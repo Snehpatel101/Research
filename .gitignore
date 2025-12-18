@@ -1,30 +1,71 @@
-# Large raw data files (keep Parquet only)
-data/raw/*.csv
-
-# Python cache
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 .pytest_cache/
 
-# Jupyter
-.ipynb_checkpoints/
-
-# Model checkpoints (can be large)
-*.pth.bak
-*.pkl.bak
-
-# OS files
-.DS_Store
-Thumbs.db
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
 # IDE
 .idea/
 .vscode/
 *.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files (too large for git)
+data/raw/*.parquet
+data/raw/*.csv
+data/clean/*.parquet
+data/features/*.parquet
+data/final/*.parquet
+*.npy
+
+# Keep split config (small JSON file)
+!data/splits/split_config.json
+
+# Models (too large for git)
+models/**/*.pkl
+models/**/*.pt
+models/**/*.pth
+models/**/*.h5
+models/**/*.onnx
+*.pth.bak
+*.pkl.bak
 
 # Logs
-logs/*.log
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Temporary files
 *.tmp
