@@ -6,7 +6,7 @@ Quick verification that all modules can be imported and instantiated.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 def main():
     print("="*60)

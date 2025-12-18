@@ -4,11 +4,11 @@ Quick test script for labeling stages
 Tests imports and basic functionality with small dataset
 """
 import sys
-sys.path.insert(0, '/home/user/Research/src')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
 def test_imports():
     """Test that all modules can be imported."""
