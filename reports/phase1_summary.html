@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Phase 1 Summary Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f6f8fa;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        }
+        h1 { color: #24292e; border-bottom: 2px solid #e1e4e8; padding-bottom: 10px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 8px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+        }
+        table th, table td {
+            border: 1px solid #dfe2e5;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        table th {
+            background-color: #f6f8fa;
+            font-weight: 600;
+        }
+        table tr:nth-child(even) {
+            background-color: #f6f8fa;
+        }
+        code {
+            background-color: #f6f8fa;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 85%;
+        }
+        pre {
+            background-color: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .pass { color: #22863a; font-weight: bold; }
+        .fail { color: #d73a49; font-weight: bold; }
+        .warning { color: #b08800; font-weight: bold; }
+        img { max-width: 100%; height: auto; margin: 16px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+<h1>Phase 1 Summary Report</h1>
+<h2>Ensemble Price Prediction System</h2>
+
+<strong>Generated:</strong> 2025-12-18 07:21:55
+
+<strong>Data File:</strong> `combined_final_labeled.parquet`
+
+<hr>
+
+<h2>Executive Summary</h2>
+
+<p>Phase 1 data preparation pipeline has completed successfully with the following outputs:</p>
+
+- <strong>Status:</strong> ⚠ NEEDS ATTENTION
+- <strong>Total Samples:</strong> 124,412
+- <strong>Symbols:</strong> MES, MGC
+- <strong>Date Range:</strong> 2020-01-03 00:25:00 to 2021-12-01 22:55:00 (698 days)
+- <strong>Features:</strong> 60
+- <strong>Label Horizons:</strong> 1, 5, 20 bars
+- <strong>Data Quality:</strong> Issues detected (see Data Health)
+
+<h3>Pipeline Stages Completed</h3>
+
+<ol><li>✓ Data Cleaning & Resampling</li>
+<ol><li>✓ Feature Engineering</li>
+<ol><li>✓ Triple-Barrier Labeling</li>
+<ol><li>✓ Quality Scoring</li>
+<ol><li>✓ Train/Val/Test Splitting</li>
+<ol><li>✓ Comprehensive Validation</li>
+<ol><li>✓ Baseline Backtesting</li></ol>
+
+<hr>
+
+<h2>Data Health Summary</h2>
+
+<p>⚠ Validation report not available.</p>
+
+<hr>
+
+<h2>Feature Overview</h2>
+
+<strong>Total Features:</strong> 60
+
+<h3>Feature Categories</h3>
+
+<p>| Category | Count | Examples |</p>
+<p>|----------|-------|----------|</p>
+<p>| Price | 4 | log_return, simple_return, high_low_range, ... (+1 more) |</p>
+<p>| Moving Averages | 18 | sma_10, close_to_sma_10, sma_20, ... (+15 more) |</p>
+<p>| Momentum | 13 | rsi, rsi_oversold, rsi_overbought, ... (+10 more) |</p>
+<p>| Volatility | 10 | bb_upper, bb_lower, bb_width, ... (+7 more) |</p>
+<p>| Volume | 7 | obv, obv_sma_20, vwap, ... (+4 more) |</p>
+<p>| Trend | 1 | adx |</p>
+<p>| Regime | 2 | vol_regime, trend_regime |</p>
+<p>| Temporal | 5 | hour_sin, hour_cos, dow_sin, ... (+2 more) |</p>
+
+<hr>
+
+<h2>Label Analysis</h2>
+
+<h3>Label Distribution by Horizon</h3>
+
+<h4>Horizon 1 (1-bar ahead)</h4>
+
+<p>| Class | Count | Percentage |</p>
+<p>|-------|-------|------------|</p>
+<p>| Short (-1) | 389 | 0.31% |</p>
+<p>| Neutral (0) | 123,198 | 99.02% |</p>
+<p>| Long (+1) | 825 | 0.66% |</p>
+
+<strong>Quality Score:</strong> Mean = 0.302, Median = 0.300
+
+<h4>Horizon 5 (5-bar ahead)</h4>
+
+<p>| Class | Count | Percentage |</p>
+<p>|-------|-------|------------|</p>
+<p>| Short (-1) | 1,947 | 1.56% |</p>
+<p>| Neutral (0) | 122,439 | 98.41% |</p>
+<p>| Long (+1) | 26 | 0.02% |</p>
+
+<strong>Quality Score:</strong> Mean = 0.303, Median = 0.300
+
+<h4>Horizon 20 (20-bar ahead)</h4>
+
+<p>| Class | Count | Percentage |</p>
+<p>|-------|-------|------------|</p>
+<p>| Short (-1) | 0 | 0.00% |</p>
+<p>| Neutral (0) | 124,412 | 100.00% |</p>
+<p>| Long (+1) | 0 | 0.00% |</p>
+
+<strong>Quality Score:</strong> Mean = 0.300, Median = 0.300
+
+<h3>Visualizations</h3>
+
+<p>See `charts/label_distribution.png` for visual representation.</p>
+
+<hr>
+
+<h2>Data Splits</h2>
+
+<h3>Split Configuration</h3>
+
+<p>| Split | Samples | Percentage | Date Range |</p>
+<p>|-------|---------|------------|------------|</p>
+| <strong>Train</strong> | 87,068 | 70.0% | 2020-01-03 to 2021-05-04 |
+| <strong>Validation</strong> | 18,354 | 14.8% | 2021-05-05 to 2021-08-17 |
+| <strong>Test</strong> | 18,374 | 14.8% | 2021-08-18 to 2021-12-01 |
+
+<h3>Leakage Prevention</h3>
+
+- <strong>Purge Bars:</strong> 20 bars removed at split boundaries
+- <strong>Embargo Period:</strong> 288 bars buffer between splits
+- <strong>Validation:</strong> <span class="pass">✓ PASS</span>ED
+
+<hr>
+
+<h2>Baseline Backtest Results</h2>
+
+<strong>Strategy:</strong> Trade in direction of label when quality > 0.5 (shifted to prevent lookahead)
+
+<strong>Note:</strong> This is NOT meant to be profitable - it's a sanity check that labels have some predictive signal.
+
+<h3>Results by Horizon</h3>
+
+<h4>Horizon 1</h4>
+
+<p>| Metric | Value |</p>
+<p>|--------|-------|</p>
+<p>| Total Trades | 112 |</p>
+<p>| Win Rate | 16.96% |</p>
+<p>| Total Return | -87.11% |</p>
+<p>| Profit Factor | 1.20 |</p>
+<p>| Sharpe Ratio | -0.03 |</p>
+<p>| Max Drawdown | 273.25% |</p>
+<p>| Avg Trade Duration | 1.5 bars |</p>
+
+<h4>Horizon 5</h4>
+
+<p>| Metric | Value |</p>
+<p>|--------|-------|</p>
+<p>| Total Trades | 57 |</p>
+<p>| Win Rate | 14.04% |</p>
+<p>| Total Return | -99.78% |</p>
+<p>| Profit Factor | 0.57 |</p>
+<p>| Sharpe Ratio | -0.51 |</p>
+<p>| Max Drawdown | 148.08% |</p>
+<p>| Avg Trade Duration | 2.2 bars |</p>
+
+<h4>Horizon 20</h4>
+
+<p>⚠ No trades executed</p>
+
+<h3>Equity Curves</h3>
+
+<p>See `baseline_backtest/` directory for equity curve plots.</p>
+
+<hr>
+
+<h2>Quality Gates Checklist</h2>
+
+<p>| Gate | Status |</p>
+<p>|------|--------|</p>
+<p>| Data validation completed | <span class="fail">✗ FAIL</span> |</p>
+<p>| Horizon 1 labels reasonably balanced (>15% each) | <span class="fail">✗ FAIL</span> |</p>
+<p>| Horizon 5 labels reasonably balanced (>15% each) | <span class="fail">✗ FAIL</span> |</p>
+<p>| Horizon 20 labels reasonably balanced (>15% each) | <span class="pass">✓ PASS</span> |</p>
+<p>| Train/val/test splits created | <span class="pass">✓ PASS</span> |</p>
+<p>| No overlap between splits | <span class="pass">✓ PASS</span> |</p>
+<p>| Baseline backtest completed | <span class="pass">✓ PASS</span> |</p>
+
+<h3>Overall Assessment</h3>
+
+<strong>Status:</strong> ✗ ISSUES DETECTED - Review before proceeding
+
+<hr>
+
+<h2>Recommendations for Phase 2</h2>
+
+<ol><li>Horizon(s) [5, 1] showed poor baseline performance - consider adjusting barrier parameters</li>
+<ol><li>Use sample weights during model training to emphasize high-quality labels</li>
+<ol><li>Implement walk-forward validation in Phase 2 to prevent overfitting</li>
+<ol><li>Monitor feature importance and remove low-importance features if needed</li>
+<ol><li>Consider ensemble methods to capture different market regimes</li>
+<ol><li>Implement proper risk management in live trading</li></ol>
+
+<hr>
+
+<h2>Output Files Summary</h2>
+
+<h3>Data Files</h3>
+<ul><li>Combined labeled data: `/home/user/Research/data/final/combined_final_labeled.parquet`</li>
+<ul><li>Split indices: `data/splits/{train,val,test}.npy`</li></ul>
+
+<h3>Reports & Results</h3>
+<ul><li>Validation report: `N/A`</li>
+<ul><li>Split configuration: `split_config.json`</li>
+<ul><li>Backtest results: `baseline_backtest/`</li>
+<ul><li>Charts: `charts/`</li></ul>
+
+<h3>Next Steps</h3>
+
+<p>Load the splits and begin Phase 2 model training:</p>
+
+<pre><code>
+<p>import numpy as np</p>
+<p>import pandas as pd</p>
+
+<h1>Load data and splits</h1>
+<p>df = pd.read_parquet('/home/user/Research/data/final/combined_final_labeled.parquet')</p>
+<p>train_idx = np.load('data/splits/train.npy')</p>
+<p>val_idx = np.load('data/splits/val.npy')</p>
+<p>test_idx = np.load('data/splits/test.npy')</p>
+
+<h1>Prepare training data</h1>
+<p>train_df = df.iloc[train_idx]</p>
+<p>feature_cols = [c for c in df.columns if ...]  # Define features</p>
+<p>X_train = train_df[feature_cols]</p>
+<p>y_train = train_df['label_h5']  # Choose horizon</p>
+<p>sample_weights = train_df['sample_weight_h5']</p>
+<pre><code>
+
+<hr>
+
+<p>*Phase 1 Complete - 2025-12-18 07:21:55*</p>
+
+    </div>
+</body>
+</html>

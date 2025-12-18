@@ -24,12 +24,13 @@ ENSEMBLE_MODELS_DIR = MODELS_DIR / "ensemble"
 
 # Results paths
 RESULTS_DIR = PROJECT_ROOT / "results"
+REPORTS_DIR = PROJECT_ROOT / "reports"
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Create directories if they don't exist
 for dir_path in [RAW_DATA_DIR, CLEAN_DATA_DIR, FEATURES_DIR, PROCESSED_DATA_DIR,
                  FINAL_DATA_DIR, SPLITS_DIR, BASE_MODELS_DIR, ENSEMBLE_MODELS_DIR,
-                 RESULTS_DIR, LOGS_DIR]:
+                 RESULTS_DIR, REPORTS_DIR, LOGS_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # Trading parameters

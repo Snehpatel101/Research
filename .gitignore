@@ -70,3 +70,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Pipeline run directories (generated data)
+runs/
+data/clean_test/
+data/splits/20*/

@@ -1,0 +1,3 @@
+# CLI Dependencies for Phase 1 Pipeline
+typer>=0.9.0
+rich>=13.0.0
