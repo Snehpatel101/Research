@@ -1,0 +1,27 @@
+{
+  "horizon": 1,
+  "quality_threshold": 0.5,
+  "commission": 0.0001,
+  "test_samples": 18374,
+  "test_date_start": "2021-08-18 13:50:00",
+  "test_date_end": "2021-12-01 22:55:00",
+  "metrics": {
+    "total_trades": 112,
+    "winning_trades": 19,
+    "losing_trades": 15,
+    "win_rate": 16.964285714285715,
+    "total_return_pct": -87.10856039749724,
+    "total_pnl": 5090.85,
+    "avg_pnl": 45.45401785714286,
+    "gross_profit": 30546.85,
+    "gross_loss": 25455.999999999996,
+    "profit_factor": 1.1999862507856696,
+    "sharpe_ratio": -0.028587948763074418,
+    "max_drawdown_pct": 273.2520667640335,
+    "avg_trade_duration_bars": 1.4821428571428572,
+    "initial_capital": 100000.0,
+    "final_capital": 12891.439602502762,
+    "commission_per_trade": 0.01
+  },
+  "timestamp": "2025-12-18T07:21:50.250628"
+}

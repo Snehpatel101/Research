@@ -1,0 +1,194 @@
+================================================================================
+COMPLETE FILE LISTING - LABELING PIPELINE
+================================================================================
+
+PRODUCTION CODE MODULES (1,173 lines total):
+================================================================================
+
+/home/user/Research/src/stages/stage4_labeling.py (301 lines)
+  Purpose: Triple-barrier labeling with Numba optimization
+  Key Functions:
+    - triple_barrier_numba() - JIT-compiled core labeling logic
+    - apply_triple_barrier() - High-level labeling interface
+    - process_symbol_labeling() - Symbol-level orchestration
+  Output: data/labels/{symbol}_labels_init.parquet
+  
+/home/user/Research/src/stages/stage5_ga_optimize.py (520 lines)
+  Purpose: Genetic algorithm parameter optimization
+  Key Functions:
+    - calculate_fitness() - Multi-objective fitness evaluation
+    - evaluate_individual() - GA individual evaluation
+    - run_ga_optimization() - Main GA loop with DEAP
+    - process_symbol_ga() - Symbol-level GA orchestration
+    - plot_convergence() - Visualization generation
+  Output: config/ga_results/{symbol}_ga_h{horizon}_best.json
+          results/ga_plots/{symbol}_ga_h{horizon}_convergence.png
+
+/home/user/Research/src/stages/stage6_final_labels.py (352 lines)
+  Purpose: Final labeling with quality scores and sample weights
+  Key Functions:
+    - compute_quality_scores() - Quality metric computation
+    - assign_sample_weights() - Tiered weight assignment
+    - apply_optimized_labels() - Apply GA-optimized parameters
+    - process_symbol_final() - Symbol-level final labeling
+    - generate_labeling_report() - Summary report generation
+  Output: data/final/{symbol}_final_labeled.parquet
+          results/labeling_report.md
+
+SUPPORTING INFRASTRUCTURE:
+================================================================================
+
+/home/user/Research/src/stages/__init__.py
+  Purpose: Module initialization and exports
+  Exports: process_symbol_labeling, apply_triple_barrier,
+           run_ga_optimization, process_symbol_ga,
+           process_symbol_final, apply_optimized_labels
+
+/home/user/Research/src/run_labeling_pipeline.py
+  Purpose: Master orchestrator for stages 4-6
+  Functionality: Sequential execution with timing and error handling
+
+/home/user/Research/src/stages/test_stages.py (182 lines)
+  Purpose: Unit test suite
+  Tests:
+    - test_imports() - Module import validation
+    - test_numba_function() - Triple barrier correctness
+    - test_quality_scoring() - Quality score computation
+    - test_sample_weights() - Weight assignment logic
+  Result: 4/4 tests passing
+
+/home/user/Research/requirements_labeling.txt
+  Purpose: Python dependency specification
+  Packages: numba, deap, scipy, matplotlib, pandas, numpy, tqdm
+
+DOCUMENTATION:
+================================================================================
+
+/home/user/Research/src/stages/README.md
+  Purpose: Comprehensive technical documentation
+  Contents:
+    - Algorithm descriptions (triple barrier, GA, quality scoring)
+    - Parameter specifications
+    - Performance benchmarks
+    - Usage examples
+    - Troubleshooting guide
+
+/home/user/Research/LABELING_QUICKSTART.md
+  Purpose: Quick start guide with code examples
+  Contents:
+    - Installation instructions
+    - Quick start commands
+    - Usage examples (basic and advanced)
+    - Performance tips
+    - Troubleshooting
+    - Validation procedures
+
+/home/user/Research/INSTALLATION_SUMMARY.md
+  Purpose: Installation details and feature overview
+  Contents:
+    - Created files listing
+    - Directory structure
+    - Dependencies
+    - Test results
+    - Feature descriptions
+    - Next steps
+
+/home/user/Research/LABELING_PIPELINE_COMPLETE.md
+  Purpose: Comprehensive overview document
+  Contents:
+    - Complete feature summary
+    - Performance benchmarks
+    - Usage examples
+    - Algorithm details
+    - Technical specifications
+    - Troubleshooting
+    - References
+
+/home/user/Research/FILES_CREATED.txt
+  Purpose: This file - complete file listing
+
+UTILITIES:
+================================================================================
+
+/home/user/Research/VERIFY_INSTALLATION.sh
+  Purpose: Automated installation verification
+  Checks:
+    - Python version
+    - Dependency installation
+    - File structure
+    - Directory creation
+    - Unit test execution
+  Result: All checks passing
+
+DIRECTORIES CREATED:
+================================================================================
+
+/home/user/Research/data/labels/
+  Purpose: Stage 4 output (initial labels)
+  Contents: {symbol}_labels_init.parquet
+
+/home/user/Research/config/ga_results/
+  Purpose: Stage 5 output (GA optimization results)
+  Contents: {symbol}_ga_h{horizon}_best.json
+            optimization_summary.json
+
+/home/user/Research/results/ga_plots/
+  Purpose: Stage 5 convergence plots
+  Contents: {symbol}_ga_h{horizon}_convergence.png
+
+FILE COUNT SUMMARY:
+================================================================================
+
+Python Code:        6 files  (1,355 lines total including tests)
+Documentation:      5 files  (comprehensive guides)
+Configuration:      1 file   (requirements)
+Utilities:          1 file   (verification script)
+Directories:        3 new directories
+
+Total:              16 items created
+
+DEPENDENCIES:
+================================================================================
+
+Runtime Dependencies (7 packages):
+  ✓ numba 0.63.1       - JIT compilation
+  ✓ deap 1.4           - Genetic algorithms
+  ✓ scipy 1.16.3       - Scientific computing
+  ✓ matplotlib 3.10.8  - Plotting
+  ✓ pandas 2.3.3       - DataFrames
+  ✓ numpy 2.3.5        - Numerical arrays
+  ✓ tqdm 4.67.1        - Progress bars
+
+VERIFICATION STATUS:
+================================================================================
+
+✓ All files created successfully
+✓ All directories exist
+✓ All dependencies installed
+✓ All imports working
+✓ All unit tests passing (4/4)
+✓ Verification script passing
+✓ Documentation complete
+✓ Ready for production use
+
+NEXT STEPS:
+================================================================================
+
+1. Run verification:
+   bash VERIFY_INSTALLATION.sh
+
+2. Execute pipeline:
+   python src/run_labeling_pipeline.py
+
+3. Check outputs:
+   ls data/labels/
+   ls config/ga_results/
+   ls results/ga_plots/
+   cat results/labeling_report.md
+
+4. Load and use:
+   python -c "import pandas as pd; df = pd.read_parquet('data/final/MES_final_labeled.parquet'); print(df.head())"
+
+================================================================================
+END OF FILE LISTING
+================================================================================
