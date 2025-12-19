@@ -62,7 +62,7 @@ class PipelineConfig:
     random_seed: int = 42
 
     # Paths (auto-generated from run_id)
-    project_root: Path = field(default_factory=lambda: Path("/home/user/Research"))
+    project_root: Path = field(default_factory=lambda: Path(__file__).parent.parent.resolve())
 
     def __post_init__(self):
         """Validate configuration after initialization."""
@@ -240,7 +240,7 @@ class PipelineConfig:
             PipelineConfig instance
         """
         if project_root is None:
-            project_root = Path("/home/user/Research")
+            project_root = Path(__file__).parent.parent.resolve()
         else:
             project_root = Path(project_root)
 

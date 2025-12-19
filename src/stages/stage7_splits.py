@@ -243,7 +243,7 @@ def create_splits(
 def main():
     """Run splits creation for the default configuration."""
     import sys
-    sys.path.insert(0, '/home/user/Research/src')
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
     from config import FINAL_DATA_DIR, SPLITS_DIR, TRAIN_RATIO, VAL_RATIO, TEST_RATIO, PURGE_BARS, EMBARGO_BARS
 

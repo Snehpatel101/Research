@@ -959,7 +959,7 @@ def generate_phase1_report(
 def main():
     """Generate Phase 1 report with default configuration."""
     import sys
-    sys.path.insert(0, '/home/user/Research/src')
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
     from config import FINAL_DATA_DIR, SPLITS_DIR, RESULTS_DIR
 

@@ -4,7 +4,7 @@ Configuration for ensemble trading project
 from pathlib import Path
 
 # Base paths
-PROJECT_ROOT = Path("/home/user/Research")
+PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DATA_DIR = PROJECT_ROOT / "data"
 SRC_DIR = PROJECT_ROOT / "src"
 CONFIG_DIR = PROJECT_ROOT / "config"

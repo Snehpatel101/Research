@@ -362,7 +362,7 @@ def run_baseline_backtest(
 def main():
     """Run baseline backtest on default configuration."""
     import sys
-    sys.path.insert(0, '/home/user/Research/src')
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
     from config import FINAL_DATA_DIR, SPLITS_DIR, RESULTS_DIR
 

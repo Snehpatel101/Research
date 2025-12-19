@@ -4,10 +4,10 @@ Complete Phase 1 Pipeline Runner
 Runs all stages including new splitting, validation, backtesting, and reporting modules
 """
 import sys
-sys.path.insert(0, '/home/user/Research/src')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
 
 import logging
-from pathlib import Path
 from datetime import datetime
 
 # Configure logging
@@ -15,7 +15,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/home/user/Research/logs/phase1_complete.log'),
+        logging.FileHandler(str(Path(__file__).parent.parent / 'logs' / 'phase1_complete.log')),
         logging.StreamHandler(sys.stdout)
     ]
 )

@@ -117,7 +117,7 @@ def run(
         help="Generate synthetic data"
     ),
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     )
@@ -228,7 +228,7 @@ def rerun(
         help="Stage to resume from (e.g., 'labels', 'features')"
     ),
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     )
@@ -300,7 +300,7 @@ def status(
         help="Run ID to check"
     ),
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     ),
@@ -476,7 +476,7 @@ def validate(
         help="Comma-separated list of symbols"
     ),
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     )
@@ -553,7 +553,7 @@ def validate(
 @app.command()
 def list_runs(
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     ),
@@ -636,7 +636,7 @@ def compare(
     run1: str = typer.Argument(..., help="First run ID"),
     run2: str = typer.Argument(..., help="Second run ID"),
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     )
@@ -688,7 +688,7 @@ def compare(
 def clean(
     run_id: str = typer.Argument(..., help="Run ID to clean"),
     project_root: str = typer.Option(
-        "/home/user/Research",
+        "str(Path(__file__).parent.parent.resolve())",
         "--project-root",
         help="Project root directory"
     ),

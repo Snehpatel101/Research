@@ -1,14 +1,15 @@
 {
-  "total_samples": 124412,
-  "train_samples": 87068,
-  "val_samples": 18374,
-  "test_samples": 18374,
+  "run_id": "20251218_231108",
+  "total_samples": 2398649,
+  "train_samples": 1679034,
+  "val_samples": 359509,
+  "test_samples": 359510,
   "purge_bars": 20,
   "embargo_bars": 288,
-  "train_date_start": "2020-01-03 00:25:00",
-  "train_date_end": "2021-05-04 13:20:00",
-  "val_date_start": "2021-05-05 21:45:00",
-  "val_date_end": "2021-08-17 21:25:00",
-  "test_date_start": "2021-08-18 13:50:00",
-  "test_date_end": "2021-12-01 22:55:00"
+  "train_date_start": "2008-11-27 07:10:00",
+  "train_date_end": "2020-06-26 01:20:00",
+  "val_date_start": "2020-06-26 14:10:00",
+  "val_date_end": "2022-12-16 21:10:00",
+  "test_date_start": "2022-12-19 09:45:00",
+  "test_date_end": "2025-07-16 05:00:00"
 }

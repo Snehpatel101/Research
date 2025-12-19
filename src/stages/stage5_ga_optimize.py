@@ -17,7 +17,7 @@ from deap import base, creator, tools, algorithms
 
 # Import our labeling function
 import sys
-sys.path.insert(0, '/home/user/Research/src/stages')
+sys.path.insert(0, str(Path(__file__).parent))
 from stage4_labeling import triple_barrier_numba
 
 logging.basicConfig(
@@ -420,7 +420,8 @@ def process_symbol_ga(
     all_results : dict mapping horizon -> results
     """
     # Load labels_init data (has features + initial labels)
-    labels_dir = Path('/home/user/Research/data/labels')
+    project_root = Path(__file__).parent.parent.parent.resolve()
+    labels_dir = project_root / 'data' / 'labels'
     input_path = labels_dir / f"{symbol}_labels_init.parquet"
 
     if not input_path.exists():
@@ -446,7 +447,7 @@ def process_symbol_ga(
         all_results[horizon] = results
 
         # Save results
-        ga_results_dir = Path('/home/user/Research/config/ga_results')
+        ga_results_dir = project_root / 'config' / 'ga_results'
         ga_results_dir.mkdir(parents=True, exist_ok=True)
 
         results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
@@ -455,7 +456,7 @@ def process_symbol_ga(
         logger.info(f"  Saved results to {results_path}")
 
         # Plot convergence
-        plots_dir = Path('/home/user/Research/results/ga_plots')
+        plots_dir = project_root / 'results' / 'ga_plots'
         plots_dir.mkdir(parents=True, exist_ok=True)
         plot_path = plots_dir / f"{symbol}_ga_h{horizon}_convergence.png"
         plot_convergence(results, plot_path)
@@ -466,7 +467,7 @@ def process_symbol_ga(
 def main():
     """Run Stage 5: GA optimization for all symbols."""
     import sys
-    sys.path.insert(0, '/home/user/Research/src')
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
     from config import SYMBOLS
 
@@ -493,7 +494,8 @@ def main():
             logger.error(f"Error processing {symbol}: {e}", exc_info=True)
 
     # Save combined summary
-    summary_path = Path('/home/user/Research/config/ga_results/optimization_summary.json')
+    project_root = Path(__file__).parent.parent.parent.resolve()
+    summary_path = project_root / 'config' / 'ga_results' / 'optimization_summary.json'
     summary = {}
     for symbol, symbol_results in all_symbols_results.items():
         summary[symbol] = {

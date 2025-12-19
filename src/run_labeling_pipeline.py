@@ -4,10 +4,10 @@ Master runner for Labeling Pipeline (Stages 4-6)
 Orchestrates triple-barrier labeling, GA optimization, and final label application
 """
 import sys
-sys.path.insert(0, '/home/user/Research/src')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent))
 
 import logging
-from pathlib import Path
 from datetime import datetime
 import time
 

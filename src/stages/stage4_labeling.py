@@ -257,12 +257,12 @@ def process_symbol_labeling(
 def main():
     """Run Stage 4: Initial labeling for all symbols."""
     import sys
-    sys.path.insert(0, '/home/user/Research/src')
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
-    from config import FEATURES_DIR, SYMBOLS
+    from config import FEATURES_DIR, SYMBOLS, PROJECT_ROOT
 
     # Output directory
-    labels_dir = Path('/home/user/Research/data/labels')
+    labels_dir = PROJECT_ROOT / 'data' / 'labels'
     labels_dir.mkdir(parents=True, exist_ok=True)
 
     horizons = [1, 5, 20]

@@ -365,7 +365,7 @@ def compare_runs(
         Comparison results
     """
     if project_root is None:
-        project_root = Path("/home/user/Research")
+        project_root = Path(__file__).parent.parent.resolve()
 
     try:
         manifest_1 = ArtifactManifest.load(run_id_1, project_root)
