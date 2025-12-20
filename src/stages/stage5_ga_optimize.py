@@ -4,17 +4,21 @@ Uses DEAP to find optimal k_up, k_down, and max_bars for balanced, tradable labe
 
 FIXES APPLIED:
 1. Improved fitness function with 40% minimum signal rate
-2. Horizon-specific neutral targets
-3. Fixed profit factor calculation (uses actual wins/losses)
+2. Horizon-specific neutral targets (20-30% neutral rate)
+3. Fixed profit factor calculation using actual trade outcomes
 4. Contiguous time block sampling instead of random (preserves temporal order)
 5. Narrower search space bounds for more realistic parameters
-6. Near-symmetry constraint on barriers
+6. SYMBOL-SPECIFIC asymmetry constraints:
+   - MES: asymmetric (k_up > k_down) for equity drift
+   - MGC: symmetric (k_up = k_down) for mean-reverting gold
+7. TRANSACTION COST penalty in fitness (MES: 0.5 ticks, MGC: 0.3 ticks)
+8. Wider barriers to target 20-30% neutral rate (was <2%)
 """
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Optional
 import json
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -28,13 +32,17 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from stage4_labeling import triple_barrier_numba
 
+# Import config for transaction costs
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import TRANSACTION_COSTS, TICK_VALUES
+
 # Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
 # =============================================================================
-# IMPROVED FITNESS FUNCTION
+# IMPROVED FITNESS FUNCTION WITH TRANSACTION COSTS
 # =============================================================================
 
 def calculate_fitness(
@@ -42,17 +50,30 @@ def calculate_fitness(
     bars_to_hit: np.ndarray,
     mae: np.ndarray,
     mfe: np.ndarray,
-    horizon: int
+    horizon: int,
+    atr_mean: float,
+    symbol: str = 'MES'
 ) -> float:
     """
     Calculate fitness score for a set of labels.
 
     IMPROVEMENTS:
-    1. Require at least 40% directional signals (was 10%)
-    2. Penalize neutral-heavy distributions with horizon-specific targets
+    1. Require at least 60% directional signals (target 70-80% signal rate)
+    2. Target 20-30% neutral rate (was <2%)
     3. Reward balanced long/short ratio
     4. Speed score prefers faster resolution
-    5. Fixed profit factor using actual trade outcomes
+    5. FIXED profit factor using ACTUAL trade outcomes (not MAE/MFE confusion)
+    6. TRANSACTION COST penalty (MES: 0.5 ticks, MGC: 0.3 ticks)
+
+    Parameters:
+    -----------
+    labels : array of -1, 0, 1
+    bars_to_hit : array of bars until barrier hit
+    mae : Maximum Adverse Excursion (always negative or zero - worst drawdown)
+    mfe : Maximum Favorable Excursion (always positive or zero - best gain)
+    horizon : horizon identifier (5 or 20)
+    atr_mean : mean ATR for the sample (for transaction cost normalization)
+    symbol : 'MES' or 'MGC' (for symbol-specific transaction costs)
 
     Returns:
     --------
@@ -67,26 +88,36 @@ def calculate_fitness(
     n_neutral = (labels == 0).sum()
 
     # ==========================================================================
-    # 1. STRICT SIGNAL RATE REQUIREMENT (40% minimum directional signals)
+    # 1. SIGNAL RATE REQUIREMENT (target 70-80% signals, 20-30% neutral)
     # ==========================================================================
     signal_rate = (n_long + n_short) / total
-    if signal_rate < 0.40:
-        # Harsh penalty for degenerate cases - this is the main fix
-        return -1000.0 + (signal_rate * 100)  # Slightly less bad if close to threshold
-
-    # ==========================================================================
-    # 2. NEUTRAL PENALTY (horizon-specific targets)
-    # ==========================================================================
-    # Shorter horizons can have more neutrals (harder to hit barriers quickly)
-    # Longer horizons should have fewer neutrals (more time to hit barriers)
-    target_neutral = {1: 0.35, 5: 0.30, 20: 0.25}.get(horizon, 0.30)
-
     neutral_pct = n_neutral / total
-    neutral_penalty = -abs(neutral_pct - target_neutral) * 10.0
 
-    # Extra penalty if neutral is way too high
-    if neutral_pct > 0.50:
-        neutral_penalty -= (neutral_pct - 0.50) * 20.0
+    # Target: 20-30% neutral rate
+    if neutral_pct < 0.15:
+        # Too few neutrals - trading on noise
+        return -1000.0 + (neutral_pct * 100)
+    elif neutral_pct > 0.40:
+        # Too many neutrals - not enough trading signals
+        return -1000.0 + ((1 - neutral_pct) * 100)
+
+    # ==========================================================================
+    # 2. NEUTRAL SCORE (target 20-30% neutral)
+    # ==========================================================================
+    # Perfect neutral range: 20-30%
+    TARGET_NEUTRAL_LOW = 0.20
+    TARGET_NEUTRAL_HIGH = 0.30
+    TARGET_NEUTRAL_MID = 0.25
+
+    if TARGET_NEUTRAL_LOW <= neutral_pct <= TARGET_NEUTRAL_HIGH:
+        neutral_score = 3.0  # Perfect range
+    else:
+        # Penalize deviation from target range
+        if neutral_pct < TARGET_NEUTRAL_LOW:
+            deviation = TARGET_NEUTRAL_LOW - neutral_pct
+        else:
+            deviation = neutral_pct - TARGET_NEUTRAL_HIGH
+        neutral_score = 3.0 - (deviation * 15.0)
 
     # ==========================================================================
     # 3. LONG/SHORT BALANCE SCORE
@@ -117,41 +148,64 @@ def calculate_fitness(
         speed_score = -2.0
 
     # ==========================================================================
-    # 5. PROFIT FACTOR SCORE (fixed calculation)
+    # 5. PROFIT FACTOR SCORE (FIXED CALCULATION)
     # ==========================================================================
-    # For LONG trades (label=1): profit = MFE (max favorable), loss = |MAE|
-    # For SHORT trades (label=-1): profit = |MAE| (price went down), loss = MFE
+    # CRITICAL FIX: The trade outcome is determined by which barrier was hit,
+    # NOT by comparing MAE/MFE. The label tells us the outcome:
+    # - label = 1 (Long): Upper barrier hit first -> PROFIT = upper_barrier level
+    # - label = -1 (Short): Lower barrier hit first -> PROFIT = lower_barrier level
+    # - label = 0 (Neutral): Timeout -> No trade taken
+    #
+    # For profit factor, we need to estimate:
+    # - Total profits from winning trades
+    # - Total losses from losing trades (drawdown before winning)
+    #
+    # Use MFE as profit potential and MAE as risk taken.
+    # MFE is the max favorable move (profit), MAE is max adverse move (risk).
 
     long_mask = labels == 1
     short_mask = labels == -1
 
-    # Long trade P&L
+    # Long trades: MFE is profit (upside), |MAE| is the drawdown risk
+    # Short trades: |MAE| represents the downside (profit for short), MFE is upside risk
+
+    # CORRECT interpretation:
+    # - For a LONG (label=1): The trade hit the UPPER barrier
+    #   - Actual profit = the barrier level (approximated by MFE at hit)
+    #   - Risk taken = |MAE| (max drawdown during trade)
+    # - For a SHORT (label=-1): The trade hit the LOWER barrier
+    #   - Actual profit = the barrier level (approximated by |MAE| magnitude)
+    #   - Risk taken = MFE (max upside move during trade = max loss for short)
+
     if long_mask.sum() > 0:
-        long_profits = mfe[long_mask].sum()
-        long_losses = np.abs(mae[long_mask]).sum()
+        # Long profits = MFE (how far up it went)
+        long_profits = np.maximum(mfe[long_mask], 0).sum()
+        # Long risk = |MAE| (how far down it went before winning)
+        long_risk = np.abs(mae[long_mask]).sum()
     else:
         long_profits = 0.0
-        long_losses = 0.0
+        long_risk = 0.0
 
-    # Short trade P&L (inverted - down moves are profits)
     if short_mask.sum() > 0:
-        short_profits = np.abs(mae[short_mask]).sum()  # MAE is negative for down moves
-        short_losses = mfe[short_mask].sum()  # MFE is positive up moves (losses for shorts)
+        # Short profits = |MAE| (how far down it went = profit for short)
+        short_profits = np.abs(mae[short_mask]).sum()
+        # Short risk = MFE (how far up it went = loss for short)
+        short_risk = np.maximum(mfe[short_mask], 0).sum()
     else:
         short_profits = 0.0
-        short_losses = 0.0
+        short_risk = 0.0
 
     total_profit = long_profits + short_profits
-    total_loss = long_losses + short_losses
+    total_risk = long_risk + short_risk
 
-    if total_loss > 1e-10:  # Avoid division by zero
-        profit_factor = total_profit / total_loss
+    if total_risk > 1e-10:
+        profit_factor = total_profit / total_risk
 
         # Prefer profit factor between 1.0 and 2.0 (realistic range)
         if 1.0 <= profit_factor <= 2.0:
             pf_score = 2.0
         elif 0.8 <= profit_factor < 1.0:
-            pf_score = 0.5  # Slight positive for near-profitable
+            pf_score = 0.5  # Near-profitable
         elif profit_factor > 2.0:
             pf_score = 1.5  # Good but might be overfit
         else:
@@ -160,9 +214,34 @@ def calculate_fitness(
         pf_score = 0.0
 
     # ==========================================================================
+    # 6. TRANSACTION COST PENALTY (NEW)
+    # ==========================================================================
+    # Penalize strategies where expected profit is small relative to costs
+    # Cost per trade in ATR units = cost_in_ticks * tick_size / ATR
+    cost_ticks = TRANSACTION_COSTS.get(symbol, 0.5)
+
+    # Estimate average profit per trade (in price units)
+    n_trades = n_long + n_short
+    if n_trades > 0 and atr_mean > 0:
+        avg_profit_per_trade = total_profit / n_trades
+
+        # Transaction cost as fraction of ATR
+        # Typical ATR for MES ~10-20 points, for MGC ~2-5 points
+        # Cost should be small fraction of expected profit
+        cost_ratio = cost_ticks / (avg_profit_per_trade / atr_mean + 1e-6)
+
+        # Penalize if cost ratio is too high (>20% of expected profit)
+        if cost_ratio > 0.20:
+            transaction_penalty = -(cost_ratio - 0.20) * 10.0
+        else:
+            transaction_penalty = 0.5  # Bonus for low-cost strategy
+    else:
+        transaction_penalty = 0.0
+
+    # ==========================================================================
     # COMBINED FITNESS
     # ==========================================================================
-    fitness = neutral_penalty + balance_score + speed_score + pf_score
+    fitness = neutral_score + balance_score + speed_score + pf_score + transaction_penalty
 
     return fitness
 
@@ -172,8 +251,10 @@ def evaluate_individual(
     close: np.ndarray,
     high: np.ndarray,
     low: np.ndarray,
+    open_prices: np.ndarray,
     atr: np.ndarray,
-    horizon: int
+    horizon: int,
+    symbol: str = 'MES'
 ) -> Tuple[float]:
     """
     Evaluate a GA individual (parameter set).
@@ -181,8 +262,9 @@ def evaluate_individual(
     Parameters:
     -----------
     individual : [k_up, k_down, max_bars_multiplier]
-    close, high, low, atr : price/indicator arrays
+    close, high, low, open_prices, atr : price/indicator arrays
     horizon : horizon value
+    symbol : 'MES' or 'MGC' for symbol-specific constraints
 
     Returns:
     --------
@@ -191,26 +273,46 @@ def evaluate_individual(
     k_up, k_down, max_bars_mult = individual
 
     # ==========================================================================
-    # SYMMETRY CONSTRAINT: k_up and k_down should be within 20% of each other
+    # SYMBOL-SPECIFIC ASYMMETRY CONSTRAINT
     # ==========================================================================
+    # MES (equity): Allow asymmetric barriers (k_up > k_down) to counteract drift
+    # MGC (gold): Enforce symmetric barriers (k_up ≈ k_down) for mean-reverting asset
     avg_k = (k_up + k_down) / 2.0
-    if abs(k_up - k_down) > avg_k * 0.40:  # More than 40% asymmetry
-        # Apply soft penalty rather than rejection
-        asymmetry_penalty = -abs(k_up - k_down) * 2.0
-    else:
-        asymmetry_penalty = 0.0
 
-    # Decode max_bars - use the narrower range
+    if symbol == 'MGC':
+        # MGC: Strict symmetry - penalize asymmetry > 10%
+        if abs(k_up - k_down) > avg_k * 0.10:
+            asymmetry_penalty = -abs(k_up - k_down) * 5.0  # Heavy penalty for asymmetry
+        else:
+            asymmetry_penalty = 0.5  # Bonus for symmetry
+    else:
+        # MES: Allow asymmetry but prefer k_up > k_down for equity drift
+        # Penalize if k_down > k_up (wrong direction for equity)
+        if k_down > k_up:
+            asymmetry_penalty = -(k_down - k_up) * 3.0  # Wrong direction
+        elif abs(k_up - k_down) > avg_k * 0.60:
+            asymmetry_penalty = -abs(k_up - k_down) * 2.0  # Too asymmetric
+        else:
+            asymmetry_penalty = 0.0  # Good range of asymmetry
+
+    # Decode max_bars - reduced from [2x, 4x] to [2x, 3x] for more neutrals
     max_bars = int(horizon * max_bars_mult)
-    max_bars = max(horizon * 2, min(max_bars, horizon * 4))  # Clamp to [2x, 4x] horizon
+    max_bars = max(horizon * 2, min(max_bars, horizon * 3))  # Clamp to [2x, 3x] horizon
 
     # Run labeling
     try:
         labels, bars_to_hit, mae, mfe, _ = triple_barrier_numba(
-            close, high, low, atr, k_up, k_down, max_bars
+            close, high, low, open_prices, atr, k_up, k_down, max_bars
         )
 
-        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon)
+        # Calculate mean ATR for transaction cost normalization
+        atr_mean = np.mean(atr[atr > 0]) if np.any(atr > 0) else 1.0
+
+        fitness = calculate_fitness(
+            labels, bars_to_hit, mae, mfe, horizon,
+            atr_mean=atr_mean,
+            symbol=symbol
+        )
         fitness += asymmetry_penalty
 
         return (fitness,)
@@ -258,12 +360,13 @@ def get_contiguous_subset(df: pd.DataFrame, subset_fraction: float) -> pd.DataFr
 def run_ga_optimization(
     df: pd.DataFrame,
     horizon: int,
+    symbol: str = 'MES',
     population_size: int = 50,
     generations: int = 30,
     crossover_prob: float = 0.7,
     mutation_prob: float = 0.2,
     tournament_size: int = 3,
-    subset_fraction: float = 0.3,  # Increased from 0.2 for better representation
+    subset_fraction: float = 0.3,
     atr_column: str = 'atr_14'
 ) -> Dict:
     """
@@ -271,13 +374,16 @@ def run_ga_optimization(
 
     FIXES:
     - Uses contiguous time blocks instead of random sampling
-    - Narrower search bounds: k_up/k_down [0.3, 1.5], max_bars_mult [2.0, 4.0]
+    - WIDER search bounds: k_up/k_down [0.8, 2.0] for 20-30% neutral target
+    - Symbol-specific asymmetry constraints (MES: asymmetric, MGC: symmetric)
+    - Transaction cost penalty in fitness
     - Improved mutation with smaller sigma for finer tuning
 
     Parameters:
     -----------
     df : DataFrame with OHLCV and ATR
     horizon : horizon to optimize for
+    symbol : 'MES' or 'MGC' for symbol-specific optimization
     population_size : GA population size
     generations : number of generations
     crossover_prob : crossover probability
@@ -290,8 +396,9 @@ def run_ga_optimization(
     --------
     results : dict with best parameters and statistics
     """
-    logger.info(f"\nOptimizing parameters for horizon {horizon}")
+    logger.info(f"\nOptimizing parameters for {symbol} horizon {horizon}")
     logger.info(f"  Population: {population_size}, Generations: {generations}")
+    logger.info(f"  Symbol-specific mode: {'SYMMETRIC (gold)' if symbol == 'MGC' else 'ASYMMETRIC (equity)'}")
 
     # ==========================================================================
     # FIX: Use contiguous time blocks instead of random sampling
@@ -303,6 +410,7 @@ def run_ga_optimization(
     close = df_subset['close'].values
     high = df_subset['high'].values
     low = df_subset['low'].values
+    open_prices = df_subset['open'].values
     atr = df_subset[atr_column].values
 
     # Setup DEAP
@@ -317,14 +425,14 @@ def run_ga_optimization(
     toolbox = base.Toolbox()
 
     # ==========================================================================
-    # FIX: Narrower search space bounds for realistic parameters
+    # FIX: WIDER search bounds for 20-30% neutral rate
     # ==========================================================================
-    # k_up: [0.3, 1.5] (narrower - most realistic values are 0.5-1.2)
-    # k_down: [0.3, 1.5] (same as k_up for symmetry encouragement)
-    # max_bars_mult: [2.0, 4.0] (longer windows to reduce neutrals)
+    # Previous bounds [0.3, 1.5] were too tight, resulting in <2% neutral
+    # New bounds [0.8, 2.5] allow for wider barriers = more timeouts = more neutrals
+    # max_bars_mult: [2.0, 3.0] (shorter windows = more timeouts)
 
-    K_MIN, K_MAX = 0.3, 1.5
-    MAX_BARS_MIN, MAX_BARS_MAX = 2.0, 4.0
+    K_MIN, K_MAX = 0.8, 2.5
+    MAX_BARS_MIN, MAX_BARS_MAX = 2.0, 3.0
 
     toolbox.register("k_up", random.uniform, K_MIN, K_MAX)
     toolbox.register("k_down", random.uniform, K_MIN, K_MAX)
@@ -339,20 +447,22 @@ def run_ga_optimization(
     )
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
-    # Evaluation function
+    # Evaluation function with symbol parameter
     toolbox.register(
         "evaluate",
         evaluate_individual,
         close=close,
         high=high,
         low=low,
+        open_prices=open_prices,
         atr=atr,
-        horizon=horizon
+        horizon=horizon,
+        symbol=symbol
     )
 
     # Genetic operators - smaller sigma for finer tuning
-    toolbox.register("mate", tools.cxBlend, alpha=0.3)  # Reduced from 0.5
-    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.15, indpb=0.3)  # Reduced sigma
+    toolbox.register("mate", tools.cxBlend, alpha=0.3)
+    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.20, indpb=0.3)
     toolbox.register("select", tools.selTournament, tournsize=tournament_size)
 
     # Constraint function with UPDATED bounds
@@ -369,16 +479,27 @@ def run_ga_optimization(
     population = toolbox.population(n=population_size)
 
     # ==========================================================================
-    # SEED with known good starting points
+    # SEED with symbol-specific starting points
     # ==========================================================================
-    # Add some individuals with symmetric barriers to guide evolution
-    seeded_individuals = [
-        [0.8, 0.8, 3.0],   # Symmetric, medium barriers
-        [1.0, 1.0, 3.0],   # Symmetric, wider barriers
-        [0.6, 0.6, 2.5],   # Symmetric, tighter barriers
-        [0.7, 0.8, 3.5],   # Slightly asymmetric
-        [1.2, 1.1, 2.5],   # Wider, slightly asymmetric
-    ]
+    if symbol == 'MGC':
+        # MGC: Symmetric barriers for mean-reverting gold
+        seeded_individuals = [
+            [1.2, 1.2, 2.5],   # Symmetric, medium barriers
+            [1.5, 1.5, 2.5],   # Symmetric, wider barriers
+            [1.0, 1.0, 2.0],   # Symmetric, tighter barriers
+            [1.3, 1.3, 2.8],   # Symmetric, medium
+            [1.8, 1.8, 2.2],   # Symmetric, wide
+        ]
+    else:
+        # MES: Asymmetric barriers for equity drift (k_up > k_down)
+        seeded_individuals = [
+            [1.5, 1.0, 2.5],   # Asymmetric, upper barrier 50% higher
+            [1.8, 1.2, 2.5],   # Asymmetric, upper barrier 50% higher
+            [1.3, 0.9, 2.0],   # Asymmetric, tighter barriers
+            [2.0, 1.4, 2.8],   # Asymmetric, wider barriers
+            [1.6, 1.1, 2.2],   # Asymmetric, medium
+        ]
+
     for i, seed_ind in enumerate(seeded_individuals):
         if i < len(population):
             population[i][:] = seed_ind
@@ -500,13 +621,14 @@ def run_ga_optimization(
     full_close = df['close'].values
     full_high = df['high'].values
     full_low = df['low'].values
+    full_open = df['open'].values
     full_atr = df[atr_column].values
 
     k_up, k_down, max_bars_mult = best_ind
     max_bars = int(horizon * max_bars_mult)
 
     val_labels, val_bars, val_mae, val_mfe, _ = triple_barrier_numba(
-        full_close, full_high, full_low, full_atr, k_up, k_down, max_bars
+        full_close, full_high, full_low, full_open, full_atr, k_up, k_down, max_bars
     )
 
     n_total = len(val_labels)
@@ -605,12 +727,19 @@ def plot_convergence(results: Dict, output_path: Path):
 
 def process_symbol_ga(
     symbol: str,
-    horizons: List[int] = [1, 5, 20],
+    horizons: List[int] = [5, 20],  # Exclude H1 - not viable after transaction costs
     population_size: int = 50,
     generations: int = 30
 ) -> Dict[int, Dict]:
     """
     Run GA optimization for all horizons for a symbol.
+
+    Parameters:
+    -----------
+    symbol : 'MES' or 'MGC'
+    horizons : list of horizons to optimize (default excludes H1)
+    population_size : GA population size
+    generations : number of generations
 
     Returns:
     --------
@@ -626,6 +755,8 @@ def process_symbol_ga(
 
     logger.info("=" * 70)
     logger.info(f"GA OPTIMIZATION: {symbol}")
+    logger.info(f"  Mode: {'SYMMETRIC' if symbol == 'MGC' else 'ASYMMETRIC'}")
+    logger.info(f"  Transaction cost: {TRANSACTION_COSTS.get(symbol, 0.5)} ticks")
     logger.info("=" * 70)
 
     df = pd.read_parquet(input_path)
@@ -636,9 +767,10 @@ def process_symbol_ga(
     for horizon in horizons:
         results, logbook = run_ga_optimization(
             df, horizon,
+            symbol=symbol,  # Pass symbol for symbol-specific optimization
             population_size=population_size,
             generations=generations,
-            subset_fraction=0.3  # Increased from 0.2 for better representation
+            subset_fraction=0.3
         )
 
         all_results[horizon] = results
@@ -673,24 +805,29 @@ def main():
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-    from config import SYMBOLS
+    from config import SYMBOLS, ACTIVE_HORIZONS
 
-    horizons = [1, 5, 20]
+    # Use only ACTIVE_HORIZONS (excludes H1 which is not viable after costs)
+    horizons = ACTIVE_HORIZONS  # [5, 20]
     population_size = 50
     generations = 30
 
     logger.info("=" * 70)
-    logger.info("STAGE 5: GENETIC ALGORITHM OPTIMIZATION (IMPROVED)")
+    logger.info("STAGE 5: GENETIC ALGORITHM OPTIMIZATION (PRODUCTION FIX)")
     logger.info("=" * 70)
-    logger.info(f"Horizons: {horizons}")
+    logger.info(f"Horizons: {horizons} (H1 excluded - not viable after transaction costs)")
     logger.info(f"GA Config: pop_size={population_size}, gens={generations}")
     logger.info("")
-    logger.info("IMPROVEMENTS APPLIED:")
-    logger.info("  - 40% minimum signal rate (was 10%)")
-    logger.info("  - Horizon-specific neutral targets")
-    logger.info("  - Contiguous time block sampling")
-    logger.info("  - Narrower search bounds: k=[0.3,1.5], max_bars=[2x,4x]")
-    logger.info("  - Near-symmetry constraint on barriers")
+    logger.info("PRODUCTION FIXES APPLIED:")
+    logger.info("  - Target 20-30% neutral rate (was <2%)")
+    logger.info("  - SYMBOL-SPECIFIC barriers:")
+    logger.info("    - MES: ASYMMETRIC (k_up > k_down) for equity drift")
+    logger.info("    - MGC: SYMMETRIC (k_up = k_down) for mean-reverting gold")
+    logger.info("  - Transaction cost penalty in fitness:")
+    logger.info(f"    - MES: {TRANSACTION_COSTS.get('MES', 0.5)} ticks round-trip")
+    logger.info(f"    - MGC: {TRANSACTION_COSTS.get('MGC', 0.3)} ticks round-trip")
+    logger.info("  - Wider search bounds: k=[0.8,2.5], max_bars=[2x,3x]")
+    logger.info("  - Fixed profit factor calculation")
     logger.info("")
 
     all_symbols_results = {}

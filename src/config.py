@@ -67,81 +67,160 @@ EMBARGO_BARS = 288  # ~1 day for 5-min data
 ACTIVE_HORIZONS = [5, 20]  # H1 excluded due to transaction cost impact
 
 # =============================================================================
-# BARRIER CONFIGURATION - ASYMMETRIC FOR BALANCED LONG/SHORT DISTRIBUTION
+# BARRIER CONFIGURATION - SYMBOL-SPECIFIC FOR BALANCED DISTRIBUTION
 # =============================================================================
 # These parameters control triple-barrier label distribution.
 #
-# CRITICAL FIX (2024-12): ASYMMETRIC BARRIERS TO CORRECT LONG BIAS
+# CRITICAL FIX (2024-12): SYMBOL-SPECIFIC BARRIERS
 # -----------------------------------------------------------------------------
-# PROBLEM: Symmetric barriers (k_up = k_down) in a historically bullish market
-# (2008-2025) produce 87-91% long signals, creating dangerous asymmetric risk
-# in bear markets. The model becomes overconfident in longs and underweights
-# short opportunities.
+# PROBLEM 1: Previous neutral rate was <2% - models predict every bar, creating
+# excessive trading. Target neutral rate: 20-30% for realistic trading.
 #
-# SOLUTION: Asymmetric barriers that make the lower barrier EASIER to hit:
-# - k_up > k_down: Upper barrier is farther away (harder to hit)
-# - k_down < k_up: Lower barrier is closer (easier to hit)
+# PROBLEM 2: Same asymmetric barriers for all symbols ignores market structure.
+# MES (S&P 500 futures) has structural upward drift from equity risk premium.
+# MGC (Gold futures) does NOT have this drift - gold is a store of value.
 #
-# This compensates for the structural upward drift in equity/commodity markets,
-# producing closer to 50/50 long/short distribution instead of 87/13.
-#
-# RATIONALE BY HORIZON:
-# - H5:  k_up=1.10, k_down=0.75 (ratio 1.47:1) - short-term mean reversion
-# - H20: k_up=2.40, k_down=1.70 (ratio 1.41:1) - medium-term trend following
-#
-# The asymmetry ratio (~1.4-1.5x) was empirically calibrated to achieve
-# approximately balanced label distribution given the historical upward drift.
+# SOLUTION:
+# - MES: ASYMMETRIC barriers (k_up > k_down) to counteract equity drift
+# - MGC: SYMMETRIC barriers (k_up = k_down) since gold lacks directional bias
+# - WIDER barriers across both to achieve 20-30% neutral rate
 #
 # Key principles:
-# 1. k_up > k_down to counteract bullish market bias
-# 2. max_bars should be 3-5x horizon for barriers to realistically hit
-# 3. Smaller k values = more directional signals, fewer neutrals
-#
-# Tune these based on your instrument's volatility:
-# - Higher volatility: can use larger k values
-# - Lower volatility: use smaller k values
+# 1. MES: k_up > k_down to counteract bullish market bias
+# 2. MGC: k_up = k_down for unbiased mean-reverting asset
+# 3. Wider k values = more neutrals, more selective signals
+# 4. max_bars reduction = more timeouts = more neutrals
 
+# =============================================================================
+# TRANSACTION COSTS - Critical for realistic fitness evaluation
+# =============================================================================
+# Round-trip costs in ticks (entry + exit):
+# - MES: ~0.5 ticks (1 tick spread + commission, 0.25 per side)
+# - MGC: ~0.3 ticks (tighter spread on gold micro)
+TRANSACTION_COSTS = {
+    'MES': 0.5,  # ticks round-trip
+    'MGC': 0.3   # ticks round-trip
+}
+
+# Tick values in dollars (for P&L calculation)
+TICK_VALUES = {
+    'MES': 1.25,  # $1.25 per tick (micro E-mini S&P)
+    'MGC': 1.00   # $1.00 per tick (micro Gold)
+}
+
+# =============================================================================
+# SYMBOL-SPECIFIC BARRIER PARAMETERS
+# =============================================================================
 BARRIER_PARAMS = {
-    # -------------------------------------------------------------------------
-    # Horizon 1: Ultra-short term (5 minutes) - EXCLUDED FROM ACTIVE TRADING
-    # -------------------------------------------------------------------------
-    # NOTE: H1 is NOT in ACTIVE_HORIZONS due to transaction cost impact.
-    # Kept for labeling completeness but should NOT be used for production models.
-    # Transaction costs (~0.5 ticks) exceed typical H1 profit (1-2 ticks).
-    # Symmetric barriers are acceptable here since H1 is not used for trading.
-    1: {
-        'k_up': 0.25,
-        'k_down': 0.25,
-        'max_bars': 5,
-        'description': 'Ultra-short: tight barriers, NON-VIABLE after transaction costs'
+    # =========================================================================
+    # MES (S&P 500 Micro Futures) - ASYMMETRIC for equity drift
+    # =========================================================================
+    # MES has structural upward drift from equity risk premium (~7% annually).
+    # Use asymmetric barriers: k_up > k_down to counteract long bias.
+    # WIDER barriers to achieve 20-30% neutral rate.
+    'MES': {
+        # Horizon 5: Short-term (25 minutes) - ACTIVE
+        # Asymmetric: upper barrier 47% harder to hit than lower
+        # Wider barriers (1.50/1.00) for ~25% neutral vs old (1.10/0.75) <2%
+        5: {
+            'k_up': 1.50,
+            'k_down': 1.00,
+            'max_bars': 12,
+            'description': 'MES H5: Asymmetric (k_up>k_down), ~25% neutral target'
+        },
+        # Horizon 20: Medium-term (~1.5 hours) - ACTIVE
+        # Asymmetric: upper barrier 40% harder to hit than lower
+        # Wider barriers (3.00/2.10) for ~25% neutral
+        20: {
+            'k_up': 3.00,
+            'k_down': 2.10,
+            'max_bars': 50,
+            'description': 'MES H20: Asymmetric (k_up>k_down), ~25% neutral target'
+        }
     },
-    # -------------------------------------------------------------------------
-    # Horizon 5: Short-term (25 minutes) - ACTIVE, ASYMMETRIC
-    # -------------------------------------------------------------------------
-    # ASYMMETRIC BARRIERS to correct long bias in bullish markets.
-    # k_up=1.10, k_down=0.75 makes lower barrier 47% easier to hit than upper.
-    # This counteracts the structural upward drift that caused 87%+ long labels.
-    # max_bars=15 gives sufficient time window (75 min) for barriers to hit.
-    5: {
-        'k_up': 1.10,
-        'k_down': 0.75,
-        'max_bars': 15,
-        'description': 'Short-term: ASYMMETRIC barriers (k_up>k_down) to reduce long bias'
-    },
-    # -------------------------------------------------------------------------
-    # Horizon 20: Medium-term (~1.5 hours) - ACTIVE, ASYMMETRIC
-    # -------------------------------------------------------------------------
-    # ASYMMETRIC BARRIERS to correct long bias in bullish markets.
-    # k_up=2.40, k_down=1.70 makes lower barrier 41% easier to hit than upper.
-    # This counteracts the structural upward drift that caused 87%+ long labels.
-    # max_bars=60 is CRITICAL: PURGE_BARS must equal this value to prevent leakage.
-    20: {
-        'k_up': 2.40,
-        'k_down': 1.70,
-        'max_bars': 60,
-        'description': 'Medium-term: ASYMMETRIC barriers (k_up>k_down) to reduce long bias'
+    # =========================================================================
+    # MGC (Gold Micro Futures) - SYMMETRIC for mean-reverting asset
+    # =========================================================================
+    # Gold lacks the structural drift of equities. It's a store of value with
+    # mean-reverting characteristics. Use SYMMETRIC barriers for unbiased signals.
+    # WIDER barriers to achieve 20-30% neutral rate.
+    'MGC': {
+        # Horizon 5: Short-term (25 minutes) - ACTIVE
+        # Symmetric: equal probability of hitting upper/lower
+        # Wide barriers (1.20/1.20) for ~25% neutral
+        5: {
+            'k_up': 1.20,
+            'k_down': 1.20,
+            'max_bars': 12,
+            'description': 'MGC H5: Symmetric barriers, ~25% neutral target'
+        },
+        # Horizon 20: Medium-term (~1.5 hours) - ACTIVE
+        # Symmetric: equal probability of hitting upper/lower
+        # Wide barriers (2.50/2.50) for ~25% neutral
+        20: {
+            'k_up': 2.50,
+            'k_down': 2.50,
+            'max_bars': 50,
+            'description': 'MGC H20: Symmetric barriers, ~25% neutral target'
+        }
     }
 }
+
+# =============================================================================
+# LEGACY BARRIER PARAMS (for backward compatibility)
+# =============================================================================
+# Default parameters used when symbol-specific not available
+# Also used for H1 horizon (excluded from active trading)
+BARRIER_PARAMS_DEFAULT = {
+    1: {
+        'k_up': 0.30,
+        'k_down': 0.30,
+        'max_bars': 4,
+        'description': 'H1: Ultra-short, NON-VIABLE after transaction costs'
+    },
+    5: {
+        'k_up': 1.35,
+        'k_down': 1.10,
+        'max_bars': 12,
+        'description': 'H5: Default asymmetric, ~25% neutral target'
+    },
+    20: {
+        'k_up': 2.75,
+        'k_down': 2.30,
+        'max_bars': 50,
+        'description': 'H20: Default asymmetric, ~25% neutral target'
+    }
+}
+
+
+def get_barrier_params(symbol: str, horizon: int) -> dict:
+    """
+    Get barrier parameters for a specific symbol and horizon.
+
+    Parameters:
+    -----------
+    symbol : str - 'MES' or 'MGC'
+    horizon : int - 1, 5, or 20
+
+    Returns:
+    --------
+    dict with 'k_up', 'k_down', 'max_bars', 'description'
+    """
+    # Check symbol-specific params first
+    if symbol in BARRIER_PARAMS and horizon in BARRIER_PARAMS[symbol]:
+        return BARRIER_PARAMS[symbol][horizon]
+
+    # Fall back to default params
+    if horizon in BARRIER_PARAMS_DEFAULT:
+        return BARRIER_PARAMS_DEFAULT[horizon]
+
+    # Ultimate fallback
+    return {
+        'k_up': 1.0,
+        'k_down': 1.0,
+        'max_bars': horizon * 3,
+        'description': 'Fallback: symmetric barriers'
+    }
 
 # Alternative: Percentage-based barriers (ATR-independent)
 # Useful when ATR calculation is inconsistent across instruments

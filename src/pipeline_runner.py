@@ -1,13 +1,24 @@
 """
 Pipeline Runner and Orchestrator
 Manages stage execution, dependency tracking, and artifact management
+
+Stage Flow:
+1. data_generation    - Generate/validate raw data
+2. data_cleaning      - Clean and resample OHLCV data
+3. feature_engineering - Generate technical features
+4. initial_labeling   - Apply initial triple-barrier labels
+5. ga_optimize        - Genetic algorithm optimization of barrier params
+6. final_labels       - Apply optimized labels with quality scores
+7. create_splits      - Create train/val/test splits
+8. validate           - Comprehensive data validation
+9. generate_report    - Generate completion report
 """
 import sys
 import logging
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Optional, Callable, Set, Any
+from typing import List, Dict, Optional, Callable, Set, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import traceback
@@ -129,42 +140,63 @@ class PipelineRunner:
                 name="data_generation",
                 function=self._run_data_generation,
                 dependencies=[],
-                description="Generate or validate raw data files",
+                description="Stage 1: Generate or validate raw data files",
                 required=True
             ),
             PipelineStage(
                 name="data_cleaning",
                 function=self._run_data_cleaning,
                 dependencies=["data_generation"],
-                description="Clean and resample OHLCV data",
+                description="Stage 2: Clean and resample OHLCV data",
                 required=True
             ),
             PipelineStage(
                 name="feature_engineering",
                 function=self._run_feature_engineering,
                 dependencies=["data_cleaning"],
-                description="Generate technical features",
+                description="Stage 3: Generate technical features",
                 required=True
             ),
             PipelineStage(
-                name="labeling",
-                function=self._run_labeling,
+                name="initial_labeling",
+                function=self._run_initial_labeling,
                 dependencies=["feature_engineering"],
-                description="Apply triple-barrier labeling",
+                description="Stage 4: Apply initial triple-barrier labeling",
+                required=True
+            ),
+            PipelineStage(
+                name="ga_optimize",
+                function=self._run_ga_optimization,
+                dependencies=["initial_labeling"],
+                description="Stage 5: GA optimization of barrier parameters",
+                required=True
+            ),
+            PipelineStage(
+                name="final_labels",
+                function=self._run_final_labels,
+                dependencies=["ga_optimize"],
+                description="Stage 6: Apply optimized labels with quality scores",
                 required=True
             ),
             PipelineStage(
                 name="create_splits",
                 function=self._run_create_splits,
-                dependencies=["labeling"],
-                description="Create train/val/test splits",
+                dependencies=["final_labels"],
+                description="Stage 7: Create train/val/test splits",
+                required=True
+            ),
+            PipelineStage(
+                name="validate",
+                function=self._run_validation,
+                dependencies=["create_splits"],
+                description="Stage 8: Comprehensive data validation",
                 required=True
             ),
             PipelineStage(
                 name="generate_report",
                 function=self._run_generate_report,
-                dependencies=["create_splits"],
-                description="Generate completion report",
+                dependencies=["validate"],
+                description="Stage 9: Generate completion report",
                 required=True
             )
         ]
@@ -425,44 +457,345 @@ class PipelineRunner:
                 error=str(e)
             )
 
-    def _run_labeling(self) -> StageResult:
-        """Stage 4: Triple-Barrier Labeling."""
+    def _run_initial_labeling(self) -> StageResult:
+        """Stage 4: Initial Triple-Barrier Labeling for GA optimization input."""
         start_time = datetime.now()
         self.logger.info("="*70)
-        self.logger.info("STAGE 4: Triple-Barrier Labeling")
+        self.logger.info("STAGE 4: Initial Triple-Barrier Labeling")
         self.logger.info("="*70)
 
         try:
-            from labeling import main as apply_labels
-            apply_labels()
+            from stages.stage4_labeling import triple_barrier_numba
+
+            # Create labels directory for GA input
+            labels_dir = self.config.project_root / 'data' / 'labels'
+            labels_dir.mkdir(parents=True, exist_ok=True)
 
             artifacts = []
+            label_stats = {}
+
             for symbol in self.config.symbols:
-                file_path = self.config.final_data_dir / f"{symbol}_labeled.parquet"
-                if file_path.exists():
-                    artifacts.append(file_path)
-                    self.manifest.add_artifact(
-                        name=f"labeled_data_{symbol}",
-                        file_path=file_path,
-                        stage="labeling",
-                        metadata={'symbol': symbol}
+                # Load features data
+                features_path = self.config.features_dir / f"{symbol}_5m_features.parquet"
+                if not features_path.exists():
+                    raise FileNotFoundError(f"Features file not found: {features_path}")
+
+                self.logger.info(f"\nProcessing {symbol}...")
+                df = pd.read_parquet(features_path)
+                self.logger.info(f"  Loaded {len(df):,} rows")
+
+                # Check for ATR column
+                atr_col = 'atr_14'
+                if atr_col not in df.columns:
+                    raise ValueError(f"ATR column '{atr_col}' not found in features")
+
+                # Apply initial labeling with default parameters for each horizon
+                for horizon in self.config.label_horizons:
+                    # Default parameters (will be optimized by GA)
+                    k_up = 2.0
+                    k_down = 1.0
+                    max_bars = horizon * 3
+
+                    self.logger.info(f"  Horizon {horizon}: k_up={k_up}, k_down={k_down}, max_bars={max_bars}")
+
+                    labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
+                        df['close'].values,
+                        df['high'].values,
+                        df['low'].values,
+                        df['open'].values,
+                        df[atr_col].values,
+                        k_up, k_down, max_bars
                     )
+
+                    # Add columns
+                    df[f'label_h{horizon}'] = labels
+                    df[f'bars_to_hit_h{horizon}'] = bars_to_hit
+                    df[f'mae_h{horizon}'] = mae
+                    df[f'mfe_h{horizon}'] = mfe
+
+                    # Log distribution
+                    n_long = (labels == 1).sum()
+                    n_short = (labels == -1).sum()
+                    n_neutral = (labels == 0).sum()
+                    total = len(labels)
+                    self.logger.info(f"    Distribution: L={n_long/total*100:.1f}% S={n_short/total*100:.1f}% N={n_neutral/total*100:.1f}%")
+
+                # Save to labels directory for GA input
+                output_path = labels_dir / f"{symbol}_labels_init.parquet"
+                df.to_parquet(output_path, index=False)
+                artifacts.append(output_path)
+
+                self.manifest.add_artifact(
+                    name=f"initial_labels_{symbol}",
+                    file_path=output_path,
+                    stage="initial_labeling",
+                    metadata={'symbol': symbol, 'horizons': self.config.label_horizons}
+                )
+
+                self.logger.info(f"  Saved initial labels to {output_path}")
 
             end_time = datetime.now()
             return StageResult(
-                stage_name="labeling",
+                stage_name="initial_labeling",
                 status=StageStatus.COMPLETED,
                 start_time=start_time,
                 end_time=end_time,
                 duration_seconds=(end_time - start_time).total_seconds(),
-                artifacts=artifacts
+                artifacts=artifacts,
+                metadata={'horizons': self.config.label_horizons}
             )
 
         except Exception as e:
-            self.logger.error(f"Labeling failed: {e}")
+            self.logger.error(f"Initial labeling failed: {e}")
             self.logger.error(traceback.format_exc())
             return StageResult(
-                stage_name="labeling",
+                stage_name="initial_labeling",
+                status=StageStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
+                error=str(e)
+            )
+
+    def _run_ga_optimization(self) -> StageResult:
+        """Stage 5: Genetic Algorithm Optimization of labeling parameters."""
+        start_time = datetime.now()
+        self.logger.info("="*70)
+        self.logger.info("STAGE 5: Genetic Algorithm Optimization")
+        self.logger.info("="*70)
+
+        try:
+            from stages.stage5_ga_optimize import run_ga_optimization, plot_convergence
+
+            # GA results directory
+            ga_results_dir = self.config.project_root / 'config' / 'ga_results'
+            ga_results_dir.mkdir(parents=True, exist_ok=True)
+
+            # Plots directory
+            plots_dir = self.config.results_dir / 'ga_plots'
+            plots_dir.mkdir(parents=True, exist_ok=True)
+
+            artifacts = []
+            all_results = {}
+
+            # GA configuration
+            population_size = 50
+            generations = 30
+
+            self.logger.info(f"GA Config: population={population_size}, generations={generations}")
+            self.logger.info(f"Horizons: {self.config.label_horizons}")
+
+            for symbol in self.config.symbols:
+                self.logger.info(f"\n{'='*50}")
+                self.logger.info(f"Optimizing {symbol}")
+                self.logger.info(f"{'='*50}")
+
+                # Load labels data
+                labels_dir = self.config.project_root / 'data' / 'labels'
+                labels_path = labels_dir / f"{symbol}_labels_init.parquet"
+
+                if not labels_path.exists():
+                    raise FileNotFoundError(f"Labels file not found: {labels_path}")
+
+                df = pd.read_parquet(labels_path)
+                self.logger.info(f"Loaded {len(df):,} rows")
+
+                symbol_results = {}
+
+                for horizon in self.config.label_horizons:
+                    # Check if already optimized (skip if results exist)
+                    results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
+
+                    if results_path.exists():
+                        self.logger.info(f"\n  Horizon {horizon}: Loading existing results from {results_path.name}")
+                        with open(results_path, 'r') as f:
+                            results = json.load(f)
+                        symbol_results[horizon] = results
+                        artifacts.append(results_path)
+                        self.logger.info(f"    k_up={results['best_k_up']:.3f}, k_down={results['best_k_down']:.3f}, "
+                                        f"max_bars={results['best_max_bars']}, fitness={results['best_fitness']:.4f}")
+                        continue
+
+                    # Run GA optimization
+                    self.logger.info(f"\n  Horizon {horizon}: Running GA optimization...")
+
+                    results, logbook = run_ga_optimization(
+                        df, horizon,
+                        population_size=population_size,
+                        generations=generations,
+                        subset_fraction=0.3,
+                        atr_column='atr_14'
+                    )
+
+                    symbol_results[horizon] = results
+
+                    # Save results
+                    with open(results_path, 'w') as f:
+                        json.dump(results, f, indent=2)
+                    artifacts.append(results_path)
+
+                    self.logger.info(f"    Best: k_up={results['best_k_up']:.3f}, k_down={results['best_k_down']:.3f}, "
+                                    f"max_bars={results['best_max_bars']}, fitness={results['best_fitness']:.4f}")
+
+                    # Check signal rate
+                    val = results.get('validation', {})
+                    signal_rate = val.get('signal_rate', 0)
+                    if signal_rate < 0.40:
+                        self.logger.warning(f"    WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!")
+
+                    # Plot convergence
+                    plot_path = plots_dir / f"{symbol}_ga_h{horizon}_convergence.png"
+                    plot_convergence(results, plot_path)
+                    artifacts.append(plot_path)
+
+                    self.manifest.add_artifact(
+                        name=f"ga_results_{symbol}_h{horizon}",
+                        file_path=results_path,
+                        stage="ga_optimize",
+                        metadata={
+                            'symbol': symbol,
+                            'horizon': horizon,
+                            'best_fitness': results['best_fitness'],
+                            'signal_rate': signal_rate
+                        }
+                    )
+
+                all_results[symbol] = symbol_results
+
+            # Save combined summary
+            summary = {}
+            for symbol, symbol_results in all_results.items():
+                summary[symbol] = {
+                    str(h): {
+                        'k_up': res['best_k_up'],
+                        'k_down': res['best_k_down'],
+                        'max_bars': res['best_max_bars'],
+                        'fitness': res['best_fitness'],
+                        'signal_rate': res.get('validation', {}).get('signal_rate', None)
+                    }
+                    for h, res in symbol_results.items()
+                }
+
+            summary_path = ga_results_dir / 'optimization_summary.json'
+            with open(summary_path, 'w') as f:
+                json.dump(summary, f, indent=2)
+            artifacts.append(summary_path)
+
+            self.logger.info(f"\nOptimization summary saved to {summary_path}")
+
+            end_time = datetime.now()
+            return StageResult(
+                stage_name="ga_optimize",
+                status=StageStatus.COMPLETED,
+                start_time=start_time,
+                end_time=end_time,
+                duration_seconds=(end_time - start_time).total_seconds(),
+                artifacts=artifacts,
+                metadata={'all_results': summary}
+            )
+
+        except Exception as e:
+            self.logger.error(f"GA optimization failed: {e}")
+            self.logger.error(traceback.format_exc())
+            return StageResult(
+                stage_name="ga_optimize",
+                status=StageStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
+                error=str(e)
+            )
+
+    def _run_final_labels(self) -> StageResult:
+        """Stage 6: Apply optimized labels with quality scores and sample weights."""
+        start_time = datetime.now()
+        self.logger.info("="*70)
+        self.logger.info("STAGE 6: Final Labels with Quality Scores")
+        self.logger.info("="*70)
+
+        try:
+            from stages.stage6_final_labels import apply_optimized_labels, generate_labeling_report
+
+            # GA results directory
+            ga_results_dir = self.config.project_root / 'config' / 'ga_results'
+
+            artifacts = []
+            all_dfs = {}
+
+            for symbol in self.config.symbols:
+                self.logger.info(f"\n{'='*50}")
+                self.logger.info(f"Processing {symbol}")
+                self.logger.info(f"{'='*50}")
+
+                # Load features data (original, without initial labels)
+                features_path = self.config.features_dir / f"{symbol}_5m_features.parquet"
+                if not features_path.exists():
+                    raise FileNotFoundError(f"Features file not found: {features_path}")
+
+                df = pd.read_parquet(features_path)
+                self.logger.info(f"Loaded {len(df):,} rows from features")
+
+                # Apply optimized labels for each horizon
+                for horizon in self.config.label_horizons:
+                    results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
+
+                    if results_path.exists():
+                        with open(results_path, 'r') as f:
+                            results = json.load(f)
+                        best_params = {
+                            'k_up': results['best_k_up'],
+                            'k_down': results['best_k_down'],
+                            'max_bars': results['best_max_bars']
+                        }
+                        self.logger.info(f"\n  Horizon {horizon}: Using GA-optimized params")
+                    else:
+                        # Fall back to defaults if no GA results
+                        self.logger.warning(f"  Horizon {horizon}: No GA results found, using defaults")
+                        best_params = {
+                            'k_up': 2.0,
+                            'k_down': 1.0,
+                            'max_bars': horizon * 3
+                        }
+
+                    # Apply optimized labeling with quality scores
+                    df = apply_optimized_labels(df, horizon, best_params, atr_column='atr_14')
+
+                # Save final labeled data
+                output_path = self.config.final_data_dir / f"{symbol}_labeled.parquet"
+                df.to_parquet(output_path, index=False)
+                artifacts.append(output_path)
+
+                self.manifest.add_artifact(
+                    name=f"final_labeled_{symbol}",
+                    file_path=output_path,
+                    stage="final_labels",
+                    metadata={'symbol': symbol, 'horizons': self.config.label_horizons}
+                )
+
+                all_dfs[symbol] = df
+                self.logger.info(f"\n  Saved final labels to {output_path}")
+
+            # Generate labeling report
+            if all_dfs:
+                generate_labeling_report(all_dfs)
+                report_path = self.config.results_dir / 'labeling_report.md'
+                if report_path.exists():
+                    artifacts.append(report_path)
+
+            end_time = datetime.now()
+            return StageResult(
+                stage_name="final_labels",
+                status=StageStatus.COMPLETED,
+                start_time=start_time,
+                end_time=end_time,
+                duration_seconds=(end_time - start_time).total_seconds(),
+                artifacts=artifacts,
+                metadata={'symbols': self.config.symbols, 'horizons': self.config.label_horizons}
+            )
+
+        except Exception as e:
+            self.logger.error(f"Final labeling failed: {e}")
+            self.logger.error(traceback.format_exc())
+            return StageResult(
+                stage_name="final_labels",
                 status=StageStatus.FAILED,
                 start_time=start_time,
                 end_time=datetime.now(),
@@ -470,10 +803,10 @@ class PipelineRunner:
             )
 
     def _run_create_splits(self) -> StageResult:
-        """Stage 5: Create Train/Val/Test Splits."""
+        """Stage 7: Create Train/Val/Test Splits."""
         start_time = datetime.now()
         self.logger.info("="*70)
-        self.logger.info("STAGE 5: Create Train/Val/Test Splits")
+        self.logger.info("STAGE 7: Create Train/Val/Test Splits")
         self.logger.info("="*70)
 
         try:
@@ -595,11 +928,125 @@ class PipelineRunner:
                 error=str(e)
             )
 
-    def _run_generate_report(self) -> StageResult:
-        """Stage 6: Generate Completion Report."""
+    def _run_validation(self) -> StageResult:
+        """Stage 8: Comprehensive data validation with optional pipeline failure."""
         start_time = datetime.now()
         self.logger.info("="*70)
-        self.logger.info("STAGE 6: Generate Completion Report")
+        self.logger.info("STAGE 8: Data Validation")
+        self.logger.info("="*70)
+
+        try:
+            from stages.stage8_validate import validate_data, DataValidator
+
+            # Path to combined labeled data
+            combined_path = self.config.final_data_dir / "combined_final_labeled.parquet"
+
+            if not combined_path.exists():
+                raise FileNotFoundError(f"Combined labeled data not found: {combined_path}")
+
+            # Output paths
+            validation_report_path = self.config.results_dir / f"validation_report_{self.config.run_id}.json"
+            feature_selection_path = self.config.results_dir / f"feature_selection_{self.config.run_id}.json"
+
+            self.logger.info(f"Validating combined dataset: {combined_path}")
+
+            # Run validation with feature selection
+            summary, feature_selection_result = validate_data(
+                data_path=combined_path,
+                output_path=validation_report_path,
+                horizons=self.config.label_horizons,
+                run_feature_selection=True,
+                correlation_threshold=0.85,
+                variance_threshold=0.01,
+                feature_selection_output_path=feature_selection_path
+            )
+
+            artifacts = [validation_report_path]
+            if feature_selection_path.exists():
+                artifacts.append(feature_selection_path)
+
+            # Log summary
+            self.logger.info(f"\n{'='*50}")
+            self.logger.info("VALIDATION SUMMARY")
+            self.logger.info(f"{'='*50}")
+            self.logger.info(f"Status: {summary['status']}")
+            self.logger.info(f"Issues: {summary['issues_count']}")
+            self.logger.info(f"Warnings: {summary['warnings_count']}")
+
+            if summary['issues']:
+                self.logger.error("Critical Issues Found:")
+                for issue in summary['issues'][:10]:  # Show first 10
+                    self.logger.error(f"  - {issue}")
+                if len(summary['issues']) > 10:
+                    self.logger.error(f"  ... and {len(summary['issues'])-10} more")
+
+            if summary['warnings']:
+                self.logger.warning("Warnings:")
+                for warning in summary['warnings'][:10]:
+                    self.logger.warning(f"  - {warning}")
+
+            # Feature selection results
+            if feature_selection_result:
+                self.logger.info(f"\nFeature Selection:")
+                self.logger.info(f"  Original features: {feature_selection_result.original_count}")
+                self.logger.info(f"  Selected features: {feature_selection_result.final_count}")
+                self.logger.info(f"  Removed: {len(feature_selection_result.removed_features)}")
+
+            # Add to manifest
+            self.manifest.add_artifact(
+                name="validation_report",
+                file_path=validation_report_path,
+                stage="validate",
+                metadata={
+                    'status': summary['status'],
+                    'issues_count': summary['issues_count'],
+                    'warnings_count': summary['warnings_count']
+                }
+            )
+
+            end_time = datetime.now()
+
+            # Determine if validation passed or failed
+            if summary['status'] == 'FAILED':
+                self.logger.error(f"\nValidation FAILED with {summary['issues_count']} critical issues")
+                return StageResult(
+                    stage_name="validate",
+                    status=StageStatus.FAILED,
+                    start_time=start_time,
+                    end_time=end_time,
+                    duration_seconds=(end_time - start_time).total_seconds(),
+                    artifacts=artifacts,
+                    error=f"Validation failed with {summary['issues_count']} critical issues",
+                    metadata=summary
+                )
+
+            self.logger.info(f"\nValidation PASSED (with {summary['warnings_count']} warnings)")
+            return StageResult(
+                stage_name="validate",
+                status=StageStatus.COMPLETED,
+                start_time=start_time,
+                end_time=end_time,
+                duration_seconds=(end_time - start_time).total_seconds(),
+                artifacts=artifacts,
+                metadata=summary
+            )
+
+        except Exception as e:
+            self.logger.error(f"Validation failed: {e}")
+            self.logger.error(traceback.format_exc())
+            return StageResult(
+                stage_name="validate",
+                status=StageStatus.FAILED,
+                start_time=start_time,
+                end_time=datetime.now(),
+                error=str(e)
+            )
+
+    def _run_generate_report(self) -> StageResult:
+        """Stage 9: Generate Completion Report."""
+        start_time = datetime.now()
+        self.logger.info("="*70)
+        self.logger.info("STAGE 9: Generate Completion Report")
         self.logger.info("="*70)
 
         try:
