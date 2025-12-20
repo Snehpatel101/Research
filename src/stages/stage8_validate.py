@@ -25,8 +25,9 @@ from feature_selection import (
 
 warnings.filterwarnings('ignore')
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class DataValidator:

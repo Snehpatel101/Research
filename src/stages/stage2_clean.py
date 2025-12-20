@@ -21,12 +21,9 @@ from datetime import datetime, timedelta
 import json
 from numba import jit
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 @jit(nopython=True)
@@ -242,7 +239,7 @@ class DataCleaner:
             if self.gap_fill_method == 'forward':
                 # Forward fill with limit
                 df_complete[['open', 'high', 'low', 'close']] = \
-                    df_complete[['open', 'high', 'low', 'close']].fillna(method='ffill', limit=max_fill_bars)
+                    df_complete[['open', 'high', 'low', 'close']].ffill(limit=max_fill_bars)
                 df_complete['volume'] = df_complete['volume'].fillna(0)
 
             elif self.gap_fill_method == 'interpolate':
@@ -253,7 +250,7 @@ class DataCleaner:
 
             # Copy symbol column if exists
             if 'symbol' in df_complete.columns:
-                df_complete['symbol'] = df_complete['symbol'].fillna(method='ffill')
+                df_complete['symbol'] = df_complete['symbol'].ffill()
 
             # Drop any remaining NaN rows (gaps too large to fill)
             remaining_na = df_complete['close'].isna().sum()

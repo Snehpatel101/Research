@@ -27,6 +27,19 @@ try:
 except ImportError:
     _extended_imports = False
 
+# Import Phase 2 feature scaler
+try:
+    from .feature_scaler import (
+        FeatureScaler,
+        scale_train_val_test,
+        validate_scaling,
+        validate_no_leakage,
+        validate_scaling_for_splits
+    )
+    _scaler_import = True
+except ImportError:
+    _scaler_import = False
+
 __all__ = [
     'DataIngestor',
     'DataCleaner',
@@ -39,6 +52,15 @@ if _extended_imports:
         'validate_data',
         'run_baseline_backtest',
         'generate_phase1_report'
+    ])
+
+if _scaler_import:
+    __all__.extend([
+        'FeatureScaler',
+        'scale_train_val_test',
+        'validate_scaling',
+        'validate_no_leakage',
+        'validate_scaling_for_splits'
     ])
 
 __version__ = '1.0.0'

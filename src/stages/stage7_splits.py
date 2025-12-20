@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Dict, Tuple, Optional
 from datetime import datetime
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def validate_no_overlap(

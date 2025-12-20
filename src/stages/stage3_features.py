@@ -24,12 +24,9 @@ from datetime import datetime
 import json
 from numba import jit
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 # ============================================================================
@@ -935,11 +932,22 @@ class FeatureEngineer:
         )
         mgc_returns[0] = 0.0
 
-        # Fix: Calculate proper returns (pct_change style)
+        # Fix: Calculate proper returns (pct_change style) with zero-division protection
         mes_returns = np.zeros(len(mes_close))
         mgc_returns = np.zeros(len(mgc_close))
-        mes_returns[1:] = (mes_close[1:] - mes_close[:-1]) / mes_close[:-1]
-        mgc_returns[1:] = (mgc_close[1:] - mgc_close[:-1]) / mgc_close[:-1]
+        # Use np.divide with where parameter to handle zero-division safely
+        mes_returns[1:] = np.divide(
+            mes_close[1:] - mes_close[:-1],
+            mes_close[:-1],
+            out=np.zeros_like(mes_close[1:]),
+            where=mes_close[:-1] != 0
+        )
+        mgc_returns[1:] = np.divide(
+            mgc_close[1:] - mgc_close[:-1],
+            mgc_close[:-1],
+            out=np.zeros_like(mgc_close[1:]),
+            where=mgc_close[:-1] != 0
+        )
 
         # 1. MES-MGC Correlation (20-bar rolling)
         df['mes_mgc_correlation_20'] = calculate_rolling_correlation_numba(

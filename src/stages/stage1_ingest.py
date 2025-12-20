@@ -18,12 +18,14 @@ import logging
 from datetime import datetime
 import pytz
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+
+class SecurityError(Exception):
+    """Exception raised for security violations such as path traversal attempts."""
+    pass
 
 
 class DataIngestor:
@@ -90,6 +92,62 @@ class DataIngestor:
         logger.info(f"Raw data dir: {self.raw_data_dir}")
         logger.info(f"Output dir: {self.output_dir}")
 
+    def _validate_path(self, file_path: Path, allowed_dirs: List[Path]) -> Path:
+        """
+        Validate that a file path is safe and within allowed directories.
+
+        Parameters:
+        -----------
+        file_path : Path to validate
+        allowed_dirs : List of allowed directory paths
+
+        Returns:
+        --------
+        Path : Resolved absolute path
+
+        Raises:
+        -------
+        SecurityError : If path is outside allowed directories or contains suspicious patterns
+        """
+        # Check for suspicious patterns in the input path string (before resolution)
+        # Focus on relative path traversal patterns
+        path_str = str(file_path)
+        suspicious_patterns = ['..', '~']
+        for pattern in suspicious_patterns:
+            if pattern in path_str:
+                logger.warning(f"Suspicious path pattern detected: {pattern} in {path_str}")
+                raise SecurityError(f"Path contains suspicious pattern '{pattern}': {path_str}")
+
+        # Resolve to absolute path to prevent path traversal
+        try:
+            resolved_path = file_path.resolve()
+        except (OSError, RuntimeError) as e:
+            raise SecurityError(f"Invalid file path: {file_path}. Error: {e}")
+
+        # Validate that resolved path is within allowed directories
+        is_allowed = False
+        for allowed_dir in allowed_dirs:
+            try:
+                resolved_allowed = allowed_dir.resolve()
+                # Check if the file is within the allowed directory
+                resolved_path.relative_to(resolved_allowed)
+                is_allowed = True
+                break
+            except ValueError:
+                # Path is not relative to this allowed directory
+                continue
+            except (OSError, RuntimeError) as e:
+                logger.warning(f"Error resolving allowed directory {allowed_dir}: {e}")
+                continue
+
+        if not is_allowed:
+            allowed_dirs_str = ', '.join(str(d) for d in allowed_dirs)
+            raise SecurityError(
+                f"Access denied: Path '{resolved_path}' is outside allowed directories: {allowed_dirs_str}"
+            )
+
+        return resolved_path
+
     def load_data(
         self,
         file_path: Union[str, Path],
@@ -106,40 +164,60 @@ class DataIngestor:
         Returns:
         --------
         pd.DataFrame : Loaded data
+
+        Raises:
+        -------
+        SecurityError : If path validation fails
+        FileNotFoundError : If file does not exist
+        ValueError : If file format is unsupported
         """
         file_path = Path(file_path)
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+        # Validate path is within allowed directories
+        allowed_dirs = [self.raw_data_dir, self.output_dir]
+        validated_path = self._validate_path(file_path, allowed_dirs)
+
+        if not validated_path.exists():
+            raise FileNotFoundError(f"File not found: {validated_path}")
 
         # Auto-detect format
         if file_format is None:
-            file_format = file_path.suffix.lower().replace('.', '')
+            file_format = validated_path.suffix.lower().replace('.', '')
 
-        logger.info(f"Loading {file_format.upper()} file: {file_path.name}")
+        logger.info(f"Loading {file_format.upper()} file: {validated_path.name}")
 
         try:
             if file_format == 'csv':
-                df = pd.read_csv(file_path)
+                df = pd.read_csv(validated_path)
             elif file_format == 'parquet':
-                df = pd.read_parquet(file_path)
+                df = pd.read_parquet(validated_path)
             else:
                 raise ValueError(f"Unsupported file format: {file_format}")
 
             logger.info(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
             return df
 
+        except pd.errors.ParserError as e:
+            logger.error(f"Error parsing CSV file: {e}")
+            raise
+        except (OSError, IOError) as e:
+            logger.error(f"Error reading file: {e}")
+            raise
+        except ValueError as e:
+            logger.error(f"Invalid file format or data: {e}")
+            raise
         except Exception as e:
-            logger.error(f"Error loading file: {e}")
+            logger.error(f"Unexpected error loading file: {e}")
             raise
 
-    def standardize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+    def standardize_columns(self, df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
         """
         Standardize column names to expected format.
 
         Parameters:
         -----------
         df : Input DataFrame
+        copy : If True, create a copy of the DataFrame. If False, modify in place.
 
         Returns:
         --------
@@ -147,8 +225,8 @@ class DataIngestor:
         """
         logger.info("Standardizing column names...")
 
-        # Create a copy
-        df = df.copy()
+        if copy:
+            df = df.copy()
 
         # Convert all column names to lowercase for mapping
         df.columns = df.columns.str.lower().str.strip()
@@ -173,25 +251,45 @@ class DataIngestor:
 
         return df
 
-    def validate_ohlcv_relationships(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+    def validate_ohlcv_relationships(
+        self,
+        df: pd.DataFrame,
+        auto_fix: bool = True,
+        dry_run: bool = False,
+        copy: bool = True
+    ) -> Tuple[pd.DataFrame, Dict]:
         """
         Validate OHLC relationships (high >= low, etc.).
 
         Parameters:
         -----------
         df : Input DataFrame
+        auto_fix : If True, automatically fix violations. If False, only report them.
+        dry_run : If True, show what would be fixed without applying changes.
+                  Implies auto_fix=False for the actual modifications.
+        copy : If True, create a copy of the DataFrame. If False, modify in place.
 
         Returns:
         --------
-        tuple : (validated DataFrame, validation report)
+        tuple : (validated DataFrame, validation report with detailed fix information)
         """
         logger.info("Validating OHLCV relationships...")
+        if dry_run:
+            logger.info("  [DRY RUN MODE] - No changes will be applied")
+        elif not auto_fix:
+            logger.info("  [REPORT ONLY MODE] - Violations will be reported but not fixed")
 
-        df = df.copy()
+        if copy:
+            df = df.copy()
+
         validation_report = {
             'total_rows': len(df),
-            'violations': {}
+            'violations': {},
+            'fixes_applied': {},
+            'mode': 'dry_run' if dry_run else ('auto_fix' if auto_fix else 'report_only')
         }
+
+        should_fix = auto_fix and not dry_run
 
         # Check 1: High >= Low
         high_low_violations = df['high'] < df['low']
@@ -199,9 +297,13 @@ class DataIngestor:
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows where high < low")
             validation_report['violations']['high_lt_low'] = int(n_violations)
-            # Fix by swapping
-            mask = high_low_violations
-            df.loc[mask, ['high', 'low']] = df.loc[mask, ['low', 'high']].values
+            if should_fix:
+                mask = high_low_violations
+                df.loc[mask, ['high', 'low']] = df.loc[mask, ['low', 'high']].values
+                validation_report['fixes_applied']['high_lt_low'] = int(n_violations)
+                logger.info(f"  Fixed {n_violations} rows by swapping high/low values")
+            elif dry_run:
+                logger.info(f"  [DRY RUN] Would fix {n_violations} rows by swapping high/low values")
 
         # Check 2: High >= Open
         high_open_violations = df['high'] < df['open']
@@ -209,8 +311,12 @@ class DataIngestor:
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows where high < open")
             validation_report['violations']['high_lt_open'] = int(n_violations)
-            # Fix by setting high to max(high, open)
-            df.loc[high_open_violations, 'high'] = df.loc[high_open_violations, ['high', 'open']].max(axis=1)
+            if should_fix:
+                df.loc[high_open_violations, 'high'] = df.loc[high_open_violations, ['high', 'open']].max(axis=1)
+                validation_report['fixes_applied']['high_lt_open'] = int(n_violations)
+                logger.info(f"  Fixed {n_violations} rows by setting high = max(high, open)")
+            elif dry_run:
+                logger.info(f"  [DRY RUN] Would fix {n_violations} rows by setting high = max(high, open)")
 
         # Check 3: High >= Close
         high_close_violations = df['high'] < df['close']
@@ -218,7 +324,12 @@ class DataIngestor:
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows where high < close")
             validation_report['violations']['high_lt_close'] = int(n_violations)
-            df.loc[high_close_violations, 'high'] = df.loc[high_close_violations, ['high', 'close']].max(axis=1)
+            if should_fix:
+                df.loc[high_close_violations, 'high'] = df.loc[high_close_violations, ['high', 'close']].max(axis=1)
+                validation_report['fixes_applied']['high_lt_close'] = int(n_violations)
+                logger.info(f"  Fixed {n_violations} rows by setting high = max(high, close)")
+            elif dry_run:
+                logger.info(f"  [DRY RUN] Would fix {n_violations} rows by setting high = max(high, close)")
 
         # Check 4: Low <= Open
         low_open_violations = df['low'] > df['open']
@@ -226,7 +337,12 @@ class DataIngestor:
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows where low > open")
             validation_report['violations']['low_gt_open'] = int(n_violations)
-            df.loc[low_open_violations, 'low'] = df.loc[low_open_violations, ['low', 'open']].min(axis=1)
+            if should_fix:
+                df.loc[low_open_violations, 'low'] = df.loc[low_open_violations, ['low', 'open']].min(axis=1)
+                validation_report['fixes_applied']['low_gt_open'] = int(n_violations)
+                logger.info(f"  Fixed {n_violations} rows by setting low = min(low, open)")
+            elif dry_run:
+                logger.info(f"  [DRY RUN] Would fix {n_violations} rows by setting low = min(low, open)")
 
         # Check 5: Low <= Close
         low_close_violations = df['low'] > df['close']
@@ -234,7 +350,12 @@ class DataIngestor:
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows where low > close")
             validation_report['violations']['low_gt_close'] = int(n_violations)
-            df.loc[low_close_violations, 'low'] = df.loc[low_close_violations, ['low', 'close']].min(axis=1)
+            if should_fix:
+                df.loc[low_close_violations, 'low'] = df.loc[low_close_violations, ['low', 'close']].min(axis=1)
+                validation_report['fixes_applied']['low_gt_close'] = int(n_violations)
+                logger.info(f"  Fixed {n_violations} rows by setting low = min(low, close)")
+            elif dry_run:
+                logger.info(f"  [DRY RUN] Would fix {n_violations} rows by setting low = min(low, close)")
 
         # Check 6: Negative prices
         negative_price_mask = (df['open'] <= 0) | (df['high'] <= 0) | (df['low'] <= 0) | (df['close'] <= 0)
@@ -242,8 +363,12 @@ class DataIngestor:
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows with negative or zero prices")
             validation_report['violations']['negative_prices'] = int(n_violations)
-            # Remove these rows
-            df = df[~negative_price_mask]
+            if should_fix:
+                df = df[~negative_price_mask]
+                validation_report['fixes_applied']['negative_prices'] = int(n_violations)
+                logger.info(f"  Fixed by removing {n_violations} rows with negative/zero prices")
+            elif dry_run:
+                logger.info(f"  [DRY RUN] Would remove {n_violations} rows with negative/zero prices")
 
         # Check 7: Negative volume
         if 'volume' in df.columns:
@@ -252,20 +377,34 @@ class DataIngestor:
             if n_violations > 0:
                 logger.warning(f"Found {n_violations} rows with negative volume")
                 validation_report['violations']['negative_volume'] = int(n_violations)
-                df.loc[negative_volume, 'volume'] = 0
+                if should_fix:
+                    df.loc[negative_volume, 'volume'] = 0
+                    validation_report['fixes_applied']['negative_volume'] = int(n_violations)
+                    logger.info(f"  Fixed {n_violations} rows by setting negative volume to 0")
+                elif dry_run:
+                    logger.info(f"  [DRY RUN] Would set {n_violations} negative volume values to 0")
 
         validation_report['rows_after_validation'] = len(df)
-        logger.info(f"Validation complete. Rows: {validation_report['total_rows']} -> {validation_report['rows_after_validation']}")
+        validation_report['total_fixes_applied'] = sum(validation_report['fixes_applied'].values())
+
+        if dry_run:
+            logger.info(f"Validation complete (DRY RUN). No changes applied.")
+            logger.info(f"  Would fix {validation_report['total_fixes_applied']} violations")
+        else:
+            logger.info(f"Validation complete. Rows: {validation_report['total_rows']} -> {validation_report['rows_after_validation']}")
+            if auto_fix:
+                logger.info(f"  Applied {validation_report['total_fixes_applied']} fixes")
 
         return df, validation_report
 
-    def handle_timezone(self, df: pd.DataFrame) -> pd.DataFrame:
+    def handle_timezone(self, df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
         """
         Convert datetime to UTC timezone.
 
         Parameters:
         -----------
         df : Input DataFrame
+        copy : If True, create a copy of the DataFrame. If False, modify in place.
 
         Returns:
         --------
@@ -273,7 +412,8 @@ class DataIngestor:
         """
         logger.info(f"Converting timezone from {self.source_timezone} to UTC...")
 
-        df = df.copy()
+        if copy:
+            df = df.copy()
 
         # Ensure datetime column exists and is datetime type
         if 'datetime' not in df.columns:
@@ -305,13 +445,14 @@ class DataIngestor:
 
         return df
 
-    def validate_data_types(self, df: pd.DataFrame) -> pd.DataFrame:
+    def validate_data_types(self, df: pd.DataFrame, copy: bool = True) -> pd.DataFrame:
         """
         Validate and convert data types.
 
         Parameters:
         -----------
         df : Input DataFrame
+        copy : If True, create a copy of the DataFrame. If False, modify in place.
 
         Returns:
         --------
@@ -319,7 +460,8 @@ class DataIngestor:
         """
         logger.info("Validating data types...")
 
-        df = df.copy()
+        if copy:
+            df = df.copy()
 
         # Datetime
         if not pd.api.types.is_datetime64_any_dtype(df['datetime']):
@@ -373,8 +515,12 @@ class DataIngestor:
                 if self.symbol_col and self.symbol_col in sample_df.columns:
                     # Symbol is in the data, will be extracted later
                     symbol = sample_df[self.symbol_col].iloc[0] if len(sample_df) > 0 else None
-            except:
-                pass
+            except (OSError, IOError, FileNotFoundError) as e:
+                # File might be CSV or unreadable, will extract from filename instead
+                logger.debug(f"Could not read parquet file to extract symbol: {e}")
+            except (KeyError, IndexError) as e:
+                # Symbol column not found in data or empty dataframe
+                logger.debug(f"Symbol column not found in data: {e}")
 
             if symbol is None:
                 # Extract from filename (e.g., "MES_1m.parquet" -> "MES")
@@ -395,22 +541,26 @@ class DataIngestor:
         df = self.load_data(file_path)
         metadata['raw_rows'] = len(df)
 
-        # Standardize columns
-        df = self.standardize_columns(df)
+        # Create a single copy at the start to avoid 4x memory overhead
+        # All subsequent operations use copy=False for in-place modifications
+        df = df.copy()
 
-        # Validate data types
-        df = self.validate_data_types(df)
+        # Standardize columns (in-place)
+        df = self.standardize_columns(df, copy=False)
+
+        # Validate data types (in-place)
+        df = self.validate_data_types(df, copy=False)
         metadata['rows_after_type_validation'] = len(df)
 
-        # Handle timezone
-        df = self.handle_timezone(df)
+        # Handle timezone (in-place)
+        df = self.handle_timezone(df, copy=False)
 
         # Sort by datetime
         df = df.sort_values('datetime').reset_index(drop=True)
 
-        # Validate OHLCV relationships
+        # Validate OHLCV relationships (in-place)
         if validate:
-            df, validation_report = self.validate_ohlcv_relationships(df)
+            df, validation_report = self.validate_ohlcv_relationships(df, copy=False)
             metadata['validation'] = validation_report
 
         # Add symbol column if not present

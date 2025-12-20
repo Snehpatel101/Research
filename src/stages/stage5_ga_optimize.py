@@ -28,11 +28,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from stage4_labeling import triple_barrier_numba
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 # =============================================================================
@@ -218,8 +216,10 @@ def evaluate_individual(
         return (fitness,)
 
     except Exception as e:
-        logger.error(f"Error evaluating individual: {e}")
-        return (-1000.0,)
+        # Use float('-inf') for invalid fitness to ensure it's never selected
+        # Log full traceback for debugging
+        logger.error(f"Error evaluating individual [k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}]: {e}", exc_info=True)
+        return (float('-inf'),)
 
 
 def get_contiguous_subset(df: pd.DataFrame, subset_fraction: float) -> pd.DataFrame:
@@ -400,10 +400,25 @@ def run_ga_optimization(
     logbook = tools.Logbook()
     logbook.header = ["gen", "nevals"] + stats.fields
 
+    # Track consecutive evaluation errors for early abort
+    MAX_CONSECUTIVE_ERRORS = 10
+    consecutive_errors = 0
+    total_errors = 0
+
+    def count_errors_in_fitnesses(fitnesses_list):
+        """Count how many fitness values indicate errors (float('-inf'))."""
+        return sum(1 for fit in fitnesses_list if fit[0] == float('-inf'))
+
     # Evaluate initial population
     fitnesses = list(map(toolbox.evaluate, population))
     for ind, fit in zip(population, fitnesses):
         ind.fitness.values = fit
+
+    # Check for errors in initial population
+    init_errors = count_errors_in_fitnesses(fitnesses)
+    if init_errors > 0:
+        logger.warning(f"  Initial population had {init_errors} evaluation errors")
+        total_errors += init_errors
 
     hof.update(population)
     record = stats.compile(population)
@@ -436,9 +451,22 @@ def run_ga_optimization(
 
         # Evaluate offspring with invalid fitness
         invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
-        fitnesses = map(toolbox.evaluate, invalid_ind)
+        fitnesses = list(map(toolbox.evaluate, invalid_ind))
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
+
+        # Track consecutive errors and abort if too many
+        gen_errors = count_errors_in_fitnesses(fitnesses)
+        if gen_errors > 0:
+            consecutive_errors += 1
+            total_errors += gen_errors
+            logger.warning(f"  Gen {gen}: {gen_errors} evaluation errors (consecutive: {consecutive_errors})")
+
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                logger.error(f"  ABORTING: {consecutive_errors} consecutive generations with errors. Total errors: {total_errors}")
+                raise RuntimeError(f"GA optimization aborted due to {consecutive_errors} consecutive generations with evaluation errors")
+        else:
+            consecutive_errors = 0  # Reset on successful generation
 
         # ELITISM: Add best 2 from hall of fame
         elite = [toolbox.clone(ind) for ind in hof[:2]]

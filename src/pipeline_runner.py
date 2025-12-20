@@ -170,14 +170,15 @@ class PipelineRunner:
         ]
 
     def _run_data_generation(self) -> StageResult:
-        """Stage 1: Data Generation or Validation."""
+        """Stage 1: Data Generation and Ingestion with Validation."""
         start_time = datetime.now()
         self.logger.info("="*70)
-        self.logger.info("STAGE 1: Data Generation / Acquisition")
+        self.logger.info("STAGE 1: Data Generation / Acquisition & Validation")
         self.logger.info("="*70)
 
         try:
             from generate_synthetic_data import main as generate_data
+            from stages.stage1_ingest import DataIngestor
 
             # Check if raw data exists
             raw_files_exist = all(
@@ -187,35 +188,108 @@ class PipelineRunner:
             )
 
             artifacts = []
+            ingestion_metadata = {}
 
+            # Step 1: Generate synthetic data if needed
             if not raw_files_exist or self.config.use_synthetic_data:
                 self.logger.info("Generating synthetic data...")
                 generate_data()
-
-                for symbol in self.config.symbols:
-                    file_path = self.config.raw_data_dir / f"{symbol}_1m.parquet"
-                    if file_path.exists():
-                        artifacts.append(file_path)
-                        self.manifest.add_artifact(
-                            name=f"raw_data_{symbol}",
-                            file_path=file_path,
-                            stage="data_generation",
-                            metadata={'symbol': symbol}
-                        )
+                self.logger.info("Synthetic data generation complete.")
             else:
                 self.logger.info("Raw data files already exist. Skipping generation.")
-                for symbol in self.config.symbols:
-                    for ext in ['.parquet', '.csv']:
-                        file_path = self.config.raw_data_dir / f"{symbol}_1m{ext}"
-                        if file_path.exists():
-                            artifacts.append(file_path)
-                            self.manifest.add_artifact(
-                                name=f"raw_data_{symbol}",
-                                file_path=file_path,
-                                stage="data_generation",
-                                metadata={'symbol': symbol}
-                            )
-                            break
+
+            # Step 2: ALWAYS run DataIngestor for validation and standardization
+            self.logger.info("\nRunning DataIngestor for validation and standardization...")
+
+            # Create validated data output directory
+            validated_data_dir = self.config.raw_data_dir / "validated"
+            validated_data_dir.mkdir(parents=True, exist_ok=True)
+
+            # Initialize DataIngestor
+            ingestor = DataIngestor(
+                raw_data_dir=self.config.raw_data_dir,
+                output_dir=validated_data_dir,
+                source_timezone='UTC',
+                symbol_col='symbol'
+            )
+
+            # Process each symbol
+            total_violations = 0
+            for symbol in self.config.symbols:
+                # Find the raw data file
+                raw_file = None
+                for ext in ['.parquet', '.csv']:
+                    candidate = self.config.raw_data_dir / f"{symbol}_1m{ext}"
+                    if candidate.exists():
+                        raw_file = candidate
+                        break
+
+                if raw_file is None:
+                    raise FileNotFoundError(
+                        f"Raw data file not found for symbol {symbol}. "
+                        f"Expected: {self.config.raw_data_dir}/{symbol}_1m.parquet or .csv"
+                    )
+
+                self.logger.info(f"\nProcessing {symbol} from {raw_file.name}...")
+
+                # Ingest and validate the file
+                df, metadata = ingestor.ingest_file(
+                    file_path=raw_file,
+                    symbol=symbol,
+                    validate=True
+                )
+
+                # Check for validation issues
+                validation_info = metadata.get('validation', {})
+                violations = validation_info.get('violations', {})
+                if violations:
+                    violation_count = sum(violations.values())
+                    total_violations += violation_count
+                    self.logger.warning(
+                        f"Symbol {symbol}: Fixed {violation_count} OHLCV violations: {violations}"
+                    )
+
+                # Save validated data
+                output_path = ingestor.save_parquet(df, f"{symbol}_1m_validated", metadata)
+                artifacts.append(output_path)
+
+                # Store metadata for this symbol
+                ingestion_metadata[symbol] = {
+                    'source_file': str(raw_file),
+                    'validated_file': str(output_path),
+                    'raw_rows': metadata.get('raw_rows', 0),
+                    'final_rows': metadata.get('final_rows', 0),
+                    'date_range': metadata.get('date_range', {}),
+                    'violations_fixed': sum(violations.values()) if violations else 0,
+                    'validation_details': violations
+                }
+
+                # Add to manifest
+                self.manifest.add_artifact(
+                    name=f"validated_data_{symbol}",
+                    file_path=output_path,
+                    stage="data_generation",
+                    metadata=ingestion_metadata[symbol]
+                )
+
+                self.logger.info(
+                    f"Validated {symbol}: {metadata.get('raw_rows', 0):,} -> "
+                    f"{metadata.get('final_rows', 0):,} rows"
+                )
+
+            # Log summary
+            self.logger.info("\n" + "-"*50)
+            self.logger.info("INGESTION SUMMARY")
+            self.logger.info("-"*50)
+            for symbol, meta in ingestion_metadata.items():
+                self.logger.info(
+                    f"  {symbol}: {meta['raw_rows']:,} raw -> {meta['final_rows']:,} validated "
+                    f"({meta['violations_fixed']} fixes)"
+                )
+            if total_violations > 0:
+                self.logger.warning(f"Total OHLCV violations fixed: {total_violations}")
+            else:
+                self.logger.info("No OHLCV violations found - data is clean!")
 
             end_time = datetime.now()
             return StageResult(
@@ -225,11 +299,15 @@ class PipelineRunner:
                 end_time=end_time,
                 duration_seconds=(end_time - start_time).total_seconds(),
                 artifacts=artifacts,
-                metadata={'symbols': self.config.symbols}
+                metadata={
+                    'symbols': self.config.symbols,
+                    'ingestion_results': ingestion_metadata,
+                    'total_violations_fixed': total_violations
+                }
             )
 
         except Exception as e:
-            self.logger.error(f"Data generation failed: {e}")
+            self.logger.error(f"Data generation/ingestion failed: {e}")
             self.logger.error(traceback.format_exc())
             return StageResult(
                 stage_name="data_generation",
@@ -240,26 +318,46 @@ class PipelineRunner:
             )
 
     def _run_data_cleaning(self) -> StageResult:
-        """Stage 2: Data Cleaning."""
+        """Stage 2: Data Cleaning - uses validated data from Stage 1."""
         start_time = datetime.now()
         self.logger.info("="*70)
         self.logger.info("STAGE 2: Data Cleaning")
         self.logger.info("="*70)
 
         try:
-            from data_cleaning import main as clean_data
-            clean_data()
+            from data_cleaning import clean_symbol_data
+
+            # Use validated data from Stage 1
+            validated_data_dir = self.config.raw_data_dir / "validated"
 
             artifacts = []
             for symbol in self.config.symbols:
-                file_path = self.config.clean_data_dir / f"{symbol}_5m_clean.parquet"
-                if file_path.exists():
-                    artifacts.append(file_path)
+                # Look for validated data first, fall back to raw if not found
+                input_path = validated_data_dir / f"{symbol}_1m_validated.parquet"
+                if not input_path.exists():
+                    # Fall back to raw data (for backward compatibility)
+                    self.logger.warning(
+                        f"Validated data not found for {symbol}, using raw data"
+                    )
+                    input_path = self.config.raw_data_dir / f"{symbol}_1m.parquet"
+                    if not input_path.exists():
+                        input_path = self.config.raw_data_dir / f"{symbol}_1m.csv"
+
+                if not input_path.exists():
+                    raise FileNotFoundError(f"No input data found for {symbol}")
+
+                output_path = self.config.clean_data_dir / f"{symbol}_5m_clean.parquet"
+
+                self.logger.info(f"Cleaning {symbol}: {input_path.name} -> {output_path.name}")
+                clean_symbol_data(input_path, output_path, symbol)
+
+                if output_path.exists():
+                    artifacts.append(output_path)
                     self.manifest.add_artifact(
                         name=f"clean_data_{symbol}",
-                        file_path=file_path,
+                        file_path=output_path,
                         stage="data_cleaning",
-                        metadata={'symbol': symbol}
+                        metadata={'symbol': symbol, 'source': str(input_path)}
                     )
 
             end_time = datetime.now()
