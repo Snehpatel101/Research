@@ -294,12 +294,12 @@ class DataValidator:
         feature_df = self.df[feature_cols].fillna(0)
         corr_matrix = feature_df.corr()
 
-        # Find highly correlated pairs (> 0.95)
+        # Find highly correlated pairs (> 0.85)
         high_corr_pairs = []
         for i in range(len(corr_matrix.columns)):
             for j in range(i+1, len(corr_matrix.columns)):
                 corr_val = abs(corr_matrix.iloc[i, j])
-                if corr_val > 0.95:
+                if corr_val > 0.85:
                     pair = {
                         'feature1': corr_matrix.columns[i],
                         'feature2': corr_matrix.columns[j],
@@ -308,14 +308,14 @@ class DataValidator:
                     high_corr_pairs.append(pair)
 
         if high_corr_pairs:
-            logger.warning(f"  Found {len(high_corr_pairs)} highly correlated feature pairs (>0.95):")
+            logger.warning(f"  Found {len(high_corr_pairs)} highly correlated feature pairs (>0.85):")
             for pair in high_corr_pairs[:10]:  # Show first 10
                 logger.warning(f"    {pair['feature1']} <-> {pair['feature2']}: {pair['correlation']:.3f}")
             if len(high_corr_pairs) > 10:
                 logger.warning(f"    ... and {len(high_corr_pairs)-10} more")
             self.warnings_found.append(f"{len(high_corr_pairs)} highly correlated feature pairs")
         else:
-            logger.info("  No highly correlated features found (>0.95) ✓")
+            logger.info("  No highly correlated features found (>0.85) ✓")
 
         results['high_correlations'] = high_corr_pairs
 
@@ -680,7 +680,7 @@ class DataValidator:
 
     def run_feature_selection(
         self,
-        correlation_threshold: float = 0.95,
+        correlation_threshold: float = 0.85,
         variance_threshold: float = 0.01
     ) -> FeatureSelectionResult:
         """
@@ -690,7 +690,7 @@ class DataValidator:
         while keeping the most interpretable feature from each correlated group.
 
         Args:
-            correlation_threshold: Threshold for feature correlation (default 0.95)
+            correlation_threshold: Threshold for feature correlation (default 0.85)
             variance_threshold: Minimum variance to keep feature (default 0.01)
 
         Returns:
@@ -766,7 +766,7 @@ def validate_data(
     output_path: Optional[Path] = None,
     horizons: List[int] = [1, 5, 20],
     run_feature_selection: bool = True,
-    correlation_threshold: float = 0.95,
+    correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
     feature_selection_output_path: Optional[Path] = None
 ) -> Tuple[Dict, Optional[FeatureSelectionResult]]:
@@ -778,7 +778,7 @@ def validate_data(
         output_path: Optional path to save validation report (JSON)
         horizons: List of label horizons to validate
         run_feature_selection: Whether to run feature selection (default True)
-        correlation_threshold: Threshold for feature correlation (default 0.95)
+        correlation_threshold: Threshold for feature correlation (default 0.85)
         variance_threshold: Minimum variance to keep feature (default 0.01)
         feature_selection_output_path: Optional path to save feature selection report
 

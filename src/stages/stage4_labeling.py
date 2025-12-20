@@ -2,9 +2,10 @@
 Stage 4: Triple-Barrier Labeling with Numba Optimization
 Generates initial labels using triple barrier method with ATR-based dynamic barriers
 
-CRITICAL FIX (2024): Barrier multipliers calibrated for balanced class distribution.
-Previous values (k_up=2.0, k_down=1.0) were too wide, causing 99%+ neutral labels.
-New values target ~35% long, ~35% short, ~30% neutral distribution.
+CRITICAL FIX (2024-12): ASYMMETRIC BARRIERS TO CORRECT LONG BIAS
+Previous symmetric barriers (k_up = k_down) in a historically bullish market
+produced 87-91% long signals. New asymmetric barriers (k_up > k_down) make the
+lower barrier easier to hit, targeting ~50/50 long/short distribution.
 """
 import pandas as pd
 import numpy as np
@@ -34,50 +35,52 @@ try:
 except ImportError:
     logger.info("Using local BARRIER_PARAMS (config.py not available)")
 
-    # Local fallback - EMPIRICALLY CALIBRATED for 30-35% neutral label rate
-    # These parameters were derived from statistical analysis of actual data.
-    # Previous values produced only 1-5% neutral labels (too many directional signals).
+    # Local fallback - ASYMMETRIC BARRIERS TO CORRECT LONG BIAS
+    # PROBLEM: Symmetric barriers in bullish markets produce 87%+ long labels.
+    # SOLUTION: k_up > k_down makes lower barrier easier to hit, balancing labels.
     #
-    # Key insights from empirical calibration:
+    # Key insights:
     # - H1 is NON-VIABLE after transaction costs (excluded from ACTIVE_HORIZONS)
-    # - H5 requires k=0.90 for proper neutral rate
-    # - H20 requires k=2.00 for proper neutral rate
+    # - H5: k_up=1.10, k_down=0.75 (ratio 1.47:1 to counteract bullish drift)
+    # - H20: k_up=2.40, k_down=1.70 (ratio 1.41:1 to counteract bullish drift)
     # - max_bars for H20 (60) determines required PURGE_BARS to prevent leakage
 
     BARRIER_PARAMS = {
         # Horizon 1: Ultra-short (5 min) - NON-VIABLE after transaction costs
         # Transaction costs (~0.5 ticks) exceed typical H1 profit (1-2 ticks).
-        # Kept for labeling completeness only.
+        # Symmetric barriers acceptable since H1 is not used for trading.
         1: {
             'k_up': 0.25,
             'k_down': 0.25,
             'max_bars': 5,
             'description': 'Ultra-short: NON-VIABLE after transaction costs'
         },
-        # Horizon 5: Short-term (25 min) - ACTIVE
-        # Empirically calibrated: k=0.90 produces ~30-35% neutral labels.
+        # Horizon 5: Short-term (25 min) - ACTIVE, ASYMMETRIC
+        # k_up=1.10, k_down=0.75 makes lower barrier 47% easier to hit.
+        # This counteracts structural upward drift causing 87%+ long labels.
         5: {
-            'k_up': 0.90,
-            'k_down': 0.90,
+            'k_up': 1.10,
+            'k_down': 0.75,
             'max_bars': 15,
-            'description': 'Short-term: empirically calibrated for 30-35% neutral'
+            'description': 'Short-term: ASYMMETRIC barriers to reduce long bias'
         },
-        # Horizon 20: Medium-term (~1.5 hours) - ACTIVE
-        # Empirically calibrated: k=2.0 produces ~30-35% neutral labels.
+        # Horizon 20: Medium-term (~1.5 hours) - ACTIVE, ASYMMETRIC
+        # k_up=2.40, k_down=1.70 makes lower barrier 41% easier to hit.
         # CRITICAL: max_bars=60 determines PURGE_BARS requirement.
         20: {
-            'k_up': 2.00,
-            'k_down': 2.00,
+            'k_up': 2.40,
+            'k_down': 1.70,
             'max_bars': 60,
-            'description': 'Medium-term: empirically calibrated for 30-35% neutral'
+            'description': 'Medium-term: ASYMMETRIC barriers to reduce long bias'
         }
     }
 
     # Alternative: Percentage-based barriers (ATR-independent fallback)
+    # Also uses asymmetric barriers (pct_up > pct_down) to correct long bias
     PERCENTAGE_BARRIER_PARAMS = {
-        1: {'pct_up': 0.0015, 'pct_down': 0.0015, 'max_bars': 5},   # 0.15%
-        5: {'pct_up': 0.0030, 'pct_down': 0.0030, 'max_bars': 15},  # 0.30%
-        20: {'pct_up': 0.0075, 'pct_down': 0.0075, 'max_bars': 60}  # 0.75%
+        1: {'pct_up': 0.0015, 'pct_down': 0.0015, 'max_bars': 5},   # 0.15% symmetric (H1 not traded)
+        5: {'pct_up': 0.0030, 'pct_down': 0.0020, 'max_bars': 15},  # 0.30%/0.20% asymmetric
+        20: {'pct_up': 0.0060, 'pct_down': 0.0042, 'max_bars': 60}  # 0.60%/0.42% asymmetric
     }
 
 

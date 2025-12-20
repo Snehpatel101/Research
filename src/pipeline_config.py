@@ -46,7 +46,7 @@ class PipelineConfig:
     train_ratio: float = 0.70
     val_ratio: float = 0.15
     test_ratio: float = 0.15
-    purge_bars: int = 20
+    purge_bars: int = 60  # = max_bars for H20 (prevents label leakage)
     embargo_bars: int = 288  # ~1 day for 5-min data
 
     # Genetic Algorithm settings (for future Phase 2)

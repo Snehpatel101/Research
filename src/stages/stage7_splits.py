@@ -47,7 +47,7 @@ def create_chronological_splits(
     train_ratio: float = 0.70,
     val_ratio: float = 0.15,
     test_ratio: float = 0.15,
-    purge_bars: int = 20,
+    purge_bars: int = 60,
     embargo_bars: int = 288,
     datetime_col: str = 'datetime'
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict]:
@@ -156,7 +156,7 @@ def create_splits(
     train_ratio: float = 0.70,
     val_ratio: float = 0.15,
     test_ratio: float = 0.15,
-    purge_bars: int = 20,
+    purge_bars: int = 60,
     embargo_bars: int = 288,
     datetime_col: str = 'datetime'
 ) -> Dict:

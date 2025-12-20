@@ -27,7 +27,7 @@ metadata = create_splits(
     train_ratio=0.70,
     val_ratio=0.15,
     test_ratio=0.15,
-    purge_bars=20,
+    purge_bars=60,  # = max_bars for H20 (prevents label leakage)
     embargo_bars=288
 )
 ```

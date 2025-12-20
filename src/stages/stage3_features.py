@@ -150,6 +150,59 @@ def calculate_stochastic_numba(high: np.ndarray, low: np.ndarray, close: np.ndar
 
 
 @jit(nopython=True)
+def calculate_rolling_correlation_numba(x: np.ndarray, y: np.ndarray, period: int) -> np.ndarray:
+    """Calculate rolling correlation using Numba."""
+    n = len(x)
+    result = np.full(n, np.nan)
+
+    for i in range(period - 1, n):
+        x_window = x[i - period + 1:i + 1]
+        y_window = y[i - period + 1:i + 1]
+
+        x_mean = np.mean(x_window)
+        y_mean = np.mean(y_window)
+
+        x_centered = x_window - x_mean
+        y_centered = y_window - y_mean
+
+        numerator = np.sum(x_centered * y_centered)
+        denominator = np.sqrt(np.sum(x_centered ** 2) * np.sum(y_centered ** 2))
+
+        if denominator > 0:
+            result[i] = numerator / denominator
+        else:
+            result[i] = 0.0
+
+    return result
+
+
+@jit(nopython=True)
+def calculate_rolling_beta_numba(y: np.ndarray, x: np.ndarray, period: int) -> np.ndarray:
+    """Calculate rolling beta (regression coefficient) of y on x using Numba."""
+    n = len(x)
+    result = np.full(n, np.nan)
+
+    for i in range(period - 1, n):
+        x_window = x[i - period + 1:i + 1]
+        y_window = y[i - period + 1:i + 1]
+
+        x_mean = np.mean(x_window)
+        y_mean = np.mean(y_window)
+
+        x_centered = x_window - x_mean
+        y_centered = y_window - y_mean
+
+        denominator = np.sum(x_centered ** 2)
+
+        if denominator > 0:
+            result[i] = np.sum(x_centered * y_centered) / denominator
+        else:
+            result[i] = 0.0
+
+    return result
+
+
+@jit(nopython=True)
 def calculate_adx_numba(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Calculate ADX, +DI, -DI using Numba."""
     n = len(close)
@@ -817,10 +870,150 @@ class FeatureEngineer:
         return df
 
     # ========================================================================
+    # CROSS-ASSET FEATURES
+    # ========================================================================
+
+    def add_cross_asset_features(
+        self,
+        df: pd.DataFrame,
+        mes_close: Optional[np.ndarray] = None,
+        mgc_close: Optional[np.ndarray] = None,
+        current_symbol: str = ''
+    ) -> pd.DataFrame:
+        """
+        Add cross-asset features between MES (S&P 500 futures) and MGC (Gold futures).
+
+        These features capture:
+        - Correlation: Rolling correlation between MES and MGC returns
+        - Spread Z-score: Normalized spread between the two assets
+        - Beta: Rolling beta of MES returns vs MGC returns
+        - Relative Strength: Momentum divergence (MES return - MGC return)
+
+        Parameters:
+        -----------
+        df : DataFrame to add features to
+        mes_close : MES close prices (aligned with df index)
+        mgc_close : MGC close prices (aligned with df index)
+        current_symbol : The symbol being processed ('MES' or 'MGC')
+
+        Returns:
+        --------
+        DataFrame with cross-asset features added
+        """
+        # Check if both assets are available
+        has_both_assets = (mes_close is not None and
+                          mgc_close is not None and
+                          len(mes_close) == len(df) and
+                          len(mgc_close) == len(df))
+
+        if not has_both_assets:
+            logger.info("Skipping cross-asset features (requires both MES and MGC data)")
+            # Set cross-asset features to NaN when only one symbol is present
+            df['mes_mgc_correlation_20'] = np.nan
+            df['mes_mgc_spread_zscore'] = np.nan
+            df['mes_mgc_beta'] = np.nan
+            df['relative_strength'] = np.nan
+
+            self.feature_metadata['mes_mgc_correlation_20'] = "20-bar rolling correlation between MES and MGC returns"
+            self.feature_metadata['mes_mgc_spread_zscore'] = "Z-score of spread between normalized MES and MGC prices"
+            self.feature_metadata['mes_mgc_beta'] = "Rolling beta of MES returns vs MGC returns"
+            self.feature_metadata['relative_strength'] = "MES return minus MGC return (momentum divergence)"
+
+            return df
+
+        logger.info("Adding cross-asset features (MES-MGC)...")
+
+        # Calculate returns for both assets
+        mes_returns = np.diff(mes_close, prepend=mes_close[0]) / np.where(
+            mes_close > 0, mes_close, 1.0
+        )
+        # Shift to get proper pct_change equivalent
+        mes_returns[0] = 0.0
+
+        mgc_returns = np.diff(mgc_close, prepend=mgc_close[0]) / np.where(
+            mgc_close > 0, mgc_close, 1.0
+        )
+        mgc_returns[0] = 0.0
+
+        # Fix: Calculate proper returns (pct_change style)
+        mes_returns = np.zeros(len(mes_close))
+        mgc_returns = np.zeros(len(mgc_close))
+        mes_returns[1:] = (mes_close[1:] - mes_close[:-1]) / mes_close[:-1]
+        mgc_returns[1:] = (mgc_close[1:] - mgc_close[:-1]) / mgc_close[:-1]
+
+        # 1. MES-MGC Correlation (20-bar rolling)
+        df['mes_mgc_correlation_20'] = calculate_rolling_correlation_numba(
+            mes_returns.astype(np.float64),
+            mgc_returns.astype(np.float64),
+            period=20
+        )
+
+        # 2. MES-MGC Spread Z-score
+        # Normalize prices to allow comparison (z-score of each)
+        period = 20
+
+        # Calculate rolling mean and std for MES
+        mes_rolling_mean = pd.Series(mes_close).rolling(window=period).mean().values
+        mes_rolling_std = pd.Series(mes_close).rolling(window=period).std().values
+
+        # Calculate rolling mean and std for MGC
+        mgc_rolling_mean = pd.Series(mgc_close).rolling(window=period).mean().values
+        mgc_rolling_std = pd.Series(mgc_close).rolling(window=period).std().values
+
+        # Normalized prices (z-scores)
+        mes_normalized = np.where(
+            mes_rolling_std > 0,
+            (mes_close - mes_rolling_mean) / mes_rolling_std,
+            0.0
+        )
+        mgc_normalized = np.where(
+            mgc_rolling_std > 0,
+            (mgc_close - mgc_rolling_mean) / mgc_rolling_std,
+            0.0
+        )
+
+        # Spread between normalized prices
+        spread = mes_normalized - mgc_normalized
+
+        # Z-score of the spread
+        spread_mean = pd.Series(spread).rolling(window=period).mean().values
+        spread_std = pd.Series(spread).rolling(window=period).std().values
+        df['mes_mgc_spread_zscore'] = np.where(
+            spread_std > 0,
+            (spread - spread_mean) / spread_std,
+            0.0
+        )
+
+        # 3. MES-MGC Beta (rolling beta of MES returns vs MGC returns)
+        df['mes_mgc_beta'] = calculate_rolling_beta_numba(
+            mes_returns.astype(np.float64),
+            mgc_returns.astype(np.float64),
+            period=20
+        )
+
+        # 4. Relative Strength (momentum divergence)
+        # 20-bar cumulative returns for each asset
+        mes_cum_ret = pd.Series(mes_returns).rolling(window=20).sum().values
+        mgc_cum_ret = pd.Series(mgc_returns).rolling(window=20).sum().values
+        df['relative_strength'] = mes_cum_ret - mgc_cum_ret
+
+        self.feature_metadata['mes_mgc_correlation_20'] = "20-bar rolling correlation between MES and MGC returns"
+        self.feature_metadata['mes_mgc_spread_zscore'] = "Z-score of spread between normalized MES and MGC prices"
+        self.feature_metadata['mes_mgc_beta'] = "Rolling beta of MES returns vs MGC returns"
+        self.feature_metadata['relative_strength'] = "MES return minus MGC return (momentum divergence)"
+
+        return df
+
+    # ========================================================================
     # MAIN PIPELINE
     # ========================================================================
 
-    def engineer_features(self, df: pd.DataFrame, symbol: str) -> Tuple[pd.DataFrame, Dict]:
+    def engineer_features(
+        self,
+        df: pd.DataFrame,
+        symbol: str,
+        cross_asset_data: Optional[Dict[str, np.ndarray]] = None
+    ) -> Tuple[pd.DataFrame, Dict]:
         """
         Complete feature engineering pipeline.
 
@@ -828,6 +1021,9 @@ class FeatureEngineer:
         -----------
         df : Input DataFrame with cleaned OHLCV data
         symbol : Symbol name
+        cross_asset_data : Optional dict with 'mes_close' and 'mgc_close' arrays
+                          for cross-asset feature computation. Arrays must be
+                          aligned with df index (same length and timestamps).
 
         Returns:
         --------
@@ -867,10 +1063,35 @@ class FeatureEngineer:
         df = self.add_temporal_features(df)
         df = self.add_regime_features(df)
 
+        # Add cross-asset features (MES-MGC)
+        mes_close = None
+        mgc_close = None
+        if cross_asset_data is not None:
+            mes_close = cross_asset_data.get('mes_close')
+            mgc_close = cross_asset_data.get('mgc_close')
+        df = self.add_cross_asset_features(
+            df,
+            mes_close=mes_close,
+            mgc_close=mgc_close,
+            current_symbol=symbol
+        )
+
         # Drop rows with NaN (mainly from initial indicator warmup periods)
+        # Note: Cross-asset features are NaN when only one symbol is present
+        # We use subset to exclude cross-asset columns from dropna if they are all NaN
+        cross_asset_cols = ['mes_mgc_correlation_20', 'mes_mgc_spread_zscore',
+                           'mes_mgc_beta', 'relative_strength']
+        non_cross_asset_cols = [c for c in df.columns if c not in cross_asset_cols]
+
         rows_before_dropna = len(df)
-        df = df.dropna()
+        # Only drop NaN based on non-cross-asset columns
+        df = df.dropna(subset=non_cross_asset_cols)
         rows_dropped = rows_before_dropna - len(df)
+
+        # Check if cross-asset features were computed
+        has_cross_asset = (cross_asset_data is not None and
+                          'mes_close' in cross_asset_data and
+                          'mgc_close' in cross_asset_data)
 
         feature_report = {
             'symbol': symbol,
@@ -881,6 +1102,8 @@ class FeatureEngineer:
             'final_columns': len(df.columns),
             'features_added': len(df.columns) - initial_cols,
             'rows_dropped_for_nan': rows_dropped,
+            'cross_asset_features': has_cross_asset,
+            'cross_asset_feature_names': cross_asset_cols if has_cross_asset else [],
             'date_range': {
                 'start': df['datetime'].min().isoformat(),
                 'end': df['datetime'].max().isoformat()
@@ -890,6 +1113,8 @@ class FeatureEngineer:
         logger.info(f"\nFeature engineering complete for {symbol}")
         logger.info(f"Columns: {initial_cols} -> {len(df.columns)} (+{feature_report['features_added']} features)")
         logger.info(f"Rows: {initial_rows:,} -> {len(df):,} (-{rows_dropped:,} for NaN)")
+        if has_cross_asset:
+            logger.info(f"Cross-asset features: {cross_asset_cols}")
 
         return df, feature_report
 
@@ -995,6 +1220,104 @@ class FeatureEngineer:
 
         return results
 
+    def process_multi_symbol(
+        self,
+        symbol_files: Dict[str, Union[str, Path]],
+        compute_cross_asset: bool = True
+    ) -> Dict[str, Dict]:
+        """
+        Process multiple symbols with cross-asset feature computation.
+
+        This method loads data for multiple symbols, aligns them by timestamp,
+        and computes cross-asset features when both MES and MGC are present.
+
+        Parameters:
+        -----------
+        symbol_files : Dict mapping symbol names to file paths
+                      e.g., {'MES': 'path/to/mes.parquet', 'MGC': 'path/to/mgc.parquet'}
+        compute_cross_asset : Whether to compute cross-asset features (default True)
+
+        Returns:
+        --------
+        dict : Dictionary mapping symbols to feature reports
+        """
+        logger.info(f"\n{'='*60}")
+        logger.info(f"Processing {len(symbol_files)} symbols with cross-asset features")
+        logger.info(f"{'='*60}\n")
+
+        # Load all data
+        symbol_data = {}
+        for symbol, file_path in symbol_files.items():
+            file_path = Path(file_path)
+            if file_path.exists():
+                df = pd.read_parquet(file_path)
+                symbol_data[symbol.upper()] = df
+                logger.info(f"Loaded {symbol.upper()}: {len(df):,} rows")
+            else:
+                logger.warning(f"File not found for {symbol}: {file_path}")
+
+        # Check if we can compute cross-asset features
+        has_mes = 'MES' in symbol_data
+        has_mgc = 'MGC' in symbol_data
+        can_compute_cross_asset = compute_cross_asset and has_mes and has_mgc
+
+        cross_asset_data = None
+
+        if can_compute_cross_asset:
+            logger.info("Aligning MES and MGC data for cross-asset features...")
+
+            mes_df = symbol_data['MES'].copy()
+            mgc_df = symbol_data['MGC'].copy()
+
+            # Set datetime as index for alignment
+            mes_df = mes_df.set_index('datetime')
+            mgc_df = mgc_df.set_index('datetime')
+
+            # Get common timestamps
+            common_idx = mes_df.index.intersection(mgc_df.index)
+            logger.info(f"Common timestamps: {len(common_idx):,}")
+
+            if len(common_idx) > 0:
+                # Align data to common timestamps
+                mes_aligned = mes_df.loc[common_idx].reset_index()
+                mgc_aligned = mgc_df.loc[common_idx].reset_index()
+
+                # Update symbol_data with aligned data
+                symbol_data['MES'] = mes_aligned
+                symbol_data['MGC'] = mgc_aligned
+
+                # Prepare cross-asset data
+                cross_asset_data = {
+                    'mes_close': mes_aligned['close'].values,
+                    'mgc_close': mgc_aligned['close'].values
+                }
+            else:
+                logger.warning("No common timestamps found, skipping cross-asset features")
+                can_compute_cross_asset = False
+
+        # Process each symbol
+        results = {}
+        for symbol, df in symbol_data.items():
+            try:
+                logger.info(f"\nProcessing {symbol}...")
+
+                # Engineer features with cross-asset data
+                df_features, feature_report = self.engineer_features(
+                    df,
+                    symbol,
+                    cross_asset_data=cross_asset_data if can_compute_cross_asset else None
+                )
+
+                # Save results
+                self.save_features(df_features, symbol, feature_report)
+                results[symbol] = feature_report
+
+            except Exception as e:
+                logger.error(f"Error processing {symbol}: {e}", exc_info=True)
+                continue
+
+        return results
+
 
 def main():
     """
@@ -1011,6 +1334,10 @@ def main():
                         help='Data timeframe')
     parser.add_argument('--pattern', type=str, default='*.parquet',
                         help='File pattern to match')
+    parser.add_argument('--multi-symbol', action='store_true',
+                        help='Process MES and MGC together with cross-asset features')
+    parser.add_argument('--symbols', type=str, nargs='+', default=['MES', 'MGC'],
+                        help='Symbols to process (for multi-symbol mode)')
 
     args = parser.parse_args()
 
@@ -1021,8 +1348,28 @@ def main():
         timeframe=args.timeframe
     )
 
-    # Process all files
-    results = engineer.process_directory(pattern=args.pattern)
+    if args.multi_symbol:
+        # Build symbol_files dict
+        input_dir = Path(args.input_dir)
+        symbol_files = {}
+        for symbol in args.symbols:
+            # Look for files matching the symbol
+            matches = list(input_dir.glob(f"{symbol.lower()}*.parquet")) + \
+                      list(input_dir.glob(f"{symbol.upper()}*.parquet"))
+            if matches:
+                symbol_files[symbol.upper()] = matches[0]
+                print(f"Found {symbol.upper()}: {matches[0]}")
+            else:
+                print(f"Warning: No file found for {symbol}")
+
+        if symbol_files:
+            results = engineer.process_multi_symbol(symbol_files, compute_cross_asset=True)
+        else:
+            print("No files found for specified symbols")
+            results = {}
+    else:
+        # Process all files independently
+        results = engineer.process_directory(pattern=args.pattern)
 
     print("\n" + "="*60)
     print("FEATURE ENGINEERING SUMMARY")
@@ -1032,6 +1379,7 @@ def main():
         print(f"  Features added: {report['features_added']}")
         print(f"  Final columns: {report['final_columns']}")
         print(f"  Final rows: {report['final_rows']:,}")
+        print(f"  Cross-asset features: {report.get('cross_asset_features', False)}")
         print(f"  Date range: {report['date_range']['start']} to {report['date_range']['end']}")
 
 

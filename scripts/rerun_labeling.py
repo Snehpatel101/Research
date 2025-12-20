@@ -58,7 +58,7 @@ HORIZONS = [1, 5, 20]
 TRAIN_RATIO = 0.70
 VAL_RATIO = 0.15
 TEST_RATIO = 0.15
-PURGE_BARS = 20
+PURGE_BARS = 60  # = max_bars for H20 (prevents label leakage)
 EMBARGO_BARS = 288
 
 # Validation thresholds

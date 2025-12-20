@@ -82,6 +82,6 @@ src/stages/
 SYMBOLS = ['MES', 'MGC']
 LABEL_HORIZONS = [1, 5, 20]
 TRAIN/VAL/TEST = 70/15/15
-PURGE_BARS = 20
+PURGE_BARS = 60  # = max_bars for H20 (prevents label leakage)
 EMBARGO_BARS = 288
 ```

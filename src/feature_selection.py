@@ -230,7 +230,7 @@ def filter_low_variance(
 def build_correlation_groups(
     df: pd.DataFrame,
     feature_cols: List[str],
-    correlation_threshold: float = 0.95
+    correlation_threshold: float = 0.85
 ) -> List[Set[str]]:
     """
     Build groups of highly correlated features using union-find.
@@ -241,7 +241,7 @@ def build_correlation_groups(
     Args:
         df: Input DataFrame
         feature_cols: List of feature column names
-        correlation_threshold: Threshold for considering features correlated (default 0.95)
+        correlation_threshold: Threshold for considering features correlated (default 0.85)
 
     Returns:
         List of sets, each containing correlated feature names
@@ -322,7 +322,7 @@ def select_from_correlated_group(group: Set[str]) -> Tuple[str, List[str]]:
 def filter_correlated_features(
     df: pd.DataFrame,
     feature_cols: List[str],
-    correlation_threshold: float = 0.95
+    correlation_threshold: float = 0.85
 ) -> Tuple[List[str], Dict[str, str], List[List[str]]]:
     """
     Remove highly correlated features, keeping the most interpretable from each group.
@@ -330,7 +330,7 @@ def filter_correlated_features(
     Args:
         df: Input DataFrame
         feature_cols: List of feature column names
-        correlation_threshold: Threshold for considering features correlated (default 0.95)
+        correlation_threshold: Threshold for considering features correlated (default 0.85)
 
     Returns:
         Tuple of (features_to_keep, removed_features_dict, correlation_groups)
@@ -361,7 +361,7 @@ def filter_correlated_features(
 
 def select_features(
     df: pd.DataFrame,
-    correlation_threshold: float = 0.95,
+    correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
     feature_cols: Optional[List[str]] = None
 ) -> FeatureSelectionResult:
@@ -373,7 +373,7 @@ def select_features(
 
     Args:
         df: Input DataFrame with features
-        correlation_threshold: Threshold for feature correlation (default 0.95)
+        correlation_threshold: Threshold for feature correlation (default 0.85)
         variance_threshold: Minimum variance to keep feature (default 0.01)
         feature_cols: Optional list of feature columns (auto-detected if None)
 
@@ -476,7 +476,7 @@ def save_feature_selection_report(
             'use_features': result.selected_features,
             'feature_count': result.final_count,
             'notes': [
-                "These features have been filtered for low correlation (<0.95)",
+                "These features have been filtered for low correlation (<0.85)",
                 "Low variance features have been removed",
                 "Features are ranked by interpretability/importance",
                 "Use this feature list for model training in Phase 2"
@@ -546,7 +546,7 @@ def main():
     # Run feature selection
     result = select_features(
         df,
-        correlation_threshold=0.95,
+        correlation_threshold=0.85,
         variance_threshold=0.01
     )
 
