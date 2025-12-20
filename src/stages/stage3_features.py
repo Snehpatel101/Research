@@ -754,25 +754,22 @@ class FeatureEngineer:
         df['dayofweek_sin'] = np.sin(2 * np.pi * df['dayofweek'] / 7)
         df['dayofweek_cos'] = np.cos(2 * np.pi * df['dayofweek'] / 7)
 
-        # Regular Trading Hours flag (9:30 AM - 4:00 PM ET)
-        # Assuming data is in UTC, convert to ET
-        df['is_rth'] = ((df['hour'] >= 14) & (df['hour'] < 21)).astype(int)
-
-        # Trading session
+        # Trading sessions - 3 equal 8-hour blocks covering 24 hours (UTC)
+        # Asia:   00:00-08:00 UTC (hours 0-7)
+        # London: 08:00-16:00 UTC (hours 8-15)
+        # NY:     16:00-24:00 UTC (hours 16-23)
         def get_session(hour):
             if 0 <= hour < 8:
                 return 'asia'
-            elif 8 <= hour < 13:
+            elif 8 <= hour < 16:
                 return 'london'
-            elif 13 <= hour < 21:
+            else:  # 16 <= hour < 24
                 return 'ny'
-            else:
-                return 'overnight'
 
         df['session'] = df['hour'].apply(get_session)
 
-        # One-hot encode session
-        for session in ['asia', 'london', 'ny', 'overnight']:
+        # One-hot encode session (3 sessions, 8 hours each)
+        for session in ['asia', 'london', 'ny']:
             df[f'session_{session}'] = (df['session'] == session).astype(int)
 
         df = df.drop(['hour', 'minute', 'dayofweek', 'session'], axis=1)
@@ -783,11 +780,9 @@ class FeatureEngineer:
         self.feature_metadata['minute_cos'] = "Minute cosine encoding"
         self.feature_metadata['dayofweek_sin'] = "Day of week sine encoding"
         self.feature_metadata['dayofweek_cos'] = "Day of week cosine encoding"
-        self.feature_metadata['is_rth'] = "Regular trading hours flag"
-        self.feature_metadata['session_asia'] = "Asian session flag"
-        self.feature_metadata['session_london'] = "London session flag"
-        self.feature_metadata['session_ny'] = "NY session flag"
-        self.feature_metadata['session_overnight'] = "Overnight session flag"
+        self.feature_metadata['session_asia'] = "Asia session (00:00-08:00 UTC)"
+        self.feature_metadata['session_london'] = "London session (08:00-16:00 UTC)"
+        self.feature_metadata['session_ny'] = "New York session (16:00-24:00 UTC)"
 
         return df
 

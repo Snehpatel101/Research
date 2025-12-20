@@ -193,8 +193,11 @@ def compute_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     df['dow_sin'] = np.sin(2 * np.pi * df['day_of_week'] / 5)
     df['dow_cos'] = np.cos(2 * np.pi * df['day_of_week'] / 5)
 
-    # Regular Trading Hours flag (9:30 AM - 4:00 PM ET approximation)
-    df['is_rth'] = ((df['hour'] >= 9) & (df['hour'] < 16)).astype(int)
+    # Trading sessions - 3 equal 8-hour blocks (UTC)
+    # Asia: 00:00-08:00, London: 08:00-16:00, NY: 16:00-24:00
+    df['session_asia'] = ((df['hour'] >= 0) & (df['hour'] < 8)).astype(int)
+    df['session_london'] = ((df['hour'] >= 8) & (df['hour'] < 16)).astype(int)
+    df['session_ny'] = (df['hour'] >= 16).astype(int)
 
     # Drop raw temporal columns
     df = df.drop(columns=['hour', 'minute', 'day_of_week'])
