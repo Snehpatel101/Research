@@ -1,13 +1,17 @@
 """
 Stage 4: Triple-Barrier Labeling with Numba Optimization
 Generates initial labels using triple barrier method with ATR-based dynamic barriers
+
+CRITICAL FIX (2024): Barrier multipliers calibrated for balanced class distribution.
+Previous values (k_up=2.0, k_down=1.0) were too wide, causing 99%+ neutral labels.
+New values target ~35% long, ~35% short, ~30% neutral distribution.
 """
 import pandas as pd
 import numpy as np
 import numba as nb
 from pathlib import Path
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from tqdm import tqdm
 
 logging.basicConfig(
@@ -15,6 +19,60 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# BARRIER CONFIGURATION - TUNABLE PARAMETERS
+# =============================================================================
+# Try to import from config, fall back to local defaults if not available
+
+try:
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from config import BARRIER_PARAMS, PERCENTAGE_BARRIER_PARAMS
+    logger.info("Loaded BARRIER_PARAMS from config.py")
+except ImportError:
+    logger.info("Using local BARRIER_PARAMS (config.py not available)")
+
+    # Local fallback - calibrated for balanced class distribution
+    # These parameters control label distribution. Adjust based on:
+    # 1. ATR characteristics of your instruments
+    # 2. Target class balance (symmetric barriers = balanced classes)
+    # 3. max_bars should be 3-5x the horizon for barriers to have chance to hit
+
+    BARRIER_PARAMS = {
+        # Horizon 1: Very short-term (5 minutes)
+        # k_up/k_down = 0.3 ATR, max_bars = 5 (25 minutes to hit)
+        1: {
+            'k_up': 0.3,
+            'k_down': 0.3,
+            'max_bars': 5,
+            'description': 'Ultra-short: 0.3 ATR barriers, 5-bar window'
+        },
+        # Horizon 5: Short-term (25 minutes)
+        # k_up/k_down = 0.5 ATR, max_bars = 15 (75 minutes to hit)
+        5: {
+            'k_up': 0.5,
+            'k_down': 0.5,
+            'max_bars': 15,
+            'description': 'Short-term: 0.5 ATR barriers, 15-bar window'
+        },
+        # Horizon 20: Medium-term (~1.5 hours)
+        # k_up/k_down = 0.75 ATR, max_bars = 60 (5 hours to hit)
+        20: {
+            'k_up': 0.75,
+            'k_down': 0.75,
+            'max_bars': 60,
+            'description': 'Medium-term: 0.75 ATR barriers, 60-bar window'
+        }
+    }
+
+    # Alternative: Percentage-based barriers (use instead of ATR if preferred)
+    PERCENTAGE_BARRIER_PARAMS = {
+        1: {'pct_up': 0.0015, 'pct_down': 0.0015, 'max_bars': 5},   # 0.15%
+        5: {'pct_up': 0.0025, 'pct_down': 0.0025, 'max_bars': 15},  # 0.25%
+        20: {'pct_up': 0.0050, 'pct_down': 0.0050, 'max_bars': 60}  # 0.50%
+    }
 
 
 @nb.jit(nopython=True, cache=True)
@@ -123,10 +181,13 @@ def triple_barrier_numba(
 def apply_triple_barrier(
     df: pd.DataFrame,
     horizon: int,
-    k_up: float = 2.0,
-    k_down: float = 1.0,
-    max_bars: int = None,
-    atr_column: str = 'atr_14'
+    k_up: Optional[float] = None,
+    k_down: Optional[float] = None,
+    max_bars: Optional[int] = None,
+    atr_column: str = 'atr_14',
+    use_percentage: bool = False,
+    pct_up: Optional[float] = None,
+    pct_down: Optional[float] = None
 ) -> pd.DataFrame:
     """
     Apply triple barrier labeling to a dataframe.
@@ -135,10 +196,13 @@ def apply_triple_barrier(
     -----------
     df : DataFrame with OHLCV data and ATR
     horizon : horizon identifier (e.g., 1, 5, 20)
-    k_up : profit barrier multiplier
-    k_down : stop barrier multiplier
-    max_bars : maximum bars (defaults to horizon * 3)
+    k_up : profit barrier multiplier (ATR-based). If None, uses BARRIER_PARAMS
+    k_down : stop barrier multiplier (ATR-based). If None, uses BARRIER_PARAMS
+    max_bars : maximum bars. If None, uses BARRIER_PARAMS
     atr_column : column name for ATR values
+    use_percentage : if True, use percentage barriers instead of ATR
+    pct_up : percentage for upper barrier (e.g., 0.002 = 0.2%)
+    pct_down : percentage for lower barrier
 
     Returns:
     --------
@@ -149,11 +213,27 @@ def apply_triple_barrier(
         - mfe_h{horizon}
         - touch_type_h{horizon}
     """
-    if max_bars is None:
-        max_bars = horizon * 3
+    # Get default parameters from configuration if not provided
+    if horizon in BARRIER_PARAMS:
+        defaults = BARRIER_PARAMS[horizon]
+        if k_up is None:
+            k_up = defaults['k_up']
+        if k_down is None:
+            k_down = defaults['k_down']
+        if max_bars is None:
+            max_bars = defaults['max_bars']
+    else:
+        # Fallback for non-standard horizons
+        if k_up is None:
+            k_up = 0.5
+        if k_down is None:
+            k_down = 0.5
+        if max_bars is None:
+            max_bars = max(horizon * 3, 10)
 
     logger.info(f"Applying triple barrier for horizon {horizon}")
-    logger.info(f"  k_up={k_up:.2f}, k_down={k_down:.2f}, max_bars={max_bars}")
+    logger.info(f"  k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}")
+    logger.info(f"  Mode: {'Percentage-based' if use_percentage else 'ATR-based'}")
 
     # Extract arrays
     close = df['close'].values
@@ -195,7 +275,8 @@ def process_symbol_labeling(
     output_path: Path,
     symbol: str,
     horizons: List[int] = [1, 5, 20],
-    default_params: Dict = None
+    barrier_params: Optional[Dict] = None,
+    atr_column: str = 'atr_14'
 ) -> pd.DataFrame:
     """
     Process labeling for a single symbol with multiple horizons.
@@ -206,44 +287,59 @@ def process_symbol_labeling(
     output_path : Path to save labeled data
     symbol : Symbol name
     horizons : List of horizons to label
-    default_params : Default parameters dict with keys:
-        - k_up: float (default 2.0)
-        - k_down: float (default 1.0)
-        - atr_column: str (default 'atr_14')
+    barrier_params : Dict mapping horizon -> {k_up, k_down, max_bars}
+                     If None, uses module-level BARRIER_PARAMS
+    atr_column : column name for ATR values
 
     Returns:
     --------
     df : Labeled DataFrame
     """
-    if default_params is None:
-        default_params = {
-            'k_up': 2.0,
-            'k_down': 1.0,
-            'atr_column': 'atr_14'
-        }
+    # Use module-level defaults if not provided
+    if barrier_params is None:
+        barrier_params = BARRIER_PARAMS
 
     logger.info("=" * 70)
     logger.info(f"Triple-Barrier Labeling: {symbol}")
     logger.info("=" * 70)
+    logger.info("Using CALIBRATED barrier parameters for balanced labels:")
+    for h, params in barrier_params.items():
+        if h in horizons:
+            logger.info(f"  H{h}: k_up={params['k_up']}, k_down={params['k_down']}, max_bars={params['max_bars']}")
 
     # Load features
     df = pd.read_parquet(input_path)
     logger.info(f"Loaded {len(df):,} rows from {input_path}")
 
     # Ensure ATR column exists
-    atr_col = default_params.get('atr_column', 'atr_14')
-    if atr_col not in df.columns:
-        raise ValueError(f"ATR column '{atr_col}' not found in dataframe")
+    if atr_column not in df.columns:
+        raise ValueError(f"ATR column '{atr_column}' not found in dataframe")
 
-    # Apply labeling for each horizon
+    # Apply labeling for each horizon using calibrated parameters
     for horizon in tqdm(horizons, desc=f"Labeling {symbol}"):
-        k_up = default_params.get('k_up', 2.0)
-        k_down = default_params.get('k_down', 1.0)
-        max_bars = horizon * 3  # Default: 3x the horizon
+        params = barrier_params.get(horizon, {})
+        k_up = params.get('k_up')
+        k_down = params.get('k_down')
+        max_bars = params.get('max_bars')
 
         df = apply_triple_barrier(
-            df, horizon, k_up, k_down, max_bars, atr_col
+            df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars, atr_column=atr_column
         )
+
+    # Log final label distribution summary
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("LABEL DISTRIBUTION SUMMARY")
+    logger.info("=" * 70)
+    for horizon in horizons:
+        label_col = f'label_h{horizon}'
+        if label_col in df.columns:
+            counts = df[label_col].value_counts().sort_index()
+            total = len(df)
+            short_pct = counts.get(-1, 0) / total * 100
+            neutral_pct = counts.get(0, 0) / total * 100
+            long_pct = counts.get(1, 0) / total * 100
+            logger.info(f"H{horizon}: Short={short_pct:.1f}% | Neutral={neutral_pct:.1f}% | Long={long_pct:.1f}%")
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -267,18 +363,17 @@ def main():
 
     horizons = [1, 5, 20]
 
-    # Default initial parameters (will be optimized in Stage 5)
-    default_params = {
-        'k_up': 2.0,
-        'k_down': 1.0,
-        'atr_column': 'atr_14'
-    }
-
     logger.info("=" * 70)
-    logger.info("STAGE 4: TRIPLE-BARRIER LABELING")
+    logger.info("STAGE 4: TRIPLE-BARRIER LABELING (CALIBRATED)")
     logger.info("=" * 70)
-    logger.info(f"Horizons: {horizons}")
-    logger.info(f"Default parameters: {default_params}")
+    logger.info("")
+    logger.info("BARRIER PARAMETERS (calibrated for ~35/30/35 distribution):")
+    logger.info("-" * 70)
+    for horizon, params in BARRIER_PARAMS.items():
+        logger.info(f"  Horizon {horizon:2d}: k_up={params['k_up']:.2f}, "
+                   f"k_down={params['k_down']:.2f}, max_bars={params['max_bars']:2d}")
+        logger.info(f"             {params.get('description', '')}")
+    logger.info("-" * 70)
     logger.info("")
 
     for symbol in SYMBOLS:
@@ -287,7 +382,9 @@ def main():
 
         if input_path.exists():
             process_symbol_labeling(
-                input_path, output_path, symbol, horizons, default_params
+                input_path, output_path, symbol, horizons,
+                barrier_params=BARRIER_PARAMS,
+                atr_column='atr_14'
             )
         else:
             logger.warning(f"No features file found for {symbol}: {input_path}")

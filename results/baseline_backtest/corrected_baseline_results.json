@@ -1,0 +1,102 @@
+{
+  "timestamp": "2025-12-19T23:32:22.015873",
+  "methodology": "Hold for horizon bars (no overlapping positions)",
+  "commission_pct": 0.0002,
+  "quality_threshold": 0.5,
+  "results": {
+    "MGC": {
+      "h1": {
+        "n_trades": 80425,
+        "n_long": 52191,
+        "n_short": 28234,
+        "win_rate": 16.428971091078644,
+        "long_win_rate": 18.40930428617961,
+        "short_win_rate": 12.768293546787563,
+        "total_return_pct": -99.99999999993913,
+        "sharpe_ratio": -184.69144157052736,
+        "profit_factor": 0.14496679043296162,
+        "max_drawdown_pct": 99.99999999993908,
+        "avg_trade_bps": -3.49546058349725,
+        "std_trade_bps": 5.098637693694218
+      },
+      "h5": {
+        "n_trades": 27075,
+        "n_long": 21946,
+        "n_short": 5129,
+        "win_rate": 38.43397968605725,
+        "long_win_rate": 39.22354871047116,
+        "short_win_rate": 35.05556638720998,
+        "total_return_pct": -98.44388063691855,
+        "sharpe_ratio": -16.33247904359532,
+        "profit_factor": 0.6602916081089495,
+        "max_drawdown_pct": 98.44997828557543,
+        "avg_trade_bps": -1.5310750932028776,
+        "std_trade_bps": 11.294210925035559
+      },
+      "h20": {
+        "n_trades": 8166,
+        "n_long": 7502,
+        "n_short": 664,
+        "win_rate": 50.07347538574578,
+        "long_win_rate": 50.346574246867505,
+        "short_win_rate": 46.98795180722892,
+        "total_return_pct": 71.68458591127511,
+        "sharpe_ratio": 1.744379589889358,
+        "profit_factor": 1.0934035617187612,
+        "max_drawdown_pct": 20.23662675087919,
+        "avg_trade_bps": 0.6902926258495814,
+        "std_trade_bps": 23.838216177551015
+      }
+    },
+    "MES": {
+      "h1": {
+        "n_trades": 75915,
+        "n_long": 47656,
+        "n_short": 28259,
+        "win_rate": 12.76164130935915,
+        "long_win_rate": 14.531223770354204,
+        "short_win_rate": 9.777416044446017,
+        "total_return_pct": -99.99999999986949,
+        "sharpe_ratio": -178.26755513979336,
+        "profit_factor": 0.13542074489429565,
+        "max_drawdown_pct": 99.99999999986935,
+        "avg_trade_bps": -3.6025117818480394,
+        "std_trade_bps": 5.444144147499861
+      },
+      "h5": {
+        "n_trades": 25750,
+        "n_long": 19367,
+        "n_short": 6383,
+        "win_rate": 32.76504854368932,
+        "long_win_rate": 34.87375432436619,
+        "short_win_rate": 26.36691211029297,
+        "total_return_pct": -99.13037292195145,
+        "sharpe_ratio": -18.305982104412376,
+        "profit_factor": 0.5908077452522398,
+        "max_drawdown_pct": 99.33687162745464,
+        "avg_trade_bps": -1.835215521106935,
+        "std_trade_bps": 12.078292763924253
+      },
+      "h20": {
+        "n_trades": 7680,
+        "n_long": 6689,
+        "n_short": 991,
+        "win_rate": 47.239583333333336,
+        "long_win_rate": 48.333084168037075,
+        "short_win_rate": 39.858728557013116,
+        "total_return_pct": 2.296971284064786,
+        "sharpe_ratio": 0.14637618011881423,
+        "profit_factor": 1.0083606455571512,
+        "max_drawdown_pct": 29.556476404247096,
+        "avg_trade_bps": 0.060759866117268635,
+        "std_trade_bps": 25.00506081847787
+      }
+    }
+  },
+  "targets": {
+    "sharpe_ratio": "> 0.3",
+    "win_rate": "45-55%",
+    "max_drawdown_pct": "< 20%",
+    "profit_factor": "> 1.0"
+  }
+}

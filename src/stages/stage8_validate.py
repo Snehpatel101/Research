@@ -1,6 +1,6 @@
 """
 Stage 8: Comprehensive Data Validation
-Performs integrity, label sanity, and feature quality checks
+Performs integrity, label sanity, feature quality checks, and feature selection
 """
 import numpy as np
 import pandas as pd
@@ -13,6 +13,15 @@ from scipy import stats
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 import warnings
+import sys
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from feature_selection import (
+    select_features,
+    save_feature_selection_report,
+    FeatureSelectionResult
+)
 
 warnings.filterwarnings('ignore')
 
@@ -669,6 +678,51 @@ class DataValidator:
         self.validation_results['feature_normalization'] = results
         return results
 
+    def run_feature_selection(
+        self,
+        correlation_threshold: float = 0.95,
+        variance_threshold: float = 0.01
+    ) -> FeatureSelectionResult:
+        """
+        Run feature selection to identify and remove redundant features.
+
+        This addresses multicollinearity by removing highly correlated features
+        while keeping the most interpretable feature from each correlated group.
+
+        Args:
+            correlation_threshold: Threshold for feature correlation (default 0.95)
+            variance_threshold: Minimum variance to keep feature (default 0.01)
+
+        Returns:
+            FeatureSelectionResult with selected and removed features
+        """
+        logger.info("\n" + "="*60)
+        logger.info("FEATURE SELECTION")
+        logger.info("="*60)
+
+        result = select_features(
+            self.df,
+            correlation_threshold=correlation_threshold,
+            variance_threshold=variance_threshold
+        )
+
+        # Store results in validation_results
+        self.validation_results['feature_selection'] = result.to_dict()
+
+        # Update warnings if features were removed
+        if len(result.removed_features) > 0:
+            # Replace the old correlation warning with a more informative one
+            self.warnings_found = [
+                w for w in self.warnings_found
+                if 'correlated feature pairs' not in w
+            ]
+            self.warnings_found.append(
+                f"Feature selection removed {len(result.removed_features)} redundant features "
+                f"({result.original_count} -> {result.final_count})"
+            )
+
+        return result
+
     def generate_summary(self) -> Dict:
         """Generate validation summary."""
         logger.info("\n" + "="*60)
@@ -710,8 +764,12 @@ class DataValidator:
 def validate_data(
     data_path: Path,
     output_path: Optional[Path] = None,
-    horizons: List[int] = [1, 5, 20]
-) -> Dict:
+    horizons: List[int] = [1, 5, 20],
+    run_feature_selection: bool = True,
+    correlation_threshold: float = 0.95,
+    variance_threshold: float = 0.01,
+    feature_selection_output_path: Optional[Path] = None
+) -> Tuple[Dict, Optional[FeatureSelectionResult]]:
     """
     Main validation function.
 
@@ -719,9 +777,13 @@ def validate_data(
         data_path: Path to combined labeled data
         output_path: Optional path to save validation report (JSON)
         horizons: List of label horizons to validate
+        run_feature_selection: Whether to run feature selection (default True)
+        correlation_threshold: Threshold for feature correlation (default 0.95)
+        variance_threshold: Minimum variance to keep feature (default 0.01)
+        feature_selection_output_path: Optional path to save feature selection report
 
     Returns:
-        Validation summary dictionary
+        Tuple of (validation summary dict, FeatureSelectionResult or None)
     """
     logger.info("="*70)
     logger.info("STAGE 8: DATA VALIDATION")
@@ -741,6 +803,21 @@ def validate_data(
     validator.check_feature_quality()
     validator.check_feature_normalization()
 
+    # Run feature selection if requested
+    feature_selection_result = None
+    if run_feature_selection:
+        feature_selection_result = validator.run_feature_selection(
+            correlation_threshold=correlation_threshold,
+            variance_threshold=variance_threshold
+        )
+
+        # Save feature selection report if path provided
+        if feature_selection_output_path:
+            save_feature_selection_report(
+                feature_selection_result,
+                feature_selection_output_path
+            )
+
     # Generate summary
     summary = validator.generate_summary()
 
@@ -755,28 +832,37 @@ def validate_data(
     logger.info("STAGE 8 COMPLETE")
     logger.info("="*70)
 
-    return summary
+    return summary, feature_selection_result
 
 
 def main():
     """Run validation on default configuration."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-
     from config import FINAL_DATA_DIR, RESULTS_DIR
 
     data_path = FINAL_DATA_DIR / "combined_final_labeled.parquet"
     output_path = RESULTS_DIR / "validation_report.json"
+    feature_selection_path = RESULTS_DIR / "feature_selection_report.json"
 
     if not data_path.exists():
         logger.error(f"Data file not found: {data_path}")
         return
 
-    summary = validate_data(data_path, output_path)
+    summary, feature_selection_result = validate_data(
+        data_path,
+        output_path,
+        run_feature_selection=True,
+        feature_selection_output_path=feature_selection_path
+    )
 
     logger.info(f"\nValidation status: {summary['status']}")
     logger.info(f"Issues: {summary['issues_count']}")
     logger.info(f"Warnings: {summary['warnings_count']}")
+
+    if feature_selection_result:
+        logger.info(f"\nFeature Selection Results:")
+        logger.info(f"  Original features: {feature_selection_result.original_count}")
+        logger.info(f"  Selected features: {feature_selection_result.final_count}")
+        logger.info(f"  Removed features: {len(feature_selection_result.removed_features)}")
 
 
 if __name__ == "__main__":

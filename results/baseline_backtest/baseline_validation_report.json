@@ -1,0 +1,92 @@
+{
+  "timestamp": "2025-12-19T23:30:33.361082",
+  "test_period": {
+    "start": "2022-12-19 09:45:00",
+    "end": "2025-07-16 05:00:00",
+    "samples": 359510
+  },
+  "results": {
+    "MGC": {
+      "h1": {
+        "n_trades": 147493,
+        "n_long": 95430,
+        "n_short": 52063,
+        "n_neutral": 2826,
+        "win_rate": 31.766253313716586,
+        "total_return_pct": -99.99999996097138,
+        "sharpe_ratio": -70.135721901781,
+        "profit_factor": 0.4137073117451644,
+        "max_drawdown_pct": 99.99999996094411,
+        "avg_trade_bps": -1.467480930006647,
+        "buy_hold_return_pct": 64.07691755986251
+      },
+      "h5": {
+        "n_trades": 116389,
+        "n_long": 93708,
+        "n_short": 22681,
+        "n_neutral": 1090,
+        "win_rate": 34.90364209676172,
+        "total_return_pct": -99.99595955564335,
+        "sharpe_ratio": -38.7465711763507,
+        "profit_factor": 0.5768259560161192,
+        "max_drawdown_pct": 99.99596244417768,
+        "avg_trade_bps": -0.8680415426219797,
+        "buy_hold_return_pct": 64.07691755986251
+      },
+      "h20": {
+        "n_trades": 101204,
+        "n_long": 93575,
+        "n_short": 7629,
+        "n_neutral": 294,
+        "win_rate": 37.448124580056124,
+        "total_return_pct": -99.73751713895746,
+        "sharpe_ratio": -23.680941540388748,
+        "profit_factor": 0.6997810505782642,
+        "max_drawdown_pct": 99.80622904552015,
+        "avg_trade_bps": -0.5859874709120539,
+        "buy_hold_return_pct": 64.07691755986251
+      }
+    },
+    "MES": {
+      "h1": {
+        "n_trades": 141718,
+        "n_long": 87941,
+        "n_short": 53777,
+        "n_neutral": 4870,
+        "win_rate": 25.588139826980346,
+        "total_return_pct": -99.99999998364765,
+        "sharpe_ratio": -70.41571543789867,
+        "profit_factor": 0.3610983751524355,
+        "max_drawdown_pct": 99.99999998365242,
+        "avg_trade_bps": -1.588452045638695,
+        "buy_hold_return_pct": 37.9420370467076
+      },
+      "h5": {
+        "n_trades": 117140,
+        "n_long": 86620,
+        "n_short": 30520,
+        "n_neutral": 2966,
+        "win_rate": 27.320300495134024,
+        "total_return_pct": -99.99963988852542,
+        "sharpe_ratio": -48.72134567189583,
+        "profit_factor": 0.47105739586669065,
+        "max_drawdown_pct": 99.99970709994038,
+        "avg_trade_bps": -1.0688056433320723,
+        "buy_hold_return_pct": 37.9420370467076
+      },
+      "h20": {
+        "n_trades": 99880,
+        "n_long": 86952,
+        "n_short": 12928,
+        "n_neutral": 915,
+        "win_rate": 29.256107328794556,
+        "total_return_pct": -99.97867655529302,
+        "sharpe_ratio": -34.75714968427786,
+        "profit_factor": 0.5646114324883605,
+        "max_drawdown_pct": 99.9849751561565,
+        "avg_trade_bps": -0.84507066960769,
+        "buy_hold_return_pct": 37.9420370467076
+      }
+    }
+  }
+}

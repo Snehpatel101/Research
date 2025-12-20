@@ -1,6 +1,14 @@
 """
 Stage 5: Genetic Algorithm Optimization of Labeling Parameters
 Uses DEAP to find optimal k_up, k_down, and max_bars for balanced, tradable labels
+
+FIXES APPLIED:
+1. Improved fitness function with 40% minimum signal rate
+2. Horizon-specific neutral targets
+3. Fixed profit factor calculation (uses actual wins/losses)
+4. Contiguous time block sampling instead of random (preserves temporal order)
+5. Narrower search space bounds for more realistic parameters
+6. Near-symmetry constraint on barriers
 """
 import pandas as pd
 import numpy as np
@@ -27,6 +35,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# IMPROVED FITNESS FUNCTION
+# =============================================================================
+
 def calculate_fitness(
     labels: np.ndarray,
     bars_to_hit: np.ndarray,
@@ -37,96 +49,122 @@ def calculate_fitness(
     """
     Calculate fitness score for a set of labels.
 
-    Objective: Balance between label quality metrics:
-    1. Label balance (not too imbalanced)
-    2. Win rate realism (40-60% preferred)
-    3. Average bars to hit (not too fast/slow)
-    4. Profit factor from simple simulation
+    IMPROVEMENTS:
+    1. Require at least 40% directional signals (was 10%)
+    2. Penalize neutral-heavy distributions with horizon-specific targets
+    3. Reward balanced long/short ratio
+    4. Speed score prefers faster resolution
+    5. Fixed profit factor using actual trade outcomes
 
     Returns:
     --------
     fitness : float (higher is better)
     """
-    # Count labels
-    unique, counts = np.unique(labels, return_counts=True)
-    label_counts = dict(zip(unique, counts))
     total = len(labels)
-
-    n_long = label_counts.get(1, 0)
-    n_short = label_counts.get(-1, 0)
-    n_neutral = label_counts.get(0, 0)
-
-    # Avoid degenerate cases
-    if total == 0 or (n_long + n_short) < total * 0.1:
+    if total == 0:
         return -1000.0
 
-    # 1. Label Balance Score (penalize extreme imbalance)
-    # Ideal: roughly 30-40% each for long/short, 20-40% neutral
-    long_pct = n_long / total
-    short_pct = n_short / total
+    n_long = (labels == 1).sum()
+    n_short = (labels == -1).sum()
+    n_neutral = (labels == 0).sum()
+
+    # ==========================================================================
+    # 1. STRICT SIGNAL RATE REQUIREMENT (40% minimum directional signals)
+    # ==========================================================================
+    signal_rate = (n_long + n_short) / total
+    if signal_rate < 0.40:
+        # Harsh penalty for degenerate cases - this is the main fix
+        return -1000.0 + (signal_rate * 100)  # Slightly less bad if close to threshold
+
+    # ==========================================================================
+    # 2. NEUTRAL PENALTY (horizon-specific targets)
+    # ==========================================================================
+    # Shorter horizons can have more neutrals (harder to hit barriers quickly)
+    # Longer horizons should have fewer neutrals (more time to hit barriers)
+    target_neutral = {1: 0.35, 5: 0.30, 20: 0.25}.get(horizon, 0.30)
+
     neutral_pct = n_neutral / total
+    neutral_penalty = -abs(neutral_pct - target_neutral) * 10.0
 
-    # Balance penalty (prefer 0.2-0.5 for each non-neutral class)
-    balance_score = 0.0
-    for pct in [long_pct, short_pct]:
-        if 0.20 <= pct <= 0.50:
-            balance_score += 1.0
-        else:
-            balance_score -= abs(pct - 0.35) * 2  # penalty
+    # Extra penalty if neutral is way too high
+    if neutral_pct > 0.50:
+        neutral_penalty -= (neutral_pct - 0.50) * 20.0
 
-    # Neutral should be reasonable (not too high)
-    if neutral_pct > 0.6:
-        balance_score -= (neutral_pct - 0.6) * 3
-
-    # 2. Win Rate Realism (40-60% preferred)
+    # ==========================================================================
+    # 3. LONG/SHORT BALANCE SCORE
+    # ==========================================================================
     if (n_long + n_short) > 0:
-        win_rate = n_long / (n_long + n_short)
-        if 0.40 <= win_rate <= 0.60:
-            win_rate_score = 2.0
-        else:
-            # Penalize extreme win rates
-            win_rate_score = -abs(win_rate - 0.50) * 5
+        long_ratio = n_long / (n_long + n_short)
+        # Perfect balance = 0.5, max score = 2.0
+        # Deviation from 0.5 penalized heavily
+        balance_score = 2.0 - abs(long_ratio - 0.5) * 8.0
+
+        # Additional penalty for extreme imbalance
+        if long_ratio < 0.30 or long_ratio > 0.70:
+            balance_score -= 3.0
     else:
-        win_rate_score = -5.0
+        balance_score = -10.0
 
-    # 3. Speed Score (bars to hit should be reasonable)
-    # Not too fast (< horizon/2) or too slow (> horizon*2)
-    valid_bars = bars_to_hit[bars_to_hit > 0]
-    if len(valid_bars) > 0:
-        avg_bars = valid_bars.mean()
-        ideal_bars = horizon * 1.5
-
-        if horizon * 0.5 <= avg_bars <= horizon * 2.5:
-            speed_score = 1.0
-        else:
-            speed_score = -abs(avg_bars - ideal_bars) / ideal_bars
+    # ==========================================================================
+    # 4. SPEED SCORE (prefer faster resolution within reason)
+    # ==========================================================================
+    hit_mask = labels != 0
+    if hit_mask.sum() > 0:
+        avg_bars = bars_to_hit[hit_mask].mean()
+        # Normalize by horizon - prefer hitting barriers in 1-2x horizon
+        max_expected = horizon * 2.0
+        speed_score = 1.0 - (avg_bars / max_expected)
+        speed_score = np.clip(speed_score, -2.0, 1.5)
     else:
         speed_score = -2.0
 
-    # 4. Profit Factor (simple backtest)
-    # Assume: long wins = +mfe, short losses = +|mae|
-    # Wins: where label = 1
-    # Losses: where label = -1
-    winning_trades = mfe[labels == 1]
-    losing_trades = np.abs(mae[labels == -1])
+    # ==========================================================================
+    # 5. PROFIT FACTOR SCORE (fixed calculation)
+    # ==========================================================================
+    # For LONG trades (label=1): profit = MFE (max favorable), loss = |MAE|
+    # For SHORT trades (label=-1): profit = |MAE| (price went down), loss = MFE
 
-    total_profit = winning_trades.sum() if len(winning_trades) > 0 else 0
-    total_loss = losing_trades.sum() if len(losing_trades) > 0 else 0
+    long_mask = labels == 1
+    short_mask = labels == -1
 
-    if total_loss > 0:
+    # Long trade P&L
+    if long_mask.sum() > 0:
+        long_profits = mfe[long_mask].sum()
+        long_losses = np.abs(mae[long_mask]).sum()
+    else:
+        long_profits = 0.0
+        long_losses = 0.0
+
+    # Short trade P&L (inverted - down moves are profits)
+    if short_mask.sum() > 0:
+        short_profits = np.abs(mae[short_mask]).sum()  # MAE is negative for down moves
+        short_losses = mfe[short_mask].sum()  # MFE is positive up moves (losses for shorts)
+    else:
+        short_profits = 0.0
+        short_losses = 0.0
+
+    total_profit = long_profits + short_profits
+    total_loss = long_losses + short_losses
+
+    if total_loss > 1e-10:  # Avoid division by zero
         profit_factor = total_profit / total_loss
-        # Prefer profit factor between 1.2 and 2.0
-        if 1.2 <= profit_factor <= 2.5:
+
+        # Prefer profit factor between 1.0 and 2.0 (realistic range)
+        if 1.0 <= profit_factor <= 2.0:
             pf_score = 2.0
-        elif profit_factor > 1.0:
-            pf_score = 1.0
+        elif 0.8 <= profit_factor < 1.0:
+            pf_score = 0.5  # Slight positive for near-profitable
+        elif profit_factor > 2.0:
+            pf_score = 1.5  # Good but might be overfit
         else:
-            pf_score = -2.0
+            pf_score = -2.0  # Unprofitable
     else:
         pf_score = 0.0
 
-    # Combined fitness
-    fitness = balance_score + win_rate_score + speed_score + pf_score
+    # ==========================================================================
+    # COMBINED FITNESS
+    # ==========================================================================
+    fitness = neutral_penalty + balance_score + speed_score + pf_score
 
     return fitness
 
@@ -154,9 +192,19 @@ def evaluate_individual(
     """
     k_up, k_down, max_bars_mult = individual
 
-    # Decode max_bars
+    # ==========================================================================
+    # SYMMETRY CONSTRAINT: k_up and k_down should be within 20% of each other
+    # ==========================================================================
+    avg_k = (k_up + k_down) / 2.0
+    if abs(k_up - k_down) > avg_k * 0.40:  # More than 40% asymmetry
+        # Apply soft penalty rather than rejection
+        asymmetry_penalty = -abs(k_up - k_down) * 2.0
+    else:
+        asymmetry_penalty = 0.0
+
+    # Decode max_bars - use the narrower range
     max_bars = int(horizon * max_bars_mult)
-    max_bars = max(horizon, min(max_bars, horizon * 5))  # clamp
+    max_bars = max(horizon * 2, min(max_bars, horizon * 4))  # Clamp to [2x, 4x] horizon
 
     # Run labeling
     try:
@@ -165,11 +213,46 @@ def evaluate_individual(
         )
 
         fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon)
+        fitness += asymmetry_penalty
+
         return (fitness,)
 
     except Exception as e:
         logger.error(f"Error evaluating individual: {e}")
         return (-1000.0,)
+
+
+def get_contiguous_subset(df: pd.DataFrame, subset_fraction: float) -> pd.DataFrame:
+    """
+    Get a contiguous time block from the data instead of random sampling.
+
+    This preserves temporal order which is critical for barrier calculations.
+    Random sampling would create artificial gaps and invalidate the barriers.
+
+    Parameters:
+    -----------
+    df : Full DataFrame
+    subset_fraction : Fraction of data to use
+
+    Returns:
+    --------
+    df_subset : Contiguous slice of the data
+    """
+    total_len = len(df)
+    subset_len = int(total_len * subset_fraction)
+
+    if subset_len < 1000:
+        subset_len = min(1000, total_len)
+
+    # Choose a random starting point that allows for the full subset
+    max_start = total_len - subset_len
+    if max_start <= 0:
+        return df.copy()
+
+    start_idx = random.randint(0, max_start)
+    end_idx = start_idx + subset_len
+
+    return df.iloc[start_idx:end_idx].copy()
 
 
 def run_ga_optimization(
@@ -180,11 +263,16 @@ def run_ga_optimization(
     crossover_prob: float = 0.7,
     mutation_prob: float = 0.2,
     tournament_size: int = 3,
-    subset_fraction: float = 0.2,
+    subset_fraction: float = 0.3,  # Increased from 0.2 for better representation
     atr_column: str = 'atr_14'
 ) -> Dict:
     """
     Run genetic algorithm to optimize labeling parameters.
+
+    FIXES:
+    - Uses contiguous time blocks instead of random sampling
+    - Narrower search bounds: k_up/k_down [0.3, 1.5], max_bars_mult [2.0, 4.0]
+    - Improved mutation with smaller sigma for finer tuning
 
     Parameters:
     -----------
@@ -205,16 +293,11 @@ def run_ga_optimization(
     logger.info(f"\nOptimizing parameters for horizon {horizon}")
     logger.info(f"  Population: {population_size}, Generations: {generations}")
 
-    # Subsample data for speed
-    n_subset = int(len(df) * subset_fraction)
-    if n_subset < 1000:
-        n_subset = min(1000, len(df))
-
-    # Random sample (ensure temporal order preserved)
-    indices = sorted(np.random.choice(len(df), n_subset, replace=False))
-    df_subset = df.iloc[indices].copy()
-
-    logger.info(f"  Using {len(df_subset):,} samples ({subset_fraction*100:.0f}% of data)")
+    # ==========================================================================
+    # FIX: Use contiguous time blocks instead of random sampling
+    # ==========================================================================
+    df_subset = get_contiguous_subset(df, subset_fraction)
+    logger.info(f"  Using {len(df_subset):,} contiguous samples ({subset_fraction*100:.0f}% of data)")
 
     # Extract arrays
     close = df_subset['close'].values
@@ -223,7 +306,6 @@ def run_ga_optimization(
     atr = df_subset[atr_column].values
 
     # Setup DEAP
-    # Define fitness and individual
     if hasattr(creator, "FitnessMax"):
         del creator.FitnessMax
     if hasattr(creator, "Individual"):
@@ -234,13 +316,19 @@ def run_ga_optimization(
 
     toolbox = base.Toolbox()
 
-    # Gene ranges:
-    # k_up: [0.5, 3.0]
-    # k_down: [0.5, 3.0]
-    # max_bars_multiplier: [1.0, 5.0]
-    toolbox.register("k_up", random.uniform, 0.5, 3.0)
-    toolbox.register("k_down", random.uniform, 0.5, 3.0)
-    toolbox.register("max_bars_mult", random.uniform, 1.0, 5.0)
+    # ==========================================================================
+    # FIX: Narrower search space bounds for realistic parameters
+    # ==========================================================================
+    # k_up: [0.3, 1.5] (narrower - most realistic values are 0.5-1.2)
+    # k_down: [0.3, 1.5] (same as k_up for symmetry encouragement)
+    # max_bars_mult: [2.0, 4.0] (longer windows to reduce neutrals)
+
+    K_MIN, K_MAX = 0.3, 1.5
+    MAX_BARS_MIN, MAX_BARS_MAX = 2.0, 4.0
+
+    toolbox.register("k_up", random.uniform, K_MIN, K_MAX)
+    toolbox.register("k_down", random.uniform, K_MIN, K_MAX)
+    toolbox.register("max_bars_mult", random.uniform, MAX_BARS_MIN, MAX_BARS_MAX)
 
     toolbox.register(
         "individual",
@@ -262,28 +350,38 @@ def run_ga_optimization(
         horizon=horizon
     )
 
-    # Genetic operators
-    toolbox.register("mate", tools.cxBlend, alpha=0.5)
-    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.3, indpb=0.3)
+    # Genetic operators - smaller sigma for finer tuning
+    toolbox.register("mate", tools.cxBlend, alpha=0.3)  # Reduced from 0.5
+    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.15, indpb=0.3)  # Reduced sigma
     toolbox.register("select", tools.selTournament, tournsize=tournament_size)
 
-    # Constraint function (ensure valid ranges)
+    # Constraint function with UPDATED bounds
     def check_bounds(individual):
-        for i in range(len(individual)):
-            if i < 2:  # k_up, k_down
-                if individual[i] < 0.5:
-                    individual[i] = 0.5
-                elif individual[i] > 3.0:
-                    individual[i] = 3.0
-            else:  # max_bars_mult
-                if individual[i] < 1.0:
-                    individual[i] = 1.0
-                elif individual[i] > 5.0:
-                    individual[i] = 5.0
+        # k_up bounds
+        individual[0] = max(K_MIN, min(K_MAX, individual[0]))
+        # k_down bounds
+        individual[1] = max(K_MIN, min(K_MAX, individual[1]))
+        # max_bars_mult bounds
+        individual[2] = max(MAX_BARS_MIN, min(MAX_BARS_MAX, individual[2]))
         return individual
 
     # Create initial population
     population = toolbox.population(n=population_size)
+
+    # ==========================================================================
+    # SEED with known good starting points
+    # ==========================================================================
+    # Add some individuals with symmetric barriers to guide evolution
+    seeded_individuals = [
+        [0.8, 0.8, 3.0],   # Symmetric, medium barriers
+        [1.0, 1.0, 3.0],   # Symmetric, wider barriers
+        [0.6, 0.6, 2.5],   # Symmetric, tighter barriers
+        [0.7, 0.8, 3.5],   # Slightly asymmetric
+        [1.2, 1.1, 2.5],   # Wider, slightly asymmetric
+    ]
+    for i, seed_ind in enumerate(seeded_individuals):
+        if i < len(population):
+            population[i][:] = seed_ind
 
     # Statistics
     stats = tools.Statistics(lambda ind: ind.fitness.values)
@@ -293,7 +391,7 @@ def run_ga_optimization(
     stats.register("max", np.max)
 
     # Hall of fame (best individuals)
-    hof = tools.HallOfFame(1)
+    hof = tools.HallOfFame(5)  # Keep top 5 for diversity
 
     # Run evolution
     logger.info("  Starting evolution...")
@@ -311,10 +409,13 @@ def run_ga_optimization(
     record = stats.compile(population)
     logbook.record(gen=0, nevals=len(population), **record)
 
-    # Evolution loop
+    # Log initial stats
+    logger.info(f"  Gen 0: avg={record['avg']:.2f}, max={record['max']:.2f}")
+
+    # Evolution loop with elitism
     for gen in tqdm(range(1, generations + 1), desc=f"  GA H={horizon}"):
         # Select next generation
-        offspring = toolbox.select(population, len(population))
+        offspring = toolbox.select(population, len(population) - 2)  # Leave room for elites
         offspring = list(map(toolbox.clone, offspring))
 
         # Crossover
@@ -339,6 +440,10 @@ def run_ga_optimization(
         for ind, fit in zip(invalid_ind, fitnesses):
             ind.fitness.values = fit
 
+        # ELITISM: Add best 2 from hall of fame
+        elite = [toolbox.clone(ind) for ind in hof[:2]]
+        offspring.extend(elite)
+
         # Replace population
         population[:] = offspring
         hof.update(population)
@@ -347,13 +452,44 @@ def run_ga_optimization(
         record = stats.compile(population)
         logbook.record(gen=gen, nevals=len(invalid_ind), **record)
 
+        # Log progress every 10 generations
+        if gen % 10 == 0:
+            logger.info(f"  Gen {gen}: avg={record['avg']:.2f}, max={record['max']:.2f}")
+
     # Get best individual
     best_ind = hof[0]
     best_fitness = best_ind.fitness.values[0]
 
+    logger.info(f"\n  OPTIMIZATION COMPLETE")
     logger.info(f"  Best fitness: {best_fitness:.4f}")
     logger.info(f"  Best params: k_up={best_ind[0]:.3f}, k_down={best_ind[1]:.3f}, "
                 f"max_bars={int(horizon * best_ind[2])}")
+
+    # ==========================================================================
+    # VALIDATE best parameters on full data
+    # ==========================================================================
+    logger.info(f"  Validating on full dataset...")
+    full_close = df['close'].values
+    full_high = df['high'].values
+    full_low = df['low'].values
+    full_atr = df[atr_column].values
+
+    k_up, k_down, max_bars_mult = best_ind
+    max_bars = int(horizon * max_bars_mult)
+
+    val_labels, val_bars, val_mae, val_mfe, _ = triple_barrier_numba(
+        full_close, full_high, full_low, full_atr, k_up, k_down, max_bars
+    )
+
+    n_total = len(val_labels)
+    n_long = (val_labels == 1).sum()
+    n_short = (val_labels == -1).sum()
+    n_neutral = (val_labels == 0).sum()
+
+    logger.info(f"  Full data label distribution:")
+    logger.info(f"    Long:    {n_long:,} ({100*n_long/n_total:.1f}%)")
+    logger.info(f"    Short:   {n_short:,} ({100*n_short/n_total:.1f}%)")
+    logger.info(f"    Neutral: {n_neutral:,} ({100*n_neutral/n_total:.1f}%)")
 
     # Prepare results
     results = {
@@ -364,6 +500,16 @@ def run_ga_optimization(
         'best_fitness': float(best_fitness),
         'population_size': population_size,
         'generations': generations,
+        'validation': {
+            'n_total': int(n_total),
+            'n_long': int(n_long),
+            'n_short': int(n_short),
+            'n_neutral': int(n_neutral),
+            'pct_long': float(100 * n_long / n_total),
+            'pct_short': float(100 * n_short / n_total),
+            'pct_neutral': float(100 * n_neutral / n_total),
+            'signal_rate': float((n_long + n_short) / n_total)
+        },
         'convergence': [
             {
                 'gen': record['gen'],
@@ -388,19 +534,42 @@ def plot_convergence(results: Dict, output_path: Path):
     max_fits = [c['max'] for c in convergence]
     min_fits = [c['min'] for c in convergence]
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(gens, max_fits, 'g-', label='Best', linewidth=2)
-    plt.plot(gens, avg_fits, 'b-', label='Average', linewidth=2)
-    plt.plot(gens, min_fits, 'r-', label='Worst', linewidth=1, alpha=0.5)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-    plt.xlabel('Generation', fontsize=12)
-    plt.ylabel('Fitness', fontsize=12)
-    plt.title(f'GA Convergence - Horizon {results["horizon"]}', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=10)
-    plt.grid(True, alpha=0.3)
+    # Convergence plot
+    ax1.plot(gens, max_fits, 'g-', label='Best', linewidth=2)
+    ax1.plot(gens, avg_fits, 'b-', label='Average', linewidth=2)
+    ax1.plot(gens, min_fits, 'r-', label='Worst', linewidth=1, alpha=0.5)
+    ax1.axhline(y=0, color='k', linestyle='--', alpha=0.3)
+
+    ax1.set_xlabel('Generation', fontsize=12)
+    ax1.set_ylabel('Fitness', fontsize=12)
+    ax1.set_title(f'GA Convergence - Horizon {results["horizon"]}', fontsize=14, fontweight='bold')
+    ax1.legend(fontsize=10)
+    ax1.grid(True, alpha=0.3)
+
+    # Label distribution (if validation data available)
+    if 'validation' in results:
+        val = results['validation']
+        labels = ['Long', 'Short', 'Neutral']
+        sizes = [val['pct_long'], val['pct_short'], val['pct_neutral']]
+        colors = ['#2ecc71', '#e74c3c', '#95a5a6']
+
+        ax2.bar(labels, sizes, color=colors, edgecolor='black', linewidth=1.2)
+        ax2.axhline(y=40, color='orange', linestyle='--', label='40% min signal', alpha=0.7)
+        ax2.set_ylabel('Percentage (%)', fontsize=12)
+        ax2.set_title(f'Label Distribution (Full Data)\nSignal Rate: {val["signal_rate"]*100:.1f}%',
+                      fontsize=12, fontweight='bold')
+        ax2.set_ylim(0, 60)
+        ax2.legend()
+        ax2.grid(True, alpha=0.3, axis='y')
+
+        # Add percentage labels on bars
+        for i, (label, pct) in enumerate(zip(labels, sizes)):
+            ax2.text(i, pct + 1, f'{pct:.1f}%', ha='center', va='bottom', fontweight='bold')
+
     plt.tight_layout()
-
-    plt.savefig(output_path, dpi=150)
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
 
     logger.info(f"  Saved convergence plot to {output_path}")
@@ -441,10 +610,17 @@ def process_symbol_ga(
             df, horizon,
             population_size=population_size,
             generations=generations,
-            subset_fraction=0.2  # Use 20% of data for speed
+            subset_fraction=0.3  # Increased from 0.2 for better representation
         )
 
         all_results[horizon] = results
+
+        # Check if optimization succeeded
+        val = results.get('validation', {})
+        signal_rate = val.get('signal_rate', 0)
+        if signal_rate < 0.40:
+            logger.warning(f"  WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!")
+            logger.warning(f"  Consider adjusting search bounds or running more generations.")
 
         # Save results
         ga_results_dir = project_root / 'config' / 'ga_results'
@@ -476,10 +652,17 @@ def main():
     generations = 30
 
     logger.info("=" * 70)
-    logger.info("STAGE 5: GENETIC ALGORITHM OPTIMIZATION")
+    logger.info("STAGE 5: GENETIC ALGORITHM OPTIMIZATION (IMPROVED)")
     logger.info("=" * 70)
     logger.info(f"Horizons: {horizons}")
     logger.info(f"GA Config: pop_size={population_size}, gens={generations}")
+    logger.info("")
+    logger.info("IMPROVEMENTS APPLIED:")
+    logger.info("  - 40% minimum signal rate (was 10%)")
+    logger.info("  - Horizon-specific neutral targets")
+    logger.info("  - Contiguous time block sampling")
+    logger.info("  - Narrower search bounds: k=[0.3,1.5], max_bars=[2x,4x]")
+    logger.info("  - Near-symmetry constraint on barriers")
     logger.info("")
 
     all_symbols_results = {}
@@ -503,7 +686,11 @@ def main():
                 'k_up': res['best_k_up'],
                 'k_down': res['best_k_down'],
                 'max_bars': res['best_max_bars'],
-                'fitness': res['best_fitness']
+                'fitness': res['best_fitness'],
+                'signal_rate': res.get('validation', {}).get('signal_rate', None),
+                'pct_long': res.get('validation', {}).get('pct_long', None),
+                'pct_short': res.get('validation', {}).get('pct_short', None),
+                'pct_neutral': res.get('validation', {}).get('pct_neutral', None)
             }
             for h, res in symbol_results.items()
         }
@@ -516,6 +703,16 @@ def main():
     logger.info("STAGE 5 COMPLETE")
     logger.info("=" * 70)
     logger.info(f"Optimization summary saved to {summary_path}")
+
+    # Final summary
+    logger.info("\nFINAL PARAMETER SUMMARY:")
+    for symbol, sym_res in summary.items():
+        logger.info(f"\n  {symbol}:")
+        for h, params in sym_res.items():
+            sr = params.get('signal_rate', 0)
+            status = "OK" if sr and sr >= 0.40 else "WARNING"
+            logger.info(f"    H{h}: k_up={params['k_up']:.2f}, k_down={params['k_down']:.2f}, "
+                       f"max_bars={params['max_bars']}, signal_rate={sr*100 if sr else 0:.1f}% [{status}]")
 
 
 if __name__ == "__main__":

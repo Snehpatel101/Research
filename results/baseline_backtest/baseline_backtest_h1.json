@@ -3,6 +3,8 @@
   "quality_threshold": 0.5,
   "commission": 0.0001,
   "test_samples": 359510,
+  "test_date_start": "2022-12-19 09:45:00",
+  "test_date_end": "2025-07-16 05:00:00",
   "metrics": {
     "total_trades": 75998,
     "winning_trades": 40530,
@@ -20,5 +22,6 @@
     "initial_capital": 100000.0,
     "final_capital": 0.0,
     "commission_per_trade": 0.01
-  }
+  },
+  "timestamp": "2025-12-19T23:21:32.740608"
 }
