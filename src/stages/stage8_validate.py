@@ -391,6 +391,284 @@ class DataValidator:
         self.validation_results['feature_quality'] = results
         return results
 
+    def check_feature_normalization(self, z_threshold: float = 3.0, extreme_threshold: float = 5.0) -> Dict:
+        """
+        Check feature normalization, distributions, and outliers.
+
+        Args:
+            z_threshold: Z-score threshold for outlier warning (default 3.0)
+            extreme_threshold: Z-score threshold for extreme outlier issue (default 5.0)
+
+        Returns:
+            Dictionary with normalization validation results
+        """
+        logger.info("\n" + "="*60)
+        logger.info("FEATURE NORMALIZATION CHECKS")
+        logger.info("="*60)
+
+        results = {}
+
+        # Identify feature columns (same pattern as check_feature_quality)
+        excluded_cols = ['datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+        feature_cols = [c for c in self.df.columns
+                       if c not in excluded_cols
+                       and not c.startswith('label_')
+                       and not c.startswith('bars_to_hit_')
+                       and not c.startswith('mae_')
+                       and not c.startswith('quality_')
+                       and not c.startswith('sample_weight_')]
+
+        logger.info(f"\nAnalyzing normalization for {len(feature_cols)} features")
+        results['total_features'] = len(feature_cols)
+
+        # 1. Feature Distribution Statistics
+        logger.info("\n1. Feature distribution statistics...")
+        feature_stats = []
+        unnormalized_features = []
+        high_skew_features = []
+
+        for col in feature_cols:
+            series = self.df[col].replace([np.inf, -np.inf], np.nan).dropna()
+            if len(series) < 100:
+                continue
+
+            mean_val = float(series.mean())
+            std_val = float(series.std())
+            min_val = float(series.min())
+            max_val = float(series.max())
+
+            # Percentiles
+            p1 = float(np.percentile(series, 1))
+            p5 = float(np.percentile(series, 5))
+            p50 = float(np.percentile(series, 50))
+            p95 = float(np.percentile(series, 95))
+            p99 = float(np.percentile(series, 99))
+
+            # Skewness and Kurtosis
+            try:
+                skewness = float(stats.skew(series))
+                kurtosis = float(stats.kurtosis(series))
+            except Exception:
+                skewness = 0.0
+                kurtosis = 0.0
+
+            stat_info = {
+                'feature': col,
+                'mean': mean_val,
+                'std': std_val,
+                'min': min_val,
+                'max': max_val,
+                'p1': p1,
+                'p5': p5,
+                'p50': p50,
+                'p95': p95,
+                'p99': p99,
+                'skewness': skewness,
+                'kurtosis': kurtosis
+            }
+            feature_stats.append(stat_info)
+
+            # Flag unnormalized features (std far from 1, mean far from 0)
+            if std_val > 100 or abs(mean_val) > 100:
+                unnormalized_features.append({
+                    'feature': col,
+                    'mean': mean_val,
+                    'std': std_val,
+                    'issue': 'large_scale'
+                })
+
+            # Flag highly skewed features
+            if abs(skewness) > 2.0:
+                high_skew_features.append({
+                    'feature': col,
+                    'skewness': skewness,
+                    'kurtosis': kurtosis
+                })
+
+        results['feature_statistics'] = feature_stats
+
+        if unnormalized_features:
+            logger.warning(f"  Found {len(unnormalized_features)} features with large scale (may need normalization):")
+            for feat in unnormalized_features[:5]:
+                logger.warning(f"    {feat['feature']:30s}: mean={feat['mean']:.2f}, std={feat['std']:.2f}")
+            if len(unnormalized_features) > 5:
+                logger.warning(f"    ... and {len(unnormalized_features)-5} more")
+            self.warnings_found.append(f"{len(unnormalized_features)} features need normalization (large scale)")
+        else:
+            logger.info("  All features have reasonable scale ✓")
+
+        results['unnormalized_features'] = unnormalized_features
+
+        if high_skew_features:
+            logger.warning(f"  Found {len(high_skew_features)} highly skewed features (|skew| > 2):")
+            for feat in high_skew_features[:5]:
+                logger.warning(f"    {feat['feature']:30s}: skew={feat['skewness']:.2f}")
+            if len(high_skew_features) > 5:
+                logger.warning(f"    ... and {len(high_skew_features)-5} more")
+            self.warnings_found.append(f"{len(high_skew_features)} features highly skewed")
+        else:
+            logger.info("  No highly skewed features ✓")
+
+        results['high_skew_features'] = high_skew_features
+
+        # 2. Z-Score Outlier Detection
+        logger.info(f"\n2. Z-score outlier detection (threshold={z_threshold})...")
+        outlier_summary = []
+        extreme_outlier_features = []
+
+        for col in feature_cols:
+            series = self.df[col].replace([np.inf, -np.inf], np.nan).dropna()
+            if len(series) < 100:
+                continue
+
+            mean_val = series.mean()
+            std_val = series.std()
+
+            if std_val == 0:
+                continue
+
+            z_scores = np.abs((series - mean_val) / std_val)
+
+            # Count outliers at different thresholds
+            outliers_3std = (z_scores > 3.0).sum()
+            outliers_5std = (z_scores > 5.0).sum()
+            outliers_10std = (z_scores > 10.0).sum()
+
+            pct_3std = outliers_3std / len(series) * 100
+            pct_5std = outliers_5std / len(series) * 100
+
+            outlier_info = {
+                'feature': col,
+                'outliers_3std': int(outliers_3std),
+                'outliers_5std': int(outliers_5std),
+                'outliers_10std': int(outliers_10std),
+                'pct_beyond_3std': float(pct_3std),
+                'pct_beyond_5std': float(pct_5std),
+                'max_z_score': float(z_scores.max())
+            }
+            outlier_summary.append(outlier_info)
+
+            # Flag features with extreme outliers (>1% beyond 5 std)
+            if pct_5std > 1.0:
+                extreme_outlier_features.append(outlier_info)
+
+        results['outlier_analysis'] = outlier_summary
+
+        if extreme_outlier_features:
+            logger.warning(f"  Found {len(extreme_outlier_features)} features with extreme outliers (>1% beyond 5σ):")
+            for feat in extreme_outlier_features[:5]:
+                logger.warning(f"    {feat['feature']:30s}: {feat['pct_beyond_5std']:.2f}% beyond 5σ, max_z={feat['max_z_score']:.1f}")
+            if len(extreme_outlier_features) > 5:
+                logger.warning(f"    ... and {len(extreme_outlier_features)-5} more")
+            self.warnings_found.append(f"{len(extreme_outlier_features)} features have extreme outliers")
+        else:
+            logger.info("  No features with excessive extreme outliers ✓")
+
+        results['extreme_outlier_features'] = extreme_outlier_features
+
+        # 3. Feature Range Analysis
+        logger.info("\n3. Feature range analysis...")
+        range_issues = []
+
+        for col in feature_cols:
+            series = self.df[col].replace([np.inf, -np.inf], np.nan).dropna()
+            if len(series) < 100:
+                continue
+
+            min_val = series.min()
+            max_val = series.max()
+            range_val = max_val - min_val
+
+            # Check for potential issues
+            if range_val == 0:
+                range_issues.append({
+                    'feature': col,
+                    'issue': 'constant_value',
+                    'value': float(min_val)
+                })
+                self.issues_found.append(f"{col}: constant value ({min_val})")
+            elif range_val > 1e6:
+                range_issues.append({
+                    'feature': col,
+                    'issue': 'extreme_range',
+                    'min': float(min_val),
+                    'max': float(max_val),
+                    'range': float(range_val)
+                })
+
+        results['range_issues'] = range_issues
+
+        if range_issues:
+            constant_count = sum(1 for r in range_issues if r['issue'] == 'constant_value')
+            extreme_count = sum(1 for r in range_issues if r['issue'] == 'extreme_range')
+            if constant_count > 0:
+                logger.warning(f"  Found {constant_count} constant features (zero variance)")
+            if extreme_count > 0:
+                logger.warning(f"  Found {extreme_count} features with extreme range (>1M)")
+        else:
+            logger.info("  All features have reasonable ranges ✓")
+
+        # 4. Normalization Recommendations
+        logger.info("\n4. Normalization recommendations...")
+        recommendations = []
+
+        # Features that need StandardScaler
+        needs_scaling = [f for f in unnormalized_features if f['std'] > 10]
+        if needs_scaling:
+            recommendations.append({
+                'type': 'StandardScaler',
+                'features': [f['feature'] for f in needs_scaling],
+                'reason': 'Features with std > 10 should be standardized'
+            })
+            logger.info(f"  StandardScaler recommended for {len(needs_scaling)} features")
+
+        # Features that need log transform (high positive skew)
+        needs_log = [f for f in high_skew_features if f['skewness'] > 2.0]
+        if needs_log:
+            recommendations.append({
+                'type': 'LogTransform',
+                'features': [f['feature'] for f in needs_log],
+                'reason': 'Features with skew > 2 may benefit from log transform'
+            })
+            logger.info(f"  Log transform may help {len(needs_log)} skewed features")
+
+        # Features that need RobustScaler (many outliers)
+        needs_robust = [f for f in extreme_outlier_features if f['pct_beyond_5std'] > 0.5]
+        if needs_robust:
+            recommendations.append({
+                'type': 'RobustScaler',
+                'features': [f['feature'] for f in needs_robust],
+                'reason': 'Features with many outliers should use RobustScaler'
+            })
+            logger.info(f"  RobustScaler recommended for {len(needs_robust)} features with outliers")
+
+        if not recommendations:
+            logger.info("  No specific normalization needed ✓")
+
+        results['recommendations'] = recommendations
+
+        # 5. Summary statistics
+        total_warnings = len(unnormalized_features) + len(high_skew_features) + len(extreme_outlier_features)
+        total_issues = len([r for r in range_issues if r['issue'] == 'constant_value'])
+
+        results['summary'] = {
+            'features_analyzed': len(feature_cols),
+            'unnormalized_count': len(unnormalized_features),
+            'high_skew_count': len(high_skew_features),
+            'extreme_outlier_count': len(extreme_outlier_features),
+            'constant_features': total_issues,
+            'needs_attention': total_warnings > 0 or total_issues > 0
+        }
+
+        logger.info(f"\n  Summary: {len(feature_cols)} features analyzed")
+        logger.info(f"    - Unnormalized: {len(unnormalized_features)}")
+        logger.info(f"    - High skew: {len(high_skew_features)}")
+        logger.info(f"    - Extreme outliers: {len(extreme_outlier_features)}")
+        logger.info(f"    - Constant: {total_issues}")
+
+        self.validation_results['feature_normalization'] = results
+        return results
+
     def generate_summary(self) -> Dict:
         """Generate validation summary."""
         logger.info("\n" + "="*60)
@@ -461,6 +739,7 @@ def validate_data(
     validator.check_data_integrity()
     validator.check_label_sanity()
     validator.check_feature_quality()
+    validator.check_feature_normalization()
 
     # Generate summary
     summary = validator.generate_summary()

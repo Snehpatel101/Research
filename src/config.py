@@ -34,7 +34,7 @@ for dir_path in [RAW_DATA_DIR, CLEAN_DATA_DIR, FEATURES_DIR, PROCESSED_DATA_DIR,
     dir_path.mkdir(parents=True, exist_ok=True)
 
 # Trading parameters
-SYMBOLS = ['MES', 'MGC']
+SYMBOLS = ['MGC']  # Focus on gold only
 BAR_RESOLUTION = '5min'
 LOOKBACK_HORIZONS = [1, 5, 20]  # bars
 
