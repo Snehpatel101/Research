@@ -151,11 +151,12 @@ def apply_optimized_labels(
     close = df['close'].values
     high = df['high'].values
     low = df['low'].values
+    open_prices = df['open'].values
     atr = df[atr_column].values
 
-    # Apply labeling
+    # Apply labeling (includes open_prices for same-bar race condition fix)
     labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
-        close, high, low, atr,
+        close, high, low, open_prices, atr,
         best_params['k_up'],
         best_params['k_down'],
         best_params['max_bars']

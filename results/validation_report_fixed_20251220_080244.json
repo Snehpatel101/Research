@@ -1,0 +1,19 @@
+{
+  "timestamp": "2025-12-20T08:04:32.722337",
+  "total_rows": 2398649,
+  "total_columns": 88,
+  "issues_count": 0,
+  "warnings_count": 6,
+  "issues": [],
+  "warnings": [
+    "h1 neutral: low representation (0.3%)",
+    "h5 neutral: low representation (0.7%)",
+    "h20 neutral: low representation (1.7%)",
+    "14 features need normalization (large scale)",
+    "15 features highly skewed",
+    "Feature selection removed 22 redundant features (66 -> 44)"
+  ],
+  "validation_results": {
+    "data_integrity": {
+      "duplicate_timestamps": {
+        "MGC": 

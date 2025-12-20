@@ -824,8 +824,21 @@ def validate_data(
     # Save report if requested
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Custom JSON encoder for numpy types
+        def numpy_encoder(obj):
+            if isinstance(obj, (np.integer, np.int64, np.int32)):
+                return int(obj)
+            elif isinstance(obj, (np.floating, np.float64, np.float32)):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, np.bool_):
+                return bool(obj)
+            raise TypeError(f'Object of type {type(obj)} is not JSON serializable')
+
         with open(output_path, 'w') as f:
-            json.dump(summary, f, indent=2)
+            json.dump(summary, f, indent=2, default=numpy_encoder)
         logger.info(f"\nValidation report saved to: {output_path}")
 
     logger.info("\n" + "="*70)
