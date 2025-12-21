@@ -87,4 +87,15 @@ coverage.xml
 TEST_REPORT_*.md
 
 # Example/scratch directories
-EXAMPLE/
+# (Note: examples moved to docs/examples/)
+
+# Generated reports and charts
+reports/**/*.png
+reports/**/*.jpg
+reports/**/*.pdf
+reports/**/*.html
+reports/**/*.json
+!reports/.gitkeep
+
+# Keep example reports
+!reports/phase1_summary.*
