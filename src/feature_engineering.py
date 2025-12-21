@@ -1,12 +1,28 @@
 """
 Feature Engineering Module for Ensemble Trading System
 Generates 50+ technical indicators for price prediction
+
+DEPRECATED: This module is deprecated as of 2025-12-21.
+Use 'from stages.stage3_features import FeatureEngineer' instead.
+
+This file is maintained for backward compatibility only.
+All functionality has been moved to src/stages/features/ (modular implementation)
+and is orchestrated through stages.stage3_features.FeatureEngineer.
 """
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
 from typing import List, Optional
+import warnings
+
+# Deprecation warning
+warnings.warn(
+    "feature_engineering.py is DEPRECATED (2025-12-21). "
+    "Use 'from stages.stage3_features import FeatureEngineer' instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
