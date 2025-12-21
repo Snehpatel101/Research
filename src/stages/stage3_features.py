@@ -25,7 +25,7 @@ Usage:
 """
 
 # Re-export everything from the features package for backward compatibility
-from stages.features import (
+from src.stages.features import (
     # Main class
     FeatureEngineer,
     main,

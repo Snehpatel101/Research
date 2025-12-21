@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import pandas as pd
 
 from ..utils import StageResult, StageStatus, create_stage_result, create_failed_result
-from stages.stage3_features import FeatureEngineer
+from src.stages.stage3_features import FeatureEngineer
 
 if TYPE_CHECKING:
     from pipeline_config import PipelineConfig
