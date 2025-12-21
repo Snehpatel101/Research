@@ -74,7 +74,7 @@ def main():
     logger.info("STEP 4: Triple-Barrier Labeling")
     logger.info("="*60)
 
-    from labeling import main as apply_labels
+    from stages.stage4_labeling import main as apply_labels
     apply_labels()
 
     # Step 5: Create Splits

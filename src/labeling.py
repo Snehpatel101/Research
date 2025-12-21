@@ -5,16 +5,37 @@ Implements ATR-based barrier labeling with quality scoring
 CRITICAL FIX (2024): Barrier multipliers calibrated for balanced class distribution.
 Previous values were too wide, causing 99%+ neutral labels.
 New values target ~35% long, ~35% short, ~30% neutral distribution.
+
+DEPRECATION WARNING (2025-12-21):
+This module is DEPRECATED and will be removed in a future release.
+Use src/stages/stage4_labeling.py instead, which provides:
+- Better feature output (includes MFE and touch_type)
+- Symbol-specific barrier parameters via get_barrier_params()
+- Consolidated configuration from config.py
+- Forward compatibility with pipeline infrastructure
+
+Migration path:
+  OLD: from labeling import main, apply_triple_barrier, label_symbol
+  NEW: from stages.stage4_labeling import main, apply_triple_barrier, process_symbol_labeling
 """
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
+import warnings
 from typing import Tuple, Dict, Optional
 from numba import njit, prange
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Issue deprecation warning at module import
+warnings.warn(
+    "The labeling module is deprecated. Use stages.stage4_labeling instead. "
+    "This module will be removed in a future release.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 
 # =============================================================================
