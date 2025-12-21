@@ -116,8 +116,8 @@ def run(
         "--synthetic",
         help="Generate synthetic data"
     ),
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     )
@@ -138,6 +138,12 @@ def run(
 
     # Create configuration
     try:
+        # If project_root not provided, use the actual project root
+        if project_root is None:
+            project_root_path = Path(__file__).parent.parent.resolve()
+        else:
+            project_root_path = Path(project_root)
+
         config = create_default_config(
             symbols=symbol_list,
             start_date=start,
@@ -151,7 +157,7 @@ def run(
             embargo_bars=embargo_bars,
             label_horizons=horizon_list,
             use_synthetic_data=synthetic,
-            project_root=Path(project_root)
+            project_root=project_root_path
         )
     except ValueError as e:
         show_error(f"Configuration error: {e}")
@@ -227,8 +233,8 @@ def rerun(
         "--from",
         help="Stage to resume from (e.g., 'labels', 'features')"
     ),
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     )
@@ -244,7 +250,13 @@ def rerun(
 
     # Load configuration
     try:
-        config = PipelineConfig.load_from_run_id(run_id, Path(project_root))
+        # If project_root not provided, use the actual project root
+        if project_root is None:
+            project_root_path = Path(__file__).parent.parent.resolve()
+        else:
+            project_root_path = Path(project_root)
+
+        config = PipelineConfig.load_from_run_id(run_id, project_root_path)
         show_success(f"Loaded configuration for run: {run_id}")
     except FileNotFoundError as e:
         show_error(f"Run not found: {e}")
@@ -299,8 +311,8 @@ def status(
         ...,
         help="Run ID to check"
     ),
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     ),
@@ -320,7 +332,12 @@ def status(
     """
     console.print(f"\n[bold cyan]Pipeline Run Status: {run_id}[/bold cyan]\n")
 
-    project_path = Path(project_root)
+    # If project_root not provided, use the actual project root
+    if project_root is None:
+        project_path = Path(__file__).parent.parent.resolve()
+    else:
+        project_path = Path(project_root)
+
     run_dir = project_path / "runs" / run_id
 
     # Check if run exists
@@ -475,8 +492,8 @@ def validate(
         "--symbols",
         help="Comma-separated list of symbols"
     ),
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     )
@@ -490,10 +507,16 @@ def validate(
     """
     console.print("\n[bold cyan]Pipeline Validation[/bold cyan]\n")
 
+    # If project_root not provided, use the actual project root
+    if project_root is None:
+        project_root_path = Path(__file__).parent.parent.resolve()
+    else:
+        project_root_path = Path(project_root)
+
     # Load or create configuration
     if run_id:
         try:
-            config = PipelineConfig.load_from_run_id(run_id, Path(project_root))
+            config = PipelineConfig.load_from_run_id(run_id, project_root_path)
             show_info(f"Validating configuration for run: {run_id}")
         except FileNotFoundError:
             show_error(f"Run not found: {run_id}")
@@ -502,7 +525,7 @@ def validate(
         symbol_list = [s.strip().upper() for s in symbols.split(",")]
         config = create_default_config(
             symbols=symbol_list,
-            project_root=Path(project_root)
+            project_root=project_root_path
         )
         show_info("Validating new configuration")
 
@@ -524,7 +547,7 @@ def validate(
     # If run_id provided, validate artifacts
     if run_id:
         try:
-            manifest = ArtifactManifest.load(run_id, Path(project_root))
+            manifest = ArtifactManifest.load(run_id, project_root_path)
             show_info("Validating artifacts...")
 
             verification = manifest.verify_all_artifacts()
@@ -552,8 +575,8 @@ def validate(
 
 @app.command()
 def list_runs(
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     ),
@@ -573,7 +596,13 @@ def list_runs(
     """
     console.print("\n[bold cyan]Pipeline Runs[/bold cyan]\n")
 
-    runs_dir = Path(project_root) / "runs"
+    # If project_root not provided, use the actual project root
+    if project_root is None:
+        project_root_path = Path(__file__).parent.parent.resolve()
+    else:
+        project_root_path = Path(project_root)
+
+    runs_dir = project_root_path / "runs"
 
     if not runs_dir.exists():
         show_warning("No runs directory found")
@@ -603,7 +632,7 @@ def list_runs(
 
         # Try to load config
         try:
-            config = PipelineConfig.load_from_run_id(run_id, Path(project_root))
+            config = PipelineConfig.load_from_run_id(run_id, project_root_path)
             description = config.description
             symbols = ", ".join(config.symbols)
         except Exception as e:
@@ -636,8 +665,8 @@ def list_runs(
 def compare(
     run1: str = typer.Argument(..., help="First run ID"),
     run2: str = typer.Argument(..., help="Second run ID"),
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     )
@@ -650,8 +679,14 @@ def compare(
     """
     console.print(f"\n[bold cyan]Comparing Runs: {run1} vs {run2}[/bold cyan]\n")
 
+    # If project_root not provided, use the actual project root
+    if project_root is None:
+        project_root_path = Path(__file__).parent.parent.resolve()
+    else:
+        project_root_path = Path(project_root)
+
     try:
-        comparison = compare_runs(run1, run2, Path(project_root))
+        comparison = compare_runs(run1, run2, project_root_path)
 
         # Display results
         console.print(f"[bold]Added Artifacts:[/bold] {len(comparison['added'])}")
@@ -688,8 +723,8 @@ def compare(
 @app.command()
 def clean(
     run_id: str = typer.Argument(..., help="Run ID to clean"),
-    project_root: str = typer.Option(
-        "str(Path(__file__).parent.parent.resolve())",
+    project_root: Optional[str] = typer.Option(
+        None,
         "--project-root",
         help="Project root directory"
     ),
@@ -707,7 +742,13 @@ def clean(
         pipeline clean 20241218_120000
         pipeline clean phase1_v1 --force
     """
-    run_dir = Path(project_root) / "runs" / run_id
+    # If project_root not provided, use the actual project root
+    if project_root is None:
+        project_root_path = Path(__file__).parent.parent.resolve()
+    else:
+        project_root_path = Path(project_root)
+
+    run_dir = project_root_path / "runs" / run_id
 
     if not run_dir.exists():
         show_error(f"Run not found: {run_id}")
