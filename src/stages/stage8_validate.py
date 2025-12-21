@@ -17,7 +17,7 @@ import sys
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from feature_selection import (
+from utils.feature_selection import (
     select_features,
     save_feature_selection_report,
     FeatureSelectionResult
