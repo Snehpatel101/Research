@@ -33,9 +33,10 @@ logger.addHandler(logging.NullHandler())
 class DataValidator:
     """Comprehensive data validation for Phase 1 pipeline."""
 
-    def __init__(self, df: pd.DataFrame, horizons: List[int] = [1, 5, 20]):
+    def __init__(self, df: pd.DataFrame, horizons: List[int] = [1, 5, 20], seed: int = 42):
         self.df = df
         self.horizons = horizons
+        self.seed = seed
         self.validation_results = {}
         self.issues_found = []
         self.warnings_found = []
@@ -326,6 +327,8 @@ class DataValidator:
 
         if label_col in self.df.columns:
             # Sample data for speed (max 10k samples)
+            # Set seed for reproducibility
+            np.random.seed(self.seed)
             sample_size = min(10000, len(self.df))
             sample_idx = np.random.choice(len(self.df), size=sample_size, replace=False)
             X_sample = feature_df.iloc[sample_idx].values
@@ -769,7 +772,8 @@ def validate_data(
     run_feature_selection: bool = True,
     correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
-    feature_selection_output_path: Optional[Path] = None
+    feature_selection_output_path: Optional[Path] = None,
+    seed: int = 42
 ) -> Tuple[Dict, Optional[FeatureSelectionResult]]:
     """
     Main validation function.
@@ -782,6 +786,7 @@ def validate_data(
         correlation_threshold: Threshold for feature correlation (default 0.85)
         variance_threshold: Minimum variance to keep feature (default 0.01)
         feature_selection_output_path: Optional path to save feature selection report
+        seed: Random seed for reproducibility (default: 42)
 
     Returns:
         Tuple of (validation summary dict, FeatureSelectionResult or None)
@@ -789,14 +794,15 @@ def validate_data(
     logger.info("="*70)
     logger.info("STAGE 8: DATA VALIDATION")
     logger.info("="*70)
+    logger.info(f"Random seed: {seed}")
 
     # Load data
     logger.info(f"\nLoading data from {data_path}")
     df = pd.read_parquet(data_path)
     logger.info(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
 
-    # Create validator
-    validator = DataValidator(df, horizons=horizons)
+    # Create validator with seed for reproducibility
+    validator = DataValidator(df, horizons=horizons, seed=seed)
 
     # Run all checks
     validator.check_data_integrity()
@@ -851,7 +857,7 @@ def validate_data(
 
 def main():
     """Run validation on default configuration."""
-    from config import FINAL_DATA_DIR, RESULTS_DIR
+    from config import FINAL_DATA_DIR, RESULTS_DIR, RANDOM_SEED
 
     data_path = FINAL_DATA_DIR / "combined_final_labeled.parquet"
     output_path = RESULTS_DIR / "validation_report.json"
@@ -865,7 +871,8 @@ def main():
         data_path,
         output_path,
         run_feature_selection=True,
-        feature_selection_output_path=feature_selection_path
+        feature_selection_output_path=feature_selection_path,
+        seed=RANDOM_SEED
     )
 
     logger.info(f"\nValidation status: {summary['status']}")

@@ -521,13 +521,24 @@ def main():
     logger.info("")
 
     all_results = {}
+    errors = []
 
     for symbol in SYMBOLS:
         try:
             df = process_symbol_final(symbol, horizons)
             all_results[symbol] = df
         except Exception as e:
+            errors.append({
+                'symbol': symbol,
+                'error': str(e),
+                'type': type(e).__name__
+            })
             logger.error(f"Error processing {symbol}: {e}", exc_info=True)
+
+    if errors:
+        error_summary = f"{len(errors)}/{len(SYMBOLS)} symbols failed final labeling"
+        logger.error(f"Final labeling completed with errors: {error_summary}")
+        raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 
     # Generate report
     if all_results:

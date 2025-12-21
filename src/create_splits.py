@@ -55,11 +55,14 @@ train_end_purged = train_end - purge_bars
 # Apply embargo (buffer between splits)
 embargo_bars = EMBARGO_BARS
 val_start = train_end + embargo_bars
-test_start = val_end + embargo_bars
+
+# Apply purge at val_end too (prevents label leakage into test set)
+val_end_purged = val_end - purge_bars
+test_start = val_end + embargo_bars  # Use original val_end for embargo
 
 # Create indices
 train_indices = np.arange(0, train_end_purged)
-val_indices = np.arange(val_start, val_end)
+val_indices = np.arange(val_start, val_end_purged)
 test_indices = np.arange(test_start, n)
 
 print(f"\nSplit sizes:")

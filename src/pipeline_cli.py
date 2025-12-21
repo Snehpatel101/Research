@@ -606,7 +606,8 @@ def list_runs(
             config = PipelineConfig.load_from_run_id(run_id, Path(project_root))
             description = config.description
             symbols = ", ".join(config.symbols)
-        except:
+        except Exception as e:
+            logger.debug(f"Could not load config for run {run_id}: {e}")
             description = "N/A"
             symbols = "N/A"
 

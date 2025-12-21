@@ -216,7 +216,7 @@ class DataCleaner:
         df = df.sort_values('datetime').reset_index(drop=True)
 
         if max_fill_bars is None:
-            max_fill_bars = self.max_gap_fill_minutes // self.freq_minutes
+            max_fill_bars = max(1, self.max_gap_fill_minutes // self.freq_minutes)
 
         # Create complete datetime range
         date_range = pd.date_range(
@@ -653,6 +653,7 @@ class DataCleaner:
         logger.info(f"Found {len(files)} files to clean")
 
         results = {}
+        errors = []
 
         for file_path in files:
             try:
@@ -662,8 +663,17 @@ class DataCleaner:
                 results[symbol] = cleaning_report
 
             except Exception as e:
+                errors.append({
+                    'file': str(file_path.name),
+                    'error': str(e),
+                    'type': type(e).__name__
+                })
                 logger.error(f"Error processing {file_path.name}: {e}", exc_info=True)
-                continue
+
+        if errors:
+            error_summary = f"{len(errors)}/{len(files)} files failed cleaning"
+            logger.error(f"Cleaning completed with errors: {error_summary}")
+            raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 
         # Save combined cleaning report
         combined_report_path = self.output_dir / "cleaning_report.json"

@@ -27,8 +27,13 @@ def main():
 
     from config import (
         RAW_DATA_DIR, CLEAN_DATA_DIR, FEATURES_DIR,
-        FINAL_DATA_DIR, SPLITS_DIR, SYMBOLS, RESULTS_DIR
+        FINAL_DATA_DIR, SPLITS_DIR, SYMBOLS, RESULTS_DIR,
+        RANDOM_SEED, set_global_seeds
     )
+
+    # Set random seeds for reproducibility across the entire pipeline
+    set_global_seeds(RANDOM_SEED)
+    logger.info(f"Random seed set to {RANDOM_SEED} for reproducibility")
 
     # Step 1: Generate synthetic data (if no real data exists)
     logger.info("\n" + "="*60)

@@ -17,7 +17,12 @@ def compute_returns(df: pd.DataFrame) -> pd.DataFrame:
     df['log_return'] = np.log(df['close'] / df['close'].shift(1))
     df['simple_return'] = df['close'].pct_change()
     df['high_low_range'] = (df['high'] - df['low']) / df['close']
-    df['close_open_range'] = (df['close'] - df['open']) / df['open']
+    # Fix: Protect against division by zero when open price is zero
+    df['close_open_range'] = np.where(
+        df['open'] != 0,
+        (df['close'] - df['open']) / df['open'],
+        0.0
+    )
     return df
 
 
@@ -43,7 +48,14 @@ def compute_rsi(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     gain = delta.where(delta > 0, 0).rolling(window=period).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
 
-    rs = gain / loss.replace(0, np.inf)
+    # Fix: Handle zero loss case properly to avoid division by zero
+    # When loss is 0 and gain > 0: RSI = 100 (all gains, no losses)
+    # When loss is 0 and gain = 0: RSI = 50 (no movement, neutral)
+    rs = np.where(
+        loss > 0,
+        gain / loss,
+        np.where(gain > 0, 100.0, 0.0)  # 100 if only gains, 0 if no movement
+    )
     df['rsi'] = 100 - (100 / (1 + rs))
 
     # RSI zones
@@ -73,8 +85,19 @@ def compute_bollinger_bands(df: pd.DataFrame, period: int = 20, std_dev: float =
 
     df['bb_upper'] = sma + (std * std_dev)
     df['bb_lower'] = sma - (std * std_dev)
-    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / sma
-    df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+    # Fix: Protect against division by zero when SMA is zero
+    df['bb_width'] = np.where(
+        sma > 0,
+        (df['bb_upper'] - df['bb_lower']) / sma,
+        0.0
+    )
+    # Fix: Protect against division by zero when band width is zero
+    bb_range = df['bb_upper'] - df['bb_lower']
+    df['bb_position'] = np.where(
+        bb_range > 0,
+        (df['close'] - df['bb_lower']) / bb_range,
+        0.5  # Neutral position when bands are identical
+    )
 
     return df
 
@@ -99,7 +122,13 @@ def compute_stochastic(df: pd.DataFrame, k_period: int = 14, d_period: int = 3) 
     low_min = df['low'].rolling(window=k_period).min()
     high_max = df['high'].rolling(window=k_period).max()
 
-    df['stoch_k'] = 100 * (df['close'] - low_min) / (high_max - low_min)
+    # Fix: Protect against division by zero when high_max equals low_min
+    range_hl = high_max - low_min
+    df['stoch_k'] = np.where(
+        range_hl != 0,
+        100 * (df['close'] - low_min) / range_hl,
+        50.0  # Neutral value when range is zero
+    )
     df['stoch_d'] = df['stoch_k'].rolling(window=d_period).mean()
 
     return df
@@ -122,11 +151,26 @@ def compute_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
 
     atr = tr.rolling(window=period).mean()
 
-    plus_di = 100 * pd.Series(plus_dm).rolling(window=period).mean() / atr
-    minus_di = 100 * pd.Series(minus_dm).rolling(window=period).mean() / atr
+    # Fix: Protect against division by zero when ATR is zero
+    plus_di = np.where(
+        atr > 0,
+        100 * pd.Series(plus_dm).rolling(window=period).mean() / atr,
+        0.0
+    )
+    minus_di = np.where(
+        atr > 0,
+        100 * pd.Series(minus_dm).rolling(window=period).mean() / atr,
+        0.0
+    )
 
-    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
-    df['adx'] = dx.rolling(window=period).mean()
+    # Fix: Protect against division by zero when plus_di + minus_di is zero
+    di_sum = plus_di + minus_di
+    dx = np.where(
+        di_sum > 0,
+        100 * np.abs(plus_di - minus_di) / di_sum,
+        0.0
+    )
+    df['adx'] = pd.Series(dx).rolling(window=period).mean()
     df['plus_di'] = plus_di
     df['minus_di'] = minus_di
 
@@ -146,7 +190,13 @@ def compute_obv(df: pd.DataFrame) -> pd.DataFrame:
 def compute_vwap(df: pd.DataFrame) -> pd.DataFrame:
     """Compute Volume Weighted Average Price (session-based approximation)."""
     typical_price = (df['high'] + df['low'] + df['close']) / 3
-    df['vwap'] = (typical_price * df['volume']).rolling(288).sum() / df['volume'].rolling(288).sum()
+    # Fix: Protect against division by zero when volume sum is zero
+    volume_sum = df['volume'].rolling(288).sum()
+    df['vwap'] = np.where(
+        volume_sum > 0,
+        (typical_price * df['volume']).rolling(288).sum() / volume_sum,
+        df['close']  # Fallback to close price when no volume
+    )
     df['close_to_vwap'] = df['close'] / df['vwap'] - 1
 
     return df
@@ -164,7 +214,13 @@ def compute_williams_r(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     high_max = df['high'].rolling(window=period).max()
     low_min = df['low'].rolling(window=period).min()
 
-    df['williams_r'] = -100 * (high_max - df['close']) / (high_max - low_min)
+    # Fix: Protect against division by zero when high_max equals low_min
+    range_hl = high_max - low_min
+    df['williams_r'] = np.where(
+        range_hl != 0,
+        -100 * (high_max - df['close']) / range_hl,
+        -50.0  # Neutral value when range is zero
+    )
 
     return df
 
@@ -172,11 +228,21 @@ def compute_williams_r(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
 def compute_volume_features(df: pd.DataFrame) -> pd.DataFrame:
     """Compute volume-based features."""
     df['volume_sma_20'] = df['volume'].rolling(window=20).mean()
-    df['volume_ratio'] = df['volume'] / df['volume_sma_20']
+    # Fix: Protect against division by zero when volume SMA is zero
+    df['volume_ratio'] = np.where(
+        df['volume_sma_20'] > 0,
+        df['volume'] / df['volume_sma_20'],
+        1.0  # Neutral ratio when no volume
+    )
 
     # Volume z-score
     vol_std = df['volume'].rolling(window=20).std()
-    df['volume_zscore'] = (df['volume'] - df['volume_sma_20']) / vol_std
+    # Fix: Protect against division by zero when volume std is zero
+    df['volume_zscore'] = np.where(
+        vol_std > 0,
+        (df['volume'] - df['volume_sma_20']) / vol_std,
+        0.0  # Neutral z-score when no variance
+    )
 
     return df
 

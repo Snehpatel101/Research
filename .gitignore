@@ -75,3 +75,13 @@ Thumbs.db
 runs/
 data/clean_test/
 data/splits/20*/
+data/splits/fixed_*/
+data/labels/
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Temporary test reports
+TEST_REPORT_*.md

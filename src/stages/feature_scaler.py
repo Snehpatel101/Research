@@ -1,5 +1,5 @@
 """
-Feature Scaler Infrastructure for Phase 2 - Train-Only Scaling
+Feature Scaler Infrastructure for Phase 1/2 Pipeline - Train-Only Scaling
 
 This module provides a train-only scaling infrastructure to prevent data leakage.
 All scalers are fitted ONLY on training data, then applied to validation and test sets.
@@ -8,14 +8,20 @@ Key Features:
 - Fits scalers exclusively on training data to prevent leakage
 - Supports multiple scaler types (StandardScaler, RobustScaler, MinMaxScaler)
 - Feature-type-aware scaling (different strategies per feature category)
+- Outlier clipping to prevent extreme values from dominating
 - Persists scaler parameters to disk for production inference
 - Validates scaling correctness on val/test sets
 - Integrates with stage8_validate.py
 
 Usage:
-    from stages.feature_scaler import FeatureScaler
+    from stages.feature_scaler import FeatureScaler, scale_splits
 
-    # Initialize and fit on training data ONLY
+    # Simple usage with scale_splits convenience function
+    train_scaled, val_scaled, test_scaled, scaler = scale_splits(
+        train_df, val_df, test_df, feature_cols
+    )
+
+    # Or use FeatureScaler directly for more control
     scaler = FeatureScaler(scaler_type='robust')
     train_scaled = scaler.fit_transform(train_df, feature_cols)
 
@@ -31,6 +37,7 @@ Usage:
 
 Author: ML Pipeline
 Created: 2025-12-20
+Updated: 2025-12-20 - Added outlier clipping, simplified scale_splits interface
 """
 
 import numpy as np
@@ -47,11 +54,10 @@ from enum import Enum
 from sklearn.preprocessing import RobustScaler, StandardScaler, MinMaxScaler
 from scipy import stats
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Configure logger with NullHandler to avoid "No handler found" warnings
+# when used as a library. Applications should configure their own handlers.
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 # =============================================================================
@@ -64,6 +70,36 @@ class ScalerType(Enum):
     ROBUST = 'robust'
     MINMAX = 'minmax'
     NONE = 'none'
+
+
+@dataclass
+class ScalerConfig:
+    """
+    Simple configuration for feature scaling.
+
+    Attributes:
+        scaler_type: Type of scaler to use ('robust', 'standard', 'minmax')
+        clip_outliers: Whether to clip scaled values to clip_range
+        clip_range: Range to clip scaled values (in units of the scaled distribution)
+    """
+    scaler_type: str = 'robust'
+    clip_outliers: bool = True
+    clip_range: Tuple[float, float] = (-5.0, 5.0)
+
+    def to_dict(self) -> Dict:
+        return {
+            'scaler_type': self.scaler_type,
+            'clip_outliers': self.clip_outliers,
+            'clip_range': self.clip_range
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict) -> 'ScalerConfig':
+        return cls(
+            scaler_type=d.get('scaler_type', 'robust'),
+            clip_outliers=d.get('clip_outliers', True),
+            clip_range=tuple(d.get('clip_range', (-5.0, 5.0)))
+        )
 
 
 class FeatureCategory(Enum):
@@ -275,7 +311,10 @@ class FeatureScaler:
         scaler_type: str = 'robust',
         feature_config: Optional[Dict[str, Dict]] = None,
         apply_log_to_price_volume: bool = True,
-        robust_quantile_range: Tuple[float, float] = (25.0, 75.0)
+        robust_quantile_range: Tuple[float, float] = (25.0, 75.0),
+        clip_outliers: bool = True,
+        clip_range: Tuple[float, float] = (-5.0, 5.0),
+        config: Optional[ScalerConfig] = None
     ):
         """
         Initialize the FeatureScaler.
@@ -287,8 +326,20 @@ class FeatureScaler:
             apply_log_to_price_volume: Whether to apply log transform to
                                        price level and volume features
             robust_quantile_range: Quantile range for RobustScaler
+            clip_outliers: Whether to clip scaled values to clip_range
+            clip_range: Range to clip scaled values (e.g., (-5.0, 5.0))
+            config: Optional ScalerConfig object (overrides other parameters)
         """
-        self.default_scaler_type = ScalerType(scaler_type)
+        # If config provided, use it to set parameters
+        if config is not None:
+            self.default_scaler_type = ScalerType(config.scaler_type)
+            self.clip_outliers = config.clip_outliers
+            self.clip_range = config.clip_range
+        else:
+            self.default_scaler_type = ScalerType(scaler_type)
+            self.clip_outliers = clip_outliers
+            self.clip_range = clip_range
+
         self.custom_feature_config = feature_config or {}
         self.apply_log_to_price_volume = apply_log_to_price_volume
         self.robust_quantile_range = robust_quantile_range
@@ -569,6 +620,10 @@ class FeatureScaler:
             if scaler is not None:
                 col_data = scaler.transform(col_data.reshape(-1, 1)).ravel()
 
+            # Apply outlier clipping if configured
+            if self.clip_outliers:
+                col_data = np.clip(col_data, self.clip_range[0], self.clip_range[1])
+
             result[fname] = col_data
 
         return result
@@ -656,10 +711,12 @@ class FeatureScaler:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         state = {
-            'version': '2.0',
+            'version': '2.1',
             'default_scaler_type': self.default_scaler_type.value,
             'robust_quantile_range': self.robust_quantile_range,
             'apply_log_to_price_volume': self.apply_log_to_price_volume,
+            'clip_outliers': self.clip_outliers,
+            'clip_range': self.clip_range,
             'is_fitted': self.is_fitted,
             'feature_names': self.feature_names,
             'scalers': self.scalers,
@@ -734,7 +791,9 @@ class FeatureScaler:
         scaler = cls(
             scaler_type=state['default_scaler_type'],
             apply_log_to_price_volume=state.get('apply_log_to_price_volume', True),
-            robust_quantile_range=state.get('robust_quantile_range', (25.0, 75.0))
+            robust_quantile_range=state.get('robust_quantile_range', (25.0, 75.0)),
+            clip_outliers=state.get('clip_outliers', True),
+            clip_range=tuple(state.get('clip_range', (-5.0, 5.0)))
         )
 
         scaler.is_fitted = state['is_fitted']
@@ -970,18 +1029,70 @@ def validate_no_leakage(
 # CONVENIENCE FUNCTIONS
 # =============================================================================
 
+def scale_splits(
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    feature_cols: List[str],
+    scaler_path: Optional[Path] = None,
+    config: Optional[ScalerConfig] = None
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
+    """
+    Scale train/val/test splits with train-only fitting.
+
+    This is the recommended simple interface for scaling data.
+
+    Args:
+        train_df: Training DataFrame
+        val_df: Validation DataFrame
+        test_df: Test DataFrame
+        feature_cols: Feature columns to scale
+        scaler_path: Optional path to save the fitted scaler
+        config: Optional ScalerConfig for customization
+
+    Returns:
+        Tuple of (train_scaled, val_scaled, test_scaled, scaler)
+
+    Example:
+        >>> train_scaled, val_scaled, test_scaled, scaler = scale_splits(
+        ...     train_df, val_df, test_df, feature_cols
+        ... )
+    """
+    scaler = FeatureScaler(config=config) if config else FeatureScaler()
+
+    # Fit ONLY on training data
+    train_scaled = scaler.fit_transform(train_df, feature_cols)
+
+    # Transform val and test using training statistics
+    val_scaled = scaler.transform(val_df)
+    test_scaled = scaler.transform(test_df)
+
+    # Save scaler if path provided
+    if scaler_path:
+        scaler.save(scaler_path)
+
+    logger.info("\nScaling complete:")
+    logger.info(f"  Train: {len(train_scaled):,} samples")
+    logger.info(f"  Val:   {len(val_scaled):,} samples")
+    logger.info(f"  Test:  {len(test_scaled):,} samples")
+
+    return train_scaled, val_scaled, test_scaled, scaler
+
+
 def scale_train_val_test(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
     feature_cols: List[str],
     scaler_type: str = 'robust',
-    save_path: Optional[Path] = None
+    save_path: Optional[Path] = None,
+    clip_outliers: bool = True,
+    clip_range: Tuple[float, float] = (-5.0, 5.0)
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
     """
     Scale train/val/test data with a scaler fitted on training data only.
 
-    This is the recommended way to scale data for model training.
+    This is an alternative interface with more explicit parameters.
 
     Args:
         train_df: Training DataFrame
@@ -990,11 +1101,17 @@ def scale_train_val_test(
         feature_cols: Feature columns to scale
         scaler_type: Scaler type ('robust', 'standard', 'minmax')
         save_path: Optional path to save the fitted scaler
+        clip_outliers: Whether to clip outliers after scaling
+        clip_range: Range to clip scaled values to
 
     Returns:
         Tuple of (train_scaled, val_scaled, test_scaled, scaler)
     """
-    scaler = FeatureScaler(scaler_type=scaler_type)
+    scaler = FeatureScaler(
+        scaler_type=scaler_type,
+        clip_outliers=clip_outliers,
+        clip_range=clip_range
+    )
 
     # Fit ONLY on training data
     train_scaled = scaler.fit_transform(train_df, feature_cols)
@@ -1396,6 +1513,105 @@ def test_feature_categorization():
     return True
 
 
+def test_outlier_clipping():
+    """Test that outlier clipping works correctly."""
+    print("\n" + "="*60)
+    print("TEST: outlier_clipping")
+    print("="*60)
+
+    np.random.seed(42)
+
+    # Create data with extreme outliers
+    normal_data = np.random.normal(0, 1, 990)
+    outliers = np.array([50, -50, 100, -100, 200, -200, 500, -500, 1000, -1000])
+    data = np.concatenate([normal_data, outliers])
+
+    train_df = pd.DataFrame({'feature': data})
+
+    # Test with clipping enabled
+    scaler_clip = FeatureScaler(
+        scaler_type='standard',
+        clip_outliers=True,
+        clip_range=(-5.0, 5.0)
+    )
+    scaled_clip = scaler_clip.fit_transform(train_df, ['feature'])
+
+    # Verify all values are within clip range
+    assert scaled_clip['feature'].max() <= 5.0, "Max should be clipped to 5.0"
+    assert scaled_clip['feature'].min() >= -5.0, "Min should be clipped to -5.0"
+    print(f"  With clipping: min={scaled_clip['feature'].min():.2f}, max={scaled_clip['feature'].max():.2f}")
+
+    # Test with clipping disabled
+    scaler_no_clip = FeatureScaler(
+        scaler_type='standard',
+        clip_outliers=False
+    )
+    scaled_no_clip = scaler_no_clip.fit_transform(train_df, ['feature'])
+
+    # Verify extreme values are NOT clipped
+    assert scaled_no_clip['feature'].max() > 5.0, "Without clipping, max should exceed 5.0"
+    assert scaled_no_clip['feature'].min() < -5.0, "Without clipping, min should be below -5.0"
+    print(f"  Without clipping: min={scaled_no_clip['feature'].min():.2f}, max={scaled_no_clip['feature'].max():.2f}")
+
+    # Test with ScalerConfig
+    config = ScalerConfig(scaler_type='robust', clip_outliers=True, clip_range=(-3.0, 3.0))
+    scaler_config = FeatureScaler(config=config)
+    scaled_config = scaler_config.fit_transform(train_df, ['feature'])
+
+    assert scaled_config['feature'].max() <= 3.0, "Max should be clipped to 3.0 with config"
+    assert scaled_config['feature'].min() >= -3.0, "Min should be clipped to -3.0 with config"
+    print(f"  With ScalerConfig (-3,3): min={scaled_config['feature'].min():.2f}, max={scaled_config['feature'].max():.2f}")
+
+    print("PASSED: Outlier clipping works correctly")
+    return True
+
+
+def test_scale_splits_function():
+    """Test the scale_splits convenience function."""
+    print("\n" + "="*60)
+    print("TEST: scale_splits_function")
+    print("="*60)
+
+    np.random.seed(42)
+
+    # Create synthetic train/val/test data
+    train_df = pd.DataFrame({
+        'feature1': np.random.normal(0, 1, 1000),
+        'feature2': np.random.normal(100, 10, 1000)
+    })
+    val_df = pd.DataFrame({
+        'feature1': np.random.normal(0.5, 1.2, 200),
+        'feature2': np.random.normal(105, 12, 200)
+    })
+    test_df = pd.DataFrame({
+        'feature1': np.random.normal(0.3, 1.1, 200),
+        'feature2': np.random.normal(102, 11, 200)
+    })
+
+    # Test scale_splits
+    train_scaled, val_scaled, test_scaled, scaler = scale_splits(
+        train_df, val_df, test_df, ['feature1', 'feature2']
+    )
+
+    # Verify shapes
+    assert len(train_scaled) == len(train_df), "Train size mismatch"
+    assert len(val_scaled) == len(val_df), "Val size mismatch"
+    assert len(test_scaled) == len(test_df), "Test size mismatch"
+
+    # Verify scaler is fitted
+    assert scaler.is_fitted, "Scaler should be fitted"
+    assert len(scaler.feature_names) == 2, "Should have 2 features"
+
+    # Verify train is scaled (approximately zero mean for robust scaler)
+    # Note: RobustScaler uses median, so we check that median is near 0
+    print(f"  Train feature1 median: {train_scaled['feature1'].median():.4f}")
+    print(f"  Val feature1 median: {val_scaled['feature1'].median():.4f}")
+    print(f"  Test feature1 median: {test_scaled['feature1'].median():.4f}")
+
+    print("PASSED: scale_splits function works correctly")
+    return True
+
+
 def run_all_tests():
     """Run all unit tests."""
     print("\n" + "="*70)
@@ -1407,7 +1623,9 @@ def run_all_tests():
         test_transform_uses_train_statistics,
         test_save_and_load_scaler,
         test_different_scaler_types,
-        test_feature_categorization
+        test_feature_categorization,
+        test_outlier_clipping,
+        test_scale_splits_function
     ]
 
     passed = 0

@@ -194,6 +194,10 @@ class DataIngestor:
             else:
                 raise ValueError(f"Unsupported file format: {file_format}")
 
+            # Check for empty DataFrame
+            if len(df) == 0:
+                raise ValueError(f"Loaded file is empty: {validated_path}")
+
             logger.info(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
             return df
 
@@ -474,7 +478,11 @@ class DataIngestor:
 
         # Volume should be integer
         if 'volume' in df.columns:
-            df['volume'] = pd.to_numeric(df['volume'], errors='coerce').fillna(0).astype('int64')
+            volume_numeric = pd.to_numeric(df['volume'], errors='coerce')
+            nan_count = volume_numeric.isna().sum()
+            if nan_count > 0:
+                logger.warning(f"Found {nan_count} invalid volume values, setting to 0")
+            df['volume'] = volume_numeric.fillna(0).astype('int64')
 
         # Check for any NaN values introduced
         nan_counts = df[['open', 'high', 'low', 'close']].isna().sum()
@@ -656,6 +664,7 @@ class DataIngestor:
         logger.info(f"Found {len(files)} files to ingest")
 
         results = {}
+        errors = []
 
         for file_path in files:
             try:
@@ -665,8 +674,17 @@ class DataIngestor:
                 results[symbol] = metadata
 
             except Exception as e:
+                errors.append({
+                    'file': str(file_path.name),
+                    'error': str(e),
+                    'type': type(e).__name__
+                })
                 logger.error(f"Error processing {file_path.name}: {e}", exc_info=True)
-                continue
+
+        if errors:
+            error_summary = f"{len(errors)}/{len(files)} files failed ingestion"
+            logger.error(f"Ingestion completed with errors: {error_summary}")
+            raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 
         logger.info(f"\nIngestion complete. Processed {len(results)} files successfully.")
         return results

@@ -3,6 +3,54 @@ Configuration for ensemble trading project
 """
 from pathlib import Path
 
+# =============================================================================
+# REPRODUCIBILITY
+# =============================================================================
+RANDOM_SEED = 42
+
+
+def set_global_seeds(seed: int = RANDOM_SEED) -> None:
+    """
+    Set random seeds for reproducibility across the entire pipeline.
+
+    This function sets seeds for:
+    - Python's random module
+    - NumPy's random module
+    - PyTorch (if available)
+    - TensorFlow (if available)
+
+    Call this at the start of any pipeline run to ensure reproducible results.
+
+    Parameters:
+    -----------
+    seed : int
+        Random seed value (default: RANDOM_SEED = 42)
+    """
+    import random
+    import numpy as np
+
+    random.seed(seed)
+    np.random.seed(seed)
+
+    # Try to set PyTorch seeds if available
+    try:
+        import torch
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+            # For full determinism (may impact performance)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+    except ImportError:
+        pass
+
+    # Try to set TensorFlow seeds if available
+    try:
+        import tensorflow as tf
+        tf.random.set_seed(seed)
+    except ImportError:
+        pass
+
 # Base paths
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 DATA_DIR = PROJECT_ROOT / "data"
@@ -284,3 +332,122 @@ CROSS_ASSET_FEATURES = {
         }
     }
 }
+
+
+# =============================================================================
+# CONFIGURATION VALIDATION
+# =============================================================================
+def validate_config() -> None:
+    """
+    Validate configuration values for consistency and correctness.
+
+    Raises:
+        ValueError: If configuration values are invalid or inconsistent
+
+    This function ensures:
+    1. PURGE_BARS >= max(max_bars) across all horizons (prevents label leakage)
+    2. Split ratios sum to 1.0
+    3. All barrier parameters are positive
+    4. Transaction costs are non-negative
+    5. Tick values are positive
+    """
+    import numpy as np
+
+    errors = []
+
+    # === Validate purge_bars >= max_bars (CRITICAL for leakage prevention) ===
+    max_max_bars = 0
+    max_bars_source = None
+
+    # Check symbol-specific barrier params
+    for symbol, horizons in BARRIER_PARAMS.items():
+        for horizon, params in horizons.items():
+            mb = params.get('max_bars', 0)
+            if mb > max_max_bars:
+                max_max_bars = mb
+                max_bars_source = f"BARRIER_PARAMS['{symbol}'][{horizon}]"
+
+    # Check default barrier params
+    for horizon, params in BARRIER_PARAMS_DEFAULT.items():
+        mb = params.get('max_bars', 0)
+        if mb > max_max_bars:
+            max_max_bars = mb
+            max_bars_source = f"BARRIER_PARAMS_DEFAULT[{horizon}]"
+
+    # Check percentage barrier params
+    for horizon, params in PERCENTAGE_BARRIER_PARAMS.items():
+        mb = params.get('max_bars', 0)
+        if mb > max_max_bars:
+            max_max_bars = mb
+            max_bars_source = f"PERCENTAGE_BARRIER_PARAMS[{horizon}]"
+
+    if PURGE_BARS < max_max_bars:
+        errors.append(
+            f"PURGE_BARS ({PURGE_BARS}) must be >= max_bars ({max_max_bars}) from {max_bars_source} "
+            f"to prevent label leakage. Set PURGE_BARS >= {max_max_bars}."
+        )
+
+    # === Validate split ratios sum to 1.0 ===
+    total_ratio = TRAIN_RATIO + VAL_RATIO + TEST_RATIO
+    if not np.isclose(total_ratio, 1.0):
+        errors.append(
+            f"Split ratios must sum to 1.0, got {total_ratio:.4f} "
+            f"(train={TRAIN_RATIO}, val={VAL_RATIO}, test={TEST_RATIO})"
+        )
+
+    # === Validate individual split ratios are positive ===
+    if TRAIN_RATIO <= 0:
+        errors.append(f"TRAIN_RATIO must be positive, got {TRAIN_RATIO}")
+    if VAL_RATIO <= 0:
+        errors.append(f"VAL_RATIO must be positive, got {VAL_RATIO}")
+    if TEST_RATIO <= 0:
+        errors.append(f"TEST_RATIO must be positive, got {TEST_RATIO}")
+
+    # === Validate purge and embargo bars are non-negative ===
+    if PURGE_BARS < 0:
+        errors.append(f"PURGE_BARS must be non-negative, got {PURGE_BARS}")
+    if EMBARGO_BARS < 0:
+        errors.append(f"EMBARGO_BARS must be non-negative, got {EMBARGO_BARS}")
+
+    # === Validate barrier parameters are positive ===
+    for symbol, horizons in BARRIER_PARAMS.items():
+        for horizon, params in horizons.items():
+            if params.get('k_up', 0) <= 0:
+                errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['k_up'] must be positive")
+            if params.get('k_down', 0) <= 0:
+                errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['k_down'] must be positive")
+            if params.get('max_bars', 0) <= 0:
+                errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['max_bars'] must be positive")
+
+    for horizon, params in BARRIER_PARAMS_DEFAULT.items():
+        if params.get('k_up', 0) <= 0:
+            errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['k_up'] must be positive")
+        if params.get('k_down', 0) <= 0:
+            errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['k_down'] must be positive")
+        if params.get('max_bars', 0) <= 0:
+            errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['max_bars'] must be positive")
+
+    # === Validate transaction costs are non-negative ===
+    for symbol, cost in TRANSACTION_COSTS.items():
+        if cost < 0:
+            errors.append(f"TRANSACTION_COSTS['{symbol}'] must be non-negative, got {cost}")
+
+    # === Validate tick values are positive ===
+    for symbol, value in TICK_VALUES.items():
+        if value <= 0:
+            errors.append(f"TICK_VALUES['{symbol}'] must be positive, got {value}")
+
+    # === Validate correlation and variance thresholds ===
+    if not (0 < CORRELATION_THRESHOLD <= 1.0):
+        errors.append(f"CORRELATION_THRESHOLD must be in (0, 1.0], got {CORRELATION_THRESHOLD}")
+    if VARIANCE_THRESHOLD < 0:
+        errors.append(f"VARIANCE_THRESHOLD must be non-negative, got {VARIANCE_THRESHOLD}")
+
+    # === Raise all errors at once for comprehensive feedback ===
+    if errors:
+        error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+        raise ValueError(error_msg)
+
+
+# Run validation at module import time
+validate_config()

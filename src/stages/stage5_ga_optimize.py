@@ -319,12 +319,16 @@ def evaluate_individual(
 
     except Exception as e:
         # Use float('-inf') for invalid fitness to ensure it's never selected
-        # Log full traceback for debugging
-        logger.error(f"Error evaluating individual [k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}]: {e}", exc_info=True)
+        # Log as warning since this is acceptable GA behavior (invalid individuals get worst fitness)
+        logger.warning(f"Fitness evaluation failed for individual [k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}]: {e}")
         return (float('-inf'),)
 
 
-def get_contiguous_subset(df: pd.DataFrame, subset_fraction: float) -> pd.DataFrame:
+def get_contiguous_subset(
+    df: pd.DataFrame,
+    subset_fraction: float,
+    seed: int = 42
+) -> pd.DataFrame:
     """
     Get a contiguous time block from the data instead of random sampling.
 
@@ -335,6 +339,7 @@ def get_contiguous_subset(df: pd.DataFrame, subset_fraction: float) -> pd.DataFr
     -----------
     df : Full DataFrame
     subset_fraction : Fraction of data to use
+    seed : Random seed for reproducibility (default: 42)
 
     Returns:
     --------
@@ -351,6 +356,8 @@ def get_contiguous_subset(df: pd.DataFrame, subset_fraction: float) -> pd.DataFr
     if max_start <= 0:
         return df.copy()
 
+    # Set seed for reproducibility before random selection
+    random.seed(seed)
     start_idx = random.randint(0, max_start)
     end_idx = start_idx + subset_len
 
@@ -367,7 +374,8 @@ def run_ga_optimization(
     mutation_prob: float = 0.2,
     tournament_size: int = 3,
     subset_fraction: float = 0.3,
-    atr_column: str = 'atr_14'
+    atr_column: str = 'atr_14',
+    seed: int = 42
 ) -> Dict:
     """
     Run genetic algorithm to optimize labeling parameters.
@@ -378,6 +386,7 @@ def run_ga_optimization(
     - Symbol-specific asymmetry constraints (MES: asymmetric, MGC: symmetric)
     - Transaction cost penalty in fitness
     - Improved mutation with smaller sigma for finer tuning
+    - Random seed for reproducibility
 
     Parameters:
     -----------
@@ -391,19 +400,25 @@ def run_ga_optimization(
     tournament_size : tournament selection size
     subset_fraction : fraction of data to use (for speed)
     atr_column : ATR column name
+    seed : random seed for reproducibility (default: 42)
 
     Returns:
     --------
     results : dict with best parameters and statistics
     """
+    # Set random seeds for reproducibility at GA initialization
+    random.seed(seed)
+    np.random.seed(seed)
+
     logger.info(f"\nOptimizing parameters for {symbol} horizon {horizon}")
     logger.info(f"  Population: {population_size}, Generations: {generations}")
     logger.info(f"  Symbol-specific mode: {'SYMMETRIC (gold)' if symbol == 'MGC' else 'ASYMMETRIC (equity)'}")
+    logger.info(f"  Random seed: {seed}")
 
     # ==========================================================================
     # FIX: Use contiguous time blocks instead of random sampling
     # ==========================================================================
-    df_subset = get_contiguous_subset(df, subset_fraction)
+    df_subset = get_contiguous_subset(df, subset_fraction, seed=seed)
     logger.info(f"  Using {len(df_subset):,} contiguous samples ({subset_fraction*100:.0f}% of data)")
 
     # Extract arrays
@@ -729,7 +744,8 @@ def process_symbol_ga(
     symbol: str,
     horizons: List[int] = [5, 20],  # Exclude H1 - not viable after transaction costs
     population_size: int = 50,
-    generations: int = 30
+    generations: int = 30,
+    seed: int = 42
 ) -> Dict[int, Dict]:
     """
     Run GA optimization for all horizons for a symbol.
@@ -740,6 +756,7 @@ def process_symbol_ga(
     horizons : list of horizons to optimize (default excludes H1)
     population_size : GA population size
     generations : number of generations
+    seed : random seed for reproducibility (default: 42)
 
     Returns:
     --------
@@ -770,7 +787,8 @@ def process_symbol_ga(
             symbol=symbol,  # Pass symbol for symbol-specific optimization
             population_size=population_size,
             generations=generations,
-            subset_fraction=0.3
+            subset_fraction=0.3,
+            seed=seed
         )
 
         all_results[horizon] = results
@@ -805,7 +823,10 @@ def main():
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-    from config import SYMBOLS, ACTIVE_HORIZONS
+    from config import SYMBOLS, ACTIVE_HORIZONS, RANDOM_SEED, set_global_seeds
+
+    # Set random seeds for reproducibility
+    set_global_seeds(RANDOM_SEED)
 
     # Use only ACTIVE_HORIZONS (excludes H1 which is not viable after costs)
     horizons = ACTIVE_HORIZONS  # [5, 20]
@@ -817,6 +838,7 @@ def main():
     logger.info("=" * 70)
     logger.info(f"Horizons: {horizons} (H1 excluded - not viable after transaction costs)")
     logger.info(f"GA Config: pop_size={population_size}, gens={generations}")
+    logger.info(f"Random seed: {RANDOM_SEED}")
     logger.info("")
     logger.info("PRODUCTION FIXES APPLIED:")
     logger.info("  - Target 20-30% neutral rate (was <2%)")
@@ -828,18 +850,30 @@ def main():
     logger.info(f"    - MGC: {TRANSACTION_COSTS.get('MGC', 0.3)} ticks round-trip")
     logger.info("  - Wider search bounds: k=[0.8,2.5], max_bars=[2x,3x]")
     logger.info("  - Fixed profit factor calculation")
+    logger.info("  - Random seed for reproducibility")
     logger.info("")
 
     all_symbols_results = {}
+    errors = []
 
     for symbol in SYMBOLS:
         try:
             results = process_symbol_ga(
-                symbol, horizons, population_size, generations
+                symbol, horizons, population_size, generations, seed=RANDOM_SEED
             )
             all_symbols_results[symbol] = results
         except Exception as e:
+            errors.append({
+                'symbol': symbol,
+                'error': str(e),
+                'type': type(e).__name__
+            })
             logger.error(f"Error processing {symbol}: {e}", exc_info=True)
+
+    if errors:
+        error_summary = f"{len(errors)}/{len(SYMBOLS)} symbols failed GA optimization"
+        logger.error(f"GA optimization completed with errors: {error_summary}")
+        raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 
     # Save combined summary
     project_root = Path(__file__).parent.parent.parent.resolve()

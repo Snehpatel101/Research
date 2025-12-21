@@ -252,7 +252,61 @@ def apply_triple_barrier(
         - mae_h{horizon}
         - mfe_h{horizon}
         - touch_type_h{horizon}
+
+    Raises:
+    -------
+    ValueError : If DataFrame is empty or parameters are invalid
+    KeyError : If required columns are missing
     """
+    # === PARAMETER VALIDATION ===
+    # Validate DataFrame is not empty
+    if df.empty:
+        raise ValueError("DataFrame is empty - cannot apply triple barrier labeling")
+
+    # Validate horizon
+    if not isinstance(horizon, int) or horizon <= 0:
+        raise ValueError(f"horizon must be a positive integer, got {horizon} (type: {type(horizon).__name__})")
+
+    # Validate k_up if provided
+    if k_up is not None and k_up <= 0:
+        raise ValueError(f"k_up must be positive, got {k_up}")
+
+    # Validate k_down if provided
+    if k_down is not None and k_down <= 0:
+        raise ValueError(f"k_down must be positive, got {k_down}")
+
+    # Validate max_bars if provided
+    if max_bars is not None and max_bars <= 0:
+        raise ValueError(f"max_bars must be positive, got {max_bars}")
+
+    # Validate percentage parameters if use_percentage is True
+    if use_percentage:
+        if pct_up is not None and pct_up <= 0:
+            raise ValueError(f"pct_up must be positive, got {pct_up}")
+        if pct_down is not None and pct_down <= 0:
+            raise ValueError(f"pct_down must be positive, got {pct_down}")
+
+    # Validate required OHLC columns
+    required_cols = {'close', 'high', 'low', 'open'}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise KeyError(f"Missing required OHLC columns: {sorted(missing)}")
+
+    # Validate ATR column exists
+    if atr_column not in df.columns:
+        available_cols = [c for c in df.columns if 'atr' in c.lower()]
+        raise KeyError(
+            f"ATR column '{atr_column}' not found. "
+            f"Available ATR-like columns: {available_cols if available_cols else 'none'}"
+        )
+
+    # Check for NaN values in critical columns and warn
+    critical_cols = ['close', 'high', 'low', 'open', atr_column]
+    nan_counts = df[critical_cols].isna().sum()
+    if nan_counts.any():
+        nan_report = nan_counts[nan_counts > 0].to_dict()
+        logger.warning(f"NaN values in critical columns: {nan_report}")
+
     # Get default parameters from configuration if not provided
     if horizon in BARRIER_PARAMS:
         defaults = BARRIER_PARAMS[horizon]

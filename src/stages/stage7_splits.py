@@ -7,7 +7,7 @@ import pandas as pd
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from datetime import datetime
 
 # Configure logging - use NullHandler to avoid duplicate logs when imported as module
@@ -43,6 +43,98 @@ def validate_no_overlap(
     return True
 
 
+def validate_per_symbol_distribution(
+    df: pd.DataFrame,
+    train_indices: np.ndarray,
+    val_indices: np.ndarray,
+    test_indices: np.ndarray,
+    min_symbol_pct: float = 20.0
+) -> None:
+    """
+    Validate that each split has adequate representation from each symbol.
+
+    Args:
+        df: DataFrame with 'symbol' column
+        train_indices: Training set indices
+        val_indices: Validation set indices
+        test_indices: Test set indices
+        min_symbol_pct: Minimum percentage required for each symbol in each split
+
+    Raises:
+        ValueError: If any symbol is underrepresented in any split
+    """
+    splits = {
+        'train': train_indices,
+        'val': val_indices,
+        'test': test_indices
+    }
+
+    symbols = df['symbol'].unique()
+
+    for split_name, indices in splits.items():
+        split_df = df.iloc[indices]
+        split_size = len(indices)
+
+        logger.info(f"\n{split_name.upper()} split symbol distribution:")
+
+        for symbol in symbols:
+            symbol_count = (split_df['symbol'] == symbol).sum()
+            symbol_pct = symbol_count / split_size * 100
+
+            logger.info(f"  {symbol}: {symbol_count:,} ({symbol_pct:.1f}%)")
+
+            if symbol_pct < min_symbol_pct:
+                raise ValueError(
+                    f"Symbol {symbol} underrepresented in {split_name} split: "
+                    f"{symbol_pct:.1f}% < {min_symbol_pct}% minimum"
+                )
+
+
+def validate_label_distribution(
+    df: pd.DataFrame,
+    train_indices: np.ndarray,
+    val_indices: np.ndarray,
+    test_indices: np.ndarray,
+    horizons: List[int] = None
+) -> None:
+    """
+    Validate label distribution across splits.
+
+    Args:
+        df: DataFrame with label columns
+        train_indices: Training set indices
+        val_indices: Validation set indices
+        test_indices: Test set indices
+        horizons: List of label horizons to check (default: [5, 20])
+    """
+    if horizons is None:
+        horizons = [5, 20]
+
+    splits = {
+        'train': train_indices,
+        'val': val_indices,
+        'test': test_indices
+    }
+
+    for horizon in horizons:
+        label_col = f'label_h{horizon}'
+        if label_col not in df.columns:
+            continue
+
+        logger.info(f"\nLabel distribution for horizon {horizon}:")
+
+        for split_name, indices in splits.items():
+            split_labels = df.iloc[indices][label_col]
+            counts = split_labels.value_counts().sort_index()
+            total = len(split_labels)
+
+            dist_str = ", ".join([
+                f"{label}: {count/total*100:.1f}%"
+                for label, count in counts.items()
+            ])
+            logger.info(f"  {split_name}: {dist_str}")
+
+
 def create_chronological_splits(
     df: pd.DataFrame,
     train_ratio: float = 0.70,
@@ -66,16 +158,60 @@ def create_chronological_splits(
 
     Returns:
         train_indices, val_indices, test_indices, metadata dict
+
+    Raises:
+        ValueError: If parameters are invalid or splits would be empty
+        KeyError: If datetime column is missing
     """
-    # Validate ratios
+    # === PARAMETER VALIDATION ===
+    # Validate DataFrame is not empty
+    if df.empty:
+        raise ValueError("DataFrame is empty - cannot create splits")
+
+    n = len(df)
+
+    # Validate datetime column exists
+    if datetime_col not in df.columns:
+        raise KeyError(
+            f"Datetime column '{datetime_col}' not found. "
+            f"Available columns: {list(df.columns)[:10]}..."
+        )
+
+    # Validate ratios are positive
+    if train_ratio <= 0:
+        raise ValueError(f"train_ratio must be positive, got {train_ratio}")
+    if val_ratio <= 0:
+        raise ValueError(f"val_ratio must be positive, got {val_ratio}")
+    if test_ratio <= 0:
+        raise ValueError(f"test_ratio must be positive, got {test_ratio}")
+
+    # Validate ratios sum to 1.0
     total_ratio = train_ratio + val_ratio + test_ratio
     if not np.isclose(total_ratio, 1.0):
-        raise ValueError(f"Ratios must sum to 1.0, got {total_ratio}")
+        raise ValueError(
+            f"Ratios must sum to 1.0, got {total_ratio:.4f} "
+            f"(train={train_ratio}, val={val_ratio}, test={test_ratio})"
+        )
+
+    # Validate purge_bars and embargo_bars are non-negative
+    if purge_bars < 0:
+        raise ValueError(f"purge_bars must be non-negative, got {purge_bars}")
+    if embargo_bars < 0:
+        raise ValueError(f"embargo_bars must be non-negative, got {embargo_bars}")
+
+    # Validate dataset is large enough for purging and embargo
+    min_required_samples = (purge_bars * 2) + (embargo_bars * 2) + 3  # At least 1 sample per split
+    if n < min_required_samples:
+        raise ValueError(
+            f"Dataset too small ({n} samples) for purge_bars={purge_bars} and embargo_bars={embargo_bars}. "
+            f"Need at least {min_required_samples} samples. "
+            f"Reduce purge_bars/embargo_bars or increase data size."
+        )
 
     # Sort by datetime if not already sorted
     if not df[datetime_col].is_monotonic_increasing:
         logger.warning(f"DataFrame not sorted by {datetime_col}, sorting now...")
-        df = df.sort_values(datetime_col).reset_index(drop=True)
+        df = df.copy().sort_values(datetime_col).reset_index(drop=True)
 
     n = len(df)
     logger.info(f"Total samples: {n:,}")
@@ -92,13 +228,36 @@ def create_chronological_splits(
     val_end = val_end_raw - purge_bars
     test_start = val_end_raw + embargo_bars
 
-    # Validate indices
+    # Validate split indices with actionable error messages
     if train_end <= 0:
-        raise ValueError(f"Train set too small after purging: {train_end}")
+        raise ValueError(
+            f"Training set eliminated by purging. "
+            f"train_end_raw={train_end_raw}, purge_bars={purge_bars}, result={train_end}. "
+            f"Reduce purge_bars (current: {purge_bars}) or increase training data. "
+            f"Minimum train_end_raw needed: {purge_bars + 1}"
+        )
+
     if val_start >= val_end:
-        raise ValueError(f"Validation set eliminated by purge/embargo: {val_start} >= {val_end}")
+        val_samples_available = val_end_raw - train_end_raw
+        samples_needed = embargo_bars + purge_bars
+        raise ValueError(
+            f"Validation set is empty after purge/embargo. "
+            f"val_start={val_start}, val_end={val_end}. "
+            f"Available samples between train/val boundary: {val_samples_available}. "
+            f"Samples consumed by embargo+purge: {samples_needed}. "
+            f"Reduce embargo_bars (current: {embargo_bars}) or purge_bars (current: {purge_bars}), "
+            f"or increase validation data ratio."
+        )
+
     if test_start >= n:
-        raise ValueError(f"Test set eliminated by embargo: {test_start} >= {n}")
+        test_samples_available = n - val_end_raw
+        raise ValueError(
+            f"Test set is empty after embargo. "
+            f"test_start={test_start}, n={n}. "
+            f"Available samples after val boundary: {test_samples_available}. "
+            f"Embargo consumes: {embargo_bars} samples. "
+            f"Reduce embargo_bars (current: {embargo_bars}) or increase test data ratio."
+        )
 
     # Create index arrays
     train_indices = np.arange(0, train_end)
