@@ -21,65 +21,20 @@ logger.addHandler(logging.NullHandler())
 
 
 # =============================================================================
-# BARRIER CONFIGURATION - TUNABLE PARAMETERS
+# BARRIER CONFIGURATION - IMPORTED FROM CENTRAL CONFIG
 # =============================================================================
-# Try to import from config, fall back to local defaults if not available
+# All barrier parameters are now defined in src/config.py as the single source of truth.
+# This ensures consistency across all pipeline stages and eliminates configuration drift.
 
-try:
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    from config import BARRIER_PARAMS, PERCENTAGE_BARRIER_PARAMS
-    logger.info("Loaded BARRIER_PARAMS from config.py")
-except ImportError:
-    logger.info("Using local BARRIER_PARAMS (config.py not available)")
-
-    # Local fallback - ASYMMETRIC BARRIERS TO CORRECT LONG BIAS
-    # PROBLEM: Symmetric barriers in bullish markets produce 87%+ long labels.
-    # SOLUTION: k_up > k_down makes lower barrier easier to hit, balancing labels.
-    #
-    # Key insights:
-    # - H1 is NON-VIABLE after transaction costs (excluded from ACTIVE_HORIZONS)
-    # - H5: k_up=1.10, k_down=0.75 (ratio 1.47:1 to counteract bullish drift)
-    # - H20: k_up=2.40, k_down=1.70 (ratio 1.41:1 to counteract bullish drift)
-    # - max_bars for H20 (60) determines required PURGE_BARS to prevent leakage
-
-    BARRIER_PARAMS = {
-        # Horizon 1: Ultra-short (5 min) - NON-VIABLE after transaction costs
-        # Transaction costs (~0.5 ticks) exceed typical H1 profit (1-2 ticks).
-        # Symmetric barriers acceptable since H1 is not used for trading.
-        1: {
-            'k_up': 0.25,
-            'k_down': 0.25,
-            'max_bars': 5,
-            'description': 'Ultra-short: NON-VIABLE after transaction costs'
-        },
-        # Horizon 5: Short-term (25 min) - ACTIVE, ASYMMETRIC
-        # k_up=1.10, k_down=0.75 makes lower barrier 47% easier to hit.
-        # This counteracts structural upward drift causing 87%+ long labels.
-        5: {
-            'k_up': 1.10,
-            'k_down': 0.75,
-            'max_bars': 15,
-            'description': 'Short-term: ASYMMETRIC barriers to reduce long bias'
-        },
-        # Horizon 20: Medium-term (~1.5 hours) - ACTIVE, ASYMMETRIC
-        # k_up=2.40, k_down=1.70 makes lower barrier 41% easier to hit.
-        # CRITICAL: max_bars=60 determines PURGE_BARS requirement.
-        20: {
-            'k_up': 2.40,
-            'k_down': 1.70,
-            'max_bars': 60,
-            'description': 'Medium-term: ASYMMETRIC barriers to reduce long bias'
-        }
-    }
-
-    # Alternative: Percentage-based barriers (ATR-independent fallback)
-    # Also uses asymmetric barriers (pct_up > pct_down) to correct long bias
-    PERCENTAGE_BARRIER_PARAMS = {
-        1: {'pct_up': 0.0015, 'pct_down': 0.0015, 'max_bars': 5},   # 0.15% symmetric (H1 not traded)
-        5: {'pct_up': 0.0030, 'pct_down': 0.0020, 'max_bars': 15},  # 0.30%/0.20% asymmetric
-        20: {'pct_up': 0.0060, 'pct_down': 0.0042, 'max_bars': 60}  # 0.60%/0.42% asymmetric
-    }
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config import (
+    BARRIER_PARAMS,
+    BARRIER_PARAMS_DEFAULT,
+    PERCENTAGE_BARRIER_PARAMS,
+    get_barrier_params
+)
+logger.info("Loaded barrier parameters from config.py (single source of truth)")
 
 
 @nb.jit(nopython=True, cache=True)
@@ -308,8 +263,10 @@ def apply_triple_barrier(
         logger.warning(f"NaN values in critical columns: {nan_report}")
 
     # Get default parameters from configuration if not provided
-    if horizon in BARRIER_PARAMS:
-        defaults = BARRIER_PARAMS[horizon]
+    # Note: This function doesn't know the symbol, so it uses BARRIER_PARAMS_DEFAULT
+    # For symbol-specific params, call this with explicit k_up/k_down/max_bars
+    if horizon in BARRIER_PARAMS_DEFAULT:
+        defaults = BARRIER_PARAMS_DEFAULT[horizon]
         if k_up is None:
             k_up = defaults['k_up']
         if k_down is None:
@@ -319,9 +276,9 @@ def apply_triple_barrier(
     else:
         # Fallback for non-standard horizons
         if k_up is None:
-            k_up = 0.5
+            k_up = 1.0
         if k_down is None:
-            k_down = 0.5
+            k_down = 1.0
         if max_bars is None:
             max_bars = max(horizon * 3, 10)
 
@@ -383,24 +340,29 @@ def process_symbol_labeling(
     symbol : Symbol name
     horizons : List of horizons to label
     barrier_params : Dict mapping horizon -> {k_up, k_down, max_bars}
-                     If None, uses module-level BARRIER_PARAMS
+                     If None, uses symbol-specific params from config.py
     atr_column : column name for ATR values
 
     Returns:
     --------
     df : Labeled DataFrame
     """
-    # Use module-level defaults if not provided
+    # Use symbol-specific parameters from config.py if not provided
+    # This ensures MES gets asymmetric barriers and MGC gets symmetric barriers
     if barrier_params is None:
-        barrier_params = BARRIER_PARAMS
+        barrier_params = {}
+        for h in horizons:
+            barrier_params[h] = get_barrier_params(symbol, h)
 
     logger.info("=" * 70)
     logger.info(f"Triple-Barrier Labeling: {symbol}")
     logger.info("=" * 70)
-    logger.info("Using CALIBRATED barrier parameters for balanced labels:")
-    for h, params in barrier_params.items():
-        if h in horizons:
-            logger.info(f"  H{h}: k_up={params['k_up']}, k_down={params['k_down']}, max_bars={params['max_bars']}")
+    logger.info(f"Using symbol-specific barrier parameters from config.py:")
+    for h in horizons:
+        if h in barrier_params:
+            params = barrier_params[h]
+            logger.info(f"  H{h}: k_up={params['k_up']:.2f}, k_down={params['k_down']:.2f}, "
+                       f"max_bars={params['max_bars']} - {params.get('description', '')}")
 
     # Load features
     df = pd.read_parquet(input_path)
@@ -410,12 +372,12 @@ def process_symbol_labeling(
     if atr_column not in df.columns:
         raise ValueError(f"ATR column '{atr_column}' not found in dataframe")
 
-    # Apply labeling for each horizon using calibrated parameters
+    # Apply labeling for each horizon using symbol-specific parameters
     for horizon in tqdm(horizons, desc=f"Labeling {symbol}"):
-        params = barrier_params.get(horizon, {})
-        k_up = params.get('k_up')
-        k_down = params.get('k_down')
-        max_bars = params.get('max_bars')
+        params = barrier_params[horizon]
+        k_up = params['k_up']
+        k_down = params['k_down']
+        max_bars = params['max_bars']
 
         df = apply_triple_barrier(
             df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars, atr_column=atr_column
@@ -459,15 +421,18 @@ def main():
     horizons = [1, 5, 20]
 
     logger.info("=" * 70)
-    logger.info("STAGE 4: TRIPLE-BARRIER LABELING (CALIBRATED)")
+    logger.info("STAGE 4: TRIPLE-BARRIER LABELING (SYMBOL-SPECIFIC)")
     logger.info("=" * 70)
     logger.info("")
-    logger.info("BARRIER PARAMETERS (calibrated for ~35/30/35 distribution):")
+    logger.info("SYMBOL-SPECIFIC BARRIER PARAMETERS from config.py:")
     logger.info("-" * 70)
-    for horizon, params in BARRIER_PARAMS.items():
-        logger.info(f"  Horizon {horizon:2d}: k_up={params['k_up']:.2f}, "
-                   f"k_down={params['k_down']:.2f}, max_bars={params['max_bars']:2d}")
-        logger.info(f"             {params.get('description', '')}")
+    for symbol in SYMBOLS:
+        logger.info(f"{symbol}:")
+        for horizon in horizons:
+            params = get_barrier_params(symbol, horizon)
+            logger.info(f"  H{horizon:2d}: k_up={params['k_up']:.2f}, "
+                       f"k_down={params['k_down']:.2f}, max_bars={params['max_bars']:2d}")
+            logger.info(f"       {params.get('description', '')}")
     logger.info("-" * 70)
     logger.info("")
 
@@ -476,9 +441,10 @@ def main():
         output_path = labels_dir / f"{symbol}_labels_init.parquet"
 
         if input_path.exists():
+            # Pass None to use symbol-specific params from config.py
             process_symbol_labeling(
                 input_path, output_path, symbol, horizons,
-                barrier_params=BARRIER_PARAMS,
+                barrier_params=None,  # Uses get_barrier_params(symbol, horizon)
                 atr_column='atr_14'
             )
         else:

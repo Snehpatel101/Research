@@ -85,3 +85,6 @@ coverage.xml
 
 # Temporary test reports
 TEST_REPORT_*.md
+
+# Example/scratch directories
+EXAMPLE/

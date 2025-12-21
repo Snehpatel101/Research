@@ -38,8 +38,11 @@ class PipelineConfig:
 
     # Labeling parameters
     label_horizons: List[int] = field(default_factory=lambda: [1, 5, 20])
-    barrier_k_up: float = 2.0
-    barrier_k_down: float = 2.0
+    # DEPRECATED: barrier_k_up and barrier_k_down are no longer used.
+    # Barrier parameters are now symbol-specific and defined in src/config.py
+    # See config.BARRIER_PARAMS for MES/MGC symbol-specific values
+    barrier_k_up: float = 2.0  # DEPRECATED - use config.BARRIER_PARAMS
+    barrier_k_down: float = 2.0  # DEPRECATED - use config.BARRIER_PARAMS
     max_bars_ahead: int = 50
 
     # Split parameters
@@ -353,9 +356,10 @@ Features:
 
 Labeling:
   - Horizons: {self.label_horizons}
-  - Barrier K-Up: {self.barrier_k_up}
-  - Barrier K-Down: {self.barrier_k_down}
+  - Barrier K-Up: {self.barrier_k_up} (DEPRECATED - see config.BARRIER_PARAMS)
+  - Barrier K-Down: {self.barrier_k_down} (DEPRECATED - see config.BARRIER_PARAMS)
   - Max Bars Ahead: {self.max_bars_ahead}
+  - Note: Using symbol-specific barriers from src/config.py
 
 Splits:
   - Train: {self.train_ratio:.1%}
