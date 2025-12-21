@@ -21,7 +21,7 @@ from rich import print as rprint
 sys.path.insert(0, str(Path(__file__).parent))
 
 from pipeline_config import PipelineConfig, create_default_config
-from pipeline_runner import PipelineRunner, StageStatus
+from pipeline import PipelineRunner, StageStatus
 from manifest import ArtifactManifest, compare_runs
 
 app = typer.Typer(
