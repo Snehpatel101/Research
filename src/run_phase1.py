@@ -58,7 +58,7 @@ def main():
     logger.info("STEP 2: Data Cleaning")
     logger.info("="*60)
 
-    from data_cleaning import main as clean_data
+    from stages.stage2_clean import main as clean_data
     clean_data()
 
     # Step 3: Feature Engineering

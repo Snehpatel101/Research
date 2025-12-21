@@ -1,12 +1,37 @@
 """
-Data Cleaning Module for Ensemble Trading System
+DEPRECATED: Data Cleaning Module for Ensemble Trading System
+
+WARNING: This module is deprecated and will be removed in a future version.
+
+All functionality has been consolidated into src/stages/stage2_clean.py.
+
+MIGRATION GUIDE:
+  Old:  from data_cleaning import clean_symbol_data
+  New:  from stages.stage2_clean import clean_symbol_data
+
+  Old:  from data_cleaning import resample_to_5min
+  New:  from stages.stage2_clean import resample_to_5min
+
+  Old:  from data_cleaning import validate_ohlc
+  New:  from stages.stage2_clean import validate_ohlc
+
+See STANDARDIZATION_PLAN.md Phase 2 for consolidation details.
+
 Handles: OHLC validation, gap filling, resampling to 5-min bars
 """
+import warnings
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import logging
 from typing import Tuple, Optional
+
+warnings.warn(
+    "data_cleaning module is deprecated. Use stages.stage2_clean instead. "
+    "This module will be removed in a future version.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)

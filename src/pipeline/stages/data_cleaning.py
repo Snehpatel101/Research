@@ -41,7 +41,7 @@ def run_data_cleaning(
     logger.info("=" * 70)
 
     try:
-        from data_cleaning import clean_symbol_data
+        from stages.stage2_clean import clean_symbol_data
 
         # Use validated data from Stage 1
         validated_data_dir = config.raw_data_dir / "validated"
