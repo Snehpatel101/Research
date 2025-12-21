@@ -62,10 +62,14 @@ class PipelineConfig:
     random_seed: int = 42
 
     # Paths (auto-generated from run_id)
-    project_root: Path = field(default_factory=lambda: Path(__file__).parent.parent.resolve())
+    project_root: Path = field(default=None)
 
     def __post_init__(self):
         """Validate configuration after initialization."""
+        # Set project_root if not provided
+        if self.project_root is None:
+            self.project_root = Path(__file__).parent.parent.resolve()
+
         # Convert string paths to Path objects
         if isinstance(self.project_root, str):
             self.project_root = Path(self.project_root)
