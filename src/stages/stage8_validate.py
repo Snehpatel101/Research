@@ -599,7 +599,17 @@ class DataValidator:
                     'issue': 'constant_value',
                     'value': float(min_val)
                 })
-                self.issues_found.append(f"{col}: constant value ({min_val})")
+                # Binary indicator features (crossovers, flags) may legitimately be
+                # constant in certain market conditions. Treat as warning, not critical.
+                binary_indicator_patterns = [
+                    'cross_up', 'cross_down', 'overbought', 'oversold',
+                    '_direction', 'regime_', '_flag'
+                ]
+                is_binary_indicator = any(p in col.lower() for p in binary_indicator_patterns)
+                if is_binary_indicator:
+                    self.warnings_found.append(f"{col}: constant value ({min_val}) - binary indicator")
+                else:
+                    self.issues_found.append(f"{col}: constant value ({min_val})")
             elif range_val > 1e6:
                 range_issues.append({
                     'feature': col,

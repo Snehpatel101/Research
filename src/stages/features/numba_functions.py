@@ -42,10 +42,12 @@ def calculate_ema_numba(arr: np.ndarray, period: int) -> np.ndarray:
     """
     Calculate Exponential Moving Average using Numba.
 
+    Handles input arrays with leading NaN values (e.g., from prior calculations).
+
     Parameters
     ----------
     arr : np.ndarray
-        Input price array
+        Input price array (may have leading NaN values)
     period : int
         Lookback period for EMA calculation
 
@@ -59,12 +61,35 @@ def calculate_ema_numba(arr: np.ndarray, period: int) -> np.ndarray:
 
     alpha = 2.0 / (period + 1)
 
-    # Start with SMA
-    result[period - 1] = np.mean(arr[:period])
+    # Find first valid (non-NaN) index
+    first_valid = 0
+    for i in range(n):
+        if not np.isnan(arr[i]):
+            first_valid = i
+            break
+    else:
+        # All NaN, return all NaN
+        return result
 
-    # Calculate EMA
-    for i in range(period, n):
-        result[i] = alpha * arr[i] + (1 - alpha) * result[i - 1]
+    # Calculate starting index for EMA (need 'period' valid values)
+    start_idx = first_valid + period - 1
+
+    if start_idx >= n:
+        # Not enough data for EMA calculation
+        return result
+
+    # Start with SMA of first 'period' valid values
+    sma_sum = 0.0
+    for i in range(first_valid, first_valid + period):
+        sma_sum += arr[i]
+    result[start_idx] = sma_sum / period
+
+    # Calculate EMA for remaining values
+    for i in range(start_idx + 1, n):
+        if not np.isnan(arr[i]):
+            result[i] = alpha * arr[i] + (1 - alpha) * result[i - 1]
+        else:
+            result[i] = result[i - 1]  # Carry forward if input is NaN
 
     return result
 

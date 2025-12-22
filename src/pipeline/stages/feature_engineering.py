@@ -52,6 +52,8 @@ def run_feature_engineering(
     logger.info("=" * 70)
 
     try:
+        import numpy as np
+
         # Initialize FeatureEngineer from modular implementation
         engineer = FeatureEngineer(
             input_dir=config.clean_data_dir,
@@ -59,25 +61,60 @@ def run_feature_engineering(
             timeframe='5min'
         )
 
+        # Load all symbol data first
+        symbol_data = {}
+        for symbol in config.symbols:
+            input_file = config.clean_data_dir / f"{symbol}_5m_clean.parquet"
+            if input_file.exists():
+                symbol_data[symbol] = pd.read_parquet(input_file)
+                logger.info(f"Loaded {symbol}: {len(symbol_data[symbol]):,} rows")
+            else:
+                logger.warning(f"No cleaned data found for {symbol}")
+
+        # Prepare cross-asset data if both MES and MGC are available
+        cross_asset_data = None
+        has_mes = 'MES' in symbol_data
+        has_mgc = 'MGC' in symbol_data
+
+        if has_mes and has_mgc:
+            logger.info("Aligning MES and MGC data for cross-asset features...")
+            mes_df = symbol_data['MES'].copy().set_index('datetime')
+            mgc_df = symbol_data['MGC'].copy().set_index('datetime')
+
+            # Get common timestamps
+            common_idx = mes_df.index.intersection(mgc_df.index)
+            logger.info(f"Common timestamps: {len(common_idx):,}")
+
+            if len(common_idx) > 0:
+                # Align data to common timestamps
+                mes_aligned = mes_df.loc[common_idx].reset_index()
+                mgc_aligned = mgc_df.loc[common_idx].reset_index()
+
+                # Update symbol_data with aligned data
+                symbol_data['MES'] = mes_aligned
+                symbol_data['MGC'] = mgc_aligned
+
+                # Prepare cross-asset data arrays
+                cross_asset_data = {
+                    'mes_close': mes_aligned['close'].values,
+                    'mgc_close': mgc_aligned['close'].values
+                }
+                logger.info("Cross-asset data prepared for feature computation")
+
         # Process each symbol
         artifacts = []
         feature_metadata = {}
 
-        for symbol in config.symbols:
-            input_file = config.clean_data_dir / f"{symbol}_5m_clean.parquet"
+        for symbol in symbol_data.keys():
+            df = symbol_data[symbol]
             output_file = config.features_dir / f"{symbol}_5m_features.parquet"
-
-            if not input_file.exists():
-                logger.warning(f"No cleaned data found for {symbol}")
-                continue
 
             logger.info(f"Processing {symbol}...")
 
-            # Read cleaned data
-            df = pd.read_parquet(input_file)
-
-            # Engineer features
-            df_features, feature_info = engineer.engineer_features(df, symbol)
+            # Engineer features with cross-asset data
+            df_features, feature_info = engineer.engineer_features(
+                df, symbol, cross_asset_data=cross_asset_data
+            )
 
             # Save features
             output_file.parent.mkdir(parents=True, exist_ok=True)

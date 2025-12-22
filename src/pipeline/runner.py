@@ -10,6 +10,21 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Set
+import numpy as np
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle numpy types."""
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, Path):
+            return str(obj)
+        return super().default(obj)
 
 from .utils import StageResult, StageStatus
 from .stage_registry import PipelineStage, get_stage_definitions
@@ -23,6 +38,7 @@ from .stages import (
     run_final_labels,
     run_ga_optimization,
     run_create_splits,
+    run_feature_scaling,
     run_validation,
     run_generate_report,
 )
@@ -100,6 +116,7 @@ class PipelineRunner:
             "ga_optimize": lambda: run_ga_optimization(self.config, self.manifest),
             "final_labels": lambda: run_final_labels(self.config, self.manifest),
             "create_splits": lambda: run_create_splits(self.config, self.manifest),
+            "feature_scaling": lambda: run_feature_scaling(self.config, self.manifest),
             "validate": lambda: run_validation(self.config, self.manifest),
             "generate_report": lambda: run_generate_report(
                 self.config, self.manifest, self.stage_results
@@ -240,7 +257,7 @@ class PipelineRunner:
 
         state_path = self.config.run_artifacts_dir / "pipeline_state.json"
         with open(state_path, 'w') as f:
-            json.dump(state, f, indent=2)
+            json.dump(state, f, indent=2, cls=NumpyEncoder)
 
     def _load_state(self) -> None:
         """Load previous pipeline state for resuming."""
