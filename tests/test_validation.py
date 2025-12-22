@@ -1,24 +1,33 @@
 """
-Tests for parameter validation across the pipeline.
-Verifies that validation catches invalid inputs early.
+Tests for parameter validation across the pipeline using modern Python 3.12+ patterns.
+Verifies that validation catches invalid inputs early at boundaries.
 """
+from __future__ import annotations
+
 import pytest
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import sys
+from typing import Final
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
+# Test configuration matching pipeline defaults
+TEST_SYMBOLS: Final[list[str]] = ['MES', 'MGC']
+TEST_HORIZONS: Final[list[int]] = [5, 20]  # H1 excluded (transaction costs > profit)
+PURGE_BARS: Final[int] = 60  # = max_bars for H20 (prevents label leakage)
+EMBARGO_BARS: Final[int] = 288  # ~1 day for 5-min data
+
 
 class TestLabelingValidation:
-    """Tests for labeling parameter validation."""
+    """Tests for labeling parameter validation at boundaries."""
 
-    def test_negative_horizon_raises(self):
+    def test_negative_horizon_raises(self) -> None:
         """Test that negative horizon raises ValueError."""
         from stages.stage4_labeling import apply_triple_barrier
 
-        df = pd.DataFrame({
+        df: pd.DataFrame = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
             'open': [100]*100,
             'high': [101]*100,
@@ -148,11 +157,11 @@ class TestLabelingValidation:
         with pytest.raises(ValueError, match="empty"):
             apply_triple_barrier(df, horizon=5)
 
-    def test_valid_parameters_succeed(self):
+    def test_valid_parameters_succeed(self) -> None:
         """Test that valid parameters do not raise."""
         from stages.stage4_labeling import apply_triple_barrier
 
-        df = pd.DataFrame({
+        df: pd.DataFrame = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
             'open': [100]*100,
             'high': [101]*100,
@@ -161,49 +170,45 @@ class TestLabelingValidation:
             'atr_14': [1.0]*100
         })
 
-        # Should not raise
-        result = apply_triple_barrier(df, horizon=5, k_up=1.0, k_down=1.0, max_bars=10)
+        # Should not raise - using active horizons from TEST_HORIZONS
+        result: pd.DataFrame = apply_triple_barrier(
+            df, horizon=5, k_up=2.0, k_down=1.0, max_bars=15
+        )
         assert 'label_h5' in result.columns
 
 
 class TestConfigValidation:
-    """Tests for config validation."""
+    """Tests for config validation at module level."""
 
-    def test_purge_bars_vs_max_bars(self):
+    def test_purge_bars_vs_max_bars(self) -> None:
         """Test that purge_bars >= max_bars is validated."""
-        from config import PURGE_BARS, BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT, PERCENTAGE_BARRIER_PARAMS
+        from config import PURGE_BARS, BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
 
         # Get max_bars across all configs
-        max_max_bars = 0
+        max_max_bars: int = 0
 
         # Check symbol-specific barrier params
         for symbol, horizons in BARRIER_PARAMS.items():
             for horizon, params in horizons.items():
-                mb = params.get('max_bars', 0)
+                mb: int = params.get('max_bars', 0)
                 if mb > max_max_bars:
                     max_max_bars = mb
 
         # Check default barrier params
         for horizon, params in BARRIER_PARAMS_DEFAULT.items():
-            mb = params.get('max_bars', 0)
+            mb: int = params.get('max_bars', 0)
             if mb > max_max_bars:
                 max_max_bars = mb
 
-        # Check percentage barrier params
-        for horizon, params in PERCENTAGE_BARRIER_PARAMS.items():
-            mb = params.get('max_bars', 0)
-            if mb > max_max_bars:
-                max_max_bars = mb
-
-        # PURGE_BARS should be >= max_max_bars
+        # PURGE_BARS should be >= max_max_bars (critical for preventing label leakage)
         assert PURGE_BARS >= max_max_bars, \
-            f"PURGE_BARS ({PURGE_BARS}) < max_bars ({max_max_bars})"
+            f"PURGE_BARS ({PURGE_BARS}) < max_bars ({max_max_bars}) - LABEL LEAKAGE RISK!"
 
-    def test_split_ratios_sum_to_one(self):
+    def test_split_ratios_sum_to_one(self) -> None:
         """Test that split ratios sum to 1.0."""
         from config import TRAIN_RATIO, VAL_RATIO, TEST_RATIO
 
-        total = TRAIN_RATIO + VAL_RATIO + TEST_RATIO
+        total: float = TRAIN_RATIO + VAL_RATIO + TEST_RATIO
         assert abs(total - 1.0) < 0.001, f"Ratios sum to {total}, not 1.0"
 
     def test_validate_config_runs_without_error(self):
@@ -559,12 +564,13 @@ class TestRandomSeedReproducibility:
 class TestGetBarrierParams:
     """Tests for get_barrier_params helper function."""
 
-    def test_symbol_specific_params_returned(self):
+    def test_symbol_specific_params_returned(self) -> None:
         """Test that symbol-specific params are returned when available."""
         from config import get_barrier_params, BARRIER_PARAMS
 
-        params = get_barrier_params('MES', 5)
-        expected = BARRIER_PARAMS['MES'][5]
+        # Test with active horizon from TEST_HORIZONS
+        params: dict[str, float | int] = get_barrier_params('MES', 5)
+        expected: dict[str, float | int] = BARRIER_PARAMS['MES'][5]
 
         assert params['k_up'] == expected['k_up']
         assert params['k_down'] == expected['k_down']

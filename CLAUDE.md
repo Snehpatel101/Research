@@ -2,7 +2,16 @@
 
 ## Goal
 
-Keep the codebase modular, readable, and easy to extend as we build a pipeline that can train and evaluate many different model families.
+Keep the codebase modular, readable, and easy to extend as we build a modular **OHLCV** ML pipeline that can train and evaluate many different model families.
+
+
+## OHLCV ML Modeling
+
+We are building ML models on market **OHLCV** bar data. This repo should remain a **modular training pipeline** so we can swap and compare model families without rewriting ingestion, features, labeling, evaluation, or reporting.
+
+- Use a shared dataset contract (clean/resample → features → labels → splits).
+- Treat trainers as plug-ins: adding a new model type should be an interface + config, not a rewrite.
+- Keep evaluation comparable across models (same metrics, same backtest assumptions, same reports).
 
 ---
 
@@ -19,6 +28,26 @@ We would rather crash early than silently continue in an invalid state. Inputs a
 
 ### Less Code is Better
 Simpler implementations win. Prefer straightforward, boring solutions over clever abstractions. Avoid premature generalization. If a feature can be expressed with fewer moving parts, do that. Complexity must earn its place.
+
+
+### Delete Legacy Code (If Unused, Remove It)
+Legacy code is debt. If a file, function, or feature is not used, not referenced by any active code path, and not needed for the next planned milestone, delete it.
+
+- Prefer deletion over commenting-out or leaving "dead" branches around.
+- Remove unused imports, stale utilities, and orphaned tests/docs along with the code.
+- If you're unsure whether something is needed, prove it's used (ripgrep call sites, run the feature, confirm tests). If you can't prove it, delete it.
+- Git history is the archive — do not keep code "just in case."
+
+### Concise Output and Minimal Documentation
+Default to concise answers unless explicitly asked to expand.
+
+Not every agent action needs a document. Write documentation only when it is needed for:
+- An end-of-pass summary (what changed, what remains, and next steps)
+- A decision/contract other work will depend on (schemas, interfaces, invariants)
+- Investigation artifacts others must reuse (repro steps, evidence, links, key findings)
+
+Otherwise, keep notes brief and inline (PR description, issue comment, short checklist).
+
 
 ### No Exception Swallowing
 Do not paper over failures with try/except. We do not swallow errors or "recover" by guessing. Use explicit validation, explicit return types, and explicit preconditions. If a dependency can fail, make that failure visible in the function contract and test it. Exceptions are allowed to propagate naturally so failures are obvious and diagnosable.

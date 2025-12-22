@@ -190,7 +190,8 @@ def calculate_fitness(
         # Short profits = |MAE| (how far down it went = profit for short)
         short_profits = np.abs(mae[short_mask]).sum()
         # Short risk = MFE (how far up it went = loss for short)
-        short_risk = np.maximum(mfe[short_mask], 0).sum()
+        # FIX: Remove np.maximum wrapper - MFE represents upward movement (risk for shorts)
+        short_risk = mfe[short_mask].sum()
     else:
         short_profits = 0.0
         short_risk = 0.0
@@ -217,18 +218,19 @@ def calculate_fitness(
     # 6. TRANSACTION COST PENALTY (NEW)
     # ==========================================================================
     # Penalize strategies where expected profit is small relative to costs
-    # Cost per trade in ATR units = cost_in_ticks * tick_size / ATR
+    # FIX: Convert transaction costs to price units to match avg_profit units
     cost_ticks = TRANSACTION_COSTS.get(symbol, 0.5)
+    tick_value = TICK_VALUES.get(symbol, 1.0)
+    cost_in_price_units = cost_ticks * tick_value  # Convert ticks to price units
 
     # Estimate average profit per trade (in price units)
     n_trades = n_long + n_short
     if n_trades > 0 and atr_mean > 0:
         avg_profit_per_trade = total_profit / n_trades
 
-        # Transaction cost as fraction of ATR
-        # Typical ATR for MES ~10-20 points, for MGC ~2-5 points
-        # Cost should be small fraction of expected profit
-        cost_ratio = cost_ticks / (avg_profit_per_trade / atr_mean + 1e-6)
+        # Transaction cost as fraction of average profit (both in price units now)
+        # cost_ratio = transaction_cost / avg_profit (dimensionally correct)
+        cost_ratio = cost_in_price_units / (avg_profit_per_trade + 1e-6)
 
         # Penalize if cost ratio is too high (>20% of expected profit)
         if cost_ratio > 0.20:

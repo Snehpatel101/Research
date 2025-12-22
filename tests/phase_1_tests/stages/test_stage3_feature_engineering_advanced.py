@@ -1,0 +1,358 @@
+
+class TestFeatureEngineerVolumeFeatures:
+    """Tests for volume-based features."""
+
+    def test_volume_features_with_volume(self, temp_dir, sample_ohlcv_df):
+        """Test volume features are calculated when volume is present."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_volume_features(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'obv' in df.columns
+        assert 'volume_sma_20' in df.columns
+        assert 'volume_ratio' in df.columns
+
+    def test_volume_features_without_volume(self, temp_dir):
+        """Test volume features are skipped when no volume."""
+        # Arrange
+        df = pd.DataFrame({
+            'datetime': pd.date_range('2024-01-01', periods=100, freq='min'),
+            'open': [100.0] * 100,
+            'high': [102.0] * 100,
+            'low': [98.0] * 100,
+            'close': [100.0] * 100,
+            # No volume column
+        })
+
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        result = engineer.add_volume_features(df)
+
+        # Assert - Should return unchanged
+        assert 'obv' not in result.columns
+
+
+
+class TestFeatureEngineerSupertrend:
+    """Tests for Supertrend calculation."""
+
+    def test_supertrend_direction_values(self, temp_dir, sample_ohlcv_df):
+        """Test Supertrend direction is 1 or -1."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_supertrend(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'supertrend' in df.columns
+        assert 'supertrend_direction' in df.columns
+
+        valid_dir = df['supertrend_direction'].dropna()
+        assert set(valid_dir.unique()).issubset({-1.0, 1.0})
+
+
+
+class TestFeatureEngineerCrossAsset:
+    """Tests for cross-asset features."""
+
+    def test_cross_asset_features_missing_data(self, temp_dir, sample_ohlcv_df):
+        """Test that cross-asset features are NaN when data is missing."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act - call without cross_asset_data
+        df = engineer.add_cross_asset_features(sample_ohlcv_df.copy())
+
+        # Assert - cross-asset features should be NaN
+        assert 'mes_mgc_correlation_20' in df.columns
+        assert df['mes_mgc_correlation_20'].isna().all()
+
+
+
+class TestFeatureEngineerADXIndicator:
+    """Tests for ADX indicator in FeatureEngineer."""
+
+    def test_add_adx_features(self, temp_dir, sample_ohlcv_df):
+        """Test ADX feature calculation through FeatureEngineer."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_adx(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'adx_14' in df.columns
+        assert 'plus_di_14' in df.columns
+        assert 'minus_di_14' in df.columns
+        assert 'adx_strong_trend' in df.columns
+
+
+
+class TestFeatureEngineerStochasticIndicator:
+    """Tests for Stochastic indicator in FeatureEngineer."""
+
+    def test_add_stochastic_features(self, temp_dir, sample_ohlcv_df):
+        """Test Stochastic feature calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_stochastic(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'stoch_k' in df.columns
+        assert 'stoch_d' in df.columns
+        assert 'stoch_overbought' in df.columns
+        assert 'stoch_oversold' in df.columns
+
+
+
+class TestFeatureEngineerMFI:
+    """Tests for Money Flow Index calculation."""
+
+    def test_add_mfi_with_volume(self, temp_dir, sample_ohlcv_df):
+        """Test MFI calculation with volume data."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_mfi(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'mfi_14' in df.columns
+        valid_mfi = df['mfi_14'].dropna()
+        assert np.all(valid_mfi >= 0)
+        assert np.all(valid_mfi <= 100)
+
+
+
+class TestFeatureEngineerVWAP:
+    """Tests for VWAP calculation."""
+
+    def test_add_vwap(self, temp_dir, sample_ohlcv_df):
+        """Test VWAP calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_vwap(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'vwap' in df.columns
+        assert 'price_to_vwap' in df.columns
+
+        # VWAP should be positive
+        valid_vwap = df['vwap'].dropna()
+        assert np.all(valid_vwap > 0)
+
+
+
+class TestFeatureEngineerReturns:
+    """Tests for return calculations."""
+
+    def test_add_returns(self, temp_dir, sample_ohlcv_df):
+        """Test return feature calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_returns(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'return_1' in df.columns
+        assert 'return_5' in df.columns
+        assert 'log_return_1' in df.columns
+        assert 'log_return_5' in df.columns
+
+
+
+class TestFeatureEngineerPriceRatios:
+    """Tests for price ratio calculations."""
+
+    def test_add_price_ratios(self, temp_dir, sample_ohlcv_df):
+        """Test price ratio feature calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_price_ratios(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'hl_ratio' in df.columns
+        assert 'co_ratio' in df.columns
+        assert 'range_pct' in df.columns
+
+        # HL ratio should be >= 1
+        assert np.all(df['hl_ratio'] >= 1)
+
+
+
+class TestFeatureEngineerSaveFeatures:
+    """Tests for saving features."""
+
+    def test_save_features(self, temp_dir, sample_ohlcv_df):
+        """Test saving features to parquet."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        df, report = engineer.engineer_features(sample_ohlcv_df.copy(), 'TEST')
+
+        # Act
+        data_path, meta_path = engineer.save_features(df, 'TEST', report)
+
+        # Assert
+        assert data_path.exists()
+        assert meta_path.exists()
+
+
+
+class TestFeatureEngineerProcessFile:
+    """Tests for processing a complete file."""
+
+    def test_process_file(self, temp_dir, sample_ohlcv_df):
+        """Test processing a complete file."""
+        # Arrange
+        file_path = temp_dir / "TEST.parquet"
+        sample_ohlcv_df.to_parquet(file_path, index=False)
+
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        report = engineer.process_file(file_path)
+
+        # Assert
+        assert report['symbol'] == 'TEST'
+        assert report['features_added'] > 0
+
+
+
+class TestFeatureEngineerRSIIndicator:
+    """Tests for RSI indicator in FeatureEngineer."""
+
+    def test_add_rsi_features(self, temp_dir, sample_ohlcv_df):
+        """Test RSI feature calculation through FeatureEngineer."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_rsi(sample_ohlcv_df.copy())
+
+        # Assert
+        assert 'rsi_14' in df.columns
+        assert 'rsi_overbought' in df.columns
+        assert 'rsi_oversold' in df.columns
+
+        # Overbought/oversold should be 0 or 1
+        assert set(df['rsi_overbought'].unique()).issubset({0, 1})
+        assert set(df['rsi_oversold'].unique()).issubset({0, 1})
+
+
+
+class TestFeatureEngineerATRMethod:
+    """Tests for ATR calculation in FeatureEngineer."""
+
+    def test_add_atr(self, temp_dir, sample_ohlcv_df):
+        """Test ATR feature calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_atr(sample_ohlcv_df.copy())
+
+        # Assert - periods are [7, 14, 21]
+        assert 'atr_14' in df.columns
+        assert 'atr_pct_14' in df.columns
+
+        # ATR should be positive
+        valid_atr = df['atr_14'].dropna()
+        assert np.all(valid_atr >= 0)
+
+
+
+class TestFeatureEngineerSMAMethod:
+    """Tests for SMA features in FeatureEngineer."""
+
+    def test_add_sma(self, temp_dir, sample_ohlcv_df):
+        """Test SMA feature calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_sma(sample_ohlcv_df.copy())
+
+        # Assert - periods are [10, 20, 50, 100, 200]
+        assert 'sma_10' in df.columns
+        assert 'sma_20' in df.columns
+        assert 'sma_50' in df.columns
+
+
+
+class TestFeatureEngineerEMAMethod:
+    """Tests for EMA features in FeatureEngineer."""
+
+    def test_add_ema(self, temp_dir, sample_ohlcv_df):
+        """Test EMA feature calculation."""
+        # Arrange
+        engineer = FeatureEngineer(
+            input_dir=temp_dir,
+            output_dir=temp_dir / "output"
+        )
+
+        # Act
+        df = engineer.add_ema(sample_ohlcv_df.copy())
+
+        # Assert - periods are [9, 12, 21, 26, 50]
+        assert 'ema_9' in df.columns
+        assert 'ema_12' in df.columns
+        assert 'ema_21' in df.columns
+

@@ -448,6 +448,66 @@ class FeatureEngineer:
 
         return results
 
+    # =========================================================================
+    # Wrapper methods for testing - delegate to standalone functions
+    # =========================================================================
+
+    def add_sma(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_sma function."""
+        return add_sma(df, self.feature_metadata)
+
+    def add_ema(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_ema function."""
+        return add_ema(df, self.feature_metadata)
+
+    def add_rsi(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_rsi function."""
+        return add_rsi(df, self.feature_metadata)
+
+    def add_macd(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_macd function."""
+        return add_macd(df, self.feature_metadata)
+
+    def add_stochastic(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_stochastic function."""
+        return add_stochastic(df, self.feature_metadata)
+
+    def add_atr(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_atr function."""
+        return add_atr(df, self.feature_metadata)
+
+    def add_bollinger_bands(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_bollinger_bands function."""
+        return add_bollinger_bands(df, self.feature_metadata)
+
+    def add_keltner_channels(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_keltner_channels function."""
+        return add_keltner_channels(df, self.feature_metadata)
+
+    def add_volume_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_volume_features function."""
+        return add_volume_features(df, self.feature_metadata)
+
+    def add_vwap(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_vwap function."""
+        return add_vwap(df, self.feature_metadata)
+
+    def add_adx(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_adx function."""
+        return add_adx(df, self.feature_metadata)
+
+    def add_mfi(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_mfi function."""
+        return add_mfi(df, self.feature_metadata)
+
+    def add_returns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_returns function."""
+        return add_returns(df, self.feature_metadata)
+
+    def add_price_ratios(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_price_ratios function."""
+        return add_price_ratios(df, self.feature_metadata)
+
 
 def main():
     """

@@ -166,9 +166,21 @@ def triple_barrier_numba(
         mae[i] = max_adverse
         mfe[i] = max_favorable
 
-    # Last bar always timeout
-    labels[n-1] = 0
-    bars_to_hit[n-1] = 0
+    # CRITICAL FIX (2025-12-21): Last max_bars samples should be excluded entirely
+    # to prevent edge case leakage. Previously, we labeled the last bar as timeout
+    # (label=0, bars_to_hit=0), which taught the model "end of data = neutral".
+    # This creates spurious predictions near split boundaries.
+    #
+    # FIX: Set last max_bars labels to a sentinel value (-99) that will be filtered
+    # out by the caller. This ensures these samples are excluded from training.
+    # Note: We still process i in range(n-1) above, so labels[n-1] already exists.
+    # We mark the last max_bars samples as invalid.
+    for i in range(max(0, n - max_bars), n):
+        labels[i] = -99  # Sentinel: invalid label (to be removed)
+        bars_to_hit[i] = 0
+        mae[i] = 0.0
+        mfe[i] = 0.0
+        touch_type[i] = 0
 
     return labels, bars_to_hit, mae, mfe, touch_type
 
@@ -202,11 +214,23 @@ def apply_triple_barrier(
     Returns:
     --------
     df : DataFrame with additional columns:
-        - label_h{horizon}
-        - bars_to_hit_h{horizon}
-        - mae_h{horizon}
-        - mfe_h{horizon}
-        - touch_type_h{horizon}
+        - label_h{horizon}: Label values (-1, 0, 1, or -99 for invalid)
+        - bars_to_hit_h{horizon}: Bars until barrier hit
+        - mae_h{horizon}: Maximum adverse excursion
+        - mfe_h{horizon}: Maximum favorable excursion
+        - touch_type_h{horizon}: Which barrier was touched (1, -1, or 0)
+
+    Notes:
+    ------
+    CRITICAL FIX (2025-12-21): The last max_bars samples are marked with
+    label=-99 (invalid) because there isn't enough future data to properly
+    evaluate barrier hits. These samples MUST be filtered out before model
+    training to prevent edge case leakage where the model learns "end of
+    data = neutral prediction".
+
+    When using labeled data:
+    1. Filter out rows where label_h{horizon} == -99
+    2. This ensures all training samples have valid, non-truncated labels
 
     Raises:
     -------
@@ -305,9 +329,21 @@ def apply_triple_barrier(
     df[f'mfe_h{horizon}'] = mfe
     df[f'touch_type_h{horizon}'] = touch_type
 
-    # Log statistics
-    label_counts = pd.Series(labels).value_counts().sort_index()
-    total = len(labels)
+    # CRITICAL FIX (2025-12-21): Filter out invalid labels (-99 sentinel)
+    # These are the last max_bars samples that cannot be properly labeled
+    # because we don't have enough future data to hit barriers
+    invalid_mask = labels == -99
+    num_invalid = invalid_mask.sum()
+    if num_invalid > 0:
+        logger.info(
+            f"Marked {num_invalid} samples as invalid (last {max_bars} bars). "
+            "These will be excluded from model training to prevent edge case leakage."
+        )
+
+    # Log statistics (excluding invalid labels)
+    valid_labels = labels[~invalid_mask]
+    label_counts = pd.Series(valid_labels).value_counts().sort_index()
+    total = len(valid_labels)
 
     logger.info(f"Label distribution for horizon {horizon}:")
     for label_val in [-1, 0, 1]:
@@ -316,7 +352,9 @@ def apply_triple_barrier(
         label_name = {-1: "Short/Loss", 0: "Neutral/Timeout", 1: "Long/Win"}[label_val]
         logger.info(f"  {label_name:20s}: {count:6d} ({pct:5.1f}%)")
 
-    avg_bars = bars_to_hit[bars_to_hit > 0].mean()
+    # Calculate average bars to hit (excluding invalid samples)
+    valid_bars_to_hit = bars_to_hit[~invalid_mask]
+    avg_bars = valid_bars_to_hit[valid_bars_to_hit > 0].mean()
     logger.info(f"  Avg bars to hit: {avg_bars:.1f}")
 
     return df
@@ -383,20 +421,29 @@ def process_symbol_labeling(
             df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars, atr_column=atr_column
         )
 
-    # Log final label distribution summary
+    # Log final label distribution summary (excluding invalid labels)
     logger.info("")
     logger.info("=" * 70)
-    logger.info("LABEL DISTRIBUTION SUMMARY")
+    logger.info("LABEL DISTRIBUTION SUMMARY (excluding invalid samples)")
     logger.info("=" * 70)
     for horizon in horizons:
         label_col = f'label_h{horizon}'
         if label_col in df.columns:
-            counts = df[label_col].value_counts().sort_index()
-            total = len(df)
-            short_pct = counts.get(-1, 0) / total * 100
-            neutral_pct = counts.get(0, 0) / total * 100
-            long_pct = counts.get(1, 0) / total * 100
-            logger.info(f"H{horizon}: Short={short_pct:.1f}% | Neutral={neutral_pct:.1f}% | Long={long_pct:.1f}%")
+            # Exclude invalid labels (-99)
+            valid_labels = df[df[label_col] != -99][label_col]
+            counts = valid_labels.value_counts().sort_index()
+            total_valid = len(valid_labels)
+            total_all = len(df)
+            num_invalid = total_all - total_valid
+
+            short_pct = counts.get(-1, 0) / total_valid * 100 if total_valid > 0 else 0
+            neutral_pct = counts.get(0, 0) / total_valid * 100 if total_valid > 0 else 0
+            long_pct = counts.get(1, 0) / total_valid * 100 if total_valid > 0 else 0
+
+            logger.info(
+                f"H{horizon}: Short={short_pct:.1f}% | Neutral={neutral_pct:.1f}% | Long={long_pct:.1f}% "
+                f"(valid: {total_valid:,}, invalid: {num_invalid})"
+            )
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)

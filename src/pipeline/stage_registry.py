@@ -87,8 +87,15 @@ def get_stage_definitions() -> List[dict]:
             "stage_number": 7
         },
         {
-            "name": "validate",
+            "name": "feature_scaling",
             "dependencies": ["create_splits"],
+            "description": "Stage 7.5: Train-only feature scaling",
+            "required": True,
+            "stage_number": 7.5
+        },
+        {
+            "name": "validate",
+            "dependencies": ["feature_scaling"],
             "description": "Stage 8: Comprehensive data validation",
             "required": True,
             "stage_number": 8

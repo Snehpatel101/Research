@@ -42,8 +42,9 @@ def add_rsi(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
     df['rsi_14'] = calculate_rsi_numba(df['close'].values, 14)
 
     # Overbought/Oversold flags
-    df['rsi_overbought'] = (df['rsi_14'] > 70).astype(int)
-    df['rsi_oversold'] = (df['rsi_14'] < 30).astype(int)
+    # ANTI-LOOKAHEAD: Shift flags forward 1 bar so flag at bar[t] is based on bar[t-1] RSI
+    df['rsi_overbought'] = (df['rsi_14'] > 70).astype(int).shift(1)
+    df['rsi_oversold'] = (df['rsi_14'] < 30).astype(int).shift(1)
 
     feature_metadata['rsi_14'] = "14-period Relative Strength Index"
     feature_metadata['rsi_overbought'] = "RSI overbought flag (>70)"
@@ -84,10 +85,12 @@ def add_macd(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame
     df['macd_hist'] = df['macd_line'] - df['macd_signal']
 
     # MACD crossovers
+    # ANTI-LOOKAHEAD: Shift signals forward 1 bar so crossover at bar[t] is based on
+    # comparison between bar[t-1] and bar[t-2], making it available before bar[t] close
     df['macd_cross_up'] = ((df['macd_line'] > df['macd_signal']) &
-                           (df['macd_line'].shift(1) <= df['macd_signal'].shift(1))).astype(int)
+                           (df['macd_line'].shift(1) <= df['macd_signal'].shift(1))).astype(int).shift(1)
     df['macd_cross_down'] = ((df['macd_line'] < df['macd_signal']) &
-                             (df['macd_line'].shift(1) >= df['macd_signal'].shift(1))).astype(int)
+                             (df['macd_line'].shift(1) >= df['macd_signal'].shift(1))).astype(int).shift(1)
 
     feature_metadata['macd_line'] = "MACD line (12,26)"
     feature_metadata['macd_signal'] = "MACD signal line (9)"
@@ -130,8 +133,9 @@ def add_stochastic(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.Dat
     df['stoch_d'] = d
 
     # Overbought/Oversold
-    df['stoch_overbought'] = (df['stoch_k'] > 80).astype(int)
-    df['stoch_oversold'] = (df['stoch_k'] < 20).astype(int)
+    # ANTI-LOOKAHEAD: Shift flags forward 1 bar so flag at bar[t] is based on bar[t-1] stochastic
+    df['stoch_overbought'] = (df['stoch_k'] > 80).astype(int).shift(1)
+    df['stoch_oversold'] = (df['stoch_k'] < 20).astype(int).shift(1)
 
     feature_metadata['stoch_k'] = "Stochastic %K (14,3)"
     feature_metadata['stoch_d'] = "Stochastic %D (14,3)"

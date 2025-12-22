@@ -1,46 +1,66 @@
 # Documentation Archive
 
-This directory contains historical documentation that has been superseded but is preserved for context.
+Historical documentation preserved for reference. **These docs are dated and may not reflect current implementation.**
 
-## Why These Documents Are Archived
+## Contents
 
-These documents represent earlier stages of the project and contain information that is:
-- **Outdated**: Pre-standardization or pre-reorganization
-- **Superseded**: Content has been consolidated into current documentation
-- **Historical**: Useful for understanding project evolution but not current state
+### Architecture Reviews
+- `ARCHITECTURE_EXECUTIVE_SUMMARY.md`
+- `ARCHITECTURE_REVIEW_PHASE1_PHASE2.md`
+- `CODEBASE_REORGANIZATION_SUMMARY.md`
+- `MODULAR_ARCHITECTURE.md`
+- `PIPELINE_COMPARISON.md`
+- `ROOT_STRUCTURE_PROPOSAL.md`
+- `STANDARDIZATION_PLAN.md`
 
-## Archived Documents
+### Code Quality & Bug Fixes
+- `CODE_QUALITY_REVIEW_PHASE1.md`
+- `CRITICAL_LEAKAGE_FIXES_2025_12_21.md`
+- `GA_BUG_FIXES.md`
+- `LOOKAHEAD_BIAS_FIX_SUMMARY.md`
+- `VOLATILITY_STATIONARITY_FIX.md`
 
-### Pre-Standardization (Phase 11)
-- `INSTALLATION_SUMMARY.md` - Installation guide before pipeline standardization
-- `LABELING_PIPELINE_COMPLETE.md` - Pre-standardization labeling documentation
-- `PIPELINE_SYSTEM_SUMMARY.md` - Pipeline config before reorganization
+### Phase Reviews
+- `PHASE1_COMPREHENSIVE_REVIEW.md`
+- `PHASE1_COMPREHENSIVE_RECOMMENDATIONS.md`
+- `PHASE1_INITIAL_REVIEW.md`
+- `PHASE1_PIPELINE_REVIEW.md`
+- `PHASE1_RUNTIME_DIAGNOSTIC_2025_12_21.md`
+- `PHASE11_VERIFICATION_REPORT.md`
+- `PHASE4_LABELING_CONSOLIDATION.md`
+- `STAGE1_COMPREHENSIVE_REVIEW_REPORT.md`
 
-### Legacy Deliverables
-- `DELIVERABLES_SUMMARY.txt` - Early project deliverables list
-- `DELIVERY_SUMMARY.md` - Initial pipeline system delivery notes
-- `FILES_CREATED.txt` - Original file listing
+### Technical Reference
+- `FEATURES_CATALOG.md`
+- `PHASE1_DELIVERABLES.md`
+- `PHASE1_MODULES_SUMMARY.md`
+- `STAGE_MODULES_README.md`
 
-### Early Reviews
-- `PHASE1_INITIAL_REVIEW.md` - Superseded by PHASE1_COMPREHENSIVE_REVIEW.md
+### Testing Documentation
+- `TEST_ANALYSIS_INDEX.md`
+- `TEST_COVERAGE_GAP_ANALYSIS.md`
+- `TEST_COVERAGE_SUMMARY.md`
+- `TEST_MODERNIZATION_SUMMARY.md`
+- `TEST_TEMPLATES.md`
 
-## Current Documentation
+### Task Specifications
+- `TASK_ARCHITECTURE_REVIEW.md`
+- `TASK_DATA_ENGINEERING.md`
+- `TASK_QUANT_ANALYSIS.md`
+- `TASK_SECURITY_RELIABILITY.md`
+- `TASK_TESTING_QUALITY.md`
 
-For up-to-date documentation, see:
-- **User Guides**: `/docs/guides/`
-- **Phase Specifications**: `/docs/phases/`
-- **Technical Reference**: `/docs/reference/`
-
-## Warning
-
-**These documents may contain:**
-- Incorrect file paths (pre-reorganization)
-- Deprecated APIs or patterns
-- Outdated configuration examples
-- References to removed code
-
-Use only as historical reference. Always consult current documentation for actual implementation.
+### Legacy
+- `DELIVERY_SUMMARY.md`
+- `FILE_REFACTORING_STATUS.md`
+- `FINAL_SUMMARY.md`
+- `INSTALLATION_SUMMARY.md`
+- `LABELING_PIPELINE_COMPLETE.md`
+- `PIPELINE_SYSTEM_SUMMARY.md`
+- `REFACTORING_SUMMARY_PHASE1.md`
 
 ---
 
-Last Updated: 2025-12-21
+**For current documentation, see [docs/README.md](../README.md)**
+
+Last Updated: 2025-12-22

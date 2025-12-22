@@ -48,8 +48,9 @@ def add_atr(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         )
         df[f'atr_{period}'] = atr
 
-        # ATR as percentage of close
-        df[f'atr_pct_{period}'] = (atr / df['close']) * 100
+        # ATR as percentage of close (safe division)
+        close_safe = df['close'].replace(0, np.nan)
+        df[f'atr_pct_{period}'] = (atr / close_safe) * 100
 
         feature_metadata[f'atr_{period}'] = f"Average True Range ({period})"
         feature_metadata[f'atr_pct_{period}'] = f"ATR as % of price ({period})"
@@ -62,7 +63,10 @@ def add_bollinger_bands(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> p
     Add Bollinger Bands features.
 
     Calculates 20-period Bollinger Bands with 2 standard deviations,
-    band width, and price position within the bands.
+    band width (normalized), and price position within the bands.
+
+    All features are made stationary using z-scores and normalized values
+    to avoid dependency on absolute price levels.
 
     Parameters
     ----------
@@ -87,17 +91,26 @@ def add_bollinger_bands(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> p
     df['bb_upper'] = df['bb_middle'] + (std_mult * bb_std)
     df['bb_lower'] = df['bb_middle'] - (std_mult * bb_std)
 
-    # Bollinger Band width
-    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / df['bb_middle']
+    # Bollinger Band width normalized by std (stationary)
+    # This is equivalent to band_width / std, making it scale-invariant
+    bb_std_safe = bb_std.replace(0, np.nan)
+    df['bb_width'] = (df['bb_upper'] - df['bb_lower']) / bb_std_safe
 
-    # Price position in bands
-    df['bb_position'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+    # Price position in bands (already stationary - bounded [0,1])
+    # Use safe division to handle band collapse
+    band_range = df['bb_upper'] - df['bb_lower']
+    band_range_safe = band_range.replace(0, np.nan)
+    df['bb_position'] = (df['close'] - df['bb_lower']) / band_range_safe
+
+    # Add close price z-score relative to BB middle (stationary)
+    df['close_bb_zscore'] = (df['close'] - df['bb_middle']) / bb_std_safe
 
     feature_metadata['bb_middle'] = "Bollinger Band middle (20,2)"
     feature_metadata['bb_upper'] = "Bollinger Band upper (20,2)"
     feature_metadata['bb_lower'] = "Bollinger Band lower (20,2)"
-    feature_metadata['bb_width'] = "Bollinger Band width"
-    feature_metadata['bb_position'] = "Price position in Bollinger Bands"
+    feature_metadata['bb_width'] = "Bollinger Band width (normalized by std)"
+    feature_metadata['bb_position'] = "Price position in Bollinger Bands [0,1]"
+    feature_metadata['close_bb_zscore'] = "Close price z-score relative to BB middle"
 
     return df
 
@@ -108,6 +121,8 @@ def add_keltner_channels(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> 
 
     Calculates 20-period Keltner Channels with 2x ATR multiplier
     and price position within the channels.
+
+    All features use safe division and stationary representations.
 
     Parameters
     ----------
@@ -133,13 +148,21 @@ def add_keltner_channels(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> 
     df['kc_upper'] = ema + (atr_mult * atr)
     df['kc_lower'] = ema - (atr_mult * atr)
 
-    # Price position in channels
-    df['kc_position'] = (df['close'] - df['kc_lower']) / (df['kc_upper'] - df['kc_lower'])
+    # Price position in channels (already stationary - bounded [0,1])
+    # Use safe division to handle channel collapse
+    channel_range = df['kc_upper'] - df['kc_lower']
+    channel_range_safe = channel_range.replace(0, np.nan)
+    df['kc_position'] = (df['close'] - df['kc_lower']) / channel_range_safe
+
+    # Add close deviation from KC middle in ATR units (stationary)
+    atr_safe = pd.Series(atr).replace(0, np.nan)
+    df['close_kc_atr_dev'] = (df['close'] - df['kc_middle']) / atr_safe
 
     feature_metadata['kc_middle'] = "Keltner Channel middle (20,2)"
     feature_metadata['kc_upper'] = "Keltner Channel upper (20,2)"
     feature_metadata['kc_lower'] = "Keltner Channel lower (20,2)"
-    feature_metadata['kc_position'] = "Price position in Keltner Channels"
+    feature_metadata['kc_position'] = "Price position in Keltner Channels [0,1]"
+    feature_metadata['close_kc_atr_dev'] = "Close deviation from KC middle in ATR units"
 
     return df
 

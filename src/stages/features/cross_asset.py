@@ -52,12 +52,46 @@ def add_cross_asset_features(
     -------
     pd.DataFrame
         DataFrame with cross-asset features added
+
+    Notes
+    -----
+    CRITICAL FIX (2025-12-21): Cross-asset features are computed using rolling
+    windows on the provided arrays. The caller MUST ensure that mes_close and
+    mgc_close arrays correspond to the SAME time period as df.
+
+    LEAKAGE WARNING:
+    - This function should be called BEFORE train/val/test splitting (e.g., Stage 3)
+    - If called after splitting, the caller MUST provide subset arrays matching
+      the split (not the full dataset arrays)
+    - Rolling statistics use ONLY the data in the provided arrays
+    - Using full-dataset arrays on a split subset would leak future information
+
+    CORRECT USAGE:
+    - Stage 3 (pre-split): Pass full aligned arrays -> cross-asset features use
+      only past data via rolling windows (no leakage)
+    - Post-split: Pass split-specific arrays matching df's time range
+
+    INCORRECT USAGE (causes leakage):
+    - Post-split: Passing full dataset arrays when df is a split subset
     """
-    # Check if both assets are available
+    # === TIMESTAMP AND LENGTH VALIDATION ===
+    # Validate that provided arrays match df length to prevent misalignment
     has_both_assets = (mes_close is not None and
                       mgc_close is not None and
                       len(mes_close) == len(df) and
                       len(mgc_close) == len(df))
+
+    # Additional validation: Check that arrays are non-empty and properly sized
+    if has_both_assets:
+        if len(mes_close) == 0 or len(mgc_close) == 0:
+            logger.warning("Empty arrays provided for cross-asset features")
+            has_both_assets = False
+        elif len(mes_close) != len(mgc_close):
+            logger.warning(
+                f"Array length mismatch: MES={len(mes_close)}, MGC={len(mgc_close)}. "
+                "Skipping cross-asset features."
+            )
+            has_both_assets = False
 
     if not has_both_assets:
         logger.info("Skipping cross-asset features (requires both MES and MGC data)")
@@ -75,6 +109,7 @@ def add_cross_asset_features(
         return df
 
     logger.info("Adding cross-asset features (MES-MGC)...")
+    logger.info(f"Array lengths validated: MES={len(mes_close)}, MGC={len(mgc_close)}, DF={len(df)}")
 
     # Calculate percentage returns for both assets (pct_change style)
     # Returns[t] = (Close[t] - Close[t-1]) / Close[t-1]
@@ -96,11 +131,13 @@ def add_cross_asset_features(
     )
 
     # 1. MES-MGC Correlation (20-bar rolling)
-    df['mes_mgc_correlation_20'] = calculate_rolling_correlation_numba(
+    # ANTI-LOOKAHEAD: Shift 1 bar forward so correlation at bar[t] uses data up to bar[t-1]
+    correlation = calculate_rolling_correlation_numba(
         mes_returns.astype(np.float64),
         mgc_returns.astype(np.float64),
         period=20
     )
+    df['mes_mgc_correlation_20'] = pd.Series(correlation).shift(1).values
 
     # 2. MES-MGC Spread Z-score
     # Normalize prices to allow comparison (z-score of each)
@@ -132,23 +169,31 @@ def add_cross_asset_features(
     # Z-score of the spread
     spread_mean = pd.Series(spread).rolling(window=period).mean().values
     spread_std = pd.Series(spread).rolling(window=period).std().values
-    df['mes_mgc_spread_zscore'] = np.where(
+    spread_zscore = np.where(
         spread_std > 0,
         (spread - spread_mean) / spread_std,
         0.0
     )
+    # ANTI-LOOKAHEAD: Shift 1 bar forward so z-score at bar[t] uses data up to bar[t-1]
+    df['mes_mgc_spread_zscore'] = pd.Series(spread_zscore).shift(1).values
 
     # 3. MES-MGC Beta (rolling beta of MES returns vs MGC returns)
-    df['mes_mgc_beta'] = calculate_rolling_beta_numba(
+    # ANTI-LOOKAHEAD: Shift 1 bar forward so beta at bar[t] uses data up to bar[t-1]
+    beta = calculate_rolling_beta_numba(
         mes_returns.astype(np.float64),
         mgc_returns.astype(np.float64),
         period=20
     )
+    df['mes_mgc_beta'] = pd.Series(beta).shift(1).values
 
     # 4. Relative Strength (momentum divergence)
     # 20-bar cumulative returns for each asset
-    mes_cum_ret = pd.Series(mes_returns).rolling(window=20).sum().values
-    mgc_cum_ret = pd.Series(mgc_returns).rolling(window=20).sum().values
+    # ANTI-LOOKAHEAD: Shift returns 1 bar forward so cumulative return at bar[t]
+    # uses data up to bar[t-1] and doesn't include current bar's return
+    mes_returns_shifted = pd.Series(mes_returns).shift(1).values
+    mgc_returns_shifted = pd.Series(mgc_returns).shift(1).values
+    mes_cum_ret = pd.Series(mes_returns_shifted).rolling(window=20).sum().values
+    mgc_cum_ret = pd.Series(mgc_returns_shifted).rolling(window=20).sum().values
     df['relative_strength'] = mes_cum_ret - mgc_cum_ret
 
     feature_metadata['mes_mgc_correlation_20'] = "20-bar rolling correlation between MES and MGC returns"

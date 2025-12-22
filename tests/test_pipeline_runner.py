@@ -1,5 +1,5 @@
 """
-Comprehensive tests for PipelineRunner.
+Comprehensive tests for PipelineRunner using modern Python 3.12+ patterns.
 This is a critical coverage gap - 1,393 lines were previously untested.
 
 Tests cover:
@@ -13,8 +13,10 @@ Tests cover:
 - Pipeline execution flow
 - Error handling and edge cases
 
-Run with: pytest tests/test_pipeline_runner.py -v --cov=src/pipeline_runner
+Run with: pytest tests/test_pipeline_runner.py -v --cov=src/pipeline
 """
+from __future__ import annotations
+
 import pytest
 import numpy as np
 import pandas as pd
@@ -25,17 +27,21 @@ import shutil
 import json
 import sys
 import logging
+from typing import Final, Generator
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from pipeline import (
-    StageStatus,
-    StageResult,
-    PipelineStage,
-    PipelineRunner
-)
+from pipeline.utils import StageStatus, StageResult
+from pipeline.stage_registry import PipelineStage
+from pipeline.runner import PipelineRunner
 from pipeline_config import PipelineConfig, create_default_config
+
+# Test configuration matching pipeline defaults
+TEST_SYMBOLS: Final[list[str]] = ['MES', 'MGC']
+TEST_HORIZONS: Final[list[int]] = [5, 20]  # H1 excluded (transaction costs > profit)
+PURGE_BARS: Final[int] = 60  # = max_bars for H20 (prevents label leakage)
+EMBARGO_BARS: Final[int] = 288  # ~1 day for 5-min data
 
 
 # =============================================================================
@@ -43,10 +49,15 @@ from pipeline_config import PipelineConfig, create_default_config
 # =============================================================================
 
 @pytest.fixture
-def temp_project_dir():
-    """Create a temporary project directory structure."""
-    tmpdir = tempfile.mkdtemp()
-    project_root = Path(tmpdir)
+def temp_project_dir() -> Generator[Path, None, None]:
+    """
+    Create a temporary project directory structure.
+
+    Yields:
+        Path to temporary project root directory
+    """
+    tmpdir: str = tempfile.mkdtemp()
+    project_root: Path = Path(tmpdir)
 
     # Create necessary subdirectories
     (project_root / 'data' / 'raw').mkdir(parents=True)
@@ -66,46 +77,62 @@ def temp_project_dir():
 
 
 @pytest.fixture
-def sample_config(temp_project_dir):
-    """Create a sample pipeline configuration."""
-    config = create_default_config(
-        symbols=['MES'],
+def sample_config(temp_project_dir: Path) -> PipelineConfig:
+    """
+    Create a sample pipeline configuration.
+
+    Args:
+        temp_project_dir: Temporary project root directory
+
+    Returns:
+        PipelineConfig instance for testing
+    """
+    config: PipelineConfig = create_default_config(
+        symbols=TEST_SYMBOLS,  # Use both MES and MGC for testing
         start_date='2020-01-01',
         end_date='2024-12-31',
         project_root=temp_project_dir
     )
+    config.purge_bars = PURGE_BARS
+    config.embargo_bars = EMBARGO_BARS
+    config.label_horizons = TEST_HORIZONS
     return config
 
 
 @pytest.fixture
-def sample_ohlcv_df():
-    """Create a sample OHLCV DataFrame for testing."""
-    n = 1000
+def sample_ohlcv_df() -> pd.DataFrame:
+    """
+    Create a sample OHLCV DataFrame for testing.
+
+    Returns:
+        DataFrame with realistic OHLCV data for MES symbol
+    """
+    n: int = 1000
     np.random.seed(42)
 
     # Generate realistic price series with random walk
-    base_price = 4500.0
-    returns = np.random.randn(n) * 0.001
-    close = base_price * np.exp(np.cumsum(returns))
+    base_price: float = 4500.0
+    returns: np.ndarray = np.random.randn(n) * 0.001
+    close: np.ndarray = base_price * np.exp(np.cumsum(returns))
 
     # Generate OHLC from close
-    daily_range = np.abs(np.random.randn(n) * 0.002)
-    high = close * (1 + daily_range / 2)
-    low = close * (1 - daily_range / 2)
-    open_ = close * (1 + np.random.randn(n) * 0.0005)
+    daily_range: np.ndarray = np.abs(np.random.randn(n) * 0.002)
+    high: np.ndarray = close * (1 + daily_range / 2)
+    low: np.ndarray = close * (1 - daily_range / 2)
+    open_: np.ndarray = close * (1 + np.random.randn(n) * 0.0005)
 
     # Ensure OHLC relationships are valid
     high = np.maximum(high, np.maximum(open_, close))
     low = np.minimum(low, np.minimum(open_, close))
 
     # Generate volume
-    volume = np.random.randint(100, 10000, n)
+    volume: np.ndarray = np.random.randint(100, 10000, n)
 
     # Generate timestamps (5-minute bars over multiple days)
-    start_time = datetime(2020, 1, 1, 9, 30)
-    timestamps = [start_time + timedelta(minutes=5*i) for i in range(n)]
+    start_time: datetime = datetime(2020, 1, 1, 9, 30)
+    timestamps: list[datetime] = [start_time + timedelta(minutes=5*i) for i in range(n)]
 
-    df = pd.DataFrame({
+    df: pd.DataFrame = pd.DataFrame({
         'datetime': timestamps,
         'open': open_,
         'high': high,
@@ -119,16 +146,24 @@ def sample_ohlcv_df():
 
 
 @pytest.fixture
-def sample_labeled_df(sample_ohlcv_df):
-    """Create a sample labeled DataFrame with features."""
-    df = sample_ohlcv_df.copy()
-    n = len(df)
+def sample_labeled_df(sample_ohlcv_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Create a sample labeled DataFrame with features and labels.
+
+    Args:
+        sample_ohlcv_df: Base OHLCV DataFrame
+
+    Returns:
+        DataFrame with features and labels for all horizons
+    """
+    df: pd.DataFrame = sample_ohlcv_df.copy()
+    n: int = len(df)
 
     # Add ATR feature
     df['atr_14'] = np.random.rand(n) * 10 + 5
 
-    # Add labels for different horizons
-    for horizon in [1, 5, 20]:
+    # Add labels for active horizons only (matching TEST_HORIZONS)
+    for horizon in TEST_HORIZONS:
         df[f'label_h{horizon}'] = np.random.choice([-1, 0, 1], n)
         df[f'bars_to_hit_h{horizon}'] = np.random.randint(1, horizon + 1, n)
         df[f'mae_h{horizon}'] = np.random.rand(n) * 0.01

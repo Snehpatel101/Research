@@ -101,8 +101,10 @@ TEST_RATIO = 0.15
 PURGE_BARS = 60  # = max_bars for H20 (CRITICAL: prevents leakage)
 
 # EMBARGO_BARS: Buffer between splits to account for serial correlation in features.
-# 288 bars = 1 day for 5-min data (reasonable for daily feature decay).
-EMBARGO_BARS = 288  # ~1 day for 5-min data
+# Serial correlation in financial features can persist for multiple days.
+# 1440 bars = 5 days for 5-min data (288 bars/day * 5 days).
+# Previous value of 288 (1 day) was insufficient for capturing feature decay patterns.
+EMBARGO_BARS = 1440  # ~5 days for 5-min data (CRITICAL: ensures feature decorrelation)
 
 # =============================================================================
 # ACTIVE HORIZONS - EXCLUDING NON-VIABLE HORIZONS
@@ -164,26 +166,30 @@ BARRIER_PARAMS = {
     # MES (S&P 500 Micro Futures) - ASYMMETRIC for equity drift
     # =========================================================================
     # MES has structural upward drift from equity risk premium (~7% annually).
-    # Use asymmetric barriers: k_up > k_down to counteract long bias.
+    # Use asymmetric barriers: k_down > k_up to counteract long bias.
+    # Making the LOWER barrier harder to hit reduces the number of short signals,
+    # which counterbalances the inherent upward drift of equities.
     # WIDER barriers to achieve 20-30% neutral rate.
     'MES': {
         # Horizon 5: Short-term (25 minutes) - ACTIVE
-        # Asymmetric: upper barrier 47% harder to hit than lower
-        # Wider barriers (1.50/1.00) for ~25% neutral vs old (1.10/0.75) <2%
+        # CRITICAL FIX: Swapped k_up/k_down to CORRECT for equity drift
+        # MES has upward drift from equity risk premium, so we make the LOWER
+        # barrier harder to hit (k_down > k_up) to counteract long bias.
+        # Previous config had k_up=1.50, k_down=1.00 which AMPLIFIED long bias.
         5: {
-            'k_up': 1.50,
-            'k_down': 1.00,
+            'k_up': 1.00,
+            'k_down': 1.50,
             'max_bars': 12,
-            'description': 'MES H5: Asymmetric (k_up>k_down), ~25% neutral target'
+            'description': 'MES H5: Asymmetric (k_down>k_up) to correct equity drift'
         },
         # Horizon 20: Medium-term (~1.5 hours) - ACTIVE
-        # Asymmetric: upper barrier 40% harder to hit than lower
-        # Wider barriers (3.00/2.10) for ~25% neutral
+        # CRITICAL FIX: Swapped k_up/k_down to correct for equity drift
+        # Lower barrier harder to hit counters the structural long bias
         20: {
-            'k_up': 3.00,
-            'k_down': 2.10,
+            'k_up': 2.10,
+            'k_down': 3.00,
             'max_bars': 50,
-            'description': 'MES H20: Asymmetric (k_up>k_down), ~25% neutral target'
+            'description': 'MES H20: Asymmetric (k_down>k_up) to correct equity drift'
         }
     },
     # =========================================================================
@@ -286,13 +292,20 @@ PERCENTAGE_BARRIER_PARAMS = {
 # Features with correlation above this threshold will be removed (keeping the
 # most interpretable feature from each correlated group).
 #
-# CRITICAL: The previous default of 0.95 was too lenient. Features with 0.80+
-# correlation still cause multicollinearity issues during ML training.
-# Lowering to 0.85 provides more aggressive pruning which is desirable.
+# CRITICAL: The previous default of 0.95 was too lenient. Features with 0.70+
+# correlation cause multicollinearity issues during ML training, leading to:
+# - Unstable coefficient estimates
+# - Inflated variance in predictions
+# - Reduced model interpretability
+#
+# Lowering to 0.70 provides aggressive pruning which is desirable for:
+# - Reducing overfitting in ensemble models
+# - Improving feature importance reliability
+# - Faster training with fewer redundant features
 #
 # Lower values = more aggressive pruning = fewer features = less multicollinearity
 # Higher values = less pruning = more features = potential multicollinearity
-CORRELATION_THRESHOLD = 0.85
+CORRELATION_THRESHOLD = 0.70
 
 # VARIANCE_THRESHOLD: Minimum variance for a feature to be retained.
 # Features with variance below this threshold are considered near-constant
