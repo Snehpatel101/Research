@@ -17,13 +17,10 @@ from typing import Dict, List
 import json
 
 # Import labeling function
-import sys
-sys.path.insert(0, str(Path(__file__).parent))
-from stage4_labeling import triple_barrier_numba
+from src.stages.stage4_labeling import triple_barrier_numba
 
 # Import config for symbol-specific parameters
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import get_barrier_params, TRANSACTION_COSTS
+from src.config import get_barrier_params, TRANSACTION_COSTS
 
 # Configure logging - use NullHandler to avoid duplicate logs when imported as module
 logger = logging.getLogger(__name__)
@@ -102,23 +99,44 @@ def compute_quality_scores(
         mfe_scores = np.zeros(n, dtype=np.float32)
 
     # ==========================================================================
-    # 4. PAIN-TO-GAIN RATIO (NEW)
+    # 4. PAIN-TO-GAIN RATIO
     # ==========================================================================
-    # Measures risk per unit of profit
-    # For LONG trades: pain = |MAE| (drawdown), gain = MFE (upside)
-    # For SHORT trades: pain = MFE (upside = loss for short), gain = |MAE| (downside = profit)
-    # Lower is better (less pain per unit gain)
+    # Measures risk per unit of profit. Lower is better (less pain per unit gain).
+    #
+    # SIGN CONVENTION (from triple_barrier_numba):
+    # MAE/MFE are ALWAYS calculated from a LONG POSITION perspective:
+    #   - MFE = max((high - entry) / entry) = positive for upside moves
+    #   - MAE = min((low - entry) / entry) = negative for downside moves
+    #
+    # Therefore:
+    #   - For LONG trades (label=1, upper barrier hit):
+    #       * Gain = MFE (upside move = profit)
+    #       * Pain = |MAE| (downside move = drawdown before profit)
+    #
+    #   - For SHORT trades (label=-1, lower barrier hit):
+    #       * Gain = |MAE| (downside move = profit for shorts)
+    #       * Pain = MFE (upside move = adverse move for shorts)
+
+    pain_to_gain = np.ones(n, dtype=np.float32) * 0.5  # Default to moderate
 
     for i in range(n):
-        if labels[i] == 1:  # Long
+        if labels[i] == 1:  # Long trade (upper barrier hit = profit)
+            # For longs: MFE is gain (upside), MAE is pain (downside)
+            # MFE should be positive for winning longs
             gain = max(mfe[i], 1e-6)
-            pain = abs(mae[i])
+            # MAE should be negative or zero; take absolute value for pain
+            pain = abs(min(mae[i], 0))
             pain_to_gain[i] = pain / gain
-        elif labels[i] == -1:  # Short
-            gain = max(abs(mae[i]), 1e-6)
-            pain = max(mfe[i], 0)
+
+        elif labels[i] == -1:  # Short trade (lower barrier hit = profit for shorts)
+            # For shorts: the "long perspective" MAE/MFE are inverted in meaning
+            # MAE (downside from long view) = profit for short = our gain
+            # MFE (upside from long view) = loss for short = our pain
+            gain = max(abs(mae[i]), 1e-6)  # Downside move (profit for short)
+            pain = max(mfe[i], 0)  # Upside move (loss for short)
             pain_to_gain[i] = pain / gain
-        else:  # Neutral
+
+        else:  # Neutral (timeout)
             pain_to_gain[i] = 1.0  # Default for neutrals
 
     # Normalize pain-to-gain to 0-1 (clip at 95th percentile)
@@ -134,22 +152,43 @@ def compute_quality_scores(
         ptg_scores = np.ones(n, dtype=np.float32)
 
     # ==========================================================================
-    # 5. TIME-WEIGHTED DRAWDOWN (NEW)
+    # 5. TIME-WEIGHTED DRAWDOWN
     # ==========================================================================
-    # Penalize trades that spend a lot of time in drawdown relative to total time
-    # Approximated by: (bars_to_hit / max_bars) * (|MAE| / |MFE| + epsilon)
-    # Lower score = less time in pain = better
+    # Penalize trades that spend a lot of time in drawdown relative to total time.
+    # Approximated by: (bars_to_hit / max_bars) * pain_ratio
+    # Lower score = less time in pain = better.
+    #
+    # SIGN CONVENTION: Same as pain-to-gain above.
+    # For longs: pain = |MAE|, gain = MFE
+    # For shorts: pain = MFE, gain = |MAE|
+    #
+    # Edge case: If gain = 0 (trade hit stop with no favorable excursion),
+    # this is the WORST case and should have maximum pain_ratio.
 
     max_bars = horizon * 3  # Approximate max_bars
+    MAX_PAIN_RATIO = 2.0  # Clamp at 2x to avoid outlier distortion
+
     for i in range(n):
         if labels[i] != 0 and bars_to_hit[i] > 0:
             time_fraction = bars_to_hit[i] / max_bars
-            # Ratio of pain to gain (clamped)
-            if mfe[i] > 0:
-                pain_ratio = abs(mae[i]) / mfe[i]
+
+            if labels[i] == 1:  # Long trade
+                # Pain = |MAE| (downside), Gain = MFE (upside)
+                pain = abs(min(mae[i], 0))
+                gain = mfe[i]
+            else:  # Short trade (labels[i] == -1)
+                # Pain = MFE (upside), Gain = |MAE| (downside)
+                pain = max(mfe[i], 0)
+                gain = abs(mae[i])
+
+            # Calculate pain ratio with proper handling of zero gain
+            if gain > 1e-6:
+                pain_ratio = pain / gain
             else:
-                pain_ratio = 1.0
-            pain_ratio = min(pain_ratio, 2.0)  # Clamp at 2x
+                # No favorable excursion = worst case (hit stop immediately)
+                pain_ratio = MAX_PAIN_RATIO
+
+            pain_ratio = min(pain_ratio, MAX_PAIN_RATIO)  # Clamp to avoid outliers
 
             # Time-weighted drawdown: longer time * more pain = worse
             time_weighted_dd[i] = time_fraction * pain_ratio
@@ -327,23 +366,31 @@ def apply_optimized_labels(
 
 def process_symbol_final(
     symbol: str,
-    horizons: List[int] = [5, 20]  # Exclude H1 - not viable after transaction costs
+    horizons: List[int] = None  # Uses config.HORIZONS if None
 ) -> pd.DataFrame:
     """
     Apply optimized labels for all horizons for a symbol.
 
     Uses symbol-specific barrier defaults (MES: asymmetric, MGC: symmetric)
-    when GA results are not available.
+    when GA results are not available. For horizons not in BARRIER_PARAMS,
+    auto-generated defaults are used via get_default_barrier_params_for_horizon.
 
     Parameters:
     -----------
-    symbol : 'MES' or 'MGC'
-    horizons : list of horizons to process (default excludes H1)
+    symbol : str
+        Symbol name ('MES' or 'MGC')
+    horizons : List[int], optional
+        List of horizons to process. If None, uses config.HORIZONS.
+        Default excludes H1 which is not viable after transaction costs.
 
     Returns:
     --------
-    df : Final labeled DataFrame
+    pd.DataFrame : Final labeled DataFrame with all requested horizons
     """
+    # Import config for default horizons
+    if horizons is None:
+        from src.config import HORIZONS
+        horizons = HORIZONS
     logger.info("=" * 70)
     logger.info(f"FINAL LABELING: {symbol}")
     logger.info(f"  Barrier mode: {'SYMMETRIC' if symbol == 'MGC' else 'ASYMMETRIC'}")
@@ -498,19 +545,29 @@ def generate_labeling_report(all_results: Dict[str, pd.DataFrame]):
 
 
 def main():
-    """Run Stage 6: Final labeling for all symbols."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+    """Run Stage 6: Final labeling for all symbols using dynamic horizons."""
+    from src.config import (
+        SYMBOLS,
+        HORIZONS,
+        ACTIVE_HORIZONS,
+        validate_horizons,
+    )
 
-    from config import SYMBOLS, ACTIVE_HORIZONS
+    # Use HORIZONS for dynamic horizon support (defaults to [5, 20])
+    # Falls back to ACTIVE_HORIZONS for backward compatibility
+    horizons = HORIZONS if HORIZONS else ACTIVE_HORIZONS
 
-    # Use only ACTIVE_HORIZONS (excludes H1 which is not viable after costs)
-    horizons = ACTIVE_HORIZONS  # [5, 20]
+    # Validate horizons
+    try:
+        validate_horizons(horizons)
+    except ValueError as e:
+        logger.error(f"Horizon validation failed: {e}")
+        raise
 
     logger.info("=" * 70)
     logger.info("STAGE 6: FINAL LABELING WITH RISK-ADJUSTED QUALITY SCORES")
     logger.info("=" * 70)
-    logger.info(f"Horizons: {horizons} (H1 excluded - not viable after transaction costs)")
+    logger.info(f"Horizons: {horizons} (configurable via config.HORIZONS)")
     logger.info("")
     logger.info("PRODUCTION FIXES APPLIED:")
     logger.info("  - Symbol-specific barriers (MES: asymmetric, MGC: symmetric)")

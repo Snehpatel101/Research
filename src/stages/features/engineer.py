@@ -8,7 +8,7 @@ all feature engineering operations and manages the complete pipeline.
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Union, Dict, Tuple, Optional
+from typing import Union, Dict, Tuple, Optional, List
 import logging
 from datetime import datetime
 import json
@@ -25,11 +25,16 @@ from .volatility import (
     add_historical_volatility, add_parkinson_volatility,
     add_garman_klass_volatility
 )
-from .volume import add_volume_features, add_vwap
+# Re-import here for wrapper methods
+from .volume import add_volume_features, add_vwap, add_obv
 from .trend import add_adx, add_supertrend
-from .temporal import add_temporal_features
+from .temporal import add_temporal_features, add_session_features
 from .regime import add_regime_features
 from .cross_asset import add_cross_asset_features
+from .scaling import PeriodScaler, create_period_config
+
+# MTF Features - import from sibling module
+from ..mtf_features import add_mtf_features, MTFFeatureGenerator
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -51,13 +56,20 @@ class FeatureEngineer:
     - Temporal features (time encoding)
     - Regime indicators (volatility, trend)
     - Cross-asset features (MES-MGC correlation, beta, etc.)
+    - Multi-timeframe features (MTF - indicators from higher TFs)
     """
 
     def __init__(
         self,
         input_dir: Union[str, Path],
         output_dir: Union[str, Path],
-        timeframe: str = '1min'
+        timeframe: str = '5min',
+        enable_mtf: bool = True,
+        mtf_timeframes: Optional[list] = None,
+        mtf_include_ohlcv: bool = True,
+        mtf_include_indicators: bool = True,
+        scale_periods: bool = True,
+        base_timeframe: str = '5min'
     ):
         """
         Initialize feature engineer.
@@ -68,12 +80,44 @@ class FeatureEngineer:
             Path to cleaned data directory
         output_dir : Union[str, Path]
             Path to output directory
-        timeframe : str, default '1min'
-            Data timeframe (e.g., '1min', '5min')
+        timeframe : str, default '5min'
+            Data timeframe (e.g., '1min', '5min', '15min')
+        enable_mtf : bool, default True
+            Whether to compute multi-timeframe features
+        mtf_timeframes : list, optional
+            List of higher timeframes for MTF features.
+            Default: ['15min', '60min']
+        mtf_include_ohlcv : bool, default True
+            Include OHLCV data from higher TFs
+        mtf_include_indicators : bool, default True
+            Include indicators computed on higher TFs
+        scale_periods : bool, default True
+            Whether to scale indicator periods based on timeframe.
+            When True, indicator periods are scaled to maintain
+            consistent lookback duration across timeframes.
+        base_timeframe : str, default '5min'
+            Base timeframe that indicator periods are defined for.
+            Only used when scale_periods=True.
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.timeframe = timeframe
+
+        # Period scaling configuration
+        self.scale_periods = scale_periods
+        self.base_timeframe = base_timeframe
+        if scale_periods:
+            self.period_scaler = PeriodScaler(timeframe, base_timeframe)
+            self.period_config = self.period_scaler.config
+        else:
+            self.period_scaler = None
+            self.period_config = create_period_config(base_timeframe, base_timeframe)
+
+        # MTF configuration
+        self.enable_mtf = enable_mtf
+        self.mtf_timeframes = mtf_timeframes or ['15min', '60min']
+        self.mtf_include_ohlcv = mtf_include_ohlcv
+        self.mtf_include_indicators = mtf_include_indicators
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -84,6 +128,10 @@ class FeatureEngineer:
         logger.info("Initialized FeatureEngineer")
         logger.info(f"Input dir: {self.input_dir}")
         logger.info(f"Output dir: {self.output_dir}")
+        logger.info(f"Timeframe: {self.timeframe}, scale_periods: {self.scale_periods}")
+        if self.scale_periods and self.timeframe != self.base_timeframe:
+            logger.info(f"Period scaling: {self.base_timeframe} -> {self.timeframe}")
+        logger.info(f"MTF enabled: {self.enable_mtf}, timeframes: {self.mtf_timeframes}")
 
     def engineer_features(
         self,
@@ -122,28 +170,43 @@ class FeatureEngineer:
         # Reset feature metadata for this run
         self.feature_metadata = {}
 
-        # Add all features
+        # Get scaled periods for this timeframe
+        pc = self.period_config
+
+        # Add all features with scaled periods
         df = add_returns(df, self.feature_metadata)
         df = add_price_ratios(df, self.feature_metadata)
-        df = add_sma(df, self.feature_metadata)
-        df = add_ema(df, self.feature_metadata)
-        df = add_rsi(df, self.feature_metadata)
-        df = add_macd(df, self.feature_metadata)
-        df = add_stochastic(df, self.feature_metadata)
-        df = add_williams_r(df, self.feature_metadata)
-        df = add_roc(df, self.feature_metadata)
-        df = add_cci(df, self.feature_metadata)
-        df = add_mfi(df, self.feature_metadata)
-        df = add_atr(df, self.feature_metadata)
-        df = add_bollinger_bands(df, self.feature_metadata)
-        df = add_keltner_channels(df, self.feature_metadata)
-        df = add_historical_volatility(df, self.feature_metadata)
-        df = add_parkinson_volatility(df, self.feature_metadata)
-        df = add_garman_klass_volatility(df, self.feature_metadata)
-        df = add_volume_features(df, self.feature_metadata)
+        df = add_sma(df, self.feature_metadata, periods=pc.get('sma'))
+        df = add_ema(df, self.feature_metadata, periods=pc.get('ema'))
+        df = add_rsi(df, self.feature_metadata, period=pc.get('rsi', [14])[0])
+        df = add_macd(
+            df, self.feature_metadata,
+            fast_period=pc.get('macd_fast', [12])[0],
+            slow_period=pc.get('macd_slow', [26])[0],
+            signal_period=pc.get('macd_signal', [9])[0]
+        )
+        df = add_stochastic(
+            df, self.feature_metadata,
+            k_period=pc.get('stochastic_k', [14])[0],
+            d_period=pc.get('stochastic_d', [3])[0]
+        )
+        df = add_williams_r(df, self.feature_metadata, period=pc.get('williams_r', [14])[0])
+        df = add_roc(df, self.feature_metadata, periods=pc.get('roc'))
+        df = add_cci(df, self.feature_metadata, period=pc.get('cci', [20])[0])
+        df = add_mfi(df, self.feature_metadata, period=pc.get('mfi', [14])[0])
+        df = add_atr(df, self.feature_metadata, periods=pc.get('atr'))
+        df = add_bollinger_bands(df, self.feature_metadata, period=pc.get('bollinger', [20])[0])
+        df = add_keltner_channels(df, self.feature_metadata, period=pc.get('keltner', [20])[0])
+        df = add_historical_volatility(df, self.feature_metadata, periods=pc.get('hvol'))
+        df = add_parkinson_volatility(df, self.feature_metadata, period=pc.get('parkinson', [20])[0])
+        df = add_garman_klass_volatility(df, self.feature_metadata, period=pc.get('garman_klass', [20])[0])
+        df = add_volume_features(df, self.feature_metadata, period=pc.get('volume_sma', [20])[0])
         df = add_vwap(df, self.feature_metadata)
-        df = add_adx(df, self.feature_metadata)
-        df = add_supertrend(df, self.feature_metadata)
+        df = add_adx(df, self.feature_metadata, period=pc.get('adx', [14])[0])
+        df = add_supertrend(
+            df, self.feature_metadata,
+            period=pc.get('supertrend_period', [10])[0]
+        )
         df = add_temporal_features(df, self.feature_metadata)
         df = add_regime_features(df, self.feature_metadata)
 
@@ -160,6 +223,34 @@ class FeatureEngineer:
             mgc_close=mgc_close,
             current_symbol=symbol
         )
+
+        # Add Multi-Timeframe (MTF) features
+        # MTF features compute indicators on higher TFs and align to base TF
+        mtf_cols_added = 0
+        if self.enable_mtf and len(df) >= 500:
+            try:
+                logger.info(f"Adding MTF features for timeframes: {self.mtf_timeframes}")
+                df = add_mtf_features(
+                    df,
+                    feature_metadata=self.feature_metadata,
+                    base_timeframe=self.timeframe if self.timeframe in ['5min'] else '5min',
+                    mtf_timeframes=self.mtf_timeframes,
+                    include_ohlcv=self.mtf_include_ohlcv,
+                    include_indicators=self.mtf_include_indicators
+                )
+                # Count MTF columns added
+                mtf_suffixes = ['_15m', '_30m', '_1h']
+                mtf_cols_added = len([
+                    c for c in df.columns
+                    if any(c.endswith(s) for s in mtf_suffixes)
+                ])
+                logger.info(f"Added {mtf_cols_added} MTF feature columns")
+            except Exception as e:
+                logger.warning(f"MTF feature generation failed: {e}. Continuing without MTF features.")
+        elif self.enable_mtf:
+            logger.warning(
+                f"Skipping MTF features: insufficient data ({len(df)} rows < 500 required)"
+            )
 
         # Drop rows with NaN (mainly from initial indicator warmup periods)
         # Note: Cross-asset features are NaN when only one symbol is present
@@ -192,6 +283,13 @@ class FeatureEngineer:
                           'mes_close' in cross_asset_data and
                           'mgc_close' in cross_asset_data)
 
+        # Get MTF column names
+        mtf_suffixes = ['_15m', '_30m', '_1h']
+        mtf_col_names = [
+            c for c in df.columns
+            if any(c.endswith(s) for s in mtf_suffixes)
+        ]
+
         feature_report = {
             'symbol': symbol,
             'timestamp': datetime.now().isoformat(),
@@ -203,6 +301,10 @@ class FeatureEngineer:
             'rows_dropped_for_nan': rows_dropped,
             'cross_asset_features': has_cross_asset,
             'cross_asset_feature_names': cross_asset_cols if has_cross_asset else [],
+            'mtf_features': self.enable_mtf and mtf_cols_added > 0,
+            'mtf_feature_count': mtf_cols_added,
+            'mtf_timeframes': self.mtf_timeframes if mtf_cols_added > 0 else [],
+            'mtf_feature_names': mtf_col_names,
             'date_range': {
                 'start': df['datetime'].min().isoformat(),
                 'end': df['datetime'].max().isoformat()
@@ -214,6 +316,8 @@ class FeatureEngineer:
         logger.info(f"Rows: {initial_rows:,} -> {len(df):,} (-{rows_dropped:,} for NaN)")
         if has_cross_asset:
             logger.info(f"Cross-asset features: {cross_asset_cols}")
+        if mtf_cols_added > 0:
+            logger.info(f"MTF features: {mtf_cols_added} columns from {self.mtf_timeframes}")
 
         return df, feature_report
 
@@ -508,70 +612,51 @@ class FeatureEngineer:
         """Wrapper for add_price_ratios function."""
         return add_price_ratios(df, self.feature_metadata)
 
+    def add_williams_r(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_williams_r function."""
+        return add_williams_r(df, self.feature_metadata)
 
-def main():
-    """
-    Example usage of FeatureEngineer.
-    """
-    import argparse
+    def add_roc(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_roc function."""
+        return add_roc(df, self.feature_metadata)
 
-    parser = argparse.ArgumentParser(description='Stage 3: Feature Engineering')
-    parser.add_argument('--input-dir', type=str, default='data/clean',
-                        help='Input data directory')
-    parser.add_argument('--output-dir', type=str, default='data/features',
-                        help='Output directory')
-    parser.add_argument('--timeframe', type=str, default='1min',
-                        help='Data timeframe')
-    parser.add_argument('--pattern', type=str, default='*.parquet',
-                        help='File pattern to match')
-    parser.add_argument('--multi-symbol', action='store_true',
-                        help='Process MES and MGC together with cross-asset features')
-    parser.add_argument('--symbols', type=str, nargs='+', default=['MES', 'MGC'],
-                        help='Symbols to process (for multi-symbol mode)')
+    def add_cci(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_cci function."""
+        return add_cci(df, self.feature_metadata)
 
-    args = parser.parse_args()
+    def add_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_temporal_features function."""
+        return add_temporal_features(df, self.feature_metadata)
 
-    # Initialize feature engineer
-    engineer = FeatureEngineer(
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
-        timeframe=args.timeframe
-    )
+    def add_historical_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_historical_volatility function."""
+        return add_historical_volatility(df, self.feature_metadata)
 
-    if args.multi_symbol:
-        # Build symbol_files dict
-        input_dir = Path(args.input_dir)
-        symbol_files = {}
-        for symbol in args.symbols:
-            # Look for files matching the symbol
-            matches = list(input_dir.glob(f"{symbol.lower()}*.parquet")) + \
-                      list(input_dir.glob(f"{symbol.upper()}*.parquet"))
-            if matches:
-                symbol_files[symbol.upper()] = matches[0]
-                print(f"Found {symbol.upper()}: {matches[0]}")
-            else:
-                print(f"Warning: No file found for {symbol}")
+    def add_parkinson_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_parkinson_volatility function."""
+        return add_parkinson_volatility(df, self.feature_metadata)
 
-        if symbol_files:
-            results = engineer.process_multi_symbol(symbol_files, compute_cross_asset=True)
-        else:
-            print("No files found for specified symbols")
-            results = {}
-    else:
-        # Process all files independently
-        results = engineer.process_directory(pattern=args.pattern)
+    def add_garman_klass_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_garman_klass_volatility function."""
+        return add_garman_klass_volatility(df, self.feature_metadata)
 
-    print("\n" + "="*60)
-    print("FEATURE ENGINEERING SUMMARY")
-    print("="*60)
-    for symbol, report in results.items():
-        print(f"\n{symbol}:")
-        print(f"  Features added: {report['features_added']}")
-        print(f"  Final columns: {report['final_columns']}")
-        print(f"  Final rows: {report['final_rows']:,}")
-        print(f"  Cross-asset features: {report.get('cross_asset_features', False)}")
-        print(f"  Date range: {report['date_range']['start']} to {report['date_range']['end']}")
+    def add_regime_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_regime_features function."""
+        return add_regime_features(df, self.feature_metadata)
+
+    def add_supertrend(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_supertrend function."""
+        return add_supertrend(df, self.feature_metadata)
+
+    def add_obv(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_obv function."""
+        return add_obv(df, self.feature_metadata)
+
+    def add_session_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Wrapper for add_session_features function."""
+        return add_session_features(df, self.feature_metadata)
 
 
 if __name__ == '__main__':
+    from .cli import main
     main()

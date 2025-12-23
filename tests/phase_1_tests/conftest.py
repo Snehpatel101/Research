@@ -202,12 +202,13 @@ def sample_labeled_data(sample_ohlcv_data):
     Create sample labeled data for testing stages 5-8.
 
     Adds triple barrier labels with realistic label distribution.
+    Also includes common feature columns for validation tests.
 
     Args:
         sample_ohlcv_data: Base OHLCV DataFrame with ATR
 
     Returns:
-        pd.DataFrame: Labeled OHLCV data with label_H5 and label_H20 columns
+        pd.DataFrame: Labeled OHLCV data with label columns and common features
     """
     df = sample_ohlcv_data.copy()
 
@@ -216,8 +217,17 @@ def sample_labeled_data(sample_ohlcv_data):
     n = len(df)
     labels = np.random.choice([0, 1, -1], size=n, p=[0.6, 0.2, 0.2])
 
+    # Add labels in both formats for compatibility
     df['label_H5'] = labels
     df['label_H20'] = np.roll(labels, 5)  # Slightly different for H20
+    df['label_h5'] = labels  # lowercase format used by some validators
+    df['label_h20'] = np.roll(labels, 5)
+
+    # Add common feature columns for validation tests
+    df['rsi'] = 50 + np.random.randn(n) * 10  # RSI around 50
+    df['macd'] = np.random.randn(n) * 0.5  # MACD signal
+    df['sma_10'] = df['close'].rolling(10, min_periods=1).mean()
+    df['sma_20'] = df['close'].rolling(20, min_periods=1).mean()
 
     return df
 
@@ -341,3 +351,199 @@ def assert_monotonic_datetime(df: pd.DataFrame) -> None:
     assert 'datetime' in df.columns, "DataFrame missing datetime column"
     assert df['datetime'].is_monotonic_increasing, \
         "Datetime must be monotonically increasing"
+
+
+# =============================================================================
+# ADDITIONAL FIXTURES (added 2025-12 to fix missing fixture errors)
+# =============================================================================
+
+@pytest.fixture
+def sample_features_df(sample_ohlcv_data):
+    """
+    Create a sample DataFrame with OHLCV data and common technical features.
+
+    This fixture extends sample_ohlcv_data with computed features for testing
+    feature engineering and labeling stages.
+
+    Args:
+        sample_ohlcv_data: Base OHLCV DataFrame with ATR
+
+    Returns:
+        pd.DataFrame: OHLCV data with technical indicator features
+    """
+    df = sample_ohlcv_data.copy()
+    np.random.seed(42)
+    n = len(df)
+
+    # Add common technical indicators for testing
+    # RSI-like feature (bounded 0-100)
+    df['rsi_14'] = 50.0 + np.random.randn(n) * 15
+    df['rsi_14'] = df['rsi_14'].clip(0, 100)
+
+    # MACD-like features
+    df['macd_line'] = np.random.randn(n) * 0.5
+    df['macd_signal'] = df['macd_line'].rolling(9).mean().fillna(0)
+    df['macd_hist'] = df['macd_line'] - df['macd_signal']
+
+    # Moving average ratios
+    df['sma_20'] = df['close'].rolling(20).mean().fillna(df['close'].iloc[0])
+    df['price_to_sma_20'] = df['close'] / df['sma_20']
+
+    # Volatility features
+    df['bb_width'] = np.random.uniform(0.02, 0.05, n)
+    df['bb_position'] = np.random.uniform(-1, 1, n)
+
+    # Volume features
+    df['volume_zscore'] = (df['volume'] - df['volume'].mean()) / df['volume'].std()
+
+    # Momentum features
+    df['roc_10'] = df['close'].pct_change(10).fillna(0)
+    df['williams_r'] = np.random.uniform(-100, 0, n)
+
+    # Trend features
+    df['adx_14'] = np.random.uniform(10, 50, n)
+
+    # Returns
+    df['return_1'] = df['close'].pct_change(1).fillna(0)
+    df['return_5'] = df['close'].pct_change(5).fillna(0)
+    df['log_return_1'] = np.log(df['close'] / df['close'].shift(1)).fillna(0)
+
+    return df
+
+
+@pytest.fixture
+def sample_price_arrays(sample_ohlcv_data):
+    """
+    Create sample price arrays for testing numba-optimized functions.
+
+    Provides numpy arrays extracted from OHLCV DataFrame for functions
+    that require raw array inputs (like triple_barrier_numba).
+
+    Args:
+        sample_ohlcv_data: Base OHLCV DataFrame with ATR
+
+    Returns:
+        dict: Dictionary with 'close', 'high', 'low', 'open', 'atr' arrays
+    """
+    df = sample_ohlcv_data
+    return {
+        'close': df['close'].values.astype(np.float64),
+        'high': df['high'].values.astype(np.float64),
+        'low': df['low'].values.astype(np.float64),
+        'open': df['open'].values.astype(np.float64),
+        'atr': df['atr_14'].values.astype(np.float64),
+    }
+
+
+@pytest.fixture
+def temp_directory():
+    """
+    Alias for temp_dir fixture for backward compatibility.
+
+    Some older tests use 'temp_directory' instead of 'temp_dir'.
+
+    Yields:
+        Path: Temporary directory path
+    """
+    tmp = tempfile.mkdtemp()
+    yield Path(tmp)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
+@pytest.fixture
+def sample_split_data(sample_features_df):
+    """
+    Create sample data with train/val/test split indices.
+
+    Args:
+        sample_features_df: DataFrame with features
+
+    Returns:
+        dict: Dictionary with 'data', 'train_idx', 'val_idx', 'test_idx'
+    """
+    df = sample_features_df.copy()
+    n = len(df)
+
+    # 70/15/15 split
+    train_end = int(n * 0.70)
+    val_end = int(n * 0.85)
+
+    return {
+        'data': df,
+        'train_idx': np.arange(0, train_end),
+        'val_idx': np.arange(train_end, val_end),
+        'test_idx': np.arange(val_end, n),
+    }
+
+
+@pytest.fixture
+def sample_ohlcv_with_outliers(sample_ohlcv_df):
+    """
+    Create OHLCV DataFrame with outliers for testing outlier detection.
+
+    Adds extreme values to the dataset for outlier detection algorithm testing.
+
+    Args:
+        sample_ohlcv_df: Base OHLCV DataFrame fixture
+
+    Returns:
+        pd.DataFrame: OHLCV data with some outlier values
+    """
+    df = sample_ohlcv_df.copy()
+
+    # Add some outliers at specific indices
+    # Extreme high value (spike)
+    df.loc[50, 'high'] = df['high'].mean() * 1.5
+    df.loc[50, 'close'] = df['close'].mean() * 1.3
+
+    # Extreme low value (crash)
+    df.loc[100, 'low'] = df['low'].mean() * 0.5
+    df.loc[100, 'close'] = df['close'].mean() * 0.7
+
+    # Volume outliers
+    df.loc[150, 'volume'] = df['volume'].mean() * 10
+
+    return df
+
+
+@pytest.fixture
+def sample_labeled_df(sample_features_df):
+    """
+    Create sample labeled DataFrame for testing stages 6-8.
+
+    Extends sample_features_df with label columns including
+    triple barrier labels and sample weights.
+
+    Args:
+        sample_features_df: DataFrame with OHLCV and features
+
+    Returns:
+        pd.DataFrame: Labeled DataFrame with label_h5, label_h20, quality, weights
+    """
+    df = sample_features_df.copy()
+    np.random.seed(42)
+    n = len(df)
+
+    # Add labels for multiple horizons
+    for horizon in [5, 20]:
+        # Balanced label distribution (30% long, 30% short, 40% neutral)
+        labels = np.random.choice([1, -1, 0], size=n, p=[0.30, 0.30, 0.40])
+        df[f'label_h{horizon}'] = labels
+
+        # Add bars_to_hit
+        df[f'bars_to_hit_h{horizon}'] = np.random.randint(1, horizon * 2, n)
+
+        # Add MAE/MFE
+        df[f'mae_h{horizon}'] = -np.abs(np.random.randn(n) * 0.01)
+        df[f'mfe_h{horizon}'] = np.abs(np.random.randn(n) * 0.02)
+
+        # Add touch_type (1=upper, -1=lower, 0=timeout)
+        df[f'touch_type_h{horizon}'] = labels.copy()
+
+        # Add quality scores (0-1)
+        df[f'quality_h{horizon}'] = np.random.uniform(0.3, 0.9, n)
+
+        # Add sample weights (0.5, 1.0, or 1.5)
+        df[f'sample_weight_h{horizon}'] = np.random.choice([0.5, 1.0, 1.5], n)
+
+    return df

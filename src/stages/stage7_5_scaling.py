@@ -28,7 +28,6 @@ Created: 2025-12-21
 
 import json
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -99,7 +98,7 @@ def scale_splits(
         Tuple of (train_scaled, val_scaled, test_scaled, scaler)
     """
     # Import the feature scaler
-    from stages.feature_scaler import FeatureScaler, ScalerConfig
+    from src.stages.feature_scaler import FeatureScaler, ScalerConfig
 
     # Create split DataFrames
     train_df = combined_df.iloc[train_indices].copy()
@@ -244,10 +243,7 @@ def run_scaling_stage(
 
 def main():
     """Run scaling stage with default configuration."""
-    # Add parent directory to path for imports
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-
-    from config import FINAL_DATA_DIR, SPLITS_DIR
+    from src.config import FINAL_DATA_DIR, SPLITS_DIR
 
     # Find the most recent splits directory
     splits_dirs = sorted(SPLITS_DIR.iterdir()) if SPLITS_DIR.exists() else []
@@ -276,9 +272,9 @@ def main():
 
 
 if __name__ == "__main__":
-    # Set up basic logging for standalone execution
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
+    # Set up logging for standalone execution
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().addHandler(handler)
     main()

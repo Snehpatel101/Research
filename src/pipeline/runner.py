@@ -55,8 +55,8 @@ class PipelineRunner:
             config: Pipeline configuration
             resume: Whether to resume from last successful stage
         """
-        from pipeline_config import PipelineConfig
-        from manifest import ArtifactManifest
+        from src.pipeline_config import PipelineConfig
+        from src.manifest import ArtifactManifest
 
         self.config = config
         self.resume = resume
@@ -261,7 +261,7 @@ class PipelineRunner:
 
     def _load_state(self) -> None:
         """Load previous pipeline state for resuming."""
-        from manifest import ArtifactManifest
+        from src.manifest import ArtifactManifest
 
         state_path = self.config.run_artifacts_dir / "pipeline_state.json"
 

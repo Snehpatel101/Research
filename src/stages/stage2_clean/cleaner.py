@@ -2,7 +2,7 @@
 DataCleaner Class - Comprehensive data cleaning for financial time series.
 
 This module provides the main DataCleaner class which handles:
-- Gap detection and filling
+- Gap detection and filling (via GapHandler)
 - Duplicate detection and removal
 - Outlier detection (z-score, IQR, ATR methods)
 - Contract roll handling
@@ -11,7 +11,7 @@ This module provides the main DataCleaner class which handles:
 
 Author: ML Pipeline
 Created: 2025-12-20
-Updated: 2025-12-20 - Extracted from stage2_clean.py
+Updated: 2025-12-22 - Extracted gap handling to gap_handler.py
 """
 
 import pandas as pd
@@ -21,7 +21,8 @@ from typing import Union, Dict, Optional, Tuple
 import logging
 import json
 
-from .utils import validate_ohlc, calculate_atr_numba
+from .utils import validate_ohlc, calculate_atr_numba, resample_ohlcv
+from .gap_handler import GapHandler
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -30,6 +31,10 @@ logger.addHandler(logging.NullHandler())
 class DataCleaner:
     """
     Comprehensive data cleaning for financial time series.
+
+    Supports Multi-Timeframe (MTF) resampling through the target_timeframe parameter.
+    Input data is expected to be 1-minute bars by default (timeframe='1min'), which
+    can then be resampled to any target_timeframe (e.g., '5min', '15min', '30min').
     """
 
     def __init__(
@@ -37,12 +42,14 @@ class DataCleaner:
         input_dir: Union[str, Path],
         output_dir: Union[str, Path],
         timeframe: str = '1min',
+        target_timeframe: str = '5min',
         gap_fill_method: str = 'forward',
         max_gap_fill_minutes: int = 5,
         outlier_method: str = 'atr',
         atr_threshold: float = 5.0,
         zscore_threshold: float = 5.0,
-        iqr_multiplier: float = 3.0
+        iqr_multiplier: float = 3.0,
+        calendar_aware: bool = True
     ):
         """
         Initialize data cleaner.
@@ -51,34 +58,72 @@ class DataCleaner:
         -----------
         input_dir : Path to input data directory
         output_dir : Path to output directory
-        timeframe : Data timeframe (e.g., '1min', '5min')
+        timeframe : Source data timeframe (e.g., '1min', '5min')
+        target_timeframe : Target timeframe for resampling (e.g., '5min', '15min')
+            Supported: '1min', '5min', '10min', '15min', '20min', '30min', '45min', '60min'
         gap_fill_method : Method for gap filling ('forward', 'interpolate', 'none')
         max_gap_fill_minutes : Maximum gap to fill (in minutes)
         outlier_method : Outlier detection method ('atr', 'zscore', 'iqr', 'all')
         atr_threshold : ATR multiplier for spike detection
         zscore_threshold : Z-score threshold for outlier detection
         iqr_multiplier : IQR multiplier for outlier detection
+        calendar_aware : Whether to use calendar-aware gap handling (skip market closures)
+
+        Raises:
+        -------
+        ValueError : If target_timeframe is not supported
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.timeframe = timeframe
+        self.target_timeframe = target_timeframe
         self.gap_fill_method = gap_fill_method
         self.max_gap_fill_minutes = max_gap_fill_minutes
         self.outlier_method = outlier_method
         self.atr_threshold = atr_threshold
         self.zscore_threshold = zscore_threshold
         self.iqr_multiplier = iqr_multiplier
+        self.calendar_aware = calendar_aware
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Parse timeframe to minutes
+        # Parse source timeframe to minutes
         self.freq_minutes = self._parse_timeframe(timeframe)
+
+        # Validate and parse target timeframe
+        self._validate_target_timeframe(target_timeframe)
+        self.target_freq_minutes = self._parse_timeframe(target_timeframe)
+
+        # Initialize gap handler (dependency injection)
+        self._gap_handler = GapHandler(
+            freq_minutes=self.freq_minutes,
+            gap_fill_method=self.gap_fill_method,
+            max_gap_fill_minutes=self.max_gap_fill_minutes,
+            calendar_aware=self.calendar_aware
+        )
 
         logger.info(f"Initialized DataCleaner")
         logger.info(f"Input dir: {self.input_dir}")
         logger.info(f"Output dir: {self.output_dir}")
-        logger.info(f"Timeframe: {timeframe} ({self.freq_minutes} minutes)")
+        logger.info(f"Source timeframe: {timeframe} ({self.freq_minutes} minutes)")
+        logger.info(f"Target timeframe: {target_timeframe} ({self.target_freq_minutes} minutes)")
+
+    def _validate_target_timeframe(self, target_timeframe: str) -> None:
+        """
+        Validate that target_timeframe is supported.
+
+        Parameters:
+        -----------
+        target_timeframe : str
+            Target timeframe to validate
+
+        Raises:
+        -------
+        ValueError : If target_timeframe is not supported
+        """
+        from config import SUPPORTED_TIMEFRAMES, validate_timeframe
+        validate_timeframe(target_timeframe)
 
     def _parse_timeframe(self, timeframe: str) -> int:
         """Parse timeframe string to minutes."""
@@ -96,6 +141,8 @@ class DataCleaner:
         """
         Detect gaps in time series.
 
+        Delegates to the internal GapHandler for gap detection.
+
         Parameters:
         -----------
         df : Input DataFrame with datetime index
@@ -104,63 +151,13 @@ class DataCleaner:
         --------
         tuple : (DataFrame with gap info, gap report dict)
         """
-        logger.info("Detecting gaps in time series...")
-
-        df = df.copy()
-        df = df.sort_values('datetime').reset_index(drop=True)
-
-        # Calculate time differences
-        df['time_diff'] = df['datetime'].diff()
-
-        # Expected frequency
-        expected_freq = pd.Timedelta(minutes=self.freq_minutes)
-
-        # Identify gaps (where time_diff > expected_freq)
-        gap_mask = df['time_diff'] > expected_freq
-
-        gaps = []
-        if gap_mask.any():
-            gap_indices = np.where(gap_mask)[0]
-
-            for idx in gap_indices:
-                gap_start = df.loc[idx - 1, 'datetime']
-                gap_end = df.loc[idx, 'datetime']
-                gap_duration = df.loc[idx, 'time_diff']
-                missing_bars = int(gap_duration / expected_freq) - 1
-
-                gaps.append({
-                    'gap_start': gap_start,
-                    'gap_end': gap_end,
-                    'duration': str(gap_duration),
-                    'missing_bars': missing_bars
-                })
-
-        # Gap report
-        total_expected_bars = (df['datetime'].max() - df['datetime'].min()) / expected_freq
-        total_actual_bars = len(df)
-        total_missing_bars = int(total_expected_bars - total_actual_bars)
-
-        gap_report = {
-            'total_gaps': len(gaps),
-            'total_missing_bars': total_missing_bars,
-            'expected_bars': int(total_expected_bars),
-            'actual_bars': total_actual_bars,
-            'completeness_pct': (total_actual_bars / total_expected_bars * 100) if total_expected_bars > 0 else 100,
-            'gaps': gaps[:100]  # Limit to first 100 gaps for reporting
-        }
-
-        logger.info(f"Found {len(gaps)} gaps")
-        logger.info(f"Total missing bars: {total_missing_bars:,}")
-        logger.info(f"Completeness: {gap_report['completeness_pct']:.2f}%")
-
-        # Drop temp column
-        df = df.drop('time_diff', axis=1)
-
-        return df, gap_report
+        return self._gap_handler.detect_gaps(df)
 
     def fill_gaps(self, df: pd.DataFrame, max_fill_bars: Optional[int] = None) -> pd.DataFrame:
         """
         Fill gaps in time series.
+
+        Delegates to the internal GapHandler for gap filling.
 
         Parameters:
         -----------
@@ -171,59 +168,7 @@ class DataCleaner:
         --------
         pd.DataFrame : DataFrame with filled gaps
         """
-        if self.gap_fill_method == 'none':
-            logger.info("Gap filling disabled")
-            return df
-
-        logger.info(f"Filling gaps using method: {self.gap_fill_method}")
-
-        df = df.copy()
-        df = df.sort_values('datetime').reset_index(drop=True)
-
-        if max_fill_bars is None:
-            max_fill_bars = max(1, self.max_gap_fill_minutes // self.freq_minutes)
-
-        # Create complete datetime range
-        date_range = pd.date_range(
-            start=df['datetime'].min(),
-            end=df['datetime'].max(),
-            freq=f'{self.freq_minutes}min'
-        )
-
-        # Reindex to complete range
-        df_complete = df.set_index('datetime').reindex(date_range).reset_index()
-        df_complete = df_complete.rename(columns={'index': 'datetime'})
-
-        # Identify which rows were filled
-        filled_mask = df_complete['close'].isna()
-        n_filled = filled_mask.sum()
-
-        if n_filled > 0:
-            logger.info(f"Filling {n_filled:,} missing bars...")
-
-            if self.gap_fill_method == 'forward':
-                # Forward fill with limit
-                df_complete[['open', 'high', 'low', 'close']] = \
-                    df_complete[['open', 'high', 'low', 'close']].ffill(limit=max_fill_bars)
-                df_complete['volume'] = df_complete['volume'].fillna(0)
-
-            elif self.gap_fill_method == 'interpolate':
-                # Linear interpolation
-                df_complete[['open', 'high', 'low', 'close']] = \
-                    df_complete[['open', 'high', 'low', 'close']].interpolate(method='linear', limit=max_fill_bars)
-                df_complete['volume'] = df_complete['volume'].fillna(0)
-
-            # Copy symbol column if exists
-            if 'symbol' in df_complete.columns:
-                df_complete['symbol'] = df_complete['symbol'].ffill()
-
-            # Drop any remaining NaN rows (gaps too large to fill)
-            remaining_na = df_complete['close'].isna().sum()
-            if remaining_na > 0:
-                logger.info(f"Dropping {remaining_na} rows with gaps > {max_fill_bars} bars")
-                df_complete = df_complete.dropna(subset=['close'])
-
-        return df_complete
+        return self._gap_handler.fill_gaps(df, max_fill_bars)
 
     def detect_duplicates(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
         """
@@ -427,6 +372,67 @@ class DataCleaner:
             logger.warning(f"Detected {potential_rolls.sum()} potential contract rolls")
 
         return df, roll_report
+
+    def resample_data(
+        self,
+        df: pd.DataFrame,
+        target_timeframe: Optional[str] = None,
+        include_metadata: bool = True
+    ) -> pd.DataFrame:
+        """
+        Resample data to the target timeframe.
+
+        This method uses the generic resample_ohlcv function to convert data
+        from the source timeframe to the target timeframe. If no target_timeframe
+        is provided, uses the instance's target_timeframe attribute.
+
+        Parameters:
+        -----------
+        df : pd.DataFrame
+            Input DataFrame with OHLCV data
+        target_timeframe : str, optional
+            Target timeframe for resampling. If None, uses self.target_timeframe
+        include_metadata : bool
+            If True, adds 'timeframe' column to output
+
+        Returns:
+        --------
+        pd.DataFrame : Resampled OHLCV data
+
+        Raises:
+        -------
+        ValueError : If target timeframe is not valid or data is empty
+
+        Examples:
+        ---------
+        >>> cleaner = DataCleaner(input_dir, output_dir, target_timeframe='15min')
+        >>> df_15min = cleaner.resample_data(df_1min)
+        >>> df_30min = cleaner.resample_data(df_1min, target_timeframe='30min')
+        """
+        if target_timeframe is None:
+            target_timeframe = self.target_timeframe
+
+        # Skip resampling if source equals target
+        source_minutes = self.freq_minutes
+        target_minutes = self._parse_timeframe(target_timeframe)
+
+        if source_minutes == target_minutes:
+            logger.info(f"Source ({self.timeframe}) equals target ({target_timeframe}), skipping resampling")
+            if include_metadata:
+                df = df.copy()
+                df['timeframe'] = target_timeframe
+            return df
+
+        # Validate target >= source
+        if target_minutes < source_minutes:
+            raise ValueError(
+                f"Cannot downsample from {self.timeframe} ({source_minutes}min) "
+                f"to {target_timeframe} ({target_minutes}min). "
+                f"Target timeframe must be >= source timeframe."
+            )
+
+        # Use the generic resampling function
+        return resample_ohlcv(df, target_timeframe, include_metadata)
 
     def clean_file(self, file_path: Path) -> Tuple[pd.DataFrame, Dict]:
         """

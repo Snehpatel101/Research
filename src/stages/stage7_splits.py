@@ -14,6 +14,10 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+# Sentinel value for invalid labels (e.g., labels near end of dataset where
+# triple barrier cannot complete, or labels filtered out by quality checks)
+INVALID_LABEL_SENTINEL = -99
+
 
 def validate_no_overlap(
     train_idx: np.ndarray,
@@ -96,9 +100,13 @@ def validate_label_distribution(
     val_indices: np.ndarray,
     test_indices: np.ndarray,
     horizons: List[int] = None
-) -> None:
+) -> Dict:
     """
-    Validate label distribution across splits.
+    Validate label distribution across splits, excluding invalid labels.
+
+    Invalid labels (INVALID_LABEL_SENTINEL = -99) are excluded from distribution
+    statistics but tracked separately. A warning is issued if more than 10% of
+    labels in any split are invalid.
 
     Args:
         df: DataFrame with label columns
@@ -106,6 +114,13 @@ def validate_label_distribution(
         val_indices: Validation set indices
         test_indices: Test set indices
         horizons: List of label horizons to check (default: [5, 20])
+
+    Returns:
+        Dict: Distribution statistics per label column per split, including:
+            - counts: valid label value counts
+            - total_valid: number of valid labels
+            - n_invalid: number of invalid labels
+            - invalid_pct: percentage of invalid labels
     """
     if horizons is None:
         horizons = [5, 20]
@@ -116,23 +131,56 @@ def validate_label_distribution(
         'test': test_indices
     }
 
+    distribution = {}
+
     for horizon in horizons:
         label_col = f'label_h{horizon}'
         if label_col not in df.columns:
             continue
 
+        distribution[label_col] = {}
         logger.info(f"\nLabel distribution for horizon {horizon}:")
 
         for split_name, indices in splits.items():
             split_labels = df.iloc[indices][label_col]
-            counts = split_labels.value_counts().sort_index()
-            total = len(split_labels)
 
-            dist_str = ", ".join([
-                f"{label}: {count/total*100:.1f}%"
-                for label, count in counts.items()
-            ])
-            logger.info(f"  {split_name}: {dist_str}")
+            # Filter out invalid labels
+            valid_labels = split_labels[split_labels != INVALID_LABEL_SENTINEL]
+
+            # Count invalid labels
+            n_invalid = (split_labels == INVALID_LABEL_SENTINEL).sum()
+            invalid_pct = n_invalid / len(split_labels) * 100 if len(split_labels) > 0 else 0
+
+            # Warn if high invalid rate (>10%)
+            if invalid_pct > 10:
+                logger.warning(
+                    f"{split_name} split has {invalid_pct:.1f}% invalid labels in {label_col}"
+                )
+
+            # Calculate distribution on valid labels only
+            counts = valid_labels.value_counts().sort_index()
+            total_valid = len(valid_labels)
+
+            # Store distribution data
+            distribution[label_col][split_name] = {
+                'counts': counts.to_dict(),
+                'total_valid': int(total_valid),
+                'n_invalid': int(n_invalid),
+                'invalid_pct': float(invalid_pct)
+            }
+
+            # Log distribution (valid labels only)
+            if total_valid > 0:
+                dist_str = ", ".join([
+                    f"{label}: {count/total_valid*100:.1f}%"
+                    for label, count in counts.items()
+                ])
+                invalid_info = f" (excluded {n_invalid} invalid)" if n_invalid > 0 else ""
+                logger.info(f"  {split_name}: {dist_str}{invalid_info}")
+            else:
+                logger.warning(f"  {split_name}: no valid labels (all {n_invalid} are invalid)")
+
+    return distribution
 
 
 def create_chronological_splits(
@@ -141,7 +189,7 @@ def create_chronological_splits(
     val_ratio: float = 0.15,
     test_ratio: float = 0.15,
     purge_bars: int = 60,
-    embargo_bars: int = 288,
+    embargo_bars: int = 1440,  # 5 days for 5-min data (288 bars/day * 5)
     datetime_col: str = 'datetime'
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict]:
     """
@@ -317,7 +365,7 @@ def create_splits(
     val_ratio: float = 0.15,
     test_ratio: float = 0.15,
     purge_bars: int = 60,
-    embargo_bars: int = 288,
+    embargo_bars: int = 1440,  # 5 days for 5-min data (288 bars/day * 5)
     datetime_col: str = 'datetime'
 ) -> Dict:
     """
@@ -366,9 +414,10 @@ def create_splits(
     )
 
     # Save indices as .npy files
-    train_path = split_dir / "train.npy"
-    val_path = split_dir / "val.npy"
-    test_path = split_dir / "test.npy"
+    # Filenames must match what downstream stages expect (stage7_5_scaling, baseline_backtest)
+    train_path = split_dir / "train_indices.npy"
+    val_path = split_dir / "val_indices.npy"
+    test_path = split_dir / "test_indices.npy"
     config_path = split_dir / "split_config.json"
 
     np.save(train_path, train_idx)
@@ -401,17 +450,32 @@ def create_splits(
 
 
 def main():
-    """Run splits creation for the default configuration."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-
-    from config import FINAL_DATA_DIR, SPLITS_DIR, TRAIN_RATIO, VAL_RATIO, TEST_RATIO, PURGE_BARS, EMBARGO_BARS
+    """Run splits creation for the default configuration with auto-scaled purge/embargo."""
+    from src.config import (
+        FINAL_DATA_DIR,
+        SPLITS_DIR,
+        TRAIN_RATIO,
+        VAL_RATIO,
+        TEST_RATIO,
+        PURGE_BARS,
+        EMBARGO_BARS,
+        HORIZONS,
+        auto_scale_purge_embargo,
+    )
 
     data_path = FINAL_DATA_DIR / "combined_final_labeled.parquet"
 
     if not data_path.exists():
         logger.error(f"Data file not found: {data_path}")
         return
+
+    # Auto-scale purge and embargo based on horizons
+    # This ensures sufficient buffer for the configured horizon labels
+    purge_bars, embargo_bars = auto_scale_purge_embargo(HORIZONS)
+
+    logger.info(f"Auto-scaled purge/embargo for horizons {HORIZONS}:")
+    logger.info(f"  Purge bars: {purge_bars} (was {PURGE_BARS})")
+    logger.info(f"  Embargo bars: {embargo_bars} (was {EMBARGO_BARS})")
 
     metadata = create_splits(
         data_path=data_path,
@@ -420,8 +484,8 @@ def main():
         train_ratio=TRAIN_RATIO,
         val_ratio=VAL_RATIO,
         test_ratio=TEST_RATIO,
-        purge_bars=PURGE_BARS,
-        embargo_bars=EMBARGO_BARS
+        purge_bars=purge_bars,
+        embargo_bars=embargo_bars
     )
 
     logger.info(f"\nRun ID: {metadata['run_id']}")

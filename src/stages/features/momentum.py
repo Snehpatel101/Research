@@ -8,7 +8,7 @@ indicators including RSI, MACD, Stochastic, Williams %R, ROC, CCI, and MFI.
 import pandas as pd
 import numpy as np
 import logging
-from typing import Dict
+from typing import Dict, List, Optional
 
 from .numba_functions import (
     calculate_rsi_numba,
@@ -19,11 +19,20 @@ from .numba_functions import (
 logger = logging.getLogger(__name__)
 
 
-def add_rsi(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    """Safely divide, returning NaN when denominator is zero."""
+    return numerator / denominator.replace(0, np.nan)
+
+
+def add_rsi(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    period: int = 14
+) -> pd.DataFrame:
     """
     Add RSI features.
 
-    Calculates 14-period RSI with overbought/oversold flags.
+    Calculates RSI with overbought/oversold flags.
 
     Parameters
     ----------
@@ -31,33 +40,42 @@ def add_rsi(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         DataFrame with 'close' column
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    period : int, default 14
+        RSI period
 
     Returns
     -------
     pd.DataFrame
         DataFrame with RSI features added
     """
-    logger.info("Adding RSI features...")
+    logger.info(f"Adding RSI features with period: {period}")
 
-    df['rsi_14'] = calculate_rsi_numba(df['close'].values, 14)
+    # ANTI-LOOKAHEAD: shift(1) ensures RSI at bar[t] uses data up to bar[t-1]
+    col_name = f'rsi_{period}'
+    df[col_name] = pd.Series(calculate_rsi_numba(df['close'].values, period)).shift(1).values
 
-    # Overbought/Oversold flags
-    # ANTI-LOOKAHEAD: Shift flags forward 1 bar so flag at bar[t] is based on bar[t-1] RSI
-    df['rsi_overbought'] = (df['rsi_14'] > 70).astype(int).shift(1)
-    df['rsi_oversold'] = (df['rsi_14'] < 30).astype(int).shift(1)
+    # Overbought/Oversold flags - already shifted via RSI column
+    df['rsi_overbought'] = (df[col_name] > 70).astype(int)
+    df['rsi_oversold'] = (df[col_name] < 30).astype(int)
 
-    feature_metadata['rsi_14'] = "14-period Relative Strength Index"
-    feature_metadata['rsi_overbought'] = "RSI overbought flag (>70)"
-    feature_metadata['rsi_oversold'] = "RSI oversold flag (<30)"
+    feature_metadata[col_name] = f"{period}-period Relative Strength Index (lagged)"
+    feature_metadata['rsi_overbought'] = "RSI overbought flag (>70, lagged)"
+    feature_metadata['rsi_oversold'] = "RSI oversold flag (<30, lagged)"
 
     return df
 
 
-def add_macd(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_macd(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    fast_period: int = 12,
+    slow_period: int = 26,
+    signal_period: int = 9
+) -> pd.DataFrame:
     """
     Add MACD features.
 
-    Calculates MACD line (12,26), signal line (9), histogram, and crossover signals.
+    Calculates MACD line, signal line, histogram, and crossover signals.
 
     Parameters
     ----------
@@ -65,43 +83,55 @@ def add_macd(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame
         DataFrame with 'close' column
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    fast_period : int, default 12
+        Fast EMA period
+    slow_period : int, default 26
+        Slow EMA period
+    signal_period : int, default 9
+        Signal line EMA period
 
     Returns
     -------
     pd.DataFrame
         DataFrame with MACD features added
     """
-    logger.info("Adding MACD features...")
+    logger.info(f"Adding MACD features ({fast_period},{slow_period},{signal_period})...")
 
+    # ANTI-LOOKAHEAD: All MACD components shifted by 1 bar
     # MACD line
-    ema_12 = calculate_ema_numba(df['close'].values, 12)
-    ema_26 = calculate_ema_numba(df['close'].values, 26)
-    df['macd_line'] = ema_12 - ema_26
+    ema_fast = calculate_ema_numba(df['close'].values, fast_period)
+    ema_slow = calculate_ema_numba(df['close'].values, slow_period)
+    macd_line_raw = pd.Series(ema_fast - ema_slow)
+    df['macd_line'] = macd_line_raw.shift(1).values
 
-    # Signal line
-    df['macd_signal'] = calculate_ema_numba(df['macd_line'].values, 9)
+    # Signal line (computed on raw, then shifted)
+    macd_signal_raw = pd.Series(calculate_ema_numba(macd_line_raw.values, signal_period))
+    df['macd_signal'] = macd_signal_raw.shift(1).values
 
     # MACD histogram
     df['macd_hist'] = df['macd_line'] - df['macd_signal']
 
-    # MACD crossovers
-    # ANTI-LOOKAHEAD: Shift signals forward 1 bar so crossover at bar[t] is based on
-    # comparison between bar[t-1] and bar[t-2], making it available before bar[t] close
+    # MACD crossovers - compare lagged values (now at t-1 vs t-2 in original terms)
     df['macd_cross_up'] = ((df['macd_line'] > df['macd_signal']) &
-                           (df['macd_line'].shift(1) <= df['macd_signal'].shift(1))).astype(int).shift(1)
+                           (df['macd_line'].shift(1) <= df['macd_signal'].shift(1))).astype(int)
     df['macd_cross_down'] = ((df['macd_line'] < df['macd_signal']) &
-                             (df['macd_line'].shift(1) >= df['macd_signal'].shift(1))).astype(int).shift(1)
+                             (df['macd_line'].shift(1) >= df['macd_signal'].shift(1))).astype(int)
 
-    feature_metadata['macd_line'] = "MACD line (12,26)"
-    feature_metadata['macd_signal'] = "MACD signal line (9)"
-    feature_metadata['macd_hist'] = "MACD histogram"
-    feature_metadata['macd_cross_up'] = "MACD bullish crossover"
-    feature_metadata['macd_cross_down'] = "MACD bearish crossover"
+    feature_metadata['macd_line'] = f"MACD line ({fast_period},{slow_period}, lagged)"
+    feature_metadata['macd_signal'] = f"MACD signal line ({signal_period}, lagged)"
+    feature_metadata['macd_hist'] = "MACD histogram (lagged)"
+    feature_metadata['macd_cross_up'] = "MACD bullish crossover (lagged)"
+    feature_metadata['macd_cross_down'] = "MACD bearish crossover (lagged)"
 
     return df
 
 
-def add_stochastic(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_stochastic(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    k_period: int = 14,
+    d_period: int = 3
+) -> pd.DataFrame:
     """
     Add Stochastic Oscillator features.
 
@@ -113,39 +143,47 @@ def add_stochastic(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.Dat
         DataFrame with OHLC columns
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    k_period : int, default 14
+        %K period
+    d_period : int, default 3
+        %D smoothing period
 
     Returns
     -------
     pd.DataFrame
         DataFrame with Stochastic features added
     """
-    logger.info("Adding Stochastic features...")
+    logger.info(f"Adding Stochastic features ({k_period},{d_period})...")
 
     k, d = calculate_stochastic_numba(
         df['high'].values,
         df['low'].values,
         df['close'].values,
-        k_period=14,
-        d_period=3
+        k_period=k_period,
+        d_period=d_period
     )
 
-    df['stoch_k'] = k
-    df['stoch_d'] = d
+    # ANTI-LOOKAHEAD: shift(1) ensures stochastic at bar[t] uses data up to bar[t-1]
+    df['stoch_k'] = pd.Series(k).shift(1).values
+    df['stoch_d'] = pd.Series(d).shift(1).values
 
-    # Overbought/Oversold
-    # ANTI-LOOKAHEAD: Shift flags forward 1 bar so flag at bar[t] is based on bar[t-1] stochastic
-    df['stoch_overbought'] = (df['stoch_k'] > 80).astype(int).shift(1)
-    df['stoch_oversold'] = (df['stoch_k'] < 20).astype(int).shift(1)
+    # Overbought/Oversold - already shifted via stoch_k
+    df['stoch_overbought'] = (df['stoch_k'] > 80).astype(int)
+    df['stoch_oversold'] = (df['stoch_k'] < 20).astype(int)
 
-    feature_metadata['stoch_k'] = "Stochastic %K (14,3)"
-    feature_metadata['stoch_d'] = "Stochastic %D (14,3)"
-    feature_metadata['stoch_overbought'] = "Stochastic overbought flag (>80)"
-    feature_metadata['stoch_oversold'] = "Stochastic oversold flag (<20)"
+    feature_metadata['stoch_k'] = f"Stochastic %K ({k_period},{d_period}, lagged)"
+    feature_metadata['stoch_d'] = f"Stochastic %D ({k_period},{d_period}, lagged)"
+    feature_metadata['stoch_overbought'] = "Stochastic overbought flag (>80, lagged)"
+    feature_metadata['stoch_oversold'] = "Stochastic oversold flag (<20, lagged)"
 
     return df
 
 
-def add_williams_r(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_williams_r(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    period: int = 14
+) -> pd.DataFrame:
     """
     Add Williams %R indicator.
 
@@ -155,26 +193,34 @@ def add_williams_r(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.Dat
         DataFrame with OHLC columns
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    period : int, default 14
+        Williams %R period
 
     Returns
     -------
     pd.DataFrame
         DataFrame with Williams %R added
     """
-    logger.info("Adding Williams %R...")
+    logger.info(f"Adding Williams %R with period: {period}")
 
-    period = 14
     high_max = df['high'].rolling(window=period).max()
     low_min = df['low'].rolling(window=period).min()
 
-    df['williams_r'] = -100 * (high_max - df['close']) / (high_max - low_min)
+    # Safe division: (high_max - low_min) could be 0 when price is flat
+    # ANTI-LOOKAHEAD: shift(1) ensures Williams %R at bar[t] uses data up to bar[t-1]
+    williams_r_raw = -100 * _safe_divide(high_max - df['close'], high_max - low_min)
+    df['williams_r'] = williams_r_raw.shift(1)
 
-    feature_metadata['williams_r'] = "Williams %R (14)"
+    feature_metadata['williams_r'] = f"Williams %R ({period}, lagged)"
 
     return df
 
 
-def add_roc(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_roc(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    periods: Optional[List[int]] = None
+) -> pd.DataFrame:
     """
     Add Rate of Change features.
 
@@ -186,26 +232,35 @@ def add_roc(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         DataFrame with 'close' column
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    periods : List[int], optional
+        List of ROC periods. Default: [5, 10, 20]
 
     Returns
     -------
     pd.DataFrame
         DataFrame with ROC features added
     """
-    logger.info("Adding ROC features...")
+    if periods is None:
+        periods = [5, 10, 20]
 
-    periods = [5, 10, 20]
+    logger.info(f"Adding ROC features with periods: {periods}")
 
     for period in periods:
-        df[f'roc_{period}'] = ((df['close'] - df['close'].shift(period)) /
-                               df['close'].shift(period) * 100)
+        # ANTI-LOOKAHEAD: shift(1) ensures ROC at bar[t] uses close up to bar[t-1]
+        roc_raw = ((df['close'] - df['close'].shift(period)) /
+                   df['close'].shift(period) * 100)
+        df[f'roc_{period}'] = roc_raw.shift(1)
 
-        feature_metadata[f'roc_{period}'] = f"Rate of Change ({period})"
+        feature_metadata[f'roc_{period}'] = f"Rate of Change ({period}, lagged)"
 
     return df
 
 
-def add_cci(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_cci(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    period: int = 20
+) -> pd.DataFrame:
     """
     Add Commodity Channel Index.
 
@@ -215,27 +270,36 @@ def add_cci(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         DataFrame with OHLC columns
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    period : int, default 20
+        CCI period
 
     Returns
     -------
     pd.DataFrame
         DataFrame with CCI added
     """
-    logger.info("Adding CCI...")
+    logger.info(f"Adding CCI with period: {period}")
 
-    period = 20
     tp = (df['high'] + df['low'] + df['close']) / 3
     sma_tp = tp.rolling(window=period).mean()
     mad = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
 
-    df['cci_20'] = (tp - sma_tp) / (0.015 * mad)
+    # Safe division: mad could be 0 when price is constant
+    # ANTI-LOOKAHEAD: shift(1) ensures CCI at bar[t] uses data up to bar[t-1]
+    cci_raw = _safe_divide(tp - sma_tp, 0.015 * mad)
+    col_name = f'cci_{period}'
+    df[col_name] = cci_raw.shift(1)
 
-    feature_metadata['cci_20'] = "Commodity Channel Index (20)"
+    feature_metadata[col_name] = f"Commodity Channel Index ({period}, lagged)"
 
     return df
 
 
-def add_mfi(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_mfi(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    period: int = 14
+) -> pd.DataFrame:
     """
     Add Money Flow Index (if volume available).
 
@@ -245,6 +309,8 @@ def add_mfi(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         DataFrame with OHLC and volume columns
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    period : int, default 14
+        MFI period
 
     Returns
     -------
@@ -255,19 +321,22 @@ def add_mfi(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         logger.info("Skipping MFI (no volume data)")
         return df
 
-    logger.info("Adding MFI...")
+    logger.info(f"Adding MFI with period: {period}")
 
-    period = 14
     tp = (df['high'] + df['low'] + df['close']) / 3
     mf = tp * df['volume']
 
     mf_pos = mf.where(tp > tp.shift(1), 0).rolling(window=period).sum()
     mf_neg = mf.where(tp < tp.shift(1), 0).rolling(window=period).sum()
 
-    mfr = mf_pos / mf_neg
-    df['mfi_14'] = 100 - (100 / (1 + mfr))
+    # Safe division: mf_neg could be 0 when no down periods
+    # ANTI-LOOKAHEAD: shift(1) ensures MFI at bar[t] uses data up to bar[t-1]
+    mfr = _safe_divide(mf_pos, mf_neg)
+    mfi_raw = 100 - (100 / (1 + mfr))
+    col_name = f'mfi_{period}'
+    df[col_name] = mfi_raw.shift(1)
 
-    feature_metadata['mfi_14'] = "Money Flow Index (14)"
+    feature_metadata[col_name] = f"Money Flow Index ({period}, lagged)"
 
     return df
 

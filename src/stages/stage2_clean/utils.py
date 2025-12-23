@@ -168,9 +168,123 @@ def fill_gaps_simple(df: pd.DataFrame, max_gap_minutes: int = 60) -> pd.DataFram
     return df
 
 
+def resample_ohlcv(
+    df: pd.DataFrame,
+    target_timeframe: str = '5min',
+    include_metadata: bool = True
+) -> pd.DataFrame:
+    """
+    Resample OHLCV data to a target timeframe.
+
+    This function resamples 1-minute (or any lower resolution) OHLCV data
+    to a target timeframe using proper aggregation rules:
+    - Open: first value in the period
+    - High: maximum value in the period
+    - Low: minimum value in the period
+    - Close: last value in the period
+    - Volume: sum of values in the period
+
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Input DataFrame with OHLCV data. Must have columns:
+        'datetime', 'open', 'high', 'low', 'close', 'volume'
+    target_timeframe : str
+        Target timeframe for resampling. Supported values:
+        '1min', '5min', '10min', '15min', '20min', '30min', '45min', '60min'
+    include_metadata : bool
+        If True, adds a 'timeframe' column to the output DataFrame
+
+    Returns:
+    --------
+    pd.DataFrame : Resampled OHLCV data with optional timeframe metadata
+
+    Raises:
+    -------
+    ValueError : If target_timeframe is not supported or required columns are missing
+
+    Examples:
+    ---------
+    >>> df_5min = resample_ohlcv(df_1min, '5min')
+    >>> df_15min = resample_ohlcv(df_1min, '15min')
+    >>> df_30min = resample_ohlcv(df_5min, '30min')  # Can resample from 5min to 30min
+    """
+    # Import validation function from config
+    from config import (
+        SUPPORTED_TIMEFRAMES,
+        validate_timeframe,
+        parse_timeframe_to_minutes,
+        get_timeframe_metadata
+    )
+
+    # Validate target timeframe
+    validate_timeframe(target_timeframe)
+
+    # Validate required columns
+    required_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Missing required columns: {missing_columns}. "
+            f"Expected columns: {required_columns}"
+        )
+
+    if len(df) == 0:
+        raise ValueError("Input DataFrame is empty")
+
+    # Get target minutes for resampling
+    target_minutes = parse_timeframe_to_minutes(target_timeframe)
+
+    # Build pandas frequency string
+    freq = f'{target_minutes}min' if target_minutes < 60 else f'{target_minutes // 60}h'
+
+    logger.info(f"Resampling to {target_timeframe} ({target_minutes}-minute bars)...")
+
+    df = df.copy()
+
+    # Handle symbol column if present - preserve it
+    has_symbol = 'symbol' in df.columns
+    symbol_value = df['symbol'].iloc[0] if has_symbol else None
+
+    df = df.set_index('datetime')
+
+    # Define OHLCV aggregation rules
+    agg_rules = {
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum'
+    }
+
+    # Perform resampling
+    resampled = df.resample(freq).agg(agg_rules)
+
+    # Drop rows where we couldn't compute all values (e.g., no data in period)
+    resampled = resampled.dropna()
+
+    # Reset index to get datetime as a column
+    resampled = resampled.reset_index()
+
+    # Add metadata if requested
+    if include_metadata:
+        resampled['timeframe'] = target_timeframe
+
+    # Restore symbol column if it was present
+    if has_symbol and symbol_value is not None:
+        resampled['symbol'] = symbol_value
+
+    logger.info(f"Resampled to {len(resampled):,} {target_timeframe} bars")
+
+    return resampled
+
+
 def resample_to_5min(df: pd.DataFrame) -> pd.DataFrame:
     """
     Resample 1-minute data to 5-minute bars.
+
+    This is a convenience wrapper around resample_ohlcv() for backward compatibility.
+    New code should use resample_ohlcv() directly for configurable timeframes.
 
     Parameters:
     -----------
@@ -179,21 +293,57 @@ def resample_to_5min(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
     --------
     pd.DataFrame : Resampled 5-minute bar data
+
+    See Also:
+    ---------
+    resample_ohlcv : Generic resampling function with configurable timeframe
     """
-    logger.info("Resampling to 5-minute bars...")
+    # Use the generic function, but exclude metadata for backward compatibility
+    result = resample_ohlcv(df, target_timeframe='5min', include_metadata=False)
+    return result
 
-    df = df.copy()
-    df = df.set_index('datetime')
 
-    resampled = df.resample('5min').agg({
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum'
-    }).dropna()
+def get_resampling_info(source_timeframe: str, target_timeframe: str) -> dict:
+    """
+    Get information about a resampling operation.
 
-    resampled = resampled.reset_index()
+    Parameters:
+    -----------
+    source_timeframe : str
+        Source timeframe (e.g., '1min', '5min')
+    target_timeframe : str
+        Target timeframe (e.g., '15min', '30min')
 
-    logger.info(f"Resampled to {len(resampled):,} 5-min bars")
-    return resampled
+    Returns:
+    --------
+    dict : Information including bars_per_target, scale_factor, etc.
+
+    Raises:
+    -------
+    ValueError : If target_timeframe is smaller than source_timeframe
+    """
+    from config import parse_timeframe_to_minutes, validate_timeframe
+
+    validate_timeframe(source_timeframe)
+    validate_timeframe(target_timeframe)
+
+    source_minutes = parse_timeframe_to_minutes(source_timeframe)
+    target_minutes = parse_timeframe_to_minutes(target_timeframe)
+
+    if target_minutes < source_minutes:
+        raise ValueError(
+            f"Cannot resample from {source_timeframe} to {target_timeframe}. "
+            f"Target timeframe must be >= source timeframe."
+        )
+
+    bars_per_target = target_minutes // source_minutes
+
+    return {
+        'source_timeframe': source_timeframe,
+        'target_timeframe': target_timeframe,
+        'source_minutes': source_minutes,
+        'target_minutes': target_minutes,
+        'bars_per_target': bars_per_target,
+        'scale_factor': target_minutes / source_minutes,
+        'description': f'{bars_per_target} {source_timeframe} bars = 1 {target_timeframe} bar'
+    }

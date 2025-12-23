@@ -1,3 +1,23 @@
+"""
+Unit tests for Pipeline State Persistence.
+
+Run with: pytest tests/phase_1_tests/pipeline/test_pipeline_state.py -v
+"""
+
+import sys
+import json
+from pathlib import Path
+from datetime import datetime
+
+import pytest
+
+# Add src to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+from pipeline.runner import PipelineRunner
+from pipeline.utils import StageResult, StageStatus
+
 
 class TestStatePersistence:
     """Tests for state save/load functionality."""

@@ -5,15 +5,10 @@ This test verifies that the fixes work correctly in realistic trading scenarios.
 """
 import numpy as np
 import pytest
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src' / 'stages'))
-
-from stage5_ga_optimize import calculate_fitness, evaluate_individual
-from stage4_labeling import triple_barrier_numba
-from config import TRANSACTION_COSTS, TICK_VALUES
+from src.stages.ga_optimize.fitness import calculate_fitness, evaluate_individual
+from src.stages.stage4_labeling import triple_barrier_numba
+from src.config import TRANSACTION_COSTS, TICK_VALUES
 
 
 class TestIntegration:

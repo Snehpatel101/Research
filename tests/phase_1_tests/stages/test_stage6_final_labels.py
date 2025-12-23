@@ -39,9 +39,10 @@ class TestStage6FinalLabeler:
 
         mae = np.zeros(n, dtype=np.float32)
         mfe = np.ones(n, dtype=np.float32) * 0.01
+        labels = np.ones(n, dtype=np.int8)  # All long labels
 
-        fast_scores = compute_quality_scores(fast_bars, mae, mfe, horizon)
-        slow_scores = compute_quality_scores(slow_bars, mae, mfe, horizon)
+        fast_scores, _, _ = compute_quality_scores(fast_bars, mae, mfe, labels, horizon)
+        slow_scores, _, _ = compute_quality_scores(slow_bars, mae, mfe, labels, horizon)
 
         # Fast hits should have higher speed component
         assert fast_scores.mean() > slow_scores.mean(), \
@@ -53,6 +54,7 @@ class TestStage6FinalLabeler:
         horizon = 5
 
         bars = np.ones(n, dtype=np.int32) * 5
+        labels = np.ones(n, dtype=np.int8)  # All long labels
 
         # Create varied MFE so normalization doesn't collapse
         np.random.seed(42)
@@ -63,8 +65,8 @@ class TestStage6FinalLabeler:
         # High adverse excursion (bad) - range of larger values
         high_mae = -np.abs(np.random.randn(n) * 0.05 + 0.03).astype(np.float32)
 
-        low_mae_scores = compute_quality_scores(bars, low_mae, mfe, horizon)
-        high_mae_scores = compute_quality_scores(bars, high_mae, mfe, horizon)
+        low_mae_scores, _, _ = compute_quality_scores(bars, low_mae, mfe, labels, horizon)
+        high_mae_scores, _, _ = compute_quality_scores(bars, high_mae, mfe, labels, horizon)
 
         # Lower (less negative) MAE should have higher quality
         # Note: MAE component is 40% of total score
@@ -77,6 +79,7 @@ class TestStage6FinalLabeler:
         horizon = 5
 
         bars = np.ones(n, dtype=np.int32) * 5
+        labels = np.ones(n, dtype=np.int8)  # All long labels
 
         # Create varied MAE so normalization doesn't collapse
         np.random.seed(42)
@@ -87,8 +90,8 @@ class TestStage6FinalLabeler:
         # Low favorable excursion (not as good) - range of low values
         low_mfe = np.abs(np.random.randn(n) * 0.005).astype(np.float32)
 
-        high_mfe_scores = compute_quality_scores(bars, mae, high_mfe, horizon)
-        low_mfe_scores = compute_quality_scores(bars, mae, low_mfe, horizon)
+        high_mfe_scores, _, _ = compute_quality_scores(bars, mae, high_mfe, labels, horizon)
+        low_mfe_scores, _, _ = compute_quality_scores(bars, mae, low_mfe, labels, horizon)
 
         # Higher MFE should have higher quality
         # Note: MFE component is 30% of total score
@@ -104,8 +107,9 @@ class TestStage6FinalLabeler:
         bars = np.random.randint(1, 20, n).astype(np.int32)
         mae = -np.abs(np.random.randn(n) * 0.02).astype(np.float32)
         mfe = np.abs(np.random.randn(n) * 0.03).astype(np.float32)
+        labels = np.random.choice([-1, 0, 1], n).astype(np.int8)
 
-        scores = compute_quality_scores(bars, mae, mfe, horizon)
+        scores, _, _ = compute_quality_scores(bars, mae, mfe, labels, horizon)
 
         # Scores should be bounded
         assert np.all(scores >= 0), "Scores should be non-negative"
@@ -188,7 +192,8 @@ class TestStage6FinalLabeler:
         result = apply_optimized_labels(df, horizon, best_params)
 
         labels = result[f'label_h{horizon}'].values
-        valid_labels = {-1, 0, 1}
+        # -99 is the sentinel value for invalid/unlabeled bars (end of dataset)
+        valid_labels = {-1, 0, 1, -99}
 
         assert set(np.unique(labels)).issubset(valid_labels), \
             f"Invalid label values: {np.unique(labels)}"

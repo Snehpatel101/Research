@@ -7,15 +7,9 @@ Tests for:
 """
 import numpy as np
 import pytest
-import sys
-from pathlib import Path
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src' / 'stages'))
-
-from stage5_ga_optimize import calculate_fitness
-from config import TRANSACTION_COSTS, TICK_VALUES
+from src.stages.ga_optimize.fitness import calculate_fitness
+from src.config import TRANSACTION_COSTS, TICK_VALUES
 
 
 class TestShortRiskCalculation:

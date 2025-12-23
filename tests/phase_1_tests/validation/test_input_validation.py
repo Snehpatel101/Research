@@ -594,9 +594,11 @@ class TestGetBarrierParams:
 
         params = get_barrier_params('UNKNOWN', 999)
 
-        # Ultimate fallback: symmetric barriers with max_bars = horizon * 3
-        assert params['k_up'] == 1.0
-        assert params['k_down'] == 1.0
+        # Ultimate fallback: symmetric barriers with k scaled by horizon
+        # k_base = 1.0 + (horizon / 20.0) * 1.5
+        expected_k = round(1.0 + (999 / 20.0) * 1.5, 2)  # ≈ 75.93
+        assert params['k_up'] == expected_k
+        assert params['k_down'] == expected_k
         assert params['max_bars'] == 999 * 3
 
 

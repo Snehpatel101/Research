@@ -1,188 +1,71 @@
 """
-Stage 4: Triple-Barrier Labeling with Numba Optimization
-Generates initial labels using triple barrier method with ATR-based dynamic barriers
+Stage 4: Labeling with Pluggable Strategies
 
-CRITICAL FIX (2024-12): ASYMMETRIC BARRIERS TO CORRECT LONG BIAS
-Previous symmetric barriers (k_up = k_down) in a historically bullish market
-produced 87-91% long signals. New asymmetric barriers (k_up > k_down) make the
-lower barrier easier to hit, targeting ~50/50 long/short distribution.
+This module provides the stage 4 labeling pipeline with support for multiple
+labeling strategies. The default is triple-barrier labeling with ATR-based
+dynamic barriers, but other strategies can be used via the labeling module.
+
+REFACTORED (2025-12): Strategy pattern for pluggable labelers
+The labeling logic has been moved to src/stages/labeling/ with:
+- Base LabelingStrategy ABC
+- TripleBarrierLabeler (default)
+- DirectionalLabeler
+- ThresholdLabeler
+- RegressionLabeler
+
+For backward compatibility, this module re-exports the core functions
+from the labeling module.
 """
-import pandas as pd
-import numpy as np
-import numba as nb
-from pathlib import Path
+
 import logging
-from typing import Dict, List, Tuple, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 from tqdm import tqdm
 
-# Configure logging - use NullHandler to avoid duplicate logs when imported as module
+# Configure logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+# Import from the labeling module
+from .labeling import (
+    LabelingResult,
+    LabelingStrategy,
+    LabelingType,
+    ThresholdLabeler,
+    TripleBarrierLabeler,
+    get_labeler,
+    triple_barrier_numba,
+)
 
 # =============================================================================
 # BARRIER CONFIGURATION - IMPORTED FROM CENTRAL CONFIG
 # =============================================================================
-# All barrier parameters are now defined in src/config.py as the single source of truth.
-# This ensures consistency across all pipeline stages and eliminates configuration drift.
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import (
+from src.config import (
     BARRIER_PARAMS,
     BARRIER_PARAMS_DEFAULT,
     PERCENTAGE_BARRIER_PARAMS,
-    get_barrier_params
+    get_barrier_params,
 )
 logger.info("Loaded barrier parameters from config.py (single source of truth)")
 
 
-@nb.jit(nopython=True, cache=True)
-def triple_barrier_numba(
-    close: np.ndarray,
-    high: np.ndarray,
-    low: np.ndarray,
-    open_prices: np.ndarray,
-    atr: np.ndarray,
-    k_up: float,
-    k_down: float,
-    max_bars: int
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Numba-optimized triple barrier labeling.
-
-    Parameters:
-    -----------
-    close : array of close prices
-    high : array of high prices
-    low : array of low prices
-    open_prices : array of open prices (used to resolve simultaneous barrier hits)
-    atr : array of ATR values
-    k_up : profit barrier multiplier (e.g., 2.0 means 2*ATR above entry)
-    k_down : stop barrier multiplier (e.g., 1.0 means 1*ATR below entry)
-    max_bars : maximum bars to hold before timeout
-
-    Returns:
-    --------
-    labels : +1 (long win), -1 (short loss), 0 (timeout)
-    bars_to_hit : number of bars until barrier was hit
-    mae : maximum adverse excursion (as % of entry price)
-    mfe : maximum favorable excursion (as % of entry price)
-    touch_type : 1 (upper), -1 (lower), 0 (timeout)
-
-    Note:
-    -----
-    When both upper and lower barriers are hit on the same bar, we use distance
-    from the bar's open price to determine which barrier was likely hit first.
-    This follows Lopez de Prado's methodology and eliminates long bias from
-    always checking upper barrier first.
-    """
-    n = len(close)
-    labels = np.zeros(n, dtype=np.int8)
-    bars_to_hit = np.zeros(n, dtype=np.int32)
-    mae = np.zeros(n, dtype=np.float32)
-    mfe = np.zeros(n, dtype=np.float32)
-    touch_type = np.zeros(n, dtype=np.int8)
-
-    for i in range(n - 1):
-        entry_price = close[i]
-        entry_atr = atr[i]
-
-        # Skip if ATR is invalid
-        if np.isnan(entry_atr) or entry_atr <= 0:
-            labels[i] = 0
-            bars_to_hit[i] = max_bars
-            continue
-
-        # Define barriers
-        upper_barrier = entry_price + k_up * entry_atr
-        lower_barrier = entry_price - k_down * entry_atr
-
-        # Track excursions
-        max_adverse = 0.0
-        max_favorable = 0.0
-
-        # Scan forward
-        hit = False
-        for j in range(1, min(max_bars + 1, n - i)):
-            idx = i + j
-            bar_high = high[idx]
-            bar_low = low[idx]
-            bar_open = open_prices[idx]
-
-            # Update excursions
-            # For long position perspective
-            upside = (bar_high - entry_price) / entry_price
-            downside = (bar_low - entry_price) / entry_price
-
-            if upside > max_favorable:
-                max_favorable = upside
-            if downside < max_adverse:
-                max_adverse = downside
-
-            # Check barrier hits
-            upper_hit = bar_high >= upper_barrier
-            lower_hit = bar_low <= lower_barrier
-
-            if upper_hit and lower_hit:
-                # BOTH barriers hit on same bar - determine which was hit first
-                # Use distance from bar open as proxy for which barrier hit first
-                # The barrier closer to the open price was likely hit first
-                dist_to_upper = abs(bar_open - upper_barrier)
-                dist_to_lower = abs(bar_open - lower_barrier)
-
-                if dist_to_upper <= dist_to_lower:
-                    # Upper barrier was closer to open, likely hit first
-                    labels[i] = 1
-                    touch_type[i] = 1
-                else:
-                    # Lower barrier was closer to open, likely hit first
-                    labels[i] = -1
-                    touch_type[i] = -1
-                bars_to_hit[i] = j
-                hit = True
-                break
-            elif upper_hit:
-                # Only upper barrier hit (profit for long)
-                labels[i] = 1
-                bars_to_hit[i] = j
-                touch_type[i] = 1
-                hit = True
-                break
-            elif lower_hit:
-                # Only lower barrier hit (stop for long)
-                labels[i] = -1
-                bars_to_hit[i] = j
-                touch_type[i] = -1
-                hit = True
-                break
-
-        # Timeout case
-        if not hit:
-            labels[i] = 0
-            bars_to_hit[i] = max_bars
-            touch_type[i] = 0
-
-        mae[i] = max_adverse
-        mfe[i] = max_favorable
-
-    # CRITICAL FIX (2025-12-21): Last max_bars samples should be excluded entirely
-    # to prevent edge case leakage. Previously, we labeled the last bar as timeout
-    # (label=0, bars_to_hit=0), which taught the model "end of data = neutral".
-    # This creates spurious predictions near split boundaries.
-    #
-    # FIX: Set last max_bars labels to a sentinel value (-99) that will be filtered
-    # out by the caller. This ensures these samples are excluded from training.
-    # Note: We still process i in range(n-1) above, so labels[n-1] already exists.
-    # We mark the last max_bars samples as invalid.
-    for i in range(max(0, n - max_bars), n):
-        labels[i] = -99  # Sentinel: invalid label (to be removed)
-        bars_to_hit[i] = 0
-        mae[i] = 0.0
-        mfe[i] = 0.0
-        touch_type[i] = 0
-
-    return labels, bars_to_hit, mae, mfe, touch_type
+# Re-export for backward compatibility
+__all__ = [
+    # Legacy API
+    'triple_barrier_numba',
+    'apply_triple_barrier',
+    'process_symbol_labeling',
+    'main',
+    # New API
+    'LabelingType',
+    'LabelingStrategy',
+    'LabelingResult',
+    'TripleBarrierLabeler',
+    'ThresholdLabeler',
+    'get_labeler',
+]
 
 
 def apply_triple_barrier(
@@ -199,66 +82,63 @@ def apply_triple_barrier(
     """
     Apply triple barrier labeling to a dataframe.
 
-    Parameters:
-    -----------
-    df : DataFrame with OHLCV data and ATR
-    horizon : horizon identifier (e.g., 1, 5, 20)
-    k_up : profit barrier multiplier (ATR-based). If None, uses BARRIER_PARAMS
-    k_down : stop barrier multiplier (ATR-based). If None, uses BARRIER_PARAMS
-    max_bars : maximum bars. If None, uses BARRIER_PARAMS
-    atr_column : column name for ATR values
-    use_percentage : if True, use percentage barriers instead of ATR
-    pct_up : percentage for upper barrier (e.g., 0.002 = 0.2%)
-    pct_down : percentage for lower barrier
+    This is a wrapper around the TripleBarrierLabeler for backward compatibility.
 
-    Returns:
-    --------
-    df : DataFrame with additional columns:
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with OHLCV data and ATR
+    horizon : int
+        Horizon identifier (e.g., 1, 5, 20)
+    k_up : float, optional
+        Profit barrier multiplier (ATR-based). If None, uses BARRIER_PARAMS
+    k_down : float, optional
+        Stop barrier multiplier (ATR-based). If None, uses BARRIER_PARAMS
+    max_bars : int, optional
+        Maximum bars. If None, uses BARRIER_PARAMS
+    atr_column : str
+        Column name for ATR values
+    use_percentage : bool
+        If True, use percentage barriers instead of ATR
+    pct_up : float, optional
+        Percentage for upper barrier (e.g., 0.002 = 0.2%)
+    pct_down : float, optional
+        Percentage for lower barrier
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with additional columns:
         - label_h{horizon}: Label values (-1, 0, 1, or -99 for invalid)
         - bars_to_hit_h{horizon}: Bars until barrier hit
         - mae_h{horizon}: Maximum adverse excursion
         - mfe_h{horizon}: Maximum favorable excursion
         - touch_type_h{horizon}: Which barrier was touched (1, -1, or 0)
 
-    Notes:
-    ------
+    Notes
+    -----
     CRITICAL FIX (2025-12-21): The last max_bars samples are marked with
     label=-99 (invalid) because there isn't enough future data to properly
     evaluate barrier hits. These samples MUST be filtered out before model
-    training to prevent edge case leakage where the model learns "end of
-    data = neutral prediction".
-
-    When using labeled data:
-    1. Filter out rows where label_h{horizon} == -99
-    2. This ensures all training samples have valid, non-truncated labels
-
-    Raises:
-    -------
-    ValueError : If DataFrame is empty or parameters are invalid
-    KeyError : If required columns are missing
+    training to prevent edge case leakage.
     """
     # === PARAMETER VALIDATION ===
-    # Validate DataFrame is not empty
     if df.empty:
         raise ValueError("DataFrame is empty - cannot apply triple barrier labeling")
 
-    # Validate horizon
     if not isinstance(horizon, int) or horizon <= 0:
-        raise ValueError(f"horizon must be a positive integer, got {horizon} (type: {type(horizon).__name__})")
+        raise ValueError(
+            f"horizon must be a positive integer, got {horizon} "
+            f"(type: {type(horizon).__name__})"
+        )
 
-    # Validate k_up if provided
     if k_up is not None and k_up <= 0:
         raise ValueError(f"k_up must be positive, got {k_up}")
-
-    # Validate k_down if provided
     if k_down is not None and k_down <= 0:
         raise ValueError(f"k_down must be positive, got {k_down}")
-
-    # Validate max_bars if provided
     if max_bars is not None and max_bars <= 0:
         raise ValueError(f"max_bars must be positive, got {max_bars}")
 
-    # Validate percentage parameters if use_percentage is True
     if use_percentage:
         if pct_up is not None and pct_up <= 0:
             raise ValueError(f"pct_up must be positive, got {pct_up}")
@@ -271,6 +151,25 @@ def apply_triple_barrier(
     if missing:
         raise KeyError(f"Missing required OHLC columns: {sorted(missing)}")
 
+    if use_percentage:
+        # Use ThresholdLabeler for percentage-based barriers
+        pct_up = pct_up or PERCENTAGE_BARRIER_PARAMS.get(horizon, {}).get('pct_up', 0.005)
+        pct_down = pct_down or PERCENTAGE_BARRIER_PARAMS.get(horizon, {}).get('pct_down', 0.005)
+        max_bars = max_bars or PERCENTAGE_BARRIER_PARAMS.get(horizon, {}).get('max_bars', 20)
+
+        labeler = ThresholdLabeler(pct_up=pct_up, pct_down=pct_down, max_bars=max_bars)
+        result = labeler.compute_labels(df, horizon)
+
+        # Add labels to dataframe with same column naming as triple-barrier
+        df = df.copy()
+        df[f'label_h{horizon}'] = result.labels
+        df[f'bars_to_hit_h{horizon}'] = result.metadata.get('bars_to_hit', 0)
+        df[f'mae_h{horizon}'] = result.metadata.get('max_loss', 0)
+        df[f'mfe_h{horizon}'] = result.metadata.get('max_gain', 0)
+        df[f'touch_type_h{horizon}'] = 0
+
+        return df
+
     # Validate ATR column exists
     if atr_column not in df.columns:
         available_cols = [c for c in df.columns if 'atr' in c.lower()]
@@ -279,83 +178,15 @@ def apply_triple_barrier(
             f"Available ATR-like columns: {available_cols if available_cols else 'none'}"
         )
 
-    # Check for NaN values in critical columns and warn
-    critical_cols = ['close', 'high', 'low', 'open', atr_column]
-    nan_counts = df[critical_cols].isna().sum()
-    if nan_counts.any():
-        nan_report = nan_counts[nan_counts > 0].to_dict()
-        logger.warning(f"NaN values in critical columns: {nan_report}")
+    # Use TripleBarrierLabeler
+    labeler = TripleBarrierLabeler(atr_column=atr_column)
 
-    # Get default parameters from configuration if not provided
-    # Note: This function doesn't know the symbol, so it uses BARRIER_PARAMS_DEFAULT
-    # For symbol-specific params, call this with explicit k_up/k_down/max_bars
-    if horizon in BARRIER_PARAMS_DEFAULT:
-        defaults = BARRIER_PARAMS_DEFAULT[horizon]
-        if k_up is None:
-            k_up = defaults['k_up']
-        if k_down is None:
-            k_down = defaults['k_down']
-        if max_bars is None:
-            max_bars = defaults['max_bars']
-    else:
-        # Fallback for non-standard horizons
-        if k_up is None:
-            k_up = 1.0
-        if k_down is None:
-            k_down = 1.0
-        if max_bars is None:
-            max_bars = max(horizon * 3, 10)
-
-    logger.info(f"Applying triple barrier for horizon {horizon}")
-    logger.info(f"  k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}")
-    logger.info(f"  Mode: {'Percentage-based' if use_percentage else 'ATR-based'}")
-
-    # Extract arrays
-    close = df['close'].values
-    high = df['high'].values
-    low = df['low'].values
-    open_prices = df['open'].values
-    atr = df[atr_column].values
-
-    # Apply numba function
-    labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
-        close, high, low, open_prices, atr, k_up, k_down, max_bars
+    result = labeler.compute_labels(
+        df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars
     )
 
-    # Add to dataframe
-    df[f'label_h{horizon}'] = labels
-    df[f'bars_to_hit_h{horizon}'] = bars_to_hit
-    df[f'mae_h{horizon}'] = mae
-    df[f'mfe_h{horizon}'] = mfe
-    df[f'touch_type_h{horizon}'] = touch_type
-
-    # CRITICAL FIX (2025-12-21): Filter out invalid labels (-99 sentinel)
-    # These are the last max_bars samples that cannot be properly labeled
-    # because we don't have enough future data to hit barriers
-    invalid_mask = labels == -99
-    num_invalid = invalid_mask.sum()
-    if num_invalid > 0:
-        logger.info(
-            f"Marked {num_invalid} samples as invalid (last {max_bars} bars). "
-            "These will be excluded from model training to prevent edge case leakage."
-        )
-
-    # Log statistics (excluding invalid labels)
-    valid_labels = labels[~invalid_mask]
-    label_counts = pd.Series(valid_labels).value_counts().sort_index()
-    total = len(valid_labels)
-
-    logger.info(f"Label distribution for horizon {horizon}:")
-    for label_val in [-1, 0, 1]:
-        count = label_counts.get(label_val, 0)
-        pct = count / total * 100
-        label_name = {-1: "Short/Loss", 0: "Neutral/Timeout", 1: "Long/Win"}[label_val]
-        logger.info(f"  {label_name:20s}: {count:6d} ({pct:5.1f}%)")
-
-    # Calculate average bars to hit (excluding invalid samples)
-    valid_bars_to_hit = bars_to_hit[~invalid_mask]
-    avg_bars = valid_bars_to_hit[valid_bars_to_hit > 0].mean()
-    logger.info(f"  Avg bars to hit: {avg_bars:.1f}")
+    # Add labels to dataframe
+    df = labeler.add_labels_to_dataframe(df, result)
 
     return df
 
@@ -366,84 +197,102 @@ def process_symbol_labeling(
     symbol: str,
     horizons: List[int] = [1, 5, 20],
     barrier_params: Optional[Dict] = None,
-    atr_column: str = 'atr_14'
+    atr_column: str = 'atr_14',
+    labeling_strategy: LabelingType | str = LabelingType.TRIPLE_BARRIER,
+    strategy_config: Optional[Dict[str, Any]] = None
 ) -> pd.DataFrame:
     """
     Process labeling for a single symbol with multiple horizons.
 
-    Parameters:
-    -----------
-    input_path : Path to features parquet file
-    output_path : Path to save labeled data
-    symbol : Symbol name
-    horizons : List of horizons to label
-    barrier_params : Dict mapping horizon -> {k_up, k_down, max_bars}
-                     If None, uses symbol-specific params from config.py
-    atr_column : column name for ATR values
+    Parameters
+    ----------
+    input_path : Path
+        Path to features parquet file
+    output_path : Path
+        Path to save labeled data
+    symbol : str
+        Symbol name
+    horizons : list[int]
+        List of horizons to label (default: [1, 5, 20])
+    barrier_params : dict, optional
+        Dict mapping horizon -> {k_up, k_down, max_bars}
+        If None, uses symbol-specific params from config.py
+    atr_column : str
+        Column name for ATR values
+    labeling_strategy : LabelingType or str
+        Type of labeling strategy to use (default: TRIPLE_BARRIER)
+    strategy_config : dict, optional
+        Additional configuration for the labeling strategy
 
-    Returns:
-    --------
-    df : Labeled DataFrame
+    Returns
+    -------
+    pd.DataFrame
+        Labeled DataFrame
     """
+    # Determine if using triple-barrier
+    is_triple_barrier = (
+        labeling_strategy == LabelingType.TRIPLE_BARRIER or
+        labeling_strategy == 'triple_barrier'
+    )
+
     # Use symbol-specific parameters from config.py if not provided
-    # This ensures MES gets asymmetric barriers and MGC gets symmetric barriers
-    if barrier_params is None:
+    if barrier_params is None and is_triple_barrier:
         barrier_params = {}
         for h in horizons:
             barrier_params[h] = get_barrier_params(symbol, h)
 
     logger.info("=" * 70)
-    logger.info(f"Triple-Barrier Labeling: {symbol}")
+    if is_triple_barrier:
+        logger.info(f"Triple-Barrier Labeling: {symbol}")
+    else:
+        logger.info(f"{labeling_strategy} Labeling: {symbol}")
     logger.info("=" * 70)
-    logger.info(f"Using symbol-specific barrier parameters from config.py:")
-    for h in horizons:
-        if h in barrier_params:
-            params = barrier_params[h]
-            logger.info(f"  H{h}: k_up={params['k_up']:.2f}, k_down={params['k_down']:.2f}, "
-                       f"max_bars={params['max_bars']} - {params.get('description', '')}")
+
+    if is_triple_barrier:
+        logger.info("Using symbol-specific barrier parameters from config.py:")
+        for h in horizons:
+            if h in barrier_params:
+                params = barrier_params[h]
+                logger.info(
+                    f"  H{h}: k_up={params['k_up']:.2f}, k_down={params['k_down']:.2f}, "
+                    f"max_bars={params['max_bars']} - {params.get('description', '')}"
+                )
 
     # Load features
     df = pd.read_parquet(input_path)
     logger.info(f"Loaded {len(df):,} rows from {input_path}")
 
-    # Ensure ATR column exists
-    if atr_column not in df.columns:
-        raise ValueError(f"ATR column '{atr_column}' not found in dataframe")
+    # Create labeler and apply labels
+    config = strategy_config or {}
 
-    # Apply labeling for each horizon using symbol-specific parameters
-    for horizon in tqdm(horizons, desc=f"Labeling {symbol}"):
-        params = barrier_params[horizon]
-        k_up = params['k_up']
-        k_down = params['k_down']
-        max_bars = params['max_bars']
+    if is_triple_barrier:
+        # Ensure ATR column exists
+        if atr_column not in df.columns:
+            raise ValueError(f"ATR column '{atr_column}' not found in dataframe")
 
-        df = apply_triple_barrier(
-            df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars, atr_column=atr_column
-        )
+        labeler = TripleBarrierLabeler(atr_column=atr_column, **config)
 
-    # Log final label distribution summary (excluding invalid labels)
-    logger.info("")
-    logger.info("=" * 70)
-    logger.info("LABEL DISTRIBUTION SUMMARY (excluding invalid samples)")
-    logger.info("=" * 70)
-    for horizon in horizons:
-        label_col = f'label_h{horizon}'
-        if label_col in df.columns:
-            # Exclude invalid labels (-99)
-            valid_labels = df[df[label_col] != -99][label_col]
-            counts = valid_labels.value_counts().sort_index()
-            total_valid = len(valid_labels)
-            total_all = len(df)
-            num_invalid = total_all - total_valid
-
-            short_pct = counts.get(-1, 0) / total_valid * 100 if total_valid > 0 else 0
-            neutral_pct = counts.get(0, 0) / total_valid * 100 if total_valid > 0 else 0
-            long_pct = counts.get(1, 0) / total_valid * 100 if total_valid > 0 else 0
-
-            logger.info(
-                f"H{horizon}: Short={short_pct:.1f}% | Neutral={neutral_pct:.1f}% | Long={long_pct:.1f}% "
-                f"(valid: {total_valid:,}, invalid: {num_invalid})"
+        # Apply labeling for each horizon
+        for horizon in tqdm(horizons, desc=f"Labeling {symbol}"):
+            params = barrier_params[horizon]
+            result = labeler.compute_labels(
+                df, horizon,
+                k_up=params['k_up'],
+                k_down=params['k_down'],
+                max_bars=params['max_bars']
             )
+            df = labeler.add_labels_to_dataframe(df, result)
+    else:
+        # Use factory for other strategies
+        labeler = get_labeler(labeling_strategy, **config)
+
+        # Apply labeling for each horizon
+        for horizon in tqdm(horizons, desc=f"Labeling {symbol}"):
+            result = labeler.compute_labels(df, horizon)
+            df = labeler.add_labels_to_dataframe(df, result)
+
+    # Log final label distribution summary
+    _log_label_summary(df, horizons)
 
     # Save
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -454,22 +303,71 @@ def process_symbol_labeling(
     return df
 
 
-def main():
-    """Run Stage 4: Initial labeling for all symbols."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+def _log_label_summary(df: pd.DataFrame, horizons: List[int]) -> None:
+    """Log label distribution summary."""
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("LABEL DISTRIBUTION SUMMARY (excluding invalid samples)")
+    logger.info("=" * 70)
 
-    from config import FEATURES_DIR, SYMBOLS, PROJECT_ROOT
+    for horizon in horizons:
+        label_col = f'label_h{horizon}'
+        if label_col not in df.columns:
+            continue
+
+        # Exclude invalid labels (-99)
+        valid_labels = df[df[label_col] != -99][label_col]
+        counts = valid_labels.value_counts().sort_index()
+        total_valid = len(valid_labels)
+        total_all = len(df)
+        num_invalid = total_all - total_valid
+
+        if total_valid == 0:
+            logger.warning(f"H{horizon}: No valid labels")
+            continue
+
+        short_pct = counts.get(-1, 0) / total_valid * 100
+        neutral_pct = counts.get(0, 0) / total_valid * 100
+        long_pct = counts.get(1, 0) / total_valid * 100
+
+        logger.info(
+            f"H{horizon}: Short={short_pct:.1f}% | Neutral={neutral_pct:.1f}% | "
+            f"Long={long_pct:.1f}% (valid: {total_valid:,}, invalid: {num_invalid})"
+        )
+
+
+def main() -> None:
+    """Run Stage 4: Initial labeling for all symbols using dynamic horizons."""
+    from src.config import (
+        FEATURES_DIR,
+        HORIZONS,
+        LOOKBACK_HORIZONS,
+        PROJECT_ROOT,
+        SYMBOLS,
+        validate_horizons,
+    )
 
     # Output directory
     labels_dir = PROJECT_ROOT / 'data' / 'labels'
     labels_dir.mkdir(parents=True, exist_ok=True)
 
-    horizons = [1, 5, 20]
+    # Use LOOKBACK_HORIZONS for labeling (includes H1)
+    # HORIZONS excludes H1 which is not viable after transaction costs
+    horizons = LOOKBACK_HORIZONS  # [1, 5, 20] - label all, filter later
+
+    # Validate horizons
+    try:
+        validate_horizons(horizons)
+    except ValueError as e:
+        logger.error(f"Horizon validation failed: {e}")
+        raise
 
     logger.info("=" * 70)
-    logger.info("STAGE 4: TRIPLE-BARRIER LABELING (SYMBOL-SPECIFIC)")
+    logger.info("STAGE 4: TRIPLE-BARRIER LABELING (DYNAMIC HORIZONS)")
     logger.info("=" * 70)
+    logger.info("")
+    logger.info(f"Labeling horizons: {horizons}")
+    logger.info(f"Active horizons (for training): {HORIZONS}")
     logger.info("")
     logger.info("SYMBOL-SPECIFIC BARRIER PARAMETERS from config.py:")
     logger.info("-" * 70)
@@ -477,8 +375,10 @@ def main():
         logger.info(f"{symbol}:")
         for horizon in horizons:
             params = get_barrier_params(symbol, horizon)
-            logger.info(f"  H{horizon:2d}: k_up={params['k_up']:.2f}, "
-                       f"k_down={params['k_down']:.2f}, max_bars={params['max_bars']:2d}")
+            logger.info(
+                f"  H{horizon:2d}: k_up={params['k_up']:.2f}, "
+                f"k_down={params['k_down']:.2f}, max_bars={params['max_bars']:2d}"
+            )
             logger.info(f"       {params.get('description', '')}")
     logger.info("-" * 70)
     logger.info("")
@@ -488,10 +388,9 @@ def main():
         output_path = labels_dir / f"{symbol}_labels_init.parquet"
 
         if input_path.exists():
-            # Pass None to use symbol-specific params from config.py
             process_symbol_labeling(
                 input_path, output_path, symbol, horizons,
-                barrier_params=None,  # Uses get_barrier_params(symbol, horizon)
+                barrier_params=None,
                 atr_column='atr_14'
             )
         else:

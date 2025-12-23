@@ -9,7 +9,12 @@ from typing import List, Optional, Dict, Any
 import json
 import logging
 
+# Import HorizonConfig from the dedicated horizon module
+# Re-exported here for backward compatibility
+from src.horizon_config import HorizonConfig
+
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 @dataclass
@@ -24,7 +29,15 @@ class PipelineConfig:
     symbols: List[str] = field(default_factory=lambda: ['MES', 'MGC'])
     start_date: Optional[str] = None  # YYYY-MM-DD format
     end_date: Optional[str] = None    # YYYY-MM-DD format
-    bar_resolution: str = '5min'
+
+    # Multi-Timeframe (MTF) configuration
+    # target_timeframe: Target resolution for resampling (e.g., '5min', '15min', '30min')
+    # Input data is assumed to be 1-minute bars which get resampled to this resolution.
+    # Supported: '1min', '5min', '10min', '15min', '20min', '30min', '45min', '60min'
+    target_timeframe: str = '5min'
+
+    # Legacy alias - kept for backward compatibility with existing code
+    bar_resolution: str = field(default=None)
 
     # Feature engineering
     feature_set: str = 'full'  # 'full', 'minimal', 'custom'
@@ -36,18 +49,30 @@ class PipelineConfig:
     bb_period: int = 20
     bb_std: float = 2.0
 
-    # Labeling parameters
-    label_horizons: List[int] = field(default_factory=lambda: [1, 5, 20])
+    # Labeling parameters - Dynamic Horizon Configuration
+    # Option 1: Use horizon_config for full control (HorizonConfig instance)
+    # Option 2: Use label_horizons for simple usage (legacy compatibility)
+    horizon_config: Optional[HorizonConfig] = None
+    label_horizons: List[int] = field(default_factory=lambda: [5, 20])
     # Note: Barrier parameters moved to config.py as BARRIER_PARAMS.
     # Use config.get_barrier_params(symbol, horizon) for symbol-specific values.
     max_bars_ahead: int = 50
+
+    # Auto-scale purge/embargo with horizon
+    # When True, purge_bars and embargo_bars are computed from max horizon
+    auto_scale_purge_embargo: bool = True
 
     # Split parameters
     train_ratio: float = 0.70
     val_ratio: float = 0.15
     test_ratio: float = 0.15
-    purge_bars: int = 60  # = max_bars for H20 (prevents label leakage)
-    embargo_bars: int = 288  # ~1 day for 5-min data
+    # PURGE_BARS: Must equal max(max_bars) across horizons to prevent leakage.
+    # H20 uses max_bars=60, so purge_bars must be at least 60.
+    purge_bars: int = 60  # Default, overridden if auto_scale_purge_embargo=True
+    # EMBARGO_BARS: Buffer for serial correlation in features.
+    # 1440 bars = 5 days for 5-min data (288 bars/day * 5 days).
+    # Must match src/config/splits.py EMBARGO_BARS for consistency.
+    embargo_bars: int = 1440  # Default, overridden if auto_scale_purge_embargo=True
 
     # Genetic Algorithm settings (for future Phase 2)
     ga_population_size: int = 50
@@ -66,6 +91,15 @@ class PipelineConfig:
 
     def __post_init__(self):
         """Validate configuration after initialization."""
+        # Import here to avoid circular imports
+        from src.config import (
+            SUPPORTED_TIMEFRAMES,
+            validate_timeframe,
+            auto_scale_purge_embargo,
+            validate_horizons,
+            SUPPORTED_HORIZONS,
+        )
+
         # Set project_root if not provided
         if self.project_root is None:
             self.project_root = Path(__file__).parent.parent.resolve()
@@ -73,6 +107,48 @@ class PipelineConfig:
         # Convert string paths to Path objects
         if isinstance(self.project_root, str):
             self.project_root = Path(self.project_root)
+
+        # Handle bar_resolution backward compatibility
+        # If bar_resolution is set but target_timeframe uses default, sync them
+        if self.bar_resolution is not None and self.bar_resolution != self.target_timeframe:
+            # bar_resolution was explicitly set, use it as the source of truth
+            self.target_timeframe = self.bar_resolution
+        elif self.bar_resolution is None:
+            # bar_resolution not set, sync from target_timeframe
+            self.bar_resolution = self.target_timeframe
+
+        # Validate target_timeframe
+        validate_timeframe(self.target_timeframe)
+
+        # Handle horizon configuration
+        # Priority: horizon_config > label_horizons
+        if self.horizon_config is not None:
+            # Sync label_horizons from horizon_config
+            self.label_horizons = self.horizon_config.horizons
+            # Validate horizon_config
+            horizon_issues = self.horizon_config.validate()
+            if horizon_issues:
+                raise ValueError(f"HorizonConfig validation failed: {horizon_issues}")
+        else:
+            # Validate label_horizons directly
+            if not self.label_horizons:
+                raise ValueError("At least one label horizon must be specified")
+            for h in self.label_horizons:
+                if h not in SUPPORTED_HORIZONS:
+                    logger.warning(
+                        f"Horizon {h} not in SUPPORTED_HORIZONS {SUPPORTED_HORIZONS}. "
+                        f"Auto-generated barrier params will be used."
+                    )
+
+        # Auto-scale purge and embargo bars based on horizons
+        if self.auto_scale_purge_embargo:
+            self.purge_bars, self.embargo_bars = auto_scale_purge_embargo(
+                self.label_horizons
+            )
+            logger.debug(
+                f"Auto-scaled purge/embargo for horizons {self.label_horizons}: "
+                f"purge={self.purge_bars}, embargo={self.embargo_bars}"
+            )
 
         # Validate ratios sum to 1.0
         total_ratio = self.train_ratio + self.val_ratio + self.test_ratio
@@ -95,10 +171,6 @@ class PipelineConfig:
         # Validate symbols
         if not self.symbols:
             raise ValueError("At least one symbol must be specified")
-
-        # Validate horizons
-        if not self.label_horizons:
-            raise ValueError("At least one label horizon must be specified")
 
     @property
     def data_dir(self) -> Path:
@@ -258,7 +330,16 @@ class PipelineConfig:
         Returns:
             List of validation error messages (empty if valid)
         """
+        from src.config import SUPPORTED_TIMEFRAMES
+
         issues = []
+
+        # Check timeframe
+        if self.target_timeframe not in SUPPORTED_TIMEFRAMES:
+            issues.append(
+                f"target_timeframe '{self.target_timeframe}' is not supported. "
+                f"Supported: {SUPPORTED_TIMEFRAMES}"
+            )
 
         # Check ratios
         total_ratio = self.train_ratio + self.val_ratio + self.test_ratio
@@ -340,7 +421,7 @@ Description: {self.description}
 Data Parameters:
   - Symbols: {', '.join(self.symbols)}
   - Date Range: {self.start_date or 'N/A'} to {self.end_date or 'N/A'}
-  - Resolution: {self.bar_resolution}
+  - Target Timeframe: {self.target_timeframe}
   - Synthetic Data: {self.use_synthetic_data}
 
 Features:
@@ -423,8 +504,9 @@ def create_default_config(
 
 
 if __name__ == "__main__":
-    # Example usage
-    logging.basicConfig(level=logging.INFO)
+    # Example usage - configure logging for standalone execution
+    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().addHandler(logging.StreamHandler())
 
     # Create default config
     config = create_default_config(

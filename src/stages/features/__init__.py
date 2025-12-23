@@ -27,13 +27,21 @@ Example:
 """
 
 # Main class
-from .engineer import FeatureEngineer, main
+from .engineer import FeatureEngineer
+from .cli import main
 
 # Constants
 from .constants import (
     ANNUALIZATION_FACTOR,
+    ANNUALIZATION_FACTOR_MAP,
     BARS_PER_DAY,
+    BARS_PER_DAY_MAP,
+    TIMEFRAME_MINUTES,
     TRADING_DAYS_PER_YEAR,
+    TRADING_HOURS_EXTENDED,
+    TRADING_HOURS_REGULAR,
+    get_annualization_factor,
+    get_bars_per_day,
 )
 
 # Numba functions
@@ -112,14 +120,41 @@ from .cross_asset import (
     add_cross_asset_features,
 )
 
+# Period scaling
+from .scaling import (
+    scale_period,
+    get_scaled_periods,
+    get_unique_scaled_periods,
+    create_period_config,
+    get_timeframe_minutes,
+    PeriodScaler,
+    DEFAULT_BASE_PERIODS,
+    BASE_TIMEFRAME_MINUTES,
+)
+
+# MTF Features
+from ..mtf_features import (
+    MTFFeatureGenerator,
+    add_mtf_features,
+    validate_mtf_alignment,
+    MTF_TIMEFRAMES,
+)
+
 __all__ = [
     # Main class
     'FeatureEngineer',
     'main',
     # Constants
     'ANNUALIZATION_FACTOR',
+    'ANNUALIZATION_FACTOR_MAP',
     'BARS_PER_DAY',
+    'BARS_PER_DAY_MAP',
+    'TIMEFRAME_MINUTES',
     'TRADING_DAYS_PER_YEAR',
+    'TRADING_HOURS_EXTENDED',
+    'TRADING_HOURS_REGULAR',
+    'get_annualization_factor',
+    'get_bars_per_day',
     # Numba functions
     'calculate_sma_numba',
     'calculate_ema_numba',
@@ -166,4 +201,18 @@ __all__ = [
     'add_trend_regime',
     # Cross Asset
     'add_cross_asset_features',
+    # Period scaling
+    'scale_period',
+    'get_scaled_periods',
+    'get_unique_scaled_periods',
+    'create_period_config',
+    'get_timeframe_minutes',
+    'PeriodScaler',
+    'DEFAULT_BASE_PERIODS',
+    'BASE_TIMEFRAME_MINUTES',
+    # MTF Features
+    'MTFFeatureGenerator',
+    'add_mtf_features',
+    'validate_mtf_alignment',
+    'MTF_TIMEFRAMES',
 ]

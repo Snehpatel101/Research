@@ -344,16 +344,15 @@ class TestGeneralLookaheadPrinciples:
         df = add_macd(df, metadata)
         df = add_rsi(df, metadata)
 
-        # Features that should be shifted
+        # Features that should be shifted (excludes boolean signals which are
+        # computed from already-shifted values and produce 0 instead of NaN)
         shifted_features = [
             'mes_mgc_correlation_20',
             'mes_mgc_spread_zscore',
             'mes_mgc_beta',
             'relative_strength',
-            'macd_cross_up',
-            'macd_cross_down',
-            'rsi_overbought',
-            'rsi_oversold'
+            # Note: macd_cross_up, macd_cross_down, rsi_overbought, rsi_oversold
+            # are boolean flags computed from lagged values - they produce 0/1, not NaN
         ]
 
         for feature in shifted_features:

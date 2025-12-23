@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class BaselineBacktest:
@@ -46,13 +46,32 @@ class BaselineBacktest:
         self.metrics = {}
 
     def prepare_data(self):
-        """Prepare data with shifted labels to prevent lookahead."""
+        """
+        Prepare data with shifted labels to prevent lookahead bias.
+
+        CRITICAL: Labels are forward-looking. A label at bar t was computed using
+        price data from bars t through t+horizon. To prevent lookahead:
+
+        - At bar t, we can only use labels that were "fully resolved" before bar t
+        - A label computed at bar (t - horizon - 1) uses data from bars
+          (t - horizon - 1) through (t - 1), which is all in the past at bar t
+        - Therefore, shift_bars = horizon + 1
+
+        Example for H5 (horizon=5):
+        - Label at bar 100 uses bars 100-105 (future at bar 100)
+        - At bar 106, we can safely use label from bar 100 (shift by 6)
+        - shift_bars = 5 + 1 = 6
+        """
         logger.info(f"Preparing data for backtest (horizon={self.horizon}, quality_threshold={self.quality_threshold})")
 
-        # Shift labels to prevent lookahead
-        # At time t, we can only use labels computed at t-1
-        self.df['signal'] = self.df[self.label_col].shift(1)
-        self.df['signal_quality'] = self.df[self.quality_col].shift(1)
+        # Shift labels by (horizon + 1) to prevent lookahead bias
+        # A label at bar t uses price data from bars t to t+horizon
+        # We can only act on this label after bar t+horizon has occurred
+        shift_bars = self.horizon + 1
+        logger.info(f"  Applying lookahead-safe shift: {shift_bars} bars (horizon={self.horizon} + 1)")
+
+        self.df['signal'] = self.df[self.label_col].shift(shift_bars)
+        self.df['signal_quality'] = self.df[self.quality_col].shift(shift_bars)
 
         # Filter by quality threshold
         self.df['trade_signal'] = 0
@@ -334,8 +353,11 @@ def run_baseline_backtest(
     backtest.plot_equity_curve(plot_path)
 
     # Save results
+    # Document the lookahead-safe shift applied (horizon + 1)
+    lookahead_shift = horizon + 1
     results = {
         'horizon': horizon,
+        'lookahead_shift_bars': lookahead_shift,
         'quality_threshold': quality_threshold,
         'commission': commission,
         'test_samples': int(len(test_df)),
@@ -359,28 +381,60 @@ def run_baseline_backtest(
     return results
 
 
+def get_latest_splits_dir(splits_dir: Path) -> Optional[Path]:
+    """
+    Find the most recent splits run directory.
+
+    Stage 7 saves splits in timestamped subdirectories: splits/{run_id}/
+    This function finds the latest one by sorting directory names.
+
+    Args:
+        splits_dir: Base splits directory
+
+    Returns:
+        Path to the latest splits subdirectory, or None if not found
+    """
+    if not splits_dir.exists():
+        return None
+
+    # Get all subdirectories that contain test_indices.npy
+    run_dirs = [
+        d for d in splits_dir.iterdir()
+        if d.is_dir() and (d / "test_indices.npy").exists()
+    ]
+
+    if not run_dirs:
+        return None
+
+    # Sort by name (timestamp format: YYYYMMDD_HHMMSS) to get latest
+    run_dirs.sort(key=lambda x: x.name, reverse=True)
+    return run_dirs[0]
+
+
 def main():
     """Run baseline backtest on default configuration."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-
-    from config import FINAL_DATA_DIR, SPLITS_DIR, RESULTS_DIR
+    from src.config import FINAL_DATA_DIR, SPLITS_DIR, RESULTS_DIR
+    from src.horizon_config import LOOKBACK_HORIZONS
 
     data_path = FINAL_DATA_DIR / "combined_final_labeled.parquet"
-    test_indices_path = SPLITS_DIR / "test_indices.npy"
     output_dir = RESULTS_DIR / "baseline_backtest"
 
     if not data_path.exists():
         logger.error(f"Data file not found: {data_path}")
         return
 
-    if not test_indices_path.exists():
-        logger.error(f"Test indices not found: {test_indices_path}")
+    # Find latest splits directory (stage7 saves in timestamped subdirs)
+    latest_splits = get_latest_splits_dir(SPLITS_DIR)
+    if latest_splits is None:
+        logger.error(f"No splits found in {SPLITS_DIR}")
         logger.info("Run Stage 7 (splits) first!")
         return
 
+    test_indices_path = latest_splits / "test_indices.npy"
+    logger.info(f"Using splits from: {latest_splits}")
+
     # Run backtest for all horizons
-    for horizon in [1, 5, 20]:
+    for horizon in LOOKBACK_HORIZONS:
         logger.info(f"\n{'='*70}")
         logger.info(f"HORIZON {horizon}")
         logger.info(f"{'='*70}")

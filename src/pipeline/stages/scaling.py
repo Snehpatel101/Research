@@ -81,11 +81,7 @@ def run_feature_scaling(
 
     try:
         # Import the feature scaler package
-        import sys
-        src_path = str(config.project_root / "src")
-        if src_path not in sys.path:
-            sys.path.insert(0, src_path)
-        from stages.feature_scaler import (
+        from src.stages.feature_scaler import (
             FeatureScaler,
             ScalerConfig,
             validate_scaling,

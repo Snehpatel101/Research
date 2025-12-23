@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any, Set
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 class ArtifactManifest:
@@ -387,8 +388,9 @@ def compare_runs(
 
 
 if __name__ == "__main__":
-    # Example usage
-    logging.basicConfig(level=logging.INFO)
+    # Example usage - configure logging for standalone execution
+    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().addHandler(logging.StreamHandler())
 
     # Create a test manifest
     manifest = ArtifactManifest(

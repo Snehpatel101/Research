@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import json
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 @dataclass
@@ -526,10 +526,7 @@ def apply_feature_selection(
 
 def main():
     """Run feature selection on the combined labeled data."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent))
-
-    from config import FINAL_DATA_DIR, RESULTS_DIR
+    from src.config import FINAL_DATA_DIR, RESULTS_DIR
 
     data_path = FINAL_DATA_DIR / "combined_final_labeled.parquet"
     output_path = RESULTS_DIR / "feature_selection_report.json"

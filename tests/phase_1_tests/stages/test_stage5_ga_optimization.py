@@ -17,7 +17,12 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage5_ga_optimize import calculate_fitness, evaluate_individual, run_ga_optimization
+from stages.stage5_ga_optimize import (
+    calculate_fitness,
+    evaluate_individual,
+    run_ga_optimization,
+    get_contiguous_subset,
+)
 
 
 # =============================================================================
@@ -40,8 +45,9 @@ class TestStage5GAOptimizer:
         mae = -np.abs(np.random.randn(n) * 0.01).astype(np.float32)
         mfe = np.abs(np.random.randn(n) * 0.02).astype(np.float32)
         horizon = 5
+        atr_mean = 10.0  # Typical ATR value for normalization
 
-        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon)
+        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
         # Should have positive fitness for balanced distribution
         assert fitness > -100, f"Fitness too low for balanced labels: {fitness}"
@@ -56,8 +62,9 @@ class TestStage5GAOptimizer:
         mae = np.zeros(n, dtype=np.float32)
         mfe = np.zeros(n, dtype=np.float32)
         horizon = 5
+        atr_mean = 10.0
 
-        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon)
+        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
         # Should have very negative fitness due to low signal rate
         assert fitness < -500, f"Fitness should be very negative: {fitness}"
@@ -68,8 +75,9 @@ class TestStage5GAOptimizer:
         bars_to_hit = np.array([], dtype=np.int32)
         mae = np.array([], dtype=np.float32)
         mfe = np.array([], dtype=np.float32)
+        atr_mean = 10.0
 
-        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon=5)
+        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon=5, atr_mean=atr_mean)
 
         assert fitness == -1000.0, "Empty labels should return -1000"
 
@@ -83,8 +91,9 @@ class TestStage5GAOptimizer:
         mae = -np.ones(n, dtype=np.float32) * 0.01
         mfe = np.ones(n, dtype=np.float32) * 0.02
         horizon = 5
+        atr_mean = 10.0
 
-        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon)
+        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
         # Should be penalized but slightly better than -1000
         assert -1000 < fitness < -900, f"Expected penalty for low signal rate: {fitness}"
@@ -93,17 +102,20 @@ class TestStage5GAOptimizer:
         """Test profit factor calculation with known values."""
         n = 100
 
-        # All long wins with good MFE
-        labels = np.array([1]*50 + [-1]*50, dtype=np.int8)  # 50% long, 50% short
+        # Balanced distribution with ~25% neutral (within 20-30% target)
+        # 37.5% long, 37.5% short, 25% neutral
+        labels = np.array([1]*38 + [-1]*37 + [0]*25, dtype=np.int8)
         bars_to_hit = np.ones(n, dtype=np.int32) * 3
         mae = np.zeros(n, dtype=np.float32)  # No adverse excursion
         mfe = np.ones(n, dtype=np.float32) * 0.02  # Good favorable excursion
         horizon = 5
+        atr_mean = 10.0
 
-        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon)
+        fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
-        # Should have good fitness due to balanced distribution and good PF
-        assert fitness > -10, f"Expected positive-ish fitness: {fitness}"
+        # Should have reasonable fitness (negative but not catastrophic)
+        # Note: transaction cost penalties will make fitness negative, which is expected
+        assert fitness > -200, f"Expected reasonable fitness: {fitness}"
 
     def test_evaluate_individual_valid_params(self, sample_price_arrays):
         """Test evaluate_individual with valid parameters."""
@@ -114,6 +126,7 @@ class TestStage5GAOptimizer:
             sample_price_arrays['close'],
             sample_price_arrays['high'],
             sample_price_arrays['low'],
+            sample_price_arrays['open'],
             sample_price_arrays['atr'],
             horizon=5
         )
@@ -133,6 +146,7 @@ class TestStage5GAOptimizer:
             sample_price_arrays['close'],
             sample_price_arrays['high'],
             sample_price_arrays['low'],
+            sample_price_arrays['open'],
             zero_atr,
             horizon=5
         )
@@ -152,6 +166,7 @@ class TestStage5GAOptimizer:
             sample_price_arrays['close'],
             sample_price_arrays['high'],
             sample_price_arrays['low'],
+            sample_price_arrays['open'],
             sample_price_arrays['atr'],
             horizon=5
         )
@@ -170,6 +185,7 @@ class TestStage5GAOptimizer:
             sample_price_arrays['close'],
             sample_price_arrays['high'],
             sample_price_arrays['low'],
+            sample_price_arrays['open'],
             sample_price_arrays['atr'],
             horizon=5
         )
@@ -179,6 +195,7 @@ class TestStage5GAOptimizer:
             sample_price_arrays['close'],
             sample_price_arrays['high'],
             sample_price_arrays['low'],
+            sample_price_arrays['open'],
             sample_price_arrays['atr'],
             horizon=5
         )
@@ -201,6 +218,7 @@ class TestStage5GAOptimizer:
             sample_price_arrays['close'],
             sample_price_arrays['high'],
             sample_price_arrays['low'],
+            sample_price_arrays['open'],
             nan_atr,
             horizon=5
         )

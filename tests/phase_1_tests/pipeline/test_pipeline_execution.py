@@ -1,3 +1,21 @@
+"""
+Unit tests for Pipeline Execution and Stage Dependencies.
+
+Run with: pytest tests/phase_1_tests/pipeline/test_pipeline_execution.py -v
+"""
+
+import sys
+from pathlib import Path
+
+import pytest
+
+# Add src to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+from pipeline.runner import PipelineRunner
+from pipeline.stage_registry import PipelineStage
+
 
 class TestStageDependencies:
     """Tests for pipeline stage dependencies."""
@@ -51,12 +69,12 @@ class TestStageDependencies:
         stage = next(s for s in runner.stages if s.name == 'create_splits')
         assert 'final_labels' in stage.dependencies
 
-    def test_validate_depends_on_splits(self, sample_config):
-        """Test validate depends on create_splits."""
+    def test_validate_depends_on_feature_scaling(self, sample_config):
+        """Test validate depends on feature_scaling."""
         runner = PipelineRunner(sample_config)
 
         stage = next(s for s in runner.stages if s.name == 'validate')
-        assert 'create_splits' in stage.dependencies
+        assert 'feature_scaling' in stage.dependencies
 
     def test_generate_report_depends_on_validate(self, sample_config):
         """Test generate_report depends on validate."""

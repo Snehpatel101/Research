@@ -1,7 +1,9 @@
 """
 Stage 2: Data Cleaning.
 
-Cleans and resamples validated 1-minute OHLCV data to 5-minute bars.
+Cleans and resamples validated 1-minute OHLCV data to target timeframe bars.
+Uses the DataCleaner module for comprehensive gap detection, outlier removal,
+and quality reporting.
 """
 import logging
 import traceback
@@ -25,8 +27,13 @@ def run_data_cleaning(
     """
     Stage 2: Data Cleaning.
 
-    Uses validated data from Stage 1 and resamples from 1-minute to 5-minute bars.
-    Handles missing data, outliers, and ensures data quality.
+    Uses validated data from Stage 1 and resamples from 1-minute to target timeframe.
+    Handles missing data, outliers, and ensures data quality through the DataCleaner
+    module.
+
+    Configuration options (from config):
+        - target_timeframe: Target timeframe for resampling (default: '5min')
+        - max_gap_minutes: Maximum gap to fill in minutes (default: 30)
 
     Args:
         config: Pipeline configuration
@@ -46,6 +53,13 @@ def run_data_cleaning(
         # Use validated data from Stage 1
         validated_data_dir = config.raw_data_dir / "validated"
 
+        # Get cleaning configuration with defaults
+        target_timeframe = getattr(config, 'target_timeframe', '5min')
+        max_gap_minutes = getattr(config, 'max_gap_minutes', 30)
+
+        logger.info(f"Target timeframe: {target_timeframe}")
+        logger.info(f"Max gap fill: {max_gap_minutes} minutes")
+
         artifacts = []
         cleaning_metadata = {}
 
@@ -64,10 +78,20 @@ def run_data_cleaning(
             if not input_path.exists():
                 raise FileNotFoundError(f"No input data found for {symbol}")
 
-            output_path = config.clean_data_dir / f"{symbol}_5m_clean.parquet"
+            # Build output filename based on target timeframe
+            output_path = config.clean_data_dir / f"{symbol}_{target_timeframe}_clean.parquet"
 
             logger.info(f"Cleaning {symbol}: {input_path.name} -> {output_path.name}")
-            clean_symbol_data(input_path, output_path, symbol)
+
+            # Use clean_symbol_data with full configuration
+            clean_symbol_data(
+                input_path=input_path,
+                output_path=output_path,
+                symbol=symbol,
+                target_timeframe=target_timeframe,
+                include_timeframe_metadata=True,
+                max_gap_minutes=max_gap_minutes
+            )
 
             if output_path.exists():
                 artifacts.append(output_path)
@@ -78,14 +102,20 @@ def run_data_cleaning(
                 cleaning_metadata[symbol] = {
                     'input_file': str(input_path),
                     'output_file': str(output_path),
-                    'file_size_bytes': file_size
+                    'file_size_bytes': file_size,
+                    'target_timeframe': target_timeframe,
+                    'max_gap_minutes': max_gap_minutes
                 }
 
                 manifest.add_artifact(
                     name=f"clean_data_{symbol}",
                     file_path=output_path,
                     stage="data_cleaning",
-                    metadata={'symbol': symbol, 'source': str(input_path)}
+                    metadata={
+                        'symbol': symbol,
+                        'source': str(input_path),
+                        'timeframe': target_timeframe
+                    }
                 )
 
         return create_stage_result(

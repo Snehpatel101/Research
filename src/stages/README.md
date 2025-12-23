@@ -28,14 +28,14 @@ metadata = create_splits(
     val_ratio=0.15,
     test_ratio=0.15,
     purge_bars=60,  # = max_bars for H20 (prevents label leakage)
-    embargo_bars=288
+    embargo_bars=1440  # 5 days for 5-min data (288 bars/day * 5)
 )
 ```
 
 **Outputs:**
-- `splits/{run_id}/train.npy` - Training set indices
-- `splits/{run_id}/val.npy` - Validation set indices
-- `splits/{run_id}/test.npy` - Test set indices
+- `splits/{run_id}/train_indices.npy` - Training set indices
+- `splits/{run_id}/val_indices.npy` - Validation set indices
+- `splits/{run_id}/test_indices.npy` - Test set indices
 - `splits/{run_id}/split_config.json` - Metadata
 
 ---

@@ -210,9 +210,9 @@ class TestStage7DataSplitter:
 
         # Check files exist
         split_dir = output_dir / "test_run"
-        assert (split_dir / "train.npy").exists(), "train.npy missing"
-        assert (split_dir / "val.npy").exists(), "val.npy missing"
-        assert (split_dir / "test.npy").exists(), "test.npy missing"
+        assert (split_dir / "train_indices.npy").exists(), "train_indices.npy missing"
+        assert (split_dir / "val_indices.npy").exists(), "val_indices.npy missing"
+        assert (split_dir / "test_indices.npy").exists(), "test_indices.npy missing"
         assert (split_dir / "split_config.json").exists(), "config missing"
 
 

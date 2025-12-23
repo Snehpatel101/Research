@@ -301,9 +301,10 @@ class TestTripleBarrierNoFutureData:
 
         # Assert
         # All bars except last few should have bars_to_hit >= 1 when not timeout
+        # and not invalid (label != -99). Invalid labels have bars_to_hit = 0.
         for i in range(n - 10):  # Skip last few bars
             label = df['label_h5'].iloc[i]
-            if label != 0:  # Not timeout
+            if label != 0 and label != -99:  # Not timeout and not invalid
                 assert bars[i] >= 1, f"bars_to_hit should be >= 1 at index {i}"
 
 

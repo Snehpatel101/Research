@@ -20,7 +20,9 @@ class CVConfig:
     n_splits: int = 5
     test_size_ratio: float = 0.15
     purge_bars: int = 60
-    embargo_bars: int = 288
+    # EMBARGO_BARS: 5 days for 5-min data (288 bars/day * 5)
+    # Ensures feature decorrelation between train/test
+    embargo_bars: int = 1440
     min_train_size: int = 10000
 
 
@@ -124,7 +126,7 @@ class WalkForwardCV:
         test_window: int,
         step_size: int,
         purge_bars: int = 60,
-        embargo_bars: int = 288,
+        embargo_bars: int = 1440,  # 5 days for 5-min data (288 bars/day * 5)
         expanding: bool = False
     ):
         self.train_window = train_window
@@ -259,7 +261,8 @@ def create_cv_splits(
 if __name__ == "__main__":
     # Example usage
     import sys
-    logging.basicConfig(level=logging.INFO)
+    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().addHandler(logging.StreamHandler())
 
     # Set seed for reproducibility
     np.random.seed(42)

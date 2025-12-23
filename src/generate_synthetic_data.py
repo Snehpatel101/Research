@@ -8,8 +8,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 def generate_gbm_prices(n_bars: int, initial_price: float, mu: float = 0.0,
                         sigma: float = 0.001, dt: float = 1/252/1440) -> np.ndarray:

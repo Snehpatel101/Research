@@ -159,13 +159,14 @@ def test_config_validation_errors():
         print(f"\n✓ Correctly caught invalid ratios: {e}")
 
     # Create config with other invalid parameters
+    # Note: barrier_k_up no longer exists in PipelineConfig (moved to config.py)
     config = PipelineConfig(
         run_id='test_run_005',
         symbols=['MES'],
         train_ratio=0.7,
         val_ratio=0.15,
         test_ratio=0.15,
-        barrier_k_up=-1.0,  # Invalid!
+        rsi_period=1,  # Invalid - must be >= 2
         label_horizons=[-1, 0, 5]  # Invalid!
     )
 

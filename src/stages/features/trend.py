@@ -15,11 +15,15 @@ from .numba_functions import calculate_adx_numba, calculate_atr_numba
 logger = logging.getLogger(__name__)
 
 
-def add_adx(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_adx(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    period: int = 14
+) -> pd.DataFrame:
     """
     Add ADX and Directional Indicators.
 
-    Calculates 14-period ADX, +DI, -DI, and trend strength flag.
+    Calculates ADX, +DI, -DI, and trend strength flag.
 
     Parameters
     ----------
@@ -27,41 +31,63 @@ def add_adx(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
         DataFrame with OHLC columns
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    period : int, default 14
+        ADX period
 
     Returns
     -------
     pd.DataFrame
         DataFrame with ADX features added
     """
-    logger.info("Adding ADX features...")
+    logger.info(f"Adding ADX features with period: {period}")
 
     adx, plus_di, minus_di = calculate_adx_numba(
         df['high'].values,
         df['low'].values,
         df['close'].values,
-        14
+        period
     )
 
-    df['adx_14'] = adx
-    df['plus_di_14'] = plus_di
-    df['minus_di_14'] = minus_di
+    # ANTI-LOOKAHEAD: shift(1) ensures ADX at bar[t] uses data up to bar[t-1]
+    adx_col = f'adx_{period}'
+    plus_di_col = f'plus_di_{period}'
+    minus_di_col = f'minus_di_{period}'
 
-    # Trend strength
-    df['adx_strong_trend'] = (df['adx_14'] > 25).astype(int)
+    df[adx_col] = pd.Series(adx).shift(1).values
+    df[plus_di_col] = pd.Series(plus_di).shift(1).values
+    df[minus_di_col] = pd.Series(minus_di).shift(1).values
 
-    feature_metadata['adx_14'] = "Average Directional Index (14)"
-    feature_metadata['plus_di_14'] = "+DI (14)"
-    feature_metadata['minus_di_14'] = "-DI (14)"
-    feature_metadata['adx_strong_trend'] = "ADX strong trend flag (>25)"
+    # Trend strength - already shifted via adx column
+    df['adx_strong_trend'] = (df[adx_col] > 25).astype(int)
+
+    feature_metadata[adx_col] = f"Average Directional Index ({period}, lagged)"
+    feature_metadata[plus_di_col] = f"+DI ({period}, lagged)"
+    feature_metadata[minus_di_col] = f"-DI ({period}, lagged)"
+    feature_metadata['adx_strong_trend'] = "ADX strong trend flag (>25, lagged)"
 
     return df
 
 
-def add_supertrend(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_supertrend(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    period: int = 10,
+    multiplier: float = 3.0
+) -> pd.DataFrame:
     """
     Add Supertrend indicator.
 
-    Calculates Supertrend with period=10 and multiplier=3.
+    Calculates Supertrend with configurable period and multiplier.
+
+    Supertrend Algorithm:
+    - Upper Band = (High + Low) / 2 + multiplier * ATR
+    - Lower Band = (High + Low) / 2 - multiplier * ATR
+    - In uptrend: Supertrend = Lower Band (support)
+    - In downtrend: Supertrend = Upper Band (resistance)
+
+    Band update rules:
+    - Upper band can only decrease (tighten) during downtrend
+    - Lower band can only increase (tighten) during uptrend
 
     Parameters
     ----------
@@ -69,52 +95,90 @@ def add_supertrend(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.Dat
         DataFrame with OHLC columns
     feature_metadata : Dict[str, str]
         Dictionary to store feature descriptions
+    period : int, default 10
+        ATR period for Supertrend
+    multiplier : float, default 3.0
+        ATR multiplier
 
     Returns
     -------
     pd.DataFrame
         DataFrame with Supertrend features added
     """
-    logger.info("Adding Supertrend...")
+    logger.info(f"Adding Supertrend with period: {period}, multiplier: {multiplier}")
+    n = len(df)
 
-    period = 10
-    multiplier = 3
+    # Extract numpy arrays for performance
+    close = df['close'].values
+    high = df['high'].values
+    low = df['low'].values
 
     # Calculate ATR
-    atr = calculate_atr_numba(df['high'].values, df['low'].values, df['close'].values, period)
+    atr = calculate_atr_numba(high, low, close, period)
 
-    # Calculate basic bands
-    hl_avg = (df['high'] + df['low']) / 2
-    upper_band = hl_avg + (multiplier * atr)
-    lower_band = hl_avg - (multiplier * atr)
+    # Calculate basic bands: midpoint +/- multiplier * ATR
+    hl2 = (high + low) / 2
+    basic_upper = hl2 + multiplier * atr
+    basic_lower = hl2 - multiplier * atr
 
-    # Initialize supertrend
-    supertrend = np.full(len(df), np.nan)
-    direction = np.ones(len(df))
+    # Initialize output arrays
+    upper_band = np.zeros(n)
+    lower_band = np.zeros(n)
+    supertrend = np.zeros(n)
+    direction = np.zeros(n)  # 1 = uptrend, -1 = downtrend
 
-    for i in range(1, len(df)):
-        if not np.isnan(upper_band[i]) and not np.isnan(lower_band[i]):
-            # Upper band
-            if upper_band[i] < supertrend[i-1] if not np.isnan(supertrend[i-1]) else True:
-                upper_band[i] = supertrend[i-1] if not np.isnan(supertrend[i-1]) else upper_band[i]
+    # Set initial values at first valid ATR index (period, not period-1)
+    # ATR is first valid at index 'period', so we start there
+    # Start in uptrend by convention
+    upper_band[period] = basic_upper[period]
+    lower_band[period] = basic_lower[period]
+    supertrend[period] = basic_lower[period]
+    direction[period] = 1
 
-            # Lower band
-            if lower_band[i] > supertrend[i-1] if not np.isnan(supertrend[i-1]) else True:
-                lower_band[i] = supertrend[i-1] if not np.isnan(supertrend[i-1]) else lower_band[i]
+    for i in range(period + 1, n):
+        # Update upper band: can only decrease, or reset if price broke above
+        if basic_upper[i] < upper_band[i - 1] or close[i - 1] > upper_band[i - 1]:
+            upper_band[i] = basic_upper[i]
+        else:
+            upper_band[i] = upper_band[i - 1]
 
-            # Determine supertrend
-            if df['close'].iloc[i] <= upper_band[i]:
-                supertrend[i] = upper_band[i]
+        # Update lower band: can only increase, or reset if price broke below
+        if basic_lower[i] > lower_band[i - 1] or close[i - 1] < lower_band[i - 1]:
+            lower_band[i] = basic_lower[i]
+        else:
+            lower_band[i] = lower_band[i - 1]
+
+        # Determine trend direction based on previous direction and current price
+        if direction[i - 1] == 1:  # Was in uptrend
+            if close[i] < lower_band[i]:
+                # Price broke below support -> switch to downtrend
                 direction[i] = -1
+                supertrend[i] = upper_band[i]
             else:
-                supertrend[i] = lower_band[i]
+                # Stay in uptrend
                 direction[i] = 1
+                supertrend[i] = lower_band[i]
+        else:  # Was in downtrend
+            if close[i] > upper_band[i]:
+                # Price broke above resistance -> switch to uptrend
+                direction[i] = 1
+                supertrend[i] = lower_band[i]
+            else:
+                # Stay in downtrend
+                direction[i] = -1
+                supertrend[i] = upper_band[i]
 
-    df['supertrend'] = supertrend
-    df['supertrend_direction'] = direction
+    # Set NaN for warmup period where ATR is not valid
+    # ATR is first valid at index 'period', so indices 0 to period-1 are NaN
+    supertrend[:period] = np.nan
+    direction[:period] = np.nan
 
-    feature_metadata['supertrend'] = "Supertrend (10,3)"
-    feature_metadata['supertrend_direction'] = "Supertrend direction (1=up, -1=down)"
+    # ANTI-LOOKAHEAD: shift(1) ensures Supertrend at bar[t] uses data up to bar[t-1]
+    df['supertrend'] = pd.Series(supertrend).shift(1).values
+    df['supertrend_direction'] = pd.Series(direction).shift(1).values
+
+    feature_metadata['supertrend'] = f"Supertrend ({period},{multiplier}, lagged)"
+    feature_metadata['supertrend_direction'] = "Supertrend direction (1=up, -1=down, lagged)"
 
     return df
 

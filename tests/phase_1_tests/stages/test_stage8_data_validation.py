@@ -18,6 +18,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
 from stages.stage8_validate import DataValidator, validate_data
+from utils.feature_selection import FeatureSelectionResult
 
 
 # =============================================================================
@@ -200,7 +201,11 @@ class TestStage8DataValidator:
 
         # Feature selection should return results
         if feature_result is not None:
-            assert isinstance(feature_result, FeatureSelectionResult)
+            # Use duck typing - check for expected attributes instead of isinstance
+            # (avoids import path identity issues)
+            assert hasattr(feature_result, 'selected_features')
+            assert hasattr(feature_result, 'removed_features')
+            assert hasattr(feature_result, 'final_count')
 
 
 # =============================================================================
