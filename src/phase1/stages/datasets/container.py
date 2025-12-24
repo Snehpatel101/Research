@@ -9,7 +9,7 @@ and provides data in formats required by different model frameworks:
 
 Usage:
 ------
-    from src.stages.datasets.container import TimeSeriesDataContainer
+    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
     # Load from Phase 1 outputs
     container = TimeSeriesDataContainer.from_parquet_dir(
@@ -498,7 +498,7 @@ class TimeSeriesDataContainer:
         if stride <= 0:
             raise ValueError(f"stride must be positive, got {stride}")
 
-        from src.stages.datasets.sequences import SequenceDataset
+        from src.phase1.stages.datasets.sequences import SequenceDataset
 
         split_data = self.get_split(split)
 

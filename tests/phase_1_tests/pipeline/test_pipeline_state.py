@@ -15,8 +15,8 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from pipeline.runner import PipelineRunner
-from pipeline.utils import StageResult, StageStatus
+from src.pipeline.runner import PipelineRunner
+from src.pipeline.utils import StageResult, StageStatus
 
 
 class TestStatePersistence:

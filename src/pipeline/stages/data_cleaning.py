@@ -12,6 +12,6 @@ if TYPE_CHECKING:
     from manifest import ArtifactManifest
 
 # Import orchestration logic from stage subdirectory
-from src.stages.clean.run import run_data_cleaning
+from src.phase1.stages.clean.run import run_data_cleaning
 
 __all__ = ['run_data_cleaning']

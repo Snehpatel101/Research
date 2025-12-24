@@ -17,7 +17,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage6_final_labels import compute_quality_scores, assign_sample_weights, apply_optimized_labels
+from src.phase1.stages.labeling import compute_quality_scores, assign_sample_weights, apply_optimized_labels
 
 
 # =============================================================================

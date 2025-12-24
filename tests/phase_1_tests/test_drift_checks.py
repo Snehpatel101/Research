@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from src.stages.validators.drift import compute_psi, check_feature_drift
+from src.phase1.stages.validation.drift import compute_psi, check_feature_drift
 
 
 def test_compute_psi_detects_shift():

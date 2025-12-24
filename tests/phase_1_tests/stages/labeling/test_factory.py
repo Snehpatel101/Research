@@ -19,7 +19,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.labeling import (
+from src.phase1.stages.labeling import (
     DirectionalLabeler,
     LabelingResult,
     LabelingStrategy,
@@ -29,7 +29,7 @@ from stages.labeling import (
     TripleBarrierLabeler,
     get_labeler,
 )
-from stages.labeling.factory import (
+from src.phase1.stages.labeling.factory import (
     create_multi_labeler,
     get_available_strategies,
     register_strategy,

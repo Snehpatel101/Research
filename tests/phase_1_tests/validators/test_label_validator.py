@@ -22,7 +22,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.validators.labels import (
+from src.phase1.stages.validation.labels import (
     check_label_distribution,
     check_label_balance,
     check_per_symbol_distribution,

@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
-from src.stages.scaling import (
+from src.phase1.stages.scaling import (
     FeatureScaler,
     ScalerConfig,
     validate_scaling,

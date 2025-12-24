@@ -19,8 +19,8 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage3_features import FeatureEngineer
-from stages.features import (
+from src.phase1.stages.features import FeatureEngineer
+from src.phase1.stages.features import (
     calculate_sma_numba,
     calculate_ema_numba,
     calculate_rsi_numba,

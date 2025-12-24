@@ -25,7 +25,7 @@ from datetime import datetime
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage1_ingest import DataIngestor
+from src.phase1.stages.ingest import DataIngestor
 
 
 # =============================================================================

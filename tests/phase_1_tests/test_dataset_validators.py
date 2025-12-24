@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.stages.datasets import TimeSeriesDataContainer, validate_model_ready, ValidationResult
+from src.phase1.stages.datasets import TimeSeriesDataContainer, validate_model_ready, ValidationResult
 
 
 def _create_test_df(n_rows=100, horizon=20, has_issues=False):

@@ -18,7 +18,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.features.constants import (
+from src.phase1.stages.features.constants import (
     ANNUALIZATION_FACTOR,
     ANNUALIZATION_FACTOR_MAP,
     BARS_PER_DAY,

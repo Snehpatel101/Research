@@ -15,9 +15,9 @@ from typing import Final
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage1_ingest import DataIngestor
-from stages.stage2_clean import DataCleaner
-from stages.features.engineer import FeatureEngineer
+from src.phase1.stages.ingest import DataIngestor
+from src.phase1.stages.clean import DataCleaner
+from src.phase1.stages.features import FeatureEngineer
 
 # Test configuration matching pipeline defaults
 TEST_SYMBOLS: Final[list[str]] = ['MES', 'MGC']

@@ -31,7 +31,7 @@ def run_initial_labeling(
     Returns:
         StageResult with status and artifacts
     """
-    from src.stages.labeling.run import run_initial_labeling as _run_initial_labeling
+    from src.phase1.stages.labeling.run import run_initial_labeling as _run_initial_labeling
 
     return _run_initial_labeling(
         config, manifest, create_stage_result, create_failed_result
@@ -54,7 +54,7 @@ def run_final_labels(
     Returns:
         StageResult with status and artifacts
     """
-    from src.stages.final_labels.run import run_final_labels as _run_final_labels
+    from src.phase1.stages.final_labels.run import run_final_labels as _run_final_labels
 
     return _run_final_labels(
         config, manifest, create_stage_result, create_failed_result

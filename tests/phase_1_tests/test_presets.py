@@ -23,7 +23,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from presets import (
+from src.phase1.presets import (
     TradingPreset,
     PRESET_CONFIGS,
     validate_preset,
@@ -516,7 +516,7 @@ class TestPresetIntegration:
 
     def test_preset_with_pipeline_config(self, temp_project_dir):
         """Verify preset can be applied to real PipelineConfig."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         # Create base config
         config = PipelineConfig(project_root=temp_project_dir)
@@ -532,7 +532,7 @@ class TestPresetIntegration:
 
     def test_all_presets_produce_valid_configs(self, temp_project_dir):
         """Verify all presets produce valid configurations."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         for preset in TradingPreset:
             config = PipelineConfig(project_root=temp_project_dir)

@@ -10,7 +10,7 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
-from src.stages.labeling import triple_barrier_numba
+from src.phase1.stages.labeling import triple_barrier_numba
 from src.config import TRANSACTION_COSTS
 
 logger = logging.getLogger(__name__)

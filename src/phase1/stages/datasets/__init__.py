@@ -12,11 +12,11 @@ This module provides:
 Usage:
 ------
     # Pipeline stage
-    from src.stages.datasets import run_build_datasets
+    from src.phase1.stages.datasets import run_build_datasets
     result = run_build_datasets(config, manifest)
 
     # Direct data loading for Phase 2
-    from src.stages.datasets import TimeSeriesDataContainer
+    from src.phase1.stages.datasets import TimeSeriesDataContainer
 
     container = TimeSeriesDataContainer.from_parquet_dir(
         path="data/splits/scaled",
@@ -33,13 +33,13 @@ Usage:
     nf_df = container.get_neuralforecast_df("train")
 
     # Validate model readiness
-    from src.stages.datasets import validate_model_ready, ValidationResult
+    from src.phase1.stages.datasets import validate_model_ready, ValidationResult
     result = validate_model_ready(container)
     if not result.is_valid:
         raise ValueError(f"Validation failed: {result.errors}")
 """
-from src.stages.datasets.run import run_build_datasets
-from src.stages.datasets.container import (
+from src.phase1.stages.datasets.run import run_build_datasets
+from src.phase1.stages.datasets.container import (
     TimeSeriesDataContainer,
     DataContainerConfig,
     SplitData,
@@ -47,14 +47,14 @@ from src.stages.datasets.container import (
     LABEL_PREFIXES,
     INVALID_LABEL,
 )
-from src.stages.datasets.sequences import (
+from src.phase1.stages.datasets.sequences import (
     SequenceDataset,
     SequenceConfig,
     create_sequence_dataset,
     build_sequence_indices,
     find_symbol_boundaries,
 )
-from src.stages.datasets.validators import (
+from src.phase1.stages.datasets.validators import (
     validate_model_ready,
     ValidationResult,
 )

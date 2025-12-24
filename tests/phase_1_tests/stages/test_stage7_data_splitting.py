@@ -17,7 +17,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage7_splits import create_chronological_splits, validate_no_overlap, create_splits
+from src.phase1.stages.splits.core import create_chronological_splits, validate_no_overlap, create_splits
 
 
 # =============================================================================

@@ -31,7 +31,7 @@ def run_ga_optimization(
     Returns:
         StageResult with status and artifacts
     """
-    from src.stages.ga_optimize.run import run_ga_optimization_stage
+    from src.phase1.stages.ga_optimize.run import run_ga_optimization_stage
 
     return run_ga_optimization_stage(
         config, manifest, create_stage_result, create_failed_result

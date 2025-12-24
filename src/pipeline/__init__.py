@@ -16,8 +16,8 @@ Stage Flow:
 9. generate_report    - Generate completion report
 
 Usage:
-    from pipeline import PipelineRunner
-    from pipeline_config import create_default_config
+    from src.pipeline.runner import PipelineRunner
+    from src.phase1.pipeline_config import create_default_config
 
     config = create_default_config(
         symbols=['MES', 'MGC'],
@@ -28,7 +28,6 @@ Usage:
     runner = PipelineRunner(config)
     success = runner.run()
 """
-from .runner import PipelineRunner
 from .utils import StageStatus, StageResult
 from .stage_registry import PipelineStage, get_stage_definitions, get_stage_order
 
@@ -42,3 +41,11 @@ __all__ = [
 ]
 
 __version__ = '1.0.0'
+
+
+def __getattr__(name: str):
+    """Lazy import PipelineRunner to avoid circular dependencies."""
+    if name == 'PipelineRunner':
+        from .runner import PipelineRunner
+        return PipelineRunner
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

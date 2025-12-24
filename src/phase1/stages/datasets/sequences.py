@@ -12,7 +12,7 @@ Key Features:
 
 Usage:
 ------
-    from src.stages.datasets.sequences import SequenceDataset
+    from src.phase1.stages.datasets.sequences import SequenceDataset
 
     dataset = SequenceDataset(
         df=train_df,

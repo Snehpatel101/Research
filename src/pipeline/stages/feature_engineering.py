@@ -12,6 +12,6 @@ if TYPE_CHECKING:
     from manifest import ArtifactManifest
 
 # Import orchestration logic from stage subdirectory
-from src.stages.features.run import run_feature_engineering
+from src.phase1.stages.features.run import run_feature_engineering
 
 __all__ = ['run_feature_engineering']

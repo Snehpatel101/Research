@@ -16,11 +16,11 @@ import sys
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.features.price_features import add_returns, add_price_ratios
-from stages.features.momentum import add_rsi, add_macd, add_roc, add_stochastic
-from stages.features.trend import add_adx, add_supertrend
-from stages.features.moving_averages import add_sma, add_ema
-from stages.features.volume import add_volume_features, add_vwap
+from src.phase1.stages.features.price_features import add_returns, add_price_ratios
+from src.phase1.stages.features.momentum import add_rsi, add_macd, add_roc, add_stochastic
+from src.phase1.stages.features.trend import add_adx, add_supertrend
+from src.phase1.stages.features.moving_averages import add_sma, add_ema
+from src.phase1.stages.features.volume import add_volume_features, add_vwap
 
 
 def create_test_data(n_bars: int = 100, price_jump_at: int = -1) -> pd.DataFrame:

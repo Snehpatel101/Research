@@ -24,7 +24,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from pipeline_config import PipelineConfig, create_default_config
+from src.phase1.pipeline_config import PipelineConfig, create_default_config
 
 
 # =============================================================================

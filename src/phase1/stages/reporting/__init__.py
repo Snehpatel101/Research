@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from src.horizon_config import LOOKBACK_HORIZONS
+from src.common.horizon_config import LOOKBACK_HORIZONS
 
 from .charts import generate_all_charts
 from .formatters import save_html_report

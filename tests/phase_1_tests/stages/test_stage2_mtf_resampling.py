@@ -586,14 +586,14 @@ class TestPipelineConfigMTF:
 
     def test_pipeline_config_default_timeframe(self):
         """Test PipelineConfig defaults to 5min."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig()
         assert config.target_timeframe == '5min'
 
     def test_pipeline_config_custom_timeframe(self):
         """Test PipelineConfig with custom target_timeframe."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig(target_timeframe='15min')
         assert config.target_timeframe == '15min'
@@ -601,7 +601,7 @@ class TestPipelineConfigMTF:
 
     def test_pipeline_config_bar_resolution_backward_compat(self):
         """Test that bar_resolution syncs with target_timeframe."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         # Old code might set bar_resolution directly
         config = PipelineConfig(bar_resolution='30min')
@@ -609,14 +609,14 @@ class TestPipelineConfigMTF:
 
     def test_pipeline_config_invalid_timeframe(self):
         """Test PipelineConfig rejects invalid timeframe."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             PipelineConfig(target_timeframe='7min')
 
     def test_pipeline_config_validate_timeframe(self):
         """Test PipelineConfig.validate() includes timeframe check."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig()
         issues = config.validate()

@@ -13,7 +13,7 @@ This module serves as a bridge for the config package structure.
 """
 
 # Import and re-export all horizon configuration from dedicated module
-from src.horizon_config import (
+from src.common.horizon_config import (
     # Horizon lists
     SUPPORTED_HORIZONS,
     HORIZONS,

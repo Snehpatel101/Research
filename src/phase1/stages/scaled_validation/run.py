@@ -15,7 +15,7 @@ import pandas as pd
 from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
 from src.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
 from src.config.features import get_drift_config
-from src.stages.validation.drift import check_feature_drift
+from src.phase1.stages.validation.drift import check_feature_drift
 from src.utils.feature_sets import resolve_feature_set
 
 if TYPE_CHECKING:

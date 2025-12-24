@@ -1,7 +1,7 @@
 import pandas as pd
 
-from src.manifest import ArtifactManifest
-from src.pipeline_config import PipelineConfig
+from src.common.manifest import ArtifactManifest
+from src.phase1.pipeline_config import PipelineConfig
 from src.pipeline.stages.datasets import run_build_datasets
 
 

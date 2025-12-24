@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.pipeline.utils import StageResult, StageStatus, create_stage_result, create_failed_result
-from src.stages.validation import validate_data
+from src.phase1.stages.validation import validate_data
 
 if TYPE_CHECKING:
     from pipeline_config import PipelineConfig

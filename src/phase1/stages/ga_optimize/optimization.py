@@ -18,7 +18,7 @@ import pandas as pd
 from deap import tools
 from tqdm import tqdm
 
-from src.stages.labeling import triple_barrier_numba
+from src.phase1.stages.labeling import triple_barrier_numba
 from src.config import TRANSACTION_COSTS
 
 from .operators import (

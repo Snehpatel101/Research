@@ -110,7 +110,7 @@ def validate_label_distribution(
         Dict: Distribution statistics per label column per split
     """
     if horizons is None:
-        from src.horizon_config import ACTIVE_HORIZONS
+        from src.common.horizon_config import ACTIVE_HORIZONS
         horizons = ACTIVE_HORIZONS
 
     splits = {

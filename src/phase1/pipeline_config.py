@@ -11,7 +11,7 @@ import logging
 
 # Import HorizonConfig from the dedicated horizon module
 # Re-exported here for backward compatibility
-from src.horizon_config import HorizonConfig
+from src.common.horizon_config import HorizonConfig
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

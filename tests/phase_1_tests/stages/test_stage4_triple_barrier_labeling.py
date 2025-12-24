@@ -17,7 +17,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.stage4_labeling import triple_barrier_numba, apply_triple_barrier
+from src.phase1.stages.labeling import triple_barrier_numba, apply_triple_barrier
 
 
 # =============================================================================

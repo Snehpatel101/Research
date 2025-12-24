@@ -21,7 +21,7 @@ from importlib.util import find_spec
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.validators.features import (
+from src.phase1.stages.validation.features import (
     get_feature_columns,
     check_feature_correlations,
     compute_feature_importance,

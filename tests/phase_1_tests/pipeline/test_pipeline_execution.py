@@ -13,8 +13,8 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from pipeline.runner import PipelineRunner
-from pipeline.stage_registry import PipelineStage
+from src.pipeline.runner import PipelineRunner
+from src.pipeline.stage_registry import PipelineStage
 
 
 class TestStageDependencies:

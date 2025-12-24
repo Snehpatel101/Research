@@ -12,20 +12,20 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from src.cli.run_commands import _create_config_from_args
-from src.presets import TradingPreset, get_preset, list_available_presets
+from src.phase1.presets import TradingPreset, get_preset, list_available_presets
 
 
 @pytest.fixture
 def mock_pipeline_config():
     """Mock pipeline_config module."""
-    from src import pipeline_config
+    from src.phase1 import pipeline_config
     return pipeline_config
 
 
 @pytest.fixture
 def mock_presets_module():
     """Mock presets module."""
-    from src import presets
+    from src.phase1 import presets
     return presets
 
 

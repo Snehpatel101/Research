@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.stages.datasets.container import TimeSeriesDataContainer
+    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -214,7 +214,7 @@ def main() -> int:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s: %(message)s")
-    from src.stages.datasets.container import TimeSeriesDataContainer
+    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
     path = Path(args.path)
     if not path.is_dir():

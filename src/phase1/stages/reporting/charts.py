@@ -10,7 +10,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.horizon_config import LOOKBACK_HORIZONS
+from src.common.horizon_config import LOOKBACK_HORIZONS
 
 matplotlib.use('Agg')
 

@@ -204,7 +204,7 @@ from .validation import (
 # =============================================================================
 # PRESETS - Trading presets (re-exported from presets module)
 # =============================================================================
-from src.presets import (
+from src.phase1.presets import (
     TradingPreset,
     PRESET_CONFIGS,
     get_preset,

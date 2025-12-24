@@ -14,17 +14,17 @@ Stage 8: Validation - Comprehensive data, label, and feature quality checks
 Stage 9: Report Generation - Comprehensive Phase 1 summary with charts
 """
 
-# Core stage imports
-from .ingest import DataIngestor
-from .clean import DataCleaner
-from .features import FeatureEngineer
+# Core stage imports - redirect to phase1 modules
+from src.phase1.stages.ingest import DataIngestor
+from src.phase1.stages.clean import DataCleaner
+from src.phase1.stages.features import FeatureEngineer
 
 # Extended stage imports
-from .splits.core import create_chronological_splits
-from .validation.run import run_validation
+from src.phase1.stages.splits.core import create_chronological_splits
+from src.phase1.stages.validation.run import run_validation
 
 # Feature scaler imports
-from .scaling import (
+from src.phase1.stages.scaling import (
     FeatureScalingConfig,
     FeatureScaler,
     scale_splits,

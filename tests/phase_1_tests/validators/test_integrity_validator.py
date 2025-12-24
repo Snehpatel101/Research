@@ -22,7 +22,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.validators.integrity import (
+from src.phase1.stages.validation.integrity import (
     check_duplicate_timestamps,
     check_nan_values,
     check_infinite_values,

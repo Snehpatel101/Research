@@ -22,7 +22,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.labeling import LabelingType, TripleBarrierLabeler, triple_barrier_numba
+from src.phase1.stages.labeling import LabelingType, TripleBarrierLabeler, triple_barrier_numba
 
 
 @pytest.fixture

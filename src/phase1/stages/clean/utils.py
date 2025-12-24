@@ -220,7 +220,7 @@ def add_session_id(
     if datetime_column not in df.columns:
         raise ValueError(f"Missing required datetime column: {datetime_column}")
 
-    from src.stages.sessions import SessionFilter, SessionName
+    from src.phase1.stages.sessions import SessionFilter, SessionName
 
     df = df.copy()
     session_filter = SessionFilter(datetime_column=datetime_column)

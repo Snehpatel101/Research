@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.stages.ga_optimize.fitness import calculate_fitness
+from src.phase1.stages.ga_optimize.fitness import calculate_fitness
 
 
 def test_calculate_fitness_penalizes_imbalanced_labels():
