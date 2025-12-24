@@ -19,7 +19,7 @@ def _get_pipeline_config():
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
-        from .. import pipeline_config
+        from ..phase1 import pipeline_config
         _pipeline_config = pipeline_config
     return _pipeline_config
 
@@ -37,7 +37,7 @@ def _get_presets_module():
     """Lazy import presets module."""
     global _presets_module
     if _presets_module is None:
-        from .. import presets
+        from ..phase1 import presets
         _presets_module = presets
     return _presets_module
 

@@ -134,8 +134,12 @@ def run_scaled_validation(
                 "test_drift": test_drift,
             }
 
-            logger.info(f"  Val drift - drifted: {val_drift['n_drifted']}, stable: {val_drift['n_stable']}")
-            logger.info(f"  Test drift - drifted: {test_drift['n_drifted']}, stable: {test_drift['n_stable']}")
+            val_drifted = val_drift.get('drifted_feature_count', 0)
+            val_total = val_drift.get('feature_count', 0)
+            test_drifted = test_drift.get('drifted_feature_count', 0)
+            test_total = test_drift.get('feature_count', 0)
+            logger.info(f"  Val drift - drifted: {val_drifted}/{val_total} features")
+            logger.info(f"  Test drift - drifted: {test_drifted}/{test_total} features")
 
         report_path = config.results_dir / f"scaled_drift_report_{config.run_id}.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
