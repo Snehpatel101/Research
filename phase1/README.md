@@ -26,15 +26,15 @@ Model-Ready Parquet Files
 
 # Output location
 ls data/splits/scaled/
-# train_scaled.parquet  (87K rows × 126 cols)
-# val_scaled.parquet    (18K rows × 126 cols)
-# test_scaled.parquet   (18K rows × 126 cols)
+# train_scaled.parquet  (41K rows × 129 cols)
+# val_scaled.parquet    (7K rows × 129 cols)
+# test_scaled.parquet   (7K rows × 129 cols)
 ```
 
 ## Phase 2 Integration
 
 ```python
-from src.stages.datasets import TimeSeriesDataContainer
+from src.phase1.stages.datasets import TimeSeriesDataContainer
 
 # Load Phase 1 outputs
 container = TimeSeriesDataContainer.from_parquet_dir(
@@ -50,10 +50,26 @@ nf_df = container.get_neuralforecast_df('train')     # N-HiTS/TFT
 ## Directory Structure
 
 ```
-phase1/
-├── src/ → ../src        # Symlink to source code
-├── tests/ → ../tests    # Symlink to tests
-└── README.md            # This file
+src/phase1/
+├── stages/           # 15 pipeline stages
+│   ├── ingest/       # Data ingestion
+│   ├── clean/        # Cleaning & resampling
+│   ├── features/     # Feature engineering
+│   ├── labeling/     # Triple-barrier labels
+│   ├── ga_optimize/  # GA barrier optimization
+│   ├── final_labels/ # Apply optimized labels
+│   ├── splits/       # Train/val/test splits
+│   ├── scaling/      # Feature scaling
+│   ├── datasets/     # Dataset builder
+│   ├── validation/   # Data validation
+│   └── reporting/    # Completion reports
+├── config/           # Phase 1 config
+│   ├── barriers_config.py
+│   ├── labeling_config.py
+│   └── feature_sets.py
+├── utils/            # Phase 1 utilities
+├── pipeline_config.py
+└── presets.py
 ```
 
 ## Key Parameters

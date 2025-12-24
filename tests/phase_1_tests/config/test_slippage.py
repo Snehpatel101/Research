@@ -15,7 +15,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from config.barriers_config import (
+from src.phase1.config.barriers_config import (
     SLIPPAGE_TICKS,
     TRANSACTION_COSTS,
     TICK_VALUES,

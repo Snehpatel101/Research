@@ -145,8 +145,8 @@ class TestRegisterStrategy:
     def test_register_custom_strategy(self):
         """Test registering a custom strategy."""
         # Import the registry to save/restore original
-        from stages.labeling.factory import _STRATEGY_REGISTRY
-        from stages.labeling.meta import MetaLabeler
+        from src.phase1.stages.labeling.factory import _STRATEGY_REGISTRY
+        from src.phase1.stages.labeling.meta import MetaLabeler
 
         # Save original MetaLabeler registration
         original_meta = _STRATEGY_REGISTRY.get(LabelingType.META)

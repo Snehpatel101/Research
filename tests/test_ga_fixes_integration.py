@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from src.phase1.stages.ga_optimize.fitness import calculate_fitness, evaluate_individual
-from src.phase1.stages.stage4_labeling import triple_barrier_numba
+from src.phase1.stages.labeling import triple_barrier_numba
 from src.config import TRANSACTION_COSTS, TICK_VALUES
 
 

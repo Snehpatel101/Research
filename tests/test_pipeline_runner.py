@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 from pipeline.utils import StageStatus, StageResult
 from pipeline.stage_registry import PipelineStage
 from pipeline.runner import PipelineRunner
-from pipeline_config import PipelineConfig, create_default_config
+from src.phase1.pipeline_config import PipelineConfig, create_default_config
 
 # Test configuration matching pipeline defaults
 TEST_SYMBOLS: Final[list[str]] = ['MES', 'MGC']

@@ -779,7 +779,7 @@ class TestRegimeIntegration:
 
     def test_regime_features_integration(self, sample_ohlcv_df):
         """Test regime features integrate with feature engineering."""
-        from stages.features.regime import add_regime_features
+        from src.phase1.stages.features.regime import add_regime_features
 
         feature_metadata = {}
 

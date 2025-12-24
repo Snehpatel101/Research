@@ -22,10 +22,10 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.features.volatility import add_atr, add_bollinger_bands
-from stages.features.momentum import add_rsi, add_macd
-from stages.features.price_features import add_returns
-from stages.stage7_splits import create_chronological_splits
+from src.phase1.stages.features.volatility import add_atr, add_bollinger_bands
+from src.phase1.stages.features.momentum import add_rsi, add_macd
+from src.phase1.stages.features.price_features import add_returns
+from src.phase1.stages.splits import create_chronological_splits
 
 
 # =============================================================================

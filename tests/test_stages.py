@@ -61,7 +61,7 @@ def test_numba_function() -> bool:
     """
     print("Testing numba triple barrier function...")
 
-    from stages.stage4_labeling import triple_barrier_numba
+    from src.phase1.stages.labeling import triple_barrier_numba
 
     # Create small test dataset
     n: int = 100
@@ -103,7 +103,7 @@ def test_quality_scoring() -> bool:
     """
     print("Testing quality scoring...")
 
-    from stages.stage6_final_labels import compute_quality_scores
+    from src.phase1.stages.final_labels import compute_quality_scores
 
     # Create test data
     n: int = 100
@@ -140,7 +140,7 @@ def test_sample_weights() -> bool:
     """
     print("Testing sample weight assignment...")
 
-    from stages.stage6_final_labels import assign_sample_weights
+    from src.phase1.stages.final_labels import assign_sample_weights
 
     # Create test quality scores
     n: int = 1000

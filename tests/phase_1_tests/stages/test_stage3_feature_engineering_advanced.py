@@ -125,7 +125,7 @@ class TestFeatureEngineerCrossAsset:
         """Test that cross-asset features are NaN when data is missing."""
         # Arrange - import the module-level function
         feature_metadata = {}
-        from stages.features.cross_asset import add_cross_asset_features
+        from src.phase1.stages.features.cross_asset import add_cross_asset_features
 
         # Act - call without cross-asset close arrays (mes_close=None, mgc_close=None)
         # The function adds NaN columns when cross-asset data is not provided

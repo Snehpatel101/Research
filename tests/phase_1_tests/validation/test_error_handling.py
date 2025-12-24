@@ -27,7 +27,7 @@ class TestErrorCollection:
 
     def test_stage1_ingest_collects_errors(self):
         """Test that stage1 ingest collects errors for bad files."""
-        from stages.stage1_ingest import DataIngestor
+        from src.phase1.stages.stage1_ingest import DataIngestor
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -58,7 +58,7 @@ class TestErrorCollection:
 
     def test_stage2_clean_collects_errors(self):
         """Test that stage2 clean collects errors for bad files."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -77,7 +77,7 @@ class TestErrorCollection:
 
     def test_stage3_features_collects_errors(self):
         """Test that stage3 features collects errors."""
-        from stages.stage3_features import FeatureEngineer
+        from src.phase1.stages.features.features import FeatureEngineer
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -96,7 +96,7 @@ class TestErrorCollection:
 
     def test_stage1_no_files_returns_empty(self):
         """Test that stage1 returns empty dict when no files match pattern."""
-        from stages.stage1_ingest import DataIngestor
+        from src.phase1.stages.stage1_ingest import DataIngestor
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -112,7 +112,7 @@ class TestErrorCollection:
 
     def test_stage2_no_files_returns_empty(self):
         """Test that stage2 returns empty dict when no files match pattern."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -128,7 +128,7 @@ class TestErrorCollection:
 
     def test_stage3_no_files_returns_empty(self):
         """Test that stage3 returns empty dict when no files match pattern."""
-        from stages.stage3_features import FeatureEngineer
+        from src.phase1.stages.features.features import FeatureEngineer
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -148,7 +148,7 @@ class TestGAFitnessErrors:
 
     def test_empty_labels_returns_negative(self):
         """Test that empty label array returns negative fitness."""
-        from stages.stage5_ga_optimize import calculate_fitness
+        from src.phase1.stages.ga_optimize.ga_optimize import calculate_fitness
 
         labels = np.array([], dtype=np.int8)
         bars_to_hit = np.array([], dtype=np.int32)
@@ -171,7 +171,7 @@ class TestGAFitnessErrors:
 
     def test_all_neutral_labels_penalized(self):
         """Test that all-neutral labels are penalized."""
-        from stages.stage5_ga_optimize import calculate_fitness
+        from src.phase1.stages.ga_optimize.ga_optimize import calculate_fitness
 
         n = 100
         labels = np.zeros(n, dtype=np.int8)  # All neutral
@@ -194,7 +194,7 @@ class TestGAFitnessErrors:
 
     def test_balanced_labels_positive_fitness(self):
         """Test that balanced labels can achieve positive fitness."""
-        from stages.stage5_ga_optimize import calculate_fitness
+        from src.phase1.stages.ga_optimize.ga_optimize import calculate_fitness
 
         np.random.seed(42)
         n = 100
@@ -264,7 +264,7 @@ class TestErrorMessages:
 
     def test_missing_atr_column_error_message(self):
         """Test that missing ATR column gives helpful error message."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.stage4_labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -284,7 +284,7 @@ class TestErrorMessages:
 
     def test_empty_dataframe_error_message(self):
         """Test that empty DataFrame gives helpful error message."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.stage4_labeling import apply_triple_barrier
 
         df = pd.DataFrame(columns=['datetime', 'close', 'high', 'low', 'open', 'atr_14'])
 
@@ -297,7 +297,7 @@ class TestErrorMessages:
 
     def test_invalid_horizon_error_message(self):
         """Test that invalid horizon gives helpful error message."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.stage4_labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -317,7 +317,7 @@ class TestErrorMessages:
 
     def test_negative_k_up_error_message(self):
         """Test that negative k_up gives helpful error message."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.stage4_labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -341,7 +341,7 @@ class TestSecurityErrors:
 
     def test_path_traversal_blocked(self):
         """Test that path traversal attempts are blocked."""
-        from stages.stage1_ingest import DataIngestor, SecurityError
+        from src.phase1.stages.stage1_ingest import DataIngestor, SecurityError
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -357,7 +357,7 @@ class TestSecurityErrors:
 
     def test_tilde_expansion_blocked(self):
         """Test that tilde expansion is blocked."""
-        from stages.stage1_ingest import DataIngestor, SecurityError
+        from src.phase1.stages.stage1_ingest import DataIngestor, SecurityError
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -377,7 +377,7 @@ class TestExceptionChaining:
 
     def test_stage1_preserves_error_context(self):
         """Test that stage1 error collection preserves original error info."""
-        from stages.stage1_ingest import DataIngestor
+        from src.phase1.stages.stage1_ingest import DataIngestor
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
@@ -407,7 +407,7 @@ class TestValidationErrors:
 
     def test_stage4_missing_ohlc_columns(self):
         """Test that missing OHLC columns raise clear errors."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.stage4_labeling import apply_triple_barrier
 
         # DataFrame missing 'high' column
         df = pd.DataFrame({
@@ -427,7 +427,7 @@ class TestValidationErrors:
 
     def test_stage4_nan_handling(self):
         """Test that NaN values in close prices are handled gracefully."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.stage4_labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),

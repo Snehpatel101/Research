@@ -25,7 +25,7 @@ class TestLabelingValidation:
 
     def test_negative_horizon_raises(self) -> None:
         """Test that negative horizon raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df: pd.DataFrame = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -41,7 +41,7 @@ class TestLabelingValidation:
 
     def test_zero_horizon_raises(self):
         """Test that zero horizon raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -57,7 +57,7 @@ class TestLabelingValidation:
 
     def test_negative_k_up_raises(self):
         """Test that negative k_up raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -73,7 +73,7 @@ class TestLabelingValidation:
 
     def test_zero_k_up_raises(self):
         """Test that zero k_up raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -89,7 +89,7 @@ class TestLabelingValidation:
 
     def test_negative_k_down_raises(self):
         """Test that negative k_down raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -105,7 +105,7 @@ class TestLabelingValidation:
 
     def test_negative_max_bars_raises(self):
         """Test that negative max_bars raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -121,7 +121,7 @@ class TestLabelingValidation:
 
     def test_missing_atr_column_raises(self):
         """Test that missing ATR column raises KeyError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -137,7 +137,7 @@ class TestLabelingValidation:
 
     def test_missing_ohlc_columns_raises(self):
         """Test that missing OHLC columns raises KeyError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -150,7 +150,7 @@ class TestLabelingValidation:
 
     def test_empty_dataframe_raises(self):
         """Test that empty DataFrame raises ValueError."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df = pd.DataFrame()
 
@@ -159,7 +159,7 @@ class TestLabelingValidation:
 
     def test_valid_parameters_succeed(self) -> None:
         """Test that valid parameters do not raise."""
-        from stages.stage4_labeling import apply_triple_barrier
+        from src.phase1.stages.labeling import apply_triple_barrier
 
         df: pd.DataFrame = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=100, freq='5min'),
@@ -254,7 +254,7 @@ class TestSplitsValidation:
 
     def test_empty_dataframe_raises(self):
         """Test that empty DataFrame raises ValueError."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame()
 
@@ -263,7 +263,7 @@ class TestSplitsValidation:
 
     def test_train_set_eliminated_by_purge_raises(self):
         """Test validation catches train set eliminated by purging."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         # Create small dataset where purge would eliminate train set
         df = pd.DataFrame({
@@ -284,7 +284,7 @@ class TestSplitsValidation:
 
     def test_ratios_must_be_positive(self):
         """Test that negative ratios are rejected."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),
@@ -301,7 +301,7 @@ class TestSplitsValidation:
 
     def test_val_ratio_must_be_positive(self):
         """Test that negative val_ratio is rejected."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),
@@ -318,7 +318,7 @@ class TestSplitsValidation:
 
     def test_ratios_must_sum_to_one(self):
         """Test that ratios must sum to 1.0."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),
@@ -335,7 +335,7 @@ class TestSplitsValidation:
 
     def test_missing_datetime_column_raises(self):
         """Test that missing datetime column raises KeyError."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'close': range(1000)
@@ -347,7 +347,7 @@ class TestSplitsValidation:
 
     def test_negative_purge_bars_raises(self):
         """Test that negative purge_bars raises ValueError."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),
@@ -362,7 +362,7 @@ class TestSplitsValidation:
 
     def test_negative_embargo_bars_raises(self):
         """Test that negative embargo_bars raises ValueError."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),
@@ -377,7 +377,7 @@ class TestSplitsValidation:
 
     def test_valid_parameters_succeed(self):
         """Test that valid parameters produce correct splits."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),
@@ -408,7 +408,7 @@ class TestPerSymbolValidation:
 
     def test_symbol_underrepresentation_raises(self):
         """Test that underrepresented symbol raises error."""
-        from stages.stage7_splits import validate_per_symbol_distribution
+        from src.phase1.stages.splits import validate_per_symbol_distribution
 
         # Create imbalanced data
         df = pd.DataFrame({
@@ -428,7 +428,7 @@ class TestPerSymbolValidation:
 
     def test_balanced_distribution_succeeds(self):
         """Test that balanced symbol distribution passes validation."""
-        from stages.stage7_splits import validate_per_symbol_distribution
+        from src.phase1.stages.splits import validate_per_symbol_distribution
 
         # Create balanced data
         symbols = ['MES', 'MGC'] * 50
@@ -453,7 +453,7 @@ class TestNoOverlapValidation:
 
     def test_validate_no_overlap_passes_for_disjoint(self):
         """Test that validate_no_overlap passes for disjoint sets."""
-        from stages.stage7_splits import validate_no_overlap
+        from src.phase1.stages.splits import validate_no_overlap
 
         train_idx = np.array([0, 1, 2, 3, 4])
         val_idx = np.array([10, 11, 12])
@@ -463,7 +463,7 @@ class TestNoOverlapValidation:
 
     def test_validate_no_overlap_fails_for_train_val_overlap(self):
         """Test that validate_no_overlap fails when train and val overlap."""
-        from stages.stage7_splits import validate_no_overlap
+        from src.phase1.stages.splits import validate_no_overlap
 
         train_idx = np.array([0, 1, 2, 3, 4])
         val_idx = np.array([4, 5, 6])  # 4 overlaps with train
@@ -473,7 +473,7 @@ class TestNoOverlapValidation:
 
     def test_validate_no_overlap_fails_for_train_test_overlap(self):
         """Test that validate_no_overlap fails when train and test overlap."""
-        from stages.stage7_splits import validate_no_overlap
+        from src.phase1.stages.splits import validate_no_overlap
 
         train_idx = np.array([0, 1, 2, 3, 4])
         val_idx = np.array([10, 11, 12])
@@ -483,7 +483,7 @@ class TestNoOverlapValidation:
 
     def test_validate_no_overlap_fails_for_val_test_overlap(self):
         """Test that validate_no_overlap fails when val and test overlap."""
-        from stages.stage7_splits import validate_no_overlap
+        from src.phase1.stages.splits import validate_no_overlap
 
         train_idx = np.array([0, 1, 2, 3, 4])
         val_idx = np.array([10, 11, 12])
@@ -534,7 +534,7 @@ class TestRandomSeedReproducibility:
     def test_reproducible_splits(self):
         """Test that splits are reproducible with same seed."""
         from config import set_global_seeds
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
 
         df = pd.DataFrame({
             'datetime': pd.date_range('2020-01-01', periods=1000, freq='5min'),

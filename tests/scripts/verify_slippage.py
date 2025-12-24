@@ -116,7 +116,7 @@ cost = get_total_trade_cost('MES', 'low_vol')  # 1.5 ticks
 commission = get_total_trade_cost('MES', include_slippage=False)  # 0.5 ticks
 
 # Calculate fitness with slippage
-from stages.ga_optimize.fitness import calculate_fitness
+from src.phase1.stages.ga_optimize.fitness import calculate_fitness
 fitness = calculate_fitness(
     labels, bars_to_hit, mae, mfe, horizon, atr_mean,
     symbol='MES',

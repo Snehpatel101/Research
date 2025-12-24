@@ -23,7 +23,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.features.cross_asset import add_cross_asset_features
+from src.phase1.stages.features.cross_asset import add_cross_asset_features
 
 
 # =============================================================================

@@ -70,7 +70,7 @@ class TestEmptyDataFrame:
 
     def test_stage1_empty_file_raises(self, temp_dir):
         """Test that empty file raises ValueError."""
-        from stages.stage1_ingest import DataIngestor
+        from src.phase1.stages.ingest import DataIngestor
 
         # Create empty parquet file
         empty_df = pd.DataFrame()
@@ -87,7 +87,7 @@ class TestEmptyDataFrame:
 
     def test_feature_engineer_empty_raises(self, temp_dir):
         """Test that empty DataFrame raises in feature engineering."""
-        from stages.stage3_features import FeatureEngineer
+        from src.phase1.stages.features.features import FeatureEngineer
 
         engineer = FeatureEngineer(
             input_dir=temp_dir,
@@ -106,7 +106,7 @@ class TestAllNaNColumns:
 
     def test_feature_dropna_validation(self, temp_dir):
         """Test that dropping all rows raises error."""
-        from stages.stage3_features import FeatureEngineer
+        from src.phase1.stages.features.features import FeatureEngineer
 
         # Create DataFrame with ~50 rows (some but not enough for all rolling windows)
         # The longest rolling window is 200-period SMA, so this should result
@@ -146,7 +146,7 @@ class TestDivisionByZero:
 
     def test_stochastic_zero_range(self):
         """Test stochastic with zero range (high == low)."""
-        from stages.features.momentum import add_stochastic
+        from src.phase1.stages.features.momentum import add_stochastic
 
         df = pd.DataFrame({
             'high': [100.0, 100.0, 100.0, 100.0, 100.0] * 10,  # Same as low
@@ -167,7 +167,7 @@ class TestDivisionByZero:
 
     def test_rsi_no_losses(self):
         """Test RSI when there are no losses."""
-        from stages.features.momentum import add_rsi
+        from src.phase1.stages.features.momentum import add_rsi
 
         # Monotonically increasing - no losses
         df = pd.DataFrame({
@@ -186,7 +186,7 @@ class TestDivisionByZero:
 
     def test_rsi_no_gains(self):
         """Test RSI when there are no gains."""
-        from stages.features.momentum import add_rsi
+        from src.phase1.stages.features.momentum import add_rsi
 
         # Monotonically decreasing - no gains
         df = pd.DataFrame({
@@ -205,7 +205,7 @@ class TestDivisionByZero:
 
     def test_vwap_zero_volume(self):
         """Test VWAP when volume is zero."""
-        from stages.features.volume import add_vwap
+        from src.phase1.stages.features.volume import add_vwap
 
         df = pd.DataFrame({
             'high': [101.0, 102.0, 100.0, 101.0, 103.0] * 100,
@@ -224,7 +224,7 @@ class TestDivisionByZero:
 
     def test_bollinger_zero_std(self):
         """Test Bollinger Bands when std is zero (constant price)."""
-        from stages.features.volatility import add_bollinger_bands
+        from src.phase1.stages.features.volatility import add_bollinger_bands
 
         df = pd.DataFrame({
             'close': [100.0] * 50  # Constant price
@@ -252,7 +252,7 @@ class TestNegativeIndices:
 
     def test_splits_negative_train_end(self):
         """Test that negative train_end_purged raises error."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
         from datetime import datetime, timedelta
 
         # Small dataset with large purge
@@ -273,7 +273,7 @@ class TestNegativeIndices:
 
     def test_splits_val_consumed_by_embargo(self):
         """Test that validation set consumed by embargo raises error."""
-        from stages.stage7_splits import create_chronological_splits
+        from src.phase1.stages.splits import create_chronological_splits
         from datetime import datetime, timedelta
 
         start_time = datetime(2024, 1, 1, 9, 30)
@@ -302,7 +302,7 @@ class TestIntegerDivision:
 
     def test_gap_fill_min_one(self, temp_dir):
         """Test that gap fill is at least 1."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -322,7 +322,7 @@ class TestIntegerDivision:
 
     def test_timeframe_parsing(self, temp_dir):
         """Test timeframe parsing for various formats."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         test_cases = [
             ('1min', 1),
@@ -352,7 +352,7 @@ class TestVolatilityAnnualization:
 
     def test_annualization_factor(self):
         """Test that annualization factor is correct."""
-        from stages.stage3_features import ANNUALIZATION_FACTOR, BARS_PER_DAY
+        from src.phase1.stages.features.features import ANNUALIZATION_FACTOR, BARS_PER_DAY
 
         # For 5-min bars: 78 bars/day, 252 trading days
         expected = np.sqrt(252 * 78)
@@ -363,7 +363,7 @@ class TestVolatilityAnnualization:
 
     def test_hvol_not_overstated(self, sample_ohlcv_df, temp_dir):
         """Test that historical volatility is not overstated."""
-        from stages.stage3_features import FeatureEngineer, ANNUALIZATION_FACTOR
+        from src.phase1.stages.features.features import FeatureEngineer, ANNUALIZATION_FACTOR
 
         # Create sample data with known volatility
         np.random.seed(42)
@@ -408,7 +408,7 @@ class TestNumbaFunctionEdgeCases:
 
     def test_rsi_numba_all_gains(self):
         """Test RSI Numba function with all gains."""
-        from stages.stage3_features import calculate_rsi_numba
+        from src.phase1.stages.features.features import calculate_rsi_numba
 
         # All increasing prices
         close = np.array([100.0 + i for i in range(50)], dtype=np.float64)
@@ -421,7 +421,7 @@ class TestNumbaFunctionEdgeCases:
 
     def test_rsi_numba_all_losses(self):
         """Test RSI Numba function with all losses."""
-        from stages.stage3_features import calculate_rsi_numba
+        from src.phase1.stages.features.features import calculate_rsi_numba
 
         # All decreasing prices
         close = np.array([100.0 - i * 0.5 for i in range(50)], dtype=np.float64)
@@ -434,7 +434,7 @@ class TestNumbaFunctionEdgeCases:
 
     def test_stochastic_numba_zero_range(self):
         """Test Stochastic Numba function with zero range."""
-        from stages.stage3_features import calculate_stochastic_numba
+        from src.phase1.stages.features.features import calculate_stochastic_numba
 
         n = 50
         high = np.full(n, 100.0, dtype=np.float64)
@@ -450,7 +450,7 @@ class TestNumbaFunctionEdgeCases:
 
     def test_atr_numba_constant_price(self):
         """Test ATR Numba function with constant price."""
-        from stages.stage3_features import calculate_atr_numba
+        from src.phase1.stages.features.features import calculate_atr_numba
 
         n = 50
         high = np.full(n, 100.0, dtype=np.float64)
@@ -474,7 +474,7 @@ class TestOHLCVValidation:
 
     def test_high_less_than_low_fix(self, temp_dir):
         """Test that high < low is fixed."""
-        from stages.stage1_ingest import DataIngestor
+        from src.phase1.stages.ingest import DataIngestor
         from datetime import datetime, timedelta
 
         start_time = datetime(2024, 1, 1, 9, 30)
@@ -502,7 +502,7 @@ class TestOHLCVValidation:
 
     def test_negative_prices_removed(self, temp_dir):
         """Test that negative prices are removed."""
-        from stages.stage1_ingest import DataIngestor
+        from src.phase1.stages.ingest import DataIngestor
         from datetime import datetime, timedelta
 
         start_time = datetime(2024, 1, 1, 9, 30)

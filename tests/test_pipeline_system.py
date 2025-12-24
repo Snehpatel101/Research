@@ -9,8 +9,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from pipeline_config import PipelineConfig, create_default_config
-from manifest import ArtifactManifest
+from src.phase1.pipeline_config import PipelineConfig, create_default_config
+from src.common.manifest import ArtifactManifest
 
 
 def test_config_creation():

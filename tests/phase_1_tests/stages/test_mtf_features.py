@@ -27,7 +27,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.mtf_features import (
+from src.phase1.stages.mtf import (
     MTFFeatureGenerator,
     add_mtf_features,
     validate_mtf_alignment,
@@ -584,7 +584,7 @@ class TestFeatureEngineerIntegration:
 
     def test_feature_engineer_with_mtf(self, sample_5min_ohlcv, tmp_path):
         """Test FeatureEngineer with MTF features enabled."""
-        from stages.features import FeatureEngineer
+        from src.phase1.stages.features import FeatureEngineer
 
         input_dir = tmp_path / 'input'
         output_dir = tmp_path / 'output'
@@ -614,7 +614,7 @@ class TestFeatureEngineerIntegration:
 
     def test_feature_engineer_mtf_disabled(self, sample_5min_ohlcv, tmp_path):
         """Test FeatureEngineer with MTF features disabled."""
-        from stages.features import FeatureEngineer
+        from src.phase1.stages.features import FeatureEngineer
 
         input_dir = tmp_path / 'input'
         output_dir = tmp_path / 'output'

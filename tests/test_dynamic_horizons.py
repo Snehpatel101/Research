@@ -323,7 +323,7 @@ class TestHorizonConfig:
 
     def test_default_values(self):
         """Default values should be set correctly."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig()
 
@@ -335,7 +335,7 @@ class TestHorizonConfig:
 
     def test_get_purge_embargo_auto_scale(self):
         """get_purge_embargo should auto-scale when enabled."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig(horizons=[5, 20])
         purge, embargo = config.get_purge_embargo()
@@ -345,7 +345,7 @@ class TestHorizonConfig:
 
     def test_get_purge_embargo_manual(self):
         """get_purge_embargo should return manual values when auto_scale disabled."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig(
             horizons=[5, 20],
@@ -360,7 +360,7 @@ class TestHorizonConfig:
 
     def test_get_scaled_horizons(self):
         """get_scaled_horizons should delegate to config function."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig(horizons=[5, 20], source_timeframe='5min')
         scaled = config.get_scaled_horizons('15min')
@@ -369,7 +369,7 @@ class TestHorizonConfig:
 
     def test_validate_empty_horizons(self):
         """Validation should catch empty horizons."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig(horizons=[])
         issues = config.validate()
@@ -379,7 +379,7 @@ class TestHorizonConfig:
 
     def test_validate_negative_horizon(self):
         """Validation should catch negative horizons."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig(horizons=[-5, 20])
         issues = config.validate()
@@ -389,7 +389,7 @@ class TestHorizonConfig:
 
     def test_validate_invalid_multiplier(self):
         """Validation should catch invalid multipliers."""
-        from pipeline_config import HorizonConfig
+        from src.phase1.pipeline_config import HorizonConfig
 
         config = HorizonConfig(horizons=[5, 20], purge_multiplier=-1)
         issues = config.validate()
@@ -403,7 +403,7 @@ class TestPipelineConfigHorizonIntegration:
 
     def test_default_horizons(self):
         """PipelineConfig should use default horizons."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig()
 
@@ -411,7 +411,7 @@ class TestPipelineConfigHorizonIntegration:
 
     def test_auto_scale_purge_embargo_on_init(self):
         """PipelineConfig should auto-scale purge/embargo on init."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig(label_horizons=[5, 20, 60])
 
@@ -423,7 +423,7 @@ class TestPipelineConfigHorizonIntegration:
 
     def test_disable_auto_scale(self):
         """Disabling auto_scale should use default values."""
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig(
             label_horizons=[5, 20, 60],
@@ -437,7 +437,7 @@ class TestPipelineConfigHorizonIntegration:
 
     def test_horizon_config_takes_priority(self):
         """HorizonConfig should take priority over label_horizons."""
-        from pipeline_config import PipelineConfig, HorizonConfig
+        from src.phase1.pipeline_config import PipelineConfig, HorizonConfig
 
         horizon_config = HorizonConfig(horizons=[10, 30])
         config = PipelineConfig(
@@ -450,7 +450,7 @@ class TestPipelineConfigHorizonIntegration:
     def test_invalid_horizons_logs_warning(self):
         """Unsupported horizons should log warning but not fail."""
         import logging
-        from pipeline_config import PipelineConfig
+        from src.phase1.pipeline_config import PipelineConfig
 
         # Horizon 7 is not in SUPPORTED_HORIZONS
         # Should log warning but not raise

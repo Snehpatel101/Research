@@ -22,7 +22,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from stages.features.volatility import (
+from src.phase1.stages.features.volatility import (
     add_atr,
     add_bollinger_bands,
     add_keltner_channels,
@@ -30,7 +30,7 @@ from stages.features.volatility import (
     add_parkinson_volatility,
     add_garman_klass_volatility,
 )
-from stages.features.momentum import (
+from src.phase1.stages.features.momentum import (
     add_rsi,
     add_macd,
     add_stochastic,
@@ -39,16 +39,16 @@ from stages.features.momentum import (
     add_cci,
     add_mfi,
 )
-from stages.features.trend import (
+from src.phase1.stages.features.trend import (
     add_adx,
     add_supertrend,
 )
-from stages.features.volume import (
+from src.phase1.stages.features.volume import (
     add_volume_features,
     add_vwap,
     add_obv,
 )
-from stages.features.price_features import (
+from src.phase1.stages.features.price_features import (
     add_returns,
     add_price_ratios,
 )

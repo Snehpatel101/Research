@@ -168,7 +168,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_5min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 5-minute bars."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '5min')
 
@@ -179,7 +179,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_15min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 15-minute bars."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '15min')
 
@@ -189,7 +189,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_30min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 30-minute bars."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '30min')
 
@@ -199,7 +199,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_60min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 60-minute bars."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '60min')
 
@@ -212,7 +212,7 @@ class TestResampleOHLCV:
 
     def test_resample_ohlcv_aggregation(self, sample_1min_ohlcv):
         """Test that OHLCV aggregation is correct."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '5min')
 
@@ -233,7 +233,7 @@ class TestResampleOHLCV:
 
     def test_resample_no_metadata(self, sample_1min_ohlcv):
         """Test resampling without metadata column."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '5min', include_metadata=False)
 
@@ -241,7 +241,7 @@ class TestResampleOHLCV:
 
     def test_resample_preserves_symbol(self, sample_1min_ohlcv):
         """Test that resampling preserves symbol column if present."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         sample_1min_ohlcv['symbol'] = 'MES'
         result = resample_ohlcv(sample_1min_ohlcv, '5min')
@@ -251,14 +251,14 @@ class TestResampleOHLCV:
 
     def test_resample_invalid_timeframe(self, sample_1min_ohlcv):
         """Test that invalid timeframe raises error."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             resample_ohlcv(sample_1min_ohlcv, '3min')
 
     def test_resample_missing_columns(self, sample_1min_ohlcv):
         """Test that missing columns raises error."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         df_missing = sample_1min_ohlcv.drop('volume', axis=1)
         with pytest.raises(ValueError, match="Missing required columns"):
@@ -266,7 +266,7 @@ class TestResampleOHLCV:
 
     def test_resample_empty_df(self):
         """Test that empty DataFrame raises error."""
-        from stages.stage2_clean import resample_ohlcv
+        from src.phase1.stages.clean import resample_ohlcv
 
         df_empty = pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
         with pytest.raises(ValueError, match="empty"):
@@ -282,7 +282,7 @@ class TestBackwardCompatibility:
 
     def test_resample_to_5min_still_works(self, sample_1min_ohlcv):
         """Test that resample_to_5min() still works."""
-        from stages.stage2_clean import resample_to_5min
+        from src.phase1.stages.clean import resample_to_5min
 
         result = resample_to_5min(sample_1min_ohlcv)
 
@@ -291,7 +291,7 @@ class TestBackwardCompatibility:
 
     def test_resample_to_5min_no_metadata(self, sample_1min_ohlcv):
         """Test that resample_to_5min() does not add timeframe column."""
-        from stages.stage2_clean import resample_to_5min
+        from src.phase1.stages.clean import resample_to_5min
 
         result = resample_to_5min(sample_1min_ohlcv)
 
@@ -308,7 +308,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_accepts_target_timeframe(self, temp_dir):
         """Test that DataCleaner accepts target_timeframe parameter."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -322,7 +322,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_default_target_timeframe(self, temp_dir):
         """Test that DataCleaner defaults to 5min target."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -333,7 +333,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_invalid_target_timeframe(self, temp_dir):
         """Test that DataCleaner rejects invalid target_timeframe."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             DataCleaner(
@@ -344,7 +344,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_resample_data_method(self, temp_dir, sample_1min_ohlcv):
         """Test DataCleaner.resample_data() method."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -360,7 +360,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_resample_override_timeframe(self, temp_dir, sample_1min_ohlcv):
         """Test that resample_data can override default timeframe."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -377,7 +377,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_resample_skip_if_same(self, temp_dir, sample_1min_ohlcv):
         """Test that resample_data skips if source equals target."""
-        from stages.stage2_clean import DataCleaner
+        from src.phase1.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -401,7 +401,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_default_5min(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data defaults to 5-minute resampling."""
-        from stages.stage2_clean import clean_symbol_data
+        from src.phase1.stages.clean import clean_symbol_data
 
         # Save input data
         input_path = temp_dir / "MES.parquet"
@@ -417,7 +417,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_custom_timeframe(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data with custom target_timeframe."""
-        from stages.stage2_clean import clean_symbol_data
+        from src.phase1.stages.clean import clean_symbol_data
 
         input_path = temp_dir / "MES.parquet"
         output_path = temp_dir / "MES_15min.parquet"
@@ -436,7 +436,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_no_metadata(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data without timeframe metadata."""
-        from stages.stage2_clean import clean_symbol_data
+        from src.phase1.stages.clean import clean_symbol_data
 
         input_path = temp_dir / "MES.parquet"
         output_path = temp_dir / "MES_clean.parquet"
@@ -453,7 +453,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_invalid_timeframe(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data rejects invalid timeframe."""
-        from stages.stage2_clean import clean_symbol_data
+        from src.phase1.stages.clean import clean_symbol_data
 
         input_path = temp_dir / "MES.parquet"
         output_path = temp_dir / "MES_clean.parquet"
@@ -477,7 +477,7 @@ class TestMultiTimeframePipeline:
 
     def test_multi_timeframe_default(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test multi-timeframe processing with defaults."""
-        from stages.stage2_clean import clean_symbol_data_multi_timeframe
+        from src.phase1.stages.clean import clean_symbol_data_multi_timeframe
 
         input_path = temp_dir / "MES.parquet"
         output_dir = temp_dir / "clean"
@@ -500,7 +500,7 @@ class TestMultiTimeframePipeline:
 
     def test_multi_timeframe_custom_list(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test multi-timeframe with custom timeframe list."""
-        from stages.stage2_clean import clean_symbol_data_multi_timeframe
+        from src.phase1.stages.clean import clean_symbol_data_multi_timeframe
 
         input_path = temp_dir / "MES.parquet"
         output_dir = temp_dir / "clean"
@@ -525,7 +525,7 @@ class TestMultiTimeframePipeline:
 
     def test_multi_timeframe_creates_files(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test that multi-timeframe creates output files."""
-        from stages.stage2_clean import clean_symbol_data_multi_timeframe
+        from src.phase1.stages.clean import clean_symbol_data_multi_timeframe
 
         input_path = temp_dir / "MES.parquet"
         output_dir = temp_dir / "clean"
@@ -551,7 +551,7 @@ class TestGetResamplingInfo:
 
     def test_resampling_info_1min_to_5min(self):
         """Test resampling info from 1min to 5min."""
-        from stages.stage2_clean import get_resampling_info
+        from src.phase1.stages.clean import get_resampling_info
 
         info = get_resampling_info('1min', '5min')
 
@@ -562,7 +562,7 @@ class TestGetResamplingInfo:
 
     def test_resampling_info_5min_to_15min(self):
         """Test resampling info from 5min to 15min."""
-        from stages.stage2_clean import get_resampling_info
+        from src.phase1.stages.clean import get_resampling_info
 
         info = get_resampling_info('5min', '15min')
 
@@ -571,7 +571,7 @@ class TestGetResamplingInfo:
 
     def test_resampling_info_invalid_downsampling(self):
         """Test that downsampling (larger to smaller) raises error."""
-        from stages.stage2_clean import get_resampling_info
+        from src.phase1.stages.clean import get_resampling_info
 
         with pytest.raises(ValueError, match="Cannot resample"):
             get_resampling_info('15min', '5min')

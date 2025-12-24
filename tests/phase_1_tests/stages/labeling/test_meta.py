@@ -662,7 +662,7 @@ class TestMetaFactoryIntegration:
 
     def test_create_via_factory(self, sample_df_with_labels):
         """Test creating MetaLabeler via factory."""
-        from stages.labeling import get_labeler, LabelingType
+        from src.phase1.stages.labeling import get_labeler, LabelingType
 
         labeler = get_labeler(
             LabelingType.META,
@@ -677,7 +677,7 @@ class TestMetaFactoryIntegration:
 
     def test_create_via_factory_string(self, sample_df_with_labels):
         """Test creating MetaLabeler via factory with string type."""
-        from stages.labeling import get_labeler
+        from src.phase1.stages.labeling import get_labeler
 
         labeler = get_labeler(
             'meta',
@@ -689,7 +689,7 @@ class TestMetaFactoryIntegration:
 
     def test_available_strategies_includes_meta(self):
         """Test that META is in available strategies."""
-        from stages.labeling import get_available_strategies, LabelingType
+        from src.phase1.stages.labeling import get_available_strategies, LabelingType
 
         strategies = get_available_strategies()
         assert LabelingType.META in strategies
