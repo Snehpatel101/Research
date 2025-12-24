@@ -78,15 +78,28 @@ FEATURE_PATTERNS: Dict[FeatureCategory, List[str]] = {
         'return', 'log_return', 'simple_return', 'pct_change',
         'close_to_sma', 'close_to_ema', 'close_to_vwap', 'price_to_',
         'roc_', 'high_low_range', 'close_open_range', 'range_pct',
-        'macd_hist', 'macd', 'macd_signal'
+        'macd_hist', 'macd', 'macd_signal',
+        # Ratio features (normalized returns)
+        'hl_ratio', 'co_ratio', 'volume_ratio',
+        'close_sma20_ratio', 'close_ema21_ratio',
+        # Z-score features (normalized)
+        'close_bb_zscore', 'volume_zscore', '_zscore',
+        # Deviation features
+        'close_kc_atr_dev', '_dev',
+        # Spread features (cross-asset)
+        '_spread', '_beta', '_correlation',
     ],
     FeatureCategory.OSCILLATOR: [
         'rsi', 'stoch_k', 'stoch_d', 'williams_r', 'cci', 'mfi',
-        'bb_position', 'adx', 'plus_di', 'minus_di'
+        'bb_position', 'adx', 'plus_di', 'minus_di',
+        # Relative strength (0-100 bounded)
+        'relative_strength',
     ],
     FeatureCategory.PRICE_LEVEL: [
         'sma_', 'ema_', 'bb_upper', 'bb_lower', 'bb_middle',
-        'kc_upper', 'kc_lower', 'kc_middle', 'vwap', 'supertrend'
+        'kc_upper', 'kc_lower', 'kc_middle', 'vwap', 'supertrend',
+        # MTF price levels
+        'open_', 'high_', 'low_', 'close_'
     ],
     FeatureCategory.VOLATILITY: [
         'atr_', 'hvol_', 'parkinson', 'gk_vol', 'bb_width', 'kc_position'
@@ -102,8 +115,10 @@ FEATURE_PATTERNS: Dict[FeatureCategory, List[str]] = {
         'session_', 'is_rth', 'rsi_overbought', 'rsi_oversold',
         'stoch_overbought', 'stoch_oversold', 'adx_strong_trend',
         'macd_cross_up', 'macd_cross_down', 'supertrend_direction',
-        'volatility_regime', 'trend_regime', 'vol_regime',
-        'missing_bar', 'roll_event', 'roll_window', 'filled'
+        'volatility_regime', 'trend_regime', 'vol_regime', 'structure_regime',
+        'missing_bar', 'roll_event', 'roll_window', 'filled',
+        # Metadata flags
+        'timeframe',
     ]
 }
 

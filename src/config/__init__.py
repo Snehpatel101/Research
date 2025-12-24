@@ -179,6 +179,21 @@ from .labeling_config import (
 )
 
 # =============================================================================
+# LABELS - Label column definitions and templates
+# =============================================================================
+from .labels import (
+    REQUIRED_LABEL_TEMPLATES,
+    OPTIONAL_LABEL_TEMPLATES,
+    ALL_LABEL_TEMPLATES,
+    LABEL_COLUMN_METADATA,
+    get_required_label_columns,
+    get_optional_label_columns,
+    get_all_label_columns,
+    is_label_column,
+    get_label_metadata,
+)
+
+# =============================================================================
 # VALIDATION - Configuration validation
 # =============================================================================
 from .validation import (
@@ -307,6 +322,16 @@ __all__ = [
     'get_labeling_strategy_config',
     'get_multi_label_config',
     'validate_labeling_config',
+    # Labels
+    'REQUIRED_LABEL_TEMPLATES',
+    'OPTIONAL_LABEL_TEMPLATES',
+    'ALL_LABEL_TEMPLATES',
+    'LABEL_COLUMN_METADATA',
+    'get_required_label_columns',
+    'get_optional_label_columns',
+    'get_all_label_columns',
+    'is_label_column',
+    'get_label_metadata',
     # Validation
     'validate_config',
     'validate_config_silent',

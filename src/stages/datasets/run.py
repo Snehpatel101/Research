@@ -14,6 +14,7 @@ import pandas as pd
 
 from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
 from src.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
+from src.config.labels import REQUIRED_LABEL_TEMPLATES, OPTIONAL_LABEL_TEMPLATES
 from src.utils.feature_sets import (
     METADATA_COLUMNS,
     build_feature_set_manifest,
@@ -26,23 +27,6 @@ if TYPE_CHECKING:
     from manifest import ArtifactManifest
 
 logger = logging.getLogger(__name__)
-
-REQUIRED_LABEL_TEMPLATES = [
-    "label_h{h}",
-    "sample_weight_h{h}",
-]
-
-OPTIONAL_LABEL_TEMPLATES = [
-    "quality_h{h}",
-    "bars_to_hit_h{h}",
-    "mae_h{h}",
-    "mfe_h{h}",
-    "touch_type_h{h}",
-    "pain_to_gain_h{h}",
-    "time_weighted_dd_h{h}",
-    "fwd_return_h{h}",
-    "fwd_return_log_h{h}",
-]
 
 
 def _select_label_columns(df: pd.DataFrame, horizon: int) -> List[str]:

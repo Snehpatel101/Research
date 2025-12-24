@@ -59,9 +59,13 @@ def should_log_transform(feature_name: str, category: FeatureCategory) -> bool:
 
     Log transform is recommended for:
     - Price level features (SMA, EMA, etc.)
-    - Volume features (OBV, etc.)
+    - Volume features (but NOT OBV which can be negative)
     - Features with high positive skewness
     """
+    # OBV can be negative (cumulative buying - selling volume), so never log-transform it
+    if 'obv' in feature_name.lower():
+        return False
+
     if category in [FeatureCategory.PRICE_LEVEL, FeatureCategory.VOLUME]:
         # Check if it's a raw price/volume feature (not a ratio)
         if not any(x in feature_name.lower() for x in ['ratio', 'pct', 'zscore', 'to_']):

@@ -4,12 +4,27 @@ Feature set definitions for modular model training.
 Provides named feature sets that can be selected without code edits.
 """
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
 class FeatureSetDefinition:
-    """Definition of a named feature set."""
+    """
+    Definition of a named feature set.
+
+    Attributes:
+        name: Unique identifier for this feature set
+        description: Human-readable description
+        include_prefixes: Feature name prefixes to include
+        exclude_prefixes: Feature name prefixes to exclude
+        include_columns: Specific columns to include
+        exclude_columns: Specific columns to exclude
+        include_mtf: Whether to include multi-timeframe features
+        include_cross_asset: Whether to include cross-asset features
+        supported_model_types: Model types that work with this feature set
+        default_sequence_length: Default sequence length for sequential models
+        recommended_scaler: Recommended scaler type for this feature set
+    """
     name: str
     description: str
     include_prefixes: List[str] = field(default_factory=list)
@@ -18,6 +33,11 @@ class FeatureSetDefinition:
     exclude_columns: List[str] = field(default_factory=list)
     include_mtf: bool = False
     include_cross_asset: bool = False
+    supported_model_types: List[str] = field(default_factory=lambda: [
+        "tabular", "sequential", "tree"
+    ])
+    default_sequence_length: Optional[int] = None
+    recommended_scaler: str = "robust"
 
 
 FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
@@ -34,6 +54,9 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
         include_columns=["price_to_vwap"],
         include_mtf=False,
         include_cross_asset=False,
+        supported_model_types=["tabular", "tree", "sequential"],
+        default_sequence_length=60,
+        recommended_scaler="robust",
     ),
     "core_full": FeatureSetDefinition(
         name="core_full",
@@ -41,13 +64,19 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
         include_prefixes=[],
         include_mtf=False,
         include_cross_asset=False,
+        supported_model_types=["tabular", "tree", "sequential"],
+        default_sequence_length=60,
+        recommended_scaler="robust",
     ),
     "mtf_plus": FeatureSetDefinition(
         name="mtf_plus",
-        description="All base-timeframe features plus MTF features.",
+        description="All base-timeframe features plus MTF and cross-asset features.",
         include_prefixes=[],
         include_mtf=True,
         include_cross_asset=True,
+        supported_model_types=["tabular", "tree", "sequential"],
+        default_sequence_length=120,
+        recommended_scaler="robust",
     ),
 }
 
