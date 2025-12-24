@@ -133,7 +133,7 @@ from .scaling import (
 )
 
 # MTF Features
-from ..mtf_features import (
+from ..mtf import (
     MTFFeatureGenerator,
     add_mtf_features,
     validate_mtf_alignment,

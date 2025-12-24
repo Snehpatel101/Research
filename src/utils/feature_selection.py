@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import json
 
+from src.config.features import get_cross_asset_feature_names, CROSS_ASSET_FEATURES
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -160,6 +162,7 @@ def identify_feature_columns(df: pd.DataFrame) -> List[str]:
     Identify feature columns in the dataframe.
 
     Excludes metadata, label, and target columns.
+    Also excludes cross-asset features when disabled in config.
 
     Args:
         df: Input DataFrame
@@ -167,14 +170,32 @@ def identify_feature_columns(df: pd.DataFrame) -> List[str]:
     Returns:
         List of feature column names
     """
-    excluded_cols = {'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume'}
-    excluded_prefixes = ('label_', 'bars_to_hit_', 'mae_', 'quality_', 'sample_weight_')
+    excluded_cols = {
+        'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
+        'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+    }
+    excluded_prefixes = (
+        'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
+        'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
+        'fwd_return_log_', 'time_to_hit_'
+    )
+
+    # Get cross-asset feature names
+    cross_asset_features = set(get_cross_asset_feature_names())
+    cross_asset_enabled = CROSS_ASSET_FEATURES.get('enabled', True)
 
     feature_cols = [
         c for c in df.columns
         if c not in excluded_cols
         and not any(c.startswith(p) for p in excluded_prefixes)
+        and (cross_asset_enabled or c not in cross_asset_features)  # Exclude cross-asset if disabled
     ]
+
+    # Log if cross-asset features were excluded
+    if not cross_asset_enabled:
+        excluded_cross_asset = [c for c in df.columns if c in cross_asset_features]
+        if excluded_cross_asset:
+            logger.info(f"Excluding {len(excluded_cross_asset)} cross-asset features (disabled in config): {excluded_cross_asset}")
 
     return feature_cols
 
@@ -508,8 +529,15 @@ def apply_feature_selection(
     """
     if keep_metadata:
         # Keep metadata and target columns
-        metadata_cols = ['datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume']
-        target_prefixes = ('label_', 'bars_to_hit_', 'mae_', 'quality_', 'sample_weight_')
+        metadata_cols = [
+            'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
+            'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+        ]
+        target_prefixes = (
+            'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
+            'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
+            'fwd_return_log_', 'time_to_hit_'
+        )
 
         target_cols = [c for c in df.columns if any(c.startswith(p) for p in target_prefixes)]
 

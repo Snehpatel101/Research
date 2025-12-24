@@ -19,6 +19,8 @@ from .splits import (
 from .features import (
     validate_mtf_config,
     validate_feature_thresholds,
+    validate_stationarity_config,
+    validate_drift_config,
 )
 from .sessions import validate_sessions_config
 from .regime_config import validate_regime_config
@@ -68,6 +70,12 @@ def validate_config() -> None:
     # === Validate MTF configuration ===
     errors.extend(validate_mtf_config())
 
+    # === Validate stationarity configuration ===
+    errors.extend(validate_stationarity_config())
+
+    # === Validate drift configuration ===
+    errors.extend(validate_drift_config())
+
     # === Validate sessions configuration ===
     errors.extend(validate_sessions_config())
 
@@ -109,6 +117,8 @@ def validate_config_silent() -> list[str]:
     errors.extend(validate_barrier_params())
     errors.extend(validate_feature_thresholds())
     errors.extend(validate_mtf_config())
+    errors.extend(validate_stationarity_config())
+    errors.extend(validate_drift_config())
     errors.extend(validate_sessions_config())
     errors.extend(validate_regime_config())
     errors.extend(validate_labeling_config())

@@ -53,7 +53,7 @@ class PipelineConfig:
     # Option 1: Use horizon_config for full control (HorizonConfig instance)
     # Option 2: Use label_horizons for simple usage (legacy compatibility)
     horizon_config: Optional[HorizonConfig] = None
-    label_horizons: List[int] = field(default_factory=lambda: [5, 20])
+    label_horizons: List[int] = field(default_factory=lambda: [5, 10, 15, 20])
     # Note: Barrier parameters moved to config.py as BARRIER_PARAMS.
     # Use config.get_barrier_params(symbol, horizon) for symbol-specific values.
     max_bars_ahead: int = 50
@@ -98,6 +98,7 @@ class PipelineConfig:
             auto_scale_purge_embargo,
             validate_horizons,
             SUPPORTED_HORIZONS,
+            validate_feature_set_config,
         )
 
         # Set project_root if not provided
@@ -119,6 +120,10 @@ class PipelineConfig:
 
         # Validate target_timeframe
         validate_timeframe(self.target_timeframe)
+
+        feature_set_issues = validate_feature_set_config(self.feature_set)
+        if feature_set_issues:
+            raise ValueError(f"Feature set validation failed: {feature_set_issues}")
 
         # Handle horizon configuration
         # Priority: horizon_config > label_horizons
@@ -330,7 +335,7 @@ class PipelineConfig:
         Returns:
             List of validation error messages (empty if valid)
         """
-        from src.config import SUPPORTED_TIMEFRAMES
+        from src.config import SUPPORTED_TIMEFRAMES, validate_feature_set_config
 
         issues = []
 
@@ -407,6 +412,8 @@ class PipelineConfig:
 
         if self.rsi_period < 2:
             issues.append(f"rsi_period must be >= 2, got {self.rsi_period}")
+
+        issues.extend(validate_feature_set_config(self.feature_set))
 
         return issues
 

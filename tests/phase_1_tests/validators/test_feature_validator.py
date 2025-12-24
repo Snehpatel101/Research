@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 import numpy as np
 import pandas as pd
+from importlib.util import find_spec
 
 # Add src to path for imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -27,6 +28,13 @@ from stages.validators.features import (
     run_stationarity_tests,
     check_feature_quality,
 )
+
+
+def _set_stationarity_enabled(enabled: bool) -> dict:
+    from src.config.features import STATIONARITY_TESTS
+    previous = STATIONARITY_TESTS.copy()
+    STATIONARITY_TESTS['enabled'] = enabled
+    return previous
 
 
 # =============================================================================
@@ -367,7 +375,18 @@ class TestRunStationarityTests:
         })
 
         feature_cols = ['return_1', 'return_5', 'rsi_14', 'price']
+        if find_spec("statsmodels") is None:
+            previous = _set_stationarity_enabled(False)
+            results = run_stationarity_tests(df, feature_cols)
+            assert results == []
+            from src.config.features import STATIONARITY_TESTS
+            STATIONARITY_TESTS.update(previous)
+            return
+
+        previous = _set_stationarity_enabled(True)
         results = run_stationarity_tests(df, feature_cols)
+        from src.config.features import STATIONARITY_TESTS
+        STATIONARITY_TESTS.update(previous)
 
         # Should test return and rsi features
         assert len(results) > 0
@@ -389,7 +408,18 @@ class TestRunStationarityTests:
             'return_1': np.random.randn(n) * 0.01,
         })
 
+        if find_spec("statsmodels") is None:
+            previous = _set_stationarity_enabled(False)
+            results = run_stationarity_tests(df, ['return_1'])
+            assert results == []
+            from src.config.features import STATIONARITY_TESTS
+            STATIONARITY_TESTS.update(previous)
+            return
+
+        previous = _set_stationarity_enabled(True)
         results = run_stationarity_tests(df, ['return_1'])
+        from src.config.features import STATIONARITY_TESTS
+        STATIONARITY_TESTS.update(previous)
 
         if len(results) > 0:
             # Random noise should typically be stationary
@@ -400,7 +430,10 @@ class TestRunStationarityTests:
     def test_handles_empty_feature_list(self):
         """Test handling of empty feature list."""
         df = pd.DataFrame({'price': [100] * 100})
+        previous = _set_stationarity_enabled(False)
         results = run_stationarity_tests(df, [])
+        from src.config.features import STATIONARITY_TESTS
+        STATIONARITY_TESTS.update(previous)
 
         assert results == []
 
@@ -410,7 +443,18 @@ class TestRunStationarityTests:
             'return_1': [0.01] * 10  # Too short
         })
 
+        if find_spec("statsmodels") is None:
+            previous = _set_stationarity_enabled(False)
+            results = run_stationarity_tests(df, ['return_1'])
+            assert results == []
+            from src.config.features import STATIONARITY_TESTS
+            STATIONARITY_TESTS.update(previous)
+            return
+
+        previous = _set_stationarity_enabled(True)
         results = run_stationarity_tests(df, ['return_1'])
+        from src.config.features import STATIONARITY_TESTS
+        STATIONARITY_TESTS.update(previous)
         # Should skip or handle gracefully
         assert isinstance(results, list)
 

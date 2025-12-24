@@ -6,17 +6,13 @@ Contains:
     - evaluate_individual: Evaluate a GA individual (parameter set)
 """
 
-import logging
 from typing import List, Tuple
 
 import numpy as np
 
 # Import labeling function and config
 from src.stages.labeling import triple_barrier_numba
-from src.config import TICK_VALUES, TRANSACTION_COSTS
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.NullHandler())
+from src.config import TICK_VALUES, get_total_trade_cost, LABEL_BALANCE_CONSTRAINTS
 
 
 def calculate_fitness(
@@ -29,6 +25,8 @@ def calculate_fitness(
     symbol: str = "MES",
     k_up: float = 1.0,
     k_down: float = 1.0,
+    regime: str = "low_vol",
+    include_slippage: bool = True,
 ) -> float:
     """
     Calculate fitness score for a set of labels.
@@ -39,7 +37,7 @@ def calculate_fitness(
     3. Reward balanced long/short ratio
     4. Speed score prefers faster resolution
     5. Profit factor using theoretical barrier distances (not MAE/MFE)
-    6. TRANSACTION COST penalty with round-trip costs
+    6. TRANSACTION COST penalty with round-trip costs (commission + slippage)
 
     Parameters:
     -----------
@@ -52,6 +50,10 @@ def calculate_fitness(
     symbol : 'MES' or 'MGC' (for symbol-specific transaction costs)
     k_up : upper barrier multiplier (ATR units)
     k_down : lower barrier multiplier (ATR units)
+    regime : str, optional
+        Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
+    include_slippage : bool, optional
+        Whether to include slippage in cost calculation (default: True)
 
     Returns:
     --------
@@ -64,6 +66,25 @@ def calculate_fitness(
     n_long = (labels == 1).sum()
     n_short = (labels == -1).sum()
     n_neutral = (labels == 0).sum()
+    long_pct = n_long / total
+    short_pct = n_short / total
+
+    # ==========================================================================
+    # 0. HARD BALANCE CONSTRAINTS (prevent extreme imbalance)
+    # ==========================================================================
+    min_long_pct = LABEL_BALANCE_CONSTRAINTS['min_long_pct']
+    min_short_pct = LABEL_BALANCE_CONSTRAINTS['min_short_pct']
+    if long_pct < min_long_pct or short_pct < min_short_pct:
+        return -1000.0 + ((long_pct + short_pct) * 100.0)
+
+    signal_count = n_long + n_short
+    if signal_count > 0:
+        short_signal_ratio = n_short / signal_count
+        min_short_ratio = LABEL_BALANCE_CONSTRAINTS['min_short_signal_ratio']
+        max_short_ratio = LABEL_BALANCE_CONSTRAINTS['max_short_signal_ratio']
+        if short_signal_ratio < min_short_ratio or short_signal_ratio > max_short_ratio:
+            distance = abs(short_signal_ratio - 0.5)
+            return -1000.0 + (1.0 - distance) * 100.0
 
     # ==========================================================================
     # 1. SIGNAL RATE REQUIREMENT (target 70-80% signals, 20-30% neutral)
@@ -171,12 +192,14 @@ def calculate_fitness(
         pf_score = 0.0
 
     # ==========================================================================
-    # 6. TRANSACTION COST PENALTY (round-trip: entry + exit)
+    # 6. TRANSACTION COST PENALTY (round-trip: commission + slippage)
     # ==========================================================================
-    cost_ticks = TRANSACTION_COSTS.get(symbol, 0.5)
+    # Get total round-trip cost (commission + slippage) in ticks
+    cost_ticks = get_total_trade_cost(symbol, regime, include_slippage)
     tick_value = TICK_VALUES.get(symbol, 1.0)
-    # Round-trip cost: entry + exit = 2x one-way cost
-    cost_in_price_units = 2 * cost_ticks * tick_value
+
+    # Convert to price units
+    cost_in_price_units = cost_ticks * tick_value
 
     n_trades = n_longs + n_shorts
     if n_trades > 0 and atr_mean > 0:
@@ -209,6 +232,8 @@ def evaluate_individual(
     atr: np.ndarray,
     horizon: int,
     symbol: str = "MES",
+    regime: str = "low_vol",
+    include_slippage: bool = True,
 ) -> Tuple[float]:
     """
     Evaluate a GA individual (parameter set).
@@ -219,6 +244,10 @@ def evaluate_individual(
     close, high, low, open_prices, atr : price/indicator arrays
     horizon : horizon value
     symbol : 'MES' or 'MGC' for symbol-specific constraints
+    regime : str, optional
+        Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
+    include_slippage : bool, optional
+        Whether to include slippage in cost calculation (default: True)
 
     Returns:
     --------
@@ -274,32 +303,25 @@ def evaluate_individual(
     max_bars = int(horizon * max_bars_mult)
     max_bars = max(horizon * 2, min(max_bars, horizon * 3))
 
-    # Run labeling
-    try:
-        labels, bars_to_hit, mae, mfe, _ = triple_barrier_numba(
-            close, high, low, open_prices, atr, k_up, k_down, max_bars
-        )
+    labels, bars_to_hit, mae, mfe, _ = triple_barrier_numba(
+        close, high, low, open_prices, atr, k_up, k_down, max_bars
+    )
 
-        atr_mean = np.mean(atr[atr > 0]) if np.any(atr > 0) else 1.0
+    atr_mean = np.mean(atr[atr > 0]) if np.any(atr > 0) else 1.0
 
-        fitness = calculate_fitness(
-            labels,
-            bars_to_hit,
-            mae,
-            mfe,
-            horizon,
-            atr_mean=atr_mean,
-            symbol=symbol,
-            k_up=k_up,
-            k_down=k_down,
-        )
-        fitness += asymmetry_bonus
+    fitness = calculate_fitness(
+        labels,
+        bars_to_hit,
+        mae,
+        mfe,
+        horizon,
+        atr_mean=atr_mean,
+        symbol=symbol,
+        k_up=k_up,
+        k_down=k_down,
+        regime=regime,
+        include_slippage=include_slippage,
+    )
+    fitness += asymmetry_bonus
 
-        return (fitness,)
-
-    except Exception as e:
-        logger.warning(
-            f"Fitness evaluation failed for individual "
-            f"[k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}]: {e}"
-        )
-        return (float("-inf"),)
+    return (fitness,)

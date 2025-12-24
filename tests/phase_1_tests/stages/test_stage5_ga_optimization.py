@@ -33,7 +33,12 @@ class TestStage5GAOptimizer:
     """Tests for Stage 5: Genetic Algorithm Optimization."""
 
     def test_calculate_fitness_valid_balanced_labels(self):
-        """Test fitness calculation with balanced label distribution."""
+        """Test fitness calculation with balanced label distribution.
+
+        NOTE: With slippage modeling (added 2025-12-23), fitness scores are more
+        negative due to realistic transaction costs (commission + slippage).
+        The threshold has been adjusted to reflect this.
+        """
         np.random.seed(42)
         n = 1000
 
@@ -49,8 +54,10 @@ class TestStage5GAOptimizer:
 
         fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
-        # Should have positive fitness for balanced distribution
-        assert fitness > -100, f"Fitness too low for balanced labels: {fitness}"
+        # With slippage, fitness is more negative but still reasonable for balanced labels
+        # (not catastrophically negative like degenerate cases)
+        assert fitness > -200, f"Fitness too low for balanced labels: {fitness}"
+        assert fitness < 0, f"Fitness should be negative due to transaction costs: {fitness}"
 
     def test_calculate_fitness_degenerate_neutral_heavy(self):
         """Test fitness penalizes neutral-heavy distributions."""

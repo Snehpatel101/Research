@@ -94,8 +94,22 @@ def get_stage_definitions() -> List[dict]:
             "stage_number": 7.5
         },
         {
-            "name": "validate",
+            "name": "build_datasets",
             "dependencies": ["feature_scaling"],
+            "description": "Stage 7.6: Build dataset splits and manifests",
+            "required": True,
+            "stage_number": 7.6
+        },
+        {
+            "name": "validate_scaled",
+            "dependencies": ["build_datasets"],
+            "description": "Stage 7.7: Post-scale drift validation",
+            "required": True,
+            "stage_number": 7.7
+        },
+        {
+            "name": "validate",
+            "dependencies": ["validate_scaled"],
             "description": "Stage 8: Comprehensive data validation",
             "required": True,
             "stage_number": 8

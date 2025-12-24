@@ -73,7 +73,11 @@ research/
 5. **GA Optimize** - Genetic algorithm optimization
 6. **Final Labels** - Generate final labels
 7. **Splits** - Create train/val/test splits with purging
+7.5 **Scaling** - Train-only feature scaling
+7.6 **Datasets** - Build dataset splits + feature-set manifests
+7.7 **Drift** - Post-scale drift validation
 8. **Validate** - Validate pipeline output
+9. **Report** - Generate completion report
 
 ## CLI Commands
 
@@ -98,6 +102,7 @@ Run `./pipeline --help` for detailed options.
   --start 2020-01-01 \
   --end 2024-12-31 \
   --horizons 1,5,20 \
+  --feature-set core_full \
   --description "My experiment"
 ```
 

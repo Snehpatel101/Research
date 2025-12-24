@@ -25,6 +25,29 @@ from stages.features import (
     calculate_ema_numba,
     calculate_rsi_numba,
     calculate_atr_numba,
+    add_volume_features,
+    add_supertrend,
+    add_adx,
+    add_stochastic,
+    add_mfi,
+    add_vwap,
+    add_returns,
+    add_price_ratios,
+    add_rsi,
+    add_atr,
+    add_sma,
+    add_ema,
+    add_macd,
+    add_bollinger_bands,
+    add_temporal_features,
+    add_historical_volatility,
+    add_regime_features,
+    add_roc,
+    add_williams_r,
+    add_cci,
+    add_keltner_channels,
+    add_parkinson_volatility,
+    add_garman_klass_volatility,
 )
 
 
@@ -38,6 +61,7 @@ class TestFeatureEngineerSMA:
     def test_compute_sma_correct_values(self):
         """Test SMA calculation produces correct values."""
         # Arrange
+        feature_metadata = {}
         prices = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
         period = 3
 
@@ -61,6 +85,7 @@ class TestFeatureEngineerEMA:
     def test_compute_ema_correct_values(self):
         """Test EMA calculation produces correct values."""
         # Arrange
+        feature_metadata = {}
         prices = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], dtype=np.float64)
         period = 3
 
@@ -86,6 +111,7 @@ class TestFeatureEngineerRSI:
     def test_compute_rsi_bounds(self):
         """Test RSI values are bounded between 0 and 100."""
         # Arrange
+        feature_metadata = {}
         np.random.seed(42)
         prices = 100 + np.cumsum(np.random.randn(200) * 0.5)
 
@@ -100,6 +126,7 @@ class TestFeatureEngineerRSI:
     def test_compute_rsi_uptrend(self):
         """Test RSI is high in strong uptrend."""
         # Arrange - Strong uptrend
+        feature_metadata = {}
         prices = np.array([float(i) for i in range(1, 31)])  # 1 to 30
 
         # Act
@@ -111,6 +138,7 @@ class TestFeatureEngineerRSI:
     def test_compute_rsi_downtrend(self):
         """Test RSI is low in strong downtrend."""
         # Arrange - Strong downtrend
+        feature_metadata = {}
         prices = np.array([float(30 - i) for i in range(30)])  # 30 to 1
 
         # Act
@@ -127,6 +155,7 @@ class TestFeatureEngineerATR:
     def test_compute_atr_positive_values(self, sample_ohlcv_df):
         """Test ATR produces positive values."""
         # Arrange
+        feature_metadata = {}
         high = sample_ohlcv_df['high'].values
         low = sample_ohlcv_df['low'].values
         close = sample_ohlcv_df['close'].values
@@ -147,13 +176,14 @@ class TestFeatureEngineerMACD:
     def test_compute_macd_components(self, temp_dir, sample_ohlcv_df):
         """Test MACD line, signal, and histogram are calculated."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_macd(sample_ohlcv_df.copy())
+        df = add_macd(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'macd_line' in df.columns
@@ -176,13 +206,14 @@ class TestFeatureEngineerBollingerBands:
     def test_compute_bollinger_bands(self, temp_dir, sample_ohlcv_df):
         """Test Bollinger Bands are correctly calculated."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_bollinger_bands(sample_ohlcv_df.copy())
+        df = add_bollinger_bands(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'bb_upper' in df.columns
@@ -204,13 +235,14 @@ class TestFeatureEngineerTemporalFeatures:
     def test_temporal_features_encoding(self, temp_dir, sample_ohlcv_df):
         """Test temporal features with sin/cos encoding."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_temporal_features(sample_ohlcv_df.copy())
+        df = add_temporal_features(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'hour_sin' in df.columns
@@ -227,6 +259,7 @@ class TestFeatureEngineerTemporalFeatures:
     def test_temporal_features_session_encoding(self, temp_dir):
         """Test trading session encoding."""
         # Arrange - Create data across different sessions
+        feature_metadata = {}
         df = pd.DataFrame({
             'datetime': pd.to_datetime([
                 '2024-01-02 02:00',  # Asia (0-8 UTC)
@@ -246,7 +279,7 @@ class TestFeatureEngineerTemporalFeatures:
         )
 
         # Act
-        result = engineer.add_temporal_features(df)
+        result = add_temporal_features(df, feature_metadata)
 
         # Assert
         assert 'session_asia' in result.columns
@@ -266,6 +299,7 @@ class TestFeatureEngineerRegimeFeatures:
     def test_regime_features_categories(self, temp_dir, sample_ohlcv_df):
         """Test regime features produce valid categories."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
@@ -273,11 +307,11 @@ class TestFeatureEngineerRegimeFeatures:
 
         # Need to add prerequisite features first
         df = sample_ohlcv_df.copy()
-        df = engineer.add_sma(df)
-        df = engineer.add_historical_volatility(df)
+        df = add_sma(df, feature_metadata)
+        df = add_historical_volatility(df, feature_metadata)
 
         # Act
-        df = engineer.add_regime_features(df)
+        df = add_regime_features(df, feature_metadata)
 
         # Assert
         if 'trend_regime' in df.columns:
@@ -297,6 +331,7 @@ class TestFeatureEngineerNoLookahead:
     def test_no_lookahead_in_features(self, temp_dir, sample_ohlcv_df):
         """Test that features only use past data, no future data."""
         # Arrange - use larger dataset to ensure enough rows after NaN drop
+        feature_metadata = {}
         # Extend sample to 1000 rows
         n = 1000
         np.random.seed(42)
@@ -375,6 +410,7 @@ class TestFeatureEngineerNaNHandling:
     def test_feature_nan_handling(self, temp_dir, sample_ohlcv_df):
         """Test that NaN values are properly handled during feature calculation."""
         # Arrange
+        feature_metadata = {}
         df = sample_ohlcv_df.copy()
         # Inject some NaN values
         df.loc[10, 'close'] = np.nan
@@ -404,13 +440,14 @@ class TestFeatureEngineerROC:
     def test_compute_roc_values(self, temp_dir, sample_ohlcv_df):
         """Test ROC calculation produces expected columns."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_roc(sample_ohlcv_df.copy())
+        df = add_roc(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'roc_5' in df.columns
@@ -425,13 +462,14 @@ class TestFeatureEngineerWilliamsR:
     def test_williams_r_bounds(self, temp_dir, sample_ohlcv_df):
         """Test Williams %R is bounded between -100 and 0."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_williams_r(sample_ohlcv_df.copy())
+        df = add_williams_r(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'williams_r' in df.columns
@@ -447,13 +485,14 @@ class TestFeatureEngineerCCI:
     def test_cci_calculation(self, temp_dir, sample_ohlcv_df):
         """Test CCI calculation produces values."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_cci(sample_ohlcv_df.copy())
+        df = add_cci(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'cci_20' in df.columns
@@ -468,13 +507,14 @@ class TestFeatureEngineerKeltnerChannels:
     def test_keltner_channels_order(self, temp_dir, sample_ohlcv_df):
         """Test Keltner Channels upper > middle > lower."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_keltner_channels(sample_ohlcv_df.copy())
+        df = add_keltner_channels(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'kc_upper' in df.columns
@@ -493,13 +533,14 @@ class TestFeatureEngineerVolatility:
     def test_historical_volatility_positive(self, temp_dir, sample_ohlcv_df):
         """Test historical volatility produces positive values."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_historical_volatility(sample_ohlcv_df.copy())
+        df = add_historical_volatility(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'hvol_20' in df.columns
@@ -509,13 +550,14 @@ class TestFeatureEngineerVolatility:
     def test_parkinson_volatility_positive(self, temp_dir, sample_ohlcv_df):
         """Test Parkinson volatility produces positive values."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_parkinson_volatility(sample_ohlcv_df.copy())
+        df = add_parkinson_volatility(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'parkinson_vol' in df.columns
@@ -525,13 +567,14 @@ class TestFeatureEngineerVolatility:
     def test_garman_klass_volatility(self, temp_dir, sample_ohlcv_df):
         """Test Garman-Klass volatility calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_garman_klass_volatility(sample_ohlcv_df.copy())
+        df = add_garman_klass_volatility(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'gk_vol' in df.columns

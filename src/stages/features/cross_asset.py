@@ -15,8 +15,10 @@ from .numba_functions import (
     calculate_rolling_correlation_numba,
     calculate_rolling_beta_numba,
 )
+from src.config.features import CROSS_ASSET_FEATURES
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def add_cross_asset_features(
@@ -74,6 +76,23 @@ def add_cross_asset_features(
     INCORRECT USAGE (causes leakage):
     - Post-split: Passing full dataset arrays when df is a split subset
     """
+    # === CONFIG-BASED EARLY RETURN ===
+    # Check if cross-asset features are disabled in config
+    if not CROSS_ASSET_FEATURES.get('enabled', True):
+        logger.info("Cross-asset features disabled in config (CROSS_ASSET_FEATURES['enabled'] = False)")
+        # Set cross-asset features to NaN when disabled
+        df['mes_mgc_correlation_20'] = np.nan
+        df['mes_mgc_spread_zscore'] = np.nan
+        df['mes_mgc_beta'] = np.nan
+        df['relative_strength'] = np.nan
+
+        feature_metadata['mes_mgc_correlation_20'] = "20-bar rolling correlation between MES and MGC returns"
+        feature_metadata['mes_mgc_spread_zscore'] = "Z-score of spread between normalized MES and MGC prices"
+        feature_metadata['mes_mgc_beta'] = "Rolling beta of MES returns vs MGC returns"
+        feature_metadata['relative_strength'] = "MES return minus MGC return (momentum divergence)"
+
+        return df
+
     # === TIMESTAMP AND LENGTH VALIDATION ===
     # Validate that provided arrays match df length to prevent misalignment
     has_both_assets = (mes_close is not None and

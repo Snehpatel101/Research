@@ -2,7 +2,7 @@
 CLI Run Commands - run and rerun pipeline commands.
 """
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 import typer
 from rich.table import Table
@@ -47,6 +47,7 @@ def _create_config_from_args(
     symbols: Optional[str],
     timeframe: Optional[str],
     horizons: Optional[str],
+    feature_set: Optional[str],
     start: Optional[str],
     end: Optional[str],
     run_id: Optional[str],
@@ -105,7 +106,7 @@ def _create_config_from_args(
 
             # Map preset values to config kwargs
             config_kwargs['target_timeframe'] = preset_config.get('target_timeframe', '5min')
-            config_kwargs['label_horizons'] = preset_config.get('horizons', [5, 20])
+            config_kwargs['label_horizons'] = preset_config.get('horizons', [5, 10, 15, 20])
             config_kwargs['max_bars_ahead'] = preset_config.get('max_bars_ahead', 50)
 
             # Apply feature config from preset
@@ -141,6 +142,9 @@ def _create_config_from_args(
     # Horizons override
     if horizons is not None:
         config_kwargs['label_horizons'] = [int(h.strip()) for h in horizons.split(",")]
+
+    if feature_set is not None:
+        config_kwargs['feature_set'] = feature_set
 
     # Date range
     if start is not None:
@@ -244,6 +248,11 @@ def run_command(
         "--horizons",
         help="Comma-separated label horizons (overrides preset)"
     ),
+    feature_set: Optional[str] = typer.Option(
+        None,
+        "--feature-set",
+        help="Feature set selection (core_min, core_full, mtf_plus, all)"
+    ),
     synthetic: bool = typer.Option(
         False,
         "--synthetic",
@@ -278,6 +287,7 @@ def run_command(
             symbols=symbols,
             timeframe=timeframe,
             horizons=horizons,
+            feature_set=feature_set,
             start=start,
             end=end,
             run_id=run_id,
@@ -308,6 +318,7 @@ def run_command(
     table.add_row("Timeframe", config.target_timeframe)
     table.add_row("Date Range", f"{config.start_date or 'N/A'} to {config.end_date or 'N/A'}")
     table.add_row("Label Horizons", ", ".join(map(str, config.label_horizons)))
+    table.add_row("Feature Set", config.feature_set)
     table.add_row("Train/Val/Test", f"{config.train_ratio:.0%} / {config.val_ratio:.0%} / {config.test_ratio:.0%}")
     table.add_row("Purge/Embargo", f"{config.purge_bars} / {config.embargo_bars} bars")
     table.add_row("Synthetic Data", "Yes" if config.use_synthetic_data else "No")

@@ -129,7 +129,7 @@ class TestTimeSeriesCV:
 
         assert len(splits) == 5  # Default n_splits
         assert cv.config.purge_bars == 60  # Default purge
-        assert cv.config.embargo_bars == 288  # Default embargo
+        assert cv.config.embargo_bars == 1440  # Default embargo (5 days)
 
 
 class TestWalkForwardCV:
@@ -428,7 +428,7 @@ class TestCVConfig:
         assert config.n_splits == 5
         assert config.test_size_ratio == 0.15
         assert config.purge_bars == 60
-        assert config.embargo_bars == 288
+        assert config.embargo_bars == 1440  # 5 days for 5-min data
         assert config.min_train_size == 10000
 
     def test_custom_values(self):

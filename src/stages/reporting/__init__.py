@@ -88,15 +88,19 @@ class Phase1ReportGenerator:
 
     def identify_feature_columns(self) -> List[str]:
         """Identify feature columns by excluding known non-feature columns."""
-        excluded = ['datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+        excluded = [
+            'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
+            'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+        ]
+        excluded_prefixes = (
+            'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
+            'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
+            'fwd_return_log_', 'time_to_hit_'
+        )
         feature_cols = [
             c for c in self.df.columns
             if c not in excluded
-            and not c.startswith('label_')
-            and not c.startswith('bars_to_hit_')
-            and not c.startswith('mae_')
-            and not c.startswith('quality_')
-            and not c.startswith('sample_weight_')
+            and not any(c.startswith(prefix) for prefix in excluded_prefixes)
         ]
         return feature_cols
 

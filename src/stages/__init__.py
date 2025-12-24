@@ -8,59 +8,40 @@ Stage 4: Labeling - Generate target labels
 Stage 5: GA Optimization - Genetic algorithm for label optimization
 Stage 6: Final Labels - Generate final optimized labels
 Stage 7: Data Splitting - Chronological train/val/test splits with purging and embargo
+Stage 7.5: Feature Scaling - Fit scalers on train, transform all splits
+Stage 7.6: Dataset Building - Create model-ready datasets
 Stage 8: Validation - Comprehensive data, label, and feature quality checks
-Baseline Backtest - Simple strategy to verify label signal
-Report Generation - Comprehensive Phase 1 summary with charts
+Stage 9: Report Generation - Comprehensive Phase 1 summary with charts
 """
 
-from .stage1_ingest import DataIngestor
-from .stage2_clean import DataCleaner
-from .stage3_features import FeatureEngineer
+# Core stage imports
+from .ingest import DataIngestor
+from .clean import DataCleaner
+from .features import FeatureEngineer
 
-# Import other stages if available
-try:
-    from .stage7_splits import create_splits
-    from .stage8_validate import validate_data
-    from .baseline_backtest import run_baseline_backtest
-    from .generate_report import generate_phase1_report
-    _extended_imports = True
-except ImportError:
-    _extended_imports = False
+# Extended stage imports
+from .splits.core import create_chronological_splits
+from .validation.run import run_validation
 
-# Import Phase 2 feature scaler
-try:
-    from .feature_scaler import (
-        FeatureScaler,
-        scale_train_val_test,
-        validate_scaling,
-        validate_no_leakage,
-        validate_scaling_for_splits
-    )
-    _scaler_import = True
-except ImportError:
-    _scaler_import = False
+# Feature scaler imports
+from .scaling import (
+    FeatureScalingConfig,
+    FeatureScaler,
+    scale_splits,
+)
 
 __all__ = [
+    # Core stages
     'DataIngestor',
     'DataCleaner',
-    'FeatureEngineer'
+    'FeatureEngineer',
+    # Extended stages
+    'create_chronological_splits',
+    'run_validation',
+    # Scaling
+    'FeatureScalingConfig',
+    'FeatureScaler',
+    'scale_splits',
 ]
-
-if _extended_imports:
-    __all__.extend([
-        'create_splits',
-        'validate_data',
-        'run_baseline_backtest',
-        'generate_phase1_report'
-    ])
-
-if _scaler_import:
-    __all__.extend([
-        'FeatureScaler',
-        'scale_train_val_test',
-        'validate_scaling',
-        'validate_no_leakage',
-        'validate_scaling_for_splits'
-    ])
 
 __version__ = '1.0.0'

@@ -146,7 +146,7 @@ class TestDivisionByZero:
 
     def test_stochastic_zero_range(self):
         """Test stochastic with zero range (high == low)."""
-        from feature_engineering import compute_stochastic
+        from stages.features.momentum import add_stochastic
 
         df = pd.DataFrame({
             'high': [100.0, 100.0, 100.0, 100.0, 100.0] * 10,  # Same as low
@@ -154,7 +154,8 @@ class TestDivisionByZero:
             'close': [100.0, 100.0, 100.0, 100.0, 100.0] * 10
         })
 
-        result = compute_stochastic(df)
+        feature_metadata = {}
+        result = add_stochastic(df, feature_metadata)
 
         # Should return neutral value (50) not inf/nan
         # After warmup period, values should be valid
@@ -166,17 +167,18 @@ class TestDivisionByZero:
 
     def test_rsi_no_losses(self):
         """Test RSI when there are no losses."""
-        from feature_engineering import compute_rsi
+        from stages.features.momentum import add_rsi
 
         # Monotonically increasing - no losses
         df = pd.DataFrame({
             'close': list(range(100, 150))  # 50 bars, all gains
         })
 
-        result = compute_rsi(df)
+        feature_metadata = {}
+        result = add_rsi(df, feature_metadata)
 
         # Should return 100 (all gains), not inf
-        valid_rsi = result['rsi'].dropna()
+        valid_rsi = result['rsi_14'].dropna()
         assert len(valid_rsi) > 0, "RSI should have some valid values"
         assert not np.isinf(valid_rsi).any(), "RSI should not contain infinity"
         # With all gains and no losses, RSI should approach 100
@@ -184,17 +186,18 @@ class TestDivisionByZero:
 
     def test_rsi_no_gains(self):
         """Test RSI when there are no gains."""
-        from feature_engineering import compute_rsi
+        from stages.features.momentum import add_rsi
 
         # Monotonically decreasing - no gains
         df = pd.DataFrame({
             'close': list(range(150, 100, -1))  # 50 bars, all losses
         })
 
-        result = compute_rsi(df)
+        feature_metadata = {}
+        result = add_rsi(df, feature_metadata)
 
         # Should return 0 (all losses), not inf
-        valid_rsi = result['rsi'].dropna()
+        valid_rsi = result['rsi_14'].dropna()
         assert len(valid_rsi) > 0, "RSI should have some valid values"
         assert not np.isinf(valid_rsi).any(), "RSI should not contain infinity"
         # With all losses and no gains, RSI should approach 0
@@ -202,31 +205,33 @@ class TestDivisionByZero:
 
     def test_vwap_zero_volume(self):
         """Test VWAP when volume is zero."""
-        from feature_engineering import compute_vwap
+        from stages.features.volume import add_vwap
 
         df = pd.DataFrame({
             'high': [101.0, 102.0, 100.0, 101.0, 103.0] * 100,
             'low': [99.0, 100.0, 98.0, 99.5, 101.0] * 100,
             'close': [100.0, 101.0, 99.0, 100.5, 102.0] * 100,
-            'volume': [0] * 500  # Zero volume
+            'volume': [0] * 500,  # Zero volume
+            'datetime': pd.date_range('2024-01-01', periods=500, freq='5min')
         })
 
-        result = compute_vwap(df)
+        feature_metadata = {}
+        result = add_vwap(df, feature_metadata)
 
-        # Should fallback to close, not inf/nan
-        valid_vwap = result['vwap'].dropna()
-        assert len(valid_vwap) > 0, "VWAP should have some valid values"
-        assert not np.isinf(valid_vwap).any(), "VWAP should not contain infinity"
+        # With zero volume, VWAP should be skipped (function returns df unchanged)
+        # This validates the function doesn't crash with zero volume
+        assert 'vwap' not in result.columns, "VWAP should be skipped when volume is zero"
 
     def test_bollinger_zero_std(self):
         """Test Bollinger Bands when std is zero (constant price)."""
-        from feature_engineering import compute_bollinger_bands
+        from stages.features.volatility import add_bollinger_bands
 
         df = pd.DataFrame({
             'close': [100.0] * 50  # Constant price
         })
 
-        result = compute_bollinger_bands(df)
+        feature_metadata = {}
+        result = add_bollinger_bands(df, feature_metadata)
 
         # Check that we don't get infinity or NaN for width and position
         valid_width = result['bb_width'].dropna()

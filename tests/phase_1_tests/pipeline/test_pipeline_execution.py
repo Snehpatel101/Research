@@ -69,12 +69,12 @@ class TestStageDependencies:
         stage = next(s for s in runner.stages if s.name == 'create_splits')
         assert 'final_labels' in stage.dependencies
 
-    def test_validate_depends_on_feature_scaling(self, sample_config):
-        """Test validate depends on feature_scaling."""
+    def test_validate_depends_on_scaled_validation(self, sample_config):
+        """Test validate depends on validate_scaled."""
         runner = PipelineRunner(sample_config)
 
         stage = next(s for s in runner.stages if s.name == 'validate')
-        assert 'feature_scaling' in stage.dependencies
+        assert 'validate_scaled' in stage.dependencies
 
     def test_generate_report_depends_on_validate(self, sample_config):
         """Test generate_report depends on validate."""
@@ -201,4 +201,3 @@ class TestGetStagesToRun:
 # =============================================================================
 # SPLITS VALIDATION TESTS
 # =============================================================================
-

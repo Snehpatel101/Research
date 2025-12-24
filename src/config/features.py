@@ -47,8 +47,12 @@ VARIANCE_THRESHOLD = 0.01
 # These features are computed when both symbols are present in the data.
 
 CROSS_ASSET_FEATURES = {
-    'enabled': True,
+    # CRITICAL: Cross-asset features require BOTH MES and MGC symbols
+    # Since we trade one market at a time, these features are disabled by default
+    # Set to True only when running multi-symbol analysis with both MES and MGC
+    'enabled': False,
     'symbols': ['MES', 'MGC'],  # Symbol pair for cross-asset features
+    'min_symbols': 2,  # Require at least 2 symbols for cross-asset features
     'features': {
         'mes_mgc_correlation_20': {
             'description': '20-bar rolling correlation between MES and MGC returns',
@@ -233,3 +237,88 @@ def validate_feature_thresholds() -> list[str]:
         errors.append(f"VARIANCE_THRESHOLD must be non-negative, got {VARIANCE_THRESHOLD}")
 
     return errors
+
+
+# =============================================================================
+# STATIONARITY TEST CONFIGURATION
+# =============================================================================
+STATIONARITY_TESTS = {
+    'enabled': False,
+    'max_features': 5,
+}
+
+
+def get_stationarity_config() -> dict:
+    """Get a copy of the stationarity test configuration."""
+    import copy
+    return copy.deepcopy(STATIONARITY_TESTS)
+
+
+def validate_stationarity_config() -> list[str]:
+    """Validate stationarity test configuration."""
+    errors = []
+    if STATIONARITY_TESTS.get('max_features', 0) < 1:
+        errors.append(
+            f"STATIONARITY_TESTS.max_features must be >= 1, got {STATIONARITY_TESTS.get('max_features')}"
+        )
+    return errors
+
+
+# =============================================================================
+# DRIFT CONFIGURATION
+# =============================================================================
+DRIFT_CONFIG = {
+    'enabled': True,
+    'psi_threshold': 0.2,
+    'bins': 10,
+    'max_features': 200,
+}
+
+
+def get_drift_config() -> dict:
+    """Get a copy of the drift configuration."""
+    import copy
+    return copy.deepcopy(DRIFT_CONFIG)
+
+
+def validate_drift_config() -> list[str]:
+    """Validate drift configuration."""
+    errors = []
+    if DRIFT_CONFIG.get('bins', 0) < 2:
+        errors.append(
+            f"DRIFT_CONFIG.bins must be >= 2, got {DRIFT_CONFIG.get('bins')}"
+        )
+    if DRIFT_CONFIG.get('max_features', 0) < 1:
+        errors.append(
+            f"DRIFT_CONFIG.max_features must be >= 1, got {DRIFT_CONFIG.get('max_features')}"
+        )
+    return errors
+
+
+def get_cross_asset_feature_names() -> list[str]:
+    """
+    Get list of cross-asset feature names.
+
+    Returns
+    -------
+    list[str]
+        List of cross-asset feature column names
+    """
+    return list(CROSS_ASSET_FEATURES['features'].keys())
+
+
+def is_cross_asset_feature(feature_name: str) -> bool:
+    """
+    Check if a feature name is a cross-asset feature.
+
+    Parameters
+    ----------
+    feature_name : str
+        Name of the feature to check
+
+    Returns
+    -------
+    bool
+        True if the feature is a cross-asset feature, False otherwise
+    """
+    return feature_name in CROSS_ASSET_FEATURES['features']

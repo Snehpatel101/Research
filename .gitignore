@@ -99,3 +99,7 @@ reports/**/*.json
 
 # Keep example reports
 !reports/phase1_summary.*
+
+# Results directory (test outputs, plots, validation reports)
+results/**/*
+!results/README.md

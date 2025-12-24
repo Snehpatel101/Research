@@ -629,6 +629,9 @@ class TestPipelineRunnerInit:
             'ga_optimize',
             'final_labels',
             'create_splits',
+            'feature_scaling',
+            'build_datasets',
+            'validate_scaled',
             'validate',
             'generate_report'
         ]
@@ -708,12 +711,33 @@ class TestStageDependencies:
         stage = next(s for s in runner.stages if s.name == 'create_splits')
         assert 'final_labels' in stage.dependencies
 
+    def test_feature_scaling_depends_on_create_splits(self, sample_config):
+        """Test feature_scaling depends on create_splits."""
+        runner = PipelineRunner(sample_config)
+
+        stage = next(s for s in runner.stages if s.name == 'feature_scaling')
+        assert 'create_splits' in stage.dependencies
+
+    def test_build_datasets_depends_on_feature_scaling(self, sample_config):
+        """Test build_datasets depends on feature_scaling."""
+        runner = PipelineRunner(sample_config)
+
+        stage = next(s for s in runner.stages if s.name == 'build_datasets')
+        assert 'feature_scaling' in stage.dependencies
+
+    def test_validate_scaled_depends_on_build_datasets(self, sample_config):
+        """Test validate_scaled depends on build_datasets."""
+        runner = PipelineRunner(sample_config)
+
+        stage = next(s for s in runner.stages if s.name == 'validate_scaled')
+        assert 'build_datasets' in stage.dependencies
+
     def test_validate_depends_on_splits(self, sample_config):
-        """Test validate depends on create_splits."""
+        """Test validate depends on validate_scaled."""
         runner = PipelineRunner(sample_config)
 
         stage = next(s for s in runner.stages if s.name == 'validate')
-        assert 'create_splits' in stage.dependencies
+        assert 'validate_scaled' in stage.dependencies
 
     def test_generate_report_depends_on_validate(self, sample_config):
         """Test generate_report depends on validate."""

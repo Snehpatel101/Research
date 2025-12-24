@@ -285,6 +285,9 @@ class TestPipelineRunnerInit:
             'ga_optimize',
             'final_labels',
             'create_splits',
+            'feature_scaling',
+            'build_datasets',
+            'validate_scaled',
             'validate',
             'generate_report'
         ]
@@ -311,4 +314,3 @@ class TestPipelineRunnerInit:
 # =============================================================================
 # STAGE DEPENDENCY TESTS
 # =============================================================================
-

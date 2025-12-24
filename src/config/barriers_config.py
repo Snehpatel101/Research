@@ -8,12 +8,38 @@ for triple-barrier labeling, including transaction costs and tick values.
 # =============================================================================
 # TRANSACTION COSTS - Critical for realistic fitness evaluation
 # =============================================================================
-# Round-trip costs in ticks (entry + exit):
+# Commission costs in ticks (entry + exit round-trip):
 # - MES: ~0.5 ticks (1 tick spread + commission, 0.25 per side)
 # - MGC: ~0.3 ticks (tighter spread on gold micro)
 TRANSACTION_COSTS = {
     'MES': 0.5,  # ticks round-trip
     'MGC': 0.3   # ticks round-trip
+}
+
+# =============================================================================
+# SLIPPAGE COSTS - Regime-adaptive slippage modeling
+# =============================================================================
+# Slippage per fill (entry or exit) in ticks.
+# Total slippage = 2 * SLIPPAGE_TICKS (round-trip: entry + exit)
+#
+# Slippage varies by:
+# 1. Liquidity: MES (S&P) has deeper order book than MGC (Gold)
+# 2. Volatility regime: Higher volatility = wider spreads = more slippage
+#
+# Design:
+# - MES: 0.5-1.0 ticks per fill (higher liquidity, tighter spreads)
+# - MGC: 0.75-1.5 ticks per fill (lower liquidity, wider spreads)
+# - Low volatility: Use lower bound (tight markets, minimal slippage)
+# - High volatility: Use upper bound (wide markets, higher slippage)
+SLIPPAGE_TICKS = {
+    'MES': {
+        'low_vol': 0.5,   # Calm market, tight spreads
+        'high_vol': 1.0   # Volatile market, wide spreads
+    },
+    'MGC': {
+        'low_vol': 0.75,  # Calm market, less liquid than MES
+        'high_vol': 1.5   # Volatile market, significant slippage
+    }
 }
 
 # Tick values in dollars (for P&L calculation)
@@ -73,6 +99,24 @@ BARRIER_PARAMS = {
             'max_bars': 12,
             'description': 'MES H5: Asymmetric (k_up>k_down) to counteract equity drift'
         },
+        # Horizon 10: Medium-short-term (50 minutes) - ACTIVE
+        # CORRECTED (2025-12): k_up > k_down to counteract upward equity drift
+        # Intermediate between H5 and H20 for ensemble diversity
+        10: {
+            'k_up': 2.00,
+            'k_down': 1.40,
+            'max_bars': 25,
+            'description': 'MES H10: Asymmetric (k_up>k_down) to counteract equity drift'
+        },
+        # Horizon 15: Medium-term (75 minutes) - ACTIVE
+        # CORRECTED (2025-12): k_up > k_down to counteract upward equity drift
+        # Intermediate between H10 and H20 for ensemble diversity
+        15: {
+            'k_up': 2.50,
+            'k_down': 1.75,
+            'max_bars': 38,
+            'description': 'MES H15: Asymmetric (k_up>k_down) to counteract equity drift'
+        },
         # Horizon 20: Medium-term (~1.5 hours) - ACTIVE
         # CORRECTED (2025-12): k_up > k_down to counteract upward equity drift
         # Upper barrier harder to hit counters the structural long bias
@@ -98,6 +142,24 @@ BARRIER_PARAMS = {
             'k_down': 1.20,
             'max_bars': 12,
             'description': 'MGC H5: Symmetric barriers, ~25% neutral target'
+        },
+        # Horizon 10: Medium-short-term (50 minutes) - ACTIVE
+        # Symmetric: equal probability of hitting upper/lower
+        # Intermediate between H5 and H20 for ensemble diversity
+        10: {
+            'k_up': 1.60,
+            'k_down': 1.60,
+            'max_bars': 25,
+            'description': 'MGC H10: Symmetric barriers, ~25% neutral target'
+        },
+        # Horizon 15: Medium-term (75 minutes) - ACTIVE
+        # Symmetric: equal probability of hitting upper/lower
+        # Intermediate between H10 and H20 for ensemble diversity
+        15: {
+            'k_up': 2.00,
+            'k_down': 2.00,
+            'max_bars': 38,
+            'description': 'MGC H15: Symmetric barriers, ~25% neutral target'
         },
         # Horizon 20: Medium-term (~1.5 hours) - ACTIVE
         # Symmetric: equal probability of hitting upper/lower
@@ -128,6 +190,18 @@ BARRIER_PARAMS_DEFAULT = {
         'k_down': 1.10,
         'max_bars': 12,
         'description': 'H5: Default asymmetric, ~25% neutral target'
+    },
+    10: {
+        'k_up': 1.80,
+        'k_down': 1.35,
+        'max_bars': 25,
+        'description': 'H10: Default asymmetric, ~25% neutral target'
+    },
+    15: {
+        'k_up': 2.25,
+        'k_down': 1.70,
+        'max_bars': 38,
+        'description': 'H15: Default asymmetric, ~25% neutral target'
     },
     20: {
         'k_up': 2.75,
@@ -237,12 +311,114 @@ def validate_barrier_params() -> list[str]:
         if cost < 0:
             errors.append(f"TRANSACTION_COSTS['{symbol}'] must be non-negative, got {cost}")
 
+    # Validate slippage costs
+    for symbol, regimes in SLIPPAGE_TICKS.items():
+        if not isinstance(regimes, dict):
+            errors.append(f"SLIPPAGE_TICKS['{symbol}'] must be a dict with 'low_vol' and 'high_vol' keys")
+            continue
+
+        for regime in ('low_vol', 'high_vol'):
+            if regime not in regimes:
+                errors.append(f"SLIPPAGE_TICKS['{symbol}'] missing '{regime}' regime")
+            elif regimes[regime] < 0:
+                errors.append(f"SLIPPAGE_TICKS['{symbol}']['{regime}'] must be non-negative, got {regimes[regime]}")
+
+        # High volatility slippage should be >= low volatility slippage
+        if 'low_vol' in regimes and 'high_vol' in regimes:
+            if regimes['high_vol'] < regimes['low_vol']:
+                errors.append(
+                    f"SLIPPAGE_TICKS['{symbol}']['high_vol'] ({regimes['high_vol']}) should be >= "
+                    f"'low_vol' ({regimes['low_vol']})"
+                )
+
     # Validate tick values
     for symbol, value in TICK_VALUES.items():
         if value <= 0:
             errors.append(f"TICK_VALUES['{symbol}'] must be positive, got {value}")
 
     return errors
+
+
+def get_slippage_ticks(symbol: str, regime: str = 'low_vol') -> float:
+    """
+    Get slippage estimate in ticks for a symbol and volatility regime.
+
+    Parameters
+    ----------
+    symbol : str
+        Symbol name ('MES' or 'MGC')
+    regime : str, optional
+        Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
+
+    Returns
+    -------
+    float
+        Slippage in ticks per fill (entry or exit)
+
+    Notes
+    -----
+    Total round-trip slippage = 2 * get_slippage_ticks() (entry + exit)
+    """
+    if symbol not in SLIPPAGE_TICKS:
+        # Default to MES slippage if symbol not found
+        symbol = 'MES'
+
+    if regime not in ('low_vol', 'high_vol'):
+        # Default to low_vol if regime invalid
+        regime = 'low_vol'
+
+    return SLIPPAGE_TICKS[symbol][regime]
+
+
+def get_total_trade_cost(
+    symbol: str,
+    regime: str = 'low_vol',
+    include_slippage: bool = True
+) -> float:
+    """
+    Calculate total round-trip trade cost in ticks (commission + slippage).
+
+    Parameters
+    ----------
+    symbol : str
+        Symbol name ('MES' or 'MGC')
+    regime : str, optional
+        Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
+    include_slippage : bool, optional
+        Whether to include slippage in calculation (default: True)
+
+    Returns
+    -------
+    float
+        Total round-trip cost in ticks (entry + exit)
+
+    Examples
+    --------
+    >>> get_total_trade_cost('MES', 'low_vol')
+    1.5  # 0.5 commission + 2*0.5 slippage
+
+    >>> get_total_trade_cost('MGC', 'high_vol')
+    3.3  # 0.3 commission + 2*1.5 slippage
+
+    >>> get_total_trade_cost('MES', include_slippage=False)
+    0.5  # Commission only
+
+    Notes
+    -----
+    - Commission is round-trip (entry + exit)
+    - Slippage applies to both entry and exit (2x per-fill slippage)
+    - Total cost = commission + 2 * slippage_per_fill
+    """
+    commission = TRANSACTION_COSTS.get(symbol, 0.5)
+
+    if not include_slippage:
+        return commission
+
+    slippage_per_fill = get_slippage_ticks(symbol, regime)
+    # Round-trip slippage = entry slippage + exit slippage
+    total_slippage = 2 * slippage_per_fill
+
+    return commission + total_slippage
 
 
 def get_max_bars_across_all_params() -> tuple[int, str]:

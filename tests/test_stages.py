@@ -69,11 +69,12 @@ def test_numba_function() -> bool:
     close: np.ndarray = 100 + np.cumsum(np.random.randn(n) * 0.1)
     high: np.ndarray = close + np.abs(np.random.randn(n) * 0.2)
     low: np.ndarray = close - np.abs(np.random.randn(n) * 0.2)
+    open_prices: np.ndarray = close - np.random.randn(n) * 0.1  # Open prices
     atr: np.ndarray = np.ones(n) * 1.0
 
     # Run labeling with realistic parameters (matching config.py)
     labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
-        close, high, low, atr, k_up=2.0, k_down=1.0, max_bars=15
+        close, high, low, open_prices, atr, k_up=2.0, k_down=1.0, max_bars=15
     )
 
     # Basic checks with proper type assertions
@@ -81,10 +82,14 @@ def test_numba_function() -> bool:
     assert len(bars_to_hit) == n, "Bars_to_hit length mismatch"
     assert len(mae) == n, "MAE length mismatch"
     assert len(mfe) == n, "MFE length mismatch"
-    assert set(labels).issubset({-1, 0, 1}), "Invalid label values"
+    # Labels can be -99 (invalid), -1 (short loss), 0 (timeout), 1 (long win)
+    assert set(labels).issubset({-99, -1, 0, 1}), "Invalid label values"
 
     print(f"  ✓ Generated {n} labels")
-    print(f"  ✓ Label distribution: {np.bincount(labels + 1)}")
+    # Show label distribution (handle -99 separately since bincount can't handle it)
+    unique, counts = np.unique(labels, return_counts=True)
+    label_dist = dict(zip(unique, counts))
+    print(f"  ✓ Label distribution: {label_dist}")
     print(f"  ✓ Numba function works correctly\n")
     return True
 
@@ -106,10 +111,13 @@ def test_quality_scoring() -> bool:
     bars_to_hit: np.ndarray = np.random.randint(1, 20, n)
     mae: np.ndarray = np.random.randn(n) * 0.01
     mfe: np.ndarray = np.abs(np.random.randn(n) * 0.02)
+    labels: np.ndarray = np.random.choice([-1, 0, 1], n)  # Random labels
     horizon: int = 5  # Using active horizon from TEST_HORIZONS
 
-    # Compute scores
-    quality_scores: np.ndarray = compute_quality_scores(bars_to_hit, mae, mfe, horizon)
+    # Compute scores (returns 3 values: quality_scores, pain_to_gain, time_weighted_dd)
+    quality_scores, pain_to_gain, time_weighted_dd = compute_quality_scores(
+        bars_to_hit, mae, mfe, labels, horizon
+    )
 
     # Basic checks with explicit type validation
     assert len(quality_scores) == n, "Quality scores length mismatch"

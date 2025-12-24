@@ -39,6 +39,8 @@ from .stages import (
     run_ga_optimization,
     run_create_splits,
     run_feature_scaling,
+    run_build_datasets,
+    run_scaled_validation,
     run_validation,
     run_generate_report,
 )
@@ -117,6 +119,8 @@ class PipelineRunner:
             "final_labels": lambda: run_final_labels(self.config, self.manifest),
             "create_splits": lambda: run_create_splits(self.config, self.manifest),
             "feature_scaling": lambda: run_feature_scaling(self.config, self.manifest),
+            "build_datasets": lambda: run_build_datasets(self.config, self.manifest),
+            "validate_scaled": lambda: run_scaled_validation(self.config, self.manifest),
             "validate": lambda: run_validation(self.config, self.manifest),
             "generate_report": lambda: run_generate_report(
                 self.config, self.manifest, self.stage_results

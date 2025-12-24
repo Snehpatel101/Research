@@ -20,6 +20,32 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
 from stages.stage3_features import FeatureEngineer
+from stages.features import (
+    add_volume_features,
+    add_supertrend,
+    add_adx,
+    add_stochastic,
+    add_mfi,
+    add_vwap,
+    add_returns,
+    add_price_ratios,
+    add_rsi,
+    add_atr,
+    add_sma,
+    add_ema,
+    add_macd,
+    add_bollinger_bands,
+    add_temporal_features,
+    add_historical_volatility,
+    add_regime_features,
+    add_roc,
+    add_williams_r,
+    add_cci,
+    add_keltner_channels,
+    add_parkinson_volatility,
+    add_garman_klass_volatility,
+)
+
 
 
 class TestFeatureEngineerVolumeFeatures:
@@ -28,13 +54,14 @@ class TestFeatureEngineerVolumeFeatures:
     def test_volume_features_with_volume(self, temp_dir, sample_ohlcv_df):
         """Test volume features are calculated when volume is present."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_volume_features(sample_ohlcv_df.copy())
+        df = add_volume_features(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'obv' in df.columns
@@ -44,6 +71,7 @@ class TestFeatureEngineerVolumeFeatures:
     def test_volume_features_without_volume(self, temp_dir):
         """Test volume features are skipped when no volume."""
         # Arrange
+        feature_metadata = {}
         df = pd.DataFrame({
             'datetime': pd.date_range('2024-01-01', periods=100, freq='min'),
             'open': [100.0] * 100,
@@ -59,7 +87,7 @@ class TestFeatureEngineerVolumeFeatures:
         )
 
         # Act
-        result = engineer.add_volume_features(df)
+        result = add_volume_features(df, feature_metadata)
 
         # Assert - Should return unchanged
         assert 'obv' not in result.columns
@@ -72,13 +100,14 @@ class TestFeatureEngineerSupertrend:
     def test_supertrend_direction_values(self, temp_dir, sample_ohlcv_df):
         """Test Supertrend direction is 1 or -1."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_supertrend(sample_ohlcv_df.copy())
+        df = add_supertrend(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'supertrend' in df.columns
@@ -95,6 +124,7 @@ class TestFeatureEngineerCrossAsset:
     def test_cross_asset_features_missing_data(self, temp_dir, sample_ohlcv_df):
         """Test that cross-asset features are NaN when data is missing."""
         # Arrange - import the module-level function
+        feature_metadata = {}
         from stages.features.cross_asset import add_cross_asset_features
 
         # Act - call without cross-asset close arrays (mes_close=None, mgc_close=None)
@@ -120,13 +150,14 @@ class TestFeatureEngineerADXIndicator:
     def test_add_adx_features(self, temp_dir, sample_ohlcv_df):
         """Test ADX feature calculation through FeatureEngineer."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_adx(sample_ohlcv_df.copy())
+        df = add_adx(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'adx_14' in df.columns
@@ -142,13 +173,14 @@ class TestFeatureEngineerStochasticIndicator:
     def test_add_stochastic_features(self, temp_dir, sample_ohlcv_df):
         """Test Stochastic feature calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_stochastic(sample_ohlcv_df.copy())
+        df = add_stochastic(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'stoch_k' in df.columns
@@ -164,13 +196,14 @@ class TestFeatureEngineerMFI:
     def test_add_mfi_with_volume(self, temp_dir, sample_ohlcv_df):
         """Test MFI calculation with volume data."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_mfi(sample_ohlcv_df.copy())
+        df = add_mfi(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'mfi_14' in df.columns
@@ -186,13 +219,14 @@ class TestFeatureEngineerVWAP:
     def test_add_vwap(self, temp_dir, sample_ohlcv_df):
         """Test VWAP calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_vwap(sample_ohlcv_df.copy())
+        df = add_vwap(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'vwap' in df.columns
@@ -210,13 +244,14 @@ class TestFeatureEngineerReturns:
     def test_add_returns(self, temp_dir, sample_ohlcv_df):
         """Test return feature calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_returns(sample_ohlcv_df.copy())
+        df = add_returns(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'return_1' in df.columns
@@ -232,13 +267,14 @@ class TestFeatureEngineerPriceRatios:
     def test_add_price_ratios(self, temp_dir, sample_ohlcv_df):
         """Test price ratio feature calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_price_ratios(sample_ohlcv_df.copy())
+        df = add_price_ratios(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'hl_ratio' in df.columns
@@ -258,6 +294,7 @@ class TestFeatureEngineerSaveFeatures:
     def test_save_features(self, temp_dir, sample_ohlcv_df):
         """Test saving features to parquet."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
@@ -281,6 +318,7 @@ class TestFeatureEngineerProcessFile:
     def test_process_file(self, temp_dir, sample_ohlcv_df):
         """Test processing a complete file."""
         # Arrange
+        feature_metadata = {}
         file_path = temp_dir / "TEST.parquet"
         sample_ohlcv_df.to_parquet(file_path, index=False)
 
@@ -304,13 +342,14 @@ class TestFeatureEngineerRSIIndicator:
     def test_add_rsi_features(self, temp_dir, sample_ohlcv_df):
         """Test RSI feature calculation through FeatureEngineer."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_rsi(sample_ohlcv_df.copy())
+        df = add_rsi(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert
         assert 'rsi_14' in df.columns
@@ -329,13 +368,14 @@ class TestFeatureEngineerATRMethod:
     def test_add_atr(self, temp_dir, sample_ohlcv_df):
         """Test ATR feature calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_atr(sample_ohlcv_df.copy())
+        df = add_atr(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert - periods are [7, 14, 21]
         assert 'atr_14' in df.columns
@@ -353,13 +393,14 @@ class TestFeatureEngineerSMAMethod:
     def test_add_sma(self, temp_dir, sample_ohlcv_df):
         """Test SMA feature calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_sma(sample_ohlcv_df.copy())
+        df = add_sma(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert - periods are [10, 20, 50, 100, 200]
         assert 'sma_10' in df.columns
@@ -374,13 +415,14 @@ class TestFeatureEngineerEMAMethod:
     def test_add_ema(self, temp_dir, sample_ohlcv_df):
         """Test EMA feature calculation."""
         # Arrange
+        feature_metadata = {}
         engineer = FeatureEngineer(
             input_dir=temp_dir,
             output_dir=temp_dir / "output"
         )
 
         # Act
-        df = engineer.add_ema(sample_ohlcv_df.copy())
+        df = add_ema(sample_ohlcv_df.copy(), feature_metadata)
 
         # Assert - periods are [9, 12, 21, 26, 50]
         assert 'ema_9' in df.columns

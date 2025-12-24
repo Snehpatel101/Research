@@ -66,6 +66,17 @@ LABELING_STRATEGY_CONFIGS = {
     },
 }
 
+# =============================================================================
+# LABEL BALANCE CONSTRAINTS (GA optimization)
+# =============================================================================
+# These thresholds prevent extreme long/short imbalance in optimized labels.
+LABEL_BALANCE_CONSTRAINTS = {
+    'min_long_pct': 0.05,          # Minimum long share of total samples
+    'min_short_pct': 0.05,         # Minimum short share of total samples
+    'min_short_signal_ratio': 0.10,  # Minimum short share among signals
+    'max_short_signal_ratio': 0.90,  # Maximum short share among signals
+}
+
 
 def get_labeling_strategy_config(
     strategy: LabelingStrategyType | str

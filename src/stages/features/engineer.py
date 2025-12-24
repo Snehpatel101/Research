@@ -33,8 +33,11 @@ from .regime import add_regime_features
 from .cross_asset import add_cross_asset_features
 from .scaling import PeriodScaler, create_period_config
 
+# Import config for cross-asset feature flag
+from src.config.features import CROSS_ASSET_FEATURES
+
 # MTF Features - import from sibling module
-from ..mtf_features import add_mtf_features, MTFFeatureGenerator
+from ..mtf import add_mtf_features, MTFFeatureGenerator
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -132,6 +135,7 @@ class FeatureEngineer:
         if self.scale_periods and self.timeframe != self.base_timeframe:
             logger.info(f"Period scaling: {self.base_timeframe} -> {self.timeframe}")
         logger.info(f"MTF enabled: {self.enable_mtf}, timeframes: {self.mtf_timeframes}")
+        logger.info(f"Cross-asset features enabled: {CROSS_ASSET_FEATURES.get('enabled', True)}")
 
     def engineer_features(
         self,
@@ -211,11 +215,21 @@ class FeatureEngineer:
         df = add_regime_features(df, self.feature_metadata)
 
         # Add cross-asset features (MES-MGC)
+        # Note: Cross-asset features are controlled by CROSS_ASSET_FEATURES['enabled'] config
         mes_close = None
         mgc_close = None
         if cross_asset_data is not None:
             mes_close = cross_asset_data.get('mes_close')
             mgc_close = cross_asset_data.get('mgc_close')
+
+        # Log why cross-asset might be skipped
+        if not CROSS_ASSET_FEATURES.get('enabled', True):
+            logger.info("Cross-asset features will be skipped (disabled in config)")
+        elif cross_asset_data is None:
+            logger.info("Cross-asset features will be skipped (no cross_asset_data provided)")
+        elif mes_close is None or mgc_close is None:
+            logger.info("Cross-asset features will be skipped (missing MES or MGC close data)")
+
         df = add_cross_asset_features(
             df,
             self.feature_metadata,
@@ -279,9 +293,15 @@ class FeatureEngineer:
             )
 
         # Check if cross-asset features were computed
-        has_cross_asset = (cross_asset_data is not None and
-                          'mes_close' in cross_asset_data and
-                          'mgc_close' in cross_asset_data)
+        # Cross-asset is only computed when:
+        # 1. Config flag is enabled (CROSS_ASSET_FEATURES['enabled'] = True)
+        # 2. Both MES and MGC data are provided
+        has_cross_asset = (
+            CROSS_ASSET_FEATURES.get('enabled', True) and
+            cross_asset_data is not None and
+            'mes_close' in cross_asset_data and
+            'mgc_close' in cross_asset_data
+        )
 
         # Get MTF column names
         mtf_suffixes = ['_15m', '_30m', '_1h']
@@ -300,6 +320,7 @@ class FeatureEngineer:
             'features_added': len(df.columns) - initial_cols,
             'rows_dropped_for_nan': rows_dropped,
             'cross_asset_features': has_cross_asset,
+            'cross_asset_enabled_in_config': CROSS_ASSET_FEATURES.get('enabled', True),
             'cross_asset_feature_names': cross_asset_cols if has_cross_asset else [],
             'mtf_features': self.enable_mtf and mtf_cols_added > 0,
             'mtf_feature_count': mtf_cols_added,
@@ -551,110 +572,6 @@ class FeatureEngineer:
             raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 
         return results
-
-    # =========================================================================
-    # Wrapper methods for testing - delegate to standalone functions
-    # =========================================================================
-
-    def add_sma(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_sma function."""
-        return add_sma(df, self.feature_metadata)
-
-    def add_ema(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_ema function."""
-        return add_ema(df, self.feature_metadata)
-
-    def add_rsi(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_rsi function."""
-        return add_rsi(df, self.feature_metadata)
-
-    def add_macd(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_macd function."""
-        return add_macd(df, self.feature_metadata)
-
-    def add_stochastic(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_stochastic function."""
-        return add_stochastic(df, self.feature_metadata)
-
-    def add_atr(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_atr function."""
-        return add_atr(df, self.feature_metadata)
-
-    def add_bollinger_bands(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_bollinger_bands function."""
-        return add_bollinger_bands(df, self.feature_metadata)
-
-    def add_keltner_channels(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_keltner_channels function."""
-        return add_keltner_channels(df, self.feature_metadata)
-
-    def add_volume_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_volume_features function."""
-        return add_volume_features(df, self.feature_metadata)
-
-    def add_vwap(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_vwap function."""
-        return add_vwap(df, self.feature_metadata)
-
-    def add_adx(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_adx function."""
-        return add_adx(df, self.feature_metadata)
-
-    def add_mfi(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_mfi function."""
-        return add_mfi(df, self.feature_metadata)
-
-    def add_returns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_returns function."""
-        return add_returns(df, self.feature_metadata)
-
-    def add_price_ratios(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_price_ratios function."""
-        return add_price_ratios(df, self.feature_metadata)
-
-    def add_williams_r(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_williams_r function."""
-        return add_williams_r(df, self.feature_metadata)
-
-    def add_roc(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_roc function."""
-        return add_roc(df, self.feature_metadata)
-
-    def add_cci(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_cci function."""
-        return add_cci(df, self.feature_metadata)
-
-    def add_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_temporal_features function."""
-        return add_temporal_features(df, self.feature_metadata)
-
-    def add_historical_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_historical_volatility function."""
-        return add_historical_volatility(df, self.feature_metadata)
-
-    def add_parkinson_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_parkinson_volatility function."""
-        return add_parkinson_volatility(df, self.feature_metadata)
-
-    def add_garman_klass_volatility(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_garman_klass_volatility function."""
-        return add_garman_klass_volatility(df, self.feature_metadata)
-
-    def add_regime_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_regime_features function."""
-        return add_regime_features(df, self.feature_metadata)
-
-    def add_supertrend(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_supertrend function."""
-        return add_supertrend(df, self.feature_metadata)
-
-    def add_obv(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_obv function."""
-        return add_obv(df, self.feature_metadata)
-
-    def add_session_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Wrapper for add_session_features function."""
-        return add_session_features(df, self.feature_metadata)
 
 
 if __name__ == '__main__':

@@ -164,9 +164,9 @@ class TestAutoScalePurgeEmbargo:
 
         # max_horizon = 20
         # purge = 20 * 3 = 60
-        # embargo = 20 * 15 = 300
+        # embargo = max(20 * 72, 1440) = 1440 (enforced minimum)
         assert purge == 60
-        assert embargo == 300
+        assert embargo == 1440
 
     def test_larger_horizon_scales_up(self):
         """Larger max horizon should scale up purge/embargo."""
@@ -176,9 +176,9 @@ class TestAutoScalePurgeEmbargo:
 
         # max_horizon = 60
         # purge = 60 * 3 = 180
-        # embargo = 60 * 15 = 900
+        # embargo = max(60 * 72, 1440) = 4320
         assert purge == 180
-        assert embargo == 900
+        assert embargo == 4320
 
     def test_custom_multipliers(self):
         """Custom multipliers should be used."""
@@ -192,9 +192,9 @@ class TestAutoScalePurgeEmbargo:
 
         # max_horizon = 20
         # purge = 20 * 2 = 40
-        # embargo = 20 * 10 = 200
+        # embargo = max(20 * 10, 1440) = 1440 (enforced minimum)
         assert purge == 40
-        assert embargo == 200
+        assert embargo == 1440
 
     def test_empty_horizons_raises(self):
         """Empty horizons list should raise ValueError."""
@@ -341,7 +341,7 @@ class TestHorizonConfig:
         purge, embargo = config.get_purge_embargo()
 
         assert purge == 60  # 20 * 3
-        assert embargo == 300  # 20 * 15
+        assert embargo == 1440  # max(20 * 72, 1440)
 
     def test_get_purge_embargo_manual(self):
         """get_purge_embargo should return manual values when auto_scale disabled."""
@@ -417,9 +417,9 @@ class TestPipelineConfigHorizonIntegration:
 
         # max_horizon = 60
         # purge = 60 * 3 = 180
-        # embargo = 60 * 15 = 900
+        # embargo = max(60 * 72, 1440) = 4320
         assert config.purge_bars == 180
-        assert config.embargo_bars == 900
+        assert config.embargo_bars == 4320
 
     def test_disable_auto_scale(self):
         """Disabling auto_scale should use default values."""

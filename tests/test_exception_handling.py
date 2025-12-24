@@ -215,8 +215,8 @@ class TestGAFitnessErrors:
         )
 
         # Balanced distribution should not return severe penalty
-        # (fitness >= -1000 means it passed the basic checks)
-        assert fitness > -1000
+        # With transaction costs, expect negative fitness but better than -5000
+        assert fitness > -5000
 
 
 class TestNoBareCatch:

@@ -1,16 +1,16 @@
 {
-  "run_id": "test_run_final",
-  "timestamp": "2025-12-21T20:28:06.816395",
+  "run_id": "mes_phase1_modular",
+  "timestamp": "2025-12-23T22:13:44.726610",
   "scaler_type": "robust",
   "clip_outliers": true,
   "clip_range": [
     -5.0,
     5.0
   ],
-  "n_features_scaled": 107,
-  "train_samples": 87094,
-  "val_samples": 18328,
-  "test_samples": 18388,
+  "n_features_scaled": 129,
+  "train_samples": 41767,
+  "val_samples": 7463,
+  "test_samples": 7523,
   "feature_columns": [
     "return_1",
     "log_return_1",
@@ -113,12 +113,34 @@
     "mes_mgc_spread_zscore",
     "mes_mgc_beta",
     "relative_strength",
-    "mfe_h5",
-    "pain_to_gain_h5",
-    "time_weighted_dd_h5",
-    "mfe_h20",
-    "pain_to_gain_h20",
-    "time_weighted_dd_h20"
+    "open_15m",
+    "high_15m",
+    "low_15m",
+    "close_15m",
+    "volume_15m",
+    "sma_20_15m",
+    "sma_50_15m",
+    "ema_9_15m",
+    "ema_21_15m",
+    "rsi_14_15m",
+    "atr_14_15m",
+    "bb_position_15m",
+    "macd_hist_15m",
+    "close_sma20_ratio_15m",
+    "open_1h",
+    "high_1h",
+    "low_1h",
+    "close_1h",
+    "volume_1h",
+    "sma_20_1h",
+    "sma_50_1h",
+    "ema_9_1h",
+    "ema_21_1h",
+    "rsi_14_1h",
+    "atr_14_1h",
+    "bb_position_1h",
+    "macd_hist_1h",
+    "close_sma20_ratio_1h"
   ],
   "scaling_validation": {
     "is_valid": false,
@@ -127,7 +149,7 @@
   },
   "leakage_check": {
     "leakage_detected": false,
-    "checks_passed": 107
+    "checks_passed": 125
   },
   "features_by_category": {
     "returns": [
@@ -160,7 +182,9 @@
       "roc_5",
       "roc_10",
       "roc_20",
-      "price_to_vwap"
+      "price_to_vwap",
+      "macd_hist_15m",
+      "macd_hist_1h"
     ],
     "unknown": [
       "hl_ratio",
@@ -170,12 +194,16 @@
       "mes_mgc_spread_zscore",
       "mes_mgc_beta",
       "relative_strength",
-      "mfe_h5",
-      "pain_to_gain_h5",
-      "time_weighted_dd_h5",
-      "mfe_h20",
-      "pain_to_gain_h20",
-      "time_weighted_dd_h20"
+      "open_15m",
+      "high_15m",
+      "low_15m",
+      "close_15m",
+      "close_sma20_ratio_15m",
+      "open_1h",
+      "high_1h",
+      "low_1h",
+      "close_1h",
+      "close_sma20_ratio_1h"
     ],
     "price_level": [
       "sma_10",
@@ -198,7 +226,15 @@
       "volume_sma_20",
       "vwap",
       "supertrend",
-      "supertrend_direction"
+      "supertrend_direction",
+      "sma_20_15m",
+      "sma_50_15m",
+      "ema_9_15m",
+      "ema_21_15m",
+      "sma_20_1h",
+      "sma_50_1h",
+      "ema_9_1h",
+      "ema_21_1h"
     ],
     "oscillator": [
       "rsi_14",
@@ -213,7 +249,11 @@
       "adx_14",
       "plus_di_14",
       "minus_di_14",
-      "adx_strong_trend"
+      "adx_strong_trend",
+      "rsi_14_15m",
+      "bb_position_15m",
+      "rsi_14_1h",
+      "bb_position_1h"
     ],
     "binary": [
       "stoch_overbought",
@@ -238,12 +278,16 @@
       "hvol_20",
       "hvol_60",
       "parkinson_vol",
-      "gk_vol"
+      "gk_vol",
+      "atr_14_15m",
+      "atr_14_1h"
     ],
     "volume": [
       "obv",
       "volume_ratio",
-      "volume_zscore"
+      "volume_zscore",
+      "volume_15m",
+      "volume_1h"
     ],
     "temporal": [
       "hour_sin",
@@ -298,7 +342,9 @@
       "session_london",
       "session_ny",
       "volatility_regime",
-      "trend_regime"
+      "trend_regime",
+      "macd_hist_15m",
+      "macd_hist_1h"
     ],
     "robust": [
       "hl_ratio",
@@ -346,12 +392,28 @@
       "mes_mgc_spread_zscore",
       "mes_mgc_beta",
       "relative_strength",
-      "mfe_h5",
-      "pain_to_gain_h5",
-      "time_weighted_dd_h5",
-      "mfe_h20",
-      "pain_to_gain_h20",
-      "time_weighted_dd_h20"
+      "open_15m",
+      "high_15m",
+      "low_15m",
+      "close_15m",
+      "volume_15m",
+      "sma_20_15m",
+      "sma_50_15m",
+      "ema_9_15m",
+      "ema_21_15m",
+      "atr_14_15m",
+      "close_sma20_ratio_15m",
+      "open_1h",
+      "high_1h",
+      "low_1h",
+      "close_1h",
+      "volume_1h",
+      "sma_20_1h",
+      "sma_50_1h",
+      "ema_9_1h",
+      "ema_21_1h",
+      "atr_14_1h",
+      "close_sma20_ratio_1h"
     ],
     "minmax": [
       "rsi_14",
@@ -366,7 +428,11 @@
       "adx_14",
       "plus_di_14",
       "minus_di_14",
-      "adx_strong_trend"
+      "adx_strong_trend",
+      "rsi_14_15m",
+      "bb_position_15m",
+      "rsi_14_1h",
+      "bb_position_1h"
     ]
   }
 }

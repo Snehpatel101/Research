@@ -89,8 +89,11 @@ from .barriers_config import (
     BARRIER_PARAMS_DEFAULT,
     PERCENTAGE_BARRIER_PARAMS,
     TRANSACTION_COSTS,
+    SLIPPAGE_TICKS,
     TICK_VALUES,
     get_barrier_params,
+    get_slippage_ticks,
+    get_total_trade_cost,
     get_max_bars_across_all_params,
     validate_barrier_params,
 )
@@ -120,6 +123,25 @@ from .features import (
     validate_mtf_config,
     get_cross_asset_config,
     validate_feature_thresholds,
+    STATIONARITY_TESTS,
+    get_stationarity_config,
+    validate_stationarity_config,
+    DRIFT_CONFIG,
+    get_drift_config,
+    validate_drift_config,
+)
+
+# =============================================================================
+# FEATURE SETS - Named feature set definitions
+# =============================================================================
+from .feature_sets import (
+    FeatureSetDefinition,
+    FEATURE_SET_DEFINITIONS,
+    FEATURE_SET_ALIASES,
+    get_feature_set_definitions,
+    resolve_feature_set_name,
+    resolve_feature_set_names,
+    validate_feature_set_config,
 )
 
 # =============================================================================
@@ -149,6 +171,7 @@ from .labeling_config import (
     LabelingStrategyType,
     DEFAULT_LABELING_STRATEGY,
     LABELING_STRATEGY_CONFIGS,
+    LABEL_BALANCE_CONSTRAINTS,
     MULTI_LABEL_CONFIG,
     get_labeling_strategy_config,
     get_multi_label_config,
@@ -228,8 +251,11 @@ __all__ = [
     'BARRIER_PARAMS_DEFAULT',
     'PERCENTAGE_BARRIER_PARAMS',
     'TRANSACTION_COSTS',
+    'SLIPPAGE_TICKS',
     'TICK_VALUES',
     'get_barrier_params',
+    'get_slippage_ticks',
+    'get_total_trade_cost',
     'get_max_bars_across_all_params',
     'validate_barrier_params',
     # Splits
@@ -249,6 +275,19 @@ __all__ = [
     'validate_mtf_config',
     'get_cross_asset_config',
     'validate_feature_thresholds',
+    'STATIONARITY_TESTS',
+    'get_stationarity_config',
+    'validate_stationarity_config',
+    'DRIFT_CONFIG',
+    'get_drift_config',
+    'validate_drift_config',
+    'FeatureSetDefinition',
+    'FEATURE_SET_DEFINITIONS',
+    'FEATURE_SET_ALIASES',
+    'get_feature_set_definitions',
+    'resolve_feature_set_name',
+    'resolve_feature_set_names',
+    'validate_feature_set_config',
     # Sessions
     'SESSIONS_CONFIG',
     'get_sessions_config',
@@ -263,6 +302,7 @@ __all__ = [
     'LabelingStrategyType',
     'DEFAULT_LABELING_STRATEGY',
     'LABELING_STRATEGY_CONFIGS',
+    'LABEL_BALANCE_CONSTRAINTS',
     'MULTI_LABEL_CONFIG',
     'get_labeling_strategy_config',
     'get_multi_label_config',

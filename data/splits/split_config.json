@@ -1,15 +1,15 @@
 {
-  "run_id": "test_run_final",
-  "total_samples": 124506,
-  "train_samples": 87094,
-  "val_samples": 18328,
-  "test_samples": 18388,
+  "run_id": "mes_phase1_modular",
+  "total_samples": 59753,
+  "train_samples": 41767,
+  "val_samples": 7463,
+  "test_samples": 7523,
   "purge_bars": 60,
-  "embargo_bars": 288,
-  "train_date_start": "2020-01-02 18:40:00",
-  "train_date_end": "2021-05-04 06:50:00",
-  "val_date_start": "2021-05-05 19:25:00",
-  "val_date_end": "2021-08-17 15:25:00",
-  "test_date_start": "2021-08-18 13:15:00",
-  "test_date_end": "2021-12-01 22:55:00"
+  "embargo_bars": 1440,
+  "train_date_start": "2020-01-06 02:00:00",
+  "train_date_end": "2021-04-22 20:35:00",
+  "val_date_start": "2021-05-11 17:20:00",
+  "val_date_end": "2021-08-11 01:55:00",
+  "test_date_start": "2021-08-30 14:05:00",
+  "test_date_end": "2021-12-01 22:05:00"
 }

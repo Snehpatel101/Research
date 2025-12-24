@@ -404,14 +404,16 @@ class TestMomentumFeatures:
         result = add_roc(df, metadata)
 
         # Manually calculate ROC_5 and compare
-        expected_roc_5 = ((df['close'] - df['close'].shift(5)) / df['close'].shift(5) * 100)
+        # Note: ROC has anti-lookahead shift(1), so it's lagged by 1 bar
+        roc_raw = ((df['close'] - df['close'].shift(5)) / df['close'].shift(5) * 100)
+        expected_roc_5 = roc_raw.shift(1)
 
         valid_mask = ~result['roc_5'].isna() & ~expected_roc_5.isna()
         assert np.allclose(
             result.loc[valid_mask, 'roc_5'],
             expected_roc_5[valid_mask],
             rtol=1e-5
-        ), "ROC calculation should match expected formula"
+        ), "ROC calculation should match expected formula with anti-lookahead shift"
 
     def test_add_cci_creates_expected_columns(self, sample_ohlcv_data):
         """Test that CCI adds expected column."""
@@ -601,22 +603,23 @@ class TestPriceFeatures:
 
         result = add_returns(df, metadata)
 
-        # Verify return_1 matches pct_change
-        expected_return_1 = df['close'].pct_change(1)
+        # Verify return_1 matches pct_change (with anti-lookahead shift)
+        expected_return_1 = df['close'].pct_change(1).shift(1)
+        valid_mask = ~result['return_1'].isna() & ~expected_return_1.isna()
         assert np.allclose(
-            result['return_1'].dropna(),
-            expected_return_1.dropna(),
+            result.loc[valid_mask, 'return_1'],
+            expected_return_1[valid_mask],
             rtol=1e-5
-        ), "return_1 should match pct_change(1)"
+        ), "return_1 should match pct_change(1) with anti-lookahead shift"
 
-        # Verify log_return_1 calculation
-        expected_log_return_1 = np.log(df['close'] / df['close'].shift(1))
+        # Verify log_return_1 calculation (with anti-lookahead shift)
+        expected_log_return_1 = np.log(df['close'] / df['close'].shift(1)).shift(1)
         valid_mask = ~result['log_return_1'].isna() & ~expected_log_return_1.isna()
         assert np.allclose(
             result.loc[valid_mask, 'log_return_1'],
             expected_log_return_1[valid_mask],
             rtol=1e-5
-        ), "log_return_1 should match log(close[t] / close[t-1])"
+        ), "log_return_1 should match log(close[t] / close[t-1]) with anti-lookahead shift"
 
     def test_add_price_ratios_creates_expected_columns(self, sample_ohlcv_data):
         """Test that price ratios adds all expected columns."""

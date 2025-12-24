@@ -37,11 +37,11 @@ SUPPORTED_HORIZONS = [1, 5, 10, 15, 20, 30, 60, 120]
 # Active horizons for model training (subset of SUPPORTED_HORIZONS).
 # H1 is excluded by default because transaction costs exceed expected profit.
 # Modify this list to enable/disable specific horizons.
-HORIZONS = [5, 20]  # Default active horizons (configurable)
+HORIZONS = [5, 10, 15, 20]  # Default active horizons (configurable)
 
 # Legacy alias for backward compatibility
 LOOKBACK_HORIZONS = [1, 5, 20]  # For labeling (includes H1)
-ACTIVE_HORIZONS = [5, 20]  # For training (excludes H1)
+ACTIVE_HORIZONS = [5, 10, 15, 20]  # For training (excludes H1)
 
 
 # =============================================================================
@@ -355,7 +355,7 @@ class HorizonConfig:
 
     # Active horizons for model training
     # Must be subset of SUPPORTED_HORIZONS from config.py
-    horizons: List[int] = field(default_factory=lambda: [5, 20])
+    horizons: List[int] = field(default_factory=lambda: [5, 10, 15, 20])
 
     # Source timeframe (for horizon scaling when resampling)
     source_timeframe: str = '5min'
