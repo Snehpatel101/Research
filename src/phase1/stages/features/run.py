@@ -61,7 +61,7 @@ def run_feature_engineering(
     logger.info("=" * 70)
 
     try:
-        from src.config.features import get_mtf_config, CROSS_ASSET_FEATURES
+        from src.phase1.config.features import get_mtf_config, CROSS_ASSET_FEATURES
 
         target_timeframe = config.target_timeframe
         mtf_config = get_mtf_config()

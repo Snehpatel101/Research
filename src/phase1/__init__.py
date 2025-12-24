@@ -22,13 +22,12 @@ __version__ = '1.0.0'
 
 def __getattr__(name: str):
     """Lazy import subpackages to avoid circular dependencies."""
+    import importlib
+
     if name == 'stages':
-        from src.phase1 import stages as _stages
-        return _stages
+        return importlib.import_module('src.phase1.stages')
     elif name == 'config':
-        from src.phase1 import config as _config
-        return _config
+        return importlib.import_module('src.phase1.config')
     elif name == 'utils':
-        from src.phase1 import utils as _utils
-        return _utils
+        return importlib.import_module('src.phase1.utils')
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

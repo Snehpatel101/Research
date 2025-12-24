@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from src.phase1.stages.ga_optimize.fitness import calculate_fitness
-from src.config import TRANSACTION_COSTS, TICK_VALUES
+from src.phase1.config import TRANSACTION_COSTS, TICK_VALUES
 
 
 class TestShortRiskCalculation:

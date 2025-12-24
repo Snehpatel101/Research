@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import json
 
-from src.config.features import get_cross_asset_feature_names, CROSS_ASSET_FEATURES
+from src.phase1.config.features import get_cross_asset_feature_names, CROSS_ASSET_FEATURES
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -554,7 +554,7 @@ def apply_feature_selection(
 
 def main():
     """Run feature selection on the combined labeled data."""
-    from src.config import FINAL_DATA_DIR, RESULTS_DIR
+    from src.phase1.config import FINAL_DATA_DIR, RESULTS_DIR
 
     data_path = FINAL_DATA_DIR / "combined_final_labeled.parquet"
     output_path = RESULTS_DIR / "feature_selection_report.json"

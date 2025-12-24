@@ -63,7 +63,7 @@ SLIPPAGE_TICKS = {
 Get slippage estimate in ticks for a symbol and volatility regime.
 
 ```python
-from src.config import get_slippage_ticks
+from src.phase1.config import get_slippage_ticks
 
 # Get slippage for MES in high volatility
 slippage = get_slippage_ticks('MES', 'high_vol')  # 1.0 ticks per fill
@@ -73,7 +73,7 @@ slippage = get_slippage_ticks('MES', 'high_vol')  # 1.0 ticks per fill
 Calculate total round-trip trade cost (commission + slippage).
 
 ```python
-from src.config import get_total_trade_cost
+from src.phase1.config import get_total_trade_cost
 
 # Total cost for MES in low volatility
 cost = get_total_trade_cost('MES', 'low_vol')  # 1.5 ticks
@@ -88,7 +88,7 @@ commission = get_total_trade_cost('MES', include_slippage=False)  # 0.5 ticks
 Now accepts `regime` parameter for regime-adaptive slippage costs.
 
 ```python
-from src.stages.ga_optimize.fitness import calculate_fitness
+from src.phase1.stages.ga_optimize.fitness import calculate_fitness
 
 fitness = calculate_fitness(
     labels, bars_to_hit, mae, mfe, horizon, atr_mean,
@@ -102,7 +102,7 @@ fitness = calculate_fitness(
 GA individual evaluation now includes slippage costs.
 
 ```python
-from src.stages.ga_optimize.fitness import evaluate_individual
+from src.phase1.stages.ga_optimize.fitness import evaluate_individual
 
 fitness = evaluate_individual(
     individual, close, high, low, open_prices, atr, horizon,
@@ -171,7 +171,7 @@ pytest tests/phase_1_tests/stages/test_stage5_ga_optimization.py -v
 
 Configuration validation:
 ```python
-from src.config import validate_config
+from src.phase1.config import validate_config
 validate_config()  # Passes
 ```
 
@@ -221,7 +221,7 @@ validate_config()  # Passes
 ### Basic Usage
 
 ```python
-from src.config import get_total_trade_cost
+from src.phase1.config import get_total_trade_cost
 
 # Get costs for different scenarios
 mes_calm = get_total_trade_cost('MES', 'low_vol')     # 1.5 ticks
@@ -233,7 +233,7 @@ mgc_volatile = get_total_trade_cost('MGC', 'high_vol')  # 3.3 ticks
 ### GA Optimization
 
 ```python
-from src.stages.ga_optimize.fitness import evaluate_individual
+from src.phase1.stages.ga_optimize.fitness import evaluate_individual
 
 # Evaluate individual with high volatility costs
 individual = [1.5, 1.0, 2.4]  # k_up, k_down, max_bars_mult

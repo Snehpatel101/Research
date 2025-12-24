@@ -2,10 +2,166 @@
 Feature configuration for the ensemble trading pipeline.
 
 This module contains configuration for:
+- Supported timeframes for resampling
 - Feature selection thresholds (correlation, variance)
 - Cross-asset feature configuration
 - Multi-timeframe (MTF) feature configuration
 """
+
+
+# =============================================================================
+# TIMEFRAME CONFIGURATION
+# =============================================================================
+# Supported timeframes for resampling pipeline.
+# Input data (1min bars) can be resampled to any of these target timeframes.
+# The base timeframe for ML features is typically 5min.
+SUPPORTED_TIMEFRAMES = [
+    '1min', '5min', '10min', '15min', '20min', '30min', '45min', '60min'
+]
+
+# Mapping from timeframe string to pandas frequency for resampling
+TIMEFRAME_TO_FREQ = {
+    '1min': '1min',
+    '5min': '5min',
+    '10min': '10min',
+    '15min': '15min',
+    '20min': '20min',
+    '30min': '30min',
+    '45min': '45min',
+    '60min': '60min',
+    '1h': '1h',
+}
+
+
+def validate_timeframe(timeframe: str) -> None:
+    """
+    Validate that a timeframe string is supported.
+
+    Parameters
+    ----------
+    timeframe : str
+        Timeframe string to validate (e.g., '5min', '15min')
+
+    Raises
+    ------
+    ValueError
+        If the timeframe is not in SUPPORTED_TIMEFRAMES
+    """
+    if timeframe not in SUPPORTED_TIMEFRAMES:
+        raise ValueError(
+            f"Unsupported timeframe: '{timeframe}'. "
+            f"Supported timeframes: {SUPPORTED_TIMEFRAMES}"
+        )
+
+
+def parse_timeframe_to_minutes(timeframe: str) -> int:
+    """
+    Parse a timeframe string to minutes.
+
+    Parameters
+    ----------
+    timeframe : str
+        Timeframe string (e.g., '5min', '1h')
+
+    Returns
+    -------
+    int
+        Number of minutes
+
+    Raises
+    ------
+    ValueError
+        If the timeframe format is not recognized
+    """
+    timeframe = timeframe.lower().strip()
+
+    if timeframe.endswith('min'):
+        try:
+            return int(timeframe[:-3])
+        except ValueError:
+            raise ValueError(f"Invalid timeframe format: '{timeframe}'")
+    elif timeframe.endswith('h'):
+        try:
+            return int(timeframe[:-1]) * 60
+        except ValueError:
+            raise ValueError(f"Invalid timeframe format: '{timeframe}'")
+    else:
+        raise ValueError(
+            f"Unrecognized timeframe format: '{timeframe}'. "
+            f"Expected format like '5min' or '1h'"
+        )
+
+
+def auto_scale_purge_embargo(horizons: list) -> tuple:
+    """
+    Auto-scale purge and embargo bars based on label horizons.
+
+    The purge_bars must be at least equal to the maximum max_bars
+    across all horizon configurations to prevent label leakage.
+
+    Parameters
+    ----------
+    horizons : list
+        List of horizon values (e.g., [5, 10, 20])
+
+    Returns
+    -------
+    tuple
+        (purge_bars, embargo_bars)
+    """
+    from src.phase1.config import get_barrier_params
+
+    max_bars = 0
+    for h in horizons:
+        try:
+            # Try to get barrier params for this horizon
+            params = get_barrier_params('MES', h)
+            max_bars = max(max_bars, params.get('max_bars', h * 3))
+        except (KeyError, ValueError):
+            # Fallback: estimate max_bars as 3x horizon
+            max_bars = max(max_bars, h * 3)
+
+    # Purge = max_bars (prevent label leakage)
+    # Embargo = 5 days of 5min bars (1440 = 288 * 5)
+    purge_bars = max(max_bars, 60)  # Minimum 60 for safety
+    embargo_bars = 1440  # 5 days at 5min resolution
+
+    return purge_bars, embargo_bars
+
+
+def validate_horizons(horizons: list) -> list:
+    """
+    Validate label horizons.
+
+    Parameters
+    ----------
+    horizons : list
+        List of horizon values
+
+    Returns
+    -------
+    list
+        List of validation error messages (empty if valid)
+    """
+    errors = []
+
+    if not horizons:
+        errors.append("At least one horizon must be specified")
+        return errors
+
+    for h in horizons:
+        if not isinstance(h, int):
+            errors.append(f"Horizon must be an integer, got {type(h).__name__}: {h}")
+        elif h < 1:
+            errors.append(f"Horizon must be >= 1, got {h}")
+        elif h > 100:
+            errors.append(f"Horizon {h} is very large (> 100 bars). Consider smaller values.")
+
+    return errors
+
+
+# Default supported horizons for labeling
+SUPPORTED_HORIZONS = [5, 10, 15, 20]
 
 # =============================================================================
 # FEATURE SELECTION CONFIGURATION
@@ -101,8 +257,8 @@ MTF_CONFIG = {
 
     # Higher timeframes to compute features for
     # Must be integer multiples of base_timeframe
-    # Supported: '15min', '30min', '60min' (or '1h')
-    'mtf_timeframes': ['15min', '60min'],
+    # Supported: '15min', '30min', '1h', '4h', 'daily'
+    'mtf_timeframes': ['15min', '30min', '1h', '4h', 'daily'],
 
     # Include raw OHLCV from higher TFs
     # Features: open_15m, high_15m, low_15m, close_15m, volume_15m, etc.

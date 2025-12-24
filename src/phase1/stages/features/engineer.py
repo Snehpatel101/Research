@@ -34,7 +34,7 @@ from .cross_asset import add_cross_asset_features
 from .scaling import PeriodScaler, create_period_config
 
 # Import config for cross-asset feature flag
-from src.config.features import CROSS_ASSET_FEATURES
+from src.phase1.config.features import CROSS_ASSET_FEATURES
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features, MTFFeatureGenerator

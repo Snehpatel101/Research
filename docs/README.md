@@ -64,7 +64,7 @@ ls data/splits/scaled/
 pytest tests/phase_1_tests/
 
 # Use Phase 1 outputs in Python
-from src.stages.datasets import TimeSeriesDataContainer
+from src.phase1.stages.datasets import TimeSeriesDataContainer
 container = TimeSeriesDataContainer.from_parquet_dir('data/splits/scaled', horizon=20)
 ```
 

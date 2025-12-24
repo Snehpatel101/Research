@@ -30,7 +30,7 @@ Example:
     >>> df_with_regimes = add_regime_features_to_dataframe(df)
 
 Configuration Example:
-    >>> from src.config import REGIME_CONFIG
+    >>> from src.phase1.config import REGIME_CONFIG
     >>> detector = CompositeRegimeDetector.from_config(REGIME_CONFIG)
 
 Author: ML Pipeline

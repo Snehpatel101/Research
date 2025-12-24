@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, Dict, List
 import pandas as pd
 
 from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
-from src.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
-from src.config.labels import REQUIRED_LABEL_TEMPLATES, OPTIONAL_LABEL_TEMPLATES
-from src.utils.feature_sets import (
+from src.phase1.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
+from src.phase1.config.labels import REQUIRED_LABEL_TEMPLATES, OPTIONAL_LABEL_TEMPLATES
+from src.phase1.utils.feature_sets import (
     METADATA_COLUMNS,
     build_feature_set_manifest,
     resolve_feature_set,

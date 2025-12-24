@@ -40,7 +40,7 @@ def get_feature_columns(df: pd.DataFrame, exclude_cross_asset_if_disabled: bool 
     # Exclude cross-asset features if disabled in config
     if exclude_cross_asset_if_disabled:
         try:
-            from src.config.features import CROSS_ASSET_FEATURES, get_cross_asset_feature_names
+            from src.phase1.config.features import CROSS_ASSET_FEATURES, get_cross_asset_feature_names
 
             if not CROSS_ASSET_FEATURES.get('enabled', True):
                 cross_asset_features = get_cross_asset_feature_names()
@@ -194,7 +194,7 @@ def run_stationarity_tests(
     """
     logger.info("\n3. Stationarity tests (Augmented Dickey-Fuller)...")
 
-    from src.config.features import STATIONARITY_TESTS
+    from src.phase1.config.features import STATIONARITY_TESTS
 
     if not STATIONARITY_TESTS.get('enabled', False):
         logger.info("  Stationarity tests disabled by config")

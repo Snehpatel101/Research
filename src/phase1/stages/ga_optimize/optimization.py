@@ -19,7 +19,7 @@ from deap import tools
 from tqdm import tqdm
 
 from src.phase1.stages.labeling import triple_barrier_numba
-from src.config import TRANSACTION_COSTS
+from src.phase1.config import TRANSACTION_COSTS
 
 from .operators import (
     check_bounds,
@@ -306,7 +306,7 @@ def process_symbol_ga(
     Dict[int, Dict] : Mapping of horizon -> optimization results
     """
     if horizons is None:
-        from src.config import HORIZONS
+        from src.phase1.config import HORIZONS
         horizons = HORIZONS
 
     # Load labels_init data
@@ -370,7 +370,7 @@ def process_symbol_ga(
 
 def main():
     """Run Stage 5: GA optimization for all symbols using dynamic horizons."""
-    from src.config import (
+    from src.phase1.config import (
         ACTIVE_HORIZONS,
         HORIZONS,
         RANDOM_SEED,

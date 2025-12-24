@@ -5,13 +5,20 @@ Handles all configuration for Phase 1 pipeline with validation and persistence
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import json
 import logging
 
 # Import HorizonConfig from the dedicated horizon module
 # Re-exported here for backward compatibility
 from src.common.horizon_config import HorizonConfig
+
+# Import MTF configuration
+from src.phase1.stages.mtf.constants import (
+    MTFMode,
+    DEFAULT_MTF_TIMEFRAMES,
+    DEFAULT_MTF_MODE,
+)
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -48,6 +55,16 @@ class PipelineConfig:
     macd_params: Dict[str, int] = field(default_factory=lambda: {'fast': 12, 'slow': 26, 'signal': 9})
     bb_period: int = 20
     bb_std: float = 2.0
+
+    # Multi-Timeframe (MTF) configuration
+    # mtf_timeframes: List of higher timeframes to compute features for
+    # Supported: '5min', '15min', '30min', '1h', '4h', 'daily'
+    mtf_timeframes: List[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
+    # mtf_mode: What to generate - 'bars', 'indicators', or 'both'
+    # - 'bars': Only OHLCV data at higher timeframes (open_4h, high_4h, etc.)
+    # - 'indicators': Only technical indicators at higher timeframes
+    # - 'both': Generate both bars and indicators (default)
+    mtf_mode: str = field(default_factory=lambda: DEFAULT_MTF_MODE.value)
 
     # Labeling parameters - Dynamic Horizon Configuration
     # Option 1: Use horizon_config for full control (HorizonConfig instance)
@@ -92,7 +109,7 @@ class PipelineConfig:
     def __post_init__(self):
         """Validate configuration after initialization."""
         # Import here to avoid circular imports
-        from src.config import (
+        from src.phase1.config import (
             SUPPORTED_TIMEFRAMES,
             validate_timeframe,
             auto_scale_purge_embargo,
@@ -124,6 +141,20 @@ class PipelineConfig:
         feature_set_issues = validate_feature_set_config(self.feature_set)
         if feature_set_issues:
             raise ValueError(f"Feature set validation failed: {feature_set_issues}")
+
+        # Validate MTF configuration
+        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
+        valid_mtf_modes = ['bars', 'indicators', 'both']
+        if self.mtf_mode not in valid_mtf_modes:
+            raise ValueError(
+                f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'"
+            )
+        for tf in self.mtf_timeframes:
+            if tf not in MTF_TIMEFRAMES:
+                raise ValueError(
+                    f"Unsupported MTF timeframe: '{tf}'. "
+                    f"Supported: {list(MTF_TIMEFRAMES.keys())}"
+                )
 
         # Handle horizon configuration
         # Priority: horizon_config > label_horizons
@@ -335,7 +366,7 @@ class PipelineConfig:
         Returns:
             List of validation error messages (empty if valid)
         """
-        from src.config import SUPPORTED_TIMEFRAMES, validate_feature_set_config
+        from src.phase1.config import SUPPORTED_TIMEFRAMES, validate_feature_set_config
 
         issues = []
 
@@ -410,6 +441,20 @@ class PipelineConfig:
         if not self.atr_periods:
             issues.append("At least one ATR period must be specified")
 
+        # Check MTF parameters
+        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
+        valid_mtf_modes = ['bars', 'indicators', 'both']
+        if self.mtf_mode not in valid_mtf_modes:
+            issues.append(
+                f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'"
+            )
+        for tf in self.mtf_timeframes:
+            if tf not in MTF_TIMEFRAMES:
+                issues.append(
+                    f"Unsupported MTF timeframe: '{tf}'. "
+                    f"Supported: {list(MTF_TIMEFRAMES.keys())}"
+                )
+
         if self.rsi_period < 2:
             issues.append(f"rsi_period must be >= 2, got {self.rsi_period}")
 
@@ -437,6 +482,10 @@ Features:
   - EMA Periods: {self.ema_periods}
   - ATR Periods: {self.atr_periods}
   - RSI Period: {self.rsi_period}
+
+Multi-Timeframe (MTF):
+  - Timeframes: {', '.join(self.mtf_timeframes)}
+  - Mode: {self.mtf_mode}
 
 Labeling:
   - Horizons: {self.label_horizons}

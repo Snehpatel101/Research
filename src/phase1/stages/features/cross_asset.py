@@ -15,7 +15,7 @@ from .numba_functions import (
     calculate_rolling_correlation_numba,
     calculate_rolling_beta_numba,
 )
-from src.config.features import CROSS_ASSET_FEATURES
+from src.phase1.config.features import CROSS_ASSET_FEATURES
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

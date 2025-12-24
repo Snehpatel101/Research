@@ -1,6 +1,6 @@
 {
-  "run_id": "mes_phase1_modular",
-  "timestamp": "2025-12-24T07:09:03.811450",
+  "run_id": "20251224_143521",
+  "timestamp": "2025-12-24T14:36:23.827135",
   "scaler_type": "robust",
   "clip_outliers": true,
   "clip_range": [
@@ -8,9 +8,9 @@
     5.0
   ],
   "n_features_scaled": 129,
-  "train_samples": 41767,
-  "val_samples": 7463,
-  "test_samples": 7523,
+  "train_samples": 79910,
+  "val_samples": 15637,
+  "test_samples": 15697,
   "feature_columns": [
     "return_1",
     "log_return_1",

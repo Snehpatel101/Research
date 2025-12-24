@@ -278,11 +278,10 @@ def resample_ohlcv(
     >>> df_30min = resample_ohlcv(df_5min, '30min')  # Can resample from 5min to 30min
     """
     # Import validation function from config
-    from src.config import (
+    from src.phase1.config import (
         SUPPORTED_TIMEFRAMES,
         validate_timeframe,
-        parse_timeframe_to_minutes,
-        get_timeframe_metadata
+        parse_timeframe_to_minutes
     )
 
     # Validate target timeframe
@@ -394,7 +393,7 @@ def get_resampling_info(source_timeframe: str, target_timeframe: str) -> dict:
     -------
     ValueError : If target_timeframe is smaller than source_timeframe
     """
-    from src.config import parse_timeframe_to_minutes, validate_timeframe
+    from src.phase1.config import parse_timeframe_to_minutes, validate_timeframe
 
     validate_timeframe(source_timeframe)
     validate_timeframe(target_timeframe)

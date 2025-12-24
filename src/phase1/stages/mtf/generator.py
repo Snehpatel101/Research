@@ -9,15 +9,20 @@ Key Design Decisions:
    alignment. This ensures we only use COMPLETED higher TF bars, not the
    current (incomplete) bar which would cause lookahead bias.
 
-2. SUPPORTED TIMEFRAMES: 5min (base), 15min, 30min, 60min (1h).
+2. SUPPORTED TIMEFRAMES: 5min (base), 15min, 30min, 1h, 4h, daily.
    Only timeframes that are integer multiples of the base are supported.
 
 3. FORWARD-FILL ALIGNMENT: Higher TF features are forward-filled to base TF,
    meaning each base TF bar uses the most recent completed higher TF bar's value.
+
+4. MTF MODES:
+   - BARS: Generate only OHLCV data at higher timeframes
+   - INDICATORS: Generate only technical indicators at higher timeframes
+   - BOTH: Generate both OHLCV bars and indicators
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -26,8 +31,11 @@ from .constants import (
     MTF_TIMEFRAMES,
     REQUIRED_OHLCV_COLS,
     DEFAULT_MTF_TIMEFRAMES,
+    DEFAULT_MTF_MODE,
     MIN_BASE_BARS,
     MIN_MTF_BARS,
+    PANDAS_FREQ_MAP,
+    MTFMode,
 )
 from .validators import (
     validate_ohlcv_dataframe,
@@ -44,7 +52,7 @@ class MTFFeatureGenerator:
     Generate features from multiple timeframes.
 
     This class resamples base timeframe data to higher timeframes,
-    computes technical indicators on those higher timeframes,
+    optionally computes technical indicators on those higher timeframes,
     and aligns them back to the base timeframe without lookahead bias.
 
     Parameters
@@ -53,25 +61,50 @@ class MTFFeatureGenerator:
         Base timeframe of input data
     mtf_timeframes : List[str], optional
         List of higher timeframes to compute features for.
-        Default: ['15min', '60min']
-    include_ohlcv : bool, default True
-        Whether to include OHLCV data from higher TFs
-    include_indicators : bool, default True
-        Whether to compute indicators on higher TFs
+        Default: ['15min', '30min', '1h', '4h', 'daily']
+    mode : MTFMode or str, default MTFMode.BOTH
+        What to generate:
+        - 'bars': Only OHLCV data at higher timeframes
+        - 'indicators': Only technical indicators at higher timeframes
+        - 'both': Both OHLCV bars and indicators
+    include_ohlcv : bool, optional (deprecated)
+        Use mode='bars' or mode='both' instead
+    include_indicators : bool, optional (deprecated)
+        Use mode='indicators' or mode='both' instead
     """
 
     def __init__(
         self,
         base_timeframe: str = '5min',
         mtf_timeframes: Optional[List[str]] = None,
-        include_ohlcv: bool = True,
-        include_indicators: bool = True
+        mode: Union[MTFMode, str] = DEFAULT_MTF_MODE,
+        include_ohlcv: Optional[bool] = None,
+        include_indicators: Optional[bool] = None
     ):
         """Initialize MTF feature generator with validation."""
         self.base_timeframe = base_timeframe
         self.mtf_timeframes = mtf_timeframes or DEFAULT_MTF_TIMEFRAMES
-        self.include_ohlcv = include_ohlcv
-        self.include_indicators = include_indicators
+
+        # Handle mode parameter
+        if isinstance(mode, str):
+            mode = MTFMode(mode.lower())
+        self.mode = mode
+
+        # Handle legacy parameters (backward compatibility)
+        if include_ohlcv is not None or include_indicators is not None:
+            logger.warning(
+                "include_ohlcv and include_indicators are deprecated. "
+                "Use mode='bars', 'indicators', or 'both' instead."
+            )
+            # Convert legacy params to mode
+            if include_ohlcv and include_indicators:
+                self.mode = MTFMode.BOTH
+            elif include_ohlcv:
+                self.mode = MTFMode.BARS
+            elif include_indicators:
+                self.mode = MTFMode.INDICATORS
+            else:
+                self.mode = MTFMode.BOTH  # Default if both False (shouldn't happen)
 
         # Validate and parse timeframes
         validate_mtf_timeframes(base_timeframe, self.mtf_timeframes)
@@ -79,19 +112,43 @@ class MTFFeatureGenerator:
 
         logger.info(
             f"Initialized MTFFeatureGenerator: base={base_timeframe}, "
-            f"mtf={self.mtf_timeframes}"
+            f"mtf={self.mtf_timeframes}, mode={self.mode.value}"
         )
 
+    @property
+    def include_ohlcv(self) -> bool:
+        """Legacy property for backward compatibility."""
+        return self.mode in (MTFMode.BARS, MTFMode.BOTH)
+
+    @property
+    def include_indicators(self) -> bool:
+        """Legacy property for backward compatibility."""
+        return self.mode in (MTFMode.INDICATORS, MTFMode.BOTH)
+
     def _get_tf_suffix(self, tf: str) -> str:
-        """Get column suffix for a timeframe."""
+        """
+        Get column suffix for a timeframe.
+
+        Examples:
+            '15min' -> '_15m'
+            '1h' -> '_1h'
+            '4h' -> '_4h'
+            'daily' -> '_1d'
+        """
         minutes = MTF_TIMEFRAMES[tf]
-        if minutes >= 60 and minutes % 60 == 0:
+        if minutes >= 1440:  # Daily or longer
+            days = minutes // 1440
+            return f"_{days}d"
+        elif minutes >= 60 and minutes % 60 == 0:
             hours = minutes // 60
             return f"_{hours}h"
         return f"_{minutes}m"
 
     def _get_pandas_freq(self, tf: str) -> str:
         """Convert timeframe string to pandas frequency string."""
+        if tf in PANDAS_FREQ_MAP:
+            return PANDAS_FREQ_MAP[tf]
+        # Fallback to minute-based frequency
         minutes = MTF_TIMEFRAMES[tf]
         return f"{minutes}min"
 
@@ -128,6 +185,35 @@ class MTFFeatureGenerator:
 
         resampled = df_copy.resample(freq).agg(agg_dict).dropna()
         return resampled.reset_index()
+
+    def generate_mtf_bars(
+        self,
+        df_tf: pd.DataFrame,
+        timeframe: str
+    ) -> pd.DataFrame:
+        """
+        Generate MTF OHLCV bar columns for a specific timeframe.
+
+        Parameters
+        ----------
+        df_tf : pd.DataFrame
+            OHLCV data at the target timeframe
+        timeframe : str
+            Timeframe string for column naming
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with MTF bar columns added (open_4h, high_4h, etc.)
+        """
+        result = df_tf.copy()
+        tf_suffix = self._get_tf_suffix(timeframe)
+
+        # Add OHLCV columns with timeframe suffix
+        for col in REQUIRED_OHLCV_COLS:
+            result[f'{col}{tf_suffix}'] = result[col]
+
+        return result
 
     def compute_mtf_indicators(
         self,
@@ -214,6 +300,9 @@ class MTFFeatureGenerator:
         Align MTF features to base timeframe using forward-fill.
 
         CRITICAL: Uses shift(1) on MTF data to prevent lookahead bias.
+        A 4h bar at 12:00 represents 08:00-12:00, so we must shift by 1
+        to ensure 5min bars from 12:00-16:00 only see the completed
+        08:00-12:00 bar, not the current in-progress 12:00-16:00 bar.
 
         Parameters
         ----------
@@ -238,6 +327,7 @@ class MTFFeatureGenerator:
         df_mtf_idx = df_mtf.set_index('datetime')[mtf_columns].copy()
 
         # ANTI-LOOKAHEAD: Shift MTF data by 1 period
+        # This ensures we use COMPLETED higher TF bars only
         df_mtf_shifted = df_mtf_idx.shift(1)
 
         # Forward-fill to base timeframe
@@ -269,7 +359,10 @@ class MTFFeatureGenerator:
             )
 
         result = df.copy()
-        logger.info(f"Generating MTF features for {len(df)} rows")
+        logger.info(
+            f"Generating MTF features for {len(df)} rows "
+            f"(mode={self.mode.value})"
+        )
 
         for tf in self.mtf_timeframes:
             logger.info(f"Processing timeframe: {tf}")
@@ -286,22 +379,25 @@ class MTFFeatureGenerator:
             mtf_columns = []
             tf_suffix = self._get_tf_suffix(tf)
 
-            if self.include_ohlcv:
-                for col in REQUIRED_OHLCV_COLS:
-                    new_col = f'{col}{tf_suffix}'
-                    df_tf[new_col] = df_tf[col]
-                    mtf_columns.append(new_col)
+            # Generate MTF bars if requested
+            if self.mode in (MTFMode.BARS, MTFMode.BOTH):
+                df_tf = self.generate_mtf_bars(df_tf, tf)
+                bar_cols = [f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS]
+                mtf_columns.extend(bar_cols)
+                logger.info(f"  Added {len(bar_cols)} bar columns")
 
-            if self.include_indicators:
+            # Generate MTF indicators if requested
+            if self.mode in (MTFMode.INDICATORS, MTFMode.BOTH):
                 df_tf = self.compute_mtf_indicators(df_tf, tf)
                 indicator_cols = [
                     c for c in df_tf.columns
                     if c.endswith(tf_suffix) and c not in mtf_columns
                 ]
                 mtf_columns.extend(indicator_cols)
+                logger.info(f"  Added {len(indicator_cols)} indicator columns")
 
             result = self.align_to_base_tf(result, df_tf, mtf_columns)
-            logger.info(f"  Aligned {len(mtf_columns)} columns")
+            logger.info(f"  Aligned {len(mtf_columns)} columns to base TF")
 
         total_mtf_cols = len(result.columns) - len(df.columns)
         logger.info(f"Total MTF features added: {total_mtf_cols}")
@@ -355,17 +451,26 @@ class MTFFeatureGenerator:
         return True
 
     def get_mtf_column_names(self) -> Dict[str, List[str]]:
-        """Get expected MTF column names for each timeframe."""
+        """
+        Get expected MTF column names for each timeframe.
+
+        Returns
+        -------
+        Dict[str, List[str]]
+            Mapping from timeframe to list of column names
+        """
         result = {}
 
         for tf in self.mtf_timeframes:
             tf_suffix = self._get_tf_suffix(tf)
             cols = []
 
-            if self.include_ohlcv:
+            # Add bar columns if mode includes bars
+            if self.mode in (MTFMode.BARS, MTFMode.BOTH):
                 cols.extend([f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS])
 
-            if self.include_indicators:
+            # Add indicator columns if mode includes indicators
+            if self.mode in (MTFMode.INDICATORS, MTFMode.BOTH):
                 indicator_names = [
                     'sma_20', 'sma_50', 'ema_9', 'ema_21',
                     'rsi_14', 'atr_14', 'bb_position', 'macd_hist',
@@ -375,4 +480,39 @@ class MTFFeatureGenerator:
 
             result[tf] = cols
 
+        return result
+
+    def get_bar_column_names(self) -> Dict[str, List[str]]:
+        """
+        Get expected MTF bar column names for each timeframe.
+
+        Returns
+        -------
+        Dict[str, List[str]]
+            Mapping from timeframe to list of bar column names
+        """
+        result = {}
+        for tf in self.mtf_timeframes:
+            tf_suffix = self._get_tf_suffix(tf)
+            result[tf] = [f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS]
+        return result
+
+    def get_indicator_column_names(self) -> Dict[str, List[str]]:
+        """
+        Get expected MTF indicator column names for each timeframe.
+
+        Returns
+        -------
+        Dict[str, List[str]]
+            Mapping from timeframe to list of indicator column names
+        """
+        indicator_names = [
+            'sma_20', 'sma_50', 'ema_9', 'ema_21',
+            'rsi_14', 'atr_14', 'bb_position', 'macd_hist',
+            'close_sma20_ratio'
+        ]
+        result = {}
+        for tf in self.mtf_timeframes:
+            tf_suffix = self._get_tf_suffix(tf)
+            result[tf] = [f'{name}{tf_suffix}' for name in indicator_names]
         return result

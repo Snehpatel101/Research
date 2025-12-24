@@ -70,7 +70,7 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
     if len(nan_cols) > 0:
         # Import cross-asset feature checker
         try:
-            from src.config.features import is_cross_asset_feature
+            from src.phase1.config.features import is_cross_asset_feature
         except ImportError:
             # Fallback: check by name pattern
             def is_cross_asset_feature(name: str) -> bool:
@@ -82,6 +82,9 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
                 return None
             return int(match.group(1))
 
+        # Determine number of symbols (for forward return NaN calculations)
+        n_symbols = df['symbol'].nunique() if 'symbol' in df.columns else 1
+
         # Separate cross-asset features from regular features
         cross_asset_nans = {}
         expected_forward_return_nans = {}
@@ -92,7 +95,8 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
                 cross_asset_nans[col] = count
                 continue
             horizon = _forward_return_horizon(col)
-            if horizon is not None and count <= horizon:
+            # Forward returns should have horizon * n_symbols NaNs at the end
+            if horizon is not None and count <= horizon * n_symbols:
                 expected_forward_return_nans[col] = count
                 continue
             else:

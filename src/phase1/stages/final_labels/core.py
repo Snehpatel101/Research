@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from src.phase1.stages.labeling import triple_barrier_numba
-from src.config import TRANSACTION_COSTS
+from src.phase1.config import TRANSACTION_COSTS
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

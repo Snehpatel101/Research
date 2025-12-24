@@ -53,7 +53,7 @@ def run_data_generation(
     logger.info("=" * 70)
 
     try:
-        from src.generate_synthetic_data import main as generate_data
+        from src.phase1.generate_synthetic_data import main as generate_data
 
         # Check if raw data exists
         raw_files_exist = all(

@@ -215,7 +215,7 @@ class TripleBarrierLabeler(LabelingStrategy):
     def _get_default_params(self, horizon: int) -> dict[str, Any]:
         """Get default parameters for a given horizon."""
         # Import here to avoid circular imports
-        from src.config import BARRIER_PARAMS_DEFAULT
+        from src.phase1.config import BARRIER_PARAMS_DEFAULT
 
         if horizon in BARRIER_PARAMS_DEFAULT:
             return BARRIER_PARAMS_DEFAULT[horizon]

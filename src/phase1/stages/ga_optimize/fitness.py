@@ -12,7 +12,7 @@ import numpy as np
 
 # Import labeling function and config
 from src.phase1.stages.labeling import triple_barrier_numba
-from src.config import TICK_VALUES, get_total_trade_cost, LABEL_BALANCE_CONSTRAINTS
+from src.phase1.config import TICK_VALUES, get_total_trade_cost, LABEL_BALANCE_CONSTRAINTS
 
 
 def calculate_fitness(

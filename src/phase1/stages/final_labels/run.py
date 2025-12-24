@@ -65,7 +65,7 @@ def run_final_labels(
     logger.info("=" * 70)
 
     try:
-        from src.config import TRANSACTION_COSTS
+        from src.phase1.config import TRANSACTION_COSTS
         try:
             from src import __version__ as src_version
         except Exception:

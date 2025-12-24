@@ -122,7 +122,7 @@ class DataCleaner:
         -------
         ValueError : If target_timeframe is not supported
         """
-        from src.config import SUPPORTED_TIMEFRAMES, validate_timeframe
+        from src.phase1.config import SUPPORTED_TIMEFRAMES, validate_timeframe
         validate_timeframe(target_timeframe)
 
     def _parse_timeframe(self, timeframe: str) -> int:

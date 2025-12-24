@@ -2,12 +2,12 @@
 Convenience functions for Multi-Timeframe (MTF) Feature Integration.
 """
 
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
 from .generator import MTFFeatureGenerator
+from .constants import MTFMode, DEFAULT_MTF_MODE
 
 
 def add_mtf_features(
@@ -15,8 +15,9 @@ def add_mtf_features(
     feature_metadata: Optional[Dict[str, str]] = None,
     base_timeframe: str = '5min',
     mtf_timeframes: Optional[List[str]] = None,
-    include_ohlcv: bool = True,
-    include_indicators: bool = True
+    mode: Union[MTFMode, str] = DEFAULT_MTF_MODE,
+    include_ohlcv: Optional[bool] = None,
+    include_indicators: Optional[bool] = None
 ) -> pd.DataFrame:
     """
     Add MTF features to a DataFrame (convenience function).
@@ -33,11 +34,17 @@ def add_mtf_features(
     base_timeframe : str, default '5min'
         Base timeframe of input data
     mtf_timeframes : List[str], optional
-        List of higher timeframes. Default: ['15min', '60min']
-    include_ohlcv : bool, default True
-        Whether to include OHLCV data from higher TFs
-    include_indicators : bool, default True
-        Whether to compute indicators on higher TFs
+        List of higher timeframes.
+        Default: ['15min', '30min', '1h', '4h', 'daily']
+    mode : MTFMode or str, default 'both'
+        What to generate:
+        - 'bars': Only OHLCV data at higher timeframes
+        - 'indicators': Only technical indicators at higher timeframes
+        - 'both': Both OHLCV bars and indicators
+    include_ohlcv : bool, optional (deprecated)
+        Use mode='bars' or mode='both' instead
+    include_indicators : bool, optional (deprecated)
+        Use mode='indicators' or mode='both' instead
 
     Returns
     -------
@@ -46,12 +53,26 @@ def add_mtf_features(
 
     Example
     -------
+    >>> # Generate both bars and indicators (default)
     >>> df = add_mtf_features(df, feature_metadata)
-    >>> # Features like 'rsi_14_15m', 'close_1h' are now available
+    >>>
+    >>> # Generate only bars
+    >>> df = add_mtf_features(df, mode='bars')
+    >>>
+    >>> # Generate only indicators
+    >>> df = add_mtf_features(df, mode=MTFMode.INDICATORS)
+    >>>
+    >>> # Custom timeframes
+    >>> df = add_mtf_features(
+    ...     df,
+    ...     mtf_timeframes=['1h', '4h', 'daily'],
+    ...     mode='both'
+    ... )
     """
     generator = MTFFeatureGenerator(
         base_timeframe=base_timeframe,
         mtf_timeframes=mtf_timeframes,
+        mode=mode,
         include_ohlcv=include_ohlcv,
         include_indicators=include_indicators
     )
@@ -64,7 +85,11 @@ def add_mtf_features(
         for tf, cols in col_names.items():
             for col in cols:
                 if col in result.columns:
-                    feature_metadata[col] = f"MTF feature from {tf} timeframe"
+                    # Determine feature type from column name
+                    if any(col.startswith(ohlcv) for ohlcv in ['open', 'high', 'low', 'close', 'volume']):
+                        feature_metadata[col] = f"MTF OHLCV bar from {tf} timeframe"
+                    else:
+                        feature_metadata[col] = f"MTF indicator from {tf} timeframe"
 
     return result
 
@@ -127,3 +152,87 @@ def validate_mtf_alignment(
         )
 
     return len(issues) == 0, issues
+
+
+def add_mtf_bars(
+    df: pd.DataFrame,
+    feature_metadata: Optional[Dict[str, str]] = None,
+    base_timeframe: str = '5min',
+    mtf_timeframes: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Add only MTF OHLCV bars to a DataFrame.
+
+    This is a convenience wrapper for add_mtf_features with mode='bars'.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Base timeframe OHLCV data with 'datetime' column
+    feature_metadata : Dict[str, str], optional
+        Dictionary to store feature descriptions
+    base_timeframe : str, default '5min'
+        Base timeframe of input data
+    mtf_timeframes : List[str], optional
+        List of higher timeframes.
+        Default: ['15min', '30min', '1h', '4h', 'daily']
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with MTF bar features added
+
+    Example
+    -------
+    >>> df = add_mtf_bars(df)
+    >>> # Now has: open_15m, high_15m, ..., close_4h, volume_1d, etc.
+    """
+    return add_mtf_features(
+        df=df,
+        feature_metadata=feature_metadata,
+        base_timeframe=base_timeframe,
+        mtf_timeframes=mtf_timeframes,
+        mode=MTFMode.BARS
+    )
+
+
+def add_mtf_indicators(
+    df: pd.DataFrame,
+    feature_metadata: Optional[Dict[str, str]] = None,
+    base_timeframe: str = '5min',
+    mtf_timeframes: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Add only MTF indicators to a DataFrame.
+
+    This is a convenience wrapper for add_mtf_features with mode='indicators'.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Base timeframe OHLCV data with 'datetime' column
+    feature_metadata : Dict[str, str], optional
+        Dictionary to store feature descriptions
+    base_timeframe : str, default '5min'
+        Base timeframe of input data
+    mtf_timeframes : List[str], optional
+        List of higher timeframes.
+        Default: ['15min', '30min', '1h', '4h', 'daily']
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with MTF indicator features added
+
+    Example
+    -------
+    >>> df = add_mtf_indicators(df)
+    >>> # Now has: rsi_14_15m, sma_20_1h, macd_hist_4h, etc.
+    """
+    return add_mtf_features(
+        df=df,
+        feature_metadata=feature_metadata,
+        base_timeframe=base_timeframe,
+        mtf_timeframes=mtf_timeframes,
+        mode=MTFMode.INDICATORS
+    )

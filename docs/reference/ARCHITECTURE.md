@@ -796,7 +796,7 @@ pip install -r requirements.txt
 ### Programmatic Usage
 
 ```python
-from src.pipeline_config import PipelineConfig, create_default_config
+from src.phase1.pipeline_config import PipelineConfig, create_default_config
 from src.pipeline.runner import PipelineRunner
 
 # Create configuration

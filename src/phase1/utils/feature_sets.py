@@ -5,8 +5,8 @@ from typing import Dict, Iterable, List, Sequence
 
 import pandas as pd
 
-from src.config.feature_sets import FeatureSetDefinition
-from src.config.features import CROSS_ASSET_FEATURES
+from src.phase1.config.feature_sets import FeatureSetDefinition
+from src.phase1.config.features import CROSS_ASSET_FEATURES
 from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
 METADATA_COLUMNS = {

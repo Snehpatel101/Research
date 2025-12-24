@@ -30,7 +30,7 @@ from .data_contract import (
     INVALID_LABEL_SENTINEL,
     POSITIVE_COLUMNS,
 )
-from src.utils.feature_selection import (
+from src.phase1.utils.feature_selection import (
     select_features,
     save_feature_selection_report,
     FeatureSelectionResult

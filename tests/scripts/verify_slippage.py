@@ -15,7 +15,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import (
+from src.phase1.config import (
     SLIPPAGE_TICKS,
     TRANSACTION_COSTS,
     TICK_VALUES,
