@@ -1,8 +1,8 @@
 """
-Stage 1: Data Generation and Ingestion with Validation.
+Stage 1: Data Ingestion and Validation.
 
 Orchestration logic for Stage 1 of the pipeline.
-Generates synthetic data if needed and validates/standardizes raw OHLCV data.
+Validates and standardizes raw OHLCV data from the data/raw/ directory.
 """
 import logging
 import traceback
@@ -32,10 +32,10 @@ def run_data_generation(
     manifest: 'ArtifactManifest'
 ) -> 'StageResult':
     """
-    Stage 1: Data Generation / Acquisition & Validation.
+    Stage 1: Data Ingestion & Validation.
 
     This stage:
-    1. Generates synthetic data if needed or raw data doesn't exist
+    1. Validates that raw data exists for all requested symbols
     2. Validates and standardizes OHLCV data using DataIngestor
     3. Fixes any OHLCV violations (high < low, etc.)
     4. Saves validated data to parquet format
@@ -46,34 +46,38 @@ def run_data_generation(
 
     Returns:
         StageResult with status and artifacts
+
+    Raises:
+        FileNotFoundError: If raw data files are missing
     """
     start_time = datetime.now()
     logger.info("=" * 70)
-    logger.info("STAGE 1: Data Generation / Acquisition & Validation")
+    logger.info("STAGE 1: Data Ingestion & Validation")
     logger.info("=" * 70)
 
     try:
-        from src.phase1.generate_synthetic_data import main as generate_data
+        # Validate that raw data exists for all symbols
+        missing_symbols = []
+        for symbol in config.symbols:
+            parquet_path = config.raw_data_dir / f"{symbol}_1m.parquet"
+            csv_path = config.raw_data_dir / f"{symbol}_1m.csv"
+            if not parquet_path.exists() and not csv_path.exists():
+                missing_symbols.append(symbol)
 
-        # Check if raw data exists
-        raw_files_exist = all(
-            (config.raw_data_dir / f"{s}_1m.parquet").exists() or
-            (config.raw_data_dir / f"{s}_1m.csv").exists()
-            for s in config.symbols
-        )
+        if missing_symbols:
+            raise FileNotFoundError(
+                f"Raw data files missing for symbols: {missing_symbols}. "
+                f"Expected files in: {config.raw_data_dir}/ "
+                f"(e.g., MES_1m.parquet or MES_1m.csv). "
+                f"Please add real OHLCV data before running the pipeline."
+            )
+
+        logger.info(f"Found raw data for all {len(config.symbols)} symbols")
 
         artifacts = []
         ingestion_metadata = {}
 
-        # Step 1: Generate synthetic data if needed
-        if not raw_files_exist or config.use_synthetic_data:
-            logger.info("Generating synthetic data...")
-            generate_data()
-            logger.info("Synthetic data generation complete.")
-        else:
-            logger.info("Raw data files already exist. Skipping generation.")
-
-        # Step 2: ALWAYS run DataIngestor for validation and standardization
+        # Run DataIngestor for validation and standardization
         logger.info("\nRunning DataIngestor for validation and standardization...")
 
         # Create validated data output directory

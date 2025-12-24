@@ -1,98 +1,65 @@
-# Universal ML Pipeline - Documentation
+# Documentation Hub
 
-**Vision:** Train ANY model type on OHLCV data through a modular, phase-based architecture.
-
----
+Use this directory for current, non-phase documentation. Phase specifications live in `docs/phases/` and `docs/phase1/` and should be treated as frozen unless explicitly updated.
 
 ## Quick Navigation
 
 | Goal | Document |
 |------|----------|
-| **Get started in 15 min** | [QUICKSTART.md](getting-started/QUICKSTART.md) |
-| **Run the pipeline** | [PIPELINE_CLI.md](getting-started/PIPELINE_CLI.md) |
-| **Understand the system** | [ARCHITECTURE.md](reference/ARCHITECTURE.md) |
-| **Feature catalog** | [FEATURES.md](reference/FEATURES.md) |
-
----
-
-## Phase Specifications
-
-| Phase | Status | Description | Spec |
-|-------|--------|-------------|------|
-| **1** | COMPLETE | Data Preparation & Labeling | [PHASE_1.md](phases/PHASE_1.md) |
-| **2** | IN DESIGN | Model Factory (train any model) | [PHASE_2.md](phases/PHASE_2.md) |
-| **3** | PLANNED | Cross-Validation & OOS Predictions | [PHASE_3.md](phases/PHASE_3.md) |
-| **4** | PLANNED | Ensemble Stacking & Meta-Learner | [PHASE_4.md](phases/PHASE_4.md) |
-| **5** | PLANNED | Full Integration & Production | [PHASE_5.md](phases/PHASE_5.md) |
-| **6** | FUTURE | Central Orchestrator + Frontend | TBD |
-
----
-
-## Documentation Structure
-
-```
-docs/
-├── README.md              # This file
-├── getting-started/       # Onboarding
-│   ├── QUICKSTART.md      # 15-min setup guide
-│   └── PIPELINE_CLI.md    # Complete CLI reference
-├── reference/             # Technical specifications
-│   ├── ARCHITECTURE.md    # System design
-│   ├── FEATURES.md        # Feature catalog (107 indicators)
-│   └── SLIPPAGE.md        # Transaction cost modeling
-├── phases/                # Frozen phase specifications
-│   ├── PHASE_1.md         # Data prep (COMPLETE)
-│   ├── PHASE_2.md         # Model training
-│   ├── PHASE_3.md         # Cross-validation
-│   ├── PHASE_4.md         # Ensemble
-│   └── PHASE_5.md         # Production
-└── archive/               # Historical docs (not maintained)
-```
-
----
+| Get started | `getting-started/QUICKSTART.md` |
+| CLI reference | `getting-started/PIPELINE_CLI.md` |
+| Architecture | `reference/ARCHITECTURE.md` |
+| Feature catalog | `reference/FEATURES.md` |
+| Slippage model | `reference/SLIPPAGE.md` |
 
 ## Quick Commands
 
 ```bash
-# Run Phase 1 pipeline
-./pipeline run --symbols MES --stages all
+# Run Phase 1
+./pipeline run --symbols MES,MGC
 
-# Check outputs
-ls data/splits/scaled/
+# Check status
+./pipeline status <run_id>
 
-# Run tests
-pytest tests/phase_1_tests/
-
-# Use Phase 1 outputs in Python
-from src.phase1.stages.datasets import TimeSeriesDataContainer
-container = TimeSeriesDataContainer.from_parquet_dir('data/splits/scaled', horizon=20)
+# Validate config and artifacts
+./pipeline validate --run-id <run_id>
 ```
 
----
+## Phase Status
 
-## Key Metrics (Phase 1)
+| Phase | Status | Description | Spec |
+|-------|--------|-------------|------|
+| 1 | Implemented | Data prep + labeling | `phases/PHASE_1.md` |
+| 2 | Planned | Model factory | `phases/PHASE_2.md` |
+| 3 | Planned | CV + OOS predictions | `phases/PHASE_3.md` |
+| 4 | Planned | Ensemble | `phases/PHASE_4.md` |
+| 5 | Planned | Production | `phases/PHASE_5.md` |
 
-| Metric | Value |
-|--------|-------|
-| **Codebase** | ~10K lines Python |
-| **Features** | 107 technical indicators |
-| **Horizons** | H5, H10, H15, H20 |
-| **Split Ratio** | 70/15/15 |
-| **Purge/Embargo** | 60/288 bars |
-| **Output** | Model-ready parquet files |
+## Key Defaults (Phase 1)
 
----
+- Horizons: `[5, 10, 15, 20]`
+- Timeframe: `5min`
+- Splits: `70/15/15`
+- Purge/embargo: auto-scaled from horizons (embargo defaults to 1440 bars unless overridden)
 
-## Engineering Principles
+## Doc Structure
 
-1. **Modularity** - No monoliths, clear separation
-2. **650-line limit** - Forces good decomposition
-3. **Fail fast** - Validate at boundaries
-4. **Less code** - Simplicity wins
-5. **Delete unused** - Git is the archive
-
----
-
-## Archived Documentation
-
-Historical documents (reports, fix logs, status updates) are preserved in `docs/archive/` for reference but are not actively maintained.
+```
+docs/
+├── README.md
+├── getting-started/
+│   ├── QUICKSTART.md
+│   └── PIPELINE_CLI.md
+├── reference/
+│   ├── ARCHITECTURE.md
+│   ├── FEATURES.md
+│   └── SLIPPAGE.md
+├── phase1/
+│   └── README.md
+└── phases/
+    ├── PHASE_1.md
+    ├── PHASE_2.md
+    ├── PHASE_3.md
+    ├── PHASE_4.md
+    └── PHASE_5.md
+```

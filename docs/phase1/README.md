@@ -30,11 +30,13 @@ Raw 1-minute bars  →  Clean 5-minute bars  →  Add 100+ indicators  →  Labe
 ```
 
 ### Step 3: Add Technical Indicators (Features)
-**What:** Calculate 100+ signals that traders use to make decisions:
-- **Momentum:** RSI, MACD, Stochastic
+**What:** Calculate 150+ signals that traders use to make decisions:
+- **Momentum:** RSI, MACD, Stochastic, ROC
 - **Trend:** Moving averages (SMA, EMA), Supertrend
-- **Volatility:** ATR, Bollinger Bands
-- **Volume:** OBV, VWAP
+- **Volatility:** ATR, Bollinger Bands, rolling volatility
+- **Volume:** OBV, VWAP, volume ratios
+- **Wavelets:** Multi-scale decomposition for cycle detection
+- **Microstructure:** Bid-ask spread proxies, order flow imbalance
 
 ### Step 4: Multi-Timeframe Features
 **The key insight:** What happens on the 1-hour chart affects the 5-minute chart.
@@ -107,7 +109,7 @@ data/splits/scaled/
 ```
 
 Each file contains:
-- **129 features** (technical indicators + multi-timeframe)
+- **150+ features** (technical indicators, wavelets, microstructure, multi-timeframe)
 - **Labels** for 4 horizons (H5, H10, H15, H20)
 - **Quality weights** (some samples are higher quality than others)
 - **Metadata** (symbol, timestamp)
@@ -154,11 +156,13 @@ Central dashboard to manage everything.
 | Decision | Why |
 |----------|-----|
 | 5-minute bars | Balance between noise reduction and signal preservation |
-| 60-bar purge | Prevents label leakage (labels look 20 bars ahead × 3 safety margin) |
+| 60-bar purge | Prevents label leakage (labels look 20 bars ahead x 3 safety margin) |
+| 1440-bar embargo | 5 days buffer for serial correlation in features |
 | Multi-timeframe | Higher timeframes provide context that single-timeframe misses |
 | Triple-barrier | More realistic than simple up/down labels - includes stop losses |
 | Robust scaling | Handles outliers better than standard scaling |
 | Train-only fit | Scaler fitted on train data only to prevent data leakage |
+| Real data only | Pipeline requires real market data - no synthetic data fallback |
 
 ---
 
@@ -188,10 +192,12 @@ print(f'Ready to train: {X.shape[0]} samples, {X.shape[1]} features')
 
 It handles all the tedious but critical data engineering:
 - Cleaning and validation
-- Feature engineering (100+ indicators)
+- Feature engineering (150+ indicators including wavelets and microstructure)
 - Multi-timeframe analysis (5min to daily)
-- Realistic trade labeling
-- Proper train/val/test splits
+- Realistic trade labeling (triple-barrier method)
+- Proper train/val/test splits with purge and embargo
 - Feature scaling without leakage
 
 The result is clean, labeled data that any ML model can consume - from simple random forests to complex transformers.
+
+**Note:** The pipeline requires real OHLCV data in `data/raw/` directory. No synthetic data generation is provided.

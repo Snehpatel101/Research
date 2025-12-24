@@ -1,22 +1,20 @@
 """
-GA operators and helper functions.
+Helper functions for barrier optimization.
 
 Contains:
     - get_contiguous_subset: Extract contiguous time block for temporal integrity
     - check_bounds: Enforce parameter bounds on individuals
-    - create_toolbox: Create and configure DEAP toolbox
     - get_seeded_individuals: Get symbol-specific seeded starting points
+
+NOTE: DEAP-specific functions (create_toolbox) have been removed.
+      The optimization now uses Optuna TPE via optuna_optimizer.py.
 """
 
 import logging
 import random
 from typing import List
 
-import numpy as np
 import pandas as pd
-from deap import base, creator, tools
-
-from .fitness import evaluate_individual
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -85,79 +83,9 @@ def check_bounds(individual: List[float]) -> List[float]:
     return individual
 
 
-def create_toolbox(
-    close: np.ndarray,
-    high: np.ndarray,
-    low: np.ndarray,
-    open_prices: np.ndarray,
-    atr: np.ndarray,
-    horizon: int,
-    symbol: str,
-    tournament_size: int = 3,
-) -> base.Toolbox:
-    """
-    Create and configure DEAP toolbox for GA optimization.
-
-    Parameters:
-    -----------
-    close, high, low, open_prices, atr : Price/indicator arrays
-    horizon : Horizon value
-    symbol : Symbol name for symbol-specific constraints
-    tournament_size : Tournament selection size
-
-    Returns:
-    --------
-    toolbox : Configured DEAP toolbox
-    """
-    # Clean up any existing DEAP types
-    if hasattr(creator, "FitnessMax"):
-        del creator.FitnessMax
-    if hasattr(creator, "Individual"):
-        del creator.Individual
-
-    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-    creator.create("Individual", list, fitness=creator.FitnessMax)
-
-    toolbox = base.Toolbox()
-
-    # Register attribute generators
-    toolbox.register("k_up", random.uniform, K_MIN, K_MAX)
-    toolbox.register("k_down", random.uniform, K_MIN, K_MAX)
-    toolbox.register("max_bars_mult", random.uniform, MAX_BARS_MIN, MAX_BARS_MAX)
-
-    toolbox.register(
-        "individual",
-        tools.initCycle,
-        creator.Individual,
-        (toolbox.k_up, toolbox.k_down, toolbox.max_bars_mult),
-        n=1,
-    )
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-
-    # Evaluation function with symbol parameter
-    toolbox.register(
-        "evaluate",
-        evaluate_individual,
-        close=close,
-        high=high,
-        low=low,
-        open_prices=open_prices,
-        atr=atr,
-        horizon=horizon,
-        symbol=symbol,
-    )
-
-    # Genetic operators
-    toolbox.register("mate", tools.cxBlend, alpha=0.3)
-    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=0.20, indpb=0.3)
-    toolbox.register("select", tools.selTournament, tournsize=tournament_size)
-
-    return toolbox
-
-
 def get_seeded_individuals(symbol: str) -> List[List[float]]:
     """
-    Get symbol-specific seeded starting points for the GA.
+    Get symbol-specific seeded starting points for optimization.
 
     Parameters:
     -----------

@@ -213,8 +213,11 @@ def run_final_labels(
 
         # Generate labeling report
         if all_dfs:
-            generate_labeling_report(all_dfs)
-            report_path = config.results_dir / 'labeling_report.md'
+            report_path = generate_labeling_report(
+                all_dfs,
+                config.results_dir,
+                config.label_horizons,
+            )
             if report_path.exists():
                 artifacts.append(report_path)
 

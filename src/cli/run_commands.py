@@ -57,7 +57,6 @@ def _create_config_from_args(
     test_ratio: Optional[float],
     purge_bars: Optional[int],
     embargo_bars: Optional[int],
-    synthetic: bool,
     project_root_path: Path,
     pipeline_config,
     presets_mod
@@ -93,7 +92,6 @@ def _create_config_from_args(
     # Start with base config kwargs
     config_kwargs = {
         'project_root': project_root_path,
-        'use_synthetic_data': synthetic,
     }
 
     # Apply preset if specified
@@ -253,11 +251,6 @@ def run_command(
         "--feature-set",
         help="Feature set selection (core_min, core_full, mtf_plus, all)"
     ),
-    synthetic: bool = typer.Option(
-        False,
-        "--synthetic",
-        help="Generate synthetic data"
-    ),
     project_root: Optional[str] = typer.Option(
         None,
         "--project-root",
@@ -267,11 +260,13 @@ def run_command(
     """
     Run the complete Phase 1 pipeline.
 
+    Requires real data in data/raw/ directory (e.g., MES_1m.parquet).
+
     Examples:
         pipeline run --symbols MES,MGC --start 2020-01-01 --end 2024-12-31
         pipeline run --preset day_trading --symbols MES
         pipeline run --preset scalping --horizons 1,3,5
-        pipeline run --run-id phase1_v1 --synthetic
+        pipeline run --run-id phase1_v1
     """
     pipeline_config = _get_pipeline_config()
     pipeline_mod = _get_pipeline_runner()
@@ -297,7 +292,6 @@ def run_command(
             test_ratio=test_ratio,
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
-            synthetic=synthetic,
             project_root_path=project_root_path,
             pipeline_config=pipeline_config,
             presets_mod=presets_mod
@@ -321,7 +315,6 @@ def run_command(
     table.add_row("Feature Set", config.feature_set)
     table.add_row("Train/Val/Test", f"{config.train_ratio:.0%} / {config.val_ratio:.0%} / {config.test_ratio:.0%}")
     table.add_row("Purge/Embargo", f"{config.purge_bars} / {config.embargo_bars} bars")
-    table.add_row("Synthetic Data", "Yes" if config.use_synthetic_data else "No")
 
     console.print(table)
     console.print()
@@ -416,9 +409,20 @@ def rerun_command(
         'cleaning': 'data_cleaning',
         'clean': 'data_cleaning',
         'features': 'feature_engineering',
-        'labeling': 'labeling',
-        'labels': 'labeling',
+        'labeling': 'initial_labeling',
+        'labels': 'initial_labeling',
+        'initial_labeling': 'initial_labeling',
+        'initial-labeling': 'initial_labeling',
+        'final_labels': 'final_labels',
+        'final-labels': 'final_labels',
+        'final': 'final_labels',
+        'ga': 'ga_optimize',
+        'optimize': 'ga_optimize',
         'splits': 'create_splits',
+        'scaling': 'feature_scaling',
+        'scale': 'feature_scaling',
+        'datasets': 'build_datasets',
+        'validate_scaled': 'validate_scaled',
         'report': 'generate_report'
     }
 

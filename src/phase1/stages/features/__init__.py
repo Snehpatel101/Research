@@ -19,6 +19,7 @@ Feature Categories:
     temporal: Time encoding, trading sessions
     regime: Volatility and trend regime classification
     cross_asset: MES-MGC correlation, spread, beta, relative strength
+    wavelets: Multi-scale wavelet decomposition (DWT coefficients, energy, trend)
 
 Example:
     >>> from stages.features import FeatureEngineer
@@ -120,6 +121,34 @@ from .cross_asset import (
     add_cross_asset_features,
 )
 
+# Feature functions - Microstructure
+from .microstructure import (
+    add_microstructure_features,
+    add_amihud_illiquidity,
+    add_roll_spread,
+    add_kyle_lambda,
+    add_corwin_schultz_spread,
+    add_relative_spread,
+    add_volume_imbalance,
+    add_trade_intensity,
+    add_price_efficiency,
+    add_realized_volatility_ratio,
+)
+
+# Feature functions - Wavelets
+from .wavelets import (
+    add_wavelet_features,
+    add_wavelet_coefficients,
+    add_wavelet_energy,
+    add_wavelet_volatility,
+    add_wavelet_trend_strength,
+    SUPPORTED_WAVELETS,
+    DEFAULT_WAVELET,
+    DEFAULT_LEVEL,
+    DEFAULT_WINDOW,
+    PYWT_AVAILABLE,
+)
+
 # Period scaling
 from .scaling import (
     scale_period,
@@ -201,6 +230,28 @@ __all__ = [
     'add_trend_regime',
     # Cross Asset
     'add_cross_asset_features',
+    # Microstructure
+    'add_microstructure_features',
+    'add_amihud_illiquidity',
+    'add_roll_spread',
+    'add_kyle_lambda',
+    'add_corwin_schultz_spread',
+    'add_relative_spread',
+    'add_volume_imbalance',
+    'add_trade_intensity',
+    'add_price_efficiency',
+    'add_realized_volatility_ratio',
+    # Wavelets
+    'add_wavelet_features',
+    'add_wavelet_coefficients',
+    'add_wavelet_energy',
+    'add_wavelet_volatility',
+    'add_wavelet_trend_strength',
+    'SUPPORTED_WAVELETS',
+    'DEFAULT_WAVELET',
+    'DEFAULT_LEVEL',
+    'DEFAULT_WINDOW',
+    'PYWT_AVAILABLE',
     # Period scaling
     'scale_period',
     'get_scaled_periods',

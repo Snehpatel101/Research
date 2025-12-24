@@ -145,28 +145,33 @@ def _add_advanced_regime_features(
         DataFrame with advanced regime features added
     """
     try:
-        from stages.regime import (
+        from src.phase1.stages.regime import (
             CompositeRegimeDetector,
             add_regime_features_to_dataframe,
         )
+    except ImportError:
+        try:
+            from stages.regime import (
+                CompositeRegimeDetector,
+                add_regime_features_to_dataframe,
+            )
+        except ImportError as e:
+            logger.warning(
+                f"Advanced regime detection not available: {e}. "
+                f"Falling back to basic regime features."
+            )
+            return _add_basic_regime_features(df, feature_metadata)
 
-        logger.info("Using advanced regime detection...")
+    logger.info("Using advanced regime detection...")
 
-        # Use the convenience function which handles everything
-        df = add_regime_features_to_dataframe(
-            df,
-            config=regime_config,
-            feature_metadata=feature_metadata
-        )
+    # Use the convenience function which handles everything
+    df = add_regime_features_to_dataframe(
+        df,
+        config=regime_config,
+        feature_metadata=feature_metadata
+    )
 
-        return df
-
-    except ImportError as e:
-        logger.warning(
-            f"Advanced regime detection not available: {e}. "
-            f"Falling back to basic regime features."
-        )
-        return _add_basic_regime_features(df, feature_metadata)
+    return df
 
 
 def add_volatility_regime(

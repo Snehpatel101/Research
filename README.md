@@ -1,107 +1,93 @@
-# Universal ML Pipeline for OHLCV Time Series
+# ML Pipeline for OHLCV Time Series
 
-**Train ANY model type on market data through a modular, phase-based architecture.**
+Modular Phase 1 data pipeline that turns raw OHLCV bars into model-ready datasets with leakage-safe splits, scaling, and labeling. Phase 2+ (model factory, CV, ensembles) is planned but not implemented here.
 
 ```
-[ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3-4: Ensemble ] → [ Phase 5: Prod ] → [ Phase 6: UI ]
-     ✅ DONE            IN DESIGN              PLANNED               PLANNED           FUTURE
+[ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3: CV ] → [ Phase 4: Ensemble ] → [ Phase 5: Prod ]
+    IMPLEMENTED          PLANNED            PLANNED           PLANNED             FUTURE
 ```
 
 ## Quick Start
 
 ```bash
-# Run Phase 1 pipeline
-./pipeline run --symbols MES --stages all
+# Run Phase 1 pipeline with defaults (requires real data in data/raw/)
+./pipeline run --symbols MES,MGC
 
-# Use outputs for Phase 2
-from src.phase1.stages.datasets import TimeSeriesDataContainer
-container = TimeSeriesDataContainer.from_parquet_dir('data/splits/scaled', horizon=20)
-
-# Get data in any format
-X, y, w = container.get_sklearn_arrays('train')      # XGBoost/LightGBM
-dataset = container.get_pytorch_sequences('train')   # LSTM/TCN/Transformer
-nf_df = container.get_neuralforecast_df('train')     # N-HiTS/TFT/PatchTST
+# Check status
+./pipeline status <run_id>
 ```
+
+```python
+from src.phase1.stages.datasets import TimeSeriesDataContainer
+
+container = TimeSeriesDataContainer.from_parquet_dir(
+    "data/splits/scaled",
+    horizon=20,
+)
+X_train, y_train, w_train = container.get_sklearn_arrays("train")
+```
+
+## Pipeline Stages (Phase 1)
+
+1) data_ingestion
+2) data_cleaning
+3) feature_engineering
+4) initial_labeling
+5) ga_optimize
+6) final_labels
+7) create_splits
+7.5) feature_scaling
+7.6) build_datasets
+7.7) validate_scaled
+8) validate
+9) generate_report
+
+## Key Outputs
+
+- Labeled data: `data/final/{SYMBOL}_labeled.parquet`
+- Combined labeled data: `data/final/combined_final_labeled.parquet`
+- Scaled splits: `data/splits/scaled/train_scaled.parquet`, `val_scaled.parquet`, `test_scaled.parquet`
+- Dataset manifests: `runs/<run_id>/artifacts/feature_set_manifest.json`, `dataset_manifest.json`
+- Completion report: `results/PHASE1_COMPLETION_REPORT_<run_id>.md`
+
+## Configuration Defaults (Phase 1)
+
+- Horizons: `[5, 10, 15, 20]`
+- Timeframe: `5min` (resampled from 1-min bars)
+- Splits: `70/15/15` train/val/test
+- Purge/embargo: auto-scaled from horizons (embargo defaults to 1440 bars unless overridden)
 
 ## Project Structure
 
 ```
 .
-├── phase1/              # Data preparation (COMPLETE)
-│   ├── src/ → ../src    # Symlink to source
-│   ├── tests/ → ../tests
-│   └── README.md
-│
-├── src/                 # Phase 1 source code
-│   ├── stages/          # Pipeline stages (ingest→validate)
-│   ├── config/          # Configuration
-│   └── pipeline/        # Orchestration
-│
-├── tests/               # Phase 1 tests
-│   └── phase_1_tests/   # Unit & integration tests
-│
-├── data/                # All pipeline data
-│   ├── raw/             # Source OHLCV data
-│   ├── splits/scaled/   # Model-ready parquet files
-│   └── ...
-│
-├── docs/                # Documentation
-│   ├── phases/          # PHASE_1.md through PHASE_5.md
-│   ├── getting-started/ # Quickstart, CLI reference
-│   ├── reference/       # Architecture, features
-│   └── archive/         # Historical docs
-│
-├── config/              # GA optimization results
-└── notebooks/           # Jupyter notebooks
+├── src/
+│   ├── cli/                 # Typer CLI entrypoints
+│   ├── pipeline/            # Runner + stage registry
+│   ├── phase1/              # Phase 1 logic, configs, and stages
+│   └── common/              # Shared utilities (manifest, horizon config)
+├── data/                    # Raw/clean/features/final/splits
+├── runs/                    # Per-run configs/logs/artifacts
+├── results/                 # Reports and plots
+├── docs/                    # Docs (non-phase + phase specs)
+└── tests/                   # Phase 1 tests and fixtures
 ```
-
-## Phase Overview
-
-| Phase | Name | Status | Description |
-|-------|------|--------|-------------|
-| **1** | Data Pipeline | COMPLETE | Ingest → Clean → Features → Labels → Splits → Scale |
-| **2** | Model Factory | IN DESIGN | Plugin architecture for ANY model (XGBoost, LSTM, TFT, etc.) |
-| **3** | Cross-Validation | PLANNED | Purged k-fold, walk-forward, OOS predictions |
-| **4** | Ensemble | PLANNED | Stacking meta-learner, regime-aware weighting |
-| **5** | Production | PLANNED | Real-time inference, monitoring, A/B testing |
-| **6** | Orchestrator | FUTURE | Central UI, model comparison dashboard |
-
-## Supported Model Families (Phase 2)
-
-| Family | Models | Status |
-|--------|--------|--------|
-| **Boosting** | XGBoost, LightGBM, CatBoost | Planned |
-| **Time Series** | TCN, N-HiTS, TFT, PatchTST, TimesNet | Planned |
-| **Neural** | LSTM, GRU, Transformer | Planned |
-| **Foundation** | TimesFM 2.0, TimeLLM | Planned |
-| **Classical** | RandomForest, SVM, LogisticRegression | Planned |
-
-## Key Features
-
-- **Model-Agnostic Data Serving** - One container, multiple output formats
-- **Zero Leakage** - Purge (60 bars) + Embargo (288 bars) + train-only scaling
-- **107 Technical Features** - Momentum, volatility, volume, multi-timeframe
-- **GA-Optimized Labels** - Symbol-specific asymmetric barriers
-- **Plugin Architecture** - Add new models with 4 methods + decorator
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [docs/README.md](docs/README.md) | Documentation hub |
-| [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) | 15-min setup |
-| [docs/phases/PHASE_1.md](docs/phases/PHASE_1.md) | Phase 1 specification |
-| [docs/phases/PHASE_2.md](docs/phases/PHASE_2.md) | Phase 2 specification |
-| [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) | System design |
+- `docs/README.md`
+- `docs/getting-started/QUICKSTART.md`
+- `docs/getting-started/PIPELINE_CLI.md`
+- `docs/reference/ARCHITECTURE.md`
+- `docs/reference/FEATURES.md`
 
 ## Engineering Principles
 
-1. **Modularity** - No monoliths, clear phase separation
-2. **650-line limit** - Forces good decomposition
-3. **Fail fast** - Validate at boundaries
-4. **Plugin architecture** - Add models without rewriting infrastructure
-5. **Delete unused** - Git is the archive
+1) Modularity: small, composable modules
+2) Fail fast: validate at boundaries
+3) No leakage: purge/embargo + train-only scaling
+4) Keep it simple: remove unused code
 
 ---
 
-**Phase 1:** COMPLETE (9.5/10) | **Next:** Build Phase 2 Model Factory
+Phase 1 is implemented; Phase 2+ is planned.

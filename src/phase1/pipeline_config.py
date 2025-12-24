@@ -99,7 +99,6 @@ class PipelineConfig:
     ga_elite_size: int = 5
 
     # Processing options
-    use_synthetic_data: bool = False
     n_jobs: int = -1  # -1 for all cores
     random_seed: int = 42
 
@@ -120,7 +119,7 @@ class PipelineConfig:
 
         # Set project_root if not provided
         if self.project_root is None:
-            self.project_root = Path(__file__).parent.parent.resolve()
+            self.project_root = Path(__file__).parent.parent.parent.resolve()
 
         # Convert string paths to Path objects
         if isinstance(self.project_root, str):
@@ -352,7 +351,9 @@ class PipelineConfig:
             PipelineConfig instance
         """
         if project_root is None:
-            project_root = Path(__file__).parent.parent.resolve()
+            # __file__ = src/phase1/pipeline_config.py
+            # .parent = src/phase1/, .parent.parent = src/, .parent.parent.parent = project root
+            project_root = Path(__file__).parent.parent.parent.resolve()
         else:
             project_root = Path(project_root)
 
@@ -474,7 +475,6 @@ Data Parameters:
   - Symbols: {', '.join(self.symbols)}
   - Date Range: {self.start_date or 'N/A'} to {self.end_date or 'N/A'}
   - Target Timeframe: {self.target_timeframe}
-  - Synthetic Data: {self.use_synthetic_data}
 
 Features:
   - Feature Set: {self.feature_set}

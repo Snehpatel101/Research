@@ -235,15 +235,19 @@ Restore: `/context-restore --project research --mode full`
 The data pipeline produces standardized datasets for all model types:
 
 ```
-src/stages/
-├── stage1_ingest.py    → Load raw data
-├── stage2_clean.py     → Resample 1min→5min
-├── stage3_features.py  → 50+ indicators
-├── stage4_labeling.py  → Triple-barrier
-├── stage5_ga_optimize.py → DEAP optimization
-├── stage6_final_labels.py
-├── stage7_splits.py    → Train/val/test
-└── stage8_validate.py  → Quality checks
+src/phase1/stages/
+├── ingest/             → Load and validate raw data
+├── clean/              → Resample 1min→5min, gap handling
+├── features/           → 150+ indicators (momentum, wavelets, microstructure)
+├── mtf/                → Multi-timeframe features
+├── labeling/           → Triple-barrier initial labels
+├── ga_optimize/        → Optuna parameter optimization
+├── final_labels/       → Apply optimized parameters
+├── splits/             → Train/val/test with purge/embargo
+├── scaling/            → Train-only robust scaling
+├── datasets/           → Build TimeSeriesDataContainer
+├── validation/         → Feature correlation and quality checks
+└── reporting/          → Generate completion reports
 ```
 
 **Output:** Standardized datasets consumed by all model trainers
@@ -290,36 +294,39 @@ src/models/
 
 ```python
 SYMBOLS = ['MES', 'MGC']
-LABEL_HORIZONS = [5, 20]  # H1 excluded (transaction costs > profit)
+LABEL_HORIZONS = [5, 10, 15, 20]  # All supported horizons
 TRAIN/VAL/TEST = 70/15/15
-PURGE_BARS = 60   # = max_bars for H20 (prevents label leakage)
-EMBARGO_BARS = 288  # ~1 day buffer
+# Purge/embargo are auto-scaled from max horizon:
+# PURGE_BARS = max_horizon * 3 = 60 bars (prevents label leakage)
+# EMBARGO_BARS = 1440 bars (~5 days at 5-min for serial correlation)
 ```
 
 ---
 
-## Phase 1 Analysis Summary (2025-12-20)
+## Phase 1 Analysis Summary (2025-12-24)
 
-### Overall Score: 7.5/10 (Production-Ready)
+### Overall Score: 8.5/10 (Production-Ready)
 
 **Strengths:**
 - Triple-barrier labeling with symbol-specific asymmetric barriers (MES: 1.5:1.0)
-- GA optimization with transaction cost penalties
-- Proper purge (60) and embargo (288) for leakage prevention
+- Optuna-based parameter optimization with transaction cost penalties
+- Proper purge (60) and embargo (1440) for leakage prevention
 - Quality-based sample weighting (0.5x-1.5x)
+- 150+ features including wavelets and microstructure
+- Multi-timeframe analysis (5min to daily)
+- TimeSeriesDataContainer for unified model training interface
 
-**Critical Fixes Applied:**
-- `PURGE_BARS` increased from 20 to 60 (= max_bars for H20)
-- Path traversal vulnerability fixed in stage1_ingest.py
-- DataIngestor now integrated in pipeline
-
-**Remaining Issues:**
-- `TimeSeriesDataset` needed for Phase 2 model training
-- 7 files still use `logging.basicConfig` (should use NullHandler)
-- No regime-adaptive barriers implemented
+**Recent Improvements:**
+- Removed synthetic data generation - pipeline requires real data
+- Added wavelet decomposition features
+- Added microstructure features (bid-ask spread, order flow)
+- Improved embargo to 1440 bars (5 days) for better serial correlation handling
+- DataIngestor validates OHLCV data at pipeline entry
 
 **Expected Performance:**
 | Horizon | Sharpe | Win Rate | Max DD |
 |---------|--------|----------|--------|
 | H5 | 0.3-0.8 | 45-50% | 10-25% |
+| H10 | 0.4-0.9 | 46-52% | 9-20% |
+| H15 | 0.4-1.0 | 47-53% | 8-18% |
 | H20 | 0.5-1.2 | 48-55% | 8-18% |

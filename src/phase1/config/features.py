@@ -92,41 +92,24 @@ def parse_timeframe_to_minutes(timeframe: str) -> int:
         )
 
 
-def auto_scale_purge_embargo(horizons: list) -> tuple:
+def auto_scale_purge_embargo(
+    horizons: list,
+    purge_multiplier: float | None = None,
+    embargo_multiplier: float | None = None,
+) -> tuple:
     """
     Auto-scale purge and embargo bars based on label horizons.
 
-    The purge_bars must be at least equal to the maximum max_bars
-    across all horizon configurations to prevent label leakage.
-
-    Parameters
-    ----------
-    horizons : list
-        List of horizon values (e.g., [5, 10, 20])
-
-    Returns
-    -------
-    tuple
-        (purge_bars, embargo_bars)
+    This delegates to the shared horizon_config implementation so
+    all code paths use the same defaults and validation.
     """
-    from src.phase1.config import get_barrier_params
+    from src.common.horizon_config import auto_scale_purge_embargo as _auto_scale
 
-    max_bars = 0
-    for h in horizons:
-        try:
-            # Try to get barrier params for this horizon
-            params = get_barrier_params('MES', h)
-            max_bars = max(max_bars, params.get('max_bars', h * 3))
-        except (KeyError, ValueError):
-            # Fallback: estimate max_bars as 3x horizon
-            max_bars = max(max_bars, h * 3)
-
-    # Purge = max_bars (prevent label leakage)
-    # Embargo = 5 days of 5min bars (1440 = 288 * 5)
-    purge_bars = max(max_bars, 60)  # Minimum 60 for safety
-    embargo_bars = 1440  # 5 days at 5min resolution
-
-    return purge_bars, embargo_bars
+    return _auto_scale(
+        horizons,
+        purge_multiplier=purge_multiplier,
+        embargo_multiplier=embargo_multiplier,
+    )
 
 
 def validate_horizons(horizons: list) -> list:

@@ -127,14 +127,13 @@ def _display_pipeline_state(run_dir: Path) -> None:
     stages_table.add_column("Duration", style="green")
     stages_table.add_column("Artifacts", style="yellow")
 
-    all_stages = [
-        "data_generation",
-        "data_cleaning",
-        "feature_engineering",
-        "labeling",
-        "create_splits",
-        "generate_report"
-    ]
+    try:
+        from src.pipeline.stage_registry import get_stage_definitions
+        stage_defs = get_stage_definitions()
+        all_stages = [stage["name"] for stage in stage_defs]
+    except Exception:
+        # Fallback for legacy runs if stage registry is unavailable
+        all_stages = list(stage_results.keys())
 
     for stage in all_stages:
         if stage in stage_results:
@@ -173,7 +172,11 @@ def _display_pipeline_state(run_dir: Path) -> None:
 
     # Overall progress
     total_stages = len(all_stages)
-    completed = len(completed_stages)
+    if total_stages == 0:
+        show_warning("No stages available to display.")
+        return
+
+    completed = len([stage for stage in all_stages if stage in completed_stages])
     progress_pct = (completed / total_stages) * 100
 
     console.print(f"[bold]Progress:[/bold] {completed}/{total_stages} stages ({progress_pct:.0f}%)")
@@ -380,7 +383,12 @@ def list_runs_command(
             with open(state_path, 'r') as f:
                 state = json.load(f)
             completed = len(state.get('completed_stages', []))
-            total = 6  # Total stages
+            # Get total from stage registry
+            try:
+                from src.pipeline.stage_registry import get_stage_definitions
+                total = len(get_stage_definitions())
+            except Exception:
+                total = 12  # Fallback to known count
             status = f"{completed}/{total} stages"
         else:
             status = "Not started"

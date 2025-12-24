@@ -31,7 +31,9 @@ from .trend import add_adx, add_supertrend
 from .temporal import add_temporal_features, add_session_features
 from .regime import add_regime_features
 from .cross_asset import add_cross_asset_features
+from .microstructure import add_microstructure_features
 from .scaling import PeriodScaler, create_period_config
+from .wavelets import add_wavelet_features, PYWT_AVAILABLE
 
 # Import config for cross-asset feature flag
 from src.phase1.config.features import CROSS_ASSET_FEATURES
@@ -72,7 +74,11 @@ class FeatureEngineer:
         mtf_include_ohlcv: bool = True,
         mtf_include_indicators: bool = True,
         scale_periods: bool = True,
-        base_timeframe: str = '5min'
+        base_timeframe: str = '5min',
+        enable_wavelets: bool = True,
+        wavelet_type: str = 'db4',
+        wavelet_level: int = 3,
+        wavelet_window: int = 64
     ):
         """
         Initialize feature engineer.
@@ -101,6 +107,15 @@ class FeatureEngineer:
         base_timeframe : str, default '5min'
             Base timeframe that indicator periods are defined for.
             Only used when scale_periods=True.
+        enable_wavelets : bool, default True
+            Whether to compute wavelet decomposition features.
+            Requires PyWavelets library.
+        wavelet_type : str, default 'db4'
+            Wavelet family to use ('db4', 'sym5', 'coif3', 'haar').
+        wavelet_level : int, default 3
+            Decomposition level (3 = 4 frequency bands).
+        wavelet_window : int, default 64
+            Rolling window size for causal wavelet computation.
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
@@ -122,6 +137,14 @@ class FeatureEngineer:
         self.mtf_include_ohlcv = mtf_include_ohlcv
         self.mtf_include_indicators = mtf_include_indicators
 
+        # Wavelet configuration
+        self.enable_wavelets = enable_wavelets and PYWT_AVAILABLE
+        self.wavelet_type = wavelet_type
+        self.wavelet_level = wavelet_level
+        self.wavelet_window = wavelet_window
+        if enable_wavelets and not PYWT_AVAILABLE:
+            logger.warning("Wavelets disabled: PyWavelets not installed")
+
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -136,6 +159,10 @@ class FeatureEngineer:
             logger.info(f"Period scaling: {self.base_timeframe} -> {self.timeframe}")
         logger.info(f"MTF enabled: {self.enable_mtf}, timeframes: {self.mtf_timeframes}")
         logger.info(f"Cross-asset features enabled: {CROSS_ASSET_FEATURES.get('enabled', True)}")
+        logger.info(
+            f"Wavelets enabled: {self.enable_wavelets}, "
+            f"type: {self.wavelet_type}, level: {self.wavelet_level}"
+        )
 
     def engineer_features(
         self,
@@ -214,21 +241,48 @@ class FeatureEngineer:
         df = add_temporal_features(df, self.feature_metadata)
         df = add_regime_features(df, self.feature_metadata)
 
-        # Add cross-asset features (MES-MGC)
-        # Note: Cross-asset features are controlled by CROSS_ASSET_FEATURES['enabled'] config
-        mes_close = None
-        mgc_close = None
-        if cross_asset_data is not None:
-            mes_close = cross_asset_data.get('mes_close')
-            mgc_close = cross_asset_data.get('mgc_close')
+        # Add microstructure proxy features (liquidity, spread, price impact from OHLCV)
+        df = add_microstructure_features(df, self.feature_metadata)
 
-        # Log why cross-asset might be skipped
-        if not CROSS_ASSET_FEATURES.get('enabled', True):
-            logger.info("Cross-asset features will be skipped (disabled in config)")
-        elif cross_asset_data is None:
-            logger.info("Cross-asset features will be skipped (no cross_asset_data provided)")
-        elif mes_close is None or mgc_close is None:
-            logger.info("Cross-asset features will be skipped (missing MES or MGC close data)")
+        # Add Wavelet decomposition features
+        wavelet_cols_added = 0
+        if self.enable_wavelets and len(df) >= self.wavelet_window:
+            try:
+                logger.info(
+                    f"Adding wavelet features ({self.wavelet_type}, "
+                    f"level={self.wavelet_level}, window={self.wavelet_window})"
+                )
+                df = add_wavelet_features(
+                    df,
+                    self.feature_metadata,
+                    price_col='close',
+                    volume_col='volume',
+                    wavelet=self.wavelet_type,
+                    level=self.wavelet_level,
+                    window=self.wavelet_window,
+                    include_volume=True,
+                    include_energy=True,
+                    include_volatility=True,
+                    include_trend=True
+                )
+                # Count wavelet columns added
+                wavelet_cols_added = len([
+                    c for c in df.columns if c.startswith('wavelet_')
+                ])
+                logger.info(f"Added {wavelet_cols_added} wavelet feature columns")
+            except Exception as e:
+                logger.warning(
+                    f"Wavelet feature generation failed: {e}. Continuing without wavelet features."
+                )
+        elif self.enable_wavelets:
+            logger.warning(
+                f"Skipping wavelet features: insufficient data "
+                f"({len(df)} rows < {self.wavelet_window} window required)"
+            )
+
+        # Add cross-asset features (MES-MGC)
+        mes_close = cross_asset_data.get('mes_close') if cross_asset_data else None
+        mgc_close = cross_asset_data.get('mgc_close') if cross_asset_data else None
 
         df = add_cross_asset_features(
             df,
@@ -239,7 +293,6 @@ class FeatureEngineer:
         )
 
         # Add Multi-Timeframe (MTF) features
-        # MTF features compute indicators on higher TFs and align to base TF
         mtf_cols_added = 0
         if self.enable_mtf and len(df) >= 500:
             try:
@@ -310,6 +363,9 @@ class FeatureEngineer:
             if any(c.endswith(s) for s in mtf_suffixes)
         ]
 
+        # Get microstructure feature names
+        micro_col_names = [c for c in df.columns if c.startswith('micro_')]
+
         feature_report = {
             'symbol': symbol,
             'timestamp': datetime.now().isoformat(),
@@ -326,6 +382,17 @@ class FeatureEngineer:
             'mtf_feature_count': mtf_cols_added,
             'mtf_timeframes': self.mtf_timeframes if mtf_cols_added > 0 else [],
             'mtf_feature_names': mtf_col_names,
+            'wavelet_features': self.enable_wavelets and wavelet_cols_added > 0,
+            'wavelet_feature_count': wavelet_cols_added,
+            'wavelet_config': {
+                'type': self.wavelet_type,
+                'level': self.wavelet_level,
+                'window': self.wavelet_window
+            } if wavelet_cols_added > 0 else {},
+            'wavelet_feature_names': [c for c in df.columns if c.startswith('wavelet_')],
+            'microstructure_features': len(micro_col_names) > 0,
+            'microstructure_feature_count': len(micro_col_names),
+            'microstructure_feature_names': micro_col_names,
             'date_range': {
                 'start': df['datetime'].min().isoformat(),
                 'end': df['datetime'].max().isoformat()
@@ -339,6 +406,10 @@ class FeatureEngineer:
             logger.info(f"Cross-asset features: {cross_asset_cols}")
         if mtf_cols_added > 0:
             logger.info(f"MTF features: {mtf_cols_added} columns from {self.mtf_timeframes}")
+        if wavelet_cols_added > 0:
+            logger.info(f"Wavelet features: {wavelet_cols_added} columns ({self.wavelet_type})")
+        if len(micro_col_names) > 0:
+            logger.info(f"Microstructure features: {len(micro_col_names)} columns")
 
         return df, feature_report
 

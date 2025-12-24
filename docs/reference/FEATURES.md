@@ -1,95 +1,88 @@
 # Feature Catalog
 
 ## Overview
-The pipeline generates 50+ technical indicators across multiple categories. Features are computed on resampled 5-minute bars with proper forward-fill handling.
+Features are generated during Stage 3 (feature_engineering). The pipeline produces 150+ features depending on:
+- Feature set selection (`feature_set` in `PipelineConfig`)
+- Multi-timeframe (MTF) mode and timeframes
+- Cross-asset features (disabled by default)
 
-## Feature Categories
+Use the run artifacts to see the exact feature list:
+- `runs/<run_id>/artifacts/feature_set_manifest.json`
+- `runs/<run_id>/artifacts/dataset_manifest.json`
 
-### 1. Price-Based Features
-- **Returns**: Simple returns, log returns (1, 5, 15, 60 bar lookbacks)
-- **Price Ratios**: close/open, high/low, (high-low)/close
-- **Price Momentum**: Rate of change over multiple windows
+## Core Feature Groups
 
-### 2. Volatility Features
-- **ATR (Average True Range)**: 14-period ATR and ATR ratio
-- **Parkinson**: High-low range-based volatility estimator
-- **Garman-Klass**: OHLC-based volatility (more efficient than close-to-close)
-- **Rolling Std**: Returns volatility over 20/60 periods
+### Price and Returns
+- Simple and log returns
+- OHLC ranges (high-low, close-open)
+- Body/wick ratios
 
-### 3. Volume Features
-- **Volume Ratios**: Current volume vs. rolling mean (20, 60 periods)
-- **Volume-Price Correlation**: 20-period rolling correlation
-- **Volume Momentum**: Rate of change in volume
+### Moving Averages
+- SMA/EMA families
+- Price-to-MA distances and ratios
 
-### 4. Moving Averages
-- **SMA**: 20, 50, 200-period simple moving averages
-- **EMA**: 12, 26-period exponential moving averages
-- **Price-MA Distance**: (close - MA) / MA for mean reversion signals
+### Momentum
+- RSI, MACD, ROC, stochastic
+- Directional momentum deltas
 
-### 5. Momentum Indicators
-- **RSI**: 14-period Relative Strength Index
-- **MACD**: 12/26/9 MACD, signal line, histogram
-- **Stochastic**: %K and %D oscillators
-- **ROC**: Rate of change over multiple periods
+### Volatility
+- ATR and ATR-derived metrics
+- Bollinger-band position/width
+- Rolling volatility measures
 
-### 6. Trend Indicators
-- **ADX**: Average Directional Index (14-period)
-- **Bollinger Bands**: 20-period bands, width, %B position
-- **Donchian Channels**: 20-period high/low channels
+### Volume
+- Volume z-scores and rolling ratios
+- Volume/price interaction metrics
 
-### 7. Pattern Features
-- **Candle Patterns**: Doji, hammer, engulfing (via heuristics)
-- **Support/Resistance**: Distance to recent highs/lows
-- **Pivot Points**: Standard, Fibonacci, Woodie pivots
+### Trend and Regime
+- Trend flags from MA alignment
+- Volatility regime features
+- Optional structure regime (advanced detectors)
 
-### 8. Statistical Features
-- **Skewness**: Returns distribution skew (20/60 periods)
-- **Kurtosis**: Returns tail heaviness (20/60 periods)
-- **Autocorrelation**: Returns persistence at lag 1, 5
+### Temporal
+- Hour/day-of-week cyclic encodings
+- Session boundary flags
 
-## Feature Selection
+### Wavelet Features
+Multi-scale decomposition for cycle and trend detection:
+- Wavelet coefficients at multiple levels (approximation + detail)
+- Energy distribution across scales
+- Trend extraction via low-frequency components
+- Noise filtering via high-frequency removal
 
-### Correlation Filtering
-- **Threshold**: 0.70 (aggressive pruning)
-- **Method**: Keep most interpretable feature from correlated groups
-- **Rationale**: Reduce multicollinearity, improve stability
+Configuration: `src/phase1/stages/features/wavelets.py`
 
-### Variance Filtering
-- **Threshold**: 0.01
-- **Purpose**: Remove near-constant features with no discriminative power
+### Microstructure Features
+Market microstructure proxies from OHLCV data:
+- **Bid-ask spread proxy:** Estimated from high-low range
+- **Order flow imbalance:** Inferred from close position within range
+- **Volume-weighted price deviation:** VWAP-based metrics
+- **Trade intensity:** Volume per price movement
+- **Amihud illiquidity:** Price impact of volume
 
-### Genetic Algorithm Optimization
-- **Objective**: Maximize Sharpe ratio - transaction cost penalty
-- **Penalty**: 0.5 bps per trade for MES, 1.0 bps for MGC
-- **Generations**: 50
-- **Population**: 100
-- **Selection**: Tournament selection (k=3)
+Configuration: `src/phase1/stages/features/microstructure.py`
 
-## Feature Engineering Pipeline
+## Multi-Timeframe (MTF) Features
+MTF features are optional and configurable (bars, indicators, or both). When enabled, higher timeframe features are shifted to prevent lookahead bias.
 
-1. **Stage 3**: Compute all raw features from OHLCV
-2. **Stage 4**: Apply GA optimization for feature subset selection
-3. **Stage 7.5**: Scale features using RobustScaler (IQR normalization)
-4. **Validation**: Check for look-ahead bias, NaN leakage, stationarity
+Supported timeframes: 5min, 15min, 30min, 1h, 4h, daily
 
-## Configuration
+## Cross-Asset Features (disabled by default)
+Cross-asset features (MES/MGC correlations, spread, beta) exist but are disabled by default in `src/phase1/config/features.py`. Enable only when both symbols are present and aligned.
 
-Features are configured in:
-- `/home/jake/Desktop/Research/src/config/features.py` - Feature selection thresholds
-- `/home/jake/Desktop/Research/src/config/feature_sets.py` - Feature set definitions
-- `/home/jake/Desktop/Research/src/stages/features/engineer.py` - Feature computation logic
+## Feature Selection and Validation
+Feature selection is part of Stage 8 validation:
+- Correlation filtering
+- Variance thresholding
+- Optional stationarity checks
 
-## Cross-Asset Features (Disabled)
+Thresholds are configurable; see `src/phase1/stages/validation/run.py` and `src/phase1/config/features.py`.
 
-Cross-asset features (MES-MGC correlations, spreads) were removed in Dec 2025 due to:
-- Length validation complexity when symbols have different bar counts
-- Minimal predictive value (empirical testing)
-- Increased maintenance burden
+## Configuration References
 
-May be re-enabled in Phase 2 with proper sequence alignment.
-
-## References
-
-- Feature correlation analysis: `/home/jake/Desktop/Research/results/feature_selection_report.json`
-- GA optimization results: `/home/jake/Desktop/Research/config/ga_results/optimization_summary.json`
-- Feature importance (post-training): Will be available after Phase 2 model training
+- Feature sets: `src/phase1/config/feature_sets.py`
+- Feature config: `src/phase1/config/features.py`
+- Feature engineering: `src/phase1/stages/features/`
+- Wavelet features: `src/phase1/stages/features/wavelets.py`
+- Microstructure features: `src/phase1/stages/features/microstructure.py`
+- Validation: `src/phase1/stages/validation/`

@@ -178,7 +178,7 @@ class TestMTFFeatureGeneratorInit:
         generator = MTFFeatureGenerator()
 
         assert generator.base_timeframe == '5min'
-        assert generator.mtf_timeframes == ['15min', '60min']
+        assert generator.mtf_timeframes == ['15min', '30min', '1h', '4h', 'daily']
         assert generator.include_ohlcv is True
         assert generator.include_indicators is True
 

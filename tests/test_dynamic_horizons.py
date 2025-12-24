@@ -327,7 +327,7 @@ class TestHorizonConfig:
 
         config = HorizonConfig()
 
-        assert config.horizons == [5, 20]
+        assert config.horizons == [5, 10, 15, 20]
         assert config.source_timeframe == '5min'
         assert config.auto_scale_purge_embargo is True
         assert config.purge_multiplier == 3.0
@@ -407,7 +407,7 @@ class TestPipelineConfigHorizonIntegration:
 
         config = PipelineConfig()
 
-        assert config.label_horizons == [5, 20]
+        assert config.label_horizons == [5, 10, 15, 20]
 
     def test_auto_scale_purge_embargo_on_init(self):
         """PipelineConfig should auto-scale purge/embargo on init."""
@@ -472,10 +472,10 @@ class TestSupportedHorizonsConfig:
         assert SUPPORTED_HORIZONS == expected
 
     def test_horizons_defaults(self):
-        """HORIZONS should default to [5, 20]."""
+        """HORIZONS should default to [5, 10, 15, 20]."""
         from config import HORIZONS
 
-        assert HORIZONS == [5, 20]
+        assert HORIZONS == [5, 10, 15, 20]
 
 
 class TestTimeframeScalingConfig:

@@ -27,6 +27,12 @@ from src.phase1.config.labeling_config import (
     validate_labeling_config,
 )
 
+from src.phase1.config.regime_config import (
+    REGIME_CONFIG,
+    REGIME_BARRIER_ADJUSTMENTS,
+    get_regime_adjusted_barriers,
+)
+
 from src.phase1.config.feature_sets import (
     FeatureSetDefinition,
     FEATURE_SET_DEFINITIONS,
@@ -41,11 +47,8 @@ from src.phase1.config.features import (
     # Timeframe config
     SUPPORTED_TIMEFRAMES,
     TIMEFRAME_TO_FREQ,
-    SUPPORTED_HORIZONS,
     validate_timeframe,
     parse_timeframe_to_minutes,
-    auto_scale_purge_embargo,
-    validate_horizons,
     # Feature thresholds
     CORRELATION_THRESHOLD,
     VARIANCE_THRESHOLD,
@@ -63,6 +66,38 @@ from src.phase1.config.features import (
     validate_drift_config,
     get_cross_asset_feature_names,
     is_cross_asset_feature,
+)
+
+from src.common.horizon_config import (
+    HORIZONS,
+    SUPPORTED_HORIZONS,
+    ACTIVE_HORIZONS,
+    LOOKBACK_HORIZONS,
+    HORIZON_TIMEFRAME_MINUTES,
+    validate_horizons,
+    get_scaled_horizons,
+    auto_scale_purge_embargo,
+    get_default_barrier_params_for_horizon,
+)
+
+from src.phase1.config.runtime import (
+    PROJECT_ROOT,
+    DATA_DIR,
+    RAW_DATA_DIR,
+    RESULTS_DIR,
+    RUNS_DIR,
+    CONFIG_DIR,
+    SYMBOLS,
+    TARGET_TIMEFRAME,
+    TRAIN_RATIO,
+    VAL_RATIO,
+    TEST_RATIO,
+    RANDOM_SEED,
+    PURGE_BARS,
+    EMBARGO_BARS,
+    set_global_seeds,
+    validate_config,
+    get_timeframe_metadata,
 )
 
 from src.phase1.config.labels import (
@@ -99,6 +134,10 @@ __all__ = [
     'get_labeling_strategy_config',
     'get_multi_label_config',
     'validate_labeling_config',
+    # regime_config
+    'REGIME_CONFIG',
+    'REGIME_BARRIER_ADJUSTMENTS',
+    'get_regime_adjusted_barriers',
     # feature_sets
     'FeatureSetDefinition',
     'FEATURE_SET_DEFINITIONS',
@@ -110,11 +149,35 @@ __all__ = [
     # timeframe config
     'SUPPORTED_TIMEFRAMES',
     'TIMEFRAME_TO_FREQ',
+    'HORIZONS',
     'SUPPORTED_HORIZONS',
+    'ACTIVE_HORIZONS',
+    'LOOKBACK_HORIZONS',
+    'HORIZON_TIMEFRAME_MINUTES',
     'validate_timeframe',
     'parse_timeframe_to_minutes',
     'auto_scale_purge_embargo',
     'validate_horizons',
+    'get_scaled_horizons',
+    'get_default_barrier_params_for_horizon',
+    # runtime defaults
+    'PROJECT_ROOT',
+    'DATA_DIR',
+    'RAW_DATA_DIR',
+    'RESULTS_DIR',
+    'RUNS_DIR',
+    'CONFIG_DIR',
+    'SYMBOLS',
+    'TARGET_TIMEFRAME',
+    'TRAIN_RATIO',
+    'VAL_RATIO',
+    'TEST_RATIO',
+    'RANDOM_SEED',
+    'PURGE_BARS',
+    'EMBARGO_BARS',
+    'set_global_seeds',
+    'validate_config',
+    'get_timeframe_metadata',
     # features
     'CORRELATION_THRESHOLD',
     'VARIANCE_THRESHOLD',
