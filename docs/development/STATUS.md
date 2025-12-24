@@ -1,767 +1,403 @@
-# TODO Before Phase 2 - Detailed Checklist
+# Phase 1 Status & Phase 2 Readiness
 
 ## Overview
 
-This is the **complete checklist** of work needed to finish Phase 1 before moving to Phase 2 (ML Model Factory).
+Phase 1 is **COMPLETE** as a modular data preparation pipeline. This document tracks the single blocker for Phase 2.
 
-**Estimated Time:** 1.5-2 days
-**Priority:** All items are required before Phase 2
-
----
-
-## Critical Context
-
-### What We're Fixing
-Phase 1 (Sneh's work) is **8.5/10 complete** as a modular data preparation pipeline. However:
-- Cross-asset features cause validation failures when running single-symbol
-- Minor bugs and edge cases need fixing
-- Documentation needs updates for Phase 2 integration
-
-### What We're NOT Building
-- ❌ PyTorch/TensorFlow integration (Phase 2's job)
-- ❌ Model training code (Phase 2's job)
-- ❌ Ensemble framework (Phase 2's job)
-
-Phase 1 = Data prep → Parquet files
-Phase 2 = Load Parquets → Train models
+**Overall Score:** 8.5/10 - Production-ready for data prep
+**Phase 2 Blocker:** TimeSeriesDataContainer (3-5 days effort)
 
 ---
 
-## PART 1: Cross-Asset Feature Removal (PRIORITY 1)
+## Phase 1 Completion Summary
 
-### Issue
-- Cross-asset features (e.g., `mes_mgc_correlation_20`, `relative_strength`) require BOTH MES+MGC
-- When running single symbol → 4 features = 100% NaN → validation fails
-- We trade **one market at a time**, so cross-asset features are unnecessary
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Data Ingestion | COMPLETE | Validates OHLCV schema, handles CSV/Parquet |
+| Data Cleaning | COMPLETE | 1m → 5m resampling, gap filling, outlier removal |
+| Feature Engineering | COMPLETE | 107 features, configurable periods |
+| Triple-Barrier Labeling | COMPLETE | Symbol-specific asymmetric barriers (MES 1.5:1.0) |
+| GA Optimization | COMPLETE | DEAP-based barrier tuning with Sharpe fitness |
+| Train/Val/Test Splits | COMPLETE | 70/15/15 with purge (60) + embargo (288) |
+| Feature Scaling | COMPLETE | Train-only fit, RobustScaler with clipping |
+| Validation | COMPLETE | Schema, leakage, distribution checks |
 
-### Files to Modify
+### Phase 1 Outputs
 
-#### 1.1. Disable Cross-Asset Features in Config
-**File:** `src/config/features.py`
-
-**Action:** Add feature flag
-```python
-# Add at top of file
-CROSS_ASSET_ENABLED = False  # Set to False to disable cross-asset features
-
-# In FEATURE_CONFIG dict, add:
-FEATURE_CONFIG = {
-    # ... existing config ...
-    "cross_asset": {
-        "enabled": CROSS_ASSET_ENABLED,
-        "min_symbols": 2,  # Require at least 2 symbols for cross-asset
-    }
-}
+```
+data/splits/scaled/
+├── train_scaled.parquet    (87,094 × 126)
+├── val_scaled.parquet      (18,591 × 126)
+├── test_scaled.parquet     (18,592 × 126)
+├── feature_scaler.pkl      (for production inference)
+└── scaling_metadata.json   (column info)
 ```
 
-**Estimated Time:** 5 minutes
-
 ---
 
-#### 1.2. Update Feature Engineer to Skip Cross-Asset
-**File:** `src/stages/features/engineer.py`
+## Critical Path for Phase 2
 
-**Action:** Add conditional check before cross-asset feature generation
+### TimeSeriesDataContainer - REQUIRED (NOT BUILT)
 
-Find the section that generates cross-asset features (around line 200-300) and wrap it:
+Phase 2 models need proper sequence windowing. Current Phase 1 outputs flat parquet files. Neural models need:
+
+- Sliding window generation (seq_len=128)
+- Symbol-isolated sequences (no MES→MGC bleeding)
+- Encoder/decoder length separation (for TFT)
+- Multiple output formats (sklearn arrays, PyTorch datasets, NeuralForecast df)
+
+**Specification:**
 
 ```python
-# Before (generates cross-asset features unconditionally):
-if self.symbols and len(self.symbols) > 1:
-    df = self._add_cross_asset_features(df)
+from dataclasses import dataclass
+from typing import List, Tuple, Optional
+import pandas as pd
+import numpy as np
+import torch
+from torch.utils.data import Dataset
 
-# After (check config flag):
-from src.config.features import CROSS_ASSET_ENABLED
+@dataclass
+class TimeSeriesDataContainer:
+    """
+    Universal container for Phase 1 outputs that provides model-specific formats.
 
-if CROSS_ASSET_ENABLED and self.symbols and len(self.symbols) >= 2:
-    df = self._add_cross_asset_features(df)
-else:
-    logger.info("Skipping cross-asset features (disabled or insufficient symbols)")
-```
+    This is the ONLY missing piece for Phase 2. All Phase 1 data prep is complete,
+    but models need proper windowing/sequencing interfaces.
+    """
+    train_df: pd.DataFrame
+    val_df: pd.DataFrame
+    test_df: pd.DataFrame
+    feature_columns: List[str]
+    label_column: str  # e.g., 'label_h5'
+    horizon: int       # e.g., 5
+    freq: str = "5min"
 
-**Estimated Time:** 10 minutes
+    # Computed on init
+    _feature_count: int = None
+    _train_size: int = None
 
----
+    def __post_init__(self):
+        self._feature_count = len(self.feature_columns)
+        self._train_size = len(self.train_df[self.train_df[self.label_column] != -99])
+        self._validate()
 
-#### 1.3. Update Cross-Asset Feature Module
-**File:** `src/stages/features/cross_asset.py`
+    def _validate(self):
+        """Validate data consistency."""
+        # Check all feature columns exist
+        for col in self.feature_columns:
+            assert col in self.train_df.columns, f"Missing feature: {col}"
 
-**Action:** Add early return if disabled
+        # Check label column exists
+        assert self.label_column in self.train_df.columns
 
-```python
-# At top of main function (e.g., add_cross_asset_features):
-from src.config.features import CROSS_ASSET_ENABLED
+        # Check no NaN in features (after filtering invalid labels)
+        valid_train = self.train_df[self.train_df[self.label_column] != -99]
+        nan_count = valid_train[self.feature_columns].isnull().sum().sum()
+        assert nan_count == 0, f"Found {nan_count} NaN values in features"
 
-def add_cross_asset_features(df, symbols):
-    """Generate cross-asset correlation features."""
+    # ========== OUTPUT FORMATS ==========
 
-    # Early return if disabled
-    if not CROSS_ASSET_ENABLED:
-        logger.info("Cross-asset features disabled in config")
-        return df
+    def get_sklearn_arrays(self, split: str = 'train') -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        For boosting models (XGBoost, LightGBM, CatBoost).
+        Returns flat X, y, sample_weight arrays.
 
-    # Early return if insufficient symbols
-    if len(symbols) < 2:
-        logger.warning(f"Cross-asset features require >=2 symbols, got {len(symbols)}. Skipping.")
-        return df
+        Args:
+            split: 'train', 'val', or 'test'
 
-    # ... existing implementation ...
-```
+        Returns:
+            X: (n_samples, n_features) array
+            y: (n_samples,) array of labels
+            weights: (n_samples,) array of sample weights
+        """
+        df = self._get_split(split)
+        df = df[df[self.label_column] != -99]  # Filter invalid
 
-**Estimated Time:** 10 minutes
+        X = df[self.feature_columns].values
+        y = df[self.label_column].values
+        weight_col = f'sample_weight_h{self.horizon}'
+        weights = df[weight_col].values if weight_col in df.columns else np.ones(len(df))
 
----
+        return X, y, weights
 
-#### 1.4. Update Validation to Allow Missing Cross-Asset Features
-**File:** `src/stages/stage8_validate.py`
+    def get_pytorch_sequences(
+        self,
+        split: str = 'train',
+        seq_len: int = 128,
+        stride: int = 1
+    ) -> Dataset:
+        """
+        For neural models (LSTM, TCN, Transformers).
+        Returns PyTorch Dataset with windowed sequences.
 
-**Action:** Don't fail validation if cross-asset features are missing (expected behavior)
+        CRITICAL: Sequences are symbol-isolated (no MES→MGC bleeding).
 
-Find the feature validation section and add:
+        Args:
+            split: 'train', 'val', or 'test'
+            seq_len: Lookback window length
+            stride: Step between windows (1 = fully overlapping)
 
-```python
-from src.config.features import CROSS_ASSET_ENABLED
-
-# When checking for missing/NaN features:
-CROSS_ASSET_FEATURES = [
-    'mes_mgc_correlation_20',
-    'mes_mgc_beta',
-    'mes_mgc_spread_zscore',
-    'relative_strength'
-]
-
-# Filter out cross-asset features from required checks if disabled
-if not CROSS_ASSET_ENABLED:
-    required_features = [f for f in required_features if f not in CROSS_ASSET_FEATURES]
-```
-
-**Estimated Time:** 15 minutes
-
----
-
-#### 1.5. Update Tests
-**Files:** `tests/test_cross_asset_features.py` (if exists)
-
-**Action:** Skip cross-asset tests if disabled
-
-```python
-import pytest
-from src.config.features import CROSS_ASSET_ENABLED
-
-@pytest.mark.skipif(not CROSS_ASSET_ENABLED, reason="Cross-asset features disabled")
-def test_cross_asset_correlation():
-    # ... existing test ...
-```
-
-**Estimated Time:** 10 minutes
-
----
-
-### 1.6. Test Cross-Asset Removal
-
-**Action:** Run pipeline with single symbol and verify no failures
-
-```bash
-# Clean previous runs
-rm -rf runs/* data/splits/* data/clean/* data/features/* data/final/*
-
-# Run with single symbol (MES only)
-./pipeline run --symbols MES --stages all
-
-# Check for validation failures
-cat runs/*/logs/pipeline.log | grep -i "error\|critical\|failed"
-
-# Verify no NaN features
-cat runs/*/artifacts/validation_report.json | grep -A 5 "critical_issues"
-
-# Expected: 0 critical issues
-```
-
-**Estimated Time:** 30 minutes (includes pipeline runtime)
-
----
-
-**Total Time for Part 1:** 1.5-2 hours
-
----
-
-## PART 2: Bug Fixes & Edge Cases (PRIORITY 2)
-
-### 2.1. Fix Import Paths (Already Fixed by Debugger Agent)
-**Status:** ✅ DONE (debugger agent fixed 9 files)
-
-**Verification:**
-```bash
-# Check no remaining import issues
-grep -r "from stages\." src/ | grep -v "from src.stages"
-# Should return nothing
-```
-
----
-
-### 2.2. Handle Empty/Missing Data Gracefully
-**File:** `src/stages/ingest/__init__.py`
-
-**Issue:** Pipeline crashes if raw data file doesn't exist
-
-**Action:** Add better error messages
-
-```python
-def ingest_file(self, file_path, symbol):
-    """Ingest and validate a single OHLCV file."""
-
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(
-            f"Raw data file not found: {file_path}\n"
-            f"Expected location: data/raw/{symbol}_1m.parquet or .csv\n"
-            f"Please ensure raw data is available before running pipeline."
+        Returns:
+            PyTorch Dataset yielding (X_seq, y, weight) tuples
+            X_seq: (seq_len, n_features) tensor
+            y: scalar label
+            weight: scalar sample weight
+        """
+        df = self._get_split(split)
+        return _SequenceDataset(
+            df=df,
+            feature_columns=self.feature_columns,
+            label_column=self.label_column,
+            horizon=self.horizon,
+            seq_len=seq_len,
+            stride=stride
         )
 
-    # ... rest of implementation ...
-```
+    def get_neuralforecast_df(self, split: str = 'train') -> pd.DataFrame:
+        """
+        For NeuralForecast library (N-HiTS, TFT, PatchTST, TimesNet).
+        Returns DataFrame in [unique_id, ds, y, features...] format.
 
-**Estimated Time:** 10 minutes
+        Args:
+            split: 'train', 'val', or 'test'
 
----
+        Returns:
+            DataFrame with columns: unique_id, ds, y, feature_1, ..., feature_n
+        """
+        df = self._get_split(split)
+        df = df[df[self.label_column] != -99]
 
-### 2.3. Validate Sufficient Data After Each Stage
-**File:** `src/pipeline/runner.py`
+        result = pd.DataFrame({
+            'unique_id': df['symbol'],
+            'ds': df['datetime'],
+            'y': df[self.label_column],
+        })
 
-**Issue:** Pipeline should fail fast if insufficient data at any stage
+        # Add features as exogenous variables
+        for col in self.feature_columns:
+            result[col] = df[col].values
 
-**Action:** Add row count validation after each stage
+        return result
 
-```python
-def _validate_stage_output(self, stage_name, output_path):
-    """Validate stage output has sufficient data."""
+    def get_darts_series(self, split: str = 'train'):
+        """
+        For Darts library (alternative to NeuralForecast).
+        Returns list of TimeSeries objects per symbol.
+        """
+        from darts import TimeSeries
 
-    MIN_ROWS = {
-        'data_generation': 1000,      # At least 1K raw bars
-        'data_cleaning': 500,          # At least 500 after resampling
-        'feature_engineering': 200,    # At least 200 after feature calc
-        'create_splits': 100,          # At least 100 for training
-    }
+        df = self._get_split(split)
+        series_list = []
 
-    if stage_name in MIN_ROWS:
-        # Load output and check row count
-        df = pd.read_parquet(output_path)
-        min_required = MIN_ROWS[stage_name]
+        for symbol in df['symbol'].unique():
+            symbol_df = df[df['symbol'] == symbol].sort_values('datetime')
+            symbol_df = symbol_df[symbol_df[self.label_column] != -99]
 
-        if len(df) < min_required:
-            raise ValueError(
-                f"Stage {stage_name} output has insufficient data: "
-                f"{len(df)} rows (minimum {min_required} required)"
+            ts = TimeSeries.from_dataframe(
+                symbol_df,
+                time_col='datetime',
+                value_cols=self.feature_columns + [self.label_column],
+                fill_missing_dates=True,
+                freq=self.freq
             )
+            series_list.append(ts)
+
+        return series_list
+
+    # ========== HELPER METHODS ==========
+
+    def _get_split(self, split: str) -> pd.DataFrame:
+        """Get DataFrame for specified split."""
+        if split == 'train':
+            return self.train_df
+        elif split == 'val':
+            return self.val_df
+        elif split == 'test':
+            return self.test_df
+        else:
+            raise ValueError(f"Unknown split: {split}")
+
+    @classmethod
+    def from_parquet_dir(cls, path: str, horizon: int = 5):
+        """
+        Load from Phase 1 output directory.
+
+        Args:
+            path: Path to scaled/ directory
+            horizon: Which horizon to use for labels (5, 10, 15, or 20)
+        """
+        import json
+        from pathlib import Path
+
+        base = Path(path)
+
+        train_df = pd.read_parquet(base / 'train_scaled.parquet')
+        val_df = pd.read_parquet(base / 'val_scaled.parquet')
+        test_df = pd.read_parquet(base / 'test_scaled.parquet')
+
+        # Load feature list from metadata
+        with open(base / 'scaling_metadata.json') as f:
+            metadata = json.load(f)
+
+        feature_columns = metadata.get('scaled_columns', [])
+
+        return cls(
+            train_df=train_df,
+            val_df=val_df,
+            test_df=test_df,
+            feature_columns=feature_columns,
+            label_column=f'label_h{horizon}',
+            horizon=horizon
+        )
+
+
+class _SequenceDataset(Dataset):
+    """
+    Internal PyTorch Dataset for windowed sequences.
+
+    CRITICAL INVARIANT: Sequences never cross symbol boundaries.
+    """
+
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        feature_columns: List[str],
+        label_column: str,
+        horizon: int,
+        seq_len: int = 128,
+        stride: int = 1
+    ):
+        self.feature_columns = feature_columns
+        self.label_column = label_column
+        self.horizon = horizon
+        self.seq_len = seq_len
+
+        # Build index of valid sequences (symbol-isolated)
+        self.sequences = []
+
+        for symbol in df['symbol'].unique():
+            symbol_df = df[df['symbol'] == symbol].sort_values('datetime')
+            valid_mask = symbol_df[label_column] != -99
+
+            # Get indices where we can form complete sequences
+            valid_indices = symbol_df[valid_mask].index.tolist()
+
+            for i in range(seq_len - 1, len(valid_indices), stride):
+                # Check all seq_len elements are valid and contiguous
+                end_idx = valid_indices[i]
+                start_idx = valid_indices[i - seq_len + 1]
+
+                # Verify contiguity (indices should be sequential)
+                if end_idx - start_idx == seq_len - 1:
+                    self.sequences.append((symbol_df, start_idx, end_idx))
+
+        # Pre-extract data for efficiency
+        self._precompute(df)
+
+    def _precompute(self, df: pd.DataFrame):
+        """Pre-extract features and labels for all sequences."""
+        self.X_data = []
+        self.y_data = []
+        self.w_data = []
+
+        weight_col = f'sample_weight_h{self.horizon}'
+
+        for symbol_df, start_idx, end_idx in self.sequences:
+            seq_df = symbol_df.loc[start_idx:end_idx]
+
+            X = seq_df[self.feature_columns].values  # (seq_len, n_features)
+            y = seq_df[self.label_column].iloc[-1]   # Label at sequence end
+            w = seq_df[weight_col].iloc[-1] if weight_col in seq_df.columns else 1.0
+
+            self.X_data.append(X)
+            self.y_data.append(y)
+            self.w_data.append(w)
+
+        # Convert to tensors
+        self.X_data = torch.tensor(np.array(self.X_data), dtype=torch.float32)
+        self.y_data = torch.tensor(np.array(self.y_data), dtype=torch.long)
+        self.w_data = torch.tensor(np.array(self.w_data), dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, idx):
+        return self.X_data[idx], self.y_data[idx], self.w_data[idx]
 ```
 
-**Estimated Time:** 20 minutes
+**Location:** `src/datasets/container.py` (new)
+**Effort:** 3-5 days
+**Tests:** `tests/test_timeseries_container.py` (new)
 
----
+### PURGE_BARS Alignment - CHECK NEEDED
 
-### 2.4. Fix High NaN Drop Rate (57.6%)
-**File:** `src/stages/features/engineer.py`
-
-**Issue:** 690K bars → 141K after features → 60K after dropping NaN (57.6% loss)
-
-**Investigation needed:**
-- Which features cause the most NaN values?
-- Is warmup period too long (200+ bars for SMA_200)?
-- Can we use forward-fill for some features?
-
-**Action:** Add NaN diagnostics
+If using transformer models with `seq_len=128`, verify:
 
 ```python
-def _diagnose_nan_sources(self, df):
-    """Identify which features cause the most NaN values."""
-
-    nan_counts = df.isnull().sum()
-    nan_features = nan_counts[nan_counts > 0].sort_values(ascending=False)
-
-    logger.info(f"Features with NaN values:")
-    for feature, count in nan_features.head(10).items():
-        pct = 100 * count / len(df)
-        logger.info(f"  {feature}: {count} ({pct:.1f}%)")
-
-    return nan_features
+PURGE_BARS = max(60, 128)  # Must be >= max sequence length
 ```
 
-**Estimated Time:** 30 minutes (investigation + potential fixes)
+Current: `PURGE_BARS = 60` (correct for boosting, may need increase for transformers)
 
 ---
 
-**Total Time for Part 2:** 1-1.5 hours
+## Architecture Review Summary
+
+**Score: 8/10** - Solid foundation with addressable gaps
+
+### What's Good
+
+| Aspect | Score | Notes |
+|--------|-------|-------|
+| Plugin Architecture | 9/10 | Industry-standard decorator registration |
+| Leakage Prevention | 9/10 | 4-layer defense (purge, embargo, train-only scaling) |
+| Data Flow | 8/10 | Clean parquet outputs, proper split ratios |
+| Triple-Barrier Labeling | 9/10 | GA-optimized, symbol-specific barriers |
+| Modular Design | 8/10 | 650-line limit enforced, clear stage separation |
+
+### Gaps to Address (Phase 2-4)
+
+| Gap | Priority | When |
+|-----|----------|------|
+| Probability Calibration | Medium | Phase 2 (after base model training) |
+| Regime-Aware Meta-Learner | Medium | Phase 3 (ensemble) |
+| Walk-Forward CV | Medium | Phase 3 (validation) |
+| Prediction Confidence | Low | Phase 4 (trading) |
+| Model Lifecycle Management | Low | Phase 5 (production) |
 
 ---
 
-## PART 3: Documentation Updates (PRIORITY 3)
-
-### 3.1. Create Phase 2 Integration Guide
-**File:** `docs/PHASE2_INTEGRATION_GUIDE.md` (new file)
-
-**Content:**
-
-```markdown
-# Phase 2 Integration Guide
-
-## How to Load Phase 1 Outputs
-
-### File Locations
-Phase 1 outputs are in: `data/splits/{run_id}/scaled/`
-
-Files:
-- `train_scaled.parquet` - Training data
-- `val_scaled.parquet` - Validation data
-- `test_scaled.parquet` - Test data
-- `feature_scaler.pkl` - Scaler for production inference
-- `split_config.json` - Metadata
-
-### Schema
-Each Parquet file contains ~120 columns:
-
-**Metadata (not scaled):**
-- `datetime`: pd.datetime64[ns]
-- `symbol`: str
-
-**OHLCV (not scaled):**
-- `open`, `high`, `low`, `close`, `volume`: float64
-
-**Features (scaled, ~80-100 columns):**
-- Price features: `close_return`, `log_return`, ...
-- Moving averages: `sma_10`, `ema_21`, ...
-- Momentum: `rsi_14`, `macd`, ...
-- Volatility: `atr_14`, `bb_upper`, ...
-- Volume: `obv`, `vwap`, ...
-- (See feature list in split_config.json)
-
-**Labels (not scaled):**
-- `label_h5`, `label_h10`, `label_h15`, `label_h20`: int8 (-1, 0, 1, -99)
-- `quality_h5`, `quality_h10`, ...: float32 (0-1)
-- `sample_weight_h5`, `sample_weight_h10`, ...: float32 (0.5-1.5)
-
-### Example: Load in PyTorch
-
-\`\`\`python
-import pandas as pd
-import torch
-from torch.utils.data import TensorDataset, DataLoader
-
-# Load data
-train = pd.read_parquet('data/splits/20251223_181236/scaled/train_scaled.parquet')
-
-# Filter invalid labels
-train = train[train['label_h5'] != -99]
-
-# Separate features and labels
-feature_cols = [c for c in train.columns if c not in [
-    'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-    'label_h5', 'label_h10', 'quality_h5', 'sample_weight_h5', ...
-]]
-
-X = train[feature_cols].values
-y = train['label_h5'].values
-weights = train['sample_weight_h5'].values
-
-# Create PyTorch dataset
-X_tensor = torch.tensor(X, dtype=torch.float32)
-y_tensor = torch.tensor(y, dtype=torch.long)
-weights_tensor = torch.tensor(weights, dtype=torch.float32)
-
-dataset = TensorDataset(X_tensor, y_tensor, weights_tensor)
-loader = DataLoader(dataset, batch_size=32, shuffle=True)
-
-# Training loop
-for X_batch, y_batch, weights_batch in loader:
-    # ... train model ...
-    pass
-\`\`\`
-
-### Example: Load in XGBoost
-
-\`\`\`python
-import pandas as pd
-import xgboost as xgb
-
-# Load data
-train = pd.read_parquet('data/splits/.../train_scaled.parquet')
-train = train[train['label_h5'] != -99]
-
-# Prepare features
-feature_cols = [...]  # Same as PyTorch example
-X_train = train[feature_cols]
-y_train = train['label_h5']
-weights = train['sample_weight_h5']
-
-# Train XGBoost
-dtrain = xgb.DMatrix(X_train, label=y_train, weight=weights)
-params = {
-    'objective': 'multi:softmax',
-    'num_class': 3,
-    'max_depth': 6,
-}
-model = xgb.train(params, dtrain, num_boost_round=100)
-\`\`\`
-
-### Important Notes
-
-1. **Filter invalid labels:** Always filter `label != -99` before training
-2. **Use sample weights:** Phase 1 provides quality-based weights (0.5-1.5x)
-3. **Multi-horizon:** Train separate models for H5, H10, H15, H20
-4. **Class imbalance:** Consider balanced sampling or focal loss
-
-### Production Inference
-
-\`\`\`python
-import pickle
-import pandas as pd
-
-# Load scaler from Phase 1
-with open('data/splits/.../scaled/feature_scaler.pkl', 'rb') as f:
-    scaler = pickle.load(f)
-
-# New data (unscaled)
-new_data = pd.read_parquet('new_bars.parquet')
-
-# Extract features (same columns as training)
-X_new = new_data[feature_cols]
-
-# Scale using Phase 1 scaler
-X_scaled = scaler.transform(X_new)
-
-# Predict
-predictions = model.predict(X_scaled)
-\`\`\`
-```
-
-**Estimated Time:** 45 minutes
-
----
-
-### 3.2. Update Main README
-**File:** `README.md` (root)
-
-**Action:** Add section linking to Phase 1 completion docs
-
-```markdown
-## Phase 1: Data Preparation (COMPLETE)
-
-Phase 1 is a modular OHLCV data preparation pipeline that outputs clean, labeled datasets.
-
-**Status:** 8.5/10 - Nearly complete
-**Remaining work:** See `docs/phase1/completion/TODO_BEFORE_PHASE2.md`
-
-**Quick Start:**
-```bash
-./pipeline run --symbols MES --stages all
-```
-
-**Outputs:** `data/splits/{run_id}/scaled/*.parquet`
-
-**Next:** Phase 2 (ML Model Factory) - train/ensemble/evaluate models
-
-**Documentation:** See `docs/phase1/completion/` for completion checklist and audit reports.
-```
-
-**Estimated Time:** 10 minutes
-
----
-
-### 3.3. Document Known Limitations
-**File:** `docs/phase1/KNOWN_LIMITATIONS.md` (new file)
-
-**Content:**
-
-```markdown
-# Phase 1 Known Limitations
-
-## Current Limitations
-
-### 1. Single Symbol Only
-- **Limitation:** Cross-asset features disabled
-- **Impact:** Cannot process MES+MGC together
-- **Workaround:** Run pipeline separately for each symbol
-- **Future:** Could re-enable with multi-symbol support (not needed now)
-
-### 2. Batch Processing Only
-- **Limitation:** No real-time/streaming support
-- **Impact:** Must reprocess entire dataset for updates
-- **Workaround:** Use incremental reprocessing (manual)
-- **Future:** Add streaming ingestion in Phase 3
-
-### 3. No Model Training
-- **Limitation:** Phase 1 only does data prep, not model training
-- **Impact:** Need Phase 2 for actual ML models
-- **Workaround:** Load Parquet files in custom training scripts
-- **Future:** Phase 2 will provide full model training pipeline
-
-### 4. High NaN Drop Rate (57.6%)
-- **Limitation:** Feature engineering drops 57.6% of bars due to NaN
-- **Impact:** Reduced dataset size (690K → 60K final samples)
-- **Cause:** Long warmup periods (SMA_200 = 200 bars)
-- **Workaround:** Use shorter feature periods or forward-fill
-- **Investigation:** Needs profiling to identify main NaN sources
-
-### 5. Hardcoded Feature Periods
-- **Limitation:** SMA/EMA periods hardcoded in FeatureEngineer
-- **Impact:** Must edit code to change feature config
-- **Workaround:** Edit `src/stages/features/engineer.py`
-- **Future:** Move to `PipelineConfig` for full configurability
-
-## Design Decisions (Not Bugs)
-
-### 1. Framework-Agnostic
-- **Decision:** No PyTorch/TensorFlow dependencies in Phase 1
-- **Rationale:** Keep data prep separate from model training
-- **Benefit:** Any framework can consume Phase 1 outputs
-
-### 2. Parquet Output Format
-- **Decision:** Output as Parquet (not TFRecord, PyTorch tensors, etc.)
-- **Rationale:** Universal format, efficient, schema-preserving
-- **Benefit:** Works with pandas, PyTorch, TensorFlow, XGBoost, etc.
-
-### 3. Train-Only Scaler Fit
-- **Decision:** Scaler fitted ONLY on training data
-- **Rationale:** Prevent data leakage
-- **Benefit:** Proper ML hygiene, prevents overfitting
-
-## Non-Issues (Intentional Behavior)
-
-### 1. Invalid Labels (-99)
-- **Behavior:** Last `max_bars` samples have `label = -99`
-- **Reason:** Insufficient future data for barrier calculation
-- **Action Required:** Filter `label != -99` before training (documented)
-
-### 2. Sample Weights 0.5x-1.5x
-- **Behavior:** Sample weights vary from 0.5x to 1.5x (not 0-1)
-- **Reason:** Quality-based weighting (high quality = higher weight)
-- **Action Required:** Pass weights to model training (documented)
-
-### 3. Neutral Labels Dominate (~40-50%)
-- **Behavior:** Neutral (0) labels are ~40-50% of dataset
-- **Reason:** Most price movements timeout without hitting barriers
-- **Action Required:** Use balanced sampling or focal loss in Phase 2
-```
-
-**Estimated Time:** 20 minutes
-
----
-
-**Total Time for Part 3:** 1.5-2 hours
-
----
-
-## PART 4: Testing & Validation (PRIORITY 4)
-
-### 4.1. End-to-End Pipeline Test
-**Action:** Run full pipeline and verify all outputs
-
-```bash
-# Clean slate
-rm -rf runs/* data/splits/* data/clean/* data/features/* data/final/*
-
-# Run full pipeline with MES only
-./pipeline run --symbols MES --stages all
-
-# Verify outputs exist
-ls -lh data/splits/*/scaled/
-# Expected files:
-# - train_scaled.parquet
-# - val_scaled.parquet
-# - test_scaled.parquet
-# - feature_scaler.pkl
-# - scaling_metadata.json
-
-# Check for errors
-cat runs/*/logs/pipeline.log | grep -i "error\|critical"
-# Expected: No critical errors
-
-# Check validation report
-cat runs/*/artifacts/validation_report.json | python -m json.tool
-# Expected: 0 critical_issues
-```
-
-**Estimated Time:** 45 minutes
-
----
-
-### 4.2. Multi-Symbol Test (Verify Graceful Handling)
-**Action:** Test that pipeline still works with multiple symbols (cross-asset disabled)
-
-```bash
-# Clean slate
-rm -rf runs/* data/splits/* data/clean/* data/features/* data/final/*
-
-# Run with both symbols (cross-asset features should be skipped)
-./pipeline run --symbols MES,MGC --stages all
-
-# Verify no cross-asset features in output
-head -n 1 data/final/combined_final_labeled.parquet | grep -i "correlation\|beta\|spread"
-# Expected: No cross-asset feature columns
-
-# Check logs confirm cross-asset skip
-cat runs/*/logs/pipeline.log | grep -i "cross.asset"
-# Expected: "Skipping cross-asset features (disabled)"
-```
-
-**Estimated Time:** 30 minutes
-
----
-
-### 4.3. Data Quality Checks
-**Action:** Verify final dataset quality
+## Quick Start for Phase 2
 
 ```python
-import pandas as pd
+# 1. Load Phase 1 data
+from src.datasets.container import TimeSeriesDataContainer
 
-# Load final dataset
-train = pd.read_parquet('data/splits/.../scaled/train_scaled.parquet')
+container = TimeSeriesDataContainer.from_parquet_dir(
+    'data/splits/scaled/',
+    horizon=5
+)
 
-# Check 1: No NaN in features (after dropping invalid labels)
-train_valid = train[train['label_h5'] != -99]
-feature_cols = [c for c in train_valid.columns if c not in [...]]
-nan_counts = train_valid[feature_cols].isnull().sum()
-assert nan_counts.sum() == 0, f"Found NaN values: {nan_counts[nan_counts > 0]}"
+# 2. For XGBoost
+X_train, y_train, weights = container.get_sklearn_arrays('train')
 
-# Check 2: Label distribution reasonable
-label_dist = train_valid['label_h5'].value_counts(normalize=True)
-print("Label distribution:", label_dist)
-# Expected: Short ~20-30%, Neutral ~40-50%, Long ~20-30%
+# 3. For LSTM/TCN
+train_dataset = container.get_pytorch_sequences('train', seq_len=128)
 
-# Check 3: Sample weights in valid range
-weights = train_valid['sample_weight_h5']
-assert weights.min() >= 0.4, f"Weights too low: {weights.min()}"
-assert weights.max() <= 1.6, f"Weights too high: {weights.max()}"
-
-# Check 4: Feature scaling applied
-feature_means = train_valid[feature_cols].mean()
-feature_stds = train_valid[feature_cols].std()
-print(f"Feature means (should be ~0): {feature_means.mean():.4f}")
-print(f"Feature stds (should be ~1): {feature_stds.mean():.4f}")
-
-# Check 5: OHLCV not scaled
-assert train_valid['close'].mean() > 1, "OHLCV should not be scaled"
+# 4. For NeuralForecast
+train_df = container.get_neuralforecast_df('train')
 ```
 
-**Estimated Time:** 30 minutes
+---
+
+## Known Limitations (By Design)
+
+1. **No Cross-Asset Features** - Disabled by default (single-symbol trading)
+2. **Batch Processing Only** - No streaming support (Phase 5)
+3. **Framework-Agnostic** - No PyTorch/TF in Phase 1 (intentional separation)
+4. **Parquet Output** - Universal format, any framework can consume
 
 ---
 
-### 4.4. Performance Benchmarking
-**Action:** Measure pipeline performance
-
-```bash
-# Time full pipeline
-time ./pipeline run --symbols MES --stages all
-
-# Expected runtime (690K bars → 60K samples):
-# - Total: 30-45 seconds
-# - Stage 3 (features): 20-25 seconds (largest bottleneck)
-# - All other stages: <5 seconds
-
-# Profile Stage 3 if too slow
-python -m cProfile -o profile.stats src/pipeline_cli.py run --symbols MES --stages feature_engineering
-python -c "import pstats; p = pstats.Stats('profile.stats'); p.sort_stats('cumulative').print_stats(20)"
-```
-
-**Estimated Time:** 30 minutes
-
----
-
-**Total Time for Part 4:** 2-2.5 hours
-
----
-
-## PART 5: Final Checklist (PRIORITY 5)
-
-### Before Declaring Phase 1 Complete:
-
-- [ ] **Cross-asset features removed/disabled**
-  - [ ] Config flag added
-  - [ ] Feature engineer updated
-  - [ ] Validation updated
-  - [ ] Tests updated
-  - [ ] Tested with single symbol (MES only)
-
-- [ ] **Bug fixes applied**
-  - [ ] Import paths verified
-  - [ ] Empty data handling improved
-  - [ ] Row count validation added
-  - [ ] NaN drop rate investigated
-
-- [ ] **Documentation complete**
-  - [ ] Phase 2 integration guide created
-  - [ ] Main README updated
-  - [ ] Known limitations documented
-  - [ ] This TODO list completed
-
-- [ ] **Testing complete**
-  - [ ] End-to-end pipeline test passed
-  - [ ] Multi-symbol test passed (cross-asset disabled)
-  - [ ] Data quality checks passed
-  - [ ] Performance benchmarked
-
-- [ ] **Outputs verified**
-  - [ ] train/val/test Parquet files exist
-  - [ ] feature_scaler.pkl saved
-  - [ ] split_config.json contains metadata
-  - [ ] No validation failures (0 critical issues)
-
-- [ ] **Ready for Phase 2**
-  - [ ] Example code for loading Parquet in PyTorch
-  - [ ] Example code for loading Parquet in XGBoost
-  - [ ] Clear contract defined (what columns, what format)
-  - [ ] No known blockers
-
----
-
-## Estimated Total Time
-
-| Part | Task | Time |
-|------|------|------|
-| 1 | Cross-asset removal | 1.5-2 hours |
-| 2 | Bug fixes | 1-1.5 hours |
-| 3 | Documentation | 1.5-2 hours |
-| 4 | Testing | 2-2.5 hours |
-| 5 | Final checklist | 0.5 hours |
-| **TOTAL** | **All tasks** | **6.5-8.5 hours (1-2 days)** |
-
----
-
-## Success Criteria
-
-**Phase 1 is COMPLETE when:**
-1. Pipeline runs successfully with single symbol (no errors)
-2. Validation passes (0 critical issues)
-3. Cross-asset features removed
-4. Documentation updated for Phase 2
-5. No known bugs or blockers
-
-**Then you can start Phase 2: ML Model Factory! 🚀**
-
----
-
-## Questions?
-
-**What if I find new bugs during testing?**
-- Add them to this TODO list
-- Prioritize by severity (P0 = blocker, P1 = important, P2 = nice-to-have)
-- Fix P0 bugs before declaring Phase 1 complete
-
-**What if cross-asset features are needed later?**
-- Re-enable flag in `src/config/features.py`
-- Run pipeline with both symbols (MES,MGC)
-- Verify validation passes
-
-**What if NaN drop rate is too high?**
-- Profile features to find main NaN sources
-- Consider shorter warmup periods (e.g., SMA_100 instead of SMA_200)
-- Consider forward-fill for some features
-- Document decision in KNOWN_LIMITATIONS.md
-
-**When should I start Phase 2?**
-- After ALL items in this TODO are complete
-- After Phase 2 architecture is designed
-- After clear handoff contract is defined
-
----
-
-**Ready to get started? Begin with Part 1: Cross-Asset Feature Removal! 💪**
+**Last Updated:** 2025-12-24
+**Next Step:** Build TimeSeriesDataContainer, then start Phase 2
