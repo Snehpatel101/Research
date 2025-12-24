@@ -1,163 +1,128 @@
 # Phase 1 Improvements: Validated Roadmap
 
-> Last validated: 2025-12-24
+> Last validated: 2025-12-24 (2nd pass after user fixes)
 > Scope: Data pipeline only (ingest → splits → validation). Model training is Phase 2+.
 
 ---
 
 ## Executive Summary
 
-Two specialized agents validated the previous static analysis findings against the actual codebase.
+Two sequential agents revalidated the codebase after user fixes.
 
-**Results:**
-- 7 findings CONFIRMED (need fixing)
-- 1 finding FALSE POSITIVE (intentional design)
-- 4 CRITICAL inconsistencies identified
-
----
-
-## Part A: Bug Fixes (Must Fix Before Phase 2)
-
-### A1. CLI Stage Mapping Broken [HIGH]
-
-**Problem:** `pipeline rerun --from labeling` fails because stage aliases don't match actual stage names.
-
-**Location:** `src/cli/run_commands.py:414-423`
-
-**Current (broken):**
-```python
-stage_map = {
-    'labeling': 'labeling',      # Stage doesn't exist
-    'labels': 'labeling',        # Stage doesn't exist
-}
-```
-
-**Actual stages in registry:** `initial_labeling`, `ga_optimize`, `final_labels`
-
-**Fix:**
-```python
-stage_map = {
-    'labeling': 'initial_labeling',
-    'labels': 'final_labels',
-    'initial_labeling': 'initial_labeling',
-    'final_labels': 'final_labels',
-    'ga': 'ga_optimize',
-    'ga_optimize': 'ga_optimize',
-    'scaling': 'feature_scaling',
-    'datasets': 'build_datasets',
-    'validate': 'validate_scaled',
-}
-```
+**Current State:**
+| Category | Count |
+|----------|-------|
+| FIXED | 4 |
+| PARTIALLY FIXED | 1 |
+| STILL OPEN | 1 |
+| NOT A BUG | 1 |
 
 ---
 
-### A2. Status Command Reports Wrong Stage Count [MEDIUM]
+## Part A: Bug Status After Fixes
 
-**Problem:** Status shows "3/6 stages" when actually "6/12 stages" complete.
+### A1. CLI Stage Mapping ✅ FIXED
 
-**Locations:**
-- `src/cli/status_commands.py:130-137` - Wrong stage list
-- `src/cli/status_commands.py:383` - Hardcoded `total = 6`
+**Was:** `pipeline rerun --from labeling` failed.
 
-**Fix:** Update `all_stages` to match actual 12 stages from `src/pipeline/runner.py:113-128`
+**Now:** `src/cli/run_commands.py:414-434` includes all 12 stages:
+- `initial_labeling`, `ga_optimize`, `final_labels`
+- `feature_scaling`, `build_datasets`, `validate_scaled`
 
----
-
-### A3. PipelineConfig Project Root Wrong [HIGH]
-
-**Problem:** Default project_root resolves to `src/` instead of project root.
-
-**Location:** `src/phase1/pipeline_config.py:122-123`
-
-**Current (broken):**
-```python
-self.project_root = Path(__file__).parent.parent.resolve()
-# Resolves to: Research/src/  (WRONG)
-```
-
-**Fix:**
-```python
-self.project_root = Path(__file__).parent.parent.parent.resolve()
-# Resolves to: Research/  (CORRECT)
-```
-
-Also fix line 354-355 (same issue).
+**No action needed.**
 
 ---
 
-### A4. Labeling Report Path Mismatch [MEDIUM]
+### A2. Status Command Stage Count ⚠️ STILL OPEN
 
-**Problem:** Report is written to one path, but artifact collection looks in another.
+**Problem:** Status hardcodes `total = 6` when pipeline has 12 stages.
 
-**Locations:**
-- `src/phase1/stages/final_labels/core.py:395-396` - Writes to `src/phase1/results/`
-- `src/phase1/stages/final_labels/run.py:217-219` - Looks in `config.results_dir/`
-
-**Fix:** Use `config.results_dir` consistently:
-```python
-# In core.py, accept results_dir parameter instead of computing it
-def generate_labeling_report(df, results_dir: Path, ...):
-    report_path = results_dir / 'labeling_report.md'
-```
-
----
-
-### A5. Horizons Hardcoded [5, 20] in Report [MEDIUM]
-
-**Problem:** Report generator ignores configured horizons `[5, 10, 15, 20]`.
-
-**Location:** `src/phase1/stages/final_labels/core.py:335`
+**Location:** `src/cli/status_commands.py:386`
 
 **Current:**
 ```python
-for horizon in [5, 20]:  # Hardcoded!
+total = 6  # Total stages
 ```
 
 **Fix:**
 ```python
-# Detect from DataFrame columns or accept as parameter
-label_cols = [c for c in df.columns if c.startswith('label_h')]
-horizons = sorted(set(int(c.replace('label_h', '')) for c in label_cols))
-for horizon in horizons:
+total = len(all_stages)  # Dynamic from registry
 ```
 
 ---
 
-## Part B: Known Limitations (Document, Don't Block)
+### A3. PipelineConfig Project Root ⚠️ PARTIALLY FIXED
 
-### B1. get_regime_adjusted_barriers Not Implemented
+**__post_init__ (line 123):** ✅ FIXED - Uses `.parent.parent.parent` (3 levels)
 
-**Status:** Placeholder exists, falls back to defaults.
+**load_from_run_id (line 355):** ❌ STILL BROKEN - Uses `.parent.parent` (2 levels → resolves to `src/`)
 
-**Location:** `src/phase1/stages/labeling/adaptive_barriers.py:144-153`
-
-**Impact:** Regime-adaptive labeling always uses default barriers. Not blocking for Phase 1.
-
-**Phase 1 Action:** Document as known limitation.
-**Phase 2 Action:** Implement HMM regime detection + barrier adjustment.
+**Fix line 355:**
+```python
+project_root = Path(__file__).parent.parent.parent.resolve()  # 3 levels
+```
 
 ---
 
-### B2. Two Purge/Embargo Implementations Exist
+### A4. Labeling Report Path ✅ FIXED
 
-**Locations:**
-- `src/phase1/config/features.py:95-129` - Uses actual max_bars
-- `src/common/horizon_config.py:208-271` - Uses multiplier formula
+**Was:** Path mismatch between write and read.
 
-**Impact:** Both converge for default horizons. Potential confusion for custom configurations.
+**Now:** Both `core.py:315` and `run.py:216` use consistent `output_dir`/`config.results_dir`.
 
-**Phase 1 Action:** Document which is authoritative.
-**Phase 2 Action:** Consolidate into single source.
+**No action needed.**
 
 ---
 
-### B3. Advanced Regime Features Use Fallback Pattern [FALSE POSITIVE]
+### A5. Horizons Hardcoded ✅ FIXED
 
-**Location:** `src/phase1/stages/features/regime.py:147-168`
+**Was:** Hardcoded `[5, 20]` in report generator.
 
-**Analysis:** This is INTENTIONAL defensive programming. Warning is logged, fallback is valid.
+**Now:** `core.py:347` accepts `horizons: list[int]` parameter and iterates dynamically.
 
-**Action:** No fix needed. This is correct behavior.
+**No action needed.**
+
+---
+
+### A6. get_regime_adjusted_barriers ✅ FIXED
+
+**Was:** Function missing, always fell back to defaults.
+
+**Now:** Fully implemented in `src/phase1/config/regime_config.py:62-115` with regime multipliers. Exported in `config/__init__.py:33`.
+
+**No action needed.**
+
+---
+
+### A7. Duplicate Purge/Embargo ✅ NOT A BUG
+
+**Analysis:** `runtime.py:33` calls `auto_scale_purge_embargo()` from `horizon_config.py`. Proper separation of function definition and usage.
+
+**No action needed.**
+
+---
+
+## Part B: Documentation Issues Found
+
+Second agent reviewed all docs for accuracy:
+
+| Document | Score | Issues |
+|----------|-------|--------|
+| `docs/phase1/README.md` | 7/10 | Feature count claim (129) is dynamic |
+| `docs/README.md` | 6/10 | Embargo formula incomplete |
+| `docs/getting-started/QUICKSTART.md` | 8/10 | Minor |
+| `docs/getting-started/PIPELINE_CLI.md` | 9/10 | Accurate |
+| `docs/reference/ARCHITECTURE.md` | 9/10 | Accurate |
+| `docs/reference/FEATURES.md` | 8/10 | Accurate |
+| **CLAUDE.md** | **5/10** | **Critical issues** |
+
+### CLAUDE.md Critical Fixes Needed
+
+| Line | Current (WRONG) | Should Be |
+|------|-----------------|-----------|
+| ~238 | `src/stages/stage1_ingest.py` | `src/phase1/stages/ingest/` |
+| ~293 | `LABEL_HORIZONS = [5, 20]` | `[5, 10, 15, 20]` |
+| ~296 | `EMBARGO_BARS = 288` | `1440` (auto-scaled) |
 
 ---
 
@@ -165,11 +130,9 @@ for horizon in horizons:
 
 ### C1. Replace DEAP GA with Optuna TPE [HIGH IMPACT]
 
-**Current:** DEAP genetic algorithm for barrier optimization.
+**Problem:** GA converges slower, 27% less efficient than Bayesian methods.
 
-**Problem:** GA converges slower, harder to reproduce, 27% less efficient than Bayesian methods.
-
-**Evidence:** [Nature study](https://www.nature.com/articles/s41598-025-29383-7) - Hybrid BayGA outperforms pure GA.
+**Evidence:** [Nature study](https://www.nature.com/articles/s41598-025-29383-7)
 
 **Implementation:**
 ```python
@@ -180,7 +143,6 @@ def optimize_barriers(symbol: str, df: pd.DataFrame, config: dict) -> dict:
     def objective(trial):
         pt = trial.suggest_float('profit_take', 0.001, 0.02)
         sl = trial.suggest_float('stop_loss', 0.001, 0.02)
-        # ... apply barriers, compute fitness
         return -sharpe  # Minimize negative sharpe
 
     study = optuna.create_study(sampler=optuna.samplers.TPESampler())
@@ -188,27 +150,23 @@ def optimize_barriers(symbol: str, df: pd.DataFrame, config: dict) -> dict:
     return study.best_params
 ```
 
-**Effort:** Low (same interface, better algorithm)
+**Effort:** Low
 
 ---
 
 ### C2. Add Wavelet Decomposition Features [HIGH IMPACT]
 
-**Current:** MTF resampling captures different timeframes.
+**Problem:** Pure resampling misses non-stationary patterns.
 
-**Problem:** Pure resampling misses non-stationary patterns wavelets capture.
-
-**Evidence:** [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S2667096825000424) - Wavelets "especially suitable for multi-scale analysis."
+**Evidence:** [ScienceDirect](https://www.sciencedirect.com/science/article/pii/S2667096825000424)
 
 **Implementation:**
 ```python
 # src/phase1/stages/features/wavelets.py (NEW)
 import pywt
 
-def add_wavelet_features(df: pd.DataFrame, feature_cols: list) -> pd.DataFrame:
-    """Add discrete wavelet transform features."""
+def add_wavelet_features(df: pd.DataFrame) -> pd.DataFrame:
     for col in ['close', 'volume']:
-        # Daubechies wavelet, 3 levels
         coeffs = pywt.wavedec(df[col].values, 'db4', level=3)
         df[f'{col}_wavelet_approx'] = pywt.waverec([coeffs[0]] + [None]*3, 'db4')[:len(df)]
         for i, detail in enumerate(coeffs[1:], 1):
@@ -217,57 +175,39 @@ def add_wavelet_features(df: pd.DataFrame, feature_cols: list) -> pd.DataFrame:
     return df
 ```
 
-**Effort:** Low (add new feature module)
+**Effort:** Low
 
 ---
 
 ### C3. Add Microstructure Proxy Features [MEDIUM IMPACT]
 
-**Current:** No microstructure features.
-
-**Problem:** Missing volume-price relationship signals available from OHLCV.
-
 **Implementation:**
 ```python
 # src/phase1/stages/features/microstructure.py (NEW)
 def add_microstructure_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Add microstructure proxy features from OHLCV."""
-    # Amihud illiquidity (proxy)
+    # Amihud illiquidity proxy
     df['amihud'] = df['close'].pct_change().abs() / (df['volume'] + 1e-10)
-
-    # Roll spread estimator (proxy)
+    # Roll spread estimator
     delta_price = df['close'].diff()
     df['roll_spread'] = 2 * np.sqrt(-delta_price.cov(delta_price.shift(1)))
-
-    # Kyle's lambda proxy (price impact)
+    # Kyle's lambda proxy
     df['kyle_lambda'] = df['close'].pct_change().abs() / df['volume'].rolling(20).mean()
-
     return df
 ```
 
-**Effort:** Low (add new feature module)
+**Effort:** Low
 
 ---
 
 ### C4. Enable Cross-Asset Features [MEDIUM IMPACT]
 
-**Current:** Implemented but disabled by default.
+**Current:** Implemented but disabled.
 
-**Problem:** MES-MGC correlation provides predictive signal.
-
-**Fix:** Enable in default config:
-```python
-# src/phase1/pipeline_config.py
-enable_cross_asset_features: bool = True  # Changed from False
-```
-
-**Effort:** Trivial (config change)
+**Fix:** Enable in config (trivial change).
 
 ---
 
 ## Part D: Out of Scope (Phase 2+)
-
-These improvements are NOT Phase 1:
 
 | Improvement | Phase | Reason |
 |-------------|-------|--------|
@@ -276,67 +216,57 @@ These improvements are NOT Phase 1:
 | Data augmentation | 2 | Model training concern |
 | Concept drift monitoring | 3/5 | Production monitoring |
 | Autoencoder features | 2 | Learned features need model |
-| Foundation models | 2+ | Model family work |
 
 ---
 
 ## Priority Execution Order
 
-### Immediate (Before Any More Runs)
-1. **A3** - Fix PipelineConfig project_root
-2. **A1** - Fix CLI stage mapping
+### Remaining Bugs (2 items)
+1. **A2** - Fix status stage count (`total = 6` → dynamic)
+2. **A3** - Fix `load_from_run_id` project_root (add one more `.parent`)
 
-### Before Phase 2
-3. **A2** - Fix status stage count
-4. **A4** - Fix labeling report path
-5. **A5** - Fix hardcoded horizons
+### Documentation (3 items)
+3. Fix CLAUDE.md stage paths
+4. Fix CLAUDE.md horizons `[5,20]` → `[5,10,15,20]`
+5. Fix CLAUDE.md embargo `288` → `1440`
 
-### Phase 1 Enhancements (Optional)
-6. **C1** - Replace GA with Optuna (high impact, low effort)
-7. **C2** - Add wavelet features (high impact, low effort)
-8. **C4** - Enable cross-asset features (trivial)
-9. **C3** - Add microstructure features (medium impact, low effort)
-
-### Document Only
-10. **B1** - Document regime barrier limitation
-11. **B2** - Document authoritative purge/embargo source
+### Feature Enhancements (4 items)
+6. **C1** - Replace GA with Optuna (high impact)
+7. **C2** - Add wavelet features (high impact)
+8. **C4** - Enable cross-asset (trivial)
+9. **C3** - Add microstructure features (medium impact)
 
 ---
 
 ## Validation Checklist
 
-After fixes, verify:
-
 ```bash
-# 1. CLI rerun works
-./pipeline rerun <run_id> --from initial_labeling
-
-# 2. Status shows correct stages
-./pipeline status <run_id>
-# Should show: X/12 stages complete
-
-# 3. Pipeline runs end-to-end
+# 1. Pipeline runs end-to-end
 ./pipeline run --symbols MES,MGC
 
-# 4. Report includes all horizons
-cat runs/<run_id>/results/labeling_report.md
-# Should show H5, H10, H15, H20
+# 2. Status shows correct count (after A2 fix)
+./pipeline status <run_id>
+# Should show: X/12 stages
 
-# 5. Tests pass
+# 3. Tests pass
 python -m pytest tests/phase_1_tests/ -q
+
+# 4. load_from_run_id works (after A3 fix)
+python -c "from src.phase1.pipeline_config import PipelineConfig; c = PipelineConfig.load_from_run_id('test'); print(c.project_root)"
 ```
 
 ---
 
-## Agent Validation Notes
+## Agent Validation Summary
 
-**Python Expert Agent (Static Analysis):**
-- 7/8 findings confirmed
-- #8 (fragile imports) is FALSE POSITIVE - intentional design
+**Python Pro Agent (Revalidation):**
+- 4/7 FIXED
+- 1/7 PARTIALLY FIXED (A3 - one location remains)
+- 1/7 STILL OPEN (A2 - status count)
+- 1/7 NOT A BUG (purge/embargo separation is correct)
 
-**Backend Architect Agent (Consistency):**
-- 4 critical inconsistencies identified
-- Path consistency is proper
-- Stage registry is properly aligned (CLI is not)
-
-Both agents agree: **Fix A1-A5 before Phase 2.**
+**Backend Architect Agent (Documentation):**
+- CLAUDE.md needs 3 critical updates
+- Other docs score 6-9/10 (acceptable)
+- Stage names and CLI are accurate
+- Architecture diagrams are accurate
