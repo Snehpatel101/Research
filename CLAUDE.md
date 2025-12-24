@@ -1,17 +1,120 @@
-# Ensemble Price Prediction Pipeline
+# ML Model Factory for OHLCV Time Series
 
 ## Goal
 
-Keep the codebase modular, readable, and easy to extend as we build a modular **OHLCV** ML pipeline that can train and evaluate many different model families.
+Keep the codebase modular, readable, and easy to extend as we build a **model factory** that can train, evaluate, and compare ANY model type on OHLCV bar data.
 
+This is not a single pipeline — it's a **factory** with a plugin architecture.
 
-## OHLCV ML Modeling
+---
 
-We are building ML models on market **OHLCV** bar data. This repo should remain a **modular training pipeline** so we can swap and compare model families without rewriting ingestion, features, labeling, evaluation, or reporting.
+## OHLCV ML Modeling: Factory Pattern
 
-- Use a shared dataset contract (clean/resample → features → labels → splits).
-- Treat trainers as plug-ins: adding a new model type should be an interface + config, not a rewrite.
-- Keep evaluation comparable across models (same metrics, same backtest assumptions, same reports).
+We are building an **ML Model Factory** for OHLCV time series. The factory can train any model family (boosting, neural, transformers, classical ML, ensembles) using:
+
+1. **Shared Data Contract** - All models consume identical preprocessed datasets
+2. **Plugin-Based Model Registry** - Add new model types without rewriting pipelines
+3. **Unified Evaluation Framework** - Compare models using identical metrics
+4. **Ensemble Support Built-In** - Combine multiple models into meta-learners
+
+### Factory Architecture Principles
+
+```
+Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
+                                       ↓
+                            [ Model Registry Plugin System ]
+                            ├── XGBoost Trainer
+                            ├── LSTM Trainer
+                            ├── Transformer Trainer
+                            ├── Random Forest Trainer
+                            └── Ensemble Meta-Learner
+                                       ↓
+                            [ Unified Evaluation Engine ]
+                                       ↓
+                          Trained Models + Performance Reports
+```
+
+### Core Contracts
+
+**Data Contract (Phase 1 - Complete):**
+- Clean/resample → features → labels → splits → scaling → datasets
+- No lookahead bias (proper purging + embargo)
+- Time-series aware train/val/test splits
+- Quality-weighted samples
+
+**Model Contract (Phase 2):**
+```python
+class BaseModel(ABC):
+    @abstractmethod
+    def train(self, X: pd.DataFrame, y: pd.Series, config: dict) -> None:
+        """Train the model on provided data."""
+        pass
+
+    @abstractmethod
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Generate predictions."""
+        pass
+
+    @abstractmethod
+    def save(self, path: Path) -> None:
+        """Persist trained model."""
+        pass
+```
+
+**Evaluation Contract:**
+- Same backtest assumptions for all models
+- Identical metrics: Sharpe, win rate, max drawdown, transaction costs
+- Regime-aware performance breakdown
+- Quality-weighted evaluation
+
+### Plugin Registration
+
+Adding a new model type should be **trivial**:
+
+```python
+from src.models import ModelRegistry
+
+@ModelRegistry.register("my_model")
+class MyModel(BaseModel):
+    def train(self, X, y, config):
+        # Your training logic
+        pass
+
+    def predict(self, X):
+        # Your prediction logic
+        pass
+```
+
+Then use it:
+```bash
+./pipeline run --model-type my_model --symbols MES
+```
+
+### Ensemble Support
+
+The factory supports both **single models** and **ensembles**:
+
+```bash
+# Train individual models
+./pipeline run --model-type xgboost --symbols MES
+./pipeline run --model-type lstm --symbols MES
+
+# Train ensemble meta-learner
+./pipeline run --model-type ensemble \
+  --base-models xgboost,lstm \
+  --meta-learner logistic
+```
+
+### Model Families
+
+| Family | Examples | Interface |
+|--------|----------|-----------|
+| Boosting | XGBoost, LightGBM, CatBoost | `BoostingModel(BaseModel)` |
+| Neural | LSTM, GRU, Transformer | `NeuralModel(BaseModel)` |
+| Classical | Random Forest, SVM | `ClassicalModel(BaseModel)` |
+| Ensemble | Stacking, Blending | `EnsembleModel(BaseModel)` |
+
+All implement the same `BaseModel` interface and consume the same standardized datasets.
 
 ---
 
@@ -28,7 +131,6 @@ We would rather crash early than silently continue in an invalid state. Inputs a
 
 ### Less Code is Better
 Simpler implementations win. Prefer straightforward, boring solutions over clever abstractions. Avoid premature generalization. If a feature can be expressed with fewer moving parts, do that. Complexity must earn its place.
-
 
 ### Delete Legacy Code (If Unused, Remove It)
 Legacy code is debt. If a file, function, or feature is not used, not referenced by any active code path, and not needed for the next planned milestone, delete it.
@@ -47,7 +149,6 @@ Not every agent action needs a document. Write documentation only when it is nee
 - Investigation artifacts others must reuse (repro steps, evidence, links, key findings)
 
 Otherwise, keep notes brief and inline (PR description, issue comment, short checklist).
-
 
 ### No Exception Swallowing
 Do not paper over failures with try/except. We do not swallow errors or "recover" by guessing. Use explicit validation, explicit return types, and explicit preconditions. If a dependency can fail, make that failure visible in the function contract and test it. Exceptions are allowed to propagate naturally so failures are obvious and diagnosable.
@@ -129,7 +230,9 @@ Restore: `/context-restore --project research --mode full`
 
 ---
 
-## Pipeline Structure
+## Factory Data Pipeline (Phase 1 - Complete)
+
+The data pipeline produces standardized datasets for all model types:
 
 ```
 src/stages/
@@ -143,14 +246,42 @@ src/stages/
 └── stage8_validate.py  → Quality checks
 ```
 
+**Output:** Standardized datasets consumed by all model trainers
+
+---
+
+## Model Factory (Phase 2 - Planned)
+
+Plugin-based model training system:
+
+```
+src/models/
+├── registry.py         → ModelRegistry plugin system
+├── base.py             → BaseModel interface
+├── boosting/           → XGBoost, LightGBM, CatBoost
+├── neural/             → LSTM, GRU, Transformer
+├── classical/          → Random Forest, SVM, Logistic
+└── ensemble/           → Stacking, Blending, Voting
+```
+
+**Output:** Trained models + unified performance reports
+
 ---
 
 ## Quick Commands
 
 ```bash
+# Run data pipeline (Phase 1)
 ./pipeline run --symbols MES,MGC
-./pipeline rerun <id> --from <stage>
-./pipeline status <id>
+
+# Train specific model (Phase 2)
+./pipeline run --model-type xgboost --symbols MES
+
+# Train ensemble (Phase 4)
+./pipeline run --model-type ensemble --base-models xgboost,lstm
+
+# Compare models
+./pipeline compare <run_id_1> <run_id_2>
 ```
 
 ---

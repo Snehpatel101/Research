@@ -1,154 +1,107 @@
-# Ensemble Price Prediction Pipeline
+# Universal ML Pipeline for OHLCV Time Series
 
-A comprehensive ML pipeline for financial price prediction using ensemble methods with triple-barrier labeling.
+**Train ANY model type on market data through a modular, phase-based architecture.**
+
+```
+[ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3-4: Ensemble ] → [ Phase 5: Prod ] → [ Phase 6: UI ]
+     ✅ DONE            IN DESIGN              PLANNED               PLANNED           FUTURE
+```
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Run Phase 1 pipeline
+./pipeline run --symbols MES --stages all
 
-# Run the pipeline
-./pipeline run --symbols MES,MGC
+# Use outputs for Phase 2
+from src.stages.datasets import TimeSeriesDataContainer
+container = TimeSeriesDataContainer.from_parquet_dir('data/splits/scaled', horizon=20)
 
-# Check status
-./pipeline status <run_id>
+# Get data in any format
+X, y, w = container.get_sklearn_arrays('train')      # XGBoost/LightGBM
+dataset = container.get_pytorch_sequences('train')   # LSTM/TCN/Transformer
+nf_df = container.get_neuralforecast_df('train')     # N-HiTS/TFT/PatchTST
 ```
 
 ## Project Structure
 
 ```
-research/
-├── README.md                 # This file
-├── requirements.txt          # Python dependencies
-├── pipeline                  # CLI wrapper script
+.
+├── phase1/              # Data preparation (COMPLETE)
+│   ├── src/ → ../src    # Symlink to source
+│   ├── tests/ → ../tests
+│   └── README.md
 │
-├── src/                      # Source code
-│   ├── pipeline_cli.py       # CLI interface
-│   ├── pipeline_runner.py    # Pipeline orchestrator
-│   ├── pipeline_config.py    # Configuration management
-│   ├── manifest.py           # Data versioning
-│   ├── feature_engineering.py
-│   ├── labeling.py
-│   ├── data_cleaning.py
-│   └── stages/               # Pipeline stages
-│       ├── stage1_ingest.py
-│       ├── stage2_clean.py
-│       ├── stage3_features.py
-│       ├── stage4_labeling.py
-│       ├── stage5_ga_optimize.py
-│       ├── stage6_final_labels.py
-│       ├── stage7_splits.py
-│       └── stage8_validate.py
+├── src/                 # Phase 1 source code
+│   ├── stages/          # Pipeline stages (ingest→validate)
+│   ├── config/          # Configuration
+│   └── pipeline/        # Orchestration
 │
-├── data/                     # Data directory
-│   ├── raw/                  # Raw 1-minute data (parquet)
-│   └── splits/               # Train/val/test splits
+├── tests/               # Phase 1 tests
+│   └── phase_1_tests/   # Unit & integration tests
 │
-├── docs/                     # Documentation
-│   ├── phases/               # Phase documentation (1-5)
-│   ├── guides/               # User guides & quickstarts
-│   └── reference/            # Technical reference docs
+├── data/                # All pipeline data
+│   ├── raw/             # Source OHLCV data
+│   ├── splits/scaled/   # Model-ready parquet files
+│   └── ...
 │
-├── tests/                    # Test files
-│   ├── test_pipeline.py
-│   ├── test_pipeline_system.py
-│   ├── test_stages.py
-│   └── verify_modules.py
+├── docs/                # Documentation
+│   ├── phases/          # PHASE_1.md through PHASE_5.md
+│   ├── getting-started/ # Quickstart, CLI reference
+│   ├── reference/       # Architecture, features
+│   └── archive/         # Historical docs
 │
-├── scripts/                  # Utility scripts
-│   └── verify_installation.sh
-│
-├── notebooks/                # Jupyter notebooks
-├── reports/                  # Generated reports
-└── results/                  # Pipeline results
+├── config/              # GA optimization results
+└── notebooks/           # Jupyter notebooks
 ```
 
-## Pipeline Stages
+## Phase Overview
 
-1. **Ingest** - Load and validate raw data
-2. **Clean** - Resample 1-min to 5-min bars
-3. **Features** - Generate 50+ technical indicators
-4. **Labeling** - Apply triple-barrier labeling
-5. **GA Optimize** - Genetic algorithm optimization
-6. **Final Labels** - Generate final labels
-7. **Splits** - Create train/val/test splits with purging
-7.5 **Scaling** - Train-only feature scaling
-7.6 **Datasets** - Build dataset splits + feature-set manifests
-7.7 **Drift** - Post-scale drift validation
-8. **Validate** - Validate pipeline output
-9. **Report** - Generate completion report
+| Phase | Name | Status | Description |
+|-------|------|--------|-------------|
+| **1** | Data Pipeline | COMPLETE | Ingest → Clean → Features → Labels → Splits → Scale |
+| **2** | Model Factory | IN DESIGN | Plugin architecture for ANY model (XGBoost, LSTM, TFT, etc.) |
+| **3** | Cross-Validation | PLANNED | Purged k-fold, walk-forward, OOS predictions |
+| **4** | Ensemble | PLANNED | Stacking meta-learner, regime-aware weighting |
+| **5** | Production | PLANNED | Real-time inference, monitoring, A/B testing |
+| **6** | Orchestrator | FUTURE | Central UI, model comparison dashboard |
 
-## CLI Commands
+## Supported Model Families (Phase 2)
 
-| Command | Description |
-|---------|-------------|
-| `./pipeline run` | Execute complete pipeline |
-| `./pipeline rerun <id>` | Resume from failed stage |
-| `./pipeline status <id>` | Check pipeline status |
-| `./pipeline validate` | Validate configuration |
-| `./pipeline list-runs` | List all pipeline runs |
-| `./pipeline compare <id1> <id2>` | Compare two runs |
-| `./pipeline clean <id>` | Delete a run |
+| Family | Models | Status |
+|--------|--------|--------|
+| **Boosting** | XGBoost, LightGBM, CatBoost | Planned |
+| **Time Series** | TCN, N-HiTS, TFT, PatchTST, TimesNet | Planned |
+| **Neural** | LSTM, GRU, Transformer | Planned |
+| **Foundation** | TimesFM 2.0, TimeLLM | Planned |
+| **Classical** | RandomForest, SVM, LogisticRegression | Planned |
 
-Run `./pipeline --help` for detailed options.
+## Key Features
 
-## Configuration
-
-```bash
-# Run with custom parameters
-./pipeline run \
-  --symbols MES,MGC,MNQ \
-  --start 2020-01-01 \
-  --end 2024-12-31 \
-  --horizons 1,5,20 \
-  --feature-set core_full \
-  --description "My experiment"
-```
-
-## Python API
-
-```python
-from src.pipeline_config import PipelineConfig, create_default_config
-from src.pipeline_runner import PipelineRunner
-
-# Create configuration
-config = create_default_config(
-    symbols=['MES', 'MGC'],
-    start_date='2020-01-01',
-    end_date='2024-12-31'
-)
-
-# Run pipeline
-runner = PipelineRunner(config)
-runner.run()
-```
+- **Model-Agnostic Data Serving** - One container, multiple output formats
+- **Zero Leakage** - Purge (60 bars) + Embargo (288 bars) + train-only scaling
+- **107 Technical Features** - Momentum, volatility, volume, multi-timeframe
+- **GA-Optimized Labels** - Symbol-specific asymmetric barriers
+- **Plugin Architecture** - Add new models with 4 methods + decorator
 
 ## Documentation
 
-- **[Pipeline CLI Guide](docs/guides/PIPELINE_CLI_GUIDE.md)** - Complete CLI reference
-- **[Quick Reference](docs/guides/PIPELINE_QUICK_REFERENCE.md)** - Command cheat sheet
-- **[Installation Guide](docs/guides/INSTALLATION_SUMMARY.md)** - Setup instructions
-- **[Labeling Quickstart](docs/guides/LABELING_QUICKSTART.md)** - Labeling overview
+| Document | Purpose |
+|----------|---------|
+| [docs/README.md](docs/README.md) | Documentation hub |
+| [docs/getting-started/QUICKSTART.md](docs/getting-started/QUICKSTART.md) | 15-min setup |
+| [docs/phases/PHASE_1.md](docs/phases/PHASE_1.md) | Phase 1 specification |
+| [docs/phases/PHASE_2.md](docs/phases/PHASE_2.md) | Phase 2 specification |
+| [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) | System design |
 
-### Phase Documentation
+## Engineering Principles
 
-- [Phase 1: Data Preparation](docs/phases/PHASE_1_Data_Preparation_and_Labeling.md)
-- [Phase 2: Training Base Models](docs/phases/PHASE_2_Training_Base_Models.md)
-- [Phase 3: Cross-Validation](docs/phases/PHASE_3_Cross_Validation_OOS_Predictions.md)
-- [Phase 4: Ensemble Meta-Learner](docs/phases/PHASE_4_Train_Ensemble_Meta_Learner.md)
-- [Phase 5: Full Integration](docs/phases/PHASE_5_Full_Integration_Final_Test.md)
+1. **Modularity** - No monoliths, clear phase separation
+2. **650-line limit** - Forces good decomposition
+3. **Fail fast** - Validate at boundaries
+4. **Plugin architecture** - Add models without rewriting infrastructure
+5. **Delete unused** - Git is the archive
 
-## Testing
+---
 
-```bash
-# Run tests
-python -m pytest tests/
-
-# Or run individual test files
-python tests/test_pipeline_system.py
-```
-
-## License
-
-Part of the Ensemble Price Prediction System.
+**Phase 1:** COMPLETE (9.5/10) | **Next:** Build Phase 2 Model Factory
