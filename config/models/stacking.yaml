@@ -1,0 +1,41 @@
+# Stacking Ensemble Configuration
+# Two-layer model with out-of-fold predictions
+# GPU: Depends on base models
+
+# Model identification
+model:
+  name: stacking
+  family: ensemble
+  description: Stacking ensemble with OOF predictions and meta-learner
+
+# Default hyperparameters
+defaults:
+  # Base models (Layer 1)
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - random_forest
+
+  # Per-model config overrides
+  base_model_configs: {}
+
+  # Meta-learner (Layer 2)
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  # Cross-validation for OOF predictions
+  n_folds: 5
+
+  # Meta-learner input
+  use_probabilities: true      # Use class probs (3*n_models features) vs predictions (n_models)
+  passthrough: false           # Include original features in meta-learner input
+
+# Training settings
+training:
+  feature_set: boosting_optimal
+  random_seed: 42
+
+# Device settings
+device:
+  default: auto                # Inherited from base models
+  mixed_precision: false       # Inherited from base models

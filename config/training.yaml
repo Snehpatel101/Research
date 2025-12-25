@@ -1,0 +1,133 @@
+# Global Training Configuration
+# Default settings for all model training
+
+# =============================================================================
+# DATA SETTINGS
+# =============================================================================
+data:
+  # Default label horizon
+  horizon: 20
+
+  # Train/val/test split ratios
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+  # Leakage prevention
+  purge_bars: 60               # Bars to purge between splits (3 * max_horizon)
+  embargo_bars: 1440           # Bars to embargo after test start (~5 days)
+
+  # Symbols to process
+  default_symbols:
+    - MES
+    - MGC
+
+# =============================================================================
+# TRAINING DEFAULTS
+# =============================================================================
+training:
+  # Batch size (can be overridden per model)
+  batch_size: 256
+
+  # Maximum epochs (neural models only)
+  max_epochs: 100
+
+  # Early stopping
+  early_stopping_patience: 15
+  min_delta: 0.0001
+
+  # Reproducibility
+  random_seed: 42
+
+  # Data loading
+  num_workers: 4
+  pin_memory: true
+
+# =============================================================================
+# DEVICE SETTINGS
+# =============================================================================
+device:
+  # Device selection: auto, cuda, cpu
+  # "auto" will use CUDA if available, otherwise CPU
+  default: auto
+
+  # Mixed precision training (FP16)
+  # Speeds up training on compatible GPUs (RTX 20+, V100+)
+  mixed_precision: true
+
+  # GPU memory management
+  # Reduce batch size if OOM errors occur
+  max_memory_fraction: 0.9
+
+# =============================================================================
+# LOGGING & CHECKPOINTING
+# =============================================================================
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+  # Progress bar
+  show_progress: true
+
+  # Metrics logging frequency (batches)
+  log_interval: 100
+
+checkpointing:
+  # Save model checkpoints
+  save_checkpoints: true
+
+  # Keep N best checkpoints
+  keep_n_best: 3
+
+  # Checkpoint directory
+  checkpoint_dir: experiments/checkpoints
+
+# =============================================================================
+# EXPERIMENT TRACKING
+# =============================================================================
+experiment:
+  # Output directory for runs
+  output_dir: experiments/runs
+
+  # Enable MLflow tracking (optional)
+  mlflow_enabled: false
+  mlflow_tracking_uri: null
+
+  # Enable Weights & Biases (optional)
+  wandb_enabled: false
+  wandb_project: null
+
+# =============================================================================
+# ENVIRONMENT-SPECIFIC OVERRIDES
+# =============================================================================
+# These can be used for different deployment environments
+
+environments:
+  # Google Colab settings
+  colab:
+    device:
+      default: auto            # Will detect T4/A100
+      mixed_precision: true
+    training:
+      num_workers: 2           # Colab has limited CPU
+      pin_memory: true
+    data:
+      batch_size: 512          # Can use larger batches on Colab GPUs
+
+  # Local development (CPU)
+  local_cpu:
+    device:
+      default: cpu
+      mixed_precision: false
+    training:
+      num_workers: 4
+      batch_size: 128
+
+  # Local GPU (RTX 4070 Ti)
+  local_gpu:
+    device:
+      default: cuda
+      mixed_precision: true
+    training:
+      num_workers: 4
+      batch_size: 512

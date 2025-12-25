@@ -160,10 +160,10 @@ class TestValidationFunctions:
     def test_validate_timeframe_format_invalid(self):
         """Test timeframe validation fails for invalid formats."""
         with pytest.raises(ValueError, match="Unknown timeframe format"):
-            validate_timeframe_format('10min')
+            validate_timeframe_format('7min')  # Not a valid timeframe
 
         with pytest.raises(ValueError, match="Unknown timeframe format"):
-            validate_timeframe_format('2h')
+            validate_timeframe_format('2h')  # 2h is not supported (only 1h and 4h)
 
 
 # =============================================================================
@@ -204,11 +204,11 @@ class TestMTFFeatureGeneratorInit:
 
     def test_invalid_mtf_timeframe_not_multiple(self):
         """Test that MTF timeframe must be integer multiple of base."""
-        # Note: 10min is not in our supported list, so this should fail validation
+        # 7min is not a valid timeframe at all
         with pytest.raises(ValueError):
             MTFFeatureGenerator(
                 base_timeframe='5min',
-                mtf_timeframes=['10min']
+                mtf_timeframes=['7min']
             )
 
 

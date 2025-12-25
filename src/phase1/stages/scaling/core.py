@@ -7,6 +7,51 @@ for the feature scaling infrastructure.
 Author: ML Pipeline
 Created: 2025-12-20
 Updated: 2025-12-20 - Extracted from feature_scaler.py
+Updated: 2025-12-24 - Added model-family scaling documentation
+
+# =============================================================================
+# MODEL-FAMILY SCALING RECOMMENDATIONS
+# =============================================================================
+#
+# Different model families have different scaling requirements:
+#
+# BOOSTING MODELS (XGBoost, LightGBM, CatBoost):
+#   - Recommended scaler: NONE
+#   - Rationale: Tree-based models split on feature values, not magnitudes.
+#     They are invariant to monotonic transformations and handle different
+#     scales internally. Scaling adds no benefit and may hurt interpretability.
+#   - Exception: Some implementations benefit from scaling for numerical stability
+#     with very large/small values (>1e6 or <1e-6).
+#
+# NEURAL NETWORKS (LSTM, GRU, MLP):
+#   - Recommended scaler: ROBUST
+#   - Rationale: Neural networks use gradient-based optimization which is
+#     sensitive to feature scales. RobustScaler is preferred because:
+#     1. Uses median/IQR instead of mean/std - robust to outliers
+#     2. Financial data often has fat tails and extreme values
+#     3. Prevents gradient explosion from outlier samples
+#   - Alternative: StandardScaler works if outliers are pre-clipped
+#   - Clip range: (-5.0, 5.0) after scaling to bound extreme values
+#
+# TRANSFORMER MODELS:
+#   - Recommended scaler: STANDARD
+#   - Rationale: Transformers use layer normalization internally and
+#     benefit from input features with mean=0, std=1. StandardScaler
+#     provides this property directly.
+#   - Note: Pre-trained transformers may have specific input requirements
+#
+# LINEAR MODELS (Logistic, Ridge, Lasso):
+#   - Recommended scaler: STANDARD
+#   - Rationale: Regularization (L1/L2) penalizes coefficient magnitude.
+#     Without scaling, features with larger values dominate regularization.
+#   - Critical: Always scale for regularized linear models
+#
+# ENSEMBLE META-LEARNERS:
+#   - Recommended scaler: ROBUST or model-specific
+#   - Rationale: Base model predictions should be on similar scales for
+#     the meta-learner to weight them appropriately.
+#
+# =============================================================================
 """
 
 import logging
@@ -39,6 +84,14 @@ class ScalerConfig:
         scaler_type: Type of scaler to use ('robust', 'standard', 'minmax')
         clip_outliers: Whether to clip scaled values to clip_range
         clip_range: Range to clip scaled values (in units of the scaled distribution)
+
+    Notes:
+        Default 'robust' scaler uses median/IQR which is optimal for:
+        - Financial data with fat-tailed distributions
+        - Datasets with outliers (common in OHLCV data)
+        - Neural network training (prevents gradient explosion)
+
+        See module docstring for model-family specific recommendations.
     """
     scaler_type: str = 'robust'
     clip_outliers: bool = True
@@ -102,7 +155,8 @@ FEATURE_PATTERNS: Dict[FeatureCategory, List[str]] = {
         'open_', 'high_', 'low_', 'close_'
     ],
     FeatureCategory.VOLATILITY: [
-        'atr_', 'hvol_', 'parkinson', 'gk_vol', 'bb_width', 'kc_position'
+        'atr_', 'hvol_', 'parkinson', 'gk_vol', 'rs_vol', 'yz_vol',
+        'bb_width', 'kc_position'
     ],
     FeatureCategory.VOLUME: [
         'obv', 'volume_', 'obv_sma'

@@ -103,3 +103,9 @@ reports/**/*.json
 # Results directory (test outputs, plots, validation reports)
 results/**/*
 !results/README.md
+
+# Experiment runs (model training outputs)
+experiments/runs/
+
+# CatBoost cache
+catboost_info/

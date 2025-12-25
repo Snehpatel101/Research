@@ -6,7 +6,6 @@ from typing import Dict, Iterable, List, Sequence
 import pandas as pd
 
 from src.phase1.config.feature_sets import FeatureSetDefinition
-from src.phase1.config.features import CROSS_ASSET_FEATURES
 from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
 METADATA_COLUMNS = {
@@ -37,11 +36,6 @@ def _is_label_column(name: str) -> bool:
     return any(name.startswith(prefix) for prefix in LABEL_PREFIXES)
 
 
-def _is_cross_asset_column(name: str) -> bool:
-    features = CROSS_ASSET_FEATURES.get("features", {})
-    return name in features
-
-
 def _is_mtf_column(name: str) -> bool:
     return any(name.endswith(suffix) for suffix in _mtf_suffixes())
 
@@ -66,8 +60,7 @@ def resolve_feature_set(
     if not definition.include_mtf:
         candidates = [c for c in candidates if not _is_mtf_column(c)]
 
-    if not definition.include_cross_asset:
-        candidates = [c for c in candidates if not _is_cross_asset_column(c)]
+    # Note: Cross-asset features removed - each symbol processed independently
 
     if definition.include_prefixes:
         prefix_matches = [
@@ -107,15 +100,12 @@ def build_feature_set_manifest(
     for name, definition in definitions.items():
         features = resolve_feature_set(df, definition)
         mtf_count = sum(1 for col in features if _is_mtf_column(col))
-        cross_asset_count = sum(1 for col in features if _is_cross_asset_column(col))
         manifest[name] = {
             "description": definition.description,
             "feature_count": len(features),
             "features": features,
             "include_mtf": definition.include_mtf,
-            "include_cross_asset": definition.include_cross_asset,
             "mtf_feature_count": mtf_count,
-            "cross_asset_feature_count": cross_asset_count,
         }
     return manifest
 

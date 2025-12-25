@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 
@@ -21,8 +21,37 @@ RESULTS_DIR = PROJECT_ROOT / "results"
 RUNS_DIR = PROJECT_ROOT / "runs"
 CONFIG_DIR = PROJECT_ROOT / "config"
 
-SYMBOLS = ["MES", "MGC"]
-TARGET_TIMEFRAME = "5min"
+
+def detect_available_symbols(raw_dir: Path = None) -> List[str]:
+    """
+    Auto-detect available symbols from raw data directory.
+
+    Looks for parquet files matching pattern: {SYMBOL}_1m.parquet
+
+    Returns
+    -------
+    List[str]
+        List of detected symbol names, sorted alphabetically
+    """
+    if raw_dir is None:
+        raw_dir = RAW_DATA_DIR
+
+    if not raw_dir.exists():
+        return []
+
+    symbols = []
+    for f in raw_dir.glob("*_1m.parquet"):
+        # Extract symbol from filename (e.g., "MES_1m.parquet" -> "MES")
+        symbol = f.stem.replace("_1m", "")
+        if symbol:
+            symbols.append(symbol)
+
+    return sorted(symbols)
+
+
+# Auto-detect symbols from available data (empty list if no data)
+SYMBOLS = detect_available_symbols()
+TARGET_TIMEFRAME = "1min"
 
 TRAIN_RATIO = 0.70
 VAL_RATIO = 0.15
@@ -94,4 +123,5 @@ __all__ = [
     "set_global_seeds",
     "validate_config",
     "get_timeframe_metadata",
+    "detect_available_symbols",
 ]

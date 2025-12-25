@@ -42,7 +42,7 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 - Time-series aware train/val/test splits
 - Quality-weighted samples
 
-**Model Contract (Phase 2):**
+**Model Contract (Phase 2 - Complete):**
 ```python
 class BaseModel(ABC):
     @abstractmethod
@@ -105,16 +105,34 @@ The factory supports both **single models** and **ensembles**:
   --meta-learner logistic
 ```
 
-### Model Families
+### Model Families (12 Models Implemented)
 
-| Family | Examples | Interface |
-|--------|----------|-----------|
-| Boosting | XGBoost, LightGBM, CatBoost | `BoostingModel(BaseModel)` |
-| Neural | LSTM, GRU, Transformer | `NeuralModel(BaseModel)` |
-| Classical | Random Forest, SVM | `ClassicalModel(BaseModel)` |
-| Ensemble | Stacking, Blending | `EnsembleModel(BaseModel)` |
+| Family | Models | Interface | Strengths | Status |
+|--------|--------|-----------|-----------|--------|
+| Boosting | XGBoost, LightGBM, CatBoost | `BoostingModel(BaseModel)` | Fast, interpretable, feature interactions | **Complete** |
+| Neural | LSTM, GRU, TCN | `RNNModel(BaseModel)` | Temporal dependencies, sequential patterns | **Complete** |
+| Classical | Random Forest, Logistic, SVM | `ClassicalModel(BaseModel)` | Robust baselines, interpretable | **Complete** |
+| Ensemble | Voting, Stacking, Blending | `EnsembleModel(BaseModel)` | Combines diverse model strengths | **Complete** |
 
-All implement the same `BaseModel` interface and consume the same standardized datasets.
+**All 12 models** implement the same `BaseModel` interface and consume the same standardized datasets from Phase 1.
+
+**Registry:** Models register via `@ModelRegistry.register()` decorator for automatic discovery.
+
+### Recommended Ensemble Configurations
+
+| Ensemble Type | Models | Method | Use Case |
+|---------------|--------|--------|----------|
+| Boosting-Only | XGBoost + LightGBM + CatBoost | Voting | Low latency (< 5ms), production |
+| Hybrid Fast | XGBoost + LightGBM + Random Forest | Voting/Blending | Balanced accuracy/speed |
+| Neural Stack | LSTM + GRU + TCN | Stacking | Sequential pattern learning |
+| Full Stack | All 12 models | Stacking with Logistic meta | Maximum accuracy, ensemble diversity |
+
+**Implemented Ensemble Methods:**
+- **Voting:** Combine predictions via weighted/unweighted averaging
+- **Stacking:** Train meta-learner on base model out-of-fold predictions
+- **Blending:** Train meta-learner on holdout predictions
+
+See `docs/phases/PHASE_4.md` for detailed ensemble architecture and diversity metrics.
 
 ---
 
@@ -254,21 +272,43 @@ src/phase1/stages/
 
 ---
 
-## Model Factory (Phase 2 - Planned)
+## Model Factory (Phase 2 - Complete)
 
-Plugin-based model training system:
+Plugin-based model training system with **12 models across 4 families**:
 
 ```
 src/models/
-├── registry.py         → ModelRegistry plugin system
+├── registry.py         → ModelRegistry plugin system (12 models registered)
 ├── base.py             → BaseModel interface
-├── boosting/           → XGBoost, LightGBM, CatBoost
-├── neural/             → LSTM, GRU, Transformer
-├── classical/          → Random Forest, SVM, Logistic
-└── ensemble/           → Stacking, Blending, Voting
+├── config.py           → TrainerConfig, YAML loading
+├── trainer.py          → Unified training orchestration
+├── device.py           → GPU detection, memory estimation
+├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
+├── neural/             → LSTM, GRU, TCN (3 models)
+├── classical/          → Random Forest, Logistic, SVM (3 models)
+└── ensemble/           → Voting, Stacking, Blending (3 models)
 ```
 
 **Output:** Trained models + unified performance reports
+
+**All 12 models available:** `xgboost`, `lightgbm`, `catboost`, `lstm`, `gru`, `tcn`, `random_forest`, `logistic`, `svm`, `voting`, `stacking`, `blending`
+
+---
+
+## Cross-Validation (Phase 3 - Complete)
+
+Time-series aware cross-validation with purge/embargo:
+
+```
+src/cross_validation/
+├── purged_kfold.py     → PurgedKFold with configurable purge/embargo
+├── feature_selector.py → Walk-forward MDA/MDI feature selection
+├── oof_generator.py    → Out-of-fold predictions for stacking
+├── cv_runner.py        → CrossValidationRunner, Optuna tuning
+└── param_spaces.py     → Hyperparameter search spaces
+```
+
+**Output:** CV results, OOF predictions, stacking datasets
 
 ---
 
@@ -276,16 +316,24 @@ src/models/
 
 ```bash
 # Run data pipeline (Phase 1)
-./pipeline run --symbols MES,MGC
+./pipeline run --symbols MGC
 
 # Train specific model (Phase 2)
-./pipeline run --model-type xgboost --symbols MES
+python scripts/train_model.py --model xgboost --horizon 20
+python scripts/train_model.py --model lstm --horizon 20 --seq-len 30
+python scripts/train_model.py --model random_forest --horizon 20
 
 # Train ensemble (Phase 4)
-./pipeline run --model-type ensemble --base-models xgboost,lstm
+python scripts/train_model.py --model voting --base-models xgboost,lightgbm,lstm --horizon 20
+python scripts/train_model.py --model stacking --base-models xgboost,lgbm,rf --horizon 20
 
-# Compare models
-./pipeline compare <run_id_1> <run_id_2>
+# Run cross-validation (Phase 3)
+python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
+python scripts/run_cv.py --models all --horizons 5,10,15,20 --tune
+
+# List available models (should print 12)
+python scripts/train_model.py --list-models
+python -c "from src.models import ModelRegistry; print(len(ModelRegistry.list_all()))"
 ```
 
 ---

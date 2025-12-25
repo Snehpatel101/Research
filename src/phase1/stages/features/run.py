@@ -61,79 +61,48 @@ def run_feature_engineering(
     logger.info("=" * 70)
 
     try:
-        from src.phase1.config.features import get_mtf_config, CROSS_ASSET_FEATURES
-
         target_timeframe = config.target_timeframe
-        mtf_config = get_mtf_config()
+
+        # Determine MTF include flags based on config.mtf_mode
+        # mtf_mode: 'bars' -> only OHLCV, 'indicators' -> only indicators, 'both' -> both
+        mtf_mode = getattr(config, 'mtf_mode', 'both')
+        mtf_include_ohlcv = mtf_mode in ('bars', 'both')
+        mtf_include_indicators = mtf_mode in ('indicators', 'both')
+
+        # Use MTF timeframes from PipelineConfig (respects CLI overrides)
+        mtf_timeframes = getattr(config, 'mtf_timeframes', ['15min', '60min'])
 
         # Initialize FeatureEngineer from modular implementation
+        # MTF settings come from PipelineConfig, not global MTF_CONFIG
         engineer = FeatureEngineer(
             input_dir=config.clean_data_dir,
             output_dir=config.features_dir,
             timeframe=target_timeframe,
-            enable_mtf=mtf_config.get('enabled', True),
-            mtf_timeframes=mtf_config.get('mtf_timeframes'),
-            mtf_include_ohlcv=mtf_config.get('include_ohlcv', True),
-            mtf_include_indicators=mtf_config.get('include_indicators', True),
-            base_timeframe=mtf_config.get('base_timeframe', target_timeframe),
+            enable_mtf=bool(mtf_timeframes),  # Enable if any MTF timeframes specified
+            mtf_timeframes=mtf_timeframes,
+            mtf_include_ohlcv=mtf_include_ohlcv,
+            mtf_include_indicators=mtf_include_indicators,
+            base_timeframe=target_timeframe,  # Use run's target timeframe, not hardcoded '5min'
         )
 
-        # Load all symbol data first
-        symbol_data = {}
-        for symbol in config.symbols:
-            input_file = config.clean_data_dir / f"{symbol}_{target_timeframe}_clean.parquet"
-            if input_file.exists():
-                symbol_data[symbol] = pd.read_parquet(input_file)
-                logger.info(f"Loaded {symbol}: {len(symbol_data[symbol]):,} rows")
-            else:
-                logger.warning(f"No cleaned data found for {symbol}")
-
-        # Prepare cross-asset data if both MES and MGC are available
-        cross_asset_data = None
-        has_mes = 'MES' in symbol_data
-        has_mgc = 'MGC' in symbol_data
-
-        if has_mes and has_mgc and CROSS_ASSET_FEATURES.get('enabled', True):
-            logger.info("Aligning MES and MGC data for cross-asset features...")
-            mes_df = symbol_data['MES'].copy().set_index('datetime')
-            mgc_df = symbol_data['MGC'].copy().set_index('datetime')
-
-            # Get common timestamps
-            common_idx = mes_df.index.intersection(mgc_df.index)
-            logger.info(f"Common timestamps: {len(common_idx):,}")
-
-            if len(common_idx) > 0:
-                # Align data to common timestamps
-                mes_aligned = mes_df.loc[common_idx].reset_index()
-                mgc_aligned = mgc_df.loc[common_idx].reset_index()
-
-                # Update symbol_data with aligned data
-                symbol_data['MES'] = mes_aligned
-                symbol_data['MGC'] = mgc_aligned
-
-                # Prepare cross-asset data arrays
-                cross_asset_data = {
-                    'mes_close': mes_aligned['close'].values,
-                    'mgc_close': mgc_aligned['close'].values
-                }
-                logger.info("Cross-asset data prepared for feature computation")
-        elif has_mes and has_mgc:
-            logger.info("Skipping cross-asset alignment (disabled in config)")
-
-        # Process each symbol
+        # Process each symbol independently (no cross-symbol correlation)
         artifacts = []
         feature_metadata = {}
 
-        for symbol in symbol_data.keys():
-            df = symbol_data[symbol]
+        for symbol in config.symbols:
+            input_file = config.clean_data_dir / f"{symbol}_{target_timeframe}_clean.parquet"
+            if not input_file.exists():
+                logger.warning(f"No cleaned data found for {symbol}")
+                continue
+
+            df = pd.read_parquet(input_file)
+            logger.info(f"Loaded {symbol}: {len(df):,} rows")
+
             output_file = config.features_dir / f"{symbol}_{target_timeframe}_features.parquet"
+            logger.info(f"Processing {symbol} (symbol-isolated, no cross-correlation)...")
 
-            logger.info(f"Processing {symbol}...")
-
-            # Engineer features with cross-asset data
-            df_features, feature_info = engineer.engineer_features(
-                df, symbol, cross_asset_data=cross_asset_data
-            )
+            # Engineer features (each symbol processed independently)
+            df_features, feature_info = engineer.engineer_features(df, symbol)
 
             # Save features
             output_file.parent.mkdir(parents=True, exist_ok=True)

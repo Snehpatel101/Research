@@ -1,0 +1,43 @@
+# Blending Ensemble Configuration
+# Two-layer model with holdout set predictions
+# GPU: Depends on base models
+
+# Model identification
+model:
+  name: blending
+  family: ensemble
+  description: Blending ensemble using holdout validation for meta-learner training
+
+# Default hyperparameters
+defaults:
+  # Base models (Layer 1)
+  base_model_names:
+    - xgboost
+    - lightgbm
+
+  # Per-model config overrides
+  base_model_configs: {}
+
+  # Meta-learner (Layer 2)
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  # Holdout split
+  holdout_fraction: 0.2        # Fraction of training data for meta-learner
+
+  # Meta-learner input
+  use_probabilities: true      # Use class probs vs predictions
+  passthrough: false           # Include original features in meta-learner input
+
+  # Retraining
+  retrain_on_full: true        # Retrain base models on full data after meta-learner training
+
+# Training settings
+training:
+  feature_set: boosting_optimal
+  random_seed: 42
+
+# Device settings
+device:
+  default: auto                # Inherited from base models
+  mixed_precision: false       # Inherited from base models

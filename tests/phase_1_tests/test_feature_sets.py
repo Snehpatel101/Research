@@ -35,12 +35,10 @@ def test_feature_set_resolution():
 
     core_full = resolve_feature_set(df, FEATURE_SET_DEFINITIONS["core_full"])
     assert "rsi_14" in core_full
-    assert "rsi_14_15m" not in core_full
-    assert "mes_mgc_beta" not in core_full
+    assert "rsi_14_15m" not in core_full  # MTF excluded from core_full
 
     mtf_plus = resolve_feature_set(df, FEATURE_SET_DEFINITIONS["mtf_plus"])
-    assert "rsi_14_15m" in mtf_plus
-    assert "mes_mgc_beta" in mtf_plus
+    assert "rsi_14_15m" in mtf_plus  # MTF included in mtf_plus
 
     core_min = resolve_feature_set(df, FEATURE_SET_DEFINITIONS["core_min"])
     assert "sma_10" not in core_min

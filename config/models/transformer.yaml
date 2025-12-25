@@ -1,0 +1,48 @@
+# Transformer Configuration
+# Vanilla Transformer encoder for time series
+# GPU: Optimized for CUDA acceleration
+
+# Model identification
+model:
+  name: transformer
+  family: transformer
+  description: Transformer encoder with self-attention for time series
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  d_model: 256
+  n_heads: 8
+  n_layers: 3
+  d_ff: 512
+  dropout: 0.1
+  activation: gelu
+
+  # Input
+  sequence_length: 128
+  input_features: null           # Auto-detected from data
+
+  # Learning
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  gradient_clip: 1.0
+
+  # Scheduler
+  scheduler: cosine
+  warmup_epochs: 3
+
+# Training settings
+training:
+  batch_size: 128
+  max_epochs: 50
+  early_stopping_patience: 10
+  min_delta: 0.0001
+  feature_set: transformer_raw
+  random_seed: 42
+  num_workers: 4
+  pin_memory: true
+
+# Device settings
+device:
+  default: auto                  # auto, cuda, or cpu
+  mixed_precision: true          # Use FP16 for faster training

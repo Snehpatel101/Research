@@ -108,7 +108,8 @@ class TestConfigTimeframe:
     def test_target_timeframe_default(self):
         """Test that TARGET_TIMEFRAME has a default value."""
         from config import TARGET_TIMEFRAME
-        assert TARGET_TIMEFRAME == '5min'
+        # TARGET_TIMEFRAME is the raw data timeframe (1min)
+        assert TARGET_TIMEFRAME == '1min'
 
     def test_validate_timeframe_valid(self):
         """Test validation of valid timeframes."""

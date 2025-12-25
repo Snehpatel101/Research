@@ -118,32 +118,6 @@ class TestFeatureEngineerSupertrend:
 
 
 
-class TestFeatureEngineerCrossAsset:
-    """Tests for cross-asset features."""
-
-    def test_cross_asset_features_missing_data(self, temp_dir, sample_ohlcv_df):
-        """Test that cross-asset features are NaN when data is missing."""
-        # Arrange - import the module-level function
-        feature_metadata = {}
-        from src.phase1.stages.features.cross_asset import add_cross_asset_features
-
-        # Act - call without cross-asset close arrays (mes_close=None, mgc_close=None)
-        # The function adds NaN columns when cross-asset data is not provided
-        feature_metadata = {}  # Will be populated with metadata
-        df = add_cross_asset_features(
-            sample_ohlcv_df.copy(),
-            feature_metadata=feature_metadata,
-            mes_close=None,
-            mgc_close=None,
-            current_symbol='MES'
-        )
-
-        # Assert - cross-asset features should be NaN
-        assert 'mes_mgc_correlation_20' in df.columns
-        assert df['mes_mgc_correlation_20'].isna().all()
-
-
-
 class TestFeatureEngineerADXIndicator:
     """Tests for ADX indicator in FeatureEngineer."""
 

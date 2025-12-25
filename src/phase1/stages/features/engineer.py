@@ -14,7 +14,7 @@ from datetime import datetime
 import json
 
 # Import all feature modules
-from .price_features import add_returns, add_price_ratios
+from .price_features import add_returns, add_price_ratios, add_autocorrelation, add_clv
 from .moving_averages import add_sma, add_ema
 from .momentum import (
     add_rsi, add_macd, add_stochastic, add_williams_r,
@@ -23,20 +23,19 @@ from .momentum import (
 from .volatility import (
     add_atr, add_bollinger_bands, add_keltner_channels,
     add_historical_volatility, add_parkinson_volatility,
-    add_garman_klass_volatility
+    add_garman_klass_volatility, add_higher_moments,
+    add_rogers_satchell_volatility, add_yang_zhang_volatility
 )
 # Re-import here for wrapper methods
-from .volume import add_volume_features, add_vwap, add_obv
+from .volume import add_volume_features, add_vwap, add_obv, add_dollar_volume
 from .trend import add_adx, add_supertrend
 from .temporal import add_temporal_features, add_session_features
 from .regime import add_regime_features
-from .cross_asset import add_cross_asset_features
 from .microstructure import add_microstructure_features
 from .scaling import PeriodScaler, create_period_config
 from .wavelets import add_wavelet_features, PYWT_AVAILABLE
+from .nan_handling import clean_nan_columns
 
-# Import config for cross-asset feature flag
-from src.phase1.config.features import CROSS_ASSET_FEATURES
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features, MTFFeatureGenerator
@@ -78,7 +77,8 @@ class FeatureEngineer:
         enable_wavelets: bool = True,
         wavelet_type: str = 'db4',
         wavelet_level: int = 3,
-        wavelet_window: int = 64
+        wavelet_window: int = 64,
+        nan_threshold: float = 0.9
     ):
         """
         Initialize feature engineer.
@@ -116,9 +116,21 @@ class FeatureEngineer:
             Decomposition level (3 = 4 frequency bands).
         wavelet_window : int, default 64
             Rolling window size for causal wavelet computation.
+        nan_threshold : float, default 0.9
+            Columns with NaN rate above this threshold are dropped before
+            row-wise NaN removal. Range: 0.0 to 1.0. Set to 1.0 to disable
+            column dropping (original behavior).
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
+
+        # Validate input directory exists
+        if not self.input_dir.exists():
+            raise FileNotFoundError(
+                f"Input directory does not exist: {self.input_dir}. "
+                f"Expected cleaned data from DataCleaner stage."
+            )
+
         self.timeframe = timeframe
 
         # Period scaling configuration
@@ -145,6 +157,11 @@ class FeatureEngineer:
         if enable_wavelets and not PYWT_AVAILABLE:
             logger.warning("Wavelets disabled: PyWavelets not installed")
 
+        # NaN handling configuration
+        if not 0.0 <= nan_threshold <= 1.0:
+            raise ValueError(f"nan_threshold must be between 0.0 and 1.0, got {nan_threshold}")
+        self.nan_threshold = nan_threshold
+
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -158,20 +175,22 @@ class FeatureEngineer:
         if self.scale_periods and self.timeframe != self.base_timeframe:
             logger.info(f"Period scaling: {self.base_timeframe} -> {self.timeframe}")
         logger.info(f"MTF enabled: {self.enable_mtf}, timeframes: {self.mtf_timeframes}")
-        logger.info(f"Cross-asset features enabled: {CROSS_ASSET_FEATURES.get('enabled', True)}")
         logger.info(
             f"Wavelets enabled: {self.enable_wavelets}, "
             f"type: {self.wavelet_type}, level: {self.wavelet_level}"
         )
+        logger.info(f"NaN threshold: {self.nan_threshold} (columns with >{self.nan_threshold*100:.0f}% NaN dropped)")
 
     def engineer_features(
         self,
         df: pd.DataFrame,
-        symbol: str,
-        cross_asset_data: Optional[Dict[str, np.ndarray]] = None
+        symbol: str
     ) -> Tuple[pd.DataFrame, Dict]:
         """
         Complete feature engineering pipeline.
+
+        Each symbol is processed independently - no cross-symbol correlation.
+        This ensures symbol isolation as required by the ML Factory design.
 
         Parameters
         ----------
@@ -179,10 +198,6 @@ class FeatureEngineer:
             Input DataFrame with cleaned OHLCV data
         symbol : str
             Symbol name
-        cross_asset_data : Optional[Dict[str, np.ndarray]]
-            Optional dict with 'mes_close' and 'mgc_close' arrays
-            for cross-asset feature computation. Arrays must be
-            aligned with df index (same length and timestamps).
 
         Returns
         -------
@@ -231,8 +246,11 @@ class FeatureEngineer:
         df = add_historical_volatility(df, self.feature_metadata, periods=pc.get('hvol'))
         df = add_parkinson_volatility(df, self.feature_metadata, period=pc.get('parkinson', [20])[0])
         df = add_garman_klass_volatility(df, self.feature_metadata, period=pc.get('garman_klass', [20])[0])
+        df = add_rogers_satchell_volatility(df, self.feature_metadata, period=pc.get('rs_vol', [20])[0])
+        df = add_yang_zhang_volatility(df, self.feature_metadata, period=pc.get('yz_vol', [20])[0])
         df = add_volume_features(df, self.feature_metadata, period=pc.get('volume_sma', [20])[0])
         df = add_vwap(df, self.feature_metadata)
+        df = add_dollar_volume(df, self.feature_metadata)
         df = add_adx(df, self.feature_metadata, period=pc.get('adx', [14])[0])
         df = add_supertrend(
             df, self.feature_metadata,
@@ -240,6 +258,11 @@ class FeatureEngineer:
         )
         df = add_temporal_features(df, self.feature_metadata)
         df = add_regime_features(df, self.feature_metadata)
+
+        # Add new statistical features
+        df = add_autocorrelation(df, self.feature_metadata)
+        df = add_clv(df, self.feature_metadata)
+        df = add_higher_moments(df, self.feature_metadata)
 
         # Add microstructure proxy features (liquidity, spread, price impact from OHLCV)
         df = add_microstructure_features(df, self.feature_metadata)
@@ -280,38 +303,42 @@ class FeatureEngineer:
                 f"({len(df)} rows < {self.wavelet_window} window required)"
             )
 
-        # Add cross-asset features (MES-MGC)
-        mes_close = cross_asset_data.get('mes_close') if cross_asset_data else None
-        mgc_close = cross_asset_data.get('mgc_close') if cross_asset_data else None
-
-        df = add_cross_asset_features(
-            df,
-            self.feature_metadata,
-            mes_close=mes_close,
-            mgc_close=mgc_close,
-            current_symbol=symbol
-        )
-
         # Add Multi-Timeframe (MTF) features
+        # Filter MTF timeframes to only include those > base timeframe
         mtf_cols_added = 0
         if self.enable_mtf and len(df) >= 500:
             try:
-                logger.info(f"Adding MTF features for timeframes: {self.mtf_timeframes}")
-                df = add_mtf_features(
-                    df,
-                    feature_metadata=self.feature_metadata,
-                    base_timeframe=self.timeframe if self.timeframe in ['5min'] else '5min',
-                    mtf_timeframes=self.mtf_timeframes,
-                    include_ohlcv=self.mtf_include_ohlcv,
-                    include_indicators=self.mtf_include_indicators
-                )
-                # Count MTF columns added
-                mtf_suffixes = ['_15m', '_30m', '_1h']
-                mtf_cols_added = len([
-                    c for c in df.columns
-                    if any(c.endswith(s) for s in mtf_suffixes)
-                ])
-                logger.info(f"Added {mtf_cols_added} MTF feature columns")
+                from src.phase1.config.features import parse_timeframe_to_minutes
+                base_minutes = parse_timeframe_to_minutes(self.timeframe)
+                # Filter MTF timeframes to only those strictly greater than base
+                valid_mtf_timeframes = [
+                    tf for tf in self.mtf_timeframes
+                    if parse_timeframe_to_minutes(tf) > base_minutes
+                ]
+                if valid_mtf_timeframes:
+                    logger.info(f"Adding MTF features for timeframes: {valid_mtf_timeframes}")
+                    df = add_mtf_features(
+                        df,
+                        feature_metadata=self.feature_metadata,
+                        base_timeframe=self.timeframe,
+                        mtf_timeframes=valid_mtf_timeframes,
+                        include_ohlcv=self.mtf_include_ohlcv,
+                        include_indicators=self.mtf_include_indicators
+                    )
+                    # Count MTF columns added (dynamic suffixes based on config)
+                    mtf_suffixes = []
+                    for tf in valid_mtf_timeframes:
+                        if tf.endswith('min'):
+                            mtf_suffixes.append(f"_{tf.replace('min', 'm')}")
+                        elif tf in ['1h', '60min']:
+                            mtf_suffixes.append('_1h')
+                    mtf_cols_added = len([
+                        c for c in df.columns
+                        if any(c.endswith(s) for s in mtf_suffixes)
+                    ])
+                    logger.info(f"Added {mtf_cols_added} MTF feature columns")
+                else:
+                    logger.info(f"No MTF timeframes > base {self.timeframe}, skipping MTF features")
             except Exception as e:
                 logger.warning(f"MTF feature generation failed: {e}. Continuing without MTF features.")
         elif self.enable_mtf:
@@ -319,42 +346,15 @@ class FeatureEngineer:
                 f"Skipping MTF features: insufficient data ({len(df)} rows < 500 required)"
             )
 
-        # Drop rows with NaN (mainly from initial indicator warmup periods)
-        # Note: Cross-asset features are NaN when only one symbol is present
-        # We use subset to exclude cross-asset columns from dropna if they are all NaN
-        cross_asset_cols = ['mes_mgc_correlation_20', 'mes_mgc_spread_zscore',
-                           'mes_mgc_beta', 'relative_strength']
-        non_cross_asset_cols = [c for c in df.columns if c not in cross_asset_cols]
-
-        rows_before_dropna = len(df)
-        # Only drop NaN based on non-cross-asset columns
-        df = df.dropna(subset=non_cross_asset_cols)
-        rows_dropped = rows_before_dropna - len(df)
-
-        if len(df) == 0:
-            raise ValueError(
-                f"All rows dropped after removing NaN values. "
-                f"Insufficient data for feature calculation. "
-                f"Original rows: {rows_before_dropna}, "
-                f"Required: ~200+ rows for longest rolling window."
-            )
-
-        if rows_dropped > rows_before_dropna * 0.5:
-            logger.warning(
-                f"Dropped {rows_dropped} rows ({rows_dropped/rows_before_dropna*100:.1f}%) "
-                f"due to NaN values. Check feature warmup periods."
-            )
-
-        # Check if cross-asset features were computed
-        # Cross-asset is only computed when:
-        # 1. Config flag is enabled (CROSS_ASSET_FEATURES['enabled'] = True)
-        # 2. Both MES and MGC data are provided
-        has_cross_asset = (
-            CROSS_ASSET_FEATURES.get('enabled', True) and
-            cross_asset_data is not None and
-            'mes_close' in cross_asset_data and
-            'mgc_close' in cross_asset_data
+        # Audit NaN values and clean problematic columns before row-wise dropna
+        # This prevents all-NaN columns from wiping the entire dataset
+        df, nan_audit = clean_nan_columns(
+            df,
+            symbol=symbol,
+            nan_threshold=self.nan_threshold
         )
+        rows_dropped = nan_audit['rows_dropped']
+        cols_dropped = nan_audit['cols_dropped']
 
         # Get MTF column names
         mtf_suffixes = ['_15m', '_30m', '_1h']
@@ -375,9 +375,9 @@ class FeatureEngineer:
             'final_columns': len(df.columns),
             'features_added': len(df.columns) - initial_cols,
             'rows_dropped_for_nan': rows_dropped,
-            'cross_asset_features': has_cross_asset,
-            'cross_asset_enabled_in_config': CROSS_ASSET_FEATURES.get('enabled', True),
-            'cross_asset_feature_names': cross_asset_cols if has_cross_asset else [],
+            'cols_dropped_for_nan': cols_dropped,
+            'nan_audit': nan_audit,
+            'symbol_isolation': True,  # Each symbol processed independently
             'mtf_features': self.enable_mtf and mtf_cols_added > 0,
             'mtf_feature_count': mtf_cols_added,
             'mtf_timeframes': self.mtf_timeframes if mtf_cols_added > 0 else [],
@@ -400,10 +400,9 @@ class FeatureEngineer:
         }
 
         logger.info(f"\nFeature engineering complete for {symbol}")
-        logger.info(f"Columns: {initial_cols} -> {len(df.columns)} (+{feature_report['features_added']} features)")
+        logger.info(f"Columns: {initial_cols} -> {len(df.columns)} (+{feature_report['features_added']} features, -{cols_dropped} dropped for NaN)")
         logger.info(f"Rows: {initial_rows:,} -> {len(df):,} (-{rows_dropped:,} for NaN)")
-        if has_cross_asset:
-            logger.info(f"Cross-asset features: {cross_asset_cols}")
+        logger.info(f"Symbol isolation: each symbol processed independently")
         if mtf_cols_added > 0:
             logger.info(f"MTF features: {mtf_cols_added} columns from {self.mtf_timeframes}")
         if wavelet_cols_added > 0:
@@ -535,22 +534,19 @@ class FeatureEngineer:
 
     def process_multi_symbol(
         self,
-        symbol_files: Dict[str, Union[str, Path]],
-        compute_cross_asset: bool = True
+        symbol_files: Dict[str, Union[str, Path]]
     ) -> Dict[str, Dict]:
         """
-        Process multiple symbols with cross-asset feature computation.
+        Process multiple symbols independently (no cross-symbol correlation).
 
-        This method loads data for multiple symbols, aligns them by timestamp,
-        and computes cross-asset features when both MES and MGC are present.
+        Each symbol is processed in isolation, ensuring no data leakage
+        between symbols as required by the ML Factory design.
 
         Parameters
         ----------
         symbol_files : Dict[str, Union[str, Path]]
             Dict mapping symbol names to file paths
             e.g., {'MES': 'path/to/mes.parquet', 'MGC': 'path/to/mgc.parquet'}
-        compute_cross_asset : bool, default True
-            Whether to compute cross-asset features
 
         Returns
         -------
@@ -558,76 +554,30 @@ class FeatureEngineer:
             Dictionary mapping symbols to feature reports
         """
         logger.info(f"\n{'='*60}")
-        logger.info(f"Processing {len(symbol_files)} symbols with cross-asset features")
+        logger.info(f"Processing {len(symbol_files)} symbols (isolated, no cross-correlation)")
         logger.info(f"{'='*60}\n")
 
-        # Load all data
-        symbol_data = {}
-        for symbol, file_path in symbol_files.items():
-            file_path = Path(file_path)
-            if file_path.exists():
-                df = pd.read_parquet(file_path)
-                symbol_data[symbol.upper()] = df
-                logger.info(f"Loaded {symbol.upper()}: {len(df):,} rows")
-            else:
-                logger.warning(f"File not found for {symbol}: {file_path}")
-
-        # Check if we can compute cross-asset features
-        has_mes = 'MES' in symbol_data
-        has_mgc = 'MGC' in symbol_data
-        can_compute_cross_asset = compute_cross_asset and has_mes and has_mgc
-
-        cross_asset_data = None
-
-        if can_compute_cross_asset:
-            logger.info("Aligning MES and MGC data for cross-asset features...")
-
-            mes_df = symbol_data['MES'].copy()
-            mgc_df = symbol_data['MGC'].copy()
-
-            # Set datetime as index for alignment
-            mes_df = mes_df.set_index('datetime')
-            mgc_df = mgc_df.set_index('datetime')
-
-            # Get common timestamps
-            common_idx = mes_df.index.intersection(mgc_df.index)
-            logger.info(f"Common timestamps: {len(common_idx):,}")
-
-            if len(common_idx) > 0:
-                # Align data to common timestamps
-                mes_aligned = mes_df.loc[common_idx].reset_index()
-                mgc_aligned = mgc_df.loc[common_idx].reset_index()
-
-                # Update symbol_data with aligned data
-                symbol_data['MES'] = mes_aligned
-                symbol_data['MGC'] = mgc_aligned
-
-                # Prepare cross-asset data
-                cross_asset_data = {
-                    'mes_close': mes_aligned['close'].values,
-                    'mgc_close': mgc_aligned['close'].values
-                }
-            else:
-                logger.warning("No common timestamps found, skipping cross-asset features")
-                can_compute_cross_asset = False
-
-        # Process each symbol
+        # Process each symbol independently
         results = {}
         errors = []
-        for symbol, df in symbol_data.items():
-            try:
-                logger.info(f"\nProcessing {symbol}...")
 
-                # Engineer features with cross-asset data
-                df_features, feature_report = self.engineer_features(
-                    df,
-                    symbol,
-                    cross_asset_data=cross_asset_data if can_compute_cross_asset else None
-                )
+        for symbol, file_path in symbol_files.items():
+            file_path = Path(file_path)
+            if not file_path.exists():
+                logger.warning(f"File not found for {symbol}: {file_path}")
+                continue
+
+            try:
+                logger.info(f"\nProcessing {symbol.upper()}...")
+                df = pd.read_parquet(file_path)
+                logger.info(f"Loaded {symbol.upper()}: {len(df):,} rows")
+
+                # Engineer features (symbol isolated)
+                df_features, feature_report = self.engineer_features(df, symbol.upper())
 
                 # Save results
-                self.save_features(df_features, symbol, feature_report)
-                results[symbol] = feature_report
+                self.save_features(df_features, symbol.upper(), feature_report)
+                results[symbol.upper()] = feature_report
 
             except Exception as e:
                 errors.append({
@@ -638,7 +588,7 @@ class FeatureEngineer:
                 logger.error(f"Error processing {symbol}: {e}", exc_info=True)
 
         if errors:
-            error_summary = f"{len(errors)}/{len(symbol_data)} symbols failed"
+            error_summary = f"{len(errors)}/{len(symbol_files)} symbols failed"
             logger.error(f"Multi-symbol processing completed with errors: {error_summary}")
             raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 

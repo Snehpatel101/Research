@@ -40,6 +40,13 @@ import pandas as pd
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
 
+# Import shared constants from canonical source
+from src.phase1.utils.feature_sets import (
+    METADATA_COLUMNS,
+    LABEL_PREFIXES,
+    _is_label_column,
+)
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -53,20 +60,6 @@ VALID_SPLITS = {"train", "val", "test"}
 
 # Invalid label value (samples to exclude)
 INVALID_LABEL = -99
-
-# Metadata columns that should not be used as features
-METADATA_COLUMNS = frozenset({
-    "datetime", "symbol", "open", "high", "low", "close", "volume",
-    "timestamp", "date", "time", "timeframe",
-    "session_id", "missing_bar", "roll_event", "roll_window", "filled",
-})
-
-# Label column prefixes (not features)
-LABEL_PREFIXES = (
-    "label_", "bars_to_hit_", "mae_", "mfe_", "quality_", "sample_weight_",
-    "touch_type_", "pain_to_gain_", "time_weighted_dd_", "fwd_return_",
-    "fwd_return_log_", "time_to_hit_",
-)
 
 
 # =============================================================================
@@ -122,9 +115,7 @@ class SplitData:
 # HELPER FUNCTIONS
 # =============================================================================
 
-def _is_label_column(name: str) -> bool:
-    """Check if column is a label/target column."""
-    return any(name.startswith(prefix) for prefix in LABEL_PREFIXES)
+# _is_label_column imported from src.phase1.utils.feature_sets
 
 
 def _extract_feature_columns(

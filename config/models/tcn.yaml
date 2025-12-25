@@ -1,0 +1,47 @@
+# TCN Configuration
+# Temporal Convolutional Network with dilated convolutions
+# GPU: Optimized for CUDA acceleration
+
+# Model identification
+model:
+  name: tcn
+  family: neural
+  description: Temporal Convolutional Network with dilated causal convolutions
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  num_channels: [64, 64, 64, 64]  # 4 residual blocks
+  kernel_size: 3
+  dropout: 0.2
+  dilation_base: 2               # Dilations: 1, 2, 4, 8
+
+  # Input
+  sequence_length: 120           # Longer than LSTM due to efficient memory
+  input_features: null           # Auto-detected from data
+
+  # Learning
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+
+  # Optimizer
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+
+# Training settings
+training:
+  batch_size: 256
+  max_epochs: 100
+  early_stopping_patience: 15
+  min_delta: 0.0001
+  feature_set: neural_optimal
+  random_seed: 42
+  num_workers: 4
+  pin_memory: true
+
+# Device settings
+device:
+  default: auto                  # auto, cuda, or cpu
+  mixed_precision: true          # Use FP16 for faster training

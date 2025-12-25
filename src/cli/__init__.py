@@ -6,7 +6,7 @@ This module provides the main CLI application and aggregates commands from submo
 import typer
 
 from .utils import console, show_error, show_success, show_info, show_warning
-from .run_commands import run_command, rerun_command
+from .run_commands import run_command, rerun_command, models_command
 from .status_commands import (
     status_command,
     validate_command,
@@ -32,6 +32,7 @@ app.command(name="list-runs")(list_runs_command)
 app.command(name="compare")(compare_command)
 app.command(name="clean")(clean_command)
 app.command(name="presets")(presets_command)
+app.command(name="models")(models_command)
 
 
 def main() -> None:

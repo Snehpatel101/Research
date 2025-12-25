@@ -1,0 +1,44 @@
+# SVM Configuration
+# Support Vector Machine classifier
+# GPU: CPU-only (sklearn implementation)
+
+# Model identification
+model:
+  name: svm
+  family: classical
+  description: Support Vector Machine with RBF kernel
+
+# Default hyperparameters
+defaults:
+  # Kernel
+  kernel: rbf
+
+  # Regularization
+  C: 1.0
+  gamma: scale
+
+  # Class weights
+  class_weight: balanced
+
+  # Probability estimation (required for predict_proba)
+  probability: true
+
+  # Training limits
+  max_iter: 10000
+  tol: 0.001
+
+  # Cache size in MB (larger = faster, more memory)
+  cache_size: 1000
+
+  # Decision function
+  decision_function_shape: ovr
+
+# Training settings
+training:
+  feature_set: neural_optimal  # Requires scaling
+  random_seed: 42
+
+# Device settings
+device:
+  default: cpu                 # CPU-only model
+  mixed_precision: false       # Not applicable

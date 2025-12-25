@@ -99,6 +99,13 @@ class DataIngestor:
         self.source_timezone = source_timezone
         self.symbol_col = symbol_col
 
+        # Validate raw data directory exists
+        if not self.raw_data_dir.exists():
+            raise FileNotFoundError(
+                f"Raw data directory does not exist: {self.raw_data_dir}. "
+                f"Please place raw OHLCV files in this directory."
+            )
+
         # Create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

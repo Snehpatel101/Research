@@ -52,20 +52,16 @@ from src.phase1.config.features import (
     # Feature thresholds
     CORRELATION_THRESHOLD,
     VARIANCE_THRESHOLD,
-    CROSS_ASSET_FEATURES,
     MTF_CONFIG,
     STATIONARITY_TESTS,
     DRIFT_CONFIG,
     get_mtf_config,
     validate_mtf_config,
-    get_cross_asset_config,
     validate_feature_thresholds,
     get_stationarity_config,
     validate_stationarity_config,
     get_drift_config,
     validate_drift_config,
-    get_cross_asset_feature_names,
-    is_cross_asset_feature,
 )
 
 from src.common.horizon_config import (
@@ -110,6 +106,30 @@ from src.phase1.config.labels import (
     get_all_label_columns,
     is_label_column,
     get_label_metadata,
+)
+
+from src.phase1.config.model_config import (
+    ModelFamily,
+    ScalerType,
+    ModelDataRequirements,
+    EnsembleConfig,
+    MODEL_DATA_REQUIREMENTS,
+    ENSEMBLE_CONFIGS,
+    get_model_requirements,
+    get_ensemble_config,
+    get_models_by_family,
+    get_combined_requirements,
+    validate_model_config,
+    get_all_model_names,
+    get_all_ensemble_names,
+)
+
+from src.phase1.config.multi_model import (
+    MultiModelPipelineConfig,
+    build_multi_model_config,
+    expand_ensemble_models,
+    get_recommended_feature_set,
+    validate_multi_model_setup,
 )
 
 __all__ = [
@@ -181,20 +201,16 @@ __all__ = [
     # features
     'CORRELATION_THRESHOLD',
     'VARIANCE_THRESHOLD',
-    'CROSS_ASSET_FEATURES',
     'MTF_CONFIG',
     'STATIONARITY_TESTS',
     'DRIFT_CONFIG',
     'get_mtf_config',
     'validate_mtf_config',
-    'get_cross_asset_config',
     'validate_feature_thresholds',
     'get_stationarity_config',
     'validate_stationarity_config',
     'get_drift_config',
     'validate_drift_config',
-    'get_cross_asset_feature_names',
-    'is_cross_asset_feature',
     # labels
     'REQUIRED_LABEL_TEMPLATES',
     'OPTIONAL_LABEL_TEMPLATES',
@@ -205,4 +221,24 @@ __all__ = [
     'get_all_label_columns',
     'is_label_column',
     'get_label_metadata',
+    # model_config
+    'ModelFamily',
+    'ScalerType',
+    'ModelDataRequirements',
+    'EnsembleConfig',
+    'MODEL_DATA_REQUIREMENTS',
+    'ENSEMBLE_CONFIGS',
+    'get_model_requirements',
+    'get_ensemble_config',
+    'get_models_by_family',
+    'get_combined_requirements',
+    'validate_model_config',
+    'get_all_model_names',
+    'get_all_ensemble_names',
+    # multi_model
+    'MultiModelPipelineConfig',
+    'build_multi_model_config',
+    'expand_ensemble_models',
+    'get_recommended_feature_set',
+    'validate_multi_model_setup',
 ]

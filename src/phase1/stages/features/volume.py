@@ -167,8 +167,62 @@ def add_obv(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
     return df
 
 
+def add_dollar_volume(
+    df: pd.DataFrame,
+    feature_metadata: Dict[str, str],
+    periods: list = None
+) -> pd.DataFrame:
+    """
+    Add dollar volume features (price × volume).
+
+    Dollar volume is a better liquidity proxy than raw volume because
+    it accounts for price differences.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'close' and 'volume' columns
+    feature_metadata : Dict[str, str]
+        Dictionary to store feature descriptions
+    periods : list, optional
+        Periods for SMA calculation. Default: [10, 20]
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with dollar volume features added
+    """
+    if 'volume' not in df.columns or df['volume'].sum() == 0:
+        logger.info("Skipping dollar volume (no volume data)")
+        return df
+
+    if periods is None:
+        periods = [10, 20]
+
+    logger.info(f"Adding dollar volume features with periods: {periods}")
+
+    # ANTI-LOOKAHEAD: shift(1) ensures dollar_vol at bar[t] uses data up to bar[t-1]
+    dollar_vol_raw = df['close'] * df['volume']
+    df['dollar_volume'] = dollar_vol_raw.shift(1)
+
+    for period in periods:
+        col = f'dollar_volume_sma_{period}'
+        df[col] = dollar_vol_raw.rolling(period).mean().shift(1)
+        feature_metadata[col] = f"Dollar volume {period}-period SMA (lagged)"
+
+    # Dollar volume ratio (relative to 20-period mean)
+    dv_mean = dollar_vol_raw.rolling(20).mean()
+    df['dollar_volume_ratio'] = (dollar_vol_raw / dv_mean.replace(0, np.nan)).shift(1)
+
+    feature_metadata['dollar_volume'] = "Dollar volume (price × volume, lagged)"
+    feature_metadata['dollar_volume_ratio'] = "Dollar volume ratio to 20-period SMA (lagged)"
+
+    return df
+
+
 __all__ = [
     'add_volume_features',
     'add_vwap',
     'add_obv',
+    'add_dollar_volume',
 ]

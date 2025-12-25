@@ -1,0 +1,105 @@
+# Cross-Validation Configuration
+# Settings for time-series aware cross-validation
+
+# =============================================================================
+# TIME-SERIES CV SETTINGS
+# =============================================================================
+time_series_cv:
+  # Number of folds for expanding window CV
+  n_splits: 5
+
+  # Minimum samples in first training fold
+  min_train_samples: 10000
+
+  # Gap between train and validation (leakage prevention)
+  gap: 60                      # Same as purge_bars
+
+  # Whether to use expanding window or sliding window
+  expanding: true              # true = growing train set, false = fixed window
+
+# =============================================================================
+# PURGED K-FOLD SETTINGS
+# (For stacking and ensemble OOF predictions)
+# =============================================================================
+purged_kfold:
+  # Number of folds
+  n_splits: 5
+
+  # Purge overlap samples between folds
+  purge_overlap: 60
+
+  # Embargo samples at fold boundaries
+  embargo: 60
+
+# =============================================================================
+# WALK-FORWARD OPTIMIZATION
+# =============================================================================
+walk_forward:
+  # Enable walk-forward validation
+  enabled: true
+
+  # Retrain frequency (days)
+  retrain_every_days: 30
+
+  # Minimum days for training
+  min_train_days: 180
+
+  # Validation window (days)
+  validation_days: 30
+
+# =============================================================================
+# HYPERPARAMETER TUNING
+# =============================================================================
+hyperparameter_tuning:
+  # Tuning framework: optuna, ray
+  framework: optuna
+
+  # Number of trials
+  n_trials: 100
+
+  # Timeout (seconds)
+  timeout: 3600                # 1 hour
+
+  # Pruning
+  pruning: true
+  pruning_warmup_steps: 10
+
+  # Sampler
+  sampler: tpe                 # tpe, random, cmaes
+
+  # Storage for trials (optional)
+  storage: null                # e.g., "sqlite:///optuna.db"
+
+# =============================================================================
+# METRICS FOR CV
+# =============================================================================
+metrics:
+  # Primary metric for model selection
+  primary: f1_macro
+
+  # Additional metrics to track
+  additional:
+    - accuracy
+    - precision_macro
+    - recall_macro
+    - roc_auc_ovr
+
+  # Custom trading metrics
+  trading:
+    - sharpe_ratio
+    - max_drawdown
+    - win_rate
+
+# =============================================================================
+# AGGREGATION
+# =============================================================================
+aggregation:
+  # How to aggregate metrics across folds
+  method: mean                 # mean, median
+
+  # Report standard deviation
+  report_std: true
+
+  # Report confidence intervals
+  report_ci: true
+  ci_level: 0.95

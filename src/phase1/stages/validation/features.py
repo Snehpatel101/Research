@@ -11,13 +11,14 @@ from sklearn.ensemble import RandomForestClassifier
 logger = logging.getLogger(__name__)
 
 
-def get_feature_columns(df: pd.DataFrame, exclude_cross_asset_if_disabled: bool = True) -> List[str]:
+def get_feature_columns(df: pd.DataFrame) -> List[str]:
     """
     Identify feature columns in the DataFrame.
 
+    Each symbol is processed independently (no cross-symbol correlation).
+
     Args:
         df: DataFrame to analyze
-        exclude_cross_asset_if_disabled: If True, exclude cross-asset features when disabled in config
 
     Returns:
         List of feature column names
@@ -36,22 +37,6 @@ def get_feature_columns(df: pd.DataFrame, exclude_cross_asset_if_disabled: bool 
         if c not in excluded_cols
         and not any(c.startswith(prefix) for prefix in excluded_prefixes)
     ]
-
-    # Exclude cross-asset features if disabled in config
-    if exclude_cross_asset_if_disabled:
-        try:
-            from src.phase1.config.features import CROSS_ASSET_FEATURES, get_cross_asset_feature_names
-
-            if not CROSS_ASSET_FEATURES.get('enabled', True):
-                cross_asset_features = get_cross_asset_feature_names()
-                original_count = len(feature_cols)
-                feature_cols = [c for c in feature_cols if c not in cross_asset_features]
-                excluded_count = original_count - len(feature_cols)
-                if excluded_count > 0:
-                    logger.info(f"Excluded {excluded_count} disabled cross-asset features from validation")
-        except ImportError:
-            # Config not available, skip cross-asset exclusion
-            pass
 
     return feature_cols
 

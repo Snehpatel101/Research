@@ -16,13 +16,16 @@ class MTFMode(str, Enum):
 
 
 # Supported MTF timeframes with their minute equivalents
-# All values must be integer multiples of the base timeframe (typically 5min)
+# All values must be integer multiples of the base timeframe (1min)
 MTF_TIMEFRAMES = {
     # Base timeframe
+    '1min': 1,
     '5min': 5,
     # Short-term MTF
+    '10min': 10,
     '15min': 15,
     '30min': 30,
+    '45min': 45,
     # Hourly
     '60min': 60,
     '1h': 60,       # Alias for 60min
@@ -46,7 +49,7 @@ DEFAULT_MTF_TIMEFRAMES = ['15min', '30min', '1h', '4h', 'daily']
 DEFAULT_MTF_MODE = MTFMode.BOTH
 
 # Base timeframe for resampling
-DEFAULT_BASE_TIMEFRAME = '5min'
+DEFAULT_BASE_TIMEFRAME = '1min'
 
 # Minimum data requirements
 MIN_BASE_BARS = 100     # Minimum base TF bars required
@@ -55,9 +58,12 @@ MIN_MTF_BARS = 30       # Minimum MTF bars required per timeframe
 # Pandas frequency aliases for resampling
 # Maps our timeframe strings to pandas frequency strings
 PANDAS_FREQ_MAP = {
+    '1min': '1min',
     '5min': '5min',
+    '10min': '10min',
     '15min': '15min',
     '30min': '30min',
+    '45min': '45min',
     '60min': '60min',
     '1h': '1h',
     '4h': '4h',

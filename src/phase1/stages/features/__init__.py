@@ -18,8 +18,9 @@ Feature Categories:
     trend: ADX, Supertrend
     temporal: Time encoding, trading sessions
     regime: Volatility and trend regime classification
-    cross_asset: MES-MGC correlation, spread, beta, relative strength
     wavelets: Multi-scale wavelet decomposition (DWT coefficients, energy, trend)
+
+Note: Each symbol is processed independently (no cross-symbol correlation).
 
 Example:
     >>> from stages.features import FeatureEngineer
@@ -114,11 +115,6 @@ from .regime import (
     add_regime_features,
     add_volatility_regime,
     add_trend_regime,
-)
-
-# Feature functions - Cross Asset
-from .cross_asset import (
-    add_cross_asset_features,
 )
 
 # Feature functions - Microstructure
@@ -228,8 +224,6 @@ __all__ = [
     'add_regime_features',
     'add_volatility_regime',
     'add_trend_regime',
-    # Cross Asset
-    'add_cross_asset_features',
     # Microstructure
     'add_microstructure_features',
     'add_amihud_illiquidity',

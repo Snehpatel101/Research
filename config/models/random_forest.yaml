@@ -1,0 +1,36 @@
+# Random Forest Configuration
+# Ensemble of decision trees
+# GPU: CPU-only (sklearn implementation)
+
+# Model identification
+model:
+  name: random_forest
+  family: classical
+  description: Ensemble of decision trees with bagging
+
+# Default hyperparameters
+defaults:
+  # Forest parameters
+  n_estimators: 200
+  max_depth: 10
+  min_samples_split: 20
+  min_samples_leaf: 10
+  max_features: sqrt
+
+  # Class weights
+  class_weight: balanced
+
+  # Bootstrap
+  bootstrap: true
+  oob_score: false
+
+# Training settings
+training:
+  feature_set: boosting_optimal
+  random_seed: 42
+  n_jobs: -1                   # All CPU cores
+
+# Device settings
+device:
+  default: cpu                 # CPU-only model
+  mixed_precision: false       # Not applicable

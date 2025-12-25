@@ -34,7 +34,11 @@ def _get_git_commit_hash(project_root: Path) -> Optional[str]:
             capture_output=True,
             text=True,
         )
-    except Exception:
+    except subprocess.CalledProcessError as e:
+        logger.debug(f"Git command failed: {e}")
+        return None
+    except Exception as e:
+        logger.debug(f"Could not get git commit hash: {e}")
         return None
     return result.stdout.strip() or None
 
@@ -68,7 +72,8 @@ def run_final_labels(
         from src.phase1.config import TRANSACTION_COSTS
         try:
             from src import __version__ as src_version
-        except Exception:
+        except ImportError:
+            logger.debug("src.__version__ not available")
             src_version = None
 
         # GA results directory

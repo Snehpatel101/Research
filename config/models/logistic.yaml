@@ -1,0 +1,37 @@
+# Logistic Regression Configuration
+# Linear classifier (useful as meta-learner for ensembles)
+# GPU: CPU-only (sklearn implementation)
+
+# Model identification
+model:
+  name: logistic
+  family: classical
+  description: Logistic regression classifier - fast and interpretable
+
+# Default hyperparameters
+defaults:
+  # Regularization
+  penalty: l2
+  C: 1.0
+
+  # Solver
+  solver: lbfgs
+  max_iter: 500
+  tol: 0.0001
+
+  # Multi-class
+  multi_class: multinomial
+
+  # Class weights
+  class_weight: balanced
+
+# Training settings
+training:
+  feature_set: neural_optimal  # Requires scaling
+  random_seed: 42
+  n_jobs: -1                   # All CPU cores
+
+# Device settings
+device:
+  default: cpu                 # CPU-only model
+  mixed_precision: false       # Not applicable

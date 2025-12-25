@@ -1,20 +1,40 @@
-# ML Pipeline for OHLCV Time Series
+# ML Model Factory for OHLCV Time Series
 
-Modular Phase 1 data pipeline that turns raw OHLCV bars into model-ready datasets with leakage-safe splits, scaling, and labeling. Phase 2+ (model factory, CV, ensembles) is planned but not implemented here.
+Modular ML pipeline that turns raw OHLCV bars into trained models with leakage-safe splits, cross-validation, and unified evaluation.
 
 ```
 [ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3: CV ] → [ Phase 4: Ensemble ] → [ Phase 5: Prod ]
-    IMPLEMENTED          PLANNED            PLANNED           PLANNED             FUTURE
+    COMPLETE           COMPLETE            COMPLETE           COMPLETE            PLANNED
 ```
 
 ## Quick Start
 
 ```bash
-# Run Phase 1 pipeline with defaults (requires real data in data/raw/)
-./pipeline run --symbols MES,MGC
+# Run Phase 1 pipeline (requires real data in data/raw/)
+./pipeline run --symbols MGC
 
-# Check status
-./pipeline status <run_id>
+# Train a model (Phase 2)
+python scripts/train_model.py --model xgboost --horizon 20
+python scripts/train_model.py --model lstm --horizon 20 --seq-len 30
+
+# Run cross-validation (Phase 3)
+python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
+
+# Train ensemble (Phase 4)
+python scripts/train_model.py --model voting --base-models xgboost,lightgbm,lstm --horizon 20
+
+# List available models
+python scripts/train_model.py --list-models
+```
+
+**Colab Quick Start:**
+
+See [COLAB_GUIDE.md](docs/COLAB_GUIDE.md) for detailed setup instructions or use the quickstart notebooks:
+
+```bash
+notebooks/01_quickstart.ipynb              # Complete pipeline walkthrough
+notebooks/02_train_all_models.ipynb        # Train all 12 models
+notebooks/03_cross_validation.ipynb        # CV and hyperparameter tuning
 ```
 
 ```python
@@ -27,67 +47,112 @@ container = TimeSeriesDataContainer.from_parquet_dir(
 X_train, y_train, w_train = container.get_sklearn_arrays("train")
 ```
 
-## Pipeline Stages (Phase 1)
+## Available Models (12 Total)
 
-1) data_ingestion
-2) data_cleaning
-3) feature_engineering
-4) initial_labeling
-5) ga_optimize
-6) final_labels
-7) create_splits
-7.5) feature_scaling
-7.6) build_datasets
-7.7) validate_scaled
-8) validate
-9) generate_report
+| Family | Models | GPU Support | Status |
+|--------|--------|-------------|--------|
+| Boosting | XGBoost, LightGBM, CatBoost | Optional | Complete |
+| Neural | LSTM, GRU, TCN | Required (CUDA) | Complete |
+| Classical | Random Forest, Logistic, SVM | No | Complete |
+| Ensemble | Voting, Stacking, Blending | No | Complete |
+
+**All 12 models** implement the unified `BaseModel` interface and work with the same preprocessed datasets from Phase 1.
+
+## Pipeline Stages
+
+**Phase 1: Data Pipeline**
+1. Ingest - Load and validate raw OHLCV
+2. Clean - Resample 1min → 5min, handle gaps
+3. Features - 150+ indicators (momentum, wavelets, microstructure)
+4. Labels - Triple-barrier with symbol-specific asymmetric barriers
+5. GA Optimize - Optuna parameter optimization
+6. Final Labels - Apply optimized parameters
+7. Splits - Train/val/test with purge (60) and embargo (1440)
+8. Scaling - Train-only robust scaling
+9. Datasets - Build TimeSeriesDataContainer
+10. Validation - Feature correlation and quality checks
+
+**Phase 2: Model Factory**
+- Plugin-based model registry with `@register` decorator
+- Unified `BaseModel` interface for all model types
+- GPU-optimized training with mixed precision
+
+**Phase 3: Cross-Validation**
+- PurgedKFold with configurable purge/embargo
+- Walk-forward feature selection (MDA/MDI)
+- Out-of-fold predictions for stacking
+- Optuna hyperparameter tuning
+
+**Phase 4: Ensemble Models**
+- Voting ensembles (soft/hard voting)
+- Stacking with meta-learners
+- Blending with holdout predictions
+- Diversity analysis and model weighting
 
 ## Key Outputs
 
-- Labeled data: `data/final/{SYMBOL}_labeled.parquet`
-- Combined labeled data: `data/final/combined_final_labeled.parquet`
-- Scaled splits: `data/splits/scaled/train_scaled.parquet`, `val_scaled.parquet`, `test_scaled.parquet`
-- Dataset manifests: `runs/<run_id>/artifacts/feature_set_manifest.json`, `dataset_manifest.json`
-- Completion report: `results/PHASE1_COMPLETION_REPORT_<run_id>.md`
+- Scaled splits: `data/splits/scaled/train_scaled.parquet`
+- Trained models: `experiments/runs/<run_id>/`
+- CV results: `experiments/cv/<run_id>/`
 
-## Configuration Defaults (Phase 1)
+## Configuration
 
-- Horizons: `[5, 10, 15, 20]`
-- Timeframe: `5min` (resampled from 1-min bars)
-- Splits: `70/15/15` train/val/test
-- Purge/embargo: auto-scaled from horizons (embargo defaults to 1440 bars unless overridden)
+```python
+HORIZONS = [5, 10, 15, 20]      # Label horizons
+TRAIN/VAL/TEST = 70/15/15      # Split ratios
+PURGE_BARS = 60                # Prevent label leakage
+EMBARGO_BARS = 1440            # ~5 days for serial correlation
+```
 
 ## Project Structure
 
 ```
-.
 ├── src/
-│   ├── cli/                 # Typer CLI entrypoints
-│   ├── pipeline/            # Runner + stage registry
-│   ├── phase1/              # Phase 1 logic, configs, and stages
-│   └── common/              # Shared utilities (manifest, horizon config)
-├── data/                    # Raw/clean/features/final/splits
-├── runs/                    # Per-run configs/logs/artifacts
-├── results/                 # Reports and plots
-├── docs/                    # Docs (non-phase + phase specs)
-└── tests/                   # Phase 1 tests and fixtures
+│   ├── models/           # Phase 2: Model factory (12 models)
+│   │   ├── boosting/     # XGBoost, LightGBM, CatBoost
+│   │   ├── neural/       # LSTM, GRU, TCN
+│   │   ├── classical/    # Random Forest, Logistic, SVM
+│   │   └── ensemble/     # Voting, Stacking, Blending
+│   ├── cross_validation/ # Phase 3: CV system
+│   ├── phase1/           # Phase 1: Data pipeline
+│   └── cli/              # CLI entrypoints
+├── scripts/              # Training scripts
+├── config/models/        # Model YAML configs (12 configs)
+├── notebooks/            # Jupyter/Colab notebooks (4 notebooks)
+├── data/                 # Data artifacts
+├── experiments/          # Training outputs
+└── tests/                # Test suite (1592 passing, 13 skipped)
 ```
 
 ## Documentation
 
-- `docs/README.md`
-- `docs/getting-started/QUICKSTART.md`
-- `docs/getting-started/PIPELINE_CLI.md`
-- `docs/reference/ARCHITECTURE.md`
-- `docs/reference/FEATURES.md`
+- `ARCHITECTURE_MAP.md` - Visual system architecture with all 12 models
+- `CLAUDE.md` - Development guidelines and factory pattern
+- `docs/phases/` - Phase specifications (Phases 1-5)
+- `docs/COLAB_GUIDE.md` - Google Colab setup and GPU configuration
+- `notebooks/` - Interactive Jupyter/Colab notebooks
 
-## Engineering Principles
+## Notebooks
 
-1) Modularity: small, composable modules
-2) Fail fast: validate at boundaries
-3) No leakage: purge/embargo + train-only scaling
-4) Keep it simple: remove unused code
+Four interactive notebooks for training and experimentation:
 
----
+1. `01_quickstart.ipynb` - Complete pipeline walkthrough
+2. `02_train_all_models.ipynb` - Train all 12 models across horizons
+3. `03_cross_validation.ipynb` - CV and hyperparameter tuning
+4. `Phase1_Pipeline_Colab.ipynb` - Phase 1 on Google Colab with GPU
 
-Phase 1 is implemented; Phase 2+ is planned.
+## Tests
+
+**Test Coverage: 1592 tests passing, 13 skipped**
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run model tests only
+python -m pytest tests/models tests/cross_validation -v
+
+# Run specific model family
+python -m pytest tests/models/test_classical_models.py -v
+python -m pytest tests/models/test_ensemble_models.py -v
+```

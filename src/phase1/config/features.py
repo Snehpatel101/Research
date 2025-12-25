@@ -153,20 +153,27 @@ SUPPORTED_HORIZONS = [5, 10, 15, 20]
 # Features with correlation above this threshold will be removed (keeping the
 # most interpretable feature from each correlated group).
 #
-# CRITICAL: The previous default of 0.95 was too lenient. Features with 0.70+
-# correlation cause multicollinearity issues during ML training, leading to:
-# - Unstable coefficient estimates
-# - Inflated variance in predictions
-# - Reduced model interpretability
+# Industry Standard: 0.80 is widely accepted in ML practice as the threshold
+# where multicollinearity begins to cause significant issues.
 #
-# Lowering to 0.70 provides aggressive pruning which is desirable for:
-# - Reducing overfitting in ensemble models
-# - Improving feature importance reliability
-# - Faster training with fewer redundant features
+# Rationale for 0.80:
+# - Below 0.80: Multicollinearity is generally acceptable for most model types
+# - 0.80-0.90: Moderate correlation; some models (e.g., linear) may suffer
+# - Above 0.90: High correlation; likely redundant information
+#
+# Note: 0.70 was previously used but is too aggressive for this codebase:
+# - With 150+ features, aggressive pruning can remove useful signal
+# - Tree-based models (XGBoost, LightGBM) handle correlated features well
+# - Neural networks with dropout are robust to moderate correlation
+#
+# Model-family considerations:
+# - Boosting (XGBoost, LightGBM): Tolerant of correlation, 0.80-0.90 acceptable
+# - Neural (LSTM, Transformer): Moderate tolerance, 0.80 preferred
+# - Linear models: Most sensitive, may need 0.70 for stability
 #
 # Lower values = more aggressive pruning = fewer features = less multicollinearity
 # Higher values = less pruning = more features = potential multicollinearity
-CORRELATION_THRESHOLD = 0.70
+CORRELATION_THRESHOLD = 0.80
 
 # VARIANCE_THRESHOLD: Minimum variance for a feature to be retained.
 # Features with variance below this threshold are considered near-constant
@@ -175,42 +182,12 @@ VARIANCE_THRESHOLD = 0.01
 
 
 # =============================================================================
-# CROSS-ASSET FEATURE CONFIGURATION
+# SYMBOL ISOLATION POLICY
 # =============================================================================
-# Cross-asset features capture relationships between MES (S&P 500 futures) and
-# MGC (Gold futures), which often exhibit interesting correlation dynamics:
-# - Risk-on/risk-off regimes: MES up, MGC down (and vice versa)
-# - Flight to safety: MES down, MGC up during market stress
-# - Inflation hedging: Both assets may move together during inflation concerns
-#
-# These features are computed when both symbols are present in the data.
-
-CROSS_ASSET_FEATURES = {
-    # CRITICAL: Cross-asset features require BOTH MES and MGC symbols
-    # Since we trade one market at a time, these features are disabled by default
-    # Set to True only when running multi-symbol analysis with both MES and MGC
-    'enabled': False,
-    'symbols': ['MES', 'MGC'],  # Symbol pair for cross-asset features
-    'min_symbols': 2,  # Require at least 2 symbols for cross-asset features
-    'features': {
-        'mes_mgc_correlation_20': {
-            'description': '20-bar rolling correlation between MES and MGC returns',
-            'lookback': 20
-        },
-        'mes_mgc_spread_zscore': {
-            'description': 'Z-score of spread between normalized MES and MGC prices',
-            'lookback': 20
-        },
-        'mes_mgc_beta': {
-            'description': 'Rolling beta of MES returns vs MGC returns',
-            'lookback': 20
-        },
-        'relative_strength': {
-            'description': 'MES return minus MGC return (momentum divergence)',
-            'lookback': 20
-        }
-    }
-}
+# Each symbol is processed independently. No cross-symbol correlation features
+# are computed to ensure complete symbol isolation as required by the ML Factory
+# design. This prevents data leakage between symbols and ensures each model
+# can be trained on a single symbol's data without dependencies on other symbols.
 
 
 # =============================================================================
@@ -236,12 +213,12 @@ MTF_CONFIG = {
     'enabled': True,
 
     # Base timeframe of the input data
-    'base_timeframe': '5min',
+    'base_timeframe': '1min',
 
     # Higher timeframes to compute features for
-    # Must be integer multiples of base_timeframe
-    # Supported: '15min', '30min', '1h', '4h', 'daily'
-    'mtf_timeframes': ['15min', '30min', '1h', '4h', 'daily'],
+    # All TFs must be >= base timeframe (1min) since we resample UP
+    # Higher TFs capture broader market structure
+    'mtf_timeframes': ['5min', '10min', '15min', '30min', '45min', '60min'],
 
     # Include raw OHLCV from higher TFs
     # Features: open_15m, high_15m, low_15m, close_15m, volume_15m, etc.
@@ -324,7 +301,7 @@ def validate_mtf_config(config: dict = None) -> list[str]:
         )
 
     # Validate MTF timeframes
-    valid_mtf_tfs = ['15min', '30min', '60min', '1h']
+    valid_mtf_tfs = ['1min', '5min', '10min', '15min', '30min', '45min', '60min', '1h']
     for tf in config.get('mtf_timeframes', []):
         if tf not in valid_mtf_tfs:
             errors.append(
@@ -343,19 +320,6 @@ def validate_mtf_config(config: dict = None) -> list[str]:
         )
 
     return errors
-
-
-def get_cross_asset_config() -> dict:
-    """
-    Get the cross-asset feature configuration dictionary.
-
-    Returns
-    -------
-    dict
-        Copy of CROSS_ASSET_FEATURES
-    """
-    import copy
-    return copy.deepcopy(CROSS_ASSET_FEATURES)
 
 
 def validate_feature_thresholds() -> list[str]:
@@ -434,30 +398,3 @@ def validate_drift_config() -> list[str]:
     return errors
 
 
-def get_cross_asset_feature_names() -> list[str]:
-    """
-    Get list of cross-asset feature names.
-
-    Returns
-    -------
-    list[str]
-        List of cross-asset feature column names
-    """
-    return list(CROSS_ASSET_FEATURES['features'].keys())
-
-
-def is_cross_asset_feature(feature_name: str) -> bool:
-    """
-    Check if a feature name is a cross-asset feature.
-
-    Parameters
-    ----------
-    feature_name : str
-        Name of the feature to check
-
-    Returns
-    -------
-    bool
-        True if the feature is a cross-asset feature, False otherwise
-    """
-    return feature_name in CROSS_ASSET_FEATURES['features']

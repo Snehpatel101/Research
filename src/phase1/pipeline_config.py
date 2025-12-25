@@ -33,7 +33,8 @@ class PipelineConfig:
     description: str = "Phase 1 pipeline run"
 
     # Data parameters
-    symbols: List[str] = field(default_factory=lambda: ['MES', 'MGC'])
+    # Default to single symbol (MES). Use allow_multi_symbol=True for multi-symbol runs.
+    symbols: List[str] = field(default_factory=lambda: ['MES'])
     start_date: Optional[str] = None  # YYYY-MM-DD format
     end_date: Optional[str] = None    # YYYY-MM-DD format
 
@@ -101,6 +102,31 @@ class PipelineConfig:
     # Processing options
     n_jobs: int = -1  # -1 for all cores
     random_seed: int = 42
+
+    # Single-symbol enforcement
+    # By default, pipeline enforces single-symbol runs to prevent accidental data mixing.
+    # Set to True to explicitly allow multi-symbol runs (combines data into one dataset).
+    allow_multi_symbol: bool = False
+
+    # Feature toggles - control which feature groups are generated
+    # Keys: 'wavelets', 'microstructure', 'volume', 'volatility'
+    # Values: True (enable) or False (disable)
+    # If None, all features are enabled by default
+    feature_toggles: Optional[Dict[str, bool]] = None
+
+    # Barrier overrides - custom barrier parameters that override symbol-specific defaults
+    # Keys: 'k_up', 'k_down', 'max_bars'
+    # Use for custom labeling experiments
+    barrier_overrides: Optional[Dict[str, float]] = None
+
+    # Scaler type for feature scaling
+    # Options: 'robust' (default), 'standard', 'minmax', 'quantile', 'none'
+    scaler_type: str = 'robust'
+
+    # Model configuration for Phase 2+ model training
+    # Keys: 'model_type', 'base_models', 'meta_learner', 'sequence_length'
+    # Used to prepare appropriate datasets for specific model types
+    model_config: Optional[Dict[str, Any]] = None
 
     # Paths (auto-generated from run_id)
     project_root: Path = field(default=None)
@@ -206,6 +232,17 @@ class PipelineConfig:
         # Validate symbols
         if not self.symbols:
             raise ValueError("At least one symbol must be specified")
+
+        # Enforce single-symbol runs by default
+        if len(self.symbols) > 1 and not self.allow_multi_symbol:
+            raise ValueError(
+                f"Multi-symbol runs are not allowed by default. "
+                f"Got {len(self.symbols)} symbols: {self.symbols}. "
+                f"The pipeline is designed for single-symbol operation to prevent "
+                f"accidental data mixing in splits and labels. "
+                f"To explicitly allow multi-symbol, pass --multi-symbol flag in CLI "
+                f"or set allow_multi_symbol=True in config."
+            )
 
     @property
     def data_dir(self) -> Path:
@@ -396,6 +433,14 @@ class PipelineConfig:
         if not self.symbols:
             issues.append("At least one symbol must be specified")
 
+        # Check single-symbol enforcement
+        if len(self.symbols) > 1 and not self.allow_multi_symbol:
+            issues.append(
+                f"Multi-symbol runs require explicit opt-in. "
+                f"Got {len(self.symbols)} symbols: {self.symbols}. "
+                f"Use --multi-symbol flag or set allow_multi_symbol=True."
+            )
+
         # Check label horizons
         if not self.label_horizons:
             issues.append("At least one label horizon must be specified")
@@ -461,6 +506,54 @@ class PipelineConfig:
 
         issues.extend(validate_feature_set_config(self.feature_set))
 
+        # Validate scaler type
+        valid_scaler_types = ['robust', 'standard', 'minmax', 'quantile', 'none']
+        if self.scaler_type not in valid_scaler_types:
+            issues.append(
+                f"scaler_type must be one of {valid_scaler_types}, got '{self.scaler_type}'"
+            )
+
+        # Validate feature toggles if provided
+        if self.feature_toggles is not None:
+            valid_toggle_keys = {'wavelets', 'microstructure', 'volume', 'volatility'}
+            for key in self.feature_toggles.keys():
+                if key not in valid_toggle_keys:
+                    issues.append(
+                        f"Unknown feature toggle key: '{key}'. "
+                        f"Valid keys: {valid_toggle_keys}"
+                    )
+
+        # Validate barrier overrides if provided
+        if self.barrier_overrides is not None:
+            valid_barrier_keys = {'k_up', 'k_down', 'max_bars'}
+            for key, value in self.barrier_overrides.items():
+                if key not in valid_barrier_keys:
+                    issues.append(
+                        f"Unknown barrier override key: '{key}'. "
+                        f"Valid keys: {valid_barrier_keys}"
+                    )
+                elif key in ('k_up', 'k_down') and value <= 0:
+                    issues.append(f"barrier_overrides['{key}'] must be > 0, got {value}")
+                elif key == 'max_bars' and value < 1:
+                    issues.append(f"barrier_overrides['max_bars'] must be >= 1, got {value}")
+
+        # Validate model config if provided
+        if self.model_config is not None:
+            valid_model_keys = {'model_type', 'base_models', 'meta_learner', 'sequence_length'}
+            for key in self.model_config.keys():
+                if key not in valid_model_keys:
+                    issues.append(
+                        f"Unknown model_config key: '{key}'. "
+                        f"Valid keys: {valid_model_keys}"
+                    )
+            # Validate sequence_length if provided
+            if 'sequence_length' in self.model_config:
+                seq_len = self.model_config['sequence_length']
+                if not isinstance(seq_len, int) or seq_len < 1:
+                    issues.append(
+                        f"model_config['sequence_length'] must be a positive integer, got {seq_len}"
+                    )
+
         return issues
 
     def summary(self) -> str:
@@ -473,6 +566,7 @@ Description: {self.description}
 
 Data Parameters:
   - Symbols: {', '.join(self.symbols)}
+  - Multi-Symbol Mode: {'Enabled' if self.allow_multi_symbol else 'Disabled (single-symbol only)'}
   - Date Range: {self.start_date or 'N/A'} to {self.end_date or 'N/A'}
   - Target Timeframe: {self.target_timeframe}
 
@@ -505,6 +599,13 @@ GA Settings (Phase 2):
   - Crossover Rate: {self.ga_crossover_rate}
   - Mutation Rate: {self.ga_mutation_rate}
   - Elite Size: {self.ga_elite_size}
+
+Scaling:
+  - Scaler Type: {self.scaler_type}
+
+Feature Toggles: {self.feature_toggles or 'All enabled (default)'}
+Barrier Overrides: {self.barrier_overrides or 'Using symbol-specific defaults'}
+Model Config: {self.model_config or 'Not specified'}
 
 Paths:
   - Project Root: {self.project_root}

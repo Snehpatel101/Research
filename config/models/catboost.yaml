@@ -1,0 +1,46 @@
+# CatBoost Configuration
+# Gradient boosting with ordered boosting
+# GPU: Native GPU support with excellent performance (task_type='GPU')
+
+# Model identification
+model:
+  name: catboost
+  family: boosting
+  description: Gradient boosting with ordered boosting and categorical feature support
+
+# Default hyperparameters
+defaults:
+  # Tree parameters
+  iterations: 500              # Number of boosting rounds
+  depth: 6                     # Tree depth (max 16 for GPU)
+  learning_rate: 0.05
+  l2_leaf_reg: 3.0             # L2 regularization
+
+  # CatBoost-specific regularization
+  random_strength: 1.0         # Random noise for scoring splits
+  bagging_temperature: 1.0     # Bayesian bootstrap temperature
+
+  # Categorical features (indices if applicable)
+  cat_features: []             # List of categorical feature indices
+
+  # Training
+  early_stopping_rounds: 50
+  use_best_model: true         # Return best iteration model
+  loss_function: MultiClass
+  eval_metric: MultiClass
+
+  # GPU device ID (when using GPU)
+  devices: '0'
+
+# Training settings
+training:
+  feature_set: boosting_optimal
+  random_seed: 42
+  thread_count: -1             # All cores when on CPU
+  verbose: false               # Silent mode
+
+# Device settings
+device:
+  default: auto                # auto, cuda, or cpu
+  use_gpu: true                # Enable GPU acceleration if available
+  mixed_precision: false       # Not applicable to tree methods

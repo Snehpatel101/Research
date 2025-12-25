@@ -75,6 +75,14 @@ class DataCleaner:
         """
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
+
+        # Validate input directory exists
+        if not self.input_dir.exists():
+            raise FileNotFoundError(
+                f"Input directory does not exist: {self.input_dir}. "
+                f"Please run the ingest stage first or provide a valid path."
+            )
+
         self.timeframe = timeframe
         self.target_timeframe = target_timeframe
         self.gap_fill_method = gap_fill_method

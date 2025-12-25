@@ -1,0 +1,38 @@
+# Voting Ensemble Configuration
+# Combine predictions from multiple base models
+# GPU: Depends on base models
+
+# Model identification
+model:
+  name: voting
+  family: ensemble
+  description: Voting ensemble combining predictions via majority vote or averaging
+
+# Default hyperparameters
+defaults:
+  # Voting strategy
+  voting: soft                 # "hard" for majority vote, "soft" for probability averaging
+
+  # Model weights (optional)
+  # If null, all models weighted equally
+  # If list, weights must match number of base models
+  weights: null
+
+  # Base models to train (if training from scratch)
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+
+  # Per-model config overrides
+  base_model_configs: {}
+
+# Training settings
+training:
+  feature_set: boosting_optimal
+  random_seed: 42
+
+# Device settings
+device:
+  default: auto                # Inherited from base models
+  mixed_precision: false       # Inherited from base models

@@ -61,7 +61,8 @@ def _compute_dwt_rolling(
                 detail_idx = level - lev
                 if len(coeffs[detail_idx]) > 0:
                     details[lev][i] = coeffs[detail_idx][-1]
-        except Exception:
+        except Exception as e:
+            logger.debug(f"DWT failed for window ending at index {i}: {e}")
             continue
     return approx, details
 
@@ -85,7 +86,8 @@ def _compute_energy_rolling(
             approx_energy[i] = np.sum(coeffs[0] ** 2)
             for lev in range(level):
                 detail_energies[lev][i] = np.sum(coeffs[level - lev] ** 2)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Wavelet energy failed for window ending at index {i}: {e}")
             continue
     return approx_energy, detail_energies
 
@@ -237,7 +239,8 @@ def add_wavelet_volatility(
             _, detail = pywt.dwt(window_data, wavelet)
             mad = np.median(np.abs(detail - np.median(detail)))
             wavelet_vol[i] = mad / 0.6745  # MAD to sigma for Gaussian
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Wavelet volatility failed for window ending at index {i}: {e}")
             continue
 
     # ANTI-LOOKAHEAD: shift(1)
@@ -282,7 +285,8 @@ def add_wavelet_trend_strength(
                 if std > 1e-10:
                     trend_strength[i] = np.abs(slope) / std
                     trend_direction[i] = np.sign(slope)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Wavelet trend failed for window ending at index {i}: {e}")
             continue
 
     # ANTI-LOOKAHEAD: shift(1)
