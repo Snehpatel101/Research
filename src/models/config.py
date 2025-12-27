@@ -1,18 +1,7 @@
 """
 Model Configuration - YAML config loading and CLI arg merging.
 
-This module handles:
-- Loading model configurations from YAML files
-- Merging CLI arguments with file configs
-- Validating configuration values
-- Providing default configurations
-- Environment-specific overrides (Colab, local, etc.)
-
-Configuration precedence (highest to lowest):
-1. CLI arguments (--param value)
-2. YAML config file
-3. Environment-specific overrides
-4. Model default config (from get_default_config)
+Precedence: CLI args > YAML file > Environment overrides > Model defaults
 """
 from __future__ import annotations
 
@@ -52,27 +41,18 @@ class Environment(Enum):
 
 
 def detect_environment() -> Environment:
-    """
-    Detect the current execution environment.
-
-    Returns:
-        Environment enum indicating detected environment
-    """
-    # Check for Google Colab
+    """Detect execution environment (Colab/GPU/CPU)."""
     try:
         import google.colab  # noqa: F401
         return Environment.COLAB
     except ImportError:
         pass
-
-    # Check for GPU availability
     try:
         import torch
         if torch.cuda.is_available():
             return Environment.LOCAL_GPU
     except ImportError:
         pass
-
     return Environment.LOCAL_CPU
 
 
@@ -82,15 +62,7 @@ def is_colab() -> bool:
 
 
 def resolve_device(device_setting: str = "auto") -> str:
-    """
-    Resolve device setting to actual device.
-
-    Args:
-        device_setting: Device setting ("auto", "cuda", "cpu")
-
-    Returns:
-        Resolved device string ("cuda" or "cpu")
-    """
+    """Resolve device setting to actual device ("cuda"/"cpu")."""
     if device_setting == "auto":
         try:
             import torch
@@ -106,29 +78,7 @@ def resolve_device(device_setting: str = "auto") -> str:
 
 @dataclass
 class TrainerConfig:
-    """
-    Configuration for model training.
-
-    Combines model hyperparameters with training settings like
-    batch size, epochs, and early stopping.
-
-    Attributes:
-        model_name: Name of the model to train
-        horizon: Label horizon (5, 10, 15, 20)
-        feature_set: Feature set name for data loading
-        sequence_length: Sequence length for sequential models
-        batch_size: Training batch size
-        max_epochs: Maximum training epochs
-        early_stopping_patience: Epochs without improvement before stopping
-        random_seed: Random seed for reproducibility
-        experiment_name: Name for experiment tracking
-        output_dir: Directory for saving outputs
-        model_config: Model-specific hyperparameters
-        device: Device to use ('cuda', 'cpu', 'auto')
-        mixed_precision: Whether to use mixed precision training
-        num_workers: DataLoader workers for data loading
-        pin_memory: Pin memory for GPU transfer
-    """
+    """Configuration for model training (hyperparameters + training settings)."""
     model_name: str
     horizon: int = 20
     feature_set: str = "boosting_optimal"
@@ -195,27 +145,48 @@ class TrainerConfig:
 # YAML CONFIG LOADING
 # =============================================================================
 
-def load_yaml_config(path: Union[str, Path]) -> Dict[str, Any]:
+def load_yaml_config(
+    path: Union[str, Path],
+    explicit: bool = False,
+) -> Dict[str, Any]:
     """
     Load configuration from a YAML file.
 
     Args:
         path: Path to YAML configuration file
+        explicit: If True, raise ConfigError on any failure (user-requested config).
+                 If False, allow FileNotFoundError to propagate (auto-discovery).
 
     Returns:
         Dictionary with configuration values
 
     Raises:
-        FileNotFoundError: If file doesn't exist
-        yaml.YAMLError: If file is not valid YAML
+        FileNotFoundError: If file doesn't exist and explicit=False
+        ConfigError: If explicit=True and loading/parsing fails
+        yaml.YAMLError: If file is not valid YAML and explicit=False
     """
     path = Path(path)
 
     if not path.exists():
+        if explicit:
+            raise ConfigError(
+                f"Configuration file not found: {path.absolute()}\n"
+                f"Suggestion: Check that the file exists and the path is correct."
+            )
         raise FileNotFoundError(f"Config file not found: {path}")
 
-    with open(path, "r") as f:
-        config = yaml.safe_load(f)
+    try:
+        with open(path, "r") as f:
+            config = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        error_msg = (
+            f"Failed to parse YAML configuration from {path.absolute()}\n"
+            f"Error: {e}\n"
+            f"Suggestion: Check that the file contains valid YAML syntax."
+        )
+        if explicit:
+            raise ConfigError(error_msg) from e
+        raise
 
     if config is None:
         logger.warning(f"Empty config file: {path}")
@@ -229,29 +200,50 @@ def load_model_config(
     model_name: str,
     config_dir: Optional[Path] = None,
     flatten: bool = True,
+    explicit: bool = False,
 ) -> Dict[str, Any]:
     """
     Load model-specific configuration from YAML.
 
     Looks for config file at: {config_dir}/{model_name}.yaml
-    Supports the new structured format with model/defaults/training/device sections.
 
     Args:
         model_name: Name of the model (e.g., "xgboost", "lstm")
         config_dir: Config directory (defaults to config/models/)
         flatten: If True, flatten the nested structure for backward compatibility
+        explicit: If True, fail hard on any loading error (user-requested config).
+                 If False, warnings are logged for missing configs (auto-discovery).
 
     Returns:
         Model configuration dictionary
 
     Raises:
-        FileNotFoundError: If config file doesn't exist
+        ConfigError: If explicit=True and loading fails
+        FileNotFoundError: If config file doesn't exist (when not explicit)
     """
     if config_dir is None:
         config_dir = CONFIG_DIR
 
     config_path = config_dir / f"{model_name}.yaml"
-    raw_config = load_yaml_config(config_path)
+
+    try:
+        raw_config = load_yaml_config(config_path, explicit=explicit)
+    except FileNotFoundError:
+        if explicit:
+            raise ConfigError(
+                f"Model configuration not found for '{model_name}'\n"
+                f"Expected location: {config_path.absolute()}\n"
+                f"Suggestion: Check that the model name is correct and the config file exists."
+            )
+        raise
+    except Exception as e:
+        if explicit:
+            raise ConfigError(
+                f"Failed to load model configuration for '{model_name}' from {config_path.absolute()}\n"
+                f"Error: {e}\n"
+                f"Suggestion: Check that the file exists and has valid YAML syntax."
+            ) from e
+        raise
 
     if not flatten:
         return raw_config
@@ -261,33 +253,7 @@ def load_model_config(
 
 
 def flatten_model_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Flatten structured model config to flat dictionary.
-
-    Converts:
-        model:
-          name: xgboost
-          family: boosting
-        defaults:
-          n_estimators: 500
-        training:
-          batch_size: 256
-        device:
-          default: auto
-
-    To:
-        model_name: xgboost
-        model_family: boosting
-        n_estimators: 500
-        batch_size: 256
-        device: auto
-
-    Args:
-        config: Nested configuration dictionary
-
-    Returns:
-        Flattened configuration dictionary
-    """
+    """Flatten structured config (model/defaults/training/device sections) to flat dict."""
     result = {}
 
     # Extract model metadata
@@ -331,16 +297,7 @@ def find_model_config(
     model_name: str,
     config_dir: Optional[Path] = None,
 ) -> Optional[Path]:
-    """
-    Find model config file if it exists.
-
-    Args:
-        model_name: Name of the model
-        config_dir: Config directory to search
-
-    Returns:
-        Path to config file if found, None otherwise
-    """
+    """Find model config file if it exists."""
     if config_dir is None:
         config_dir = CONFIG_DIR
 
@@ -349,12 +306,7 @@ def find_model_config(
 
 
 def load_training_config() -> Dict[str, Any]:
-    """
-    Load global training configuration.
-
-    Returns:
-        Training configuration dictionary
-    """
+    """Load global training configuration."""
     if TRAINING_CONFIG_PATH.exists():
         return load_yaml_config(TRAINING_CONFIG_PATH)
     logger.warning(f"Training config not found: {TRAINING_CONFIG_PATH}")
@@ -362,12 +314,7 @@ def load_training_config() -> Dict[str, Any]:
 
 
 def load_cv_config() -> Dict[str, Any]:
-    """
-    Load cross-validation configuration.
-
-    Returns:
-        CV configuration dictionary
-    """
+    """Load cross-validation configuration."""
     if CV_CONFIG_PATH.exists():
         return load_yaml_config(CV_CONFIG_PATH)
     logger.warning(f"CV config not found: {CV_CONFIG_PATH}")
@@ -377,29 +324,19 @@ def load_cv_config() -> Dict[str, Any]:
 def get_environment_overrides(
     training_config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    Get environment-specific configuration overrides.
-
-    Args:
-        training_config: Training config with environments section
-
-    Returns:
-        Environment-specific overrides
-    """
+    """Get environment-specific configuration overrides."""
     if training_config is None:
         training_config = load_training_config()
 
     environments = training_config.get("environments", {})
     env = detect_environment()
 
-    if env == Environment.COLAB:
-        return environments.get("colab", {})
-    elif env == Environment.LOCAL_GPU:
-        return environments.get("local_gpu", {})
-    elif env == Environment.LOCAL_CPU:
-        return environments.get("local_cpu", {})
-
-    return {}
+    env_map = {
+        Environment.COLAB: "colab",
+        Environment.LOCAL_GPU: "local_gpu",
+        Environment.LOCAL_CPU: "local_cpu",
+    }
+    return environments.get(env_map.get(env, ""), {})
 
 
 # =============================================================================
@@ -411,19 +348,7 @@ def merge_configs(
     override: Dict[str, Any],
     deep: bool = True,
 ) -> Dict[str, Any]:
-    """
-    Merge two configuration dictionaries.
-
-    Override values take precedence over base values.
-
-    Args:
-        base: Base configuration
-        override: Override configuration (higher priority)
-        deep: If True, merge nested dicts recursively
-
-    Returns:
-        Merged configuration
-    """
+    """Merge configs (override takes precedence, supports deep merge)."""
     result = base.copy()
 
     for key, value in override.items():
@@ -452,33 +377,40 @@ def build_config(
 
     Configuration precedence (highest to lowest):
     1. CLI arguments
-    2. Config file
+    2. Config file (if explicitly provided, FAIL HARD on errors)
     3. Environment-specific overrides
-    4. Model-specific YAML (config/models/{model_name}.yaml)
+    4. Model-specific YAML (config/models/{model_name}.yaml - warn on errors)
     5. Provided defaults
 
     Args:
         model_name: Name of the model
         cli_args: Arguments from CLI (highest priority)
-        config_file: Path to override config file
+        config_file: Path to override config file (if provided, FAIL HARD on errors)
         defaults: Default configuration (lowest priority)
         apply_environment_overrides: Apply environment-specific settings
 
     Returns:
         Complete merged configuration
+
+    Raises:
+        ConfigError: If config_file is explicitly provided and loading fails
     """
     # Start with defaults
     config = defaults.copy() if defaults else {}
 
-    # Try to load model-specific YAML from config/models/
+    # Try to load model-specific YAML from config/models/ (auto-discovery, warn on failure)
     model_config_path = find_model_config(model_name)
     if model_config_path:
         try:
-            model_yaml = load_model_config(model_name, flatten=True)
+            model_yaml = load_model_config(model_name, flatten=True, explicit=False)
             config = merge_configs(config, model_yaml)
             logger.debug(f"Merged config from {model_config_path}")
         except Exception as e:
-            logger.warning(f"Failed to load {model_config_path}: {e}")
+            # Auto-discovery: warn and continue
+            logger.warning(
+                f"Failed to load default config from {model_config_path}: {e}. "
+                f"Using built-in defaults."
+            )
 
     # Apply environment-specific overrides
     if apply_environment_overrides:
@@ -494,14 +426,25 @@ def build_config(
             config = merge_configs(config, flat_overrides)
             logger.debug(f"Applied environment overrides: {detect_environment().value}")
 
-    # Load explicit config file if provided
+    # Load explicit config file if provided (FAIL HARD on errors)
     if config_file:
-        file_config = load_yaml_config(config_file)
-        # Flatten if structured
-        if any(k in file_config for k in ["model", "defaults", "training", "device"]):
-            file_config = flatten_model_config(file_config)
-        config = merge_configs(config, file_config)
-        logger.debug(f"Merged config from {config_file}")
+        try:
+            file_config = load_yaml_config(config_file, explicit=True)
+            # Flatten if structured
+            if any(k in file_config for k in ["model", "defaults", "training", "device"]):
+                file_config = flatten_model_config(file_config)
+            config = merge_configs(config, file_config)
+            logger.debug(f"Merged config from {config_file}")
+        except ConfigError:
+            # Re-raise ConfigError as-is (already has good error message)
+            raise
+        except Exception as e:
+            # Wrap unexpected exceptions
+            raise ConfigError(
+                f"Failed to load configuration from {Path(config_file).absolute()}\n"
+                f"Error: {e}\n"
+                f"Suggestion: Check that the file exists and has valid YAML syntax."
+            ) from e
 
     # Apply CLI overrides (highest priority)
     if cli_args:
@@ -522,19 +465,19 @@ def create_trainer_config(
     """
     Create TrainerConfig from CLI args and config files.
 
-    Convenience function that builds a complete TrainerConfig
-    using the configuration loading and merging utilities.
-
     Args:
         model_name: Name of the model to train
         horizon: Label horizon
         cli_args: CLI arguments
-        config_file: Optional config file path
+        config_file: Optional config file path (FAIL HARD if provided and invalid)
 
     Returns:
         Configured TrainerConfig instance
+
+    Raises:
+        ConfigError: If config_file is provided and loading fails
     """
-    # Build merged model config
+    # Build merged model config (will raise ConfigError if config_file is invalid)
     model_config = build_config(
         model_name=model_name,
         cli_args=cli_args,
@@ -580,8 +523,13 @@ def create_trainer_config(
 
 
 # =============================================================================
-# CONFIG VALIDATION
+# EXCEPTIONS
 # =============================================================================
+
+class ConfigError(Exception):
+    """Raised when configuration loading or parsing fails."""
+    pass
+
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
@@ -591,17 +539,7 @@ class ConfigValidationError(Exception):
 
 
 def validate_model_config_structure(config: Dict[str, Any]) -> List[str]:
-    """
-    Validate the structure of a model config file.
-
-    Checks for required sections and valid values in the new structured format.
-
-    Args:
-        config: Raw (non-flattened) configuration dictionary
-
-    Returns:
-        List of validation error messages (empty if valid)
-    """
+    """Validate structured config (checks model/defaults/training/device sections)."""
     errors = []
 
     # Check for required sections
@@ -637,16 +575,7 @@ def validate_model_config_structure(config: Dict[str, Any]) -> List[str]:
 
 
 def validate_config(config: Dict[str, Any], model_name: str) -> List[str]:
-    """
-    Validate model configuration (flattened format).
-
-    Args:
-        config: Configuration to validate
-        model_name: Model name for context
-
-    Returns:
-        List of validation error messages (empty if valid)
-    """
+    """Validate flattened config (checks ranges and valid values)."""
     errors = []
 
     # Validate numeric ranges
@@ -697,25 +626,10 @@ def validate_config_strict(
     model_name: str,
     raise_on_error: bool = True,
 ) -> List[str]:
-    """
-    Strictly validate configuration and optionally raise on errors.
-
-    Args:
-        config: Configuration to validate
-        model_name: Model name for context
-        raise_on_error: If True, raise ConfigValidationError on validation failure
-
-    Returns:
-        List of validation error messages
-
-    Raises:
-        ConfigValidationError: If raise_on_error is True and validation fails
-    """
+    """Validate config and optionally raise ConfigValidationError."""
     errors = validate_config(config, model_name)
-
     if errors and raise_on_error:
         raise ConfigValidationError(errors)
-
     return errors
 
 
@@ -724,36 +638,20 @@ def validate_config_strict(
 # =============================================================================
 
 def save_config(config: Dict[str, Any], path: Union[str, Path]) -> None:
-    """
-    Save configuration to YAML file.
-
-    Args:
-        config: Configuration dictionary
-        path: Output file path
-    """
+    """Save configuration to YAML file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-
     with open(path, "w") as f:
         yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
-
     logger.info(f"Saved config to {path}")
 
 
 def save_config_json(config: Dict[str, Any], path: Union[str, Path]) -> None:
-    """
-    Save configuration to JSON file.
-
-    Args:
-        config: Configuration dictionary
-        path: Output file path
-    """
+    """Save configuration to JSON file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-
     with open(path, "w") as f:
         json.dump(config, f, indent=2, default=str)
-
     logger.info(f"Saved config to {path}")
 
 
@@ -762,83 +660,70 @@ def save_config_json(config: Dict[str, Any], path: Union[str, Path]) -> None:
 # =============================================================================
 
 def list_available_models() -> List[str]:
-    """
-    List all models with configuration files.
-
-    Returns:
-        List of model names
-    """
+    """List all models with configuration files."""
     if not CONFIG_DIR.exists():
         return []
-
-    models = []
-    for config_file in CONFIG_DIR.glob("*.yaml"):
-        models.append(config_file.stem)
-
-    return sorted(models)
+    return sorted([f.stem for f in CONFIG_DIR.glob("*.yaml")])
 
 
-def get_model_info(model_name: str) -> Dict[str, Any]:
+def get_model_info(
+    model_name: str,
+    explicit: bool = False,
+) -> Dict[str, Any]:
     """
     Get basic info about a model from its config.
 
     Args:
         model_name: Name of the model
+        explicit: If True, fail hard if config cannot be loaded
 
     Returns:
         Dictionary with model info (name, family, description)
+
+    Raises:
+        ConfigError: If explicit=True and config loading fails
     """
     config_path = find_model_config(model_name)
     if not config_path:
+        error_msg = (
+            f"Model configuration not found for '{model_name}'\n"
+            f"Suggestion: Check that the model name is correct or use --list-models to see available models."
+        )
+        if explicit:
+            raise ConfigError(error_msg)
         return {"name": model_name, "family": "unknown", "description": "No config found"}
 
     try:
-        raw_config = load_yaml_config(config_path)
+        raw_config = load_yaml_config(config_path, explicit=explicit)
         model_section = raw_config.get("model", {})
         return {
             "name": model_section.get("name", model_name),
             "family": model_section.get("family", "unknown"),
             "description": model_section.get("description", ""),
         }
+    except ConfigError:
+        # Re-raise ConfigError as-is
+        raise
     except Exception as e:
-        logger.warning(f"Failed to load model info for {model_name}: {e}")
+        error_msg = (
+            f"Failed to load model info for '{model_name}' from {config_path.absolute()}\n"
+            f"Error: {e}\n"
+            f"Suggestion: Check that the config file has valid YAML syntax."
+        )
+        if explicit:
+            raise ConfigError(error_msg) from e
+        logger.warning(error_msg)
         return {"name": model_name, "family": "unknown", "description": str(e)}
 
 
 __all__ = [
-    # Classes
-    "TrainerConfig",
-    "Environment",
-    "ConfigValidationError",
-    # Paths
-    "CONFIG_ROOT",
-    "CONFIG_DIR",
-    "TRAINING_CONFIG_PATH",
-    "CV_CONFIG_PATH",
-    # Environment detection
-    "detect_environment",
-    "is_colab",
-    "resolve_device",
-    # Loading
-    "load_yaml_config",
-    "load_model_config",
-    "find_model_config",
-    "load_training_config",
-    "load_cv_config",
-    "flatten_model_config",
-    "get_environment_overrides",
-    # Building
-    "merge_configs",
-    "build_config",
-    "create_trainer_config",
-    # Validation
-    "validate_model_config_structure",
-    "validate_config",
-    "validate_config_strict",
-    # Serialization
-    "save_config",
-    "save_config_json",
-    # Utilities
-    "list_available_models",
-    "get_model_info",
+    "TrainerConfig", "Environment", "ConfigError", "ConfigValidationError",
+    "CONFIG_ROOT", "CONFIG_DIR", "TRAINING_CONFIG_PATH", "CV_CONFIG_PATH",
+    "detect_environment", "is_colab", "resolve_device",
+    "load_yaml_config", "load_model_config", "find_model_config",
+    "load_training_config", "load_cv_config", "flatten_model_config",
+    "get_environment_overrides", "merge_configs", "build_config",
+    "create_trainer_config", "validate_model_config_structure",
+    "validate_config", "validate_config_strict", "save_config",
+    "save_config_json", "list_available_models", "get_model_info",
 ]

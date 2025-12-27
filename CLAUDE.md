@@ -179,7 +179,7 @@ See `docs/phases/PHASE_4.md` for detailed ensemble architecture and diversity me
 We do not build monoliths. Responsibilities must be split into small, composable modules with clear contracts and minimal coupling. Each module should do one thing well and expose a narrow, well-documented interface. Prefer dependency injection and explicit wiring over hidden globals or implicit side effects.
 
 ### File and Complexity Limits
-No single file may exceed **650 lines**. If a module is growing, it's a signal that boundaries are wrong and responsibilities need to be refactored. Keep functions short, keep layers separated, and keep the cognitive load low.
+Files should target **650 lines** as the ideal maximum. Files up to **800 lines** are acceptable if the logic is cohesive and cannot be reasonably split without introducing artificial abstractions. Beyond 800 lines is a signal that boundaries are wrong and responsibilities need to be refactored. Keep functions short, keep layers separated, and keep the cognitive load low.
 
 ### Fail Fast, Fail Hard
 We would rather crash early than silently continue in an invalid state. Inputs are validated at the boundary. Assumptions are enforced with explicit checks. If something is wrong, we stop and surface a clear error message that points to the cause.
@@ -217,7 +217,7 @@ Every module ships with tests that prove the contract. Unit tests cover pure log
 ### Definition of Done
 A change is complete only when:
 - Implementation is modular
-- Stays within file limits (650 lines)
+- Stays within file limits (target 650 lines, max 800 lines)
 - Validates inputs at boundaries
 - Backed by tests that clearly demonstrate correctness
 

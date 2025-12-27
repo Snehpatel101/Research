@@ -23,13 +23,10 @@ except ImportError:
     lgb = None
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..common import map_labels_to_classes, map_classes_to_labels
 from ..registry import register
 
 logger = logging.getLogger(__name__)
-
-# Label mapping: -1,0,1 (short/neutral/long) -> 0,1,2 (LightGBM classes)
-LABEL_TO_CLASS = {-1: 0, 0: 1, 1: 2}
-CLASS_TO_LABEL = {0: -1, 1: 0, 2: 1}
 
 
 def _check_cuda_available() -> bool:
@@ -328,11 +325,11 @@ class LightGBMModel(BaseModel):
 
     def _convert_labels_to_lgb(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from -1,0,1 to 0,1,2."""
-        return np.array([LABEL_TO_CLASS.get(int(l), 1) for l in labels])
+        return map_labels_to_classes(labels)
 
     def _convert_labels_from_lgb(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from 0,1,2 to -1,0,1."""
-        return np.array([CLASS_TO_LABEL.get(int(l), 0) for l in labels])
+        return map_classes_to_labels(labels)
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
         """Compute accuracy and F1 for a dataset."""

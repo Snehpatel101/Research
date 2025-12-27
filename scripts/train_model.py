@@ -365,20 +365,30 @@ def main() -> int:
         logger.info(f"Using sequence length: {config_overrides.get('sequence_length')}")
 
     # Create trainer config
-    from src.models.config import TrainerConfig
+    from src.models.config import create_trainer_config
 
-    trainer_config = TrainerConfig(
-        model_name=args.model,
-        horizon=args.horizon,
-        output_dir=PROJECT_ROOT / args.output_dir,
-        sequence_length=config_overrides.get("sequence_length", 60),
-        batch_size=config_overrides.get("batch_size", 256),
-        max_epochs=config_overrides.get("max_epochs", 100),
-        early_stopping_patience=config_overrides.get("early_stopping_patience", 15),
-        model_config=config_overrides,
-        device=args.device,
-        mixed_precision=not args.no_mixed_precision,
-    )
+    # Pass config_file to create_trainer_config (will FAIL HARD if invalid)
+    config_file = PROJECT_ROOT / args.config if args.config else None
+
+    try:
+        trainer_config = create_trainer_config(
+            model_name=args.model,
+            horizon=args.horizon,
+            cli_args=config_overrides,
+            config_file=config_file,
+        )
+    except Exception as e:
+        # ConfigError or other exceptions from config loading
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    # Override output_dir from CLI if provided
+    if args.output_dir:
+        trainer_config.output_dir = PROJECT_ROOT / args.output_dir
+
+    # Override device settings from CLI
+    trainer_config.device = args.device
+    trainer_config.mixed_precision = not args.no_mixed_precision
 
     # Run training
     from src.models.trainer import Trainer
