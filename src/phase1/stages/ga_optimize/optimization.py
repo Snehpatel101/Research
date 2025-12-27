@@ -129,7 +129,8 @@ def process_symbol_ga(
         horizons = HORIZONS
 
     # Load labels_init data
-    project_root = Path(__file__).parent.parent.parent.parent.resolve()
+    # Path: optimization.py -> ga_optimize -> stages -> phase1 -> src -> research (5 parents)
+    project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
     labels_dir = project_root / "data" / "labels"
     input_path = labels_dir / f"{symbol}_labels_init.parquet"
 

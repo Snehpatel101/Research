@@ -31,21 +31,27 @@ def calculate_fitness(
     """
     Calculate fitness score for a set of labels.
 
-    IMPROVEMENTS:
-    1. Require at least 60% directional signals (target 70-80% signal rate)
-    2. Target 20-30% neutral rate (was <2%)
-    3. Reward balanced long/short ratio
-    4. Speed score prefers faster resolution
-    5. Profit factor using theoretical barrier distances (not MAE/MFE)
-    6. TRANSACTION COST penalty with round-trip costs (commission + slippage)
+    CRITICAL: This function MUST preserve neutral labels (target 20-30%).
+    Neutral labels represent "no trade" / timeout scenarios which are essential for:
+    1. Avoiding overtrading and transaction costs
+    2. Filtering low-confidence / noisy signals
+    3. Realistic signal rates in production
+
+    Components:
+    1. HARD constraints: Reject solutions with <10% neutral or <10% any class
+    2. Neutral score: Strong reward for 20-30% neutral, heavy penalty below 15%
+    3. Balance score: Reward balanced long/short ratio
+    4. Speed score: Prefer faster resolution (within reason)
+    5. Profit factor: Using actual MFE/MAE from labeling
+    6. Transaction cost penalty: Round-trip costs (commission + slippage)
 
     Parameters:
     -----------
     labels : array of -1, 0, 1
     bars_to_hit : array of bars until barrier hit
-    mae : Maximum Adverse Excursion (unused - kept for API compatibility)
-    mfe : Maximum Favorable Excursion (unused - kept for API compatibility)
-    horizon : horizon identifier (5 or 20)
+    mae : Maximum Adverse Excursion
+    mfe : Maximum Favorable Excursion
+    horizon : horizon identifier (5, 10, 15, or 20)
     atr_mean : mean ATR for the sample (for transaction cost normalization)
     symbol : 'MES' or 'MGC' (for symbol-specific transaction costs)
     k_up : upper barrier multiplier (ATR units)
@@ -61,22 +67,45 @@ def calculate_fitness(
     """
     total = len(labels)
     if total == 0:
-        return -1000.0
+        return -10000.0  # Catastrophic failure
 
     n_long = (labels == 1).sum()
     n_short = (labels == -1).sum()
     n_neutral = (labels == 0).sum()
     long_pct = n_long / total
     short_pct = n_short / total
+    neutral_pct = n_neutral / total
 
     # ==========================================================================
-    # 0. HARD BALANCE CONSTRAINTS (prevent extreme imbalance)
+    # 0. HARD CONSTRAINTS - ABSOLUTELY NON-NEGOTIABLE
+    # These return values that CANNOT be recovered from by other components
     # ==========================================================================
     min_long_pct = LABEL_BALANCE_CONSTRAINTS['min_long_pct']
     min_short_pct = LABEL_BALANCE_CONSTRAINTS['min_short_pct']
-    if long_pct < min_long_pct or short_pct < min_short_pct:
-        return -1000.0 + ((long_pct + short_pct) * 100.0)
+    min_neutral_pct = LABEL_BALANCE_CONSTRAINTS['min_neutral_pct']  # 10%
+    max_neutral_pct = LABEL_BALANCE_CONSTRAINTS['max_neutral_pct']  # 40%
+    min_any_class_pct = LABEL_BALANCE_CONSTRAINTS['min_any_class_pct']  # 10%
 
+    # HARD CONSTRAINT 1: Minimum neutral percentage (CRITICAL)
+    # This is THE most important constraint to prevent neutral destruction
+    if neutral_pct < min_neutral_pct:
+        # Return extremely negative value - no recovery possible
+        # Scale: -10000 base, plus small gradient to guide optimization
+        return -10000.0 + (neutral_pct * 10.0)
+
+    # HARD CONSTRAINT 2: Maximum neutral percentage (not enough signals)
+    if neutral_pct > max_neutral_pct:
+        return -10000.0 + ((1.0 - neutral_pct) * 10.0)
+
+    # HARD CONSTRAINT 3: Minimum long/short percentages
+    if long_pct < min_long_pct or short_pct < min_short_pct:
+        return -10000.0 + ((long_pct + short_pct) * 10.0)
+
+    # HARD CONSTRAINT 4: Any class below absolute minimum (fail-safe)
+    if long_pct < min_any_class_pct or short_pct < min_any_class_pct:
+        return -10000.0 + (min(long_pct, short_pct) * 10.0)
+
+    # HARD CONSTRAINT 5: Long/short signal ratio balance
     signal_count = n_long + n_short
     if signal_count > 0:
         short_signal_ratio = n_short / signal_count
@@ -84,36 +113,32 @@ def calculate_fitness(
         max_short_ratio = LABEL_BALANCE_CONSTRAINTS['max_short_signal_ratio']
         if short_signal_ratio < min_short_ratio or short_signal_ratio > max_short_ratio:
             distance = abs(short_signal_ratio - 0.5)
-            return -1000.0 + (1.0 - distance) * 100.0
+            return -10000.0 + ((1.0 - distance) * 10.0)
 
     # ==========================================================================
-    # 1. SIGNAL RATE REQUIREMENT (target 70-80% signals, 20-30% neutral)
+    # 1. NEUTRAL SCORE (HIGH WEIGHT - target 20-30% neutral)
+    # This is the PRIMARY driver for preserving neutral labels
     # ==========================================================================
-    neutral_pct = n_neutral / total
+    target_neutral_low = LABEL_BALANCE_CONSTRAINTS['target_neutral_low']  # 0.20
+    target_neutral_high = LABEL_BALANCE_CONSTRAINTS['target_neutral_high']  # 0.30
 
-    # Target: 20-30% neutral rate
-    if neutral_pct < 0.15:
-        # Too few neutrals - trading on noise
-        return -1000.0 + (neutral_pct * 100)
-    elif neutral_pct > 0.40:
-        # Too many neutrals - not enough trading signals
-        return -1000.0 + ((1 - neutral_pct) * 100)
-
-    # ==========================================================================
-    # 2. NEUTRAL SCORE (target 20-30% neutral)
-    # ==========================================================================
-    TARGET_NEUTRAL_LOW = 0.20
-    TARGET_NEUTRAL_HIGH = 0.30
-
-    if TARGET_NEUTRAL_LOW <= neutral_pct <= TARGET_NEUTRAL_HIGH:
-        neutral_score = 3.0  # Perfect range
+    if target_neutral_low <= neutral_pct <= target_neutral_high:
+        # Perfect range: maximum reward
+        neutral_score = 10.0
+    elif neutral_pct < target_neutral_low:
+        # Below target: graduated penalty (steeper as we approach minimum)
+        # At 15%: penalty = (0.20 - 0.15) * 40 = 2.0, score = 10 - 2 = 8.0
+        # At 12%: penalty = (0.20 - 0.12) * 40 = 3.2, score = 10 - 3.2 = 6.8
+        # At 10%: penalty = (0.20 - 0.10) * 40 = 4.0, score = 10 - 4 = 6.0
+        deviation = target_neutral_low - neutral_pct
+        neutral_score = 10.0 - (deviation * 40.0)
+        # Additional steep penalty below 15% (approaching hard constraint)
+        if neutral_pct < 0.15:
+            neutral_score -= (0.15 - neutral_pct) * 50.0
     else:
-        # Penalize deviation from target range
-        if neutral_pct < TARGET_NEUTRAL_LOW:
-            deviation = TARGET_NEUTRAL_LOW - neutral_pct
-        else:
-            deviation = neutral_pct - TARGET_NEUTRAL_HIGH
-        neutral_score = 3.0 - (deviation * 15.0)
+        # Above target: moderate penalty
+        deviation = neutral_pct - target_neutral_high
+        neutral_score = 10.0 - (deviation * 20.0)
 
     # ==========================================================================
     # 3. LONG/SHORT BALANCE SCORE
@@ -209,16 +234,48 @@ def calculate_fitness(
         cost_ratio = cost_in_price_units / (avg_profit_per_trade + 1e-6)
 
         if cost_ratio > 0.20:
-            transaction_penalty = -(cost_ratio - 0.20) * 10.0
+            # Cap penalty at -10.0 to prevent extreme values from low profit trades
+            transaction_penalty = max(-10.0, -(cost_ratio - 0.20) * 10.0)
         else:
             transaction_penalty = 0.5
     else:
         transaction_penalty = 0.0
 
     # ==========================================================================
+    # 7. CLASS BALANCE PENALTY (penalize any class being too low)
+    # Additional safety to prevent any single class from being minimized
+    # ==========================================================================
+    min_class_pct = min(long_pct, short_pct, neutral_pct)
+    if min_class_pct < 0.15:
+        # Graduated penalty as any class approaches minimum
+        # At 12%: penalty = (0.15 - 0.12) * 30 = 0.9
+        # At 10%: penalty = (0.15 - 0.10) * 30 = 1.5
+        class_balance_penalty = -(0.15 - min_class_pct) * 30.0
+    else:
+        # Small reward for balanced distribution
+        class_balance_penalty = 0.5
+
+    # ==========================================================================
     # COMBINED FITNESS
     # ==========================================================================
-    fitness = neutral_score + balance_score + speed_score + pf_score + transaction_penalty
+    # Component weights (approximate max values):
+    # - neutral_score: up to 10.0 (PRIMARY driver for neutral preservation)
+    # - balance_score: up to 2.0 (long/short balance)
+    # - speed_score: up to 1.5 (resolution speed)
+    # - pf_score: up to 2.0 (profit factor)
+    # - transaction_penalty: -10 to 0.5 (cost awareness)
+    # - class_balance_penalty: -4.5 to 0.5 (class distribution safety)
+    #
+    # Total possible range: approximately -10 to +16
+    # The neutral_score dominates, ensuring neutral preservation is prioritized
+    fitness = (
+        neutral_score +
+        balance_score +
+        speed_score +
+        pf_score +
+        transaction_penalty +
+        class_balance_penalty
+    )
 
     return fitness
 
@@ -275,7 +332,8 @@ def evaluate_individual(
     if symbol == "MGC":
         # MGC: Strict symmetry - penalize asymmetry > 10%
         if abs(k_up - k_down) > avg_k * 0.10:
-            asymmetry_bonus = -abs(k_up - k_down) * 5.0
+            # Cap penalty at -5.0 to prevent extreme values
+            asymmetry_bonus = max(-5.0, -abs(k_up - k_down) * 5.0)
         else:
             asymmetry_bonus = 0.5  # Small reward for good symmetry
     else:
@@ -287,17 +345,18 @@ def evaluate_individual(
             asymmetry_ratio = k_up / k_down if k_down > 0 else 1.0
             if 1.2 <= asymmetry_ratio <= 1.8:
                 # Ideal range: k_up is 20-80% larger than k_down
-                asymmetry_bonus = (k_up - k_down) * 2.0
+                asymmetry_bonus = min(3.0, (k_up - k_down) * 2.0)
             elif asymmetry_ratio > 1.8:
                 # Too extreme - still positive but reduced
-                asymmetry_bonus = (k_up - k_down) * 0.5
+                asymmetry_bonus = min(1.5, (k_up - k_down) * 0.5)
             else:
                 # Slight asymmetry (ratio < 1.2) - small reward
-                asymmetry_bonus = (k_up - k_down) * 1.0
+                asymmetry_bonus = min(2.0, (k_up - k_down) * 1.0)
         else:
             # WRONG direction: k_down > k_up amplifies long bias
             # This makes shorts harder when market already drifts up - penalize
-            asymmetry_bonus = -(k_down - k_up) * 3.0
+            # Cap penalty at -5.0 to prevent extreme values
+            asymmetry_bonus = max(-5.0, -(k_down - k_up) * 3.0)
 
     # Decode max_bars
     max_bars = int(horizon * max_bars_mult)

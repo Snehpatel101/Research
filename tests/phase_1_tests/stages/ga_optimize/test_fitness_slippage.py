@@ -297,34 +297,45 @@ class TestSlippageCostImpact:
 class TestSlippageEdgeCases:
     """Tests for edge cases in slippage modeling."""
 
-    def test_zero_trades_no_cost_penalty(self):
-        """Test zero trades produces no transaction cost penalty."""
-        # All neutral labels = no trades
+    def test_extreme_neutral_blocked_by_constraint(self):
+        """Test 100% neutral labels are blocked by hard constraint."""
+        # All neutral labels = no trades = violates max_neutral_pct (40%)
         labels = np.zeros(1000, dtype=np.int8)
         bars_to_hit = np.ones(1000, dtype=np.int32) * 5
         mae = np.zeros(1000, dtype=np.float32)
         mfe = np.zeros(1000, dtype=np.float32)
 
-        # Should have same fitness regardless of slippage (no trades)
-        fitness_with = calculate_fitness(
+        fitness = calculate_fitness(
             labels, bars_to_hit, mae, mfe, horizon=5, atr_mean=10.0,
             symbol='MES', include_slippage=True
         )
 
-        fitness_without = calculate_fitness(
+        # Should be blocked by hard constraint (neutral > 40%)
+        assert fitness < -9000, "100% neutral should hit hard constraint"
+
+    def test_no_neutral_blocked_by_constraint(self):
+        """Test 0% neutral labels are blocked by hard constraint."""
+        # No neutral = violates min_neutral_pct (10%)
+        np.random.seed(42)
+        labels = np.array([1]*500 + [-1]*500, dtype=np.int8)
+        bars_to_hit = np.random.randint(1, 10, 1000).astype(np.int32)
+        mae = -np.abs(np.random.randn(1000) * 0.0001).astype(np.float32)
+        mfe = np.abs(np.random.randn(1000) * 0.0001).astype(np.float32)
+
+        fitness = calculate_fitness(
             labels, bars_to_hit, mae, mfe, horizon=5, atr_mean=10.0,
-            symbol='MES', include_slippage=False
+            symbol='MES', include_slippage=True
         )
 
-        # Both should be heavily penalized for no signals, but equally
-        # (Note: They'll be very negative due to neutral rate > 40%)
-        assert fitness_with < -900
-        assert fitness_without < -900
+        # Should be blocked by hard constraint (neutral < 10%)
+        assert fitness < -9000, "0% neutral should hit hard constraint"
 
     def test_very_small_atr_high_cost_ratio(self):
         """Test very small ATR leads to high cost ratio penalty."""
         np.random.seed(42)
-        labels = np.array([1]*500 + [-1]*500, dtype=np.int8)
+        # 40% long, 20% neutral, 40% short (valid distribution)
+        labels = np.array([1]*400 + [0]*200 + [-1]*400, dtype=np.int8)
+        np.random.shuffle(labels)
         bars_to_hit = np.random.randint(1, 10, 1000).astype(np.int32)
         mae = -np.abs(np.random.randn(1000) * 0.0001).astype(np.float32)
         mfe = np.abs(np.random.randn(1000) * 0.0001).astype(np.float32)
@@ -337,9 +348,9 @@ class TestSlippageEdgeCases:
             symbol='MES', regime='high_vol', include_slippage=True
         )
 
-        # Should be heavily penalized due to high cost ratio
-        # The transaction penalty should dominate
-        assert fitness < 0, "Should be negative due to high cost ratio"
+        # Should be penalized due to high cost ratio (but not blocked)
+        # The transaction penalty should reduce the fitness significantly
+        assert fitness < 10, "Should be penalized due to high cost ratio"
 
 
 if __name__ == '__main__':

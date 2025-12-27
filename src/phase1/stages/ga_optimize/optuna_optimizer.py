@@ -381,13 +381,62 @@ def run_optuna_optimization(
     logger.info(f"    Short:   {n_short:,} ({100*n_short/n_total:.1f}%)")
     logger.info(f"    Neutral: {n_neutral:,} ({100*n_neutral/n_total:.1f}%)")
 
+    # Recalculate fitness on FULL data (not subset) for accurate validation
+    # The subset fitness may be misleading if the subset has different characteristics
+    full_atr_mean = np.mean(full_atr[full_atr > 0]) if np.any(full_atr > 0) else 1.0
+    validation_fitness = calculate_fitness(
+        val_labels,
+        val_bars,
+        val_mae,
+        val_mfe,
+        horizon,
+        atr_mean=full_atr_mean,
+        symbol=symbol,
+        k_up=best_k_up,
+        k_down=best_k_down,
+        regime=regime,
+        include_slippage=include_slippage,
+    )
+
+    # Calculate asymmetry_bonus (must match logic in fitness.py evaluate_individual)
+    avg_k = (best_k_up + best_k_down) / 2.0
+    if symbol == "MGC":
+        # MGC: Strict symmetry - penalize asymmetry > 10%
+        if abs(best_k_up - best_k_down) > avg_k * 0.10:
+            asymmetry_bonus = max(-5.0, -abs(best_k_up - best_k_down) * 5.0)
+        else:
+            asymmetry_bonus = 0.5
+    else:
+        # MES: REWARD k_up > k_down to counteract equity drift
+        if best_k_up > best_k_down:
+            asymmetry_ratio = best_k_up / best_k_down if best_k_down > 0 else 1.0
+            if 1.2 <= asymmetry_ratio <= 1.8:
+                asymmetry_bonus = min(3.0, (best_k_up - best_k_down) * 2.0)
+            elif asymmetry_ratio > 1.8:
+                asymmetry_bonus = min(1.5, (best_k_up - best_k_down) * 0.5)
+            else:
+                asymmetry_bonus = min(2.0, (best_k_up - best_k_down) * 1.0)
+        else:
+            asymmetry_bonus = max(-5.0, -(best_k_down - best_k_up) * 3.0)
+
+    # Add asymmetry bonus to validation fitness for consistency with optimization objective
+    validation_fitness += asymmetry_bonus
+
+    # Log both fitnesses for debugging
+    logger.info(f"  Subset fitness: {best_fitness:.4f}")
+    logger.info(f"  Full-data fitness: {validation_fitness:.4f} (with asymmetry_bonus={asymmetry_bonus:.2f})")
+
+    # Use validation fitness (full data) for stored results
+    # This is more representative of actual model performance
+    final_fitness = validation_fitness
+
     # Prepare results (same format as GA for compatibility)
     results = {
         "horizon": horizon,
         "best_k_up": float(best_k_up),
         "best_k_down": float(best_k_down),
         "best_max_bars": int(horizon * best_max_bars_mult),
-        "best_fitness": float(best_fitness),
+        "best_fitness": float(final_fitness),
         "n_trials": n_trials,
         "optimizer": "optuna_tpe",
         "validation": {
