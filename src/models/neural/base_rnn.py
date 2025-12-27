@@ -24,13 +24,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..common import map_labels_to_classes, map_classes_to_labels
 from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
 
 logger = logging.getLogger(__name__)
-
-# Label mapping: -1,0,1 (short/neutral/long) -> 0,1,2 (PyTorch classes)
-LABEL_TO_CLASS = {-1: 0, 0: 1, 1: 2}
-CLASS_TO_LABEL = {0: -1, 1: 0, 2: 1}
 
 
 @dataclass
@@ -626,16 +623,14 @@ class BaseRNNModel(BaseModel):
                 "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0))}
 
     def _convert_labels_to_class(self, labels: np.ndarray) -> np.ndarray:
-        return np.array([LABEL_TO_CLASS.get(int(l), 1) for l in labels])
+        return map_labels_to_classes(labels)
 
     def _convert_labels_from_class(self, labels: np.ndarray) -> np.ndarray:
-        return np.array([CLASS_TO_LABEL.get(int(l), 0) for l in labels])
+        return map_classes_to_labels(labels)
 
 
 __all__ = [
     "BaseRNNModel",
     "RNNNetwork",
     "EarlyStoppingState",
-    "LABEL_TO_CLASS",
-    "CLASS_TO_LABEL",
 ]

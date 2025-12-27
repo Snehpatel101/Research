@@ -8,23 +8,26 @@ Models:
 - LSTM: Long Short-Term Memory networks
 - GRU: Gated Recurrent Unit networks
 - TCN: Temporal Convolutional Networks
+- Transformer: Vanilla Transformer encoder with self-attention
 - MLP: Multi-Layer Perceptron (planned)
 
 All models auto-register with ModelRegistry on import.
 
 Example:
     # Models register automatically when imported
-    from src.models.neural import LSTMModel, GRUModel, TCNModel
+    from src.models.neural import LSTMModel, GRUModel, TCNModel, TransformerModel
 
     # Or create via registry
     from src.models import ModelRegistry
     model = ModelRegistry.create("lstm", config={"hidden_size": 256})
     model = ModelRegistry.create("tcn", config={"num_channels": [64, 64, 64, 64]})
+    model = ModelRegistry.create("transformer", config={"d_model": 256, "n_heads": 8})
 """
 from .base_rnn import BaseRNNModel, RNNNetwork
 from .lstm_model import LSTMModel, LSTMNetwork
 from .gru_model import GRUModel, GRUNetwork
 from .tcn_model import TCNModel, TCNNetwork, TemporalBlock, CausalConv1d
+from .transformer_model import TransformerModel, TransformerNetwork, PositionalEncoding
 
 __all__ = [
     # Base classes
@@ -41,4 +44,8 @@ __all__ = [
     "TCNNetwork",
     "TemporalBlock",
     "CausalConv1d",
+    # Transformer
+    "TransformerModel",
+    "TransformerNetwork",
+    "PositionalEncoding",
 ]
