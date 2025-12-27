@@ -12,6 +12,9 @@ class FeatureSetDefinition:
     """
     Definition of a named feature set.
 
+    Each symbol is processed in complete isolation - there are no cross-symbol
+    or cross-asset features. All features are computed from single-symbol data only.
+
     Attributes:
         name: Unique identifier for this feature set
         description: Human-readable description
@@ -20,7 +23,6 @@ class FeatureSetDefinition:
         include_columns: Specific columns to include
         exclude_columns: Specific columns to exclude
         include_mtf: Whether to include multi-timeframe features
-        include_cross_asset: Whether to include cross-asset features
         supported_model_types: Model types that work with this feature set
         default_sequence_length: Default sequence length for sequential models
         recommended_scaler: Recommended scaler type for this feature set
@@ -32,7 +34,6 @@ class FeatureSetDefinition:
     include_columns: List[str] = field(default_factory=list)
     exclude_columns: List[str] = field(default_factory=list)
     include_mtf: bool = False
-    include_cross_asset: bool = False
     supported_model_types: List[str] = field(default_factory=lambda: [
         "tabular", "sequential", "tree"
     ])
@@ -70,7 +71,7 @@ class FeatureSetDefinition:
 FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
     "core_min": FeatureSetDefinition(
         name="core_min",
-        description="Minimal base-timeframe feature set (no MTF, no cross-asset).",
+        description="Minimal base-timeframe feature set (no MTF). Single symbol only.",
         include_prefixes=[
             "return_", "log_return_", "roc_", "rsi_", "macd_", "stoch_", "williams_",
             "cci_", "mfi_", "atr_", "bb_", "kc_", "hvol_", "parkinson_", "garman_",
@@ -80,27 +81,24 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
         ],
         include_columns=["price_to_vwap"],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["tabular", "tree", "sequential"],
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
     "core_full": FeatureSetDefinition(
         name="core_full",
-        description="All base-timeframe features (no MTF, no cross-asset).",
+        description="All base-timeframe features (no MTF). Single symbol only.",
         include_prefixes=[],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["tabular", "tree", "sequential"],
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
     "mtf_plus": FeatureSetDefinition(
         name="mtf_plus",
-        description="All base-timeframe features plus MTF and cross-asset features.",
+        description="All base-timeframe features plus MTF features. Single symbol only.",
         include_prefixes=[],
         include_mtf=True,
-        include_cross_asset=True,
         supported_model_types=["tabular", "tree", "sequential"],
         default_sequence_length=120,
         recommended_scaler="robust",
@@ -142,7 +140,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
         ],
         include_columns=["is_rth", "trend_regime", "volatility_regime"],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["tree"],
         default_sequence_length=None,  # Not applicable for tabular
         recommended_scaler="none",  # Boosting handles raw features
@@ -176,7 +173,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
             "open_", "high_", "low_", "close_",
         ],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["sequential"],
         default_sequence_length=60,
         recommended_scaler="robust",  # RobustScaler handles outliers well for NNs
@@ -201,7 +197,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
             "is_rth",
         ],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["sequential", "transformer"],
         default_sequence_length=128,  # Longer sequences for transformers
         recommended_scaler="standard",  # Standard scaling for transformers
@@ -233,7 +228,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
             "is_rth",
         ],
         include_mtf=True,  # MTF adds diversity
-        include_cross_asset=False,
         supported_model_types=["tabular", "tree", "sequential"],
         default_sequence_length=60,
         recommended_scaler="robust",
@@ -271,7 +265,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
             "open_", "high_", "low_", "close_",
         ],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["sequential"],
         default_sequence_length=120,  # Longer sequences for TCN
         recommended_scaler="robust",
@@ -295,7 +288,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
             "is_rth",
         ],
         include_mtf=False,
-        include_cross_asset=False,
         supported_model_types=["transformer"],
         default_sequence_length=256,  # Long sequences for patch attention
         recommended_scaler="standard",
@@ -322,7 +314,6 @@ FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
             "range_pct",
         ],
         include_mtf=True,  # MTF volatility useful
-        include_cross_asset=False,
         supported_model_types=["tabular", "tree", "sequential"],
         default_sequence_length=60,
         recommended_scaler="robust",

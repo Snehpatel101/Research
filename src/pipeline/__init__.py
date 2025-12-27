@@ -19,8 +19,9 @@ Usage:
     from src.pipeline.runner import PipelineRunner
     from src.phase1.pipeline_config import create_default_config
 
+    # Single symbol run (recommended - each symbol processed in isolation)
     config = create_default_config(
-        symbols=['MES', 'MGC'],
+        symbols=['MES'],  # Specify your target symbol
         start_date='2020-01-01',
         end_date='2024-12-31'
     )

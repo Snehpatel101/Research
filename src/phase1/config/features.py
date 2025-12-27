@@ -184,10 +184,40 @@ VARIANCE_THRESHOLD = 0.01
 # =============================================================================
 # SYMBOL ISOLATION POLICY
 # =============================================================================
-# Each symbol is processed independently. No cross-symbol correlation features
-# are computed to ensure complete symbol isolation as required by the ML Factory
-# design. This prevents data leakage between symbols and ensures each model
-# can be trained on a single symbol's data without dependencies on other symbols.
+# Each symbol is processed in complete isolation. There are NO cross-symbol or
+# cross-asset features (no correlation, beta, spread, or relative strength
+# features between symbols). This ensures:
+# 1. No data leakage between symbols
+# 2. Each model can be trained on a single symbol's data
+# 3. No dependencies on other symbols' data availability
+# 4. Clean separation for production deployment
+
+
+def is_cross_asset_feature(feature_name: str) -> bool:
+    """
+    Check if a feature name represents a cross-asset feature.
+
+    Cross-asset features are NOT generated in this pipeline. Each symbol is
+    processed in complete isolation with no cross-symbol operations.
+
+    This function always returns False since cross-asset features have been
+    removed from the pipeline. It is kept for backward compatibility with
+    validation code that may still call it.
+
+    Parameters
+    ----------
+    feature_name : str
+        The feature column name to check
+
+    Returns
+    -------
+    bool
+        Always returns False since cross-asset features are not supported
+    """
+    # Cross-asset features are not generated - always return False
+    # Legacy patterns that would have been cross-asset (now removed):
+    # - mes_mgc_*, relative_strength, beta_*, spread_*, correlation_*
+    return False
 
 
 # =============================================================================

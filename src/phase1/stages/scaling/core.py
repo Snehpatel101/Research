@@ -139,14 +139,10 @@ FEATURE_PATTERNS: Dict[FeatureCategory, List[str]] = {
         'close_bb_zscore', 'volume_zscore', '_zscore',
         # Deviation features
         'close_kc_atr_dev', '_dev',
-        # Spread features (cross-asset)
-        '_spread', '_beta', '_correlation',
     ],
     FeatureCategory.OSCILLATOR: [
         'rsi', 'stoch_k', 'stoch_d', 'williams_r', 'cci', 'mfi',
         'bb_position', 'adx', 'plus_di', 'minus_di',
-        # Relative strength (0-100 bounded)
-        'relative_strength',
     ],
     FeatureCategory.PRICE_LEVEL: [
         'sma_', 'ema_', 'bb_upper', 'bb_lower', 'bb_middle',

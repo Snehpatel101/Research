@@ -33,8 +33,11 @@ class PipelineConfig:
     description: str = "Phase 1 pipeline run"
 
     # Data parameters
-    # Default to single symbol (MES). Use allow_multi_symbol=True for multi-symbol runs.
-    symbols: List[str] = field(default_factory=lambda: ['MES'])
+    # Symbols to process. Each symbol is processed in complete isolation (no cross-symbol
+    # operations). When multiple symbols are specified, the pipeline processes them
+    # sequentially, producing separate outputs for each symbol.
+    # The default is an empty list - symbols must be explicitly specified.
+    symbols: List[str] = field(default_factory=list)
     start_date: Optional[str] = None  # YYYY-MM-DD format
     end_date: Optional[str] = None    # YYYY-MM-DD format
 
@@ -103,10 +106,15 @@ class PipelineConfig:
     n_jobs: int = -1  # -1 for all cores
     random_seed: int = 42
 
-    # Single-symbol enforcement
-    # By default, pipeline enforces single-symbol runs to prevent accidental data mixing.
-    # Set to True to explicitly allow multi-symbol runs (combines data into one dataset).
-    allow_multi_symbol: bool = False
+    # Symbol isolation policy
+    # Each symbol is always processed in complete isolation. There are no cross-symbol
+    # operations (correlation, beta, spread features). When multiple symbols are specified,
+    # they are processed sequentially with separate outputs per symbol.
+    # This flag controls whether batch processing of multiple symbols is allowed.
+    # When False (default), only single-symbol runs are permitted.
+    # When True, multiple symbols can be processed in a batch run, but each symbol
+    # is still processed independently with no data mixing.
+    allow_batch_symbols: bool = False
 
     # Feature toggles - control which feature groups are generated
     # Keys: 'wavelets', 'microstructure', 'volume', 'volatility'
@@ -231,17 +239,20 @@ class PipelineConfig:
 
         # Validate symbols
         if not self.symbols:
-            raise ValueError("At least one symbol must be specified")
+            raise ValueError(
+                "At least one symbol must be specified. "
+                "Use --symbols MES or symbols=['MES'] in config."
+            )
 
         # Enforce single-symbol runs by default
-        if len(self.symbols) > 1 and not self.allow_multi_symbol:
+        # Each symbol is processed in complete isolation (no cross-symbol operations)
+        if len(self.symbols) > 1 and not self.allow_batch_symbols:
             raise ValueError(
-                f"Multi-symbol runs are not allowed by default. "
+                f"Batch processing of multiple symbols requires explicit opt-in. "
                 f"Got {len(self.symbols)} symbols: {self.symbols}. "
-                f"The pipeline is designed for single-symbol operation to prevent "
-                f"accidental data mixing in splits and labels. "
-                f"To explicitly allow multi-symbol, pass --multi-symbol flag in CLI "
-                f"or set allow_multi_symbol=True in config."
+                f"Each symbol is processed independently with no cross-symbol operations. "
+                f"To process multiple symbols in a batch, use --batch-symbols flag in CLI "
+                f"or set allow_batch_symbols=True in config."
             )
 
     @property
@@ -431,14 +442,18 @@ class PipelineConfig:
 
         # Check symbols
         if not self.symbols:
-            issues.append("At least one symbol must be specified")
-
-        # Check single-symbol enforcement
-        if len(self.symbols) > 1 and not self.allow_multi_symbol:
             issues.append(
-                f"Multi-symbol runs require explicit opt-in. "
+                "At least one symbol must be specified. "
+                "Use --symbols MES or symbols=['MES']."
+            )
+
+        # Check batch symbol processing
+        # Each symbol is processed in isolation (no cross-symbol operations)
+        if len(self.symbols) > 1 and not self.allow_batch_symbols:
+            issues.append(
+                f"Batch processing of multiple symbols requires explicit opt-in. "
                 f"Got {len(self.symbols)} symbols: {self.symbols}. "
-                f"Use --multi-symbol flag or set allow_multi_symbol=True."
+                f"Use --batch-symbols flag or set allow_batch_symbols=True."
             )
 
         # Check label horizons
@@ -566,7 +581,8 @@ Description: {self.description}
 
 Data Parameters:
   - Symbols: {', '.join(self.symbols)}
-  - Multi-Symbol Mode: {'Enabled' if self.allow_multi_symbol else 'Disabled (single-symbol only)'}
+  - Symbol Isolation: Each symbol processed independently (no cross-symbol operations)
+  - Batch Processing: {'Enabled' if self.allow_batch_symbols else 'Single symbol only'}
   - Date Range: {self.start_date or 'N/A'} to {self.end_date or 'N/A'}
   - Target Timeframe: {self.target_timeframe}
 
@@ -665,12 +681,12 @@ if __name__ == "__main__":
     logging.getLogger().setLevel(logging.INFO)
     logging.getLogger().addHandler(logging.StreamHandler())
 
-    # Create default config
+    # Create config for single symbol (default behavior)
     config = create_default_config(
-        symbols=['MES', 'MGC', 'MNQ'],
+        symbols=['MES'],  # Single symbol - no cross-symbol operations
         start_date='2020-01-01',
         end_date='2024-12-31',
-        description='Test run with 3 symbols'
+        description='Single symbol run'
     )
 
     print(config.summary())

@@ -47,8 +47,18 @@ data/features/*.parquet
 data/final/*.parquet
 *.npy
 
-# Keep split config (small JSON file)
-!data/splits/split_config.json
+# ALL parquet/binary data in splits (these are huge)
+data/splits/**/*.parquet
+data/splits/**/*.zip
+data/splits/**/*.joblib
+data/splits/**/*.pkl
+data/holdout/*.parquet
+data/colab/**/*.parquet
+
+# Keep small config/metadata JSON files
+!data/splits/**/split_config.json
+!data/splits/**/scaling_config.json
+!data/splits/**/scaling_metadata.json
 
 # Models (too large for git)
 models/**/*.pkl

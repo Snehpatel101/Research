@@ -2,6 +2,8 @@
 
 Modular ML pipeline that turns raw OHLCV bars into trained models with leakage-safe splits, cross-validation, and unified evaluation.
 
+**Single-Contract Architecture:** This is a single-contract ML factory. Each contract (MES, MGC, etc.) is trained in complete isolation. No cross-symbol correlation or feature engineering.
+
 ```
 [ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3: CV ] → [ Phase 4: Ensemble ] → [ Phase 5: Prod ]
     COMPLETE           COMPLETE            COMPLETE           COMPLETE            PLANNED
@@ -98,11 +100,28 @@ X_train, y_train, w_train = container.get_sklearn_arrays("train")
 ## Configuration
 
 ```python
+# Single contract per pipeline run
+SYMBOL = 'MES'                 # or 'MGC' - one contract at a time
+
 HORIZONS = [5, 10, 15, 20]      # Label horizons
 TRAIN/VAL/TEST = 70/15/15      # Split ratios
 PURGE_BARS = 60                # Prevent label leakage
 EMBARGO_BARS = 1440            # ~5 days for serial correlation
 ```
+
+### Symbol Configuration
+
+Each contract requires its own pipeline run:
+
+```bash
+# Train MES model
+./pipeline run --symbols MES
+
+# Train MGC model (separate run, separate model)
+./pipeline run --symbols MGC
+```
+
+Data paths resolve from symbol: `data/raw/{symbol}_1m.parquet`
 
 ## Project Structure
 

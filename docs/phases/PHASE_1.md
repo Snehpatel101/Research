@@ -12,9 +12,11 @@ Phase 1 is the **data foundation** for the ML Model Factory. It ensures that:
 
 1. All models receive **identical, standardized datasets** (fair comparison)
 2. No **lookahead bias** exists in features or labels
-3. **Symbol isolation** is maintained (no cross-symbol leakage)
+3. **Single-contract isolation** - Each contract (MES, MGC, etc.) is processed independently with no cross-symbol features or correlation
 4. **Train/val/test splits** have proper purge and embargo gaps
 5. **Feature scaling** is fit only on training data
+
+**This is a single-contract pipeline.** Each contract requires its own pipeline run. No cross-symbol correlation or feature engineering is performed.
 
 ---
 
@@ -77,7 +79,7 @@ Phase 1 generates features with these principles:
 2. **Safe division:** All ratios handle division by zero gracefully
 3. **Stationarity:** Prefer normalized/ratio features over raw values
 4. **Scale-invariance:** Features work across different price levels
-5. **Symbol isolation:** No cross-symbol features (each symbol processed independently)
+5. **Single-contract isolation:** Each contract is processed independently - no cross-symbol features, correlation, or shared data
 
 ### Complete Feature Catalog
 
@@ -668,7 +670,7 @@ The validation stage checks:
 | Feature count | 150+ | PASS |
 | Correlation | < 0.80 threshold | PASS |
 | Variance | > 0.01 threshold | PASS |
-| Symbol isolation | No cross-symbol features | PASS |
+| Single-contract | One symbol per run, no cross-symbol data | PASS |
 
 ---
 
@@ -677,8 +679,11 @@ The validation stage checks:
 ### Run Complete Pipeline
 
 ```bash
-# Full pipeline with default symbols
-./pipeline run --symbols MES,MGC
+# Run pipeline for a single contract (one contract per run)
+./pipeline run --symbols MES
+
+# Run pipeline for a different contract (separate run)
+./pipeline run --symbols MGC
 
 # Check status
 ./pipeline status
@@ -686,6 +691,8 @@ The validation stage checks:
 # Validate outputs
 ./pipeline validate
 ```
+
+**Note:** Each contract requires its own pipeline run. Multi-symbol processing is blocked by default.
 
 ### Use in Python
 

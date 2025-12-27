@@ -3,17 +3,32 @@ Barrier configuration for triple-barrier labeling.
 
 This module contains symbol-specific and default barrier parameters
 for triple-barrier labeling, including transaction costs and tick values.
+
+SYMBOL CONFIGURATION
+--------------------
+The pipeline supports any symbol. Known symbols (MES, MGC) have pre-tuned
+parameters. Unknown symbols use sensible defaults that can be overridden
+via barrier_overrides in PipelineConfig.
+
+ADDING NEW SYMBOLS
+------------------
+To add symbol-specific parameters for a new symbol, add entries to:
+1. BARRIER_PARAMS - Barrier parameters per horizon
+2. TRANSACTION_COSTS - Round-trip commission in ticks
+3. SLIPPAGE_TICKS - Slippage per fill by volatility regime
+4. TICK_VALUES - Dollar value per tick
 """
 
 # =============================================================================
 # TRANSACTION COSTS - Critical for realistic fitness evaluation
 # =============================================================================
-# Commission costs in ticks (entry + exit round-trip):
-# - MES: ~0.5 ticks (1 tick spread + commission, 0.25 per side)
-# - MGC: ~0.3 ticks (tighter spread on gold micro)
+# Commission costs in ticks (entry + exit round-trip).
+# Known symbols have specific values; unknown symbols use DEFAULT_TRANSACTION_COST.
+DEFAULT_TRANSACTION_COST = 0.5  # Default for unknown symbols (ticks round-trip)
+
 TRANSACTION_COSTS = {
-    'MES': 0.5,  # ticks round-trip
-    'MGC': 0.3   # ticks round-trip
+    'MES': 0.5,  # Micro E-mini S&P 500: 0.25 per side
+    'MGC': 0.3,  # Micro Gold: tighter spread
 }
 
 # =============================================================================
@@ -22,15 +37,16 @@ TRANSACTION_COSTS = {
 # Slippage per fill (entry or exit) in ticks.
 # Total slippage = 2 * SLIPPAGE_TICKS (round-trip: entry + exit)
 #
-# Slippage varies by:
-# 1. Liquidity: MES (S&P) has deeper order book than MGC (Gold)
-# 2. Volatility regime: Higher volatility = wider spreads = more slippage
-#
-# Design:
-# - MES: 0.5-1.0 ticks per fill (higher liquidity, tighter spreads)
-# - MGC: 0.75-1.5 ticks per fill (lower liquidity, wider spreads)
-# - Low volatility: Use lower bound (tight markets, minimal slippage)
-# - High volatility: Use upper bound (wide markets, higher slippage)
+# Slippage varies by volatility regime:
+# - Low volatility: Tight markets, minimal slippage
+# - High volatility: Wide markets, higher slippage
+
+# Default slippage for unknown symbols
+DEFAULT_SLIPPAGE_TICKS = {
+    'low_vol': 0.5,   # Conservative default
+    'high_vol': 1.0   # Conservative default
+}
+
 SLIPPAGE_TICKS = {
     'MES': {
         'low_vol': 0.5,   # Calm market, tight spreads
@@ -43,9 +59,11 @@ SLIPPAGE_TICKS = {
 }
 
 # Tick values in dollars (for P&L calculation)
+DEFAULT_TICK_VALUE = 1.00  # Default for unknown symbols
+
 TICK_VALUES = {
     'MES': 1.25,  # $1.25 per tick (micro E-mini S&P)
-    'MGC': 1.00   # $1.00 per tick (micro Gold)
+    'MGC': 1.00,  # $1.00 per tick (micro Gold)
 }
 
 # =============================================================================
@@ -229,13 +247,13 @@ def get_barrier_params(
     """
     Get barrier parameters for a specific symbol and horizon.
 
-    This function supports dynamic horizons by generating defaults for horizons
-    not explicitly defined in BARRIER_PARAMS or BARRIER_PARAMS_DEFAULT.
+    This function supports any symbol. Known symbols (MES, MGC) have pre-tuned
+    parameters. Unknown symbols use sensible defaults.
 
     Parameters
     ----------
     symbol : str
-        Symbol name ('MES' or 'MGC')
+        Symbol name (any valid symbol)
     horizon : int
         Horizon value (any value in SUPPORTED_HORIZONS)
     get_default_for_horizon : callable, optional
@@ -253,6 +271,7 @@ def get_barrier_params(
     1. Symbol-specific params (BARRIER_PARAMS[symbol][horizon])
     2. Default params (BARRIER_PARAMS_DEFAULT[horizon])
     3. Auto-generated defaults (get_default_for_horizon if provided)
+    4. Sensible fallback defaults based on horizon
     """
     # Check symbol-specific params first
     if symbol in BARRIER_PARAMS and horizon in BARRIER_PARAMS[symbol]:
@@ -346,7 +365,7 @@ def get_slippage_ticks(symbol: str, regime: str = 'low_vol') -> float:
     Parameters
     ----------
     symbol : str
-        Symbol name ('MES' or 'MGC')
+        Symbol name (any valid symbol)
     regime : str, optional
         Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
 
@@ -358,16 +377,17 @@ def get_slippage_ticks(symbol: str, regime: str = 'low_vol') -> float:
     Notes
     -----
     Total round-trip slippage = 2 * get_slippage_ticks() (entry + exit)
+    Unknown symbols use DEFAULT_SLIPPAGE_TICKS.
     """
-    if symbol not in SLIPPAGE_TICKS:
-        # Default to MES slippage if symbol not found
-        symbol = 'MES'
-
     if regime not in ('low_vol', 'high_vol'):
         # Default to low_vol if regime invalid
         regime = 'low_vol'
 
-    return SLIPPAGE_TICKS[symbol][regime]
+    if symbol in SLIPPAGE_TICKS:
+        return SLIPPAGE_TICKS[symbol][regime]
+
+    # Use defaults for unknown symbols
+    return DEFAULT_SLIPPAGE_TICKS[regime]
 
 
 def get_total_trade_cost(
@@ -381,7 +401,7 @@ def get_total_trade_cost(
     Parameters
     ----------
     symbol : str
-        Symbol name ('MES' or 'MGC')
+        Symbol name (any valid symbol)
     regime : str, optional
         Volatility regime: 'low_vol' or 'high_vol' (default: 'low_vol')
     include_slippage : bool, optional
@@ -392,24 +412,14 @@ def get_total_trade_cost(
     float
         Total round-trip cost in ticks (entry + exit)
 
-    Examples
-    --------
-    >>> get_total_trade_cost('MES', 'low_vol')
-    1.5  # 0.5 commission + 2*0.5 slippage
-
-    >>> get_total_trade_cost('MGC', 'high_vol')
-    3.3  # 0.3 commission + 2*1.5 slippage
-
-    >>> get_total_trade_cost('MES', include_slippage=False)
-    0.5  # Commission only
-
     Notes
     -----
     - Commission is round-trip (entry + exit)
     - Slippage applies to both entry and exit (2x per-fill slippage)
     - Total cost = commission + 2 * slippage_per_fill
+    - Unknown symbols use DEFAULT_TRANSACTION_COST and DEFAULT_SLIPPAGE_TICKS
     """
-    commission = TRANSACTION_COSTS.get(symbol, 0.5)
+    commission = TRANSACTION_COSTS.get(symbol, DEFAULT_TRANSACTION_COST)
 
     if not include_slippage:
         return commission
@@ -456,3 +466,45 @@ def get_max_bars_across_all_params() -> tuple[int, str]:
             max_bars_source = f"PERCENTAGE_BARRIER_PARAMS[{horizon}]"
 
     return max_max_bars, max_bars_source
+
+
+def get_tick_value(symbol: str) -> float:
+    """
+    Get the tick value in dollars for a symbol.
+
+    Parameters
+    ----------
+    symbol : str
+        Symbol name (any valid symbol)
+
+    Returns
+    -------
+    float
+        Tick value in dollars
+
+    Notes
+    -----
+    Unknown symbols use DEFAULT_TICK_VALUE.
+    """
+    return TICK_VALUES.get(symbol, DEFAULT_TICK_VALUE)
+
+
+def get_transaction_cost(symbol: str) -> float:
+    """
+    Get the round-trip transaction cost in ticks for a symbol.
+
+    Parameters
+    ----------
+    symbol : str
+        Symbol name (any valid symbol)
+
+    Returns
+    -------
+    float
+        Transaction cost in ticks (round-trip)
+
+    Notes
+    -----
+    Unknown symbols use DEFAULT_TRANSACTION_COST.
+    """
+    return TRANSACTION_COSTS.get(symbol, DEFAULT_TRANSACTION_COST)

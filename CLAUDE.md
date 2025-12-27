@@ -8,6 +8,43 @@ This is not a single pipeline — it's a **factory** with a plugin architecture.
 
 ---
 
+## Single-Contract Architecture
+
+**This is a single-contract ML factory. Each contract is trained in complete isolation. No cross-symbol correlation or feature engineering.**
+
+### Key Principles
+
+1. **One contract at a time** - The pipeline processes and trains models for exactly one futures contract per run
+2. **Complete isolation** - No features, labels, or data from other contracts influence the model
+3. **Symbol configurability** - Easy to switch between MES, MGC, or other contracts via configuration
+
+### Symbol Configuration
+
+**Specify the contract to train:**
+
+```python
+# In config or CLI
+symbol = "MES"  # or "MGC", "ES", "GC", etc.
+```
+
+**Data path resolution:**
+- Raw data: `data/raw/{symbol}_1m.parquet` or `data/raw/{symbol}_1m.csv`
+- Processed: `data/splits/scaled/` (contains single-symbol data after pipeline)
+- Models: `experiments/runs/{run_id}/` (trained on single symbol)
+
+**Switching contracts:**
+```bash
+# Train on MES
+./pipeline run --symbols MES
+
+# Train on MGC (separate run, separate model)
+./pipeline run --symbols MGC
+```
+
+**Multi-symbol processing is blocked by default** (`allow_batch_symbols=False` in PipelineConfig). Each symbol requires its own pipeline run and produces its own trained model.
+
+---
+
 ## OHLCV ML Modeling: Factory Pattern
 
 We are building an **ML Model Factory** for OHLCV time series. The factory can train any model family (boosting, neural, transformers, classical ML, ensembles) using:
@@ -341,7 +378,8 @@ python -c "from src.models import ModelRegistry; print(len(ModelRegistry.list_al
 ## Key Params
 
 ```python
-SYMBOLS = ['MES', 'MGC']
+# Single contract per run (no cross-symbol features or correlation)
+SYMBOL = 'MES'  # or 'MGC' - one symbol per pipeline run
 LABEL_HORIZONS = [5, 10, 15, 20]  # All supported horizons
 TRAIN/VAL/TEST = 70/15/15
 # Purge/embargo are auto-scaled from max horizon:

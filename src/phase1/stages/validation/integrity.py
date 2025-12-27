@@ -52,8 +52,8 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
     """
     Check for NaN values in the DataFrame.
 
-    Skips validation for cross-asset features (mes_mgc_*, relative_strength)
-    which are expected to be NaN when running with a single symbol.
+    Each symbol is processed in isolation - there are no cross-asset features.
+    Forward return columns are expected to have NaN values in the last horizon bars.
 
     Args:
         df: DataFrame to check
@@ -68,14 +68,6 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
     nan_cols = nan_counts[nan_counts > 0]
 
     if len(nan_cols) > 0:
-        # Import cross-asset feature checker
-        try:
-            from src.phase1.config.features import is_cross_asset_feature
-        except ImportError:
-            # Fallback: check by name pattern
-            def is_cross_asset_feature(name: str) -> bool:
-                return name.startswith('mes_mgc_') or name == 'relative_strength'
-
         def _forward_return_horizon(name: str) -> int | None:
             match = re.match(r"^fwd_return(?:_log)?_h(\d+)$", name)
             if not match:
@@ -85,29 +77,17 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
         # Determine number of symbols (for forward return NaN calculations)
         n_symbols = df['symbol'].nunique() if 'symbol' in df.columns else 1
 
-        # Separate cross-asset features from regular features
-        cross_asset_nans = {}
+        # Separate expected forward return NaNs from unexpected NaNs
         expected_forward_return_nans = {}
         regular_nans = {}
 
         for col, count in nan_cols.items():
-            if is_cross_asset_feature(col):
-                cross_asset_nans[col] = count
-                continue
             horizon = _forward_return_horizon(col)
             # Forward returns should have horizon * n_symbols NaNs at the end
             if horizon is not None and count <= horizon * n_symbols:
                 expected_forward_return_nans[col] = count
-                continue
             else:
                 regular_nans[col] = count
-
-        # Log cross-asset NaNs as warnings (expected behavior)
-        if cross_asset_nans:
-            logger.info(f"  Found NaN values in {len(cross_asset_nans)} cross-asset features (expected for single-symbol runs):")
-            for col, count in cross_asset_nans.items():
-                pct = count / len(df) * 100
-                logger.info(f"    {col}: {count:,} ({pct:.2f}%)")
 
         if expected_forward_return_nans:
             logger.info(
@@ -126,10 +106,10 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
                 logger.warning(f"    {col}: {count:,} ({pct:.2f}%)")
                 issues_found.append(f"{col}: {count} NaN values ({pct:.2f}%)")
 
-        if not regular_nans and (cross_asset_nans or expected_forward_return_nans):
+        if not regular_nans and expected_forward_return_nans:
             logger.info(
                 "  No unexpected NaN values found "
-                "(cross-asset and forward-return NaNs are expected)"
+                "(forward-return NaNs are expected in last horizon bars)"
             )
 
         # Return all NaN counts for reporting, but only regular ones are flagged as issues
