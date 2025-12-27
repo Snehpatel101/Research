@@ -133,17 +133,19 @@ class LightGBMModel(BaseModel):
         y_val_lgb = self._convert_labels_to_lgb(y_val)
 
         # Create Dataset objects
+        # Note: free_raw_data=True (default) frees raw data after construction
+        # to reduce memory usage. We only need the internal LightGBM format.
         dtrain = lgb.Dataset(
             X_train,
             label=y_train_lgb,
             weight=sample_weights,
-            free_raw_data=False,
+            free_raw_data=True,  # Free raw data to reduce memory by ~50%
         )
         dval = lgb.Dataset(
             X_val,
             label=y_val_lgb,
             reference=dtrain,
-            free_raw_data=False,
+            free_raw_data=True,  # Free raw data to reduce memory
         )
 
         # Build parameters
@@ -174,6 +176,9 @@ class LightGBMModel(BaseModel):
             valid_names=["train", "val"],
             callbacks=callbacks,
         )
+
+        # Free LightGBM Dataset objects to release memory
+        del dtrain, dval
 
         training_time = time.time() - start_time
 

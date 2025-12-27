@@ -69,14 +69,20 @@ class CatBoostModel(BaseModel):
         self._model: Optional[CatBoostClassifier] = None
         self._feature_names: Optional[List[str]] = None
         self._n_classes: int = 3
-        self._use_gpu: bool = self._config.get("use_gpu", False)
 
-        if self._use_gpu:
-            if _check_cuda_available():
-                logger.info("CatBoost GPU training enabled")
-            else:
-                logger.warning("CUDA not available for CatBoost, falling back to CPU")
-                self._use_gpu = False
+        # Check if task_type is explicitly set to CPU (force CPU mode)
+        task_type = self._config.get("task_type", "").upper()
+        if task_type == "CPU":
+            self._use_gpu = False
+            logger.info("CatBoost CPU mode forced via task_type config")
+        else:
+            self._use_gpu = self._config.get("use_gpu", False)
+            if self._use_gpu:
+                if _check_cuda_available():
+                    logger.info("CatBoost GPU training enabled")
+                else:
+                    logger.warning("CUDA not available for CatBoost, falling back to CPU")
+                    self._use_gpu = False
 
     @property
     def model_family(self) -> str:
