@@ -142,18 +142,20 @@ The factory supports both **single models** and **ensembles**:
   --meta-learner logistic
 ```
 
-### Model Families (12 Models Implemented)
+### Model Families (13 Models Implemented)
 
 | Family | Models | Interface | Strengths | Status |
 |--------|--------|-----------|-----------|--------|
 | Boosting | XGBoost, LightGBM, CatBoost | `BoostingModel(BaseModel)` | Fast, interpretable, feature interactions | **Complete** |
-| Neural | LSTM, GRU, TCN | `RNNModel(BaseModel)` | Temporal dependencies, sequential patterns | **Complete** |
+| Neural | LSTM, GRU, TCN, Transformer | `RNNModel(BaseModel)` | Temporal dependencies, sequential patterns, attention | **Complete** |
 | Classical | Random Forest, Logistic, SVM | `ClassicalModel(BaseModel)` | Robust baselines, interpretable | **Complete** |
 | Ensemble | Voting, Stacking, Blending | `EnsembleModel(BaseModel)` | Combines diverse model strengths | **Complete** |
 
-**All 12 models** implement the same `BaseModel` interface and consume the same standardized datasets from Phase 1.
+**All 13 models** implement the same `BaseModel` interface and consume the same standardized datasets from Phase 1.
 
 **Registry:** Models register via `@ModelRegistry.register()` decorator for automatic discovery.
+
+**New:** Transformer model added (507 lines) with multi-head self-attention, positional encoding, and attention visualization capabilities.
 
 ### Recommended Ensemble Configurations
 
@@ -162,7 +164,7 @@ The factory supports both **single models** and **ensembles**:
 | Boosting-Only | XGBoost + LightGBM + CatBoost | Voting | Low latency (< 5ms), production |
 | Hybrid Fast | XGBoost + LightGBM + Random Forest | Voting/Blending | Balanced accuracy/speed |
 | Neural Stack | LSTM + GRU + TCN | Stacking | Sequential pattern learning |
-| Full Stack | All 12 models | Stacking with Logistic meta | Maximum accuracy, ensemble diversity |
+| Full Stack | All 13 models | Stacking with Logistic meta | Maximum accuracy, ensemble diversity |
 
 **Implemented Ensemble Methods:**
 - **Voting:** Combine predictions via weighted/unweighted averaging
@@ -311,24 +313,24 @@ src/phase1/stages/
 
 ## Model Factory (Phase 2 - Complete)
 
-Plugin-based model training system with **12 models across 4 families**:
+Plugin-based model training system with **13 models across 4 families**:
 
 ```
 src/models/
-├── registry.py         → ModelRegistry plugin system (12 models registered)
+├── registry.py         → ModelRegistry plugin system (13 models registered)
 ├── base.py             → BaseModel interface
 ├── config.py           → TrainerConfig, YAML loading
 ├── trainer.py          → Unified training orchestration
 ├── device.py           → GPU detection, memory estimation
 ├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
-├── neural/             → LSTM, GRU, TCN (3 models)
+├── neural/             → LSTM, GRU, TCN, Transformer (4 models)
 ├── classical/          → Random Forest, Logistic, SVM (3 models)
 └── ensemble/           → Voting, Stacking, Blending (3 models)
 ```
 
 **Output:** Trained models + unified performance reports
 
-**All 12 models available:** `xgboost`, `lightgbm`, `catboost`, `lstm`, `gru`, `tcn`, `random_forest`, `logistic`, `svm`, `voting`, `stacking`, `blending`
+**All 13 models available:** `xgboost`, `lightgbm`, `catboost`, `lstm`, `gru`, `tcn`, `transformer`, `random_forest`, `logistic`, `svm`, `voting`, `stacking`, `blending`
 
 ---
 
