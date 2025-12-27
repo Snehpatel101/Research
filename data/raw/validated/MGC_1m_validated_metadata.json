@@ -1,7 +1,7 @@
 {
   "symbol": "MGC",
-  "source_file": "/home/jake/Desktop/Research/data/raw/MGC_1m.parquet",
-  "ingestion_timestamp": "2025-12-25T01:36:52.485518",
+  "source_file": "/home/user/Research/data/raw/MGC_1m.parquet",
+  "ingestion_timestamp": "2025-12-27T21:31:36.803709",
   "source_timezone": "UTC",
   "raw_rows": 690000,
   "rows_after_type_validation": 690000,
