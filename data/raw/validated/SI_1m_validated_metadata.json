@@ -1,0 +1,30 @@
+{
+  "symbol": "SI",
+  "source_file": "/home/jake/Desktop/Research/data/raw/SI_1m.parquet",
+  "ingestion_timestamp": "2025-12-27T17:50:56.170403",
+  "source_timezone": "UTC",
+  "raw_rows": 5333201,
+  "rows_after_type_validation": 5333201,
+  "validation": {
+    "total_rows": 5333201,
+    "violations": {},
+    "fixes_applied": {},
+    "mode": "auto_fix",
+    "rows_after_validation": 5333201,
+    "total_fixes_applied": 0
+  },
+  "final_rows": 5333201,
+  "date_range": {
+    "start": "2008-11-26T00:00:00",
+    "end": "2025-08-06T00:00:00"
+  },
+  "columns": [
+    "datetime",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "symbol"
+  ]
+}

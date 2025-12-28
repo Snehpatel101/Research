@@ -2,176 +2,161 @@
 
 Modular ML pipeline that turns raw OHLCV bars into trained models with leakage-safe splits, cross-validation, and unified evaluation.
 
-**Single-Contract Architecture:** This is a single-contract ML factory. Each contract (MES, MGC, etc.) is trained in complete isolation. No cross-symbol correlation or feature engineering.
+**Single-Contract Architecture:** Each contract (MES, MGC, SI, etc.) is trained in complete isolation. No cross-symbol correlation.
 
 ```
-[ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3: CV ] → [ Phase 4: Ensemble ] → [ Phase 5: Prod ]
-    COMPLETE           COMPLETE            COMPLETE           COMPLETE            PLANNED
+[ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3: CV ] → [ Phase 4: Ensemble ]
+    COMPLETE           COMPLETE            COMPLETE           COMPLETE
 ```
 
-## Quick Start
+---
+
+## Quick Start (Notebook)
+
+The unified notebook is the recommended way to use this pipeline:
+
+```
+notebooks/ML_Pipeline.ipynb
+```
+
+1. Open in [Google Colab](https://colab.research.google.com/) or Jupyter
+2. Configure Section 1 (symbol, models, horizons)
+3. Run All Cells
+4. Export trained models from Section 7
+
+**Full notebook documentation:** [NOTEBOOK_GUIDE.md](NOTEBOOK_GUIDE.md)
+
+---
+
+## Quick Start (CLI)
 
 ```bash
-# Run Phase 1 pipeline (requires real data in data/raw/)
-./pipeline run --symbols MGC
+# Run Phase 1 pipeline (requires data in data/raw/)
+./pipeline run --symbols SI
 
-# Train a model (Phase 2)
+# Train a model
 python scripts/train_model.py --model xgboost --horizon 20
-python scripts/train_model.py --model lstm --horizon 20 --seq-len 30
 
-# Run cross-validation (Phase 3)
+# Run cross-validation
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
 
-# Train ensemble (Phase 4)
-python scripts/train_model.py --model voting --base-models xgboost,lightgbm,lstm --horizon 20
+# Train ensemble
+python scripts/train_model.py --model voting --base-models xgboost,lightgbm --horizon 20
 
 # List available models
 python scripts/train_model.py --list-models
 ```
 
-**Colab Quick Start:**
+---
 
-See [COLAB_GUIDE.md](docs/COLAB_GUIDE.md) for detailed setup instructions or use the quickstart notebooks:
+## Available Models (13 Total)
 
-```bash
-notebooks/01_quickstart.ipynb              # Complete pipeline walkthrough
-notebooks/02_train_all_models.ipynb        # Train all 12 models
-notebooks/03_cross_validation.ipynb        # CV and hyperparameter tuning
+| Family | Models | GPU | Description |
+|--------|--------|-----|-------------|
+| **Boosting** | XGBoost, LightGBM, CatBoost | Optional | Fast, interpretable |
+| **Neural** | LSTM, GRU, TCN, Transformer | Required | Sequential patterns |
+| **Classical** | Random Forest, Logistic, SVM | No | Robust baselines |
+| **Ensemble** | Voting, Stacking, Blending | No | Combine models |
+
+All models implement the unified `BaseModel` interface.
+
+---
+
+## Data Flow
+
+```
+Raw OHLCV (.csv/.parquet)
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│           PHASE 1: DATA PIPELINE        │
+│  Clean → Features (150+) → Labels       │
+│  → Split (70/15/15) → Scale             │
+└─────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│          PHASE 2: MODEL TRAINING        │
+│  Boosting │ Neural │ Classical          │
+└─────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│     PHASE 3: CROSS-VALIDATION (opt)     │
+│  PurgedKFold │ Optuna Tuning            │
+└─────────────────────────────────────────┘
+       │
+       ▼
+┌─────────────────────────────────────────┐
+│       PHASE 4: ENSEMBLE (opt)           │
+│  Voting │ Stacking │ Blending           │
+└─────────────────────────────────────────┘
+       │
+       ▼
+   Exported Models (.joblib, .onnx)
 ```
 
-```python
-from src.phase1.stages.datasets import TimeSeriesDataContainer
+---
 
-container = TimeSeriesDataContainer.from_parquet_dir(
-    "data/splits/scaled",
-    horizon=20,
-)
-X_train, y_train, w_train = container.get_sklearn_arrays("train")
-```
+## Key Features
 
-## Available Models (12 Total)
+- **No Data Leakage**: Purge (60 bars) + Embargo (1440 bars) between splits
+- **Reproducible**: Random seeds for all libraries
+- **Class Balanced**: Automatic class weight calculation
+- **Quality Weighted**: Pipeline quality scores used in training
+- **150+ Features**: Momentum, volatility, wavelets, microstructure
+- **Multi-Timeframe**: 5min, 15min, 1hr, daily aggregations
 
-| Family | Models | GPU Support | Status |
-|--------|--------|-------------|--------|
-| Boosting | XGBoost, LightGBM, CatBoost | Optional | Complete |
-| Neural | LSTM, GRU, TCN | Required (CUDA) | Complete |
-| Classical | Random Forest, Logistic, SVM | No | Complete |
-| Ensemble | Voting, Stacking, Blending | No | Complete |
-
-**All 12 models** implement the unified `BaseModel` interface and work with the same preprocessed datasets from Phase 1.
-
-## Pipeline Stages
-
-**Phase 1: Data Pipeline**
-1. Ingest - Load and validate raw OHLCV
-2. Clean - Resample 1min → 5min, handle gaps
-3. Features - 150+ indicators (momentum, wavelets, microstructure)
-4. Labels - Triple-barrier with symbol-specific asymmetric barriers
-5. GA Optimize - Optuna parameter optimization
-6. Final Labels - Apply optimized parameters
-7. Splits - Train/val/test with purge (60) and embargo (1440)
-8. Scaling - Train-only robust scaling
-9. Datasets - Build TimeSeriesDataContainer
-10. Validation - Feature correlation and quality checks
-
-**Phase 2: Model Factory**
-- Plugin-based model registry with `@register` decorator
-- Unified `BaseModel` interface for all model types
-- GPU-optimized training with mixed precision
-
-**Phase 3: Cross-Validation**
-- PurgedKFold with configurable purge/embargo
-- Walk-forward feature selection (MDA/MDI)
-- Out-of-fold predictions for stacking
-- Optuna hyperparameter tuning
-
-**Phase 4: Ensemble Models**
-- Voting ensembles (soft/hard voting)
-- Stacking with meta-learners
-- Blending with holdout predictions
-- Diversity analysis and model weighting
-
-## Key Outputs
-
-- Scaled splits: `data/splits/scaled/train_scaled.parquet`
-- Trained models: `experiments/runs/<run_id>/`
-- CV results: `experiments/cv/<run_id>/`
-
-## Configuration
-
-```python
-# Single contract per pipeline run
-SYMBOL = 'MES'                 # or 'MGC' - one contract at a time
-
-HORIZONS = [5, 10, 15, 20]      # Label horizons
-TRAIN/VAL/TEST = 70/15/15      # Split ratios
-PURGE_BARS = 60                # Prevent label leakage
-EMBARGO_BARS = 1440            # ~5 days for serial correlation
-```
-
-### Symbol Configuration
-
-Each contract requires its own pipeline run:
-
-```bash
-# Train MES model
-./pipeline run --symbols MES
-
-# Train MGC model (separate run, separate model)
-./pipeline run --symbols MGC
-```
-
-Data paths resolve from symbol: `data/raw/{symbol}_1m.parquet`
+---
 
 ## Project Structure
 
 ```
+├── notebooks/
+│   └── ML_Pipeline.ipynb    # Unified notebook (recommended)
 ├── src/
-│   ├── models/           # Phase 2: Model factory (12 models)
-│   │   ├── boosting/     # XGBoost, LightGBM, CatBoost
-│   │   ├── neural/       # LSTM, GRU, TCN
-│   │   ├── classical/    # Random Forest, Logistic, SVM
-│   │   └── ensemble/     # Voting, Stacking, Blending
-│   ├── cross_validation/ # Phase 3: CV system
-│   ├── phase1/           # Phase 1: Data pipeline
-│   └── cli/              # CLI entrypoints
-├── scripts/              # Training scripts
-├── config/models/        # Model YAML configs (12 configs)
-├── notebooks/            # Jupyter/Colab notebooks (4 notebooks)
-├── data/                 # Data artifacts
-├── experiments/          # Training outputs
-└── tests/                # Test suite (1592 passing, 13 skipped)
+│   ├── models/              # 13 model implementations
+│   ├── cross_validation/    # PurgedKFold, Optuna tuning
+│   └── phase1/              # Data pipeline stages
+├── data/
+│   ├── raw/                 # Input: {symbol}_1m.csv
+│   └── splits/scaled/       # Output: train/val/test parquet
+├── experiments/             # Training outputs
+└── config/models/           # Model YAML configs
 ```
+
+---
 
 ## Documentation
 
-- `ARCHITECTURE_MAP.md` - Visual system architecture with all 12 models
-- `CLAUDE.md` - Development guidelines and factory pattern
-- `docs/phases/` - Phase specifications (Phases 1-5)
-- `docs/COLAB_GUIDE.md` - Google Colab setup and GPU configuration
-- `notebooks/` - Interactive Jupyter/Colab notebooks
+| Document | Purpose |
+|----------|---------|
+| [NOTEBOOK_GUIDE.md](NOTEBOOK_GUIDE.md) | Complete notebook usage guide |
+| [CLAUDE.md](CLAUDE.md) | Development guidelines |
+| [docs/COLAB_GUIDE.md](docs/COLAB_GUIDE.md) | Google Colab setup |
 
-## Notebooks
+---
 
-Four interactive notebooks for training and experimentation:
+## Configuration
 
-1. `01_quickstart.ipynb` - Complete pipeline walkthrough
-2. `02_train_all_models.ipynb` - Train all 12 models across horizons
-3. `03_cross_validation.ipynb` - CV and hyperparameter tuning
-4. `Phase1_Pipeline_Colab.ipynb` - Phase 1 on Google Colab with GPU
+```python
+SYMBOL = 'SI'              # Contract symbol
+HORIZONS = [5, 10, 15, 20] # Prediction horizons (bars forward)
+TRAIN/VAL/TEST = 70/15/15  # Split ratios
+PURGE_BARS = 60            # Gap to prevent label leakage
+EMBARGO_BARS = 1440        # ~5 days for serial correlation
+RANDOM_SEED = 42           # Reproducibility
+```
 
-## Tests
+---
 
-**Test Coverage: 1592 tests passing, 13 skipped**
+## Requirements
+
+- Python 3.10+
+- PyTorch (for neural models, GPU recommended)
+- XGBoost, LightGBM, CatBoost
+- scikit-learn, pandas, numpy
 
 ```bash
-# Run all tests
-python -m pytest tests/ -v
-
-# Run model tests only
-python -m pytest tests/models tests/cross_validation -v
-
-# Run specific model family
-python -m pytest tests/models/test_classical_models.py -v
-python -m pytest tests/models/test_ensemble_models.py -v
+pip install -r requirements.txt
 ```
