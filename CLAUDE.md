@@ -109,22 +109,21 @@ class BaseModel(ABC):
 Adding a new model type should be **trivial**:
 
 ```python
-from src.models import ModelRegistry
+from src.models import BaseModel, register
 
-@ModelRegistry.register("my_model")
+@register(name="my_model", family="boosting")
 class MyModel(BaseModel):
-    def train(self, X, y, config):
-        # Your training logic
-        pass
-
-    def predict(self, X):
-        # Your prediction logic
-        pass
+    # Implement BaseModel: fit/predict/save/load (+ config properties)
+    ...
 ```
 
 Then use it:
 ```bash
-./pipeline run --model-type my_model --symbols MES
+# Phase 1 (data)
+./pipeline run --symbols MES
+
+# Phase 2 (training)
+python scripts/train_model.py --model my_model --horizon 20
 ```
 
 ### Ensemble Support
@@ -132,37 +131,35 @@ Then use it:
 The factory supports both **single models** and **ensembles**:
 
 ```bash
-# Train individual models
-./pipeline run --model-type xgboost --symbols MES
-./pipeline run --model-type lstm --symbols MES
+# Train individual models (Phase 2)
+python scripts/train_model.py --model xgboost --horizon 20
+python scripts/train_model.py --model lstm --horizon 20 --seq-len 60
 
-# Train ensemble meta-learner
-./pipeline run --model-type ensemble \
-  --base-models xgboost,lstm \
-  --meta-learner logistic
+# Train an ensemble from scratch (Phase 2)
+python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,lightgbm,catboost
 ```
 
-### Model Families (12 Models Implemented)
+### Model Families (13 Models Implemented)
 
 | Family | Models | Interface | Strengths | Status |
 |--------|--------|-----------|-----------|--------|
 | Boosting | XGBoost, LightGBM, CatBoost | `BoostingModel(BaseModel)` | Fast, interpretable, feature interactions | **Complete** |
-| Neural | LSTM, GRU, TCN | `RNNModel(BaseModel)` | Temporal dependencies, sequential patterns | **Complete** |
+| Neural | LSTM, GRU, TCN, Transformer | `BaseRNNModel(BaseModel)` | Temporal dependencies, sequential patterns | **Complete** |
 | Classical | Random Forest, Logistic, SVM | `ClassicalModel(BaseModel)` | Robust baselines, interpretable | **Complete** |
 | Ensemble | Voting, Stacking, Blending | `EnsembleModel(BaseModel)` | Combines diverse model strengths | **Complete** |
 
-**All 12 models** implement the same `BaseModel` interface and consume the same standardized datasets from Phase 1.
+**All 13 models** implement the same `BaseModel` interface and consume the same standardized datasets from Phase 1.
 
-**Registry:** Models register via `@ModelRegistry.register()` decorator for automatic discovery.
+**Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 
 ### Recommended Ensemble Configurations
 
 | Ensemble Type | Models | Method | Use Case |
 |---------------|--------|--------|----------|
-| Boosting-Only | XGBoost + LightGBM + CatBoost | Voting | Low latency (< 5ms), production |
+| Boosting-Only | XGBoost + LightGBM + CatBoost | Voting | Fast baseline ensemble |
 | Hybrid Fast | XGBoost + LightGBM + Random Forest | Voting/Blending | Balanced accuracy/speed |
 | Neural Stack | LSTM + GRU + TCN | Stacking | Sequential pattern learning |
-| Full Stack | All 12 models | Stacking with Logistic meta | Maximum accuracy, ensemble diversity |
+| Full Stack | All registered models | Stacking with Logistic meta | Maximum diversity (higher overfit risk) |
 
 **Implemented Ensemble Methods:**
 - **Voting:** Combine predictions via weighted/unweighted averaging
@@ -311,24 +308,24 @@ src/phase1/stages/
 
 ## Model Factory (Phase 2 - Complete)
 
-Plugin-based model training system with **12 models across 4 families**:
+Plugin-based model training system with **13 models across 4 families**:
 
 ```
 src/models/
-├── registry.py         → ModelRegistry plugin system (12 models registered)
+├── registry.py         → ModelRegistry plugin system (13 models registered)
 ├── base.py             → BaseModel interface
 ├── config.py           → TrainerConfig, YAML loading
 ├── trainer.py          → Unified training orchestration
 ├── device.py           → GPU detection, memory estimation
 ├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
-├── neural/             → LSTM, GRU, TCN (3 models)
+├── neural/             → LSTM, GRU, TCN, Transformer (4 models)
 ├── classical/          → Random Forest, Logistic, SVM (3 models)
 └── ensemble/           → Voting, Stacking, Blending (3 models)
 ```
 
 **Output:** Trained models + unified performance reports
 
-**All 12 models available:** `xgboost`, `lightgbm`, `catboost`, `lstm`, `gru`, `tcn`, `random_forest`, `logistic`, `svm`, `voting`, `stacking`, `blending`
+**All 13 models available:** `xgboost`, `lightgbm`, `catboost`, `lstm`, `gru`, `tcn`, `transformer`, `random_forest`, `logistic`, `svm`, `voting`, `stacking`, `blending`
 
 ---
 
@@ -391,8 +388,6 @@ TRAIN/VAL/TEST = 70/15/15
 
 ## Phase 1 Analysis Summary (2025-12-24)
 
-### Overall Score: 8.5/10 (Production-Ready)
-
 **Strengths:**
 - Triple-barrier labeling with symbol-specific asymmetric barriers (MES: 1.5:1.0)
 - Optuna-based parameter optimization with transaction cost penalties
@@ -403,16 +398,10 @@ TRAIN/VAL/TEST = 70/15/15
 - TimeSeriesDataContainer for unified model training interface
 
 **Recent Improvements:**
-- Removed synthetic data generation - pipeline requires real data
+- Added a synthetic OHLCV helper for smoke tests (`src/utils/notebook.py`), but real training expects real data in `data/raw/`
 - Added wavelet decomposition features
 - Added microstructure features (bid-ask spread, order flow)
 - Improved embargo to 1440 bars (5 days) for better serial correlation handling
 - DataIngestor validates OHLCV data at pipeline entry
 
-**Expected Performance:**
-| Horizon | Sharpe | Win Rate | Max DD |
-|---------|--------|----------|--------|
-| H5 | 0.3-0.8 | 45-50% | 10-25% |
-| H10 | 0.4-0.9 | 46-52% | 9-20% |
-| H15 | 0.4-1.0 | 47-53% | 8-18% |
-| H20 | 0.5-1.2 | 48-55% | 8-18% |
+**Performance expectations:** do not treat any Sharpe/win-rate targets as “built-in”. Measure performance empirically via `scripts/run_cv.py`, `scripts/run_walk_forward.py`, and `scripts/run_cpcv_pbo.py` on your own data/cost assumptions.

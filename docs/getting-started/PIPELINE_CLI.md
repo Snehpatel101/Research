@@ -45,6 +45,10 @@ Options:
 - `--embargo-bars`: Embargo bars (disables auto-scaling)
 - `--horizons`: Comma-separated horizons (e.g., `5,10,15,20`)
 - `--feature-set`: Feature set (see `src/phase1/config/feature_sets.py`)
+- `--model-type`: Model-aware preparation hint (e.g., `xgboost`, `lstm`, `transformer`, `ensemble`)
+- `--base-models`: Base models for model-aware ensemble prep (e.g., `xgboost,lstm,transformer`)
+- `--meta-learner`: Meta-learner hint for stacking/blending ensembles (e.g., `logistic`)
+- `--sequence-length`: Sequence length hint for sequence models (LSTM/Transformer)
 - `--project-root`: Project root path
 
 ### rerun

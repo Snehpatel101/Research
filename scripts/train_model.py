@@ -10,6 +10,9 @@ Examples:
     # Train XGBoost with defaults
     python scripts/train_model.py --model xgboost --horizon 20
 
+    # Train a voting ensemble from scratch
+    python scripts/train_model.py --model voting --base-models xgboost,lightgbm,catboost --horizon 20
+
     # Train LSTM with custom config
     python scripts/train_model.py --model lstm --horizon 20 --hidden-size 256 --seq-len 60
 
@@ -64,6 +67,9 @@ Examples:
   # Train TCN (neural)
   python scripts/train_model.py --model tcn --horizon 20 --seq-len 120
 
+  # Train a voting ensemble from scratch
+  python scripts/train_model.py --model voting --base-models xgboost,lightgbm,catboost --horizon 20
+
   # List available models
   python scripts/train_model.py --list-models
         """,
@@ -80,6 +86,24 @@ Examples:
         type=int,
         default=20,
         help="Label horizon (default: 20)",
+    )
+
+    # Ensemble arguments
+    parser.add_argument(
+        "--base-models",
+        type=str,
+        help="Comma-separated base model names for ensemble models (voting/stacking/blending)",
+    )
+    parser.add_argument(
+        "--meta-learner",
+        type=str,
+        help="Meta-learner model name for stacking/blending (default: logistic)",
+    )
+    parser.add_argument(
+        "--voting",
+        type=str,
+        choices=["soft", "hard"],
+        help="Voting strategy for VotingEnsemble (soft/hard)",
     )
 
     # Data arguments
@@ -244,6 +268,16 @@ def build_config_overrides(args: argparse.Namespace) -> Dict[str, Any]:
     if args.no_mixed_precision:
         overrides["mixed_precision"] = False
 
+    # Ensemble helpers
+    if args.base_models:
+        overrides["base_model_names"] = [
+            m.strip().lower() for m in args.base_models.split(",") if m.strip()
+        ]
+    if args.meta_learner:
+        overrides["meta_learner_name"] = args.meta_learner.strip().lower()
+    if args.voting:
+        overrides["voting"] = args.voting
+
     return overrides
 
 
@@ -252,8 +286,7 @@ def list_models() -> None:
     from src.models.registry import ModelRegistry
 
     # Ensure models are imported/registered
-    import src.models.boosting  # noqa: F401
-    import src.models.neural  # noqa: F401
+    import src.models  # noqa: F401
 
     print("\nAvailable Models:")
     print("=" * 60)
@@ -278,8 +311,7 @@ def show_model_info(model_name: str) -> None:
     from src.models.registry import ModelRegistry
 
     # Ensure models are imported/registered
-    import src.models.boosting  # noqa: F401
-    import src.models.neural  # noqa: F401
+    import src.models  # noqa: F401
 
     try:
         info = ModelRegistry.get_model_info(model_name)
@@ -322,14 +354,23 @@ def main() -> int:
     # Import models to ensure registration
     logger.info("Loading model registry...")
     from src.models.registry import ModelRegistry
-    import src.models.boosting  # noqa: F401
-    import src.models.neural  # noqa: F401
+    import src.models  # noqa: F401
 
     # Validate model exists
     if not ModelRegistry.is_registered(args.model):
         print(f"Error: Unknown model '{args.model}'")
         print(f"Available: {ModelRegistry.list_all()}")
         return 1
+
+    # Validate base models if provided (ensemble convenience)
+    config_overrides = build_config_overrides(args)
+    base_model_names = config_overrides.get("base_model_names")
+    if base_model_names:
+        invalid = [m for m in base_model_names if not ModelRegistry.is_registered(m)]
+        if invalid:
+            print(f"Error: Unknown base models: {invalid}")
+            print(f"Available: {ModelRegistry.list_all()}")
+            return 1
 
     # Load data
     logger.info(f"Loading data from {args.data_dir}...")
@@ -350,9 +391,6 @@ def main() -> int:
         return 1
 
     logger.info(f"Loaded: {container}")
-
-    # Build config
-    config_overrides = build_config_overrides(args)
 
     # Get model info for sequence length
     model_info = ModelRegistry.get_model_info(args.model)

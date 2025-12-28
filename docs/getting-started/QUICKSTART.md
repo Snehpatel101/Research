@@ -7,7 +7,11 @@ Phase 1 turns raw OHLCV bars into model-ready datasets with features, triple-bar
 
 ```bash
 python --version
+# Phase 1 (data pipeline) dependencies only
 pip install -r requirements.txt
+
+# If you also want Phase 2+ (training/CV/ensembles), install the full package deps
+pip install -e .
 ```
 
 ## Run your first pipeline

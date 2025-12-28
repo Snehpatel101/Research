@@ -716,40 +716,14 @@ print(f"Label distribution: {pd.Series(y_train).value_counts().to_dict()}")
 
 ---
 
-## Expected Performance Baselines
-
-Based on the labeling configuration and feature engineering:
-
-| Horizon | Expected Sharpe | Expected Win Rate | Expected Max DD |
-|---------|-----------------|-------------------|-----------------|
-| H5 | 0.3 - 0.8 | 45% - 50% | 10% - 25% |
-| H10 | 0.4 - 0.9 | 46% - 52% | 9% - 20% |
-| H15 | 0.4 - 1.0 | 47% - 53% | 8% - 18% |
-| H20 | 0.5 - 1.2 | 48% - 55% | 8% - 18% |
-
-**Note:** These are baselines before model optimization. Actual performance depends on model choice and hyperparameters.
-
----
-
 ## Next Steps (Phase 2)
 
-Phase 1 outputs feed into Phase 2 (Model Factory):
+Phase 1’s scaled split parquets are the input to model training and evaluation:
 
-1. **Model Registry** - Register model types (XGBoost, LSTM, etc.)
-2. **Training Pipeline** - Train models using TimeSeriesDataContainer
-3. **Evaluation Framework** - Compare models with identical metrics
-4. **Ensemble Support** - Stack/blend multiple models
-
-```python
-# Phase 2 will use:
-from src.models import ModelRegistry, train_model
-
-@ModelRegistry.register("xgboost")
-class XGBoostModel(BaseModel):
-    def train(self, container, config):
-        X, y, w = container.get_sklearn_arrays("train")
-        # ... training logic
-```
+- Phase 2 training: `docs/phases/PHASE_2.md`
+- Phase 3 CV utilities: `docs/phases/PHASE_3.md`
+- Notebook workflow: `notebooks/ML_Pipeline.ipynb` (see `docs/notebook/README.md`)
+- CLI training: `python scripts/train_model.py --model xgboost --horizon 20`
 
 ---
 

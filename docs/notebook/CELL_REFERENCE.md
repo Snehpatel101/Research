@@ -313,9 +313,13 @@ Config Match: ✓ Data covers configured range
 - `RUN_DATA_PIPELINE` (bool, from config)
 
 **Outputs:**
-- `data/splits/scaled/train_h{horizon}.parquet` (for each horizon)
-- `data/splits/scaled/val_h{horizon}.parquet`
-- `data/splits/scaled/test_h{horizon}.parquet`
+- `data/splits/scaled/train_scaled.parquet`
+- `data/splits/scaled/val_scaled.parquet`
+- `data/splits/scaled/test_scaled.parquet`
+
+Notes:
+- These split files contain **all** horizon label columns (e.g. `label_h5`, `label_h10`, ...).
+- “Which horizon you’re training” is determined by selecting the appropriate label/weight columns via `TimeSeriesDataContainer(horizon=...)`.
 
 **Pipeline Stages:**
 

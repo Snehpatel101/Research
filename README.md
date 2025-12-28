@@ -93,7 +93,9 @@ Raw OHLCV (.csv/.parquet)
 └─────────────────────────────────────────┘
        │
        ▼
-   Exported Models (.joblib, .onnx)
+   Saved training artifacts (see `experiments/runs/`)
+
+Note: The notebook includes optional export helpers (e.g. ONNX) but the core trainer saves model-family artifacts under each run directory.
 ```
 
 ---
@@ -101,7 +103,7 @@ Raw OHLCV (.csv/.parquet)
 ## Key Features
 
 - **No Data Leakage**: Purge (60 bars) + Embargo (1440 bars) between splits
-- **Reproducible**: Random seeds for all libraries
+- **Seeded**: Configuration includes a `random_seed` (full determinism depends on backend)
 - **Class Balanced**: Automatic class weight calculation
 - **Quality Weighted**: Pipeline quality scores used in training
 - **150+ Features**: Momentum, volatility, wavelets, microstructure
@@ -134,7 +136,7 @@ Raw OHLCV (.csv/.parquet)
 | [docs/notebook/README.md](docs/notebook/README.md) | Notebook quick start & navigation |
 | [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | Command reference & troubleshooting |
 | [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) | System architecture & design patterns |
-| [docs/planning/ROADMAP.md](docs/planning/ROADMAP.md) | Implementation roadmap & timeline |
+| [docs/README.md](docs/README.md) | Documentation index |
 | [CLAUDE.md](CLAUDE.md) | Development guidelines & engineering rules |
 
 **Detailed Guides:**

@@ -7,9 +7,9 @@ through a plugin architecture.
 
 Supported Model Families:
 - Boosting: XGBoost, LightGBM, CatBoost
-- Neural: LSTM, GRU, TCN, MLP
-- Transformer: PatchTST, Informer
+- Neural: LSTM, GRU, TCN, Transformer
 - Classical: Random Forest, Logistic Regression, SVM
+- Ensemble: Voting, Stacking, Blending
 
 Quick Start:
 -----------
@@ -106,7 +106,7 @@ from .device import (
 # Auto-import model implementations to trigger registration
 # These imports are necessary to register models with the ModelRegistry
 from . import boosting  # XGBoost, LightGBM, CatBoost
-from . import neural    # LSTM, GRU
+from . import neural    # LSTM, GRU, TCN, Transformer
 from . import classical  # RandomForest, Logistic, SVM
 from . import ensemble  # VotingEnsemble, StackingEnsemble, BlendingEnsemble
 
