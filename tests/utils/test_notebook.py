@@ -201,8 +201,9 @@ class TestPlotConfusionMatrix:
         matplotlib.use("Agg")  # Non-interactive backend
         import matplotlib.pyplot as plt
 
-        y_true = np.array([0, 0, 1, 1, 2, 2])
-        y_pred = np.array([0, 0, 1, 1, 2, 2])
+        # Trading labels: -1=short, 0=neutral, 1=long
+        y_true = np.array([-1, -1, 0, 0, 1, 1])
+        y_pred = np.array([-1, -1, 0, 0, 1, 1])
 
         save_path = tmp_path / "confusion.png"
 

@@ -279,8 +279,9 @@ class TestClassificationMetrics:
 
     def test_basic_metrics(self):
         """Should compute basic classification metrics."""
-        y_true = np.array([0, 0, 1, 1, 2, 2])
-        y_pred = np.array([0, 0, 1, 1, 2, 2])  # Perfect predictions
+        # Trading labels: -1=short, 0=neutral, 1=long
+        y_true = np.array([-1, -1, 0, 0, 1, 1])
+        y_pred = np.array([-1, -1, 0, 0, 1, 1])  # Perfect predictions
         y_proba = np.array([
             [0.9, 0.05, 0.05],
             [0.8, 0.1, 0.1],
@@ -298,8 +299,9 @@ class TestClassificationMetrics:
 
     def test_imperfect_predictions(self):
         """Should compute metrics for imperfect predictions."""
-        y_true = np.array([0, 0, 1, 1, 2, 2])
-        y_pred = np.array([0, 1, 1, 2, 2, 0])  # Some errors
+        # Trading labels: -1=short, 0=neutral, 1=long
+        y_true = np.array([-1, -1, 0, 0, 1, 1])
+        y_pred = np.array([-1, 0, 0, 1, 1, -1])  # Some errors
         y_proba = np.ones((6, 3)) / 3
 
         metrics = compute_classification_metrics(y_true, y_pred, y_proba)
@@ -309,8 +311,9 @@ class TestClassificationMetrics:
 
     def test_confusion_matrix_included(self):
         """Should include confusion matrix."""
-        y_true = np.array([0, 0, 1, 1])
-        y_pred = np.array([0, 0, 1, 1])
+        # Trading labels: -1=short, 0=neutral, 1=long
+        y_true = np.array([-1, -1, 0, 0])
+        y_pred = np.array([-1, -1, 0, 0])
         y_proba = np.ones((4, 3)) / 3
 
         metrics = compute_classification_metrics(y_true, y_pred, y_proba)
@@ -320,8 +323,9 @@ class TestClassificationMetrics:
 
     def test_per_class_f1_included(self):
         """Should include per-class F1 scores."""
-        y_true = np.array([0, 0, 1, 1, 2, 2])
-        y_pred = np.array([0, 0, 1, 1, 2, 2])
+        # Trading labels: -1=short, 0=neutral, 1=long
+        y_true = np.array([-1, -1, 0, 0, 1, 1])
+        y_pred = np.array([-1, -1, 0, 0, 1, 1])
         y_proba = np.ones((6, 3)) / 3
 
         metrics = compute_classification_metrics(y_true, y_pred, y_proba)

@@ -129,13 +129,33 @@ class LightGBMModel(BaseModel):
         y_train_lgb = self._convert_labels_to_lgb(y_train)
         y_val_lgb = self._convert_labels_to_lgb(y_val)
 
+        # Apply class weights if enabled (balances short/neutral/long predictions)
+        final_weights = sample_weights
+        if train_config.get("use_class_weights", True):
+            # Compute balanced class weights
+            unique_classes, class_counts = np.unique(y_train_lgb, return_counts=True)
+            n_samples = len(y_train_lgb)
+            n_classes = len(unique_classes)
+            class_weights = n_samples / (n_classes * class_counts)
+
+            # Map class weights to each sample
+            sample_class_weights = np.array([class_weights[int(c)] for c in y_train_lgb])
+
+            # Combine with existing sample weights
+            if sample_weights is not None:
+                final_weights = sample_weights * sample_class_weights
+            else:
+                final_weights = sample_class_weights
+
+            logger.debug(f"Class weights applied: {dict(zip(unique_classes, class_weights))}")
+
         # Create Dataset objects
         # Note: free_raw_data=True (default) frees raw data after construction
         # to reduce memory usage. We only need the internal LightGBM format.
         dtrain = lgb.Dataset(
             X_train,
             label=y_train_lgb,
-            weight=sample_weights,
+            weight=final_weights,
             free_raw_data=True,  # Free raw data to reduce memory by ~50%
         )
         dval = lgb.Dataset(

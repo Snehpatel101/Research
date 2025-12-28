@@ -132,8 +132,28 @@ class CatBoostModel(BaseModel):
         y_train_cat = self._convert_labels_to_cat(y_train)
         y_val_cat = self._convert_labels_to_cat(y_val)
 
+        # Apply class weights if enabled (balances short/neutral/long predictions)
+        final_weights = sample_weights
+        if train_config.get("use_class_weights", True):
+            # Compute balanced class weights
+            unique_classes, class_counts = np.unique(y_train_cat, return_counts=True)
+            n_samples = len(y_train_cat)
+            n_classes = len(unique_classes)
+            class_weights = n_samples / (n_classes * class_counts)
+
+            # Map class weights to each sample
+            sample_class_weights = np.array([class_weights[int(c)] for c in y_train_cat])
+
+            # Combine with existing sample weights
+            if sample_weights is not None:
+                final_weights = sample_weights * sample_class_weights
+            else:
+                final_weights = sample_class_weights
+
+            logger.debug(f"Class weights applied: {dict(zip(unique_classes, class_weights))}")
+
         # Create Pool objects
-        train_pool = Pool(data=X_train, label=y_train_cat, weight=sample_weights)
+        train_pool = Pool(data=X_train, label=y_train_cat, weight=final_weights)
         val_pool = Pool(data=X_val, label=y_val_cat)
 
         # Build model

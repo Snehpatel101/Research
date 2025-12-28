@@ -86,8 +86,8 @@ def compute_classification_metrics(
     # Confusion matrix
     cm = confusion_matrix(y_true, y_pred, labels=classes)
 
-    # Class names for readability
-    class_names = {0: "short", 1: "neutral", 2: "long"}
+    # Class names for readability (trading labels: -1=short, 0=neutral, 1=long)
+    class_names = {-1: "short", 0: "neutral", 1: "long"}
 
     return {
         "accuracy": float(accuracy),
@@ -253,6 +253,8 @@ class Trainer:
             "evaluation_metrics": eval_metrics,
             "output_path": str(self.output_path),
             "total_time_seconds": total_time,
+            "val_predictions": val_predictions.class_predictions,
+            "val_true": y_val,
         }
 
         logger.info(
@@ -352,13 +354,13 @@ class Trainer:
         y_pred = predictions.class_predictions
 
         # Simple trading stats (placeholder)
-        # 0=short, 1=neutral, 2=long
-        long_signals = (y_pred == 2).sum()
-        short_signals = (y_pred == 0).sum()
-        neutral_signals = (y_pred == 1).sum()
+        # Trading labels: -1=short, 0=neutral, 1=long
+        long_signals = (y_pred == 1).sum()
+        short_signals = (y_pred == -1).sum()
+        neutral_signals = (y_pred == 0).sum()
 
         # Win rate when taking positions
-        position_mask = y_pred != 1  # Not neutral
+        position_mask = y_pred != 0  # Not neutral (neutral is 0, not 1)
         if position_mask.sum() > 0:
             correct_positions = (y_pred[position_mask] == y_true[position_mask]).sum()
             position_win_rate = correct_positions / position_mask.sum()

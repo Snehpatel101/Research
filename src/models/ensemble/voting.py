@@ -15,6 +15,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..common import map_classes_to_labels
 from ..registry import ModelRegistry, register
 
 logger = logging.getLogger(__name__)
@@ -259,8 +260,8 @@ class VotingEnsemble(BaseModel):
 
         # Get class predictions from averaged probabilities
         class_predictions_idx = np.argmax(avg_probs, axis=1)
-        # Convert 0,1,2 -> -1,0,1
-        class_predictions = class_predictions_idx - 1
+        # Convert 0,1,2 -> -1,0,1 using canonical mapping
+        class_predictions = map_classes_to_labels(class_predictions_idx)
 
         confidence = np.max(avg_probs, axis=1)
 
