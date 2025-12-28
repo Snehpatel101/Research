@@ -13,11 +13,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
+import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
-from sklearn.model_selection import KFold
 
+from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
+from .validator import validate_base_model_compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -98,13 +100,23 @@ class StackingEnsemble(BaseModel):
         y_val: np.ndarray,
         sample_weights: Optional[np.ndarray] = None,
         config: Optional[Dict[str, Any]] = None,
+        label_end_times: Optional[pd.Series] = None,
     ) -> TrainingMetrics:
         """
         Train stacking ensemble with OOF predictions.
 
-        1. Generate OOF predictions for each base model
+        1. Generate OOF predictions for each base model using PurgedKFold
         2. Train meta-learner on OOF predictions
         3. Train final base models on full training data
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features
+            y_val: Validation labels
+            sample_weights: Sample weights for training
+            config: Optional config overrides
+            label_end_times: When each label's outcome is known (for purging overlapping labels)
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
@@ -118,6 +130,9 @@ class StackingEnsemble(BaseModel):
         if not self._base_model_names:
             raise ValueError("No base_model_names specified in config")
 
+        # Validate base model compatibility (tabular vs sequence)
+        validate_base_model_compatibility(self._base_model_names)
+
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         self._n_folds = train_config.get("n_folds", 5)
         base_model_configs = train_config.get("base_model_configs", {})
@@ -130,7 +145,7 @@ class StackingEnsemble(BaseModel):
             f"meta_learner={self._meta_learner_name}, n_folds={self._n_folds}"
         )
 
-        # Step 1: Generate OOF predictions
+        # Step 1: Generate OOF predictions with PurgedKFold (prevents label leakage)
         oof_predictions, fold_models = self._generate_oof_predictions(
             X_train=X_train,
             y_train=y_train,
@@ -138,6 +153,7 @@ class StackingEnsemble(BaseModel):
             base_model_configs=base_model_configs,
             sample_weights=sample_weights,
             use_probabilities=use_probabilities,
+            label_end_times=label_end_times,
         )
 
         # Step 2: Train meta-learner on OOF predictions
@@ -216,8 +232,26 @@ class StackingEnsemble(BaseModel):
         base_model_configs: Dict[str, Dict],
         sample_weights: Optional[np.ndarray],
         use_probabilities: bool,
+        label_end_times: Optional[pd.Series] = None,
     ) -> Tuple[np.ndarray, List[List[BaseModel]]]:
-        """Generate out-of-fold predictions for all base models."""
+        """
+        Generate out-of-fold predictions for all base models.
+
+        Uses PurgedKFold to prevent label leakage from overlapping labels
+        and serial correlation.
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            base_model_names: Names of base models to train
+            base_model_configs: Config overrides per model
+            sample_weights: Sample weights
+            use_probabilities: If True, use class probabilities; else use class predictions
+            label_end_times: When each label is resolved (enables overlapping label purging)
+
+        Returns:
+            Tuple of (oof_predictions, fold_models)
+        """
         n_samples = X_train.shape[0]
         n_classes = 3
 
@@ -232,10 +266,19 @@ class StackingEnsemble(BaseModel):
         oof_predictions = np.zeros((n_samples, n_features))
         fold_models: List[List[BaseModel]] = [[] for _ in base_model_names]
 
-        # Create k-fold splitter
-        kfold = KFold(n_splits=self._n_folds, shuffle=False)
+        # Create PurgedKFold splitter to prevent label leakage
+        # Using purge_bars=60 (3x max horizon) and embargo_bars=1440 (5 days at 5min)
+        purged_kfold_config = PurgedKFoldConfig(
+            n_splits=self._n_folds,
+            purge_bars=60,  # Prevent overlapping label leakage
+            embargo_bars=1440,  # Break serial correlation
+        )
+        kfold = PurgedKFold(purged_kfold_config)
 
-        for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(X_train)):
+        # Convert to DataFrame for PurgedKFold (requires index for label_end_times)
+        X_df = pd.DataFrame(X_train)
+
+        for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(X_df, label_end_times=label_end_times)):
             logger.debug(f"  Fold {fold_idx + 1}/{self._n_folds}")
 
             X_fold_train = X_train[train_idx]

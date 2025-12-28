@@ -38,8 +38,19 @@ This `docs/` tree describes the **implemented** pipeline: Phase 1 data prep + la
 | `reference/ARCHITECTURE.md` | Architecture + design constraints |
 | `reference/FEATURES.md` | Feature catalog (Phase 1) |
 | `reference/PIPELINE_FIXES.md` | Notes on Phase 1 alignment + verification |
+| `MIGRATION_GUIDE.md` | Migration guide for recent improvements |
+| `VALIDATION_CHECKLIST.md` | Pre/post-training validation checklists |
+| `WORKFLOW_BEST_PRACTICES.md` | Best practices & recommended workflows |
 | `notebook/TROUBLESHOOTING.md` | Notebook/Colab troubleshooting |
 | `QUANTITATIVE_TRADING_ANALYSIS.md` | Research notes (not a runbook) |
+
+## Status & Monitoring
+
+| Doc | Purpose |
+|-----|---------|
+| `../PIPELINE_STATUS.md` | Overall pipeline status dashboard |
+| `../INTEGRATION_FIXES_SUMMARY.md` | Phase 3→4 integration improvements |
+| `../ENSEMBLE_VALIDATION_SUMMARY.md` | Ensemble validation improvements |
 
 ## Legacy / Archived Docs
 

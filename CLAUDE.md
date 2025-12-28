@@ -136,7 +136,9 @@ python scripts/train_model.py --model xgboost --horizon 20
 python scripts/train_model.py --model lstm --horizon 20 --seq-len 60
 
 # Train an ensemble from scratch (Phase 2)
+# Note: All base models must be from the same family (tabular or sequence)
 python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,lightgbm,catboost
+python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru,tcn
 ```
 
 ### Model Families (13 Models Implemented)
@@ -152,21 +154,42 @@ python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,
 
 **Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 
+### Ensemble Model Compatibility
+
+**CRITICAL:** Ensembles require all base models to have the same input shape:
+- **Tabular models (2D input):** `xgboost`, `lightgbm`, `catboost`, `random_forest`, `logistic`, `svm`
+- **Sequence models (3D input):** `lstm`, `gru`, `tcn`, `transformer`
+- **Mixed ensembles are NOT supported** and will raise `EnsembleCompatibilityError`
+
 ### Recommended Ensemble Configurations
+
+**Tabular-Only Ensembles:**
 
 | Ensemble Type | Models | Method | Use Case |
 |---------------|--------|--------|----------|
-| Boosting-Only | XGBoost + LightGBM + CatBoost | Voting | Fast baseline ensemble |
-| Hybrid Fast | XGBoost + LightGBM + Random Forest | Voting/Blending | Balanced accuracy/speed |
-| Neural Stack | LSTM + GRU + TCN | Stacking | Sequential pattern learning |
-| Full Stack | All registered models | Stacking with Logistic meta | Maximum diversity (higher overfit risk) |
+| Boosting Trio | `xgboost` + `lightgbm` + `catboost` | Voting | Fast baseline ensemble |
+| Boosting + Forest | `xgboost` + `lightgbm` + `random_forest` | Voting/Blending | Balanced accuracy/speed |
+| All Tabular | All tabular models | Stacking | Maximum diversity (higher overfit risk) |
+
+**Sequence-Only Ensembles:**
+
+| Ensemble Type | Models | Method | Use Case |
+|---------------|--------|--------|----------|
+| RNN Variants | `lstm` + `gru` | Voting | Temporal pattern diversity |
+| Temporal Stack | `lstm` + `gru` + `tcn` | Stacking | Sequential pattern learning |
+| All Neural | `lstm` + `gru` + `tcn` + `transformer` | Stacking | Maximum temporal diversity |
+
+**INVALID Configurations (Will Fail):**
+- ❌ `xgboost` + `lstm` (mixing tabular + sequence)
+- ❌ `lightgbm` + `gru` + `tcn` (mixing tabular + sequence)
+- ❌ `random_forest` + `transformer` (mixing tabular + sequence)
 
 **Implemented Ensemble Methods:**
 - **Voting:** Combine predictions via weighted/unweighted averaging
 - **Stacking:** Train meta-learner on base model out-of-fold predictions
 - **Blending:** Train meta-learner on holdout predictions
 
-See `docs/phases/PHASE_4.md` for detailed ensemble architecture and diversity metrics.
+See `docs/phases/PHASE_4.md` for detailed ensemble architecture, validation utilities, and compatibility matrix.
 
 ---
 
@@ -357,9 +380,10 @@ python scripts/train_model.py --model xgboost --horizon 20
 python scripts/train_model.py --model lstm --horizon 20 --seq-len 30
 python scripts/train_model.py --model random_forest --horizon 20
 
-# Train ensemble (Phase 4)
-python scripts/train_model.py --model voting --base-models xgboost,lightgbm,lstm --horizon 20
-python scripts/train_model.py --model stacking --base-models xgboost,lgbm,rf --horizon 20
+# Train ensemble (Phase 4) - all base models must be same family (tabular or sequence)
+python scripts/train_model.py --model voting --base-models xgboost,lightgbm,catboost --horizon 20
+python scripts/train_model.py --model stacking --base-models xgboost,lightgbm,random_forest --horizon 20
+python scripts/train_model.py --model voting --base-models lstm,gru,tcn --horizon 20
 
 # Run cross-validation (Phase 3)
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5

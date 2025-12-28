@@ -17,6 +17,7 @@ from sklearn.metrics import accuracy_score, f1_score
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
+from .validator import validate_base_model_compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -99,15 +100,30 @@ class BlendingEnsemble(BaseModel):
         y_val: np.ndarray,
         sample_weights: Optional[np.ndarray] = None,
         config: Optional[Dict[str, Any]] = None,
+        label_end_times: Optional[Any] = None,
     ) -> TrainingMetrics:
         """
         Train blending ensemble.
 
-        1. Split training data into blend_train and blend_holdout
+        1. Split training data into blend_train and blend_holdout (time-based)
         2. Train base models on blend_train
         3. Generate predictions on blend_holdout
         4. Train meta-learner on holdout predictions
         5. Optionally retrain base models on full data
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features
+            y_val: Validation labels
+            sample_weights: Sample weights for training
+            config: Optional config overrides
+            label_end_times: Unused (for API compatibility with stacking)
+
+        Note:
+            Uses time-based split: the LAST `holdout_fraction` of training data
+            is used as holdout set to preserve temporal ordering and prevent
+            future data leakage into past training.
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
@@ -120,6 +136,9 @@ class BlendingEnsemble(BaseModel):
         self._base_model_names = train_config.get("base_model_names", [])
         if not self._base_model_names:
             raise ValueError("No base_model_names specified in config")
+
+        # Validate base model compatibility (tabular vs sequence)
+        validate_base_model_compatibility(self._base_model_names)
 
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         holdout_fraction = train_config.get("holdout_fraction", 0.2)
@@ -145,15 +164,20 @@ class BlendingEnsemble(BaseModel):
             f"blend_train={n_blend_train}, holdout={n_holdout}"
         )
 
-        # Step 1: Split data (use end of data as holdout for time series)
+        # Step 1: TIME-BASED SPLIT (critical for preventing data leakage)
+        # Train on FIRST (1 - holdout_fraction) of data
+        # Use LAST holdout_fraction as holdout set
+        # This preserves temporal ordering: no future data leaks into past training
         X_blend_train = X_train[:n_blend_train]
         y_blend_train = y_train[:n_blend_train]
-        X_holdout = X_train[n_blend_train:]
+        X_holdout = X_train[n_blend_train:]  # Last portion (most recent data)
         y_holdout = y_train[n_blend_train:]
 
         w_blend_train = None
+        w_holdout = None
         if sample_weights is not None:
             w_blend_train = sample_weights[:n_blend_train]
+            w_holdout = sample_weights[n_blend_train:]
 
         # Step 2: Train base models on blend_train
         base_models_initial = []
