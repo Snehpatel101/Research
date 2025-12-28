@@ -576,6 +576,8 @@ class BaseRNNModel(BaseModel):
             correct += (predictions == y_batch).sum().item()
             total += len(y_batch)
 
+        if total == 0:
+            return 0.0, 0.0
         return total_loss / total, correct / total
 
     def _validate_epoch(
@@ -605,6 +607,8 @@ class BaseRNNModel(BaseModel):
                 correct += (predictions == y_batch).sum().item()
                 total += len(y_batch)
 
+        if total == 0:
+            return 0.0, 0.0
         return total_loss / total, correct / total
 
     def _compute_final_metrics(self, loader: DataLoader, amp_dtype: torch.dtype, y_true: np.ndarray) -> Dict[str, float]:

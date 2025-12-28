@@ -804,7 +804,7 @@ class TestConfigIntegration:
 
     def test_regime_config_available(self):
         """Test REGIME_CONFIG is available in config."""
-        from config import REGIME_CONFIG
+        from src.phase1.config import REGIME_CONFIG
 
         assert 'volatility' in REGIME_CONFIG
         assert 'trend' in REGIME_CONFIG
@@ -812,7 +812,7 @@ class TestConfigIntegration:
 
     def test_regime_adjusted_barriers(self):
         """Test regime-adjusted barrier function."""
-        from config import get_regime_adjusted_barriers
+        from src.phase1.config import get_regime_adjusted_barriers
 
         params = get_regime_adjusted_barriers(
             symbol='MES',
@@ -829,7 +829,7 @@ class TestConfigIntegration:
 
     def test_regime_barrier_adjustments_applied(self):
         """Test that barrier adjustments are actually applied."""
-        from config import get_regime_adjusted_barriers, get_barrier_params
+        from src.phase1.config import get_regime_adjusted_barriers, get_barrier_params
 
         # Get base params
         base = get_barrier_params('MES', 5)

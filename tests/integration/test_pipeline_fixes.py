@@ -573,18 +573,18 @@ class TestMethodology:
         Test that purge/embargo auto-scale from max horizon.
 
         PURGE_BARS = max_horizon * 3
-        EMBARGO_BARS = 1440 (fixed at ~5 days)
+        EMBARGO_BARS = max(max_horizon * 72, 1440)
         """
         from src.common.horizon_config import auto_scale_purge_embargo
 
-        # Test with max_horizon=20
-        purge, embargo = auto_scale_purge_embargo(max_horizon=20)
+        # Test with horizons including max=20
+        purge, embargo = auto_scale_purge_embargo([5, 10, 15, 20])
 
         assert purge == 20 * 3, f"Expected purge=60, got {purge}"
         assert embargo == 1440, f"Expected embargo=1440, got {embargo}"
 
-        # Test with max_horizon=10
-        purge, embargo = auto_scale_purge_embargo(max_horizon=10)
+        # Test with horizons including max=10
+        purge, embargo = auto_scale_purge_embargo([5, 10])
 
         assert purge == 10 * 3, f"Expected purge=30, got {purge}"
         assert embargo == 1440, f"Expected embargo=1440, got {embargo}"
@@ -605,11 +605,11 @@ class TestRegressionPrevention:
         Prevents regression where labels were only generated for [5, 20]
         instead of [5, 10, 15, 20].
         """
-        from src.common.horizon_config import LABEL_HORIZONS
+        from src.common.horizon_config import HORIZONS
 
         # Verify all 4 horizons are configured
-        assert LABEL_HORIZONS == [5, 10, 15, 20], (
-            f"Expected [5, 10, 15, 20], got {LABEL_HORIZONS}"
+        assert HORIZONS == [5, 10, 15, 20], (
+            f"Expected [5, 10, 15, 20], got {HORIZONS}"
         )
 
     def test_project_root_alignment(self):
@@ -620,7 +620,7 @@ class TestRegressionPrevention:
         """
         from src.phase1.pipeline_config import PipelineConfig
 
-        config = PipelineConfig()
+        config = PipelineConfig(symbols=['MES'])
 
         # Project root should NOT end with 'src'
         assert not str(config.project_root).endswith(
@@ -633,19 +633,22 @@ class TestRegressionPrevention:
 
         Should not fall back to default barriers.
         """
-        from src.phase1.config.barriers_config import get_regime_adjusted_barriers
+        from src.phase1.config.regime_config import get_regime_adjusted_barriers
 
-        # Test regime adjustment
-        base_up = 1.5
-        base_down = -1.0
-        regime = "high_volatility"
+        # Test regime adjustment with current API
+        adjusted = get_regime_adjusted_barriers(
+            symbol='MES',
+            horizon=20,
+            volatility_regime='high_volatility',
+            trend_regime='bull',
+            structure_regime='trending'
+        )
 
-        adjusted = get_regime_adjusted_barriers(base_up, base_down, regime)
-
-        # Should be different from base (if adjustment exists for this regime)
-        # If no adjustment, it's okay to return base values
-        assert isinstance(adjusted, tuple)
-        assert len(adjusted) == 2
+        # Should return a dict with barrier parameters
+        assert isinstance(adjusted, dict)
+        assert 'k_up' in adjusted
+        assert 'k_down' in adjusted
+        assert 'max_bars' in adjusted
 
 
 # =============================================================================

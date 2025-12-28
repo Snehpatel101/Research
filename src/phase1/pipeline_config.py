@@ -1,12 +1,11 @@
 """
 Pipeline Configuration Management System
-Handles all configuration for Phase 1 pipeline with validation and persistence
+Handles all configuration for Phase 1 pipeline with validation and persistence.
 """
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
-import json
+from typing import List, Optional, Dict, Any
 import logging
 
 # Import HorizonConfig from the dedicated horizon module
@@ -20,12 +19,19 @@ from src.phase1.stages.mtf.constants import (
     DEFAULT_MTF_MODE,
 )
 
+# Import extracted modules
+from src.phase1.config.pipeline_paths import PipelinePathMixin
+from src.phase1.config.pipeline_persistence import PipelinePersistenceMixin
+from src.phase1.config.pipeline_validation import validate_pipeline_config
+from src.phase1.config.pipeline_summary import generate_pipeline_summary
+from src.phase1.config.pipeline_defaults import create_default_config
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
 @dataclass
-class PipelineConfig:
+class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     """Complete configuration for Phase 1 pipeline."""
 
     # Run identification
@@ -39,22 +45,14 @@ class PipelineConfig:
     description: str = "Phase 1 pipeline run"
 
     # Data parameters
-    # Symbols to process. Each symbol is processed in complete isolation (no cross-symbol
-    # operations). When multiple symbols are specified, the pipeline processes them
-    # sequentially, producing separate outputs for each symbol.
-    # The default is an empty list - symbols must be explicitly specified.
+    # Symbols to process. Each symbol is processed in complete isolation.
     symbols: List[str] = field(default_factory=list)
     start_date: Optional[str] = None  # YYYY-MM-DD format
     end_date: Optional[str] = None    # YYYY-MM-DD format
 
-    # Multi-Timeframe (MTF) configuration
-    # target_timeframe: Target resolution for resampling (e.g., '5min', '15min', '30min')
-    # Input data is assumed to be 1-minute bars which get resampled to this resolution.
-    # Supported: '1min', '5min', '10min', '15min', '20min', '30min', '45min', '60min'
+    # Timeframe configuration
     target_timeframe: str = '5min'
-
-    # Legacy alias - kept for backward compatibility with existing code
-    bar_resolution: str = field(default=None)
+    bar_resolution: str = field(default=None)  # Legacy alias
 
     # Feature engineering
     feature_set: str = 'full'  # 'full', 'minimal', 'custom'
@@ -67,39 +65,21 @@ class PipelineConfig:
     bb_std: float = 2.0
 
     # Multi-Timeframe (MTF) configuration
-    # mtf_timeframes: List of higher timeframes to compute features for
-    # Supported: '5min', '15min', '30min', '1h', '4h', 'daily'
     mtf_timeframes: List[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
-    # mtf_mode: What to generate - 'bars', 'indicators', or 'both'
-    # - 'bars': Only OHLCV data at higher timeframes (open_4h, high_4h, etc.)
-    # - 'indicators': Only technical indicators at higher timeframes
-    # - 'both': Generate both bars and indicators (default)
     mtf_mode: str = field(default_factory=lambda: DEFAULT_MTF_MODE.value)
 
     # Labeling parameters - Dynamic Horizon Configuration
-    # Option 1: Use horizon_config for full control (HorizonConfig instance)
-    # Option 2: Use label_horizons for simple usage (legacy compatibility)
     horizon_config: Optional[HorizonConfig] = None
     label_horizons: List[int] = field(default_factory=lambda: [5, 10, 15, 20])
-    # Note: Barrier parameters moved to config.py as BARRIER_PARAMS.
-    # Use config.get_barrier_params(symbol, horizon) for symbol-specific values.
     max_bars_ahead: int = 50
-
-    # Auto-scale purge/embargo with horizon
-    # When True, purge_bars and embargo_bars are computed from max horizon
     auto_scale_purge_embargo: bool = True
 
     # Split parameters
     train_ratio: float = 0.70
     val_ratio: float = 0.15
     test_ratio: float = 0.15
-    # PURGE_BARS: Must equal max(max_bars) across horizons to prevent leakage.
-    # H20 uses max_bars=60, so purge_bars must be at least 60.
-    purge_bars: int = 60  # Default, overridden if auto_scale_purge_embargo=True
-    # EMBARGO_BARS: Buffer for serial correlation in features.
-    # 1440 bars = 5 days for 5-min data (288 bars/day * 5 days).
-    # Must match src/config/splits.py EMBARGO_BARS for consistency.
-    embargo_bars: int = 1440  # Default, overridden if auto_scale_purge_embargo=True
+    purge_bars: int = 60
+    embargo_bars: int = 1440
 
     # Genetic Algorithm settings (for future Phase 2)
     ga_population_size: int = 50
@@ -111,35 +91,12 @@ class PipelineConfig:
     # Processing options
     n_jobs: int = -1  # -1 for all cores
     random_seed: int = 42
-
-    # Symbol isolation policy
-    # Each symbol is always processed in complete isolation. There are no cross-symbol
-    # operations (correlation, beta, spread features). When multiple symbols are specified,
-    # they are processed sequentially with separate outputs per symbol.
-    # This flag controls whether batch processing of multiple symbols is allowed.
-    # When False (default), only single-symbol runs are permitted.
-    # When True, multiple symbols can be processed in a batch run, but each symbol
-    # is still processed independently with no data mixing.
     allow_batch_symbols: bool = False
 
-    # Feature toggles - control which feature groups are generated
-    # Keys: 'wavelets', 'microstructure', 'volume', 'volatility'
-    # Values: True (enable) or False (disable)
-    # If None, all features are enabled by default
+    # Optional configurations
     feature_toggles: Optional[Dict[str, bool]] = None
-
-    # Barrier overrides - custom barrier parameters that override symbol-specific defaults
-    # Keys: 'k_up', 'k_down', 'max_bars'
-    # Use for custom labeling experiments
     barrier_overrides: Optional[Dict[str, float]] = None
-
-    # Scaler type for feature scaling
-    # Options: 'robust' (default), 'standard', 'minmax', 'quantile', 'none'
     scaler_type: str = 'robust'
-
-    # Model configuration for Phase 2+ model training
-    # Keys: 'model_type', 'base_models', 'meta_learner', 'sequence_length'
-    # Used to prepare appropriate datasets for specific model types
     model_config: Optional[Dict[str, Any]] = None
 
     # Paths (auto-generated from run_id)
@@ -147,83 +104,61 @@ class PipelineConfig:
 
     def __post_init__(self):
         """Validate configuration after initialization."""
-        # Import here to avoid circular imports
         from src.phase1.config import (
             SUPPORTED_TIMEFRAMES,
             validate_timeframe,
             auto_scale_purge_embargo,
-            validate_horizons,
             SUPPORTED_HORIZONS,
             validate_feature_set_config,
         )
+        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
         # Set project_root if not provided
         if self.project_root is None:
+            # __file__ is src/phase1/pipeline_config.py, so .parent.parent.parent = project root
             self.project_root = Path(__file__).parent.parent.parent.resolve()
-
-        # Convert string paths to Path objects
         if isinstance(self.project_root, str):
             self.project_root = Path(self.project_root)
 
         # Handle bar_resolution backward compatibility
-        # If bar_resolution is set but target_timeframe uses default, sync them
         if self.bar_resolution is not None and self.bar_resolution != self.target_timeframe:
-            # bar_resolution was explicitly set, use it as the source of truth
             self.target_timeframe = self.bar_resolution
         elif self.bar_resolution is None:
-            # bar_resolution not set, sync from target_timeframe
             self.bar_resolution = self.target_timeframe
 
         # Validate target_timeframe
         validate_timeframe(self.target_timeframe)
 
+        # Validate feature set
         feature_set_issues = validate_feature_set_config(self.feature_set)
         if feature_set_issues:
             raise ValueError(f"Feature set validation failed: {feature_set_issues}")
 
         # Validate MTF configuration
-        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
         valid_mtf_modes = ['bars', 'indicators', 'both']
         if self.mtf_mode not in valid_mtf_modes:
-            raise ValueError(
-                f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'"
-            )
+            raise ValueError(f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'")
         for tf in self.mtf_timeframes:
             if tf not in MTF_TIMEFRAMES:
-                raise ValueError(
-                    f"Unsupported MTF timeframe: '{tf}'. "
-                    f"Supported: {list(MTF_TIMEFRAMES.keys())}"
-                )
+                raise ValueError(f"Unsupported MTF timeframe: '{tf}'. Supported: {list(MTF_TIMEFRAMES.keys())}")
 
         # Handle horizon configuration
-        # Priority: horizon_config > label_horizons
         if self.horizon_config is not None:
-            # Sync label_horizons from horizon_config
             self.label_horizons = self.horizon_config.horizons
-            # Validate horizon_config
             horizon_issues = self.horizon_config.validate()
             if horizon_issues:
                 raise ValueError(f"HorizonConfig validation failed: {horizon_issues}")
         else:
-            # Validate label_horizons directly
             if not self.label_horizons:
                 raise ValueError("At least one label horizon must be specified")
             for h in self.label_horizons:
                 if h not in SUPPORTED_HORIZONS:
-                    logger.warning(
-                        f"Horizon {h} not in SUPPORTED_HORIZONS {SUPPORTED_HORIZONS}. "
-                        f"Auto-generated barrier params will be used."
-                    )
+                    logger.warning(f"Horizon {h} not in SUPPORTED_HORIZONS {SUPPORTED_HORIZONS}.")
 
         # Auto-scale purge and embargo bars based on horizons
         if self.auto_scale_purge_embargo:
-            self.purge_bars, self.embargo_bars = auto_scale_purge_embargo(
-                self.label_horizons
-            )
-            logger.debug(
-                f"Auto-scaled purge/embargo for horizons {self.label_horizons}: "
-                f"purge={self.purge_bars}, embargo={self.embargo_bars}"
-            )
+            self.purge_bars, self.embargo_bars = auto_scale_purge_embargo(self.label_horizons)
+            logger.debug(f"Auto-scaled purge={self.purge_bars}, embargo={self.embargo_bars}")
 
         # Validate ratios sum to 1.0
         total_ratio = self.train_ratio + self.val_ratio + self.test_ratio
@@ -231,409 +166,32 @@ class PipelineConfig:
             raise ValueError(f"Train/val/test ratios must sum to 1.0, got {total_ratio}")
 
         # Validate date format if provided
-        if self.start_date:
-            try:
-                datetime.strptime(self.start_date, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError(f"start_date must be in YYYY-MM-DD format, got {self.start_date}")
-
-        if self.end_date:
-            try:
-                datetime.strptime(self.end_date, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError(f"end_date must be in YYYY-MM-DD format, got {self.end_date}")
+        for name, date_val in [("start_date", self.start_date), ("end_date", self.end_date)]:
+            if date_val:
+                try:
+                    datetime.strptime(date_val, "%Y-%m-%d")
+                except ValueError:
+                    raise ValueError(f"{name} must be in YYYY-MM-DD format, got {date_val}")
 
         # Validate symbols
         if not self.symbols:
-            raise ValueError(
-                "At least one symbol must be specified. "
-                "Use --symbols MES or symbols=['MES'] in config."
-            )
+            raise ValueError("At least one symbol must be specified. Use --symbols MES or symbols=['MES'].")
 
         # Enforce single-symbol runs by default
-        # Each symbol is processed in complete isolation (no cross-symbol operations)
         if len(self.symbols) > 1 and not self.allow_batch_symbols:
             raise ValueError(
-                f"Batch processing of multiple symbols requires explicit opt-in. "
-                f"Got {len(self.symbols)} symbols: {self.symbols}. "
-                f"Each symbol is processed independently with no cross-symbol operations. "
-                f"To process multiple symbols in a batch, use --batch-symbols flag in CLI "
-                f"or set allow_batch_symbols=True in config."
-            )
-
-    @property
-    def data_dir(self) -> Path:
-        """Data directory for this run."""
-        return self.project_root / "data"
-
-    @property
-    def raw_data_dir(self) -> Path:
-        return self.data_dir / "raw"
-
-    @property
-    def clean_data_dir(self) -> Path:
-        return self.data_dir / "clean"
-
-    @property
-    def features_dir(self) -> Path:
-        return self.data_dir / "features"
-
-    @property
-    def final_data_dir(self) -> Path:
-        return self.data_dir / "final"
-
-    @property
-    def splits_dir(self) -> Path:
-        return self.data_dir / "splits"
-
-    @property
-    def run_dir(self) -> Path:
-        """Directory for this specific run."""
-        return self.project_root / "runs" / self.run_id
-
-    @property
-    def run_config_dir(self) -> Path:
-        """Config directory for this run."""
-        return self.run_dir / "config"
-
-    @property
-    def run_logs_dir(self) -> Path:
-        """Logs directory for this run."""
-        return self.run_dir / "logs"
-
-    @property
-    def run_artifacts_dir(self) -> Path:
-        """Artifacts directory for this run."""
-        return self.run_dir / "artifacts"
-
-    @property
-    def results_dir(self) -> Path:
-        """Results directory."""
-        return self.project_root / "results"
-
-    def create_directories(self):
-        """Create all required directories for this run."""
-        directories = [
-            self.raw_data_dir,
-            self.clean_data_dir,
-            self.features_dir,
-            self.final_data_dir,
-            self.splits_dir,
-            self.run_dir,
-            self.run_config_dir,
-            self.run_logs_dir,
-            self.run_artifacts_dir,
-            self.results_dir,
-        ]
-
-        for dir_path in directories:
-            dir_path.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Created directory: {dir_path}")
-
-    def save_config(self, path: Optional[Path] = None) -> Path:
-        """
-        Save configuration to JSON file.
-
-        Args:
-            path: Path to save config. If None, saves to run_config_dir/config.json
-
-        Returns:
-            Path where config was saved
-        """
-        if path is None:
-            self.create_directories()
-            path = self.run_config_dir / "config.json"
-
-        # Convert to dict and handle Path objects
-        config_dict = asdict(self)
-        config_dict['project_root'] = str(self.project_root)
-
-        # Add metadata
-        config_dict['_metadata'] = {
-            'created_at': datetime.now().isoformat(),
-            'config_version': '1.0',
-        }
-
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(path, 'w') as f:
-            json.dump(config_dict, f, indent=2)
-
-        logger.info(f"Configuration saved to {path}")
-        return path
-
-    @classmethod
-    def load_config(cls, path: Path) -> 'PipelineConfig':
-        """
-        Load configuration from JSON file.
-
-        Args:
-            path: Path to config JSON file
-
-        Returns:
-            PipelineConfig instance
-        """
-        path = Path(path)
-
-        if not path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {path}")
-
-        with open(path, 'r') as f:
-            config_dict = json.load(f)
-
-        # Remove metadata if present
-        config_dict.pop('_metadata', None)
-
-        # Convert project_root back to Path
-        if 'project_root' in config_dict:
-            config_dict['project_root'] = Path(config_dict['project_root'])
-
-        logger.info(f"Configuration loaded from {path}")
-        return cls(**config_dict)
-
-    @classmethod
-    def load_from_run_id(cls, run_id: str, project_root: Optional[Path] = None) -> 'PipelineConfig':
-        """
-        Load configuration from a run ID.
-
-        Args:
-            run_id: Run identifier
-            project_root: Project root path (defaults to /home/user/Research)
-
-        Returns:
-            PipelineConfig instance
-        """
-        if project_root is None:
-            # __file__ = src/phase1/pipeline_config.py
-            # .parent = src/phase1/, .parent.parent = src/, .parent.parent.parent = project root
-            project_root = Path(__file__).parent.parent.parent.resolve()
-        else:
-            project_root = Path(project_root)
-
-        config_path = project_root / "runs" / run_id / "config" / "config.json"
-        return cls.load_config(config_path)
-
-    def validate(self) -> List[str]:
-        """
-        Validate configuration and return list of issues.
-
-        Returns:
-            List of validation error messages (empty if valid)
-        """
-        from src.phase1.config import SUPPORTED_TIMEFRAMES, validate_feature_set_config
-
-        issues = []
-
-        # Check timeframe
-        if self.target_timeframe not in SUPPORTED_TIMEFRAMES:
-            issues.append(
-                f"target_timeframe '{self.target_timeframe}' is not supported. "
-                f"Supported: {SUPPORTED_TIMEFRAMES}"
-            )
-
-        # Check ratios
-        total_ratio = self.train_ratio + self.val_ratio + self.test_ratio
-        if not (0.99 <= total_ratio <= 1.01):
-            issues.append(f"Train/val/test ratios must sum to 1.0, got {total_ratio}")
-
-        if not (0 < self.train_ratio < 1):
-            issues.append(f"train_ratio must be between 0 and 1, got {self.train_ratio}")
-
-        if not (0 < self.val_ratio < 1):
-            issues.append(f"val_ratio must be between 0 and 1, got {self.val_ratio}")
-
-        if not (0 < self.test_ratio < 1):
-            issues.append(f"test_ratio must be between 0 and 1, got {self.test_ratio}")
-
-        # Check symbols
-        if not self.symbols:
-            issues.append(
-                "At least one symbol must be specified. "
-                "Use --symbols MES or symbols=['MES']."
-            )
-
-        # Check batch symbol processing
-        # Each symbol is processed in isolation (no cross-symbol operations)
-        if len(self.symbols) > 1 and not self.allow_batch_symbols:
-            issues.append(
                 f"Batch processing of multiple symbols requires explicit opt-in. "
                 f"Got {len(self.symbols)} symbols: {self.symbols}. "
                 f"Use --batch-symbols flag or set allow_batch_symbols=True."
             )
 
-        # Check label horizons
-        if not self.label_horizons:
-            issues.append("At least one label horizon must be specified")
-
-        for horizon in self.label_horizons:
-            if horizon < 1:
-                issues.append(f"Label horizon must be >= 1, got {horizon}")
-
-        # Note: Barrier parameters now validated in config.py
-
-        if self.max_bars_ahead < max(self.label_horizons):
-            issues.append(f"max_bars_ahead ({self.max_bars_ahead}) must be >= max horizon ({max(self.label_horizons)})")
-
-        # Check purge/embargo
-        if self.purge_bars < 0:
-            issues.append(f"purge_bars must be >= 0, got {self.purge_bars}")
-
-        if self.embargo_bars < 0:
-            issues.append(f"embargo_bars must be >= 0, got {self.embargo_bars}")
-
-        # Check GA parameters
-        if self.ga_population_size < 2:
-            issues.append(f"ga_population_size must be >= 2, got {self.ga_population_size}")
-
-        if self.ga_generations < 1:
-            issues.append(f"ga_generations must be >= 1, got {self.ga_generations}")
-
-        if not (0 <= self.ga_crossover_rate <= 1):
-            issues.append(f"ga_crossover_rate must be between 0 and 1, got {self.ga_crossover_rate}")
-
-        if not (0 <= self.ga_mutation_rate <= 1):
-            issues.append(f"ga_mutation_rate must be between 0 and 1, got {self.ga_mutation_rate}")
-
-        if self.ga_elite_size >= self.ga_population_size:
-            issues.append(f"ga_elite_size ({self.ga_elite_size}) must be < ga_population_size ({self.ga_population_size})")
-
-        # Check feature parameters
-        if not self.sma_periods:
-            issues.append("At least one SMA period must be specified")
-
-        if not self.ema_periods:
-            issues.append("At least one EMA period must be specified")
-
-        if not self.atr_periods:
-            issues.append("At least one ATR period must be specified")
-
-        # Check MTF parameters
-        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
-        valid_mtf_modes = ['bars', 'indicators', 'both']
-        if self.mtf_mode not in valid_mtf_modes:
-            issues.append(
-                f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'"
-            )
-        for tf in self.mtf_timeframes:
-            if tf not in MTF_TIMEFRAMES:
-                issues.append(
-                    f"Unsupported MTF timeframe: '{tf}'. "
-                    f"Supported: {list(MTF_TIMEFRAMES.keys())}"
-                )
-
-        if self.rsi_period < 2:
-            issues.append(f"rsi_period must be >= 2, got {self.rsi_period}")
-
-        issues.extend(validate_feature_set_config(self.feature_set))
-
-        # Validate scaler type
-        valid_scaler_types = ['robust', 'standard', 'minmax', 'quantile', 'none']
-        if self.scaler_type not in valid_scaler_types:
-            issues.append(
-                f"scaler_type must be one of {valid_scaler_types}, got '{self.scaler_type}'"
-            )
-
-        # Validate feature toggles if provided
-        if self.feature_toggles is not None:
-            valid_toggle_keys = {'wavelets', 'microstructure', 'volume', 'volatility'}
-            for key in self.feature_toggles.keys():
-                if key not in valid_toggle_keys:
-                    issues.append(
-                        f"Unknown feature toggle key: '{key}'. "
-                        f"Valid keys: {valid_toggle_keys}"
-                    )
-
-        # Validate barrier overrides if provided
-        if self.barrier_overrides is not None:
-            valid_barrier_keys = {'k_up', 'k_down', 'max_bars'}
-            for key, value in self.barrier_overrides.items():
-                if key not in valid_barrier_keys:
-                    issues.append(
-                        f"Unknown barrier override key: '{key}'. "
-                        f"Valid keys: {valid_barrier_keys}"
-                    )
-                elif key in ('k_up', 'k_down') and value <= 0:
-                    issues.append(f"barrier_overrides['{key}'] must be > 0, got {value}")
-                elif key == 'max_bars' and value < 1:
-                    issues.append(f"barrier_overrides['max_bars'] must be >= 1, got {value}")
-
-        # Validate model config if provided
-        if self.model_config is not None:
-            valid_model_keys = {'model_type', 'base_models', 'meta_learner', 'sequence_length'}
-            for key in self.model_config.keys():
-                if key not in valid_model_keys:
-                    issues.append(
-                        f"Unknown model_config key: '{key}'. "
-                        f"Valid keys: {valid_model_keys}"
-                    )
-            # Validate sequence_length if provided
-            if 'sequence_length' in self.model_config:
-                seq_len = self.model_config['sequence_length']
-                if not isinstance(seq_len, int) or seq_len < 1:
-                    issues.append(
-                        f"model_config['sequence_length'] must be a positive integer, got {seq_len}"
-                    )
-
-        return issues
+    def validate(self) -> List[str]:
+        """Validate configuration and return list of issues."""
+        return validate_pipeline_config(self)
 
     def summary(self) -> str:
         """Generate a human-readable summary of the configuration."""
-        return f"""
-Pipeline Configuration Summary
-==============================
-Run ID: {self.run_id}
-Description: {self.description}
-
-Data Parameters:
-  - Symbols: {', '.join(self.symbols)}
-  - Symbol Isolation: Each symbol processed independently (no cross-symbol operations)
-  - Batch Processing: {'Enabled' if self.allow_batch_symbols else 'Single symbol only'}
-  - Date Range: {self.start_date or 'N/A'} to {self.end_date or 'N/A'}
-  - Target Timeframe: {self.target_timeframe}
-
-Features:
-  - Feature Set: {self.feature_set}
-  - SMA Periods: {self.sma_periods}
-  - EMA Periods: {self.ema_periods}
-  - ATR Periods: {self.atr_periods}
-  - RSI Period: {self.rsi_period}
-
-Multi-Timeframe (MTF):
-  - Timeframes: {', '.join(self.mtf_timeframes)}
-  - Mode: {self.mtf_mode}
-
-Labeling:
-  - Horizons: {self.label_horizons}
-  - Barrier Params: config.BARRIER_PARAMS (symbol-specific)
-  - Max Bars Ahead: {self.max_bars_ahead}
-
-Splits:
-  - Train: {self.train_ratio:.1%}
-  - Validation: {self.val_ratio:.1%}
-  - Test: {self.test_ratio:.1%}
-  - Purge Bars: {self.purge_bars}
-  - Embargo Bars: {self.embargo_bars}
-
-GA Settings (Phase 2):
-  - Population: {self.ga_population_size}
-  - Generations: {self.ga_generations}
-  - Crossover Rate: {self.ga_crossover_rate}
-  - Mutation Rate: {self.ga_mutation_rate}
-  - Elite Size: {self.ga_elite_size}
-
-Scaling:
-  - Scaler Type: {self.scaler_type}
-
-Feature Toggles: {self.feature_toggles or 'All enabled (default)'}
-Barrier Overrides: {self.barrier_overrides or 'Using symbol-specific defaults'}
-Model Config: {self.model_config or 'Not specified'}
-
-Paths:
-  - Project Root: {self.project_root}
-  - Run Directory: {self.run_dir}
-  - Data Directory: {self.data_dir}
-"""
+        return generate_pipeline_summary(self)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary."""
@@ -642,44 +200,8 @@ Paths:
         return config_dict
 
 
-def create_default_config(
-    symbols: Optional[List[str]] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    run_id: Optional[str] = None,
-    **kwargs
-) -> PipelineConfig:
-    """
-    Create a default configuration with optional overrides.
-
-    Args:
-        symbols: List of symbols to trade
-        start_date: Start date (YYYY-MM-DD)
-        end_date: End date (YYYY-MM-DD)
-        run_id: Run identifier (auto-generated if None)
-        **kwargs: Additional parameters to override defaults
-
-    Returns:
-        PipelineConfig instance
-    """
-    config_kwargs = {}
-
-    if symbols is not None:
-        config_kwargs['symbols'] = symbols
-
-    if start_date is not None:
-        config_kwargs['start_date'] = start_date
-
-    if end_date is not None:
-        config_kwargs['end_date'] = end_date
-
-    if run_id is not None:
-        config_kwargs['run_id'] = run_id
-
-    # Merge with additional kwargs
-    config_kwargs.update(kwargs)
-
-    return PipelineConfig(**config_kwargs)
+# Re-export create_default_config for backward compatibility
+__all__ = ['PipelineConfig', 'create_default_config', 'HorizonConfig']
 
 
 if __name__ == "__main__":
@@ -689,7 +211,7 @@ if __name__ == "__main__":
 
     # Create config for single symbol (default behavior)
     config = create_default_config(
-        symbols=['MES'],  # Single symbol - no cross-symbol operations
+        symbols=['MES'],
         start_date='2020-01-01',
         end_date='2024-12-31',
         description='Single symbol run'

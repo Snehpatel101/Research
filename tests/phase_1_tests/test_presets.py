@@ -444,7 +444,7 @@ class TestGetAdjustedBarrierParams:
         params = get_adjusted_barrier_params('scalping', 'MES', 5)
 
         # Import to get base params for comparison
-        from config import get_barrier_params
+        from src.phase1.config import get_barrier_params
         base_params = get_barrier_params('MES', 5)
 
         # Scalping multiplier is 0.7
@@ -459,7 +459,7 @@ class TestGetAdjustedBarrierParams:
         """Verify day trading preset preserves barrier values (1.0x)."""
         params = get_adjusted_barrier_params('day_trading', 'MES', 20)
 
-        from config import get_barrier_params
+        from src.phase1.config import get_barrier_params
         base_params = get_barrier_params('MES', 20)
 
         assert params['k_up'] == base_params['k_up']
@@ -470,7 +470,7 @@ class TestGetAdjustedBarrierParams:
         """Verify swing preset increases barrier values (1.3x)."""
         params = get_adjusted_barrier_params('swing', 'MGC', 20)
 
-        from config import get_barrier_params
+        from src.phase1.config import get_barrier_params
         base_params = get_barrier_params('MGC', 20)
 
         expected_k_up = round(base_params['k_up'] * 1.3, 2)
@@ -484,7 +484,7 @@ class TestGetAdjustedBarrierParams:
         """Verify max_bars is not affected by multiplier."""
         params = get_adjusted_barrier_params('scalping', 'MES', 5)
 
-        from config import get_barrier_params
+        from src.phase1.config import get_barrier_params
         base_params = get_barrier_params('MES', 5)
 
         assert params['max_bars'] == base_params['max_bars']
@@ -519,7 +519,7 @@ class TestPresetIntegration:
         from src.phase1.pipeline_config import PipelineConfig
 
         # Create base config
-        config = PipelineConfig(project_root=temp_project_dir)
+        config = PipelineConfig(symbols=['MES'], project_root=temp_project_dir)
         config_dict = config.to_dict()
 
         # Apply preset
@@ -535,7 +535,7 @@ class TestPresetIntegration:
         from src.phase1.pipeline_config import PipelineConfig
 
         for preset in TradingPreset:
-            config = PipelineConfig(project_root=temp_project_dir)
+            config = PipelineConfig(symbols=['MES'], project_root=temp_project_dir)
             config_dict = config.to_dict()
             updated = apply_preset_to_config(preset, config_dict)
 

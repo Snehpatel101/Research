@@ -27,87 +27,21 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import numpy as np
 
-from .base import BaseModel, PredictionOutput, TrainingMetrics
+from .base import PredictionOutput, TrainingMetrics
 from .calibration import CalibrationConfig, ProbabilityCalibrator
 from .config import TrainerConfig, save_config_json
+from .data_preparation import prepare_test_data, prepare_training_data
+from .metrics import compute_classification_metrics, compute_trading_metrics
 from .registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# EVALUATION METRICS
-# =============================================================================
-
-def compute_classification_metrics(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-    y_proba: np.ndarray,
-) -> Dict[str, Any]:
-    """
-    Compute classification metrics.
-
-    Args:
-        y_true: True labels
-        y_pred: Predicted labels
-        y_proba: Predicted probabilities
-
-    Returns:
-        Dict with accuracy, F1 scores, confusion matrix, etc.
-    """
-    from sklearn.metrics import (
-        accuracy_score,
-        f1_score,
-        precision_score,
-        recall_score,
-        confusion_matrix,
-        classification_report,
-    )
-
-    # Basic metrics
-    accuracy = accuracy_score(y_true, y_pred)
-    macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
-    weighted_f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
-    precision = precision_score(y_true, y_pred, average="macro", zero_division=0)
-    recall = recall_score(y_true, y_pred, average="macro", zero_division=0)
-
-    # Per-class F1
-    classes = sorted(np.unique(np.concatenate([y_true, y_pred])))
-    per_class_f1 = f1_score(
-        y_true, y_pred, average=None, labels=classes, zero_division=0
-    )
-
-    # Confusion matrix
-    cm = confusion_matrix(y_true, y_pred, labels=classes)
-
-    # Class names for readability (trading labels: -1=short, 0=neutral, 1=long)
-    class_names = {-1: "short", 0: "neutral", 1: "long"}
-
-    return {
-        "accuracy": float(accuracy),
-        "macro_f1": float(macro_f1),
-        "weighted_f1": float(weighted_f1),
-        "precision": float(precision),
-        "recall": float(recall),
-        "per_class_f1": {
-            class_names.get(c, str(c)): float(f1)
-            for c, f1 in zip(classes, per_class_f1)
-        },
-        "confusion_matrix": cm.tolist(),
-        "n_samples": len(y_true),
-    }
-
-
-# =============================================================================
-# TRAINER CLASS
-# =============================================================================
 
 class Trainer:
     """
@@ -216,7 +150,11 @@ class Trainer:
 
         # Load data
         logger.info("Loading data from container...")
-        X_train, y_train, w_train, X_val, y_val = self._prepare_data(container)
+        X_train, y_train, w_train, X_val, y_val = prepare_training_data(
+            container,
+            requires_sequences=self.model.requires_sequences,
+            sequence_length=self.config.sequence_length,
+        )
 
         # Extract label_end_times for overlapping label purging (used by ensemble models)
         label_end_times = container.get_label_end_times("train")
@@ -261,57 +199,16 @@ class Trainer:
         )
 
         # Add trading metrics
-        eval_metrics["trading"] = self._compute_trading_metrics(
-            y_val, val_predictions
+        eval_metrics["trading"] = compute_trading_metrics(
+            y_true=y_val,
+            y_pred=val_predictions.class_predictions,
         )
 
         # Test set evaluation (one-shot generalization estimate)
         test_metrics = None
         test_predictions = None
         if self.config.evaluate_test_set:
-            logger.warning("=" * 70)
-            logger.warning("⚠️  TEST SET EVALUATION - ONE-SHOT GENERALIZATION ESTIMATE")
-            logger.warning("=" * 70)
-            logger.warning(
-                "You are evaluating on the TEST SET. This is your final, "
-                "one-shot generalization estimate."
-            )
-            logger.warning(
-                "DO NOT iterate on these results. If you do, you're overfitting to test."
-            )
-            logger.warning(
-                "Iterate on VALIDATION metrics during development, "
-                "then evaluate test ONCE when ready."
-            )
-            logger.warning("=" * 70)
-
-            # Load test data
-            X_test, y_test, _ = self._prepare_test_data(container)
-            logger.info(f"Test set size: {X_test.shape}")
-
-            # Evaluate on test set
-            test_predictions = self.model.predict(X_test)
-            test_metrics = compute_classification_metrics(
-                y_true=y_test,
-                y_pred=test_predictions.class_predictions,
-                y_proba=test_predictions.class_probabilities,
-            )
-            test_metrics["trading"] = self._compute_trading_metrics(
-                y_test, test_predictions
-            )
-
-            logger.warning("=" * 70)
-            logger.warning("⚠️  TEST SET RESULTS (DO NOT ITERATE ON THESE)")
-            logger.warning("=" * 70)
-            logger.warning(
-                f"Test Accuracy: {test_metrics['accuracy']:.4f}, "
-                f"Test F1: {test_metrics['macro_f1']:.4f}"
-            )
-            logger.warning(
-                "If test results are disappointing: DO NOT tune and re-evaluate. "
-                "Move on to the next experiment."
-            )
-            logger.warning("=" * 70)
+            test_metrics, test_predictions = self._evaluate_test_set(container)
 
         # Probability calibration (leakage-safe: fits on held-out val set)
         self.calibrator = None
@@ -359,209 +256,69 @@ class Trainer:
 
         return results
 
-    def _prepare_data(
+    def _evaluate_test_set(
         self,
         container: "TimeSeriesDataContainer",
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[Optional[Dict[str, Any]], Optional[PredictionOutput]]:
         """
-        Prepare data for training based on model requirements.
-
-        Args:
-            container: TimeSeriesDataContainer with data
-
-        Returns:
-            Tuple of (X_train, y_train, w_train, X_val, y_val)
-        """
-        if self.model.requires_sequences:
-            # Get sequence data for sequential models
-            train_dataset = container.get_pytorch_sequences(
-                "train",
-                seq_len=self.config.sequence_length,
-                symbol_isolated=True,
-            )
-            val_dataset = container.get_pytorch_sequences(
-                "val",
-                seq_len=self.config.sequence_length,
-                symbol_isolated=True,
-            )
-
-            # Convert to numpy arrays
-            X_train, y_train, w_train = self._dataset_to_arrays(train_dataset)
-            X_val, y_val, _ = self._dataset_to_arrays(val_dataset)
-
-        else:
-            # Get tabular data for non-sequential models
-            X_train, y_train, w_train = container.get_sklearn_arrays("train")
-            X_val, y_val, _ = container.get_sklearn_arrays("val")
-
-        return X_train, y_train, w_train, X_val, y_val
-
-    def _prepare_test_data(
-        self,
-        container: "TimeSeriesDataContainer",
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Prepare test data for final evaluation.
+        Evaluate model on test set with warnings about one-shot evaluation.
 
         Args:
             container: TimeSeriesDataContainer with test split
 
         Returns:
-            Tuple of (X_test, y_test, w_test)
+            Tuple of (test_metrics, test_predictions)
         """
-        if self.model.requires_sequences:
-            # Get sequence data for sequential models
-            test_dataset = container.get_pytorch_sequences(
-                "test",
-                seq_len=self.config.sequence_length,
-                symbol_isolated=True,
-            )
-            # Convert to numpy arrays
-            X_test, y_test, w_test = self._dataset_to_arrays(test_dataset)
-        else:
-            # Get tabular data for non-sequential models
-            X_test, y_test, w_test = container.get_sklearn_arrays("test")
+        logger.warning("=" * 70)
+        logger.warning("⚠️  TEST SET EVALUATION - ONE-SHOT GENERALIZATION ESTIMATE")
+        logger.warning("=" * 70)
+        logger.warning(
+            "You are evaluating on the TEST SET. This is your final, "
+            "one-shot generalization estimate."
+        )
+        logger.warning(
+            "DO NOT iterate on these results. If you do, you're overfitting to test."
+        )
+        logger.warning(
+            "Iterate on VALIDATION metrics during development, "
+            "then evaluate test ONCE when ready."
+        )
+        logger.warning("=" * 70)
 
-        return X_test, y_test, w_test
+        # Load test data
+        X_test, y_test, _ = prepare_test_data(
+            container,
+            requires_sequences=self.model.requires_sequences,
+            sequence_length=self.config.sequence_length,
+        )
+        logger.info(f"Test set size: {X_test.shape}")
 
-    def _dataset_to_arrays(
-        self,
-        dataset: "Dataset",
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Convert PyTorch dataset to numpy arrays.
+        # Evaluate on test set
+        test_predictions = self.model.predict(X_test)
+        test_metrics = compute_classification_metrics(
+            y_true=y_test,
+            y_pred=test_predictions.class_predictions,
+            y_proba=test_predictions.class_probabilities,
+        )
+        test_metrics["trading"] = compute_trading_metrics(
+            y_true=y_test,
+            y_pred=test_predictions.class_predictions,
+        )
 
-        Args:
-            dataset: SequenceDataset from container
+        logger.warning("=" * 70)
+        logger.warning("⚠️  TEST SET RESULTS (DO NOT ITERATE ON THESE)")
+        logger.warning("=" * 70)
+        logger.warning(
+            f"Test Accuracy: {test_metrics['accuracy']:.4f}, "
+            f"Test F1: {test_metrics['macro_f1']:.4f}"
+        )
+        logger.warning(
+            "If test results are disappointing: DO NOT tune and re-evaluate. "
+            "Move on to the next experiment."
+        )
+        logger.warning("=" * 70)
 
-        Returns:
-            Tuple of (X, y, weights) numpy arrays
-        """
-        # Get all data from dataset
-        X_list = []
-        y_list = []
-        w_list = []
-
-        for i in range(len(dataset)):
-            X_i, y_i, w_i = dataset[i]
-            X_list.append(X_i)
-            y_list.append(y_i)
-            w_list.append(w_i)
-
-        X = np.stack(X_list)
-        y = np.array(y_list)
-        w = np.array(w_list)
-
-        return X, y, w
-
-    def _compute_trading_metrics(
-        self,
-        y_true: np.ndarray,
-        predictions: PredictionOutput,
-    ) -> Dict[str, Any]:
-        """
-        Compute trading metrics for quick model comparison.
-
-        Note: This is a simplified version for quick model evaluation.
-        Full backtesting with realistic transaction costs, slippage, and
-        position sizing is done in Phase 3+.
-
-        Args:
-            y_true: True labels (-1=short, 0=neutral, 1=long)
-            predictions: Model predictions
-
-        Returns:
-            Dict with trading statistics
-        """
-        y_pred = predictions.class_predictions
-
-        # Signal distribution
-        long_signals = (y_pred == 1).sum()
-        short_signals = (y_pred == -1).sum()
-        neutral_signals = (y_pred == 0).sum()
-        total_positions = long_signals + short_signals
-
-        # Overall position accuracy
-        position_mask = y_pred != 0
-        if position_mask.sum() > 0:
-            correct_positions = (y_pred[position_mask] == y_true[position_mask]).sum()
-            position_win_rate = correct_positions / position_mask.sum()
-        else:
-            position_win_rate = 0.0
-
-        # Long/short accuracy (directional edge)
-        long_mask = y_pred == 1
-        short_mask = y_pred == -1
-
-        long_accuracy = 0.0
-        if long_mask.sum() > 0:
-            long_accuracy = (y_pred[long_mask] == y_true[long_mask]).sum() / long_mask.sum()
-
-        short_accuracy = 0.0
-        if short_mask.sum() > 0:
-            short_accuracy = (y_pred[short_mask] == y_true[short_mask]).sum() / short_mask.sum()
-
-        # Consecutive wins/losses (measure of streakiness)
-        if position_mask.sum() > 0:
-            position_correct = (y_pred[position_mask] == y_true[position_mask]).astype(int)
-
-            # Find consecutive sequences
-            max_consecutive_wins = 0
-            max_consecutive_losses = 0
-            current_wins = 0
-            current_losses = 0
-
-            for is_correct in position_correct:
-                if is_correct:
-                    current_wins += 1
-                    current_losses = 0
-                    max_consecutive_wins = max(max_consecutive_wins, current_wins)
-                else:
-                    current_losses += 1
-                    current_wins = 0
-                    max_consecutive_losses = max(max_consecutive_losses, current_losses)
-        else:
-            max_consecutive_wins = 0
-            max_consecutive_losses = 0
-
-        # Position-based Sharpe (simplified, assumes returns are correct predictions)
-        # This is a proxy - real Sharpe requires actual returns
-        if position_mask.sum() > 0:
-            # Assume correct prediction = +1 return, incorrect = -1 return
-            position_returns = np.where(
-                y_pred[position_mask] == y_true[position_mask], 1.0, -1.0
-            )
-            position_sharpe = (
-                position_returns.mean() / position_returns.std()
-                if position_returns.std() > 0 else 0.0
-            )
-        else:
-            position_sharpe = 0.0
-
-        return {
-            # Signal distribution
-            "long_signals": int(long_signals),
-            "short_signals": int(short_signals),
-            "neutral_signals": int(neutral_signals),
-            "total_positions": int(total_positions),
-            "position_rate": float(total_positions / len(y_pred)) if len(y_pred) > 0 else 0.0,
-
-            # Accuracy metrics
-            "position_win_rate": float(position_win_rate),
-            "long_accuracy": float(long_accuracy),
-            "short_accuracy": float(short_accuracy),
-            "directional_edge": float(abs(long_accuracy - short_accuracy)),  # Measures directional bias
-
-            # Streak metrics
-            "max_consecutive_wins": int(max_consecutive_wins),
-            "max_consecutive_losses": int(max_consecutive_losses),
-
-            # Risk metrics (simplified)
-            "position_sharpe": float(position_sharpe),
-
-            # Metadata
-            "note": "Simplified metrics for quick comparison. Use Phase 3+ for full backtest.",
-        }
+        return test_metrics, test_predictions
 
     def _save_config(self) -> None:
         """Save training configuration."""
@@ -640,102 +397,15 @@ class Trainer:
         logger.info(f"Saved calibrator to {calibrator_path}")
 
 
-# =============================================================================
-# TRAINING UTILITIES
-# =============================================================================
-
-def train_model(
-    model_name: str,
-    container: "TimeSeriesDataContainer",
-    horizon: int = 20,
-    config_overrides: Optional[Dict[str, Any]] = None,
-    output_dir: Optional[Path] = None,
-) -> Dict[str, Any]:
-    """
-    Convenience function to train a model.
-
-    Args:
-        model_name: Name of model to train
-        container: TimeSeriesDataContainer with data
-        horizon: Label horizon
-        config_overrides: Optional config overrides
-        output_dir: Output directory (default: experiments/runs)
-
-    Returns:
-        Training results dict
-
-    Example:
-        >>> results = train_model(
-        ...     "xgboost",
-        ...     container,
-        ...     horizon=20,
-        ...     config_overrides={"max_depth": 8}
-        ... )
-    """
-    config_kwargs = {
-        "model_name": model_name,
-        "horizon": horizon,
-    }
-
-    if output_dir:
-        config_kwargs["output_dir"] = output_dir
-
-    if config_overrides:
-        config_kwargs["model_config"] = config_overrides
-
-    config = TrainerConfig(**config_kwargs)
-    trainer = Trainer(config)
-    return trainer.run(container)
-
-
-def evaluate_model(
-    model: BaseModel,
-    container: "TimeSeriesDataContainer",
-    split: str = "test",
-) -> Dict[str, Any]:
-    """
-    Evaluate a trained model on a data split.
-
-    Args:
-        model: Trained model
-        container: TimeSeriesDataContainer with data
-        split: Data split to evaluate on ("val" or "test")
-
-    Returns:
-        Evaluation metrics dict
-
-    Example:
-        >>> model.load("experiments/runs/xgboost_h20_xxx/checkpoints/best_model")
-        >>> metrics = evaluate_model(model, container, split="test")
-    """
-    if model.requires_sequences:
-        dataset = container.get_pytorch_sequences(
-            split, seq_len=60, symbol_isolated=True
-        )
-        # Convert to arrays (simplified - in practice use DataLoader)
-        X_list, y_list = [], []
-        for i in range(len(dataset)):
-            X_i, y_i, _ = dataset[i]
-            X_list.append(X_i)
-            y_list.append(y_i)
-        X = np.stack(X_list)
-        y = np.array(y_list)
-    else:
-        X, y, _ = container.get_sklearn_arrays(split)
-
-    predictions = model.predict(X)
-
-    return compute_classification_metrics(
-        y_true=y,
-        y_pred=predictions.class_predictions,
-        y_proba=predictions.class_probabilities,
-    )
-
+# Re-export for backward compatibility
+from .metrics import compute_classification_metrics, compute_trading_metrics
+from .training_utils import evaluate_model, train_model
 
 __all__ = [
     "Trainer",
     "TrainerConfig",
     "compute_classification_metrics",
+    "compute_trading_metrics",
     "train_model",
     "evaluate_model",
 ]

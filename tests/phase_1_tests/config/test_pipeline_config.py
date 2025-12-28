@@ -42,11 +42,11 @@ class TestSingleSymbolValidationGuard:
         )
 
         assert config.symbols == ['MES']
-        assert config.allow_multi_symbol is False
+        assert config.allow_batch_symbols is False
 
     def test_multi_symbol_blocked_by_default(self, temp_project_dir: Path) -> None:
         """Test that multi-symbol configuration raises ValueError by default."""
-        with pytest.raises(ValueError, match="Multi-symbol runs are not allowed"):
+        with pytest.raises(ValueError, match="Batch processing of multiple symbols requires explicit opt-in"):
             PipelineConfig(
                 symbols=['MES', 'MGC'],
                 project_root=temp_project_dir
@@ -54,22 +54,22 @@ class TestSingleSymbolValidationGuard:
 
     def test_multi_symbol_blocked_with_three_symbols(self, temp_project_dir: Path) -> None:
         """Test that three or more symbols are blocked by default."""
-        with pytest.raises(ValueError, match="Multi-symbol runs are not allowed"):
+        with pytest.raises(ValueError, match="Batch processing of multiple symbols requires explicit opt-in"):
             PipelineConfig(
                 symbols=['MES', 'MGC', 'MNQ'],
                 project_root=temp_project_dir
             )
 
     def test_multi_symbol_allowed_with_explicit_flag(self, temp_project_dir: Path) -> None:
-        """Test that multi-symbol is allowed when allow_multi_symbol=True."""
+        """Test that multi-symbol is allowed when allow_batch_symbols=True."""
         config = PipelineConfig(
             symbols=['MES', 'MGC'],
-            allow_multi_symbol=True,
+            allow_batch_symbols=True,
             project_root=temp_project_dir
         )
 
         assert config.symbols == ['MES', 'MGC']
-        assert config.allow_multi_symbol is True
+        assert config.allow_batch_symbols is True
 
     def test_error_message_includes_symbol_count(self, temp_project_dir: Path) -> None:
         """Test that error message includes the number of symbols provided."""
@@ -88,8 +88,8 @@ class TestSingleSymbolValidationGuard:
             )
 
     def test_error_message_suggests_cli_flag(self, temp_project_dir: Path) -> None:
-        """Test that error message suggests the --multi-symbol flag."""
-        with pytest.raises(ValueError, match="--multi-symbol flag"):
+        """Test that error message suggests the --batch-symbols flag."""
+        with pytest.raises(ValueError, match="--batch-symbols flag"):
             PipelineConfig(
                 symbols=['MES', 'MGC'],
                 project_root=temp_project_dir
@@ -111,11 +111,11 @@ class TestSingleSymbolValidationGuard:
         )
 
         assert config.symbols == ['MES']
-        assert config.allow_multi_symbol is False
+        assert config.allow_batch_symbols is False
 
     def test_create_default_config_multi_symbol_blocked(self, temp_project_dir: Path) -> None:
         """Test create_default_config blocks multi-symbol by default."""
-        with pytest.raises(ValueError, match="Multi-symbol runs are not allowed"):
+        with pytest.raises(ValueError, match="Batch processing of multiple symbols requires explicit opt-in"):
             create_default_config(
                 symbols=['MES', 'MGC'],
                 project_root=temp_project_dir
@@ -125,7 +125,7 @@ class TestSingleSymbolValidationGuard:
         """Test create_default_config allows multi-symbol with explicit override."""
         config = create_default_config(
             symbols=['MES', 'MGC'],
-            allow_multi_symbol=True,
+            allow_batch_symbols=True,
             project_root=temp_project_dir
         )
 
@@ -479,7 +479,7 @@ class TestAutoScalePurgeEmbargo:
         config_large = PipelineConfig(
             symbols=['MES'],
             label_horizons=[5, 10, 20],  # Larger horizons
-            allow_multi_symbol=True,  # Allow reuse of temp_project_dir
+            allow_batch_symbols=True,  # Allow reuse of temp_project_dir
             project_root=temp_project_dir
         )
 

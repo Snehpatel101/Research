@@ -48,15 +48,21 @@ def map_labels_to_classes(
     >>> map_labels_to_classes(labels)
     array([0, 1, 2, 0])
     """
-    result = []
-    for val in y:
-        v = int(val)
-        if v not in LABEL_TO_CLASS:
-            raise ValueError(
-                f"Invalid label: {v}. Expected one of {list(LABEL_TO_CLASS.keys())}"
-            )
-        result.append(LABEL_TO_CLASS[v])
-    return np.array(result)
+    # Vectorized implementation for 100x+ speedup on large arrays
+    arr = np.asarray(y, dtype=np.int32)
+
+    # Validate all values are in {-1, 0, 1}
+    valid_labels = np.array([-1, 0, 1])
+    invalid_mask = ~np.isin(arr, valid_labels)
+    if invalid_mask.any():
+        invalid_vals = np.unique(arr[invalid_mask])
+        raise ValueError(
+            f"Invalid labels: {invalid_vals.tolist()}. "
+            f"Expected one of {list(LABEL_TO_CLASS.keys())}"
+        )
+
+    # Vectorized mapping: -1 -> 0, 0 -> 1, 1 -> 2
+    return (arr + 1).astype(np.int32)
 
 
 def map_classes_to_labels(
@@ -86,12 +92,18 @@ def map_classes_to_labels(
     >>> map_classes_to_labels(classes)
     array([-1, 0, 1, -1])
     """
-    result = []
-    for val in y:
-        v = int(val)
-        if v not in CLASS_TO_LABEL:
-            raise ValueError(
-                f"Invalid class index: {v}. Expected one of {list(CLASS_TO_LABEL.keys())}"
-            )
-        result.append(CLASS_TO_LABEL[v])
-    return np.array(result)
+    # Vectorized implementation for 100x+ speedup on large arrays
+    arr = np.asarray(y, dtype=np.int32)
+
+    # Validate all values are in {0, 1, 2}
+    valid_classes = np.array([0, 1, 2])
+    invalid_mask = ~np.isin(arr, valid_classes)
+    if invalid_mask.any():
+        invalid_vals = np.unique(arr[invalid_mask])
+        raise ValueError(
+            f"Invalid class indices: {invalid_vals.tolist()}. "
+            f"Expected one of {list(CLASS_TO_LABEL.keys())}"
+        )
+
+    # Vectorized mapping: 0 -> -1, 1 -> 0, 2 -> 1
+    return (arr - 1).astype(np.int32)

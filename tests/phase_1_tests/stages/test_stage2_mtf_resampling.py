@@ -99,7 +99,7 @@ class TestConfigTimeframe:
 
     def test_supported_timeframes_exist(self):
         """Test that SUPPORTED_TIMEFRAMES is defined."""
-        from config import SUPPORTED_TIMEFRAMES
+        from src.phase1.config import SUPPORTED_TIMEFRAMES
         assert isinstance(SUPPORTED_TIMEFRAMES, list)
         assert len(SUPPORTED_TIMEFRAMES) > 0
         assert '5min' in SUPPORTED_TIMEFRAMES
@@ -107,19 +107,20 @@ class TestConfigTimeframe:
 
     def test_target_timeframe_default(self):
         """Test that TARGET_TIMEFRAME has a default value."""
-        from config import TARGET_TIMEFRAME
+        from src.phase1.config import TARGET_TIMEFRAME
         # TARGET_TIMEFRAME is the raw data timeframe (1min)
         assert TARGET_TIMEFRAME == '1min'
 
     def test_validate_timeframe_valid(self):
-        """Test validation of valid timeframes."""
-        from config import validate_timeframe, SUPPORTED_TIMEFRAMES
+        """Test validation of valid timeframes - should not raise."""
+        from src.phase1.config import validate_timeframe, SUPPORTED_TIMEFRAMES
         for tf in SUPPORTED_TIMEFRAMES:
-            assert validate_timeframe(tf) is True
+            # validate_timeframe raises on invalid, returns None on valid
+            validate_timeframe(tf)  # Should not raise
 
     def test_validate_timeframe_invalid(self):
         """Test validation rejects invalid timeframes."""
-        from config import validate_timeframe
+        from src.phase1.config import validate_timeframe
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             validate_timeframe('2min')
 
@@ -128,7 +129,7 @@ class TestConfigTimeframe:
 
     def test_parse_timeframe_to_minutes(self):
         """Test parsing timeframe strings to minutes."""
-        from config import parse_timeframe_to_minutes
+        from src.phase1.config import parse_timeframe_to_minutes
 
         assert parse_timeframe_to_minutes('1min') == 1
         assert parse_timeframe_to_minutes('5min') == 5
@@ -138,14 +139,14 @@ class TestConfigTimeframe:
 
     def test_parse_timeframe_to_minutes_hours(self):
         """Test parsing hour timeframes."""
-        from config import parse_timeframe_to_minutes
+        from src.phase1.config import parse_timeframe_to_minutes
 
         assert parse_timeframe_to_minutes('1h') == 60
         assert parse_timeframe_to_minutes('2h') == 120
 
     def test_get_timeframe_metadata(self):
         """Test getting timeframe metadata."""
-        from config import get_timeframe_metadata
+        from src.phase1.config import get_timeframe_metadata
 
         meta = get_timeframe_metadata('5min')
         assert meta['timeframe'] == '5min'
@@ -155,7 +156,7 @@ class TestConfigTimeframe:
 
     def test_get_timeframe_metadata_invalid(self):
         """Test metadata fails for invalid timeframe."""
-        from config import get_timeframe_metadata
+        from src.phase1.config import get_timeframe_metadata
         with pytest.raises(ValueError):
             get_timeframe_metadata('invalid')
 
@@ -589,14 +590,14 @@ class TestPipelineConfigMTF:
         """Test PipelineConfig defaults to 5min."""
         from src.phase1.pipeline_config import PipelineConfig
 
-        config = PipelineConfig()
+        config = PipelineConfig(symbols=['MES'])
         assert config.target_timeframe == '5min'
 
     def test_pipeline_config_custom_timeframe(self):
         """Test PipelineConfig with custom target_timeframe."""
         from src.phase1.pipeline_config import PipelineConfig
 
-        config = PipelineConfig(target_timeframe='15min')
+        config = PipelineConfig(symbols=['MES'], target_timeframe='15min')
         assert config.target_timeframe == '15min'
         assert config.bar_resolution == '15min'  # Should sync
 
@@ -605,7 +606,7 @@ class TestPipelineConfigMTF:
         from src.phase1.pipeline_config import PipelineConfig
 
         # Old code might set bar_resolution directly
-        config = PipelineConfig(bar_resolution='30min')
+        config = PipelineConfig(symbols=['MES'], bar_resolution='30min')
         assert config.target_timeframe == '30min'
 
     def test_pipeline_config_invalid_timeframe(self):
@@ -613,13 +614,13 @@ class TestPipelineConfigMTF:
         from src.phase1.pipeline_config import PipelineConfig
 
         with pytest.raises(ValueError, match="Unsupported timeframe"):
-            PipelineConfig(target_timeframe='7min')
+            PipelineConfig(symbols=['MES'], target_timeframe='7min')
 
     def test_pipeline_config_validate_timeframe(self):
         """Test PipelineConfig.validate() includes timeframe check."""
         from src.phase1.pipeline_config import PipelineConfig
 
-        config = PipelineConfig()
+        config = PipelineConfig(symbols=['MES'])
         issues = config.validate()
 
         # Should be valid with defaults

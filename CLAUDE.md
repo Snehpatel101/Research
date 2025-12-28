@@ -83,13 +83,21 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 ```python
 class BaseModel(ABC):
     @abstractmethod
-    def train(self, X: pd.DataFrame, y: pd.Series, config: dict) -> None:
+    def fit(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        sample_weights: Optional[np.ndarray] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> TrainingMetrics:
         """Train the model on provided data."""
         pass
 
     @abstractmethod
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Generate predictions."""
+    def predict(self, X: np.ndarray) -> PredictionOutput:
+        """Generate predictions with probabilities and confidence."""
         pass
 
     @abstractmethod
@@ -313,7 +321,9 @@ The data pipeline produces standardized datasets for all model types:
 src/phase1/stages/
 ├── ingest/             → Load and validate raw data
 ├── clean/              → Resample 1min→5min, gap handling
+├── sessions/           → Session filtering and normalization
 ├── features/           → 150+ indicators (momentum, wavelets, microstructure)
+├── regime/             → Regime detection (volatility, trend, composite)
 ├── mtf/                → Multi-timeframe features
 ├── labeling/           → Triple-barrier initial labels
 ├── ga_optimize/        → Optuna parameter optimization
@@ -321,6 +331,7 @@ src/phase1/stages/
 ├── splits/             → Train/val/test with purge/embargo
 ├── scaling/            → Train-only robust scaling
 ├── datasets/           → Build TimeSeriesDataContainer
+├── scaled_validation/  → Validate scaled data quality
 ├── validation/         → Feature correlation and quality checks
 └── reporting/          → Generate completion reports
 ```
@@ -336,9 +347,15 @@ Plugin-based model training system with **13 models across 4 families**:
 ```
 src/models/
 ├── registry.py         → ModelRegistry plugin system (13 models registered)
-├── base.py             → BaseModel interface
-├── config.py           → TrainerConfig, YAML loading
+├── base.py             → BaseModel interface, TrainingMetrics, PredictionOutput
+├── config/             → Configuration package (modular)
+│   ├── trainer_config.py  → TrainerConfig dataclass
+│   ├── loaders.py         → YAML config loading
+│   ├── paths.py           → Config file paths
+│   └── environment.py     → Environment detection
 ├── trainer.py          → Unified training orchestration
+├── metrics.py          → Metric calculation utilities
+├── data_preparation.py → Dataset preparation utilities
 ├── device.py           → GPU detection, memory estimation
 ├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
 ├── neural/             → LSTM, GRU, TCN, Transformer (4 models)
@@ -360,7 +377,12 @@ Time-series aware cross-validation with purge/embargo:
 src/cross_validation/
 ├── purged_kfold.py     → PurgedKFold with configurable purge/embargo
 ├── feature_selector.py → Walk-forward MDA/MDI feature selection
-├── oof_generator.py    → Out-of-fold predictions for stacking
+├── oof_generator.py    → Unified OOF generator interface
+├── oof_core.py         → Core tabular OOF generation
+├── oof_sequence.py     → Sequence model OOF generation
+├── oof_stacking.py     → Stacking dataset builder
+├── oof_validation.py   → Coverage and correlation validation
+├── oof_io.py           → Save/load OOF datasets
 ├── cv_runner.py        → CrossValidationRunner, Optuna tuning
 └── param_spaces.py     → Hyperparameter search spaces
 ```

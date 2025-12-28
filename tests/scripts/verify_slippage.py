@@ -105,11 +105,11 @@ def main():
 
     print("""
 # Get slippage for a specific regime
-from config import get_slippage_ticks
+from src.phase1.config import get_slippage_ticks
 slippage = get_slippage_ticks('MES', 'high_vol')  # 1.0 ticks per fill
 
 # Get total round-trip cost (commission + slippage)
-from config import get_total_trade_cost
+from src.phase1.config import get_total_trade_cost
 cost = get_total_trade_cost('MES', 'low_vol')  # 1.5 ticks
 
 # Get commission only (no slippage)

@@ -508,7 +508,7 @@ def get_adjusted_barrier_params(
     >>> params['k_up']  # Base k_up * 0.7
     """
     # Import here to avoid circular imports
-    from config import get_barrier_params
+    from src.phase1.config import get_barrier_params
 
     preset_enum = _get_preset_enum(preset)
     preset_config = PRESET_CONFIGS[preset_enum]

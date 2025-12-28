@@ -32,6 +32,7 @@ Usage:
 from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig, ModelAwareCV
 from src.cross_validation.feature_selector import WalkForwardFeatureSelector
 from src.cross_validation.oof_generator import OOFGenerator, StackingDataset
+from src.cross_validation.oof_core import OOFPrediction
 from src.cross_validation.cv_runner import CrossValidationRunner, CVResult, FoldMetrics
 from src.cross_validation.param_spaces import PARAM_SPACES
 from src.cross_validation.walk_forward import (
@@ -69,6 +70,7 @@ __all__ = [
     "ModelAwareCV",
     "WalkForwardFeatureSelector",
     "OOFGenerator",
+    "OOFPrediction",
     "StackingDataset",
     "CrossValidationRunner",
     "CVResult",

@@ -167,7 +167,7 @@ class TestOOFGenerator:
     @pytest.fixture
     def mock_model_registry(self):
         """Mock ModelRegistry for testing."""
-        with patch("src.cross_validation.oof_generator.ModelRegistry") as mock_reg:
+        with patch("src.cross_validation.oof_core.ModelRegistry") as mock_reg:
             # Create mock model
             mock_model = MagicMock()
 
