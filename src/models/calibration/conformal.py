@@ -283,7 +283,7 @@ class ConformalPredictor:
                 for j, idx in enumerate(sorted_idx):
                     if j == 0:
                         prediction_sets[i, idx] = True
-                    elif cumsum[j - 1] <= self._threshold:
+                    elif cumsum[j] <= self._threshold:
                         prediction_sets[i, idx] = True
                     else:
                         break

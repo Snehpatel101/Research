@@ -118,6 +118,10 @@ class DollarBarBuilder(BaseBarBuilder):
                 if bars_in_current >= self.min_bars_per_output:
                     bar_boundaries.append(i + 1)
                     cumulative_dollars = 0.0
+                # NOTE: If min_bars not met, cumulative_dollars continues to grow.
+                # This ensures the bar closes only after both conditions are met:
+                # (1) dollar threshold reached AND (2) minimum bars included.
+                # This may result in bars with > dollar_threshold value.
 
         # Handle last incomplete bar
         if bar_boundaries[-1] < n_rows:

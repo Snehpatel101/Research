@@ -345,7 +345,13 @@ class HMMRegimeDetector(RegimeDetector):
                 )
 
                 states = ordered_states
-                probs = raw_probs
+
+                # Reorder probability columns to match state reordering
+                # state_mapping maps old_state -> new_state
+                probs_reordered = np.zeros_like(raw_probs)
+                for old_state, new_state in self._state_mapping.items():
+                    probs_reordered[:, new_state] = raw_probs[:, old_state]
+                probs = probs_reordered
 
             except Exception as e:
                 logger.warning(f"HMM fitting failed: {e}")

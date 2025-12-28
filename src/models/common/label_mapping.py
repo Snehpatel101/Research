@@ -37,13 +37,26 @@ def map_labels_to_classes(
     np.ndarray
         Array of class indices with values in {0, 1, 2}
 
+    Raises
+    ------
+    ValueError
+        If any label is not in {-1, 0, 1}
+
     Examples
     --------
     >>> labels = np.array([-1, 0, 1, -1])
     >>> map_labels_to_classes(labels)
     array([0, 1, 2, 0])
     """
-    return np.array([LABEL_TO_CLASS.get(int(val), 1) for val in y])
+    result = []
+    for val in y:
+        v = int(val)
+        if v not in LABEL_TO_CLASS:
+            raise ValueError(
+                f"Invalid label: {v}. Expected one of {list(LABEL_TO_CLASS.keys())}"
+            )
+        result.append(LABEL_TO_CLASS[v])
+    return np.array(result)
 
 
 def map_classes_to_labels(
@@ -62,10 +75,23 @@ def map_classes_to_labels(
     np.ndarray
         Array of trading labels with values in {-1, 0, 1}
 
+    Raises
+    ------
+    ValueError
+        If any class index is not in {0, 1, 2}
+
     Examples
     --------
     >>> classes = np.array([0, 1, 2, 0])
     >>> map_classes_to_labels(classes)
     array([-1, 0, 1, -1])
     """
-    return np.array([CLASS_TO_LABEL.get(int(val), 0) for val in y])
+    result = []
+    for val in y:
+        v = int(val)
+        if v not in CLASS_TO_LABEL:
+            raise ValueError(
+                f"Invalid class index: {v}. Expected one of {list(CLASS_TO_LABEL.keys())}"
+            )
+        result.append(CLASS_TO_LABEL[v])
+    return np.array(result)
