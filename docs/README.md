@@ -89,6 +89,9 @@ Raw OHLCV Data
 | Feature catalog | [reference/FEATURES.md](reference/FEATURES.md) |
 | **Colab/Jupyter setup** | [**COLAB_GUIDE.md**](COLAB_GUIDE.md) |
 | **Interactive notebooks** | `../notebooks/` (4 notebooks) |
+| **Implementation planning** | [planning/ROADMAP.md](planning/ROADMAP.md) |
+| **Gaps analysis** | [planning/GAPS_ANALYSIS.md](planning/GAPS_ANALYSIS.md) |
+| **Migration guide** | [planning/MIGRATION_GUIDE.md](planning/MIGRATION_GUIDE.md) |
 
 ---
 
@@ -347,10 +350,21 @@ docs/
     README.md                  # Layman's explanation of Phase 1
   phases/
     PHASE_1.md                 # Technical spec (COMPLETE)
-    PHASE_2.md                 # Model factory (PLANNED)
-    PHASE_3.md                 # Cross-validation (PLANNED)
-    PHASE_4.md                 # Ensemble (PLANNED)
+    PHASE_2.md                 # Model factory (COMPLETE)
+    PHASE_3.md                 # Cross-validation (COMPLETE)
+    PHASE_4.md                 # Ensemble (COMPLETE)
     PHASE_5.md                 # Deployment (PLANNED)
+  planning/                    # Implementation planning docs
+    ROADMAP.md                 # 8-week implementation roadmap
+    GAPS_ANALYSIS.md           # Critical gaps analysis (12 gaps)
+    MIGRATION_GUIDE.md         # Step-by-step migration guide
+    specs/                     # Detailed implementation specs
+      probability_calibration.md
+      cv_improvements.md
+      cv_validation_methods.md
+      cv_cpcv.md
+      drift_detection.md
+      inference_pipeline.md
   getting-started/
     QUICKSTART.md              # Getting started guide
     PIPELINE_CLI.md            # CLI reference
@@ -389,6 +403,14 @@ docs/
 ---
 
 ## Changelog
+
+### 2025-12-28
+
+- Added implementation planning documentation (`docs/planning/`)
+- Split IMPLEMENTATION_PLAN.md into focused documents (<650 lines each)
+- Created ROADMAP.md, GAPS_ANALYSIS.md, MIGRATION_GUIDE.md
+- Created 6 detailed implementation spec files
+- Updated Phases 2-4 status to COMPLETE
 
 ### 2025-12-24
 
