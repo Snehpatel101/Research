@@ -172,7 +172,7 @@ class TestSymbolParsing:
         self, temp_project_dir, mock_pipeline_config, mock_presets
     ) -> None:
         """Test that multiple symbols raise error by default (single-symbol guard)."""
-        with pytest.raises(ValueError, match="Multi-symbol runs are not allowed"):
+        with pytest.raises(ValueError, match="Batch processing of multiple symbols requires explicit opt-in"):
             create_config_helper(
                 temp_project_dir, mock_pipeline_config, mock_presets,
                 symbols='MES,MGC,MNQ'

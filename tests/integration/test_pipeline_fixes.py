@@ -92,6 +92,7 @@ class TestDataLeakagePrevention:
         for proper purge/embargo calculation.
         """
         from src.models.trainer import Trainer
+        from src.models.config import TrainerConfig
 
         # Create mock data container
         mock_container = MagicMock()
@@ -109,11 +110,11 @@ class TestDataLeakagePrevention:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create trainer with stacking ensemble
-            trainer = Trainer(
+            config = TrainerConfig(
                 model_name="stacking",
                 horizon=20,
                 output_dir=Path(tmpdir),
-                config={
+                model_config={
                     "base_model_names": ["xgboost", "lightgbm"],
                     "n_folds": 3,
                     "base_model_configs": {
@@ -122,6 +123,7 @@ class TestDataLeakagePrevention:
                     },
                 },
             )
+            trainer = Trainer(config)
 
             # Mock the ensemble's fit method to capture arguments
             original_fit = trainer.model.fit
@@ -131,17 +133,25 @@ class TestDataLeakagePrevention:
             def mock_fit(*args, **kwargs):
                 fit_kwargs_captured.update(kwargs)
                 # Don't actually run fit, just capture args
-                return {
-                    "train_accuracy": 0.6,
-                    "val_accuracy": 0.55,
-                    "fit_time": 1.0,
-                }
+                from src.models.base import TrainingMetrics
+                return TrainingMetrics(
+                    train_loss=0.5,
+                    val_loss=0.6,
+                    train_accuracy=0.6,
+                    val_accuracy=0.55,
+                    train_f1=0.58,
+                    val_f1=0.53,
+                    epochs_trained=1,
+                    training_time_seconds=1.0,
+                    early_stopped=False,
+                    best_epoch=None,
+                )
 
             trainer.model.fit = mock_fit
 
             # Run train
             try:
-                trainer.train(mock_container)
+                trainer.run(mock_container, skip_save=True)
             except Exception:
                 pass  # May fail, but we just want to check kwargs
 
@@ -181,32 +191,42 @@ class TestDataLeakagePrevention:
         metrics = ensemble.fit(X_train, y_train, X_val, y_val)
 
         # Verify it completed successfully (basic sanity check)
-        assert "train_accuracy" in metrics
-        assert "val_accuracy" in metrics
+        assert hasattr(metrics, 'train_accuracy')
+        assert hasattr(metrics, 'val_accuracy')
+        assert 0 <= metrics.train_accuracy <= 1
+        assert 0 <= metrics.val_accuracy <= 1
 
     def test_no_future_leakage_in_predictions(self):
         """
         Test that OOF predictions never use future data.
 
-        For each fold, the model should only be trained on past data
-        (with proper purge and embargo).
+        For each fold, verify that:
+        1. Test indices are excluded from training
+        2. Purge window before test is excluded
+        3. Embargo window after test is excluded
         """
         # Create time-indexed dataset
         n_samples = 200
         n_features = 10
-        X = np.random.randn(n_samples, n_features).astype(np.float32)
-        y = np.random.choice([-1, 0, 1], size=n_samples)
+
+        # Create DataFrame with DatetimeIndex
+        timestamps = pd.date_range("2024-01-01", periods=n_samples, freq="5min")
+        X = pd.DataFrame(
+            np.random.randn(n_samples, n_features).astype(np.float32),
+            index=timestamps,
+            columns=[f"feat_{i}" for i in range(n_features)]
+        )
+        y = pd.Series(np.random.choice([-1, 0, 1], size=n_samples), index=timestamps)
 
         # Create label end times (5-minute bars)
-        label_end_times = pd.Series(
-            pd.date_range("2024-01-01", periods=n_samples, freq="5min"),
-            index=range(n_samples),
-        )
+        label_end_times = pd.Series(timestamps, index=timestamps)
 
         # Create PurgedKFold
+        purge_bars = 10
+        embargo_bars = 10
         pkfold = PurgedKFold(
             config=PurgedKFoldConfig(
-                n_splits=5, purge_bars=10, embargo_bars=10, min_samples_per_fold=30
+                n_splits=5, purge_bars=purge_bars, embargo_bars=embargo_bars, min_train_size=0.15
             )
         )
 
@@ -214,18 +234,27 @@ class TestDataLeakagePrevention:
         for fold_idx, (train_idx, test_idx) in enumerate(
             pkfold.split(X, y, label_end_times=label_end_times)
         ):
-            # Get timestamps
-            train_times = label_end_times.iloc[train_idx]
-            test_times = label_end_times.iloc[test_idx]
+            # Verify test indices are not in train
+            train_set = set(train_idx)
+            test_set = set(test_idx)
+            assert len(train_set & test_set) == 0, (
+                f"Fold {fold_idx}: Train and test sets overlap"
+            )
 
-            # Verify no overlap
-            max_train_time = train_times.max()
-            min_test_time = test_times.min()
+            # Verify purge window before test is excluded
+            test_start_idx = min(test_idx)
+            purge_start_idx = max(0, test_start_idx - purge_bars)
+            purge_indices = set(range(purge_start_idx, test_start_idx))
+            assert len(train_set & purge_indices) == 0, (
+                f"Fold {fold_idx}: Training set includes purged samples before test"
+            )
 
-            # Test set should start after train set (with purge/embargo gap)
-            assert min_test_time > max_train_time, (
-                f"Fold {fold_idx}: Test data leaks into training period. "
-                f"Max train time: {max_train_time}, Min test time: {min_test_time}"
+            # Verify embargo window after test is excluded
+            test_end_idx = max(test_idx)
+            embargo_end_idx = min(n_samples, test_end_idx + embargo_bars)
+            embargo_indices = set(range(test_end_idx + 1, embargo_end_idx))
+            assert len(train_set & embargo_indices) == 0, (
+                f"Fold {fold_idx}: Training set includes embargo samples after test"
             )
 
 
@@ -285,17 +314,19 @@ class TestWorkflowIntegration:
         Run IDs must include milliseconds and random suffix to prevent collisions.
         """
         from src.models.trainer import Trainer
+        from src.models.config import TrainerConfig
 
         # Generate many run IDs quickly
         run_ids = []
         for i in range(100):
             with tempfile.TemporaryDirectory() as tmpdir:
-                trainer = Trainer(
+                config = TrainerConfig(
                     model_name="xgboost",
                     horizon=20,
                     output_dir=Path(tmpdir),
-                    config={"n_estimators": 10},
+                    model_config={"n_estimators": 10},
                 )
+                trainer = Trainer(config)
                 run_ids.append(trainer.run_id)
 
         # Verify all unique

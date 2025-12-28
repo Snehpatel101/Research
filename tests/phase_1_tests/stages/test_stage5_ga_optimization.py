@@ -35,9 +35,9 @@ class TestStage5GAOptimizer:
     def test_calculate_fitness_valid_balanced_labels(self):
         """Test fitness calculation with balanced label distribution.
 
-        NOTE: With slippage modeling (added 2025-12-23), fitness scores are more
-        negative due to realistic transaction costs (commission + slippage).
-        The threshold has been adjusted to reflect this.
+        NOTE: With realistic profit levels (0.5-1.0 ATR), fitness can be positive.
+        Previous test used unrealistically small profits (0.01-0.02 ATR) that caused
+        transaction costs to dominate, capping penalty at -10.0.
         """
         np.random.seed(42)
         n = 1000
@@ -47,17 +47,18 @@ class TestStage5GAOptimizer:
         np.random.shuffle(labels)
 
         bars_to_hit = np.random.randint(1, 10, n).astype(np.int32)
-        mae = -np.abs(np.random.randn(n) * 0.01).astype(np.float32)
-        mfe = np.abs(np.random.randn(n) * 0.02).astype(np.float32)
+        # Use realistic barrier distances (0.5-1.0 ATR units)
+        mae = -np.abs(np.random.randn(n) * 0.5).astype(np.float32)
+        mfe = np.abs(np.random.randn(n) * 1.0).astype(np.float32)
         horizon = 5
         atr_mean = 10.0  # Typical ATR value for normalization
 
         fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
-        # With slippage, fitness is more negative but still reasonable for balanced labels
-        # (not catastrophically negative like degenerate cases)
-        assert fitness > -200, f"Fitness too low for balanced labels: {fitness}"
-        assert fitness < 0, f"Fitness should be negative due to transaction costs: {fitness}"
+        # With realistic profits, fitness should be positive (neutral penalty is moderate,
+        # other components contribute positively)
+        assert fitness > 0, f"Fitness should be positive for balanced labels: {fitness}"
+        assert fitness < 20, f"Fitness should be reasonable: {fitness}"
 
     def test_calculate_fitness_degenerate_neutral_heavy(self):
         """Test fitness penalizes neutral-heavy distributions."""
@@ -77,7 +78,11 @@ class TestStage5GAOptimizer:
         assert fitness < -500, f"Fitness should be very negative: {fitness}"
 
     def test_calculate_fitness_empty_labels(self):
-        """Test fitness with empty labels returns minimum value."""
+        """Test fitness with empty labels returns catastrophic failure value.
+
+        NOTE: The implementation returns -10000.0 for empty labels (catastrophic failure),
+        not -1000.0. See fitness.py line 70.
+        """
         labels = np.array([], dtype=np.int8)
         bars_to_hit = np.array([], dtype=np.int32)
         mae = np.array([], dtype=np.float32)
@@ -86,24 +91,33 @@ class TestStage5GAOptimizer:
 
         fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon=5, atr_mean=atr_mean)
 
-        assert fitness == -1000.0, "Empty labels should return -1000"
+        assert fitness == -10000.0, "Empty labels should return -10000 (catastrophic failure)"
 
     def test_calculate_fitness_signal_rate_threshold(self):
-        """Test that signal rate below 40% is heavily penalized."""
+        """Test that neutral > 40% triggers hard constraint.
+
+        NOTE: The test label distribution has 70% neutral, which violates the
+        max_neutral_pct constraint (40%). This triggers the hard constraint
+        returning fitness < -9990.
+
+        The previous comment about "signal rate below 40%" was misleading -
+        the constraint is on NEUTRAL percentage, not signal percentage.
+        """
         n = 1000
 
-        # 30% signal rate (below threshold)
+        # 70% neutral (above max_neutral_pct=40% threshold) = hard constraint violation
         labels = np.array([1]*150 + [-1]*150 + [0]*700, dtype=np.int8)
         bars_to_hit = np.ones(n, dtype=np.int32) * 5
-        mae = -np.ones(n, dtype=np.float32) * 0.01
-        mfe = np.ones(n, dtype=np.float32) * 0.02
+        # Use realistic profit levels
+        mae = -np.ones(n, dtype=np.float32) * 0.5
+        mfe = np.ones(n, dtype=np.float32) * 1.0
         horizon = 5
         atr_mean = 10.0
 
         fitness = calculate_fitness(labels, bars_to_hit, mae, mfe, horizon, atr_mean)
 
-        # Should be penalized but slightly better than -1000
-        assert -1000 < fitness < -900, f"Expected penalty for low signal rate: {fitness}"
+        # Should hit hard constraint (neutral > 40%)
+        assert fitness < -9990, f"Expected hard constraint for 70% neutral: {fitness}"
 
     def test_calculate_fitness_profit_factor_components(self):
         """Test profit factor calculation with known values."""

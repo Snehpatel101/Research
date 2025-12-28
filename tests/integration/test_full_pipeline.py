@@ -213,6 +213,9 @@ class TestEnsemblePipeline:
                 "meta_learner_name": "logistic",
                 "meta_learner_config": {"max_iter": 100},
                 "n_folds": 2,
+                # Override purge/embargo for small test data
+                "purge_bars": 5,
+                "embargo_bars": 10,
             },
         )
 

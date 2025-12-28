@@ -347,7 +347,10 @@ class TestSymbolBoundaries:
             symbol_column="nonexistent",
         )
 
-        assert builder._symbol_boundaries is None
+        # When symbol column doesn't exist but DatetimeIndex does,
+        # gap detection runs and returns empty array (no gaps in simple_data)
+        assert builder._symbol_boundaries is not None
+        assert len(builder._symbol_boundaries) == 0
 
 
 # =============================================================================

@@ -478,9 +478,11 @@ class TestCVRunnerRun:
 
         mock_model.predict.side_effect = mock_predict
 
-        # Patch both locations where ModelRegistry is used
+        # Patch all locations where ModelRegistry is used
         with patch("src.cross_validation.cv_runner.ModelRegistry") as mock_cv_reg, \
-             patch("src.cross_validation.oof_generator.ModelRegistry") as mock_oof_reg:
+             patch("src.cross_validation.oof_generator.ModelRegistry") as mock_oof_reg, \
+             patch("src.cross_validation.oof_sequence.ModelRegistry") as mock_oof_seq, \
+             patch("src.cross_validation.oof_core.ModelRegistry") as mock_oof_core:
 
             mock_cv_reg.get_model_info.return_value = {
                 "family": "boosting",
@@ -488,6 +490,8 @@ class TestCVRunnerRun:
             }
             mock_cv_reg.create.return_value = mock_model
             mock_oof_reg.create.return_value = mock_model
+            mock_oof_seq.create.return_value = mock_model
+            mock_oof_core.create.return_value = mock_model
 
             runner = CrossValidationRunner(
                 cv=small_cv,
@@ -531,9 +535,11 @@ class TestCVRunnerRun:
 
         mock_model.predict.side_effect = mock_predict
 
-        # Patch both locations where ModelRegistry is used
+        # Patch all locations where ModelRegistry is used
         with patch("src.cross_validation.cv_runner.ModelRegistry") as mock_cv_reg, \
-             patch("src.cross_validation.oof_generator.ModelRegistry") as mock_oof_reg:
+             patch("src.cross_validation.oof_generator.ModelRegistry") as mock_oof_reg, \
+             patch("src.cross_validation.oof_sequence.ModelRegistry") as mock_oof_seq, \
+             patch("src.cross_validation.oof_core.ModelRegistry") as mock_oof_core:
 
             mock_cv_reg.get_model_info.return_value = {
                 "family": "boosting",
@@ -541,6 +547,8 @@ class TestCVRunnerRun:
             }
             mock_cv_reg.create.return_value = mock_model
             mock_oof_reg.create.return_value = mock_model
+            mock_oof_seq.create.return_value = mock_model
+            mock_oof_core.create.return_value = mock_model
 
             runner = CrossValidationRunner(
                 cv=small_cv,

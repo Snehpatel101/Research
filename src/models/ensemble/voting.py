@@ -167,11 +167,22 @@ class VotingEnsemble(BaseModel):
         y_val: np.ndarray,
         sample_weights: Optional[np.ndarray] = None,
         config: Optional[Dict[str, Any]] = None,
+        label_end_times: Optional[np.ndarray] = None,
     ) -> TrainingMetrics:
         """
         Train all base models from scratch.
 
         Requires base_model_names to be specified in config.
+
+        Args:
+            X_train: Training features
+            y_train: Training labels
+            X_val: Validation features
+            y_val: Validation labels
+            sample_weights: Optional sample weights
+            config: Optional configuration overrides
+            label_end_times: Optional label end times (unused by VotingEnsemble,
+                accepted for API compatibility with StackingEnsemble)
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")

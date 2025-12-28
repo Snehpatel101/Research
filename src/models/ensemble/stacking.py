@@ -90,6 +90,8 @@ class StackingEnsemble(BaseModel):
             "n_folds": 5,
             "use_probabilities": True,  # Use probs vs class predictions
             "passthrough": False,  # Include original features in meta-learner
+            "purge_bars": 60,  # Prevent overlapping label leakage
+            "embargo_bars": 1440,  # Break serial correlation (5 days at 5min)
         }
 
     def fit(
@@ -139,6 +141,8 @@ class StackingEnsemble(BaseModel):
         meta_learner_config = train_config.get("meta_learner_config", {})
         use_probabilities = train_config.get("use_probabilities", True)
         passthrough = train_config.get("passthrough", False)
+        purge_bars = train_config.get("purge_bars", 60)
+        embargo_bars = train_config.get("embargo_bars", 1440)
 
         logger.info(
             f"Training StackingEnsemble: base_models={self._base_model_names}, "
@@ -154,6 +158,8 @@ class StackingEnsemble(BaseModel):
             sample_weights=sample_weights,
             use_probabilities=use_probabilities,
             label_end_times=label_end_times,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
         )
 
         # Step 2: Train meta-learner on OOF predictions
@@ -233,6 +239,8 @@ class StackingEnsemble(BaseModel):
         sample_weights: Optional[np.ndarray],
         use_probabilities: bool,
         label_end_times: Optional[pd.Series] = None,
+        purge_bars: int = 60,
+        embargo_bars: int = 1440,
     ) -> Tuple[np.ndarray, List[List[BaseModel]]]:
         """
         Generate out-of-fold predictions for all base models.
@@ -248,6 +256,8 @@ class StackingEnsemble(BaseModel):
             sample_weights: Sample weights
             use_probabilities: If True, use class probabilities; else use class predictions
             label_end_times: When each label is resolved (enables overlapping label purging)
+            purge_bars: Number of bars to purge around validation set
+            embargo_bars: Number of bars to embargo after validation set
 
         Returns:
             Tuple of (oof_predictions, fold_models)
@@ -267,11 +277,10 @@ class StackingEnsemble(BaseModel):
         fold_models: List[List[BaseModel]] = [[] for _ in base_model_names]
 
         # Create PurgedKFold splitter to prevent label leakage
-        # Using purge_bars=60 (3x max horizon) and embargo_bars=1440 (5 days at 5min)
         purged_kfold_config = PurgedKFoldConfig(
             n_splits=self._n_folds,
-            purge_bars=60,  # Prevent overlapping label leakage
-            embargo_bars=1440,  # Break serial correlation
+            purge_bars=purge_bars,  # Prevent overlapping label leakage
+            embargo_bars=embargo_bars,  # Break serial correlation
         )
         kfold = PurgedKFold(purged_kfold_config)
 

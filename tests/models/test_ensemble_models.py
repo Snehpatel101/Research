@@ -526,6 +526,9 @@ def fast_stacking_config() -> Dict[str, Any]:
         "meta_learner_config": {"max_iter": 100},
         "n_folds": 2,
         "use_probabilities": True,
+        # Override purge/embargo for small test data
+        "purge_bars": 5,
+        "embargo_bars": 10,
     }
 
 

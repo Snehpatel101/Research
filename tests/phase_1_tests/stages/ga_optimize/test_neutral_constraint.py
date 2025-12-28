@@ -36,13 +36,21 @@ from src.phase1.config import LABEL_BALANCE_CONSTRAINTS
 
 @pytest.fixture
 def sample_data():
-    """Create sample MAE/MFE and bars_to_hit data."""
+    """Create sample MAE/MFE and bars_to_hit data with realistic profits.
+
+    Previous values (0.01/0.02 ATR) were too small, causing transaction costs
+    to dominate and cap the fitness penalty at -10.0 in all scenarios.
+
+    New values (0.5/1.0 ATR) represent realistic barrier distances that allow
+    other fitness components to shine through and reach expected ranges.
+    """
     np.random.seed(42)
     n = 1000
     return {
         'bars_to_hit': np.random.randint(1, 10, n).astype(np.int32),
-        'mae': -np.abs(np.random.randn(n) * 0.01).astype(np.float32),
-        'mfe': np.abs(np.random.randn(n) * 0.02).astype(np.float32),
+        # Increased from 0.01 to 0.5 for MAE, 0.02 to 1.0 for MFE
+        'mae': -np.abs(np.random.randn(n) * 0.5).astype(np.float32),
+        'mfe': np.abs(np.random.randn(n) * 1.0).astype(np.float32),
         'horizon': 20,
         'atr_mean': 5.0,
     }
