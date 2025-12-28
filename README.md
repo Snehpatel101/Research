@@ -24,7 +24,7 @@ notebooks/ML_Pipeline.ipynb
 3. Run All Cells
 4. Export trained models from Section 7
 
-**Full notebook documentation:** [NOTEBOOK_GUIDE.md](NOTEBOOK_GUIDE.md)
+**Full notebook documentation:** [docs/notebook/README.md](docs/notebook/README.md)
 
 ---
 
@@ -131,9 +131,17 @@ Raw OHLCV (.csv/.parquet)
 
 | Document | Purpose |
 |----------|---------|
-| [NOTEBOOK_GUIDE.md](NOTEBOOK_GUIDE.md) | Complete notebook usage guide |
-| [CLAUDE.md](CLAUDE.md) | Development guidelines |
-| [docs/COLAB_GUIDE.md](docs/COLAB_GUIDE.md) | Google Colab setup |
+| [docs/notebook/README.md](docs/notebook/README.md) | Notebook quick start & navigation |
+| [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | Command reference & troubleshooting |
+| [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) | System architecture & design patterns |
+| [docs/planning/ROADMAP.md](docs/planning/ROADMAP.md) | Implementation roadmap & timeline |
+| [CLAUDE.md](CLAUDE.md) | Development guidelines & engineering rules |
+
+**Detailed Guides:**
+- [Configuration](docs/notebook/CONFIGURATION.md) - All 54 parameters
+- [Cell Reference](docs/notebook/CELL_REFERENCE.md) - Cell-by-cell documentation
+- [Colab Setup](docs/notebook/COLAB_SETUP.md) - Google Colab guide
+- [Troubleshooting](docs/notebook/TROUBLESHOOTING.md) - 40+ error scenarios
 
 ---
 
