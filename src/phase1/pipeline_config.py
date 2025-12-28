@@ -29,7 +29,13 @@ class PipelineConfig:
     """Complete configuration for Phase 1 pipeline."""
 
     # Run identification
-    run_id: str = field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
+    # Format: {timestamp_with_ms}_{random_suffix} for collision prevention
+    # Example: 20251228_143025_789456_a3f9
+    run_id: str = field(
+        default_factory=lambda: (
+            lambda: f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{__import__('secrets').token_hex(2)}"
+        )()
+    )
     description: str = "Phase 1 pipeline run"
 
     # Data parameters

@@ -58,6 +58,22 @@ DEFAULT_PURGE_BARS = 60  # 3x max horizon (20)
 DEFAULT_EMBARGO_BARS = 1440  # 5 trading days at 5-min
 
 
+def generate_cv_run_id() -> str:
+    """
+    Generate unique run ID for CV output directory.
+
+    Format: {timestamp_with_ms}_{random_suffix}
+    Example: 20251228_143025_789456_a3f9
+
+    Prevents collision between parallel CV runs.
+    """
+    import secrets
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    random_suffix = secrets.token_hex(2)  # 2 bytes = 4 hex chars
+    return f"{timestamp}_{random_suffix}"
+
+
 # =============================================================================
 # CLI ARGUMENT PARSING
 # =============================================================================
@@ -156,6 +172,11 @@ Examples:
         default=DEFAULT_OUTPUT_DIR,
         help=f"Output directory (default: {DEFAULT_OUTPUT_DIR})",
     )
+    parser.add_argument(
+        "--output-name",
+        type=str,
+        help="Custom subdirectory name for this CV run (default: auto-generated timestamp)",
+    )
 
     # Verbosity
     parser.add_argument(
@@ -220,8 +241,13 @@ def main() -> int:
         logger.error("Run Phase 1 pipeline first to generate scaled data")
         return 1
 
-    # Create output directory
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    # Generate unique run ID for this CV run
+    cv_run_id = args.output_name if args.output_name else generate_cv_run_id()
+    cv_output_dir = args.output_dir / cv_run_id
+
+    # Create run-specific output directory
+    cv_output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"CV output directory: {cv_output_dir}")
 
     # Configure CV
     cv_config = PurgedKFoldConfig(
@@ -319,7 +345,7 @@ def main() -> int:
         tune_hyperparams=args.tune,
         select_features=not args.no_feature_selection,
     )
-    save_runner.save_results(all_results, all_stacking_datasets, args.output_dir)
+    save_runner.save_results(all_results, all_stacking_datasets, cv_output_dir)
 
     # Print summary
     logger.info("\n" + "="*60)
@@ -334,8 +360,11 @@ def main() -> int:
             f"Time={result.total_time:.1f}s"
         )
 
-    logger.info(f"\nResults saved to: {args.output_dir}")
-    logger.info(f"Stacking datasets saved to: {args.output_dir / 'stacking'}")
+    logger.info(f"\nCV Run ID: {cv_run_id}")
+    logger.info(f"Results saved to: {cv_output_dir}")
+    logger.info(f"Stacking datasets saved to: {cv_output_dir / 'stacking'}")
+    logger.info(f"\nTo use in Phase 4:")
+    logger.info(f"  python scripts/train_model.py --model stacking --horizon <H> --stacking-data {cv_run_id}")
 
     return 0
 

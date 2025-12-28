@@ -151,9 +151,20 @@ class Trainer:
         )
 
     def _generate_run_id(self) -> str:
-        """Generate unique run identifier."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"{self.config.model_name}_h{self.config.horizon}_{timestamp}"
+        """
+        Generate unique run identifier with collision prevention.
+
+        Format: {model}_{horizon}_{timestamp_with_ms}_{random_suffix}
+        Example: xgboost_h20_20251228_143025_789456_a3f9
+
+        Milliseconds + random suffix ensure uniqueness even for parallel runs.
+        """
+        import secrets
+        # Include milliseconds (%f) for sub-second precision
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        # Add 4-character random suffix for collision prevention
+        random_suffix = secrets.token_hex(2)  # 2 bytes = 4 hex chars
+        return f"{self.config.model_name}_h{self.config.horizon}_{timestamp}_{random_suffix}"
 
     def _setup_output_dir(self) -> None:
         """Create output directory structure."""
@@ -207,6 +218,14 @@ class Trainer:
         logger.info("Loading data from container...")
         X_train, y_train, w_train, X_val, y_val = self._prepare_data(container)
 
+        # Extract label_end_times for overlapping label purging (used by ensemble models)
+        label_end_times = container.get_label_end_times("train")
+        if label_end_times is not None:
+            logger.info(
+                f"Label end times available for purging overlapping labels "
+                f"(prevents leakage in stacking/blending ensembles)"
+            )
+
         # Log data shapes
         logger.info(
             f"Data shapes: "
@@ -214,16 +233,23 @@ class Trainer:
             f"X_val={X_val.shape}, y_val={y_val.shape}"
         )
 
-        # Train
+        # Train model (pass label_end_times for ensemble models with internal CV)
         logger.info(f"Training {self.config.model_name}...")
-        training_metrics = self.model.fit(
-            X_train=X_train,
-            y_train=y_train,
-            X_val=X_val,
-            y_val=y_val,
-            sample_weights=w_train,
-            config=self.config.model_config,
-        )
+        fit_kwargs = {
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_val": X_val,
+            "y_val": y_val,
+            "sample_weights": w_train,
+            "config": self.config.model_config,
+        }
+
+        # Add label_end_times if model supports it (ensemble models with internal CV)
+        # Non-ensemble models ignore this parameter (not in their fit() signature)
+        if self.model.model_family == "ensemble" and label_end_times is not None:
+            fit_kwargs["label_end_times"] = label_end_times
+
+        training_metrics = self.model.fit(**fit_kwargs)
 
         # Evaluate
         logger.info("Evaluating on validation set...")
@@ -234,10 +260,58 @@ class Trainer:
             y_proba=val_predictions.class_probabilities,
         )
 
-        # Add trading metrics placeholder
+        # Add trading metrics
         eval_metrics["trading"] = self._compute_trading_metrics(
             y_val, val_predictions
         )
+
+        # Test set evaluation (one-shot generalization estimate)
+        test_metrics = None
+        test_predictions = None
+        if self.config.evaluate_test_set:
+            logger.warning("=" * 70)
+            logger.warning("⚠️  TEST SET EVALUATION - ONE-SHOT GENERALIZATION ESTIMATE")
+            logger.warning("=" * 70)
+            logger.warning(
+                "You are evaluating on the TEST SET. This is your final, "
+                "one-shot generalization estimate."
+            )
+            logger.warning(
+                "DO NOT iterate on these results. If you do, you're overfitting to test."
+            )
+            logger.warning(
+                "Iterate on VALIDATION metrics during development, "
+                "then evaluate test ONCE when ready."
+            )
+            logger.warning("=" * 70)
+
+            # Load test data
+            X_test, y_test, _ = self._prepare_test_data(container)
+            logger.info(f"Test set size: {X_test.shape}")
+
+            # Evaluate on test set
+            test_predictions = self.model.predict(X_test)
+            test_metrics = compute_classification_metrics(
+                y_true=y_test,
+                y_pred=test_predictions.class_predictions,
+                y_proba=test_predictions.class_probabilities,
+            )
+            test_metrics["trading"] = self._compute_trading_metrics(
+                y_test, test_predictions
+            )
+
+            logger.warning("=" * 70)
+            logger.warning("⚠️  TEST SET RESULTS (DO NOT ITERATE ON THESE)")
+            logger.warning("=" * 70)
+            logger.warning(
+                f"Test Accuracy: {test_metrics['accuracy']:.4f}, "
+                f"Test F1: {test_metrics['macro_f1']:.4f}"
+            )
+            logger.warning(
+                "If test results are disappointing: DO NOT tune and re-evaluate. "
+                "Move on to the next experiment."
+            )
+            logger.warning("=" * 70)
 
         # Probability calibration (leakage-safe: fits on held-out val set)
         self.calibrator = None
@@ -253,7 +327,10 @@ class Trainer:
 
         # Save artifacts
         if not skip_save:
-            self._save_artifacts(training_metrics, eval_metrics, val_predictions)
+            self._save_artifacts(
+                training_metrics, eval_metrics, val_predictions,
+                test_metrics=test_metrics, test_predictions=test_predictions
+            )
             self._save_model()
             if self.calibrator is not None:
                 self._save_calibrator()
@@ -266,6 +343,7 @@ class Trainer:
             "horizon": self.config.horizon,
             "training_metrics": training_metrics.to_dict(),
             "evaluation_metrics": eval_metrics,
+            "test_metrics": test_metrics,
             "output_path": str(self.output_path),
             "total_time_seconds": total_time,
             "val_predictions": val_predictions.class_predictions,
@@ -318,6 +396,34 @@ class Trainer:
 
         return X_train, y_train, w_train, X_val, y_val
 
+    def _prepare_test_data(
+        self,
+        container: "TimeSeriesDataContainer",
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Prepare test data for final evaluation.
+
+        Args:
+            container: TimeSeriesDataContainer with test split
+
+        Returns:
+            Tuple of (X_test, y_test, w_test)
+        """
+        if self.model.requires_sequences:
+            # Get sequence data for sequential models
+            test_dataset = container.get_pytorch_sequences(
+                "test",
+                seq_len=self.config.sequence_length,
+                symbol_isolated=True,
+            )
+            # Convert to numpy arrays
+            X_test, y_test, w_test = self._dataset_to_arrays(test_dataset)
+        else:
+            # Get tabular data for non-sequential models
+            X_test, y_test, w_test = container.get_sklearn_arrays("test")
+
+        return X_test, y_test, w_test
+
     def _dataset_to_arrays(
         self,
         dataset: "Dataset",
@@ -354,41 +460,107 @@ class Trainer:
         predictions: PredictionOutput,
     ) -> Dict[str, Any]:
         """
-        Compute basic trading metrics.
+        Compute trading metrics for quick model comparison.
 
-        This is a placeholder for more sophisticated backtesting.
-        Full trading metrics will be computed in Phase 3.
+        Note: This is a simplified version for quick model evaluation.
+        Full backtesting with realistic transaction costs, slippage, and
+        position sizing is done in Phase 3+.
 
         Args:
-            y_true: True labels
+            y_true: True labels (-1=short, 0=neutral, 1=long)
             predictions: Model predictions
 
         Returns:
-            Dict with basic trading statistics
+            Dict with trading statistics
         """
         y_pred = predictions.class_predictions
 
-        # Simple trading stats (placeholder)
-        # Trading labels: -1=short, 0=neutral, 1=long
+        # Signal distribution
         long_signals = (y_pred == 1).sum()
         short_signals = (y_pred == -1).sum()
         neutral_signals = (y_pred == 0).sum()
+        total_positions = long_signals + short_signals
 
-        # Win rate when taking positions
-        position_mask = y_pred != 0  # Not neutral (neutral is 0, not 1)
+        # Overall position accuracy
+        position_mask = y_pred != 0
         if position_mask.sum() > 0:
             correct_positions = (y_pred[position_mask] == y_true[position_mask]).sum()
             position_win_rate = correct_positions / position_mask.sum()
         else:
             position_win_rate = 0.0
 
+        # Long/short accuracy (directional edge)
+        long_mask = y_pred == 1
+        short_mask = y_pred == -1
+
+        long_accuracy = 0.0
+        if long_mask.sum() > 0:
+            long_accuracy = (y_pred[long_mask] == y_true[long_mask]).sum() / long_mask.sum()
+
+        short_accuracy = 0.0
+        if short_mask.sum() > 0:
+            short_accuracy = (y_pred[short_mask] == y_true[short_mask]).sum() / short_mask.sum()
+
+        # Consecutive wins/losses (measure of streakiness)
+        if position_mask.sum() > 0:
+            position_correct = (y_pred[position_mask] == y_true[position_mask]).astype(int)
+
+            # Find consecutive sequences
+            max_consecutive_wins = 0
+            max_consecutive_losses = 0
+            current_wins = 0
+            current_losses = 0
+
+            for is_correct in position_correct:
+                if is_correct:
+                    current_wins += 1
+                    current_losses = 0
+                    max_consecutive_wins = max(max_consecutive_wins, current_wins)
+                else:
+                    current_losses += 1
+                    current_wins = 0
+                    max_consecutive_losses = max(max_consecutive_losses, current_losses)
+        else:
+            max_consecutive_wins = 0
+            max_consecutive_losses = 0
+
+        # Position-based Sharpe (simplified, assumes returns are correct predictions)
+        # This is a proxy - real Sharpe requires actual returns
+        if position_mask.sum() > 0:
+            # Assume correct prediction = +1 return, incorrect = -1 return
+            position_returns = np.where(
+                y_pred[position_mask] == y_true[position_mask], 1.0, -1.0
+            )
+            position_sharpe = (
+                position_returns.mean() / position_returns.std()
+                if position_returns.std() > 0 else 0.0
+            )
+        else:
+            position_sharpe = 0.0
+
         return {
+            # Signal distribution
             "long_signals": int(long_signals),
             "short_signals": int(short_signals),
             "neutral_signals": int(neutral_signals),
+            "total_positions": int(total_positions),
+            "position_rate": float(total_positions / len(y_pred)) if len(y_pred) > 0 else 0.0,
+
+            # Accuracy metrics
             "position_win_rate": float(position_win_rate),
-            "total_positions": int(long_signals + short_signals),
-            "note": "Basic stats only. Full backtest in Phase 3.",
+            "long_accuracy": float(long_accuracy),
+            "short_accuracy": float(short_accuracy),
+            "directional_edge": float(abs(long_accuracy - short_accuracy)),  # Measures directional bias
+
+            # Streak metrics
+            "max_consecutive_wins": int(max_consecutive_wins),
+            "max_consecutive_losses": int(max_consecutive_losses),
+
+            # Risk metrics (simplified)
+            "position_sharpe": float(position_sharpe),
+
+            # Metadata
+            "note": "Simplified metrics for quick comparison. Use Phase 3+ for full backtest.",
         }
 
     def _save_config(self) -> None:
@@ -404,6 +576,8 @@ class Trainer:
         training_metrics: TrainingMetrics,
         eval_metrics: Dict[str, Any],
         predictions: PredictionOutput,
+        test_metrics: Optional[Dict[str, Any]] = None,
+        test_predictions: Optional[PredictionOutput] = None,
     ) -> None:
         """Save training artifacts."""
         # Training metrics
@@ -411,12 +585,12 @@ class Trainer:
         with open(metrics_path, "w") as f:
             json.dump(training_metrics.to_dict(), f, indent=2)
 
-        # Evaluation metrics
+        # Evaluation metrics (validation)
         eval_path = self.output_path / "metrics" / "evaluation_metrics.json"
         with open(eval_path, "w") as f:
             json.dump(eval_metrics, f, indent=2)
 
-        # Predictions
+        # Validation predictions
         pred_path = self.output_path / "predictions" / "val_predictions.npz"
         np.savez(
             pred_path,
@@ -424,6 +598,23 @@ class Trainer:
             class_probabilities=predictions.class_probabilities,
             confidence=predictions.confidence,
         )
+
+        # Test set metrics and predictions (if evaluated)
+        if test_metrics is not None:
+            test_metrics_path = self.output_path / "metrics" / "test_metrics.json"
+            with open(test_metrics_path, "w") as f:
+                json.dump(test_metrics, f, indent=2)
+            logger.info(f"Saved test metrics to {test_metrics_path}")
+
+        if test_predictions is not None:
+            test_pred_path = self.output_path / "predictions" / "test_predictions.npz"
+            np.savez(
+                test_pred_path,
+                class_predictions=test_predictions.class_predictions,
+                class_probabilities=test_predictions.class_probabilities,
+                confidence=test_predictions.confidence,
+            )
+            logger.info(f"Saved test predictions to {test_pred_path}")
 
         # Feature importance (if available)
         importance = self.model.get_feature_importance()

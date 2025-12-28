@@ -97,6 +97,8 @@ class TrainerConfig:
     # Calibration settings
     use_calibration: bool = True
     calibration_method: str = "auto"  # "auto", "isotonic", "sigmoid"
+    # Test set evaluation (default True, but marked as one-shot)
+    evaluate_test_set: bool = True
 
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""
@@ -134,6 +136,7 @@ class TrainerConfig:
             "pin_memory": self.pin_memory,
             "use_calibration": self.use_calibration,
             "calibration_method": self.calibration_method,
+            "evaluate_test_set": self.evaluate_test_set,
         }
 
     @classmethod

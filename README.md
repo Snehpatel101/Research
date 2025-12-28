@@ -40,10 +40,10 @@ python scripts/train_model.py --model xgboost --horizon 20
 # Run cross-validation
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
 
-# Train ensemble
-python scripts/train_model.py --model voting --base-models xgboost,lightgbm --horizon 20
+# Train ensemble (tabular-only or sequence-only)
+python scripts/train_model.py --model voting --base-models xgboost,lightgbm,catboost --horizon 20
 
-# List available models
+# List available models (should show 13)
 python scripts/train_model.py --list-models
 ```
 
@@ -135,6 +135,9 @@ Note: The notebook includes optional export helpers (e.g. ONNX) but the core tra
 |----------|---------|
 | [docs/notebook/README.md](docs/notebook/README.md) | Notebook quick start & navigation |
 | [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | Command reference & troubleshooting |
+| [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) | Migration guide for recent improvements |
+| [docs/VALIDATION_CHECKLIST.md](docs/VALIDATION_CHECKLIST.md) | Pre/post-training validation |
+| [PIPELINE_STATUS.md](PIPELINE_STATUS.md) | Pipeline status dashboard |
 | [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) | System architecture & design patterns |
 | [docs/README.md](docs/README.md) | Documentation index |
 | [CLAUDE.md](CLAUDE.md) | Development guidelines & engineering rules |
@@ -144,6 +147,7 @@ Note: The notebook includes optional export helpers (e.g. ONNX) but the core tra
 - [Cell Reference](docs/notebook/CELL_REFERENCE.md) - Cell-by-cell documentation
 - [Colab Setup](docs/notebook/COLAB_SETUP.md) - Google Colab guide
 - [Troubleshooting](docs/notebook/TROUBLESHOOTING.md) - 40+ error scenarios
+- [Workflow Best Practices](docs/WORKFLOW_BEST_PRACTICES.md) - Best practices & patterns
 
 ---
 

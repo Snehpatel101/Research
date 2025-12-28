@@ -27,6 +27,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..common import map_classes_to_labels
 from ..registry import ModelRegistry, register
+from .validator import validate_base_model_compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,22 @@ class VotingEnsemble(BaseModel):
             if not model.is_fitted:
                 raise RuntimeError(f"Model {i} is not fitted")
 
+        # Validate base model compatibility (check sequence requirements)
+        sequence_requirements = [m.requires_sequences for m in models]
+        if not all(sequence_requirements) and any(sequence_requirements):
+            tabular_models = [
+                type(m).__name__ for m in models if not m.requires_sequences
+            ]
+            sequence_models = [
+                type(m).__name__ for m in models if m.requires_sequences
+            ]
+            raise ValueError(
+                f"Cannot mix tabular and sequence models in ensemble.\n"
+                f"Tabular models (2D input): {tabular_models}\n"
+                f"Sequence models (3D input): {sequence_models}\n"
+                f"All models must have the same input shape requirements."
+            )
+
         self._base_models = list(models)
         self._base_model_names = [
             type(m).__name__ for m in models
@@ -170,6 +187,9 @@ class VotingEnsemble(BaseModel):
                 "No base_model_names specified. Either set base_model_names in config "
                 "or use set_base_models() with pre-trained models."
             )
+
+        # Validate base model compatibility (tabular vs sequence)
+        validate_base_model_compatibility(base_model_names)
 
         base_model_configs = train_config.get("base_model_configs", {})
 

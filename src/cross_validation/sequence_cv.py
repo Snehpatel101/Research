@@ -38,6 +38,10 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Gap detection threshold for datetime boundaries
+# A gap is considered a boundary if it's larger than this multiple of median bar spacing
+GAP_DETECTION_MULTIPLIER = 2.0
+
 
 @dataclass
 class SequenceFoldResult:
@@ -87,8 +91,13 @@ class SequenceCVBuilder:
 
     1. Identifying which fold samples have sufficient lookback history
     2. Building 3D sequences from those samples
-    3. Respecting symbol boundaries (no cross-symbol sequences)
+    3. Respecting boundaries (symbol changes or time gaps) - no cross-boundary sequences
     4. Tracking original indices for OOF prediction storage
+
+    Boundary Detection Methods:
+    - symbol_column: If provided and exists in X, uses symbol changes as boundaries
+    - datetime_gaps: If X has DatetimeIndex, detects large time gaps (>2x median)
+    - none: No boundary detection (sequences can span entire dataset)
 
     The key insight is that we allow using historical data from OUTSIDE the fold
     for sequence construction (the lookback window), but the TARGET (label) must
@@ -138,10 +147,24 @@ class SequenceCVBuilder:
         # Build symbol boundary information FIRST (needs original X)
         self._symbol_boundaries: Optional[np.ndarray] = None
         self._symbol_ids: Optional[np.ndarray] = None
+        self._boundary_detection_method = "none"
+
         if symbol_column and symbol_column in X.columns:
             self._build_symbol_info(X, symbol_column)
+            self._boundary_detection_method = "symbol_column"
         elif symbol_column:
-            logger.debug(f"Symbol column '{symbol_column}' not found, disabling isolation")
+            logger.debug(f"Symbol column '{symbol_column}' not found, attempting gap detection")
+            # Fallback to datetime gap detection if no symbol column
+            if isinstance(X.index, pd.DatetimeIndex):
+                self._build_gap_boundaries(X)
+                self._boundary_detection_method = "datetime_gaps"
+            else:
+                logger.debug("No DatetimeIndex found, disabling boundary detection")
+        else:
+            # No symbol column requested, check for datetime gaps anyway
+            if isinstance(X.index, pd.DatetimeIndex):
+                self._build_gap_boundaries(X)
+                self._boundary_detection_method = "datetime_gaps"
 
         # Exclude symbol column from features (it's non-numeric)
         feature_cols = [c for c in X.columns if c != symbol_column]
@@ -177,6 +200,49 @@ class SequenceCVBuilder:
         logger.debug(
             f"Found {len(unique_symbols)} symbols, {len(boundaries)} boundaries"
         )
+
+    def _build_gap_boundaries(self, X: pd.DataFrame) -> None:
+        """
+        Build boundaries from datetime gaps in the index.
+
+        Detects large time gaps in a DatetimeIndex and treats them as implicit
+        boundaries (similar to symbol changes). This prevents sequences from
+        spanning data gaps.
+
+        Args:
+            X: DataFrame with DatetimeIndex
+        """
+        if not isinstance(X.index, pd.DatetimeIndex):
+            return
+
+        # Calculate time deltas between consecutive samples
+        time_diffs = X.index.to_series().diff()
+
+        # Estimate normal bar resolution (median of time diffs)
+        # Use median instead of mode to handle occasional gaps
+        median_diff = time_diffs.median()
+
+        # Define a gap as anything > GAP_DETECTION_MULTIPLIER * normal resolution
+        # (conservative threshold to avoid false positives)
+        gap_threshold = median_diff * GAP_DETECTION_MULTIPLIER
+
+        # Find indices where gaps occur
+        boundaries = []
+        for i in range(1, len(time_diffs)):
+            if time_diffs.iloc[i] > gap_threshold:
+                boundaries.append(i)
+
+        self._symbol_boundaries = np.array(boundaries, dtype=np.int64)
+
+        if len(boundaries) > 0:
+            logger.info(
+                f"Detected {len(boundaries)} time gaps (using boundary detection). "
+                f"Bar resolution: {median_diff}, gap threshold: {gap_threshold}"
+            )
+        else:
+            logger.debug(
+                f"No significant time gaps detected (resolution: {median_diff})"
+            )
 
     def _get_symbol_at(self, idx: int) -> int:
         """Get symbol ID at given index (-1 if no symbol info)."""
