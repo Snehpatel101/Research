@@ -181,7 +181,10 @@ class ProbabilityCalibrator:
 
         self._is_fitted = True
 
-        # Compute post-calibration metrics
+        # Compute post-calibration metrics (IN-SAMPLE ONLY)
+        # WARNING: These metrics are computed on the same data used to fit
+        # the calibrator and may be overly optimistic. For unbiased evaluation,
+        # use a separate held-out test set.
         calibrated = self.calibrate(probabilities)
         brier_after = compute_brier_score(y_true, calibrated)
         ece_after = compute_ece(y_true, calibrated)
@@ -190,7 +193,8 @@ class ProbabilityCalibrator:
         logger.info(
             f"Calibration ({method}): "
             f"Brier {brier_before:.4f} -> {brier_after:.4f}, "
-            f"ECE {ece_before:.4f} -> {ece_after:.4f}"
+            f"ECE {ece_before:.4f} -> {ece_after:.4f} "
+            f"(IN-SAMPLE - may be optimistic)"
         )
 
         return CalibrationMetrics(

@@ -242,10 +242,12 @@ class ADWINDetector(BaseDriftDetector):
         self, old_mean: float, new_mean: float
     ) -> DriftSeverity:
         """Compute severity based on mean change."""
-        if old_mean == 0:
+        # Use epsilon to prevent division by zero or near-zero
+        epsilon = 1e-8
+        if abs(old_mean) < epsilon:
             change = abs(new_mean)
         else:
-            change = abs(new_mean - old_mean) / abs(old_mean)
+            change = abs(new_mean - old_mean) / max(abs(old_mean), epsilon)
 
         if change < 0.05:
             return DriftSeverity.LOW

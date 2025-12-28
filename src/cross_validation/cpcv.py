@@ -342,7 +342,13 @@ class CombinatorialPurgedCV:
                     # Remove training samples whose labels extend into test
                     for i in np.where(train_mask)[0]:
                         if i < test_start:
-                            if label_end_times.iloc[i] >= test_start_time:
+                            # Validate and convert label_end_time
+                            label_end = label_end_times.iloc[i]
+                            if pd.isna(label_end):
+                                continue
+                            # Ensure timestamp comparison
+                            label_end = pd.Timestamp(label_end)
+                            if label_end >= test_start_time:
                                 train_mask[i] = False
 
             train_indices = indices[train_mask]
