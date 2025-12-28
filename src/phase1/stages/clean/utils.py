@@ -329,7 +329,9 @@ def resample_ohlcv(
             agg_rules[col] = 'max'
 
     # Perform resampling
-    resampled = df.resample(freq).agg(agg_rules)
+    # ANTI-LOOKAHEAD: Use closed='left', label='left' explicitly
+    # A bar at 09:30 represents [09:30:00, 09:34:59], timestamp = period start
+    resampled = df.resample(freq, closed='left', label='left').agg(agg_rules)
 
     # Drop rows where we couldn't compute all values (e.g., no data in period)
     resampled = resampled.dropna()

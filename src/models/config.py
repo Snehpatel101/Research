@@ -94,6 +94,9 @@ class TrainerConfig:
     mixed_precision: bool = True
     num_workers: int = 4
     pin_memory: bool = True
+    # Calibration settings
+    use_calibration: bool = True
+    calibration_method: str = "auto"  # "auto", "isotonic", "sigmoid"
 
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""
@@ -129,6 +132,8 @@ class TrainerConfig:
             "mixed_precision": self.mixed_precision,
             "num_workers": self.num_workers,
             "pin_memory": self.pin_memory,
+            "use_calibration": self.use_calibration,
+            "calibration_method": self.calibration_method,
         }
 
     @classmethod

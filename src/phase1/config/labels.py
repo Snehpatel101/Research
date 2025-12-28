@@ -21,6 +21,7 @@ REQUIRED_LABEL_TEMPLATES: List[str] = [
 OPTIONAL_LABEL_TEMPLATES: List[str] = [
     "quality_h{h}",          # Label quality score (0-1)
     "bars_to_hit_h{h}",      # Bars until barrier hit
+    "label_end_time_h{h}",   # Datetime when label outcome is known (for purging)
     "mae_h{h}",              # Maximum adverse excursion
     "mfe_h{h}",              # Maximum favorable excursion
     "touch_type_h{h}",       # Which barrier was hit first
@@ -90,7 +91,7 @@ def is_label_column(column_name: str) -> bool:
     """
     prefixes = (
         "label_", "sample_weight_", "quality_", "bars_to_hit_",
-        "mae_", "mfe_", "touch_type_", "pain_to_gain_",
+        "label_end_time_", "mae_", "mfe_", "touch_type_", "pain_to_gain_",
         "time_weighted_dd_", "fwd_return_", "time_to_hit_",
     )
     return any(column_name.startswith(prefix) for prefix in prefixes)
@@ -121,6 +122,10 @@ LABEL_COLUMN_METADATA: Dict[str, Dict] = {
         "description": "Bars until first barrier hit",
         "dtype": "int32",
         "range": [1, None],
+    },
+    "label_end_time_h{h}": {
+        "description": "Datetime when label outcome is known (for purging)",
+        "dtype": "datetime64[ns]",
     },
     "mae_h{h}": {
         "description": "Maximum adverse excursion (worst drawdown)",

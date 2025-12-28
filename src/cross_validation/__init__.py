@@ -34,6 +34,34 @@ from src.cross_validation.feature_selector import WalkForwardFeatureSelector
 from src.cross_validation.oof_generator import OOFGenerator, StackingDataset
 from src.cross_validation.cv_runner import CrossValidationRunner, CVResult, FoldMetrics
 from src.cross_validation.param_spaces import PARAM_SPACES
+from src.cross_validation.walk_forward import (
+    WalkForwardConfig,
+    WalkForwardEvaluator,
+    WalkForwardResult,
+    WindowMetrics,
+    create_walk_forward_evaluator,
+)
+from src.cross_validation.cpcv import (
+    CPCVConfig,
+    CombinatorialPurgedCV,
+    CPCVResult,
+    CPCVPathResult,
+    create_cpcv,
+)
+from src.cross_validation.pbo import (
+    PBOConfig,
+    PBOResult,
+    compute_pbo,
+    compute_pbo_from_returns,
+    pbo_gate,
+    analyze_overfitting_risk,
+)
+from src.cross_validation.sequence_cv import (
+    SequenceCVBuilder,
+    SequenceFoldResult,
+    build_sequences_for_cv_fold,
+    validate_sequence_cv_coverage,
+)
 
 __all__ = [
     "PurgedKFold",
@@ -46,4 +74,28 @@ __all__ = [
     "CVResult",
     "FoldMetrics",
     "PARAM_SPACES",
+    # Walk-forward
+    "WalkForwardConfig",
+    "WalkForwardEvaluator",
+    "WalkForwardResult",
+    "WindowMetrics",
+    "create_walk_forward_evaluator",
+    # CPCV
+    "CPCVConfig",
+    "CombinatorialPurgedCV",
+    "CPCVResult",
+    "CPCVPathResult",
+    "create_cpcv",
+    # PBO
+    "PBOConfig",
+    "PBOResult",
+    "compute_pbo",
+    "compute_pbo_from_returns",
+    "pbo_gate",
+    "analyze_overfitting_risk",
+    # Sequence CV
+    "SequenceCVBuilder",
+    "SequenceFoldResult",
+    "build_sequences_for_cv_fold",
+    "validate_sequence_cv_coverage",
 ]

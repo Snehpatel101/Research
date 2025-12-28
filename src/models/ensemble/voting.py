@@ -2,13 +2,23 @@
 Voting Ensemble Model - Combine predictions from multiple base models.
 
 Supports both hard voting (majority) and soft voting (probability averaging).
+
+Low-Latency Mode:
+    Enable parallel=True for concurrent prediction across base models.
+    Boosting models (XGBoost, LightGBM, CatBoost) release the GIL,
+    making ThreadPoolExecutor effective for latency reduction.
+
+    Expected latency for 3-model boosting ensemble:
+    - Sequential: ~15ms (sum of individual model latencies)
+    - Parallel: ~6ms (max of individual model latencies + overhead)
 """
 from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import joblib
 import numpy as np
@@ -19,6 +29,9 @@ from ..common import map_classes_to_labels
 from ..registry import ModelRegistry, register
 
 logger = logging.getLogger(__name__)
+
+# Default thread pool size for parallel prediction
+_DEFAULT_PARALLEL_WORKERS = 3
 
 
 @register(
@@ -84,6 +97,9 @@ class VotingEnsemble(BaseModel):
             "weights": None,  # Optional model weights [w1, w2, ...]
             "base_model_names": [],  # Model names to train
             "base_model_configs": {},  # Per-model config overrides
+            # Low-latency options
+            "parallel": True,  # Run base model predictions in parallel
+            "n_workers": _DEFAULT_PARALLEL_WORKERS,  # Thread pool size
         }
 
     def set_base_models(
@@ -237,18 +253,63 @@ class VotingEnsemble(BaseModel):
         else:
             return self._hard_vote(X)
 
+    def _collect_predictions_parallel(
+        self, X: np.ndarray
+    ) -> Tuple[List[PredictionOutput], float]:
+        """
+        Collect predictions from all base models in parallel.
+
+        Boosting models (XGBoost, LightGBM, CatBoost) release the GIL
+        during prediction, making ThreadPoolExecutor effective.
+
+        Returns:
+            Tuple of (list of PredictionOutput, inference_time_ms)
+        """
+        n_workers = self._config.get("n_workers", _DEFAULT_PARALLEL_WORKERS)
+        n_workers = min(n_workers, len(self._base_models))
+
+        start = time.perf_counter()
+        outputs = [None] * len(self._base_models)
+
+        def predict_model(idx: int) -> Tuple[int, PredictionOutput]:
+            return idx, self._base_models[idx].predict(X)
+
+        with ThreadPoolExecutor(max_workers=n_workers) as executor:
+            futures = {
+                executor.submit(predict_model, i): i
+                for i in range(len(self._base_models))
+            }
+            for future in as_completed(futures):
+                idx, output = future.result()
+                outputs[idx] = output
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        return outputs, elapsed_ms
+
+    def _collect_predictions_sequential(
+        self, X: np.ndarray
+    ) -> Tuple[List[PredictionOutput], float]:
+        """Collect predictions from all base models sequentially."""
+        start = time.perf_counter()
+        outputs = []
+        for model in self._base_models:
+            outputs.append(model.predict(X))
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        return outputs, elapsed_ms
+
     def _soft_vote(self, X: np.ndarray) -> PredictionOutput:
         """Soft voting: average class probabilities."""
         n_samples = X.shape[0]
         n_classes = 3
 
         # Collect probabilities from all models
-        all_probs = []
-        for model in self._base_models:
-            output = model.predict(X)
-            all_probs.append(output.class_probabilities)
+        use_parallel = self._config.get("parallel", True)
+        if use_parallel:
+            outputs, inference_ms = self._collect_predictions_parallel(X)
+        else:
+            outputs, inference_ms = self._collect_predictions_sequential(X)
 
-        all_probs = np.array(all_probs)  # (n_models, n_samples, n_classes)
+        all_probs = np.array([o.class_probabilities for o in outputs])
 
         # Apply weights if specified
         if self._weights is not None:
@@ -273,6 +334,8 @@ class VotingEnsemble(BaseModel):
                 "voting": "soft",
                 "n_models": len(self._base_models),
                 "model_names": self._base_model_names,
+                "parallel": use_parallel,
+                "inference_ms": round(inference_ms, 2),
             },
         )
 
@@ -281,15 +344,14 @@ class VotingEnsemble(BaseModel):
         n_samples = X.shape[0]
 
         # Collect predictions from all models
-        all_preds = []
-        all_probs = []
-        for model in self._base_models:
-            output = model.predict(X)
-            all_preds.append(output.class_predictions)
-            all_probs.append(output.class_probabilities)
+        use_parallel = self._config.get("parallel", True)
+        if use_parallel:
+            outputs, inference_ms = self._collect_predictions_parallel(X)
+        else:
+            outputs, inference_ms = self._collect_predictions_sequential(X)
 
-        all_preds = np.array(all_preds)  # (n_models, n_samples)
-        all_probs = np.array(all_probs)  # (n_models, n_samples, n_classes)
+        all_preds = np.array([o.class_predictions for o in outputs])
+        all_probs = np.array([o.class_probabilities for o in outputs])
 
         # Majority vote
         class_predictions = np.zeros(n_samples, dtype=np.int32)
@@ -315,6 +377,8 @@ class VotingEnsemble(BaseModel):
                 "voting": "hard",
                 "n_models": len(self._base_models),
                 "model_names": self._base_model_names,
+                "parallel": use_parallel,
+                "inference_ms": round(inference_ms, 2),
             },
         )
 

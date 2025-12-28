@@ -202,6 +202,12 @@ class TestOOFGenerator:
             mock_model.predict.side_effect = mock_predict
             mock_reg.create.return_value = mock_model
 
+            # Setup get_model_info to return non-sequence model info
+            mock_reg.get_model_info.return_value = {
+                "family": "boosting",
+                "requires_sequences": False,
+            }
+
             yield mock_reg
 
     def test_generate_oof_predictions_structure(

@@ -66,6 +66,9 @@ dependencies = [
 
     # Timezone Support
     "pytz>=2022.0",
+
+    # Online Drift Detection
+    "river>=0.21.0",
 ]
 
 [project.optional-dependencies]
@@ -75,6 +78,16 @@ dev = [
     "black>=22.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
+]
+serving = [
+    "flask>=2.3.0",
+]
+hmm = [
+    "hmmlearn>=0.3.0",
+]
+all = [
+    "flask>=2.3.0",
+    "hmmlearn>=0.3.0",
 ]
 
 [project.scripts]

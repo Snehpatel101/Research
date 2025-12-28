@@ -20,3 +20,6 @@ rich>=13.0.0
 
 # Data Storage
 pyarrow>=10.0.0
+
+# Online Drift Detection
+river>=0.21.0

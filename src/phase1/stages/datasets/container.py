@@ -412,6 +412,35 @@ class TimeSeriesDataContainer:
         return self.config.horizon
 
     # =========================================================================
+    # LABEL END TIMES (FOR PURGED CV)
+    # =========================================================================
+
+    def get_label_end_times(self, split: str) -> Optional[pd.Series]:
+        """
+        Get label end times for purged cross-validation.
+
+        Label end times mark when each sample's label outcome is known.
+        This enables proper purging of overlapping labels in PurgedKFold.
+
+        Args:
+            split: Split name ("train", "val", "test")
+
+        Returns:
+            Series of datetime when each label is resolved, or None if not available
+        """
+        split_data = self.get_split(split)
+        label_end_time_col = f"label_end_time_h{self.config.horizon}"
+
+        if label_end_time_col not in split_data.df.columns:
+            logger.debug(
+                f"Label end time column '{label_end_time_col}' not found in {split}. "
+                "Overlapping label purging will be skipped."
+            )
+            return None
+
+        return pd.to_datetime(split_data.df[label_end_time_col])
+
+    # =========================================================================
     # SKLEARN FORMAT
     # =========================================================================
 

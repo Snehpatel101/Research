@@ -277,6 +277,25 @@ def apply_optimized_labels(
     df[f'time_weighted_dd_h{horizon}'] = time_weighted_dd
     df = add_forward_return_columns(df, horizon)
 
+    # Compute label_end_time: datetime when label outcome is known
+    # This is entry_time + bars_to_hit * bar_duration (for purging overlapping labels)
+    if 'datetime' in df.columns:
+        datetime_col = pd.to_datetime(df['datetime'])
+        # Infer bar duration from datetime index
+        if len(datetime_col) > 1:
+            bar_duration = datetime_col.iloc[1] - datetime_col.iloc[0]
+        else:
+            bar_duration = pd.Timedelta(minutes=5)  # Default to 5-min
+
+        # Vectorized: label_end_time = entry_time + bars_to_hit * bar_duration
+        # Cap at max_datetime for end samples
+        label_end_times = datetime_col + pd.to_timedelta(bars_to_hit * bar_duration.total_seconds(), unit='s')
+        max_datetime = datetime_col.max()
+        label_end_times = label_end_times.clip(upper=max_datetime)
+
+        df[f'label_end_time_h{horizon}'] = label_end_times
+        logger.info(f"  Added label_end_time column for purging")
+
     # Log statistics
     label_counts = pd.Series(labels).value_counts().sort_index()
     total = len(labels)

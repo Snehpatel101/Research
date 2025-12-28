@@ -183,7 +183,9 @@ class MTFFeatureGenerator:
             'volume': 'sum'
         }
 
-        resampled = df_copy.resample(freq).agg(agg_dict).dropna()
+        # ANTI-LOOKAHEAD: Use closed='left', label='left' explicitly
+        # A bar at 09:30 represents [09:30:00, 09:34:59], timestamp = period start
+        resampled = df_copy.resample(freq, closed='left', label='left').agg(agg_dict).dropna()
         return resampled.reset_index()
 
     def generate_mtf_bars(

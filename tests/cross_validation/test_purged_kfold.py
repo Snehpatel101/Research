@@ -266,6 +266,71 @@ class TestLabelLeakagePrevention:
         folds = list(cv.split(X, label_end_times=None))
         assert len(folds) == 3
 
+    def test_label_aware_purge_removes_additional_samples(self, label_end_times_data):
+        """
+        Prove that label_end_times purging removes MORE samples than basic purge.
+
+        This demonstrates overlapping-event leakage prevention: samples before the
+        purge zone whose labels extend into the test period are removed.
+        """
+        config = PurgedKFoldConfig(n_splits=3, purge_bars=10, embargo_bars=0, min_train_size=0.1)
+        cv = PurgedKFold(config)
+
+        X = label_end_times_data["X"]
+        label_end_times = label_end_times_data["label_end_times"]
+        horizon = label_end_times_data["horizon"]
+
+        # Compare training sizes with and without label_end_times
+        folds_without = list(cv.split(X, label_end_times=None))
+        folds_with = list(cv.split(X, label_end_times=label_end_times))
+
+        total_train_without = sum(len(train) for train, _ in folds_without)
+        total_train_with = sum(len(train) for train, _ in folds_with)
+
+        # Label-aware purging should remove additional samples
+        # (samples whose labels overlap with test set even though they're before purge zone)
+        assert total_train_with < total_train_without, (
+            f"Label-aware purging should remove more samples. "
+            f"Without: {total_train_without}, With: {total_train_with}"
+        )
+
+        # The difference should be roughly proportional to horizon size
+        # (samples within horizon bars before purge zone whose labels reach into test)
+        removed_by_label_purge = total_train_without - total_train_with
+        assert removed_by_label_purge > 0, "Label-aware purging should remove additional samples"
+
+    def test_no_lookahead_with_label_end_times(self, label_end_times_data):
+        """
+        Explicit test: no training sample can see future information via its label.
+
+        A label "sees" information from entry_time to label_end_time. If label_end_time
+        overlaps with the test set, that's lookahead bias.
+        """
+        config = PurgedKFoldConfig(n_splits=3, purge_bars=5, embargo_bars=5, min_train_size=0.1)
+        cv = PurgedKFold(config)
+
+        X = label_end_times_data["X"]
+        label_end_times = label_end_times_data["label_end_times"]
+
+        for fold_idx, (train_idx, test_idx) in enumerate(
+            cv.split(X, label_end_times=label_end_times)
+        ):
+            test_start_time = X.index[test_idx[0]]
+            test_end_time = X.index[test_idx[-1]]
+
+            # Every training sample's label must be resolved before test set starts
+            for train_i in train_idx:
+                label_end = label_end_times.iloc[train_i]
+                sample_time = X.index[train_i]
+
+                # If sample is before test set, its label_end_time must not reach into test
+                if sample_time < test_start_time:
+                    assert label_end < test_start_time, (
+                        f"Fold {fold_idx}: Sample at {sample_time} has label ending at "
+                        f"{label_end} which overlaps test set starting at {test_start_time}. "
+                        "This is lookahead bias!"
+                    )
+
 
 # =============================================================================
 # MINIMUM TRAINING SIZE TESTS

@@ -72,6 +72,16 @@ from .composite import (
     add_regime_features_to_dataframe,
 )
 
+# HMM-based regime detection
+from .hmm import (
+    HMMRegimeDetector,
+    HMMConfig,
+    HMMRegimeLabel,
+    RegimeRouter,
+    fit_gaussian_hmm,
+    order_states_by_volatility,
+)
+
 
 __all__ = [
     # Base classes
@@ -96,4 +106,11 @@ __all__ = [
     'CompositeRegimeDetector',
     'CompositeRegimeResult',
     'add_regime_features_to_dataframe',
+    # HMM
+    'HMMRegimeDetector',
+    'HMMConfig',
+    'HMMRegimeLabel',
+    'RegimeRouter',
+    'fit_gaussian_hmm',
+    'order_states_by_volatility',
 ]

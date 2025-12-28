@@ -35,6 +35,7 @@ from typing import Any, Dict, Optional, Tuple
 import numpy as np
 
 from .base import BaseModel, PredictionOutput, TrainingMetrics
+from .calibration import CalibrationConfig, ProbabilityCalibrator
 from .config import TrainerConfig, save_config_json
 from .registry import ModelRegistry
 
@@ -238,10 +239,24 @@ class Trainer:
             y_val, val_predictions
         )
 
+        # Probability calibration (leakage-safe: fits on held-out val set)
+        self.calibrator = None
+        if self.config.use_calibration:
+            logger.info("Applying probability calibration...")
+            cal_config = CalibrationConfig(method=self.config.calibration_method)
+            self.calibrator = ProbabilityCalibrator(cal_config)
+            calibration_metrics = self.calibrator.fit(
+                y_true=y_val,
+                probabilities=val_predictions.class_probabilities,
+            )
+            eval_metrics["calibration"] = calibration_metrics.to_dict()
+
         # Save artifacts
         if not skip_save:
             self._save_artifacts(training_metrics, eval_metrics, val_predictions)
             self._save_model()
+            if self.calibrator is not None:
+                self._save_calibrator()
 
         total_time = time.time() - start_time
 
@@ -424,6 +439,14 @@ class Trainer:
         model_path = self.output_path / "checkpoints" / "best_model"
         self.model.save(model_path)
         logger.info(f"Saved model to {model_path}")
+
+    def _save_calibrator(self) -> None:
+        """Save probability calibrator."""
+        if self.calibrator is None:
+            return
+        calibrator_path = self.output_path / "checkpoints" / "calibrator.pkl"
+        self.calibrator.save(calibrator_path)
+        logger.info(f"Saved calibrator to {calibrator_path}")
 
 
 # =============================================================================
