@@ -187,7 +187,9 @@ Raw 1min OHLCV (MES)
 
 ### Multi-Timeframe (MTF) Feature Engineering
 
-**Base timeframe:** **1 minute** (raw ingested data)
+**CRITICAL DISTINCTION:**
+- **Ingest timeframe:** **1 minute** (raw data ingestion, always 1m)
+- **Training timeframe:** **Configurable** (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, or 1h)
 
 **MTF Timeframe Ladder (9 timeframes):**
 ```
@@ -201,269 +203,429 @@ Raw 1min OHLCV (MES)
 - **45m-1h:** Session trends, regime transitions
 - **Gaps (no 2m, 3m, etc.):** Reduces noise, focuses on meaningful resampling intervals
 
----
-
-### Approach 1: MTF Feature Construction (Tabular Models)
-
-**Use case:** Tabular models (XGBoost, LightGBM) that need pre-computed indicators
-
-**Mechanics:**
-
-1. **Resample 1min OHLCV to all 9 timeframes:**
-   ```python
-   # src/phase1/stages/mtf/resample.py
-   df_1m = load_raw_ohlcv("MES_1m.parquet")  # Base data
-
-   # Resample to 8 higher timeframes
-   df_5m = resample_ohlcv(df_1m, freq="5min")   # 5 bars → 1 bar
-   df_10m = resample_ohlcv(df_1m, freq="10min") # 10 bars → 1 bar
-   df_15m = resample_ohlcv(df_1m, freq="15min") # 15 bars → 1 bar
-   df_20m = resample_ohlcv(df_1m, freq="20min") # 20 bars → 1 bar
-   df_25m = resample_ohlcv(df_1m, freq="25min") # 25 bars → 1 bar
-   df_30m = resample_ohlcv(df_1m, freq="30min") # 30 bars → 1 bar
-   df_45m = resample_ohlcv(df_1m, freq="45min") # 45 bars → 1 bar
-   df_1h = resample_ohlcv(df_1m, freq="1h")     # 60 bars → 1 bar
-   ```
-
-2. **Compute indicators at each timeframe:**
-   ```python
-   # src/phase1/stages/features/mtf_features.py
-
-   # Example: RSI computed on all 9 timeframes
-   df_1m["rsi_1m"] = compute_rsi(df_1m, period=14)      # Ultra-fast noise
-   df_1m["rsi_5m"] = compute_rsi(df_5m, period=14)      # Scalping signal
-   df_1m["rsi_10m"] = compute_rsi(df_10m, period=14)    # Short momentum
-   df_1m["rsi_15m"] = compute_rsi(df_15m, period=14)    # Trend confirmation
-   df_1m["rsi_20m"] = compute_rsi(df_20m, period=14)    # Mid-term signal
-   df_1m["rsi_25m"] = compute_rsi(df_25m, period=14)    # Momentum persistence
-   df_1m["rsi_30m"] = compute_rsi(df_30m, period=14)    # Session trend
-   df_1m["rsi_45m"] = compute_rsi(df_45m, period=14)    # Regime context
-   df_1m["rsi_1h"] = compute_rsi(df_1h, period=14)      # Major trend signal
-
-   # Repeat for: MACD, Stochastic, ATR, Bollinger Bands, etc.
-   # Result: 9 timeframes × 12 indicators = 108 MTF features
-   ```
-
-3. **Align all timeframes to base 1min grid:**
-   ```python
-   # Forward-fill higher timeframe features to 1min (no lookahead)
-   df_1m = df_1m.merge(df_5m[["rsi_5m"]], left_index=True, right_index=True, how="left")
-   df_1m["rsi_5m"].ffill(inplace=True)  # Use most recent 5min value
-
-   # Repeat for all 8 higher timeframes
-   # Result: Every 1min bar has features from all 9 timeframes
-   ```
-
-**Result:** Every 1min bar has **200+ aligned features** from 9 timeframes, all leakage-safe via forward-fill.
-
-**Feature count breakdown:**
-- **1m features:** 20 indicators (momentum, volatility, volume, microstructure)
-- **5m-1h features:** 9 timeframes × 12 indicators = 108 MTF features
-- **Regime features:** 15 features (volatility/trend/composite regimes across 3 timeframes)
-- **Interaction features:** 30 features (RSI × regime, MACD × trend, etc.)
-- **Wavelet features:** 20 features (multi-scale decomposition)
-- **Total:** ~200 features for tabular models
+**Pipeline flow:**
+```
+1min raw data (ingest) → Resample to 9 timeframes → Choose training strategy:
+  ├─ Strategy 1: Single-timeframe (train on 15m, no MTF)
+  ├─ Strategy 2: MTF indicators (train on 15m, add features from 1m/5m/30m/1h)
+  └─ Strategy 3: MTF ingestion (feed 1m+5m+15m tensors together)
+```
 
 ---
 
-### Approach 2: Multi-Resolution Ingestion (Sequence/Transformer Models)
+### Three MTF Strategies (Mix-and-Match)
 
-**Use case:** Models that benefit from raw multi-scale inputs (PatchTST, InceptionTime, TFT)
+#### Strategy 1: Single-Timeframe Training (No MTF)
 
-**Mechanics:**
+**Use case:** Simplest approach, good for baseline models
 
-1. **Resample 1min data to 3-5 key timeframes:**
-   ```python
-   # src/phase1/stages/datasets/multi_resolution.py
+**Config:**
+```yaml
+training_timeframe: "15m"  # Train on 15m data only
+mtf_indicators: false       # Don't include features from other timeframes
+mtf_ingestion: false        # Don't feed multiple timeframes together
+```
 
-   # Select representative timeframes (avoid redundancy)
-   df_1m = load_raw_ohlcv("MES_1m.parquet")
-   df_5m = resample_ohlcv(df_1m, freq="5min")
-   df_15m = resample_ohlcv(df_1m, freq="15min")
-   df_1h = resample_ohlcv(df_1m, freq="1h")
-   ```
+**Result:**
+- Train on 15m OHLCV only
+- Features computed from 15m data only
+- No cross-timeframe information
 
-2. **Create multi-resolution tensors (no feature engineering):**
-   ```python
-   # Stack raw OHLCV at multiple resolutions
-   # Shape: (n_samples, n_timeframes, seq_len, n_features)
-
-   # For each 1min timestamp, get synchronized lookback windows
-   X_1m = get_lookback_window(df_1m, lookback=60)    # (n, 60, 5) - last 60 minutes
-   X_5m = get_lookback_window(df_5m, lookback=12)    # (n, 12, 5) - last 60 minutes
-   X_15m = get_lookback_window(df_15m, lookback=4)   # (n, 4, 5) - last 60 minutes
-
-   # Stack into 4D tensor
-   X_multi = np.stack([X_1m, X_5m, X_15m], axis=1)  # (n, 3, varying_seq_len, 5)
-
-   # Or concatenate along sequence dimension
-   X_concat = np.concatenate([X_1m, X_5m, X_15m], axis=1)  # (n, 76, 5)
-   ```
-
-3. **Model processes multi-scale inputs directly:**
-   ```python
-   # Example: Multi-scale PatchTST
-   # - Extracts patches from each timeframe independently
-   # - Learns cross-scale attention patterns
-   # - No hand-crafted features needed
-
-   class MultiScalePatchTST(BaseModel):
-       def forward(self, X_multi):
-           # X_multi: (batch, n_timeframes=3, seq_len, n_features=5)
-
-           # Process each timeframe with separate patch embeddings
-           patches_1m = patch_embedding(X_multi[:, 0, :, :])   # 1min patches
-           patches_5m = patch_embedding(X_multi[:, 1, :, :])   # 5min patches
-           patches_15m = patch_embedding(X_multi[:, 2, :, :])  # 15min patches
-
-           # Cross-scale attention
-           attn_output = cross_scale_attention([patches_1m, patches_5m, patches_15m])
-           return attn_output
-   ```
-
-**Result:** Models receive **raw OHLCV at multiple resolutions**, learn their own cross-scale patterns via attention/convolution.
-
-**Advantages:**
-- ✅ No feature engineering required (models learn patterns)
-- ✅ Preserves raw temporal structure at each scale
-- ✅ Captures cross-scale dependencies (e.g., 1m noise + 15m trend)
-
-**Disadvantages:**
-- ❌ Higher memory usage (4D tensors)
-- ❌ Longer training time (more parameters)
-- ❌ Requires models designed for multi-resolution inputs
+**Example:** XGBoost trained on 15m bars with 15m RSI, 15m ATR, 15m VWAP
 
 ---
 
-### MTF Timeframe Selection Strategy
+#### Strategy 2: MTF Indicators (Train on One TF, Include Features from Other TFs)
 
-**For tabular models (Approach 1):**
-- **Use all 9 timeframes** → 200+ features
-- More features = better for gradient boosting (handles high dimensionality well)
+**Use case:** Tabular models that benefit from cross-timeframe features
 
-**For sequence models (Approach 2):**
-- **Use 3-4 timeframes** → 1m + 5m + 15m (+ optional 1h)
-- Fewer timeframes = lower memory, faster training
-- Select timeframes with **complementary patterns:**
-  - **1m:** Microstructure, noise
-  - **5m:** Short momentum
-  - **15m:** Trend confirmation
-  - **1h:** Regime context (optional)
+**Config:**
+```yaml
+training_timeframe: "15m"   # Train on 15m data (primary)
+mtf_indicators: true        # Include features from other timeframes
+mtf_source_timeframes:      # Which timeframes to pull features from
+  - "1m"   # Microstructure signals
+  - "5m"   # Short-term momentum
+  - "30m"  # Mid-term trend
+  - "1h"   # Regime context
+```
 
-**For foundation models (zero-shot):**
-- **Use 1m only** → matches pre-training distribution
-- Adding MTF breaks pre-trained representations
+**Result:**
+- Train on 15m bars (n_samples = 15m bar count)
+- Each 15m bar has features computed from:
+  - 15m indicators (RSI_15m, ATR_15m, VWAP_15m)
+  - 1m indicators (microstructure, order flow) - aligned to 15m grid
+  - 5m indicators (short momentum) - aligned to 15m grid
+  - 30m indicators (trend confirmation) - aligned to 15m grid
+  - 1h indicators (regime context) - aligned to 15m grid
+
+**Feature alignment (forward-fill, no lookahead):**
+```python
+# src/phase1/stages/mtf/align_features.py
+
+# Train on 15m bars
+df_15m = resample_ohlcv(df_1m, freq="15min")  # Primary training timeframe
+
+# Compute features from other timeframes
+df_1m_features = compute_features(df_1m)   # Microstructure
+df_5m_features = compute_features(df_5m)   # Short momentum
+df_30m_features = compute_features(df_30m) # Mid-term trend
+df_1h_features = compute_features(df_1h)   # Regime
+
+# Align all features to 15m grid (forward-fill, no lookahead)
+df_15m = align_mtf_features(
+    primary_tf=df_15m,
+    mtf_features={
+        "1m": df_1m_features,
+        "5m": df_5m_features,
+        "30m": df_30m_features,
+        "1h": df_1h_features,
+    }
+)
+
+# Result: Each 15m bar has ~150 features from 5 timeframes
+```
+
+**Example:** XGBoost trained on 15m bars with:
+- 15m RSI, 15m ATR, 15m VWAP (primary TF features)
+- 1m order_flow_imbalance, 1m bid_ask_spread (microstructure)
+- 5m RSI, 5m MACD (short momentum)
+- 30m RSI, 30m ATR (trend confirmation)
+- 1h regime_state (regime context)
+
+---
+
+#### Strategy 3: MTF Ingestion (Feed Multiple Timeframes Together)
+
+**Use case:** Sequence/transformer models that learn cross-scale patterns
+
+**Config:**
+```yaml
+training_timeframe: "15m"   # Primary timeframe for labels/splits
+mtf_ingestion: true         # Feed multiple timeframes together
+mtf_input_timeframes:       # Which timeframes to stack/concatenate
+  - "1m"   # Microstructure
+  - "5m"   # Short momentum
+  - "15m"  # Primary (trend)
+  - "1h"   # Regime context
+```
+
+**Result:**
+- Labels/splits defined on 15m bars
+- Model receives multi-resolution tensors (1m + 5m + 15m + 1h OHLCV)
+- No feature engineering (raw OHLCV at multiple scales)
+
+**Input construction:**
+```python
+# src/phase1/stages/datasets/multi_resolution.py
+
+# For each 15m timestamp, get synchronized lookback windows
+X_1m = get_lookback_window(df_1m, lookback=15)   # Last 15 minutes at 1m resolution (15 bars)
+X_5m = get_lookback_window(df_5m, lookback=3)    # Last 15 minutes at 5m resolution (3 bars)
+X_15m = get_lookback_window(df_15m, lookback=1)  # Current 15m bar (1 bar)
+X_1h = get_lookback_window(df_1h, lookback=1)    # Current 1h context (1 bar)
+
+# Stack into 4D tensor
+X_multi = np.stack([X_1m, X_5m, X_15m, X_1h], axis=1)  # (n_15m_bars, 4, varying_seq_len, 5)
+
+# Or concatenate along sequence dimension
+X_concat = np.concatenate([X_1m, X_5m, X_15m, X_1h], axis=1)  # (n_15m_bars, 20, 5)
+```
+
+**Example:** PatchTST trained on 15m bars, receiving:
+- 1m OHLCV (15 bars, microstructure)
+- 5m OHLCV (3 bars, short momentum)
+- 15m OHLCV (1 bar, current trend)
+- 1h OHLCV (1 bar, regime context)
+
+---
+
+### Choosing the Primary Training Timeframe
+
+**Key decision:** Which timeframe to use as the primary training dataset?
+
+**Factors to consider:**
+
+| Training TF | Pros | Cons | Best For |
+|-------------|------|------|----------|
+| **1m** | Max data (high sample count), microstructure signals | Noisy, high computational cost | HFT strategies, order flow models |
+| **5m** | Good balance of signal/noise, still high sample count | Some noise, moderate compute | Scalping, short-term momentum |
+| **15m** | Clean signals, lower noise, manageable compute | Moderate sample count | Intraday swing, trend following |
+| **30m** | Very clean signals, low noise | Lower sample count, miss short-term moves | Session trends, position trading |
+| **1h** | Cleanest signals, regime context | Low sample count, miss intraday | Multi-session trends, regime models |
+
+**Sample count comparison (1 year of data):**
+- 1m: ~100,000 bars
+- 5m: ~20,000 bars
+- 15m: ~6,500 bars
+- 30m: ~3,250 bars
+- 1h: ~1,625 bars
+
+**Configuration:**
+```yaml
+# config.yaml
+data:
+  ingest_timeframe: "1m"      # Always 1m (raw data)
+  training_timeframe: "15m"   # Primary timeframe for model training
+
+  mtf_strategy: "mtf_indicators"  # or "single_tf" or "mtf_ingestion"
+
+  # For Strategy 2 (MTF indicators)
+  mtf_indicators:
+    enabled: true
+    source_timeframes: ["1m", "5m", "30m", "1h"]  # Optional: which TFs to pull features from
+
+  # For Strategy 3 (MTF ingestion)
+  mtf_ingestion:
+    enabled: false
+    input_timeframes: ["1m", "5m", "15m", "1h"]
+```
+
+---
+
+### Implementation Details
+
+#### Step 1: Resample 1min to all 9 timeframes (always done)
+
+```python
+# src/phase1/stages/mtf/resample.py
+df_1m = load_raw_ohlcv("MES_1m.parquet")  # Ingest timeframe (always 1m)
+
+# Resample to 8 higher timeframes
+df_5m = resample_ohlcv(df_1m, freq="5min")
+df_10m = resample_ohlcv(df_1m, freq="10min")
+df_15m = resample_ohlcv(df_1m, freq="15min")
+df_20m = resample_ohlcv(df_1m, freq="20min")
+df_25m = resample_ohlcv(df_1m, freq="25min")
+df_30m = resample_ohlcv(df_1m, freq="30min")
+df_45m = resample_ohlcv(df_1m, freq="45min")
+df_1h = resample_ohlcv(df_1m, freq="1h")
+
+# Now we have 9 timeframes available for any training strategy
+```
+
+#### Step 2: Choose training strategy (config-driven)
+
+**Strategy 1: Single-timeframe (no MTF)**
+```python
+# Train on 15m bars, no cross-timeframe features
+df_train = df_15m
+features = compute_features(df_train)  # Only 15m features
+```
+
+**Strategy 2: MTF indicators**
+```python
+# Train on 15m bars, with features from 1m/5m/30m/1h
+df_train = df_15m  # Primary training timeframe
+
+# Compute features from all specified timeframes
+features_1m = compute_features(df_1m, prefix="1m_")
+features_5m = compute_features(df_5m, prefix="5m_")
+features_15m = compute_features(df_15m, prefix="15m_")
+features_30m = compute_features(df_30m, prefix="30m_")
+features_1h = compute_features(df_1h, prefix="1h_")
+
+# Align all to 15m grid (forward-fill)
+df_train = align_mtf_features(
+    primary_tf=df_train,
+    mtf_features={
+        "1m": features_1m,
+        "5m": features_5m,
+        "15m": features_15m,
+        "30m": features_30m,
+        "1h": features_1h,
+    }
+)
+# Result: Each 15m bar has ~150 features from 5 timeframes
+```
+
+**Strategy 3: MTF ingestion**
+```python
+# Train on 15m bars, feed 1m+5m+15m+1h tensors
+labels_df = df_15m  # Labels/splits defined on 15m
+
+# Create multi-resolution tensors
+X_1m = create_sequences(df_1m, lookback=15)   # (n_15m, 15, 5)
+X_5m = create_sequences(df_5m, lookback=3)    # (n_15m, 3, 5)
+X_15m = create_sequences(df_15m, lookback=1)  # (n_15m, 1, 5)
+X_1h = create_sequences(df_1h, lookback=1)    # (n_15m, 1, 5)
+
+# Stack or concatenate
+X_multi = np.stack([X_1m, X_5m, X_15m, X_1h], axis=1)  # (n_15m, 4, varying, 5)
+# OR
+X_concat = np.concatenate([X_1m, X_5m, X_15m, X_1h], axis=1)  # (n_15m, 20, 5)
+```
+
+---
+
+### Feature Count by Strategy
+
+**Strategy 1 (Single-TF):**
+- Training on 15m → ~40 features (15m indicators only)
+- Training on 1m → ~50 features (1m indicators + microstructure)
+
+**Strategy 2 (MTF Indicators):**
+- Training on 15m with 4 MTF sources → ~150 features
+- Training on 1m with 8 MTF sources → ~200 features
+- Training on 1h with 3 MTF sources → ~100 features
+
+**Strategy 3 (MTF Ingestion):**
+- 4-timeframe stack (1m+5m+15m+1h) → 5 features × 4 TFs = 20 feature channels
+- 3-timeframe stack (1m+5m+15m) → 5 features × 3 TFs = 15 feature channels
+
+---
+
+### Recommended Strategy by Model Family
+
+| Model Family | Recommended Strategy | Training TF | MTF Sources | Rationale |
+|--------------|---------------------|-------------|-------------|-----------|
+| **XGBoost/LightGBM** | Strategy 2 (MTF indicators) | 15m | 1m, 5m, 30m, 1h | Tabular models benefit from dense cross-TF features |
+| **Logistic Regression** | Strategy 1 (Single-TF) | 15m | None | Simple baseline, avoid overfitting |
+| **LSTM/TCN** | Strategy 1 or 3 | 15m | None or 1m+5m+15m | Single-TF with wavelets OR multi-res ingestion |
+| **InceptionTime/ResNet** | Strategy 3 (MTF ingestion) | 15m | 1m+5m+15m | CNN benefits from multi-scale raw inputs |
+| **PatchTST/iTransformer** | Strategy 3 (MTF ingestion) | 15m | 1m+5m+15m+1h | Transformers learn cross-scale attention |
+| **TFT** | Strategy 3 (MTF ingestion) | 15m | 1m+5m+15m+1h | Explicit multi-TF support (known/unknown features) |
+| **Chronos/TimesFM** | Strategy 1 (Single-TF) | 1m | None | Foundation models: no MTF, matches pre-training |
+
+**General guidelines:**
+- **Tabular models:** Prefer Strategy 2 (MTF indicators) with 3-5 source timeframes
+- **Sequence models:** Prefer Strategy 1 (single-TF) or Strategy 3 (MTF ingestion) with 3-4 timeframes
+- **Transformers:** Prefer Strategy 3 (MTF ingestion) for cross-scale attention
+- **Foundation models:** Use Strategy 1 (single-TF) only, no MTF
 
 ---
 
 ### Model-Specific Feature Sets
 
-**Different models have different feature requirements.** The pipeline produces **200+ features from 9 timeframes**, but each model uses a subset based on its architecture.
+**Different models have different feature requirements.** The pipeline can produce features from any combination of the 9 timeframes, depending on the chosen MTF strategy and training timeframe.
 
 ---
 
 #### Tabular Models (XGBoost, LightGBM, Logistic)
 
-**Approach:** MTF Feature Construction (Approach 1)
+**Recommended:** Strategy 2 (MTF indicators)
 
-**Features used:** ~200 features
-- ✅ **Momentum indicators** (RSI, MACD, Stochastic, ADX) across **9 timeframes** (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
-  - 9 timeframes × 4 indicators = 36 momentum features
-- ✅ **Volatility features** (ATR, Parkinson, Garman-Klass, BB width) across **9 timeframes**
-  - 9 timeframes × 4 volatility metrics = 36 volatility features
-- ✅ **Volume features** (VWAP, OBV, volume ratios, volume MA) across **9 timeframes**
-  - 9 timeframes × 4 volume metrics = 36 volume features
-- ✅ **Microstructure** (bid-ask spread, order flow imbalance, tick direction, trade intensity) - **1m only**
-  - 12 microstructure features
-- ✅ **Regime features** (volatility regime, trend regime, composite regime) across **3 key timeframes** (1m, 15m, 1h)
-  - 3 timeframes × 5 regime metrics = 15 regime features
-- ✅ **Interaction features** (RSI × volatility_regime, MACD × trend_regime, etc.)
-  - 30 interaction features
-- ✅ **Wavelet decompositions** (4 levels: D1, D2, D3, A3) on close price
-  - 20 wavelet features
-- ✅ **Statistical features** (rolling mean, std, skew, kurtosis) across **5 key timeframes** (1m, 5m, 15m, 30m, 1h)
-  - 5 timeframes × 4 stats = 20 statistical features
+**Example config:**
+```yaml
+training_timeframe: "15m"
+mtf_strategy: "mtf_indicators"
+mtf_source_timeframes: ["1m", "5m", "30m", "1h"]
+```
 
-**Total:** ~200 features
+**Features used:** ~150 features (training on 15m with 4 MTF sources)
+- ✅ **15m indicators** (primary): RSI, MACD, ATR, VWAP, etc. - 40 features
+- ✅ **1m indicators** (microstructure): order flow, bid-ask spread, tick direction - 15 features
+- ✅ **5m indicators** (short momentum): RSI, MACD, Stochastic - 20 features
+- ✅ **30m indicators** (trend confirmation): RSI, ATR, Bollinger Bands - 20 features
+- ✅ **1h indicators** (regime context): regime state, volatility regime - 15 features
+- ✅ **Interaction features**: RSI_15m × vol_regime_1h, MACD_5m × trend_30m - 20 features
+- ✅ **Wavelet features**: Multi-scale decomposition on 15m close - 20 features
 
-**Why these features?**
-- Tabular models excel at capturing **monotonic relationships** and **sparse interactions**
-- 9-timeframe MTF features provide **granular regime context** (1m microstructure → 1h trend)
-- Engineered features give **domain knowledge shortcuts** (e.g., RSI overbought/oversold)
-- XGBoost/LightGBM handle high dimensionality well (200 features is optimal)
+**Total:** ~150 features aligned to 15m grid
 
-**Input shape:** `(n_samples, 200)` 2D matrix
+**Why this approach?**
+- Tabular models excel at **cross-timeframe feature interactions**
+- Training on 15m reduces noise vs 1m (cleaner signals)
+- MTF indicators from 1m/5m/30m/1h provide multi-scale context
+- XGBoost/LightGBM handle high dimensionality well
+
+**Input shape:** `(n_15m_bars, 150)` 2D matrix
 
 ---
 
 #### Sequence Models (LSTM, TCN, InceptionTime, 1D ResNet)
 
-**Approach:** Single-timeframe with wavelets OR Multi-resolution ingestion (Approach 2)
+**Recommended:** Strategy 1 (single-TF) for LSTM/TCN, Strategy 3 (MTF ingestion) for CNN models
 
-**Option A: Single-timeframe (1m base with wavelets)**
-- ✅ Raw OHLCV at **1m** (5 features: open, high, low, close, volume)
+**Option A: Single-timeframe with wavelets (LSTM, TCN)**
+```yaml
+training_timeframe: "15m"
+mtf_strategy: "single_tf"
+```
+
+**Features used:** ~25 features
+- ✅ Raw OHLCV at **15m** (5 features)
 - ✅ Returns (log returns, realized volatility) - 2 features
 - ✅ Wavelet decompositions (4 levels: D1, D2, D3, A3) - 16 features
 - ✅ Basic volume features (volume MA, volume std) - 2 features
-- **Total:** ~25 features
-- **Input shape:** `(n_samples, seq_len=60, 25)` where seq_len=60 minutes
 
-**Option B: Multi-resolution (1m + 5m + 15m)**
-- ✅ Raw OHLCV stacked across **3 timeframes** (1m, 5m, 15m)
-- **Concatenated input shape:** `(n_samples, seq_len=76, 5)` where seq_len = 60 (1m) + 12 (5m) + 4 (15m)
-- **Stacked input shape:** `(n_samples, n_timeframes=3, seq_len=60, 5)` 4D tensor (requires model modification)
+**Input shape:** `(n_15m_bars, seq_len=60, 25)` where seq_len=60 bars = 15 hours of 15m data
 
-**Why fewer features than tabular?**
-- Sequence models **learn temporal patterns automatically** (don't need pre-computed indicators)
-- Wavelets help with **multi-scale patterns** (short-term noise vs long-term trend)
-- Feeding 200 features to RNNs causes **gradient vanishing** and **overfitting**
-- Multi-resolution ingestion captures cross-scale dependencies via architecture
+**Option B: Multi-resolution (InceptionTime, 1D ResNet)**
+```yaml
+training_timeframe: "15m"
+mtf_strategy: "mtf_ingestion"
+mtf_input_timeframes: ["1m", "5m", "15m"]
+```
+
+**Concatenated shape:** `(n_15m_bars, 19, 5)` where:
+- 15 bars from 1m (last 15 minutes)
+- 3 bars from 5m (last 15 minutes)
+- 1 bar from 15m (current bar)
+
+**Stacked shape:** `(n_15m_bars, 3, 15, 5)` 4D tensor
+
+**Why this approach?**
+- RNNs (LSTM/TCN) work well with single-TF + wavelets
+- CNNs (InceptionTime/ResNet) benefit from multi-scale raw inputs
+- Fewer features than tabular prevents gradient issues
 
 ---
 
 #### Transformers (PatchTST, iTransformer, TFT)
 
-**Approach:** Multi-resolution ingestion (Approach 2) preferred
+**Recommended:** Strategy 3 (MTF ingestion)
 
-**Option A: Single-timeframe with minimal features**
-- ✅ Raw OHLCV at **1m** (5 features)
-- ✅ Regime embeddings (volatility state, trend state) - 2 features
-- **Total:** 7 features
-- **Input shape:** `(n_samples, context_length=512, 7)` → patches of 16 bars
+**Config:**
+```yaml
+training_timeframe: "15m"
+mtf_strategy: "mtf_ingestion"
+mtf_input_timeframes: ["1m", "5m", "15m", "1h"]
+```
 
-**Option B: Multi-resolution OHLCV (recommended)**
-- ✅ Raw OHLCV stacked across **3-4 timeframes** (1m, 5m, 15m, 1h)
-- **Concatenated input:** `(n_samples, seq_len=variable, 5)`
-  - 1m: 60 bars + 5m: 12 bars + 15m: 4 bars + 1h: 1 bar = 77 total bars
-- **Stacked input (requires multi-scale architecture):** `(n_samples, n_timeframes=4, max_seq_len=60, 5)` 4D tensor
+**Multi-resolution OHLCV:**
+- ✅ **1m OHLCV:** 15 bars (last 15 minutes)
+- ✅ **5m OHLCV:** 3 bars (last 15 minutes)
+- ✅ **15m OHLCV:** 1 bar (current bar)
+- ✅ **1h OHLCV:** 1 bar (current hour context)
 
-**Why multi-resolution for transformers?**
-- Transformers **learn their own feature representations** via attention
-- Patching (PatchTST) benefits from **raw multi-scale inputs** (cross-scale patterns)
-- Inverted attention (iTransformer) treats **features as tokens** (better with raw OHLCV)
-- Over-engineering features **limits transformer's ability to discover patterns**
+**Concatenated input:** `(n_15m_bars, 20, 5)` - 20 total bars across 4 timeframes
+
+**Stacked input (requires multi-scale architecture):** `(n_15m_bars, 4, 15, 5)` 4D tensor
+
+**Why multi-resolution?**
+- Transformers **learn cross-scale attention patterns** automatically
+- Patching (PatchTST) extracts features from each timeframe independently
+- Inverted attention (iTransformer) treats timeframes as feature channels
+- TFT explicitly supports known/unknown/static feature splits across timeframes
 
 **Model-specific notes:**
-- **PatchTST:** Use multi-resolution with separate patch embeddings per timeframe
-- **iTransformer:** Use concatenated multi-resolution (treats each timeframe as separate feature channel)
-- **TFT:** Supports explicit multi-timeframe via known/unknown/static feature splits
+- **PatchTST:** Use stacked 4D input with separate patch embeddings per timeframe
+- **iTransformer:** Use concatenated input (treats each timeframe as separate feature)
+- **TFT:** Use stacked input with explicit known (1m, 5m) vs unknown (15m, 1h) splits
 
 ---
 
 #### Foundation Models (Chronos, TimesFM)
 
-**Approach:** Single-timeframe, normalized OHLCV only
+**Recommended:** Strategy 1 (single-TF), 1m only
+
+**Config:**
+```yaml
+training_timeframe: "1m"
+mtf_strategy: "single_tf"
+```
 
 **Features used:** Normalized OHLCV at **1m** (4 features)
 - ✅ Open, High, Low, Close (z-score normalized per 512-bar lookback window)
 
-**Why only 1m OHLCV?**
-- Foundation models are **pre-trained on pure OHLCV patterns** at single resolutions
-- Adding engineered features **breaks their pre-trained representations**
-- Adding multi-timeframe data **mismatches their training distribution**
-- Zero-shot inference requires **exact match to pre-training data format**
+**Why 1m only, no MTF?**
+- Foundation models are **pre-trained on pure OHLCV at single resolutions**
+- Adding engineered features **breaks pre-trained representations**
+- Adding MTF data **mismatches training distribution**
+- Zero-shot inference requires **exact match to pre-training format**
 
-**Input shape:** `(n_samples, context_length=512, 4)`
+**Input shape:** `(n_1m_bars, context_length=512, 4)`
 
 ---
 
@@ -627,32 +789,39 @@ def get_feature_view(df: pd.DataFrame, model_family: str, multi_res: bool = Fals
 
 ### Summary: One Dataset, Many Views
 
-| Model Family | Feature Count | Input Shape | MTF Approach | Why This Design? |
-|--------------|---------------|-------------|--------------|------------------|
-| **Tabular** | ~200 features | `(n, 200)` | All 9 timeframes | Needs engineered features across all resolutions |
-| **Sequence (Single-TF)** | ~25 features | `(n, 60, 25)` | 1m + wavelets | Learns temporal patterns, wavelets for multi-scale |
-| **Sequence (Multi-Res)** | 5 features × 3 TFs | `(n, 76, 5)` or `(n, 3, 60, 5)` | 1m + 5m + 15m | Cross-scale learning via architecture |
-| **Transformer (Single-TF)** | ~7 features | `(n, 512, 7)` | 1m only | Learns own features via attention |
-| **Transformer (Multi-Res)** | 5 features × 4 TFs | `(n, 77, 5)` or `(n, 4, 60, 5)` | 1m + 5m + 15m + 1h | Cross-scale attention patterns |
-| **Foundation** | 4 features | `(n, 512, 4)` | 1m only | Pre-trained on raw OHLCV |
+| Model Family | Training TF | MTF Strategy | Feature Count | Input Shape | Rationale |
+|--------------|-------------|--------------|---------------|-------------|-----------|
+| **XGBoost/LightGBM** | 15m | Strategy 2 (MTF indicators) | ~150 | `(n_15m, 150)` | Dense cross-TF features |
+| **Logistic Regression** | 15m | Strategy 1 (Single-TF) | ~40 | `(n_15m, 40)` | Simple baseline |
+| **LSTM/TCN** | 15m | Strategy 1 (Single-TF) | ~25 | `(n_15m, 60, 25)` | Single-TF + wavelets |
+| **InceptionTime/ResNet** | 15m | Strategy 3 (MTF ingestion) | 5×3 TFs | `(n_15m, 19, 5)` | Multi-scale CNN |
+| **PatchTST/iTransformer** | 15m | Strategy 3 (MTF ingestion) | 5×4 TFs | `(n_15m, 20, 5)` | Cross-scale attention |
+| **TFT** | 15m | Strategy 3 (MTF ingestion) | 5×4 TFs | `(n_15m, 4, 15, 5)` | Explicit multi-TF |
+| **Chronos/TimesFM** | 1m | Strategy 1 (Single-TF) | 4 | `(n_1m, 512, 4)` | Zero-shot, no MTF |
 
-**All models share:**
-- ✅ Same base **1min OHLCV dataset** (leakage-safe)
-- ✅ Same **9-timeframe MTF resampling** available (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
-- ✅ Same **train/val/test splits** (70/15/15)
-- ✅ Same **purge (60 bars)** and **embargo (1440 bars)** at 1min resolution
-- ✅ Same **transaction costs** in triple-barrier labels
+**All models share (experimental controls):**
+- ✅ Same **1min ingest data** (raw OHLCV ingestion)
+- ✅ Same **9-timeframe resampling** available (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - ✅ Same **deterministic resampling** (fixed seeds)
+- ✅ Same **leakage protections** (purge/embargo, train-only scaling, causal models)
+- ✅ Same **transaction costs** in triple-barrier labels
 
-**Different per model:**
-- ❌ **Feature subset** (tabular uses 200 from 9 TFs, transformers use 5-7 from 1-4 TFs)
+**Different per model (configuration choices):**
+- ❌ **Training timeframe** (15m recommended for most, 1m for foundation models)
+- ❌ **MTF strategy** (single-TF vs MTF indicators vs MTF ingestion)
+- ❌ **Feature subset** (tabular uses 150 cross-TF, transformers use 5 raw OHLCV × 4 TFs)
 - ❌ **Input shape** (2D matrix vs 3D tensor vs 4D multi-res tensor)
-- ❌ **MTF strategy** (feature construction vs multi-resolution ingestion)
-- ❌ **Feature engineering philosophy** (hand-crafted vs learned)
+- ❌ **Feature engineering** (hand-crafted vs learned)
 
-**Result:** Fair comparison under identical experimental controls (same base data, same splits, same leakage protections), but each model gets the **feature representation and multi-timeframe strategy** it needs to perform best.
+**Key architectural insights:**
+1. **Training timeframe is configurable** - 1m (ingest) ≠ 15m (training)
+2. **Three MTF strategies** - mix-and-match based on model architecture
+3. **Tabular models:** Dense feature engineering (Strategy 2, MTF indicators)
+4. **Sequence models:** Single-TF + wavelets OR multi-res ingestion
+5. **Transformers:** Multi-res ingestion for cross-scale attention
+6. **Foundation models:** Single-TF only (1m, no MTF)
 
-**Key architectural insight:** Tabular models benefit from **dense feature engineering across all 9 timeframes**, while sequence/transformer models benefit from **sparse raw features with multi-resolution ingestion**.
+**Result:** Fair comparison under identical experimental controls (same ingest data, same resampling, same leakage protections), but each model gets the **training timeframe, MTF strategy, and feature representation** it needs to perform best.
 
 ---
 
