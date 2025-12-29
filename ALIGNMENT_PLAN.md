@@ -134,6 +134,266 @@ The factory supports a **stacking / meta-learning stage** where base models act 
 symbol: "MES"  # or "MGC", "ES", "GC"
 ```
 
+---
+
+## Data Flow Architecture: One Source → Many Representations
+
+### The Critical Question: How Does One Dataset Feed Different Models?
+
+**Short answer:** One canonical OHLCV dataset → Multi-timeframe features → Model-specific feature sets → Model-specific input views
+
+```
+Raw 1min OHLCV (MES)
+       ↓
+[ Clean & Resample → 5min base timeframe ]
+       ↓
+[ Multi-Timeframe Feature Engineering ]
+       ├─ 5min features (150+ indicators)
+       ├─ 15min features (resampled + indicators)
+       ├─ 1h features (resampled + indicators)
+       ├─ 4h features (resampled + indicators)
+       └─ Daily features (resampled + indicators)
+       ↓
+[ Feature Alignment ] (all timeframes aligned to 5min grid)
+       ↓
+[ Model-Specific Feature Selection ]
+       ├─ Tabular models → momentum + microstructure + regime (80 features)
+       ├─ Sequence models → OHLCV + volume + wavelets (20 features)
+       ├─ Transformers → raw OHLCV + volume (5 features, learn their own features)
+       └─ Foundation models → normalized OHLCV only (4 features)
+       ↓
+[ Model-Specific Input Views ]
+       ├─ Tabular: (n_samples, n_features) 2D matrix
+       └─ Sequence: (n_samples, seq_len, n_features) 3D tensor
+       ↓
+[ Training ] → Different models, same experimental controls
+```
+
+---
+
+### Multi-Timeframe (MTF) Feature Engineering
+
+**Base timeframe:** 5 minutes (after resampling from 1min raw data)
+
+**Upsampling mechanics:**
+
+1. **Resample OHLCV to higher timeframes:**
+   ```python
+   # src/phase1/stages/mtf/
+   df_15m = resample_ohlcv(df_5m, freq="15min")  # 3 bars → 1 bar
+   df_1h = resample_ohlcv(df_5m, freq="1h")      # 12 bars → 1 bar
+   df_4h = resample_ohlcv(df_5m, freq="4h")      # 48 bars → 1 bar
+   df_daily = resample_ohlcv(df_5m, freq="1D")   # 288 bars → 1 bar
+   ```
+
+2. **Compute indicators at each timeframe:**
+   ```python
+   # Example: RSI computed on 15min, 1h, daily
+   df_5m["rsi_15m"] = compute_rsi(df_15m, period=14)    # Slow-moving
+   df_5m["rsi_1h"] = compute_rsi(df_1h, period=14)      # Trend signal
+   df_5m["rsi_daily"] = compute_rsi(df_daily, period=14)  # Regime signal
+   ```
+
+3. **Align all timeframes to base 5min grid:**
+   ```python
+   # Forward-fill higher timeframe features to 5min (no lookahead)
+   df_5m = df_5m.merge(df_15m[["rsi_15m"]], left_index=True, right_index=True, how="left")
+   df_5m["rsi_15m"].ffill(inplace=True)  # Use most recent 15min value
+   ```
+
+**Result:** Every 5min bar has features from 5 timeframes (5m, 15m, 1h, 4h, daily), all aligned and leakage-safe.
+
+**Why MTF?**
+- **5min features:** Microstructure, noise
+- **15min-1h features:** Intraday trends
+- **4h-daily features:** Regime context (volatility, trend strength)
+
+---
+
+### Model-Specific Feature Sets
+
+**Different models have different feature requirements.** The pipeline produces 150+ features, but each model uses a subset:
+
+#### Tabular Models (XGBoost, LightGBM, Logistic)
+
+**Features used:** ~80 features
+- ✅ Momentum indicators (RSI, MACD, Stochastic) across 5 timeframes
+- ✅ Microstructure (bid-ask spread, order flow imbalance, tick direction)
+- ✅ Volatility (ATR, Parkinson, Garman-Klass) across 5 timeframes
+- ✅ Volume features (VWAP, OBV, volume ratios)
+- ✅ Regime features (volatility regime, trend regime, composite regime)
+- ✅ Interaction features (RSI * volatility_regime, MACD * trend_regime)
+
+**Why these features?**
+- Tabular models excel at capturing **monotonic relationships** and **sparse interactions**
+- Engineered features provide **domain knowledge shortcuts** (e.g., RSI overbought/oversold)
+- Multi-timeframe features give **regime context**
+
+---
+
+#### Sequence Models (LSTM, TCN, InceptionTime, 1D ResNet)
+
+**Features used:** ~20 features
+- ✅ Raw OHLCV (5 features: open, high, low, close, volume)
+- ✅ Returns (log returns, realized volatility)
+- ✅ Wavelet decompositions (4 levels: D1, D2, D3, A3)
+- ✅ Basic volume features (volume MA, volume std)
+
+**Why fewer features?**
+- Sequence models **learn temporal patterns automatically** (don't need pre-computed indicators)
+- Wavelets help with **multi-scale patterns** (short-term vs long-term)
+- Feeding 150 features to RNNs causes **gradient vanishing** and **overfitting**
+
+**Input shape:** `(n_samples, seq_len, 20)` where `seq_len=60` (5 hours of 5min bars)
+
+---
+
+#### Transformers (PatchTST, iTransformer, TFT)
+
+**Features used:** ~5-10 features (raw OHLCV + volume + regime embeddings)
+- ✅ Raw OHLCV (4 features)
+- ✅ Volume
+- ✅ Regime embeddings (volatility state, trend state)
+
+**Why so few features?**
+- Transformers **learn their own feature representations** via attention
+- Patching (PatchTST) and inverted attention (iTransformer) need **raw inputs**
+- Over-engineering features **limits transformer's ability to discover patterns**
+
+**Input shape:**
+- PatchTST: `(n_samples, context_length=512, 5)` → patches of 16 bars
+- iTransformer: `(n_samples, seq_len=60, 5)`
+- TFT: `(n_samples, seq_len=60, 10)` with static/known/unknown feature splits
+
+---
+
+#### Foundation Models (Chronos, TimesFM)
+
+**Features used:** Normalized OHLCV only (4 features)
+- ✅ Open, High, Low, Close (z-score normalized per lookback window)
+
+**Why only OHLCV?**
+- Foundation models are **pre-trained on pure OHLCV patterns** (no custom features)
+- Adding engineered features **breaks their pre-trained representations**
+- Zero-shot inference requires **matching their training distribution**
+
+**Input shape:** `(n_samples, context_length=512, 4)`
+
+---
+
+### Feature Selection in Code
+
+**Where feature selection happens:** `src/phase1/stages/datasets/`
+
+```python
+# src/phase1/stages/datasets/model_views.py
+
+TABULAR_FEATURES = [
+    # Momentum (5 timeframes × 5 indicators)
+    "rsi_5m", "rsi_15m", "rsi_1h", "rsi_4h", "rsi_daily",
+    "macd_5m", "macd_15m", ...,
+
+    # Microstructure
+    "bid_ask_spread", "order_flow_imbalance", "tick_direction",
+
+    # Volatility
+    "atr_5m", "atr_15m", "atr_1h", "atr_4h", "atr_daily",
+
+    # Volume
+    "vwap", "obv", "volume_ratio_5m", "volume_ratio_15m",
+
+    # Regime
+    "volatility_regime", "trend_regime", "composite_regime",
+]
+
+SEQUENCE_FEATURES = [
+    "open", "high", "low", "close", "volume",
+    "log_returns", "realized_vol",
+    "wavelet_D1", "wavelet_D2", "wavelet_D3", "wavelet_A3",
+    "volume_ma_20", "volume_std_20",
+]
+
+TRANSFORMER_FEATURES = [
+    "open", "high", "low", "close", "volume",
+    "volatility_regime_embedding", "trend_regime_embedding",
+]
+
+FOUNDATION_FEATURES = [
+    "open", "high", "low", "close",  # Normalized only
+]
+
+def get_feature_view(df: pd.DataFrame, model_family: str) -> pd.DataFrame:
+    if model_family in ["boosting", "classical"]:
+        return df[TABULAR_FEATURES]
+    elif model_family in ["rnn", "cnn"]:
+        return df[SEQUENCE_FEATURES]
+    elif model_family == "transformer":
+        return df[TRANSFORMER_FEATURES]
+    elif model_family == "foundation":
+        return df[FOUNDATION_FEATURES]
+    else:
+        raise ValueError(f"Unknown model family: {model_family}")
+```
+
+---
+
+### Ensemble Compatibility: Mixing Tabular + Sequence
+
+**Question:** Can we ensemble XGBoost (tabular, 80 features) + LSTM (sequence, 20 features) + PatchTST (transformer, 5 features)?
+
+**Answer:** **YES**, via OOF-based stacking.
+
+**How it works:**
+
+1. **Phase 1: Generate base model predictions (OOF)**
+   ```python
+   # Each model trains on its own feature view
+   xgboost_oof = train_oof(XGBoost, feature_view=TABULAR_FEATURES)  # (n_samples, 1)
+   lstm_oof = train_oof(LSTM, feature_view=SEQUENCE_FEATURES)        # (n_samples, 1)
+   patchtst_oof = train_oof(PatchTST, feature_view=TRANSFORMER_FEATURES)  # (n_samples, 1)
+   ```
+
+2. **Phase 2: Stack OOF predictions**
+   ```python
+   # Meta-learner input: OOF predictions (all same shape now!)
+   X_meta = np.column_stack([xgboost_oof, lstm_oof, patchtst_oof])  # (n_samples, 3)
+
+   # Add regime features to help meta-learner learn when to trust each model
+   X_meta = np.column_stack([X_meta, df["volatility_regime"], df["trend_regime"]])  # (n_samples, 5)
+
+   # Train meta-learner (Ridge, Elastic Net, or LightGBM)
+   meta_model.fit(X_meta, y_train)
+   ```
+
+**Key insight:** OOF stacking **collapses heterogeneous inputs** (80 features vs 20 features vs 5 features) into **homogeneous predictions** (3 probabilities), which the meta-learner can combine.
+
+---
+
+### Summary: One Dataset, Many Views
+
+| Model Family | Feature Count | Input Shape | Why This Design? |
+|--------------|---------------|-------------|------------------|
+| **Tabular** | ~80 features | `(n, 80)` | Needs engineered features + domain knowledge |
+| **Sequence** | ~20 features | `(n, 60, 20)` | Learns temporal patterns, wavelets for multi-scale |
+| **Transformer** | ~5 features | `(n, 512, 5)` | Learns own features via attention |
+| **Foundation** | 4 features | `(n, 512, 4)` | Pre-trained on raw OHLCV only |
+
+**All models:**
+- ✅ Same base 5min dataset (leakage-safe)
+- ✅ Same multi-timeframe features available (5m/15m/1h/4h/daily)
+- ✅ Same train/val/test splits (70/15/15)
+- ✅ Same purge (60) and embargo (1440)
+- ✅ Same transaction costs in labels
+
+**Different per model:**
+- ❌ Feature subset (tabular uses 80, transformers use 5)
+- ❌ Input shape (2D matrix vs 3D tensor)
+- ❌ Feature engineering philosophy (hand-crafted vs learned)
+
+**Result:** Fair comparison under identical experimental controls, but each model gets the **feature representation it needs** to perform best.
+
+---
+
 ### 2. Leakage Paranoia
 
 All models trained on **same leakage-safe data:**
