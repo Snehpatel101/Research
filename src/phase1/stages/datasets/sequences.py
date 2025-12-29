@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -56,10 +55,10 @@ class SequenceConfig:
     """Configuration for sequence generation."""
     seq_len: int
     stride: int = 1
-    feature_columns: List[str] = None
+    feature_columns: list[str] = None
     label_column: str = "label_h20"
     weight_column: str = "sample_weight_h20"
-    symbol_column: Optional[str] = "symbol"
+    symbol_column: str | None = "symbol"
 
     def __post_init__(self) -> None:
         if self.seq_len <= 0:
@@ -78,7 +77,7 @@ def build_sequence_indices(
     n_samples: int,
     seq_len: int,
     stride: int,
-    symbol_boundaries: Optional[List[int]] = None
+    symbol_boundaries: list[int] | None = None
 ) -> np.ndarray:
     """
     Build valid sequence start indices.
@@ -147,7 +146,7 @@ def build_sequence_indices(
 def find_symbol_boundaries(
     df: pd.DataFrame,
     symbol_column: str
-) -> List[int]:
+) -> list[int]:
     """
     Find indices where symbol changes.
 
@@ -216,11 +215,11 @@ class SequenceDataset(Dataset):
     def __init__(
         self,
         df: pd.DataFrame,
-        feature_columns: List[str],
+        feature_columns: list[str],
         label_column: str,
         seq_len: int,
-        weight_column: Optional[str] = None,
-        symbol_column: Optional[str] = None,
+        weight_column: str | None = None,
+        symbol_column: str | None = None,
         stride: int = 1,
         dtype: torch.dtype = torch.float32,
     ) -> None:
@@ -305,7 +304,7 @@ class SequenceDataset(Dataset):
         """Return number of valid sequences."""
         return len(self._indices)
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Get a single sequence sample.
 
@@ -355,7 +354,7 @@ class SequenceDataset(Dataset):
         return self.config.seq_len
 
     @property
-    def feature_shape(self) -> Tuple[int, int]:
+    def feature_shape(self) -> tuple[int, int]:
         """Shape of feature tensor: (seq_len, n_features)."""
         return (self.config.seq_len, self.n_features)
 
@@ -373,7 +372,7 @@ class SequenceDataset(Dataset):
         """Get label value counts for valid sequences."""
         labels = self.get_all_labels()
         unique, counts = np.unique(labels, return_counts=True)
-        return dict(zip(unique.tolist(), counts.tolist()))
+        return dict(zip(unique.tolist(), counts.tolist(), strict=False))
 
     def __repr__(self) -> str:
         return (
@@ -389,11 +388,11 @@ class SequenceDataset(Dataset):
 
 def create_sequence_dataset(
     df: pd.DataFrame,
-    feature_columns: List[str],
+    feature_columns: list[str],
     label_column: str,
     seq_len: int,
-    weight_column: Optional[str] = None,
-    symbol_column: Optional[str] = "symbol",
+    weight_column: str | None = None,
+    symbol_column: str | None = "symbol",
     stride: int = 1,
 ) -> SequenceDataset:
     """

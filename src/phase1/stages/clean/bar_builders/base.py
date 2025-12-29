@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -33,7 +33,7 @@ class BarBuilderRegistry:
         >>> builder_cls = BarBuilderRegistry.get("custom")
     """
 
-    _builders: Dict[str, Type["BaseBarBuilder"]] = {}
+    _builders: dict[str, type[BaseBarBuilder]] = {}
 
     @classmethod
     def register(cls, name: str):
@@ -46,14 +46,14 @@ class BarBuilderRegistry:
         Returns:
             Decorator function
         """
-        def decorator(builder_cls: Type["BaseBarBuilder"]):
+        def decorator(builder_cls: type[BaseBarBuilder]):
             cls._builders[name.lower()] = builder_cls
             logger.debug(f"Registered bar builder: {name}")
             return builder_cls
         return decorator
 
     @classmethod
-    def get(cls, name: str) -> Type["BaseBarBuilder"]:
+    def get(cls, name: str) -> type[BaseBarBuilder]:
         """
         Get a registered builder class.
 
@@ -75,7 +75,7 @@ class BarBuilderRegistry:
         return cls._builders[name_lower]
 
     @classmethod
-    def list_all(cls) -> List[str]:
+    def list_all(cls) -> list[str]:
         """List all registered bar types."""
         return sorted(cls._builders.keys())
 
@@ -93,7 +93,7 @@ class BarBuilderRegistry:
 class BarMetadata:
     """Metadata about constructed bars."""
     bar_type: str
-    threshold: Optional[float]
+    threshold: float | None
     n_input_bars: int
     n_output_bars: int
     compression_ratio: float
@@ -101,7 +101,7 @@ class BarMetadata:
     max_bars_per_output: int
     avg_bars_per_output: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "bar_type": self.bar_type,
             "threshold": self.threshold,
@@ -142,7 +142,7 @@ class BaseBarBuilder(ABC):
     def build(
         self,
         df: pd.DataFrame,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         include_metadata: bool = True,
     ) -> pd.DataFrame:
         """
@@ -180,7 +180,7 @@ class BaseBarBuilder(ABC):
         if len(df) == 0:
             raise ValueError(f"{self.__class__.__name__}: Input DataFrame is empty")
 
-    def _aggregate_bar(self, group: pd.DataFrame) -> Dict[str, Any]:
+    def _aggregate_bar(self, group: pd.DataFrame) -> dict[str, Any]:
         """
         Aggregate OHLCV data for a single bar.
 
@@ -203,8 +203,8 @@ class BaseBarBuilder(ABC):
         self,
         df_input: pd.DataFrame,
         df_output: pd.DataFrame,
-        bars_per_output: List[int],
-        threshold: Optional[float] = None,
+        bars_per_output: list[int],
+        threshold: float | None = None,
     ) -> BarMetadata:
         """
         Compute metadata about the bar construction.

@@ -7,7 +7,6 @@ Contains:
 
 import logging
 from pathlib import Path
-from typing import Dict
 
 import matplotlib.pyplot as plt
 
@@ -15,7 +14,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-def plot_convergence(results: Dict, output_path: Path) -> None:
+def plot_convergence(results: dict, output_path: Path) -> None:
     """
     Plot GA convergence curve and label distribution.
 
@@ -67,7 +66,7 @@ def plot_convergence(results: Dict, output_path: Path) -> None:
         ax2.grid(True, alpha=0.3, axis="y")
 
         # Add percentage labels on bars
-        for i, (label, pct) in enumerate(zip(labels, sizes)):
+        for i, (label, pct) in enumerate(zip(labels, sizes, strict=False)):
             ax2.text(i, pct + 1, f"{pct:.1f}%", ha="center", va="bottom", fontweight="bold")
 
     plt.tight_layout()

@@ -2,22 +2,21 @@
 Convenience functions for Multi-Timeframe (MTF) Feature Integration.
 """
 
-from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 
+from .constants import DEFAULT_MTF_MODE, MTFMode
 from .generator import MTFFeatureGenerator
-from .constants import MTFMode, DEFAULT_MTF_MODE
 
 
 def add_mtf_features(
     df: pd.DataFrame,
-    feature_metadata: Optional[Dict[str, str]] = None,
+    feature_metadata: dict[str, str] | None = None,
     base_timeframe: str = '5min',
-    mtf_timeframes: Optional[List[str]] = None,
-    mode: Union[MTFMode, str] = DEFAULT_MTF_MODE,
-    include_ohlcv: Optional[bool] = None,
-    include_indicators: Optional[bool] = None
+    mtf_timeframes: list[str] | None = None,
+    mode: MTFMode | str = DEFAULT_MTF_MODE,
+    include_ohlcv: bool | None = None,
+    include_indicators: bool | None = None
 ) -> pd.DataFrame:
     """
     Add MTF features to a DataFrame (convenience function).
@@ -99,7 +98,7 @@ def validate_mtf_alignment(
     df_mtf: pd.DataFrame,
     base_tf: str = '5min',
     mtf_tf: str = '15min'
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
     Validate that MTF alignment is correct.
 
@@ -156,9 +155,9 @@ def validate_mtf_alignment(
 
 def add_mtf_bars(
     df: pd.DataFrame,
-    feature_metadata: Optional[Dict[str, str]] = None,
+    feature_metadata: dict[str, str] | None = None,
     base_timeframe: str = '5min',
-    mtf_timeframes: Optional[List[str]] = None,
+    mtf_timeframes: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     Add only MTF OHLCV bars to a DataFrame.
@@ -198,9 +197,9 @@ def add_mtf_bars(
 
 def add_mtf_indicators(
     df: pd.DataFrame,
-    feature_metadata: Optional[Dict[str, str]] = None,
+    feature_metadata: dict[str, str] | None = None,
     base_timeframe: str = '5min',
-    mtf_timeframes: Optional[List[str]] = None,
+    mtf_timeframes: list[str] | None = None,
 ) -> pd.DataFrame:
     """
     Add only MTF indicators to a DataFrame.

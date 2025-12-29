@@ -6,35 +6,35 @@ and normalization.
 """
 import json
 import logging
-import numpy as np
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
-from .integrity import check_data_integrity
-from .labels import check_label_sanity
-from .features import check_feature_quality
-from .normalization import check_feature_normalization
+from src.phase1.utils.feature_selection import (
+    FeatureSelectionResult,
+    save_feature_selection_report,
+    select_features,
+)
+
 from .data_contract import (
-    DataContract,
-    validate_ohlcv_schema,
-    validate_labels,
-    filter_invalid_labels,
-    get_dataset_fingerprint,
-    validate_feature_lookahead,
-    summarize_label_distribution,
-    REQUIRED_OHLCV,
-    VALID_LABELS,
     INVALID_LABEL_SENTINEL,
     POSITIVE_COLUMNS,
+    REQUIRED_OHLCV,
+    VALID_LABELS,
+    DataContract,
+    filter_invalid_labels,
+    get_dataset_fingerprint,
+    summarize_label_distribution,
+    validate_feature_lookahead,
+    validate_labels,
+    validate_ohlcv_schema,
 )
-from src.phase1.utils.feature_selection import (
-    select_features,
-    save_feature_selection_report,
-    FeatureSelectionResult
-)
+from .features import check_feature_quality
+from .integrity import check_data_integrity
+from .labels import check_label_sanity
+from .normalization import check_feature_normalization
 
 # Re-export for convenience
 __all__ = [
@@ -87,7 +87,7 @@ class DataValidator:
     def __init__(
         self,
         df: pd.DataFrame,
-        horizons: Optional[List[int]] = None,
+        horizons: list[int] | None = None,
         seed: int = 42
     ):
         """
@@ -101,11 +101,11 @@ class DataValidator:
         self.df = df
         self.horizons = horizons if horizons is not None else [1, 5, 20]
         self.seed = seed
-        self.validation_results: Dict = {}
-        self.issues_found: List[str] = []
-        self.warnings_found: List[str] = []
+        self.validation_results: dict = {}
+        self.issues_found: list[str] = []
+        self.warnings_found: list[str] = []
 
-    def check_data_integrity(self) -> Dict:
+    def check_data_integrity(self) -> dict:
         """
         Check for data quality issues.
 
@@ -123,7 +123,7 @@ class DataValidator:
         self.validation_results['data_integrity'] = results
         return results
 
-    def check_label_sanity(self) -> Dict:
+    def check_label_sanity(self) -> dict:
         """
         Check label distributions and quality metrics.
 
@@ -141,7 +141,7 @@ class DataValidator:
         self.validation_results['label_sanity'] = results
         return results
 
-    def check_feature_quality(self, max_features: int = 50) -> Dict:
+    def check_feature_quality(self, max_features: int = 50) -> dict:
         """
         Check feature correlations and basic importance.
 
@@ -166,7 +166,7 @@ class DataValidator:
         self,
         z_threshold: float = 3.0,
         extreme_threshold: float = 5.0
-    ) -> Dict:
+    ) -> dict:
         """
         Check feature normalization, distributions, and outliers.
 
@@ -237,7 +237,7 @@ class DataValidator:
 
         return result
 
-    def generate_summary(self) -> Dict:
+    def generate_summary(self) -> dict:
         """
         Generate validation summary.
 
@@ -287,14 +287,14 @@ class DataValidator:
 
 def validate_data(
     data_path: Path,
-    output_path: Optional[Path] = None,
-    horizons: List[int] = [1, 5, 20],
+    output_path: Path | None = None,
+    horizons: list[int] = [1, 5, 20],
     run_feature_selection: bool = True,
     correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
-    feature_selection_output_path: Optional[Path] = None,
+    feature_selection_output_path: Path | None = None,
     seed: int = 42
-) -> Tuple[Dict, Optional[FeatureSelectionResult]]:
+) -> tuple[dict, FeatureSelectionResult | None]:
     """
     Main validation function.
 

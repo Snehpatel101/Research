@@ -7,8 +7,7 @@ enabling Phase 1 to prepare appropriate datasets for Phase 2 training.
 The model factory architecture requires Phase 1 to produce standardized
 datasets that satisfy the requirements of all target model types.
 """
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from dataclasses import dataclass
 from enum import Enum
 
 
@@ -58,7 +57,7 @@ class ModelDataRequirements:
     scaler_type: ScalerType = ScalerType.NONE
     requires_sequences: bool = False
     sequence_length: int = 60
-    max_features: Optional[int] = None
+    max_features: int | None = None
     supports_categorical: bool = False
     supports_missing: bool = False
     description: str = ""
@@ -70,7 +69,7 @@ class ModelDataRequirements:
 # Define data preparation needs for each supported model type.
 # This allows Phase 1 to prepare appropriate datasets for Phase 2 training.
 
-MODEL_DATA_REQUIREMENTS: Dict[str, ModelDataRequirements] = {
+MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
     # -------------------------------------------------------------------------
     # BOOSTING MODELS (tree-based gradient boosting)
     # -------------------------------------------------------------------------
@@ -261,12 +260,12 @@ class EnsembleConfig:
     """Configuration for an ensemble of models."""
     name: str
     description: str
-    base_models: List[str]
+    base_models: list[str]
     meta_learner: str = "logistic"
     stacking_method: str = "soft"  # 'soft' (probabilities) or 'hard' (predictions)
 
 
-ENSEMBLE_CONFIGS: Dict[str, EnsembleConfig] = {
+ENSEMBLE_CONFIGS: dict[str, EnsembleConfig] = {
     "boosting_ensemble": EnsembleConfig(
         name="boosting_ensemble",
         description="Ensemble of tree-based boosting models",
@@ -361,7 +360,7 @@ def get_ensemble_config(ensemble_name: str) -> EnsembleConfig:
     return ENSEMBLE_CONFIGS[ensemble_name]
 
 
-def get_models_by_family(family: ModelFamily) -> List[str]:
+def get_models_by_family(family: ModelFamily) -> list[str]:
     """
     Get all model names belonging to a specific family.
 
@@ -381,7 +380,7 @@ def get_models_by_family(family: ModelFamily) -> List[str]:
     ]
 
 
-def get_combined_requirements(model_names: List[str]) -> Dict:
+def get_combined_requirements(model_names: list[str]) -> dict:
     """
     Get combined data requirements for multiple models.
 
@@ -425,7 +424,7 @@ def get_combined_requirements(model_names: List[str]) -> Dict:
     }
 
 
-def validate_model_config(model_names: List[str]) -> List[str]:
+def validate_model_config(model_names: list[str]) -> list[str]:
     """
     Validate a list of model names.
 
@@ -454,12 +453,12 @@ def validate_model_config(model_names: List[str]) -> List[str]:
     return errors
 
 
-def get_all_model_names() -> List[str]:
+def get_all_model_names() -> list[str]:
     """Get list of all supported model names."""
     return sorted(MODEL_DATA_REQUIREMENTS.keys())
 
 
-def get_all_ensemble_names() -> List[str]:
+def get_all_ensemble_names() -> list[str]:
     """Get list of all pre-defined ensemble names."""
     return sorted(ENSEMBLE_CONFIGS.keys())
 

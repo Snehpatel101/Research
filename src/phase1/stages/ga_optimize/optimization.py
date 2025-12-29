@@ -9,18 +9,17 @@ Contains:
 
 import json
 import logging
-import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-import numpy as np
 import pandas as pd
 
-from src.phase1.stages.labeling import triple_barrier_numba
 from src.phase1.config import TRANSACTION_COSTS
 
-from .optuna_optimizer import run_optuna_optimization, ConvergenceRecord
-from .operators import get_contiguous_subset
+from .optuna_optimizer import (
+    run_optuna_optimization,
+    run_optuna_optimization_safe,
+)
 from .plotting import plot_convergence
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ def run_ga_optimization(
     subset_fraction: float = 0.3,
     atr_column: str = "atr_14",
     seed: int = 42,
-) -> Tuple[Dict[str, Any], Any]:
+) -> tuple[dict[str, Any], Any]:
     """
     Run optimization to find optimal labeling parameters.
 
@@ -96,15 +95,95 @@ def run_ga_optimization(
     return results, convergence_record
 
 
+def run_ga_optimization_safe(
+    df: pd.DataFrame,
+    horizon: int,
+    symbol: str = "MES",
+    train_ratio: float = 0.70,
+    population_size: int = 50,
+    generations: int = 30,
+    crossover_prob: float = 0.7,
+    mutation_prob: float = 0.2,
+    tournament_size: int = 3,
+    subset_fraction: float = 0.3,
+    atr_column: str = "atr_14",
+    seed: int = 42,
+) -> tuple[dict[str, Any], Any]:
+    """
+    Run SAFE optimization that prevents test data leakage.
+
+    This is the SAFE version of run_ga_optimization that ensures no data from the
+    future test set influences the optimized barrier parameters.
+
+    CRITICAL: Use this function instead of run_ga_optimization when you want to
+    ensure proper train/test separation for unbiased out-of-sample evaluation.
+
+    Parameters:
+    -----------
+    df : DataFrame with OHLCV and ATR (must be time-ordered)
+    horizon : horizon to optimize for
+    symbol : 'MES' or 'MGC' for symbol-specific optimization
+    train_ratio : fraction of data to use for optimization (default: 0.70)
+                  This MUST match the train ratio used in the splits stage.
+    population_size : (deprecated) GA population size - mapped to n_trials
+    generations : (deprecated) number of generations - mapped to n_trials
+    crossover_prob : (deprecated) ignored
+    mutation_prob : (deprecated) ignored
+    tournament_size : (deprecated) ignored
+    subset_fraction : fraction of TRAINING data to use (for speed)
+    atr_column : ATR column name
+    seed : random seed for reproducibility (default: 42)
+
+    Returns:
+    --------
+    results : dict with best parameters and statistics
+    convergence_record : ConvergenceRecord (replaces DEAP logbook)
+
+    Example:
+    --------
+    >>> # SAFE: Optimize on training data only (70%)
+    >>> results, record = run_ga_optimization_safe(
+    ...     df=full_df,
+    ...     horizon=20,
+    ...     train_ratio=0.70,  # Must match splits stage
+    ...     symbol='MES'
+    ... )
+    """
+    # Map old GA parameters to Optuna trials
+    n_trials = max(50, min(population_size * 2, 150))
+
+    logger.info(f"  Using SAFE Optuna TPE optimizer (n_trials={n_trials})")
+    logger.info(f"  SAFE MODE: Only using first {train_ratio*100:.0f}% of data (training portion)")
+
+    results, convergence_record = run_optuna_optimization_safe(
+        df=df,
+        horizon=horizon,
+        symbol=symbol,
+        train_ratio=train_ratio,
+        n_trials=n_trials,
+        subset_fraction=subset_fraction,
+        atr_column=atr_column,
+        seed=seed,
+        show_progress=True,
+        n_startup_trials=10,
+    )
+
+    # Add backward-compatible fields
+    results["population_size"] = population_size
+    results["generations"] = generations
+
+    return results, convergence_record
+
+
 def process_symbol_ga(
     symbol: str,
-    horizons: Optional[List[int]] = None,
+    horizons: list[int] | None = None,
     population_size: int = 50,
     generations: int = 30,
     seed: int = 42,
-    labels_dir: Optional[Path] = None,
-    output_dir: Optional[Path] = None,
-) -> Dict[int, Dict]:
+    labels_dir: Path | None = None,
+    output_dir: Path | None = None,
+) -> dict[int, dict]:
     """
     Run optimization for all horizons for a symbol.
 
@@ -247,7 +326,7 @@ def main():
     logger.info("STAGE 5: BARRIER OPTIMIZATION (OPTUNA TPE)")
     logger.info("=" * 70)
     logger.info(f"Horizons: {horizons} (configurable via config.HORIZONS)")
-    logger.info(f"Optimizer: Optuna TPE (replaces DEAP GA)")
+    logger.info("Optimizer: Optuna TPE (replaces DEAP GA)")
     logger.info(f"Random seed: {RANDOM_SEED}")
     logger.info("")
     logger.info("OPTUNA TPE ADVANTAGES:")

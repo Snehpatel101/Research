@@ -8,9 +8,8 @@ and the common enumerations used across the regime detection system.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Any, Optional
+from typing import Any
 
-import numpy as np
 import pandas as pd
 
 
@@ -54,7 +53,7 @@ class RegimeConfig:
         column_name: Output column name in DataFrame
     """
     detector_type: RegimeType
-    params: Dict[str, Any]
+    params: dict[str, Any]
     column_name: str
 
 
@@ -133,7 +132,7 @@ class RegimeDetector(ABC):
                 f"Available columns: {list(df.columns)}"
             )
 
-    def get_regime_summary(self, regimes: pd.Series) -> Dict[str, Any]:
+    def get_regime_summary(self, regimes: pd.Series) -> dict[str, Any]:
         """Generate summary statistics for detected regimes.
 
         Args:

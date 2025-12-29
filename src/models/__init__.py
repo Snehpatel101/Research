@@ -42,73 +42,71 @@ Architecture:
 """
 from __future__ import annotations
 
+# Auto-import model implementations to trigger registration
+# These imports are necessary to register models with the ModelRegistry
+from . import (
+    boosting,  # noqa: F401 - XGBoost, LightGBM, CatBoost
+    classical,  # noqa: F401 - RandomForest, Logistic, SVM
+    ensemble,  # noqa: F401 - VotingEnsemble, StackingEnsemble, BlendingEnsemble
+    neural,  # noqa: F401 - LSTM, GRU, TCN, Transformer
+)
+
 # Core classes
 from .base import (
     BaseModel,
     PredictionOutput,
     TrainingMetrics,
 )
-
-from .registry import (
-    ModelRegistry,
-    register,
-)
-
 from .config import (
-    TrainerConfig,
     CONFIG_DIR,
-    load_yaml_config,
-    load_model_config,
+    TrainerConfig,
     build_config,
     create_trainer_config,
+    load_model_config,
+    load_yaml_config,
     merge_configs,
-    validate_config,
     save_config,
+    validate_config,
 )
-
-from .trainer import (
-    Trainer,
-    train_model,
-    evaluate_model,
-    compute_classification_metrics,
-)
-
 from .device import (
-    # Environment detection
-    is_colab,
-    is_kaggle,
-    is_notebook,
-    get_environment_info,
-    setup_colab,
+    GPU_PROFILES,
+    # Device manager
+    DeviceManager,
     # GPU detection
     GPUInfo,
-    GPU_PROFILES,
     detect_cuda_available,
-    get_gpu_count,
-    get_gpu_info,
-    get_best_gpu,
-    get_device,
     # Memory estimation
     estimate_memory_requirements,
-    get_optimal_batch_size,
     # Mixed precision
     get_amp_dtype,
+    get_best_gpu,
+    get_device,
+    get_environment_info,
+    get_gpu_count,
+    get_gpu_info,
     get_mixed_precision_config,
+    get_optimal_batch_size,
     # Optimal settings
     get_optimal_gpu_settings,
     # Convenience
     get_training_device_config,
+    # Environment detection
+    is_colab,
+    is_kaggle,
+    is_notebook,
     print_gpu_info,
-    # Device manager
-    DeviceManager,
+    setup_colab,
 )
-
-# Auto-import model implementations to trigger registration
-# These imports are necessary to register models with the ModelRegistry
-from . import boosting  # XGBoost, LightGBM, CatBoost
-from . import neural    # LSTM, GRU, TCN, Transformer
-from . import classical  # RandomForest, Logistic, SVM
-from . import ensemble  # VotingEnsemble, StackingEnsemble, BlendingEnsemble
+from .registry import (
+    ModelRegistry,
+    register,
+)
+from .trainer import (
+    Trainer,
+    compute_classification_metrics,
+    evaluate_model,
+    train_model,
+)
 
 # Version
 __version__ = "0.1.0"

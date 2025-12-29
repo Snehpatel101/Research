@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def is_notebook() -> bool:
         return False
 
 
-def get_environment_info() -> Dict[str, Any]:
+def get_environment_info() -> dict[str, Any]:
     """Get information about the current environment."""
     return {
         "is_colab": is_colab(),
@@ -56,7 +56,7 @@ def get_environment_info() -> Dict[str, Any]:
     }
 
 
-def setup_colab(mount_drive: bool = False, install_packages: Optional[list] = None) -> Dict[str, Any]:
+def setup_colab(mount_drive: bool = False, install_packages: list | None = None) -> dict[str, Any]:
     """Setup Google Colab environment for ML training."""
     results = {"is_colab": is_colab(), "drive_mounted": False, "packages_installed": [], "gpu_info": None}
 
@@ -102,7 +102,7 @@ class GPUInfo:
     name: str
     total_memory_gb: float
     free_memory_gb: float
-    compute_capability: Tuple[int, int]
+    compute_capability: tuple[int, int]
     supports_fp16: bool
     supports_bf16: bool
 
@@ -163,7 +163,7 @@ def get_gpu_count() -> int:
         return 0
 
 
-def get_gpu_info(device_index: int = 0) -> Optional[GPUInfo]:
+def get_gpu_info(device_index: int = 0) -> GPUInfo | None:
     """Get detailed information about a GPU."""
     if not detect_cuda_available():
         return None
@@ -186,7 +186,7 @@ def get_gpu_info(device_index: int = 0) -> Optional[GPUInfo]:
         return None
 
 
-def get_best_gpu() -> Optional[GPUInfo]:
+def get_best_gpu() -> GPUInfo | None:
     """Get the best available GPU (most free memory)."""
     n_gpus = get_gpu_count()
     if n_gpus == 0:
@@ -213,7 +213,7 @@ def get_device(prefer_gpu: bool = True) -> str:
 # =============================================================================
 
 
-def get_amp_dtype(gpu_info: Optional[GPUInfo] = None):
+def get_amp_dtype(gpu_info: GPUInfo | None = None):
     """Get appropriate AMP dtype: bfloat16 for Ampere+, float16 for Volta/Turing, float32 otherwise."""
     import torch
     if gpu_info is None:
@@ -227,7 +227,7 @@ def get_amp_dtype(gpu_info: Optional[GPUInfo] = None):
     return torch.float32
 
 
-def get_mixed_precision_config(gpu_info: Optional[GPUInfo] = None) -> Dict[str, Any]:
+def get_mixed_precision_config(gpu_info: GPUInfo | None = None) -> dict[str, Any]:
     """Get mixed precision configuration based on GPU capabilities."""
     if gpu_info is None:
         gpu_info = get_best_gpu()
@@ -255,7 +255,7 @@ def get_mixed_precision_config(gpu_info: Optional[GPUInfo] = None) -> Dict[str, 
 # =============================================================================
 
 
-def get_optimal_gpu_settings(model_family: str, gpu_info: Optional[GPUInfo] = None) -> Dict[str, Any]:
+def get_optimal_gpu_settings(model_family: str, gpu_info: GPUInfo | None = None) -> dict[str, Any]:
     """Get optimal training settings based on detected GPU capabilities."""
     if gpu_info is None:
         gpu_info = get_best_gpu()
@@ -303,7 +303,7 @@ def get_optimal_gpu_settings(model_family: str, gpu_info: Optional[GPUInfo] = No
 def estimate_memory_requirements(
     model_family: str, batch_size: int, sequence_length: int, n_features: int,
     hidden_size: int = 128, num_layers: int = 2,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Estimate GPU memory requirements for training."""
     family = model_family.lower()
     if family == "boosting":
@@ -332,7 +332,7 @@ def estimate_memory_requirements(
 
 
 def get_optimal_batch_size(
-    model_family: str, gpu_memory_gb: Optional[float] = None, sequence_length: int = 60,
+    model_family: str, gpu_memory_gb: float | None = None, sequence_length: int = 60,
     n_features: int = 80, hidden_size: int = 128, target_utilization: float = 0.8,
 ) -> int:
     """Calculate optimal batch size for available GPU memory."""
@@ -375,7 +375,7 @@ def print_gpu_info() -> None:
             )
 
 
-def get_training_device_config(model_family: str, prefer_gpu: bool = True) -> Dict[str, Any]:
+def get_training_device_config(model_family: str, prefer_gpu: bool = True) -> dict[str, Any]:
     """Get complete device configuration for training."""
     device = get_device(prefer_gpu)
     gpu_info = get_best_gpu() if "cuda" in device else None
@@ -413,7 +413,7 @@ class DeviceManager:
         )
 
     @property
-    def device(self) -> "torch.device":
+    def device(self) -> torch.device:
         return self._device
 
     @property
@@ -421,7 +421,7 @@ class DeviceManager:
         return self._device_str
 
     @property
-    def gpu_info(self) -> Optional[GPUInfo]:
+    def gpu_info(self) -> GPUInfo | None:
         return self._gpu_info
 
     @property
@@ -433,11 +433,11 @@ class DeviceManager:
         return self._mp_config["enabled"]
 
     @property
-    def scaler(self) -> Optional["torch.amp.GradScaler"]:
+    def scaler(self) -> torch.amp.GradScaler | None:
         return self._scaler
 
     @property
-    def mixed_precision_config(self) -> Dict[str, Any]:
+    def mixed_precision_config(self) -> dict[str, Any]:
         return self._mp_config.copy()
 
     def autocast(self):
@@ -447,10 +447,10 @@ class DeviceManager:
             return torch.amp.autocast("cuda", dtype=self._amp_dtype)
         return torch.amp.autocast("cpu", enabled=False)
 
-    def to_device(self, tensor: "torch.Tensor") -> "torch.Tensor":
+    def to_device(self, tensor: torch.Tensor) -> torch.Tensor:
         return tensor.to(self._device)
 
-    def get_optimal_settings(self, model_family: str) -> Dict[str, Any]:
+    def get_optimal_settings(self, model_family: str) -> dict[str, Any]:
         return get_optimal_gpu_settings(model_family, self._gpu_info)
 
     def __repr__(self) -> str:

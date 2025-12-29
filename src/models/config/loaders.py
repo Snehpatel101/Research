@@ -3,21 +3,21 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import yaml
 
-from .paths import CONFIG_DIR, TRAINING_CONFIG_PATH, CV_CONFIG_PATH
+from .environment import Environment, detect_environment
 from .exceptions import ConfigError
-from .environment import detect_environment, Environment
+from .paths import CONFIG_DIR, CV_CONFIG_PATH, TRAINING_CONFIG_PATH
 
 logger = logging.getLogger(__name__)
 
 
 def load_yaml_config(
-    path: Union[str, Path],
+    path: str | Path,
     explicit: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Load configuration from a YAML file.
 
@@ -45,7 +45,7 @@ def load_yaml_config(
         raise FileNotFoundError(f"Config file not found: {path}")
 
     try:
-        with open(path, "r") as f:
+        with open(path) as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         error_msg = (
@@ -67,10 +67,10 @@ def load_yaml_config(
 
 def load_model_config(
     model_name: str,
-    config_dir: Optional[Path] = None,
+    config_dir: Path | None = None,
     flatten: bool = True,
     explicit: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Load model-specific configuration from YAML.
 
@@ -121,7 +121,7 @@ def load_model_config(
     return flatten_model_config(raw_config)
 
 
-def flatten_model_config(config: Dict[str, Any]) -> Dict[str, Any]:
+def flatten_model_config(config: dict[str, Any]) -> dict[str, Any]:
     """Flatten structured config (model/defaults/training/device sections) to flat dict."""
     result = {}
 
@@ -164,8 +164,8 @@ def flatten_model_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 def find_model_config(
     model_name: str,
-    config_dir: Optional[Path] = None,
-) -> Optional[Path]:
+    config_dir: Path | None = None,
+) -> Path | None:
     """Find model config file if it exists."""
     if config_dir is None:
         config_dir = CONFIG_DIR
@@ -174,7 +174,7 @@ def find_model_config(
     return config_path if config_path.exists() else None
 
 
-def load_training_config() -> Dict[str, Any]:
+def load_training_config() -> dict[str, Any]:
     """Load global training configuration."""
     if TRAINING_CONFIG_PATH.exists():
         return load_yaml_config(TRAINING_CONFIG_PATH)
@@ -182,7 +182,7 @@ def load_training_config() -> Dict[str, Any]:
     return {}
 
 
-def load_cv_config() -> Dict[str, Any]:
+def load_cv_config() -> dict[str, Any]:
     """Load cross-validation configuration."""
     if CV_CONFIG_PATH.exists():
         return load_yaml_config(CV_CONFIG_PATH)
@@ -191,8 +191,8 @@ def load_cv_config() -> Dict[str, Any]:
 
 
 def get_environment_overrides(
-    training_config: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    training_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Get environment-specific configuration overrides."""
     if training_config is None:
         training_config = load_training_config()

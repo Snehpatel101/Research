@@ -12,8 +12,7 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -106,11 +105,11 @@ class LSTMModel(BaseRNNModel):
         >>> predictions = model.predict(X_test)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
         logger.debug(f"Initialized LSTMModel with config: {self._config}")
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         """Return default LSTM hyperparameters."""
         defaults = super().get_default_config()
         # LSTM-specific defaults (can override base)
@@ -137,7 +136,7 @@ class LSTMModel(BaseRNNModel):
         """Return model type string."""
         return "lstm"
 
-    def get_hidden_states(self, X: "np.ndarray") -> Optional["np.ndarray"]:
+    def get_hidden_states(self, X: np.ndarray) -> np.ndarray | None:
         """
         Return hidden states from the LSTM for interpretability.
 
@@ -148,7 +147,6 @@ class LSTMModel(BaseRNNModel):
             Hidden states array, shape (n_samples, seq_len, hidden_size * num_directions)
             or None if model is not fitted
         """
-        import numpy as np
 
         if not self._is_fitted:
             return None

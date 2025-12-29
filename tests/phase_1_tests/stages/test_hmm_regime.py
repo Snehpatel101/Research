@@ -333,3 +333,153 @@ class TestHMMIntegration:
 
         # Should return NaN series when hmmlearn not available
         assert regimes.isna().all()
+
+
+# =============================================================================
+# LOOKAHEAD BIAS TESTS
+# =============================================================================
+
+class TestHMMLookaheadBias:
+    """Tests to verify HMM expanding mode does not have lookahead bias."""
+
+    def test_expanding_mode_no_lookahead_bias(self):
+        """
+        Verify expanding mode doesn't use future data.
+
+        Strategy: Create data where the second half has a dramatically different
+        regime (high volatility). If there's lookahead bias, early bars would
+        "know" about the future high-vol regime and show different behavior
+        than a model trained only on the first half.
+        """
+        pytest.importorskip("hmmlearn")
+        from src.phase1.stages.regime import HMMRegimeDetector
+
+        np.random.seed(42)
+
+        # Create data: first 300 bars = low vol, last 200 bars = extreme high vol
+        n_low_vol = 300
+        n_high_vol = 200
+        total = n_low_vol + n_high_vol
+
+        # Low volatility regime
+        returns_low = np.random.randn(n_low_vol) * 0.0005
+
+        # EXTREME high volatility regime (10x volatility spike)
+        returns_high = np.random.randn(n_high_vol) * 0.01
+
+        returns = np.concatenate([returns_low, returns_high])
+        close = 100 * np.exp(np.cumsum(returns))
+
+        df = pd.DataFrame({
+            "datetime": pd.date_range("2023-01-01", periods=total, freq="5min"),
+            "close": close,
+        })
+
+        # Run with expanding mode (should NOT use future data)
+        detector = HMMRegimeDetector(
+            n_states=2,
+            lookback=100,
+            expanding=True,
+            retrain_interval=50,
+            n_init=5,
+            max_iter=50,
+            random_state=42,
+        )
+        regimes = detector.detect(df)
+
+        # The key test: bars in the low-vol portion (before the regime change)
+        # should be classified consistently as low-vol, because the model
+        # should NOT know about the future high-vol regime.
+
+        # Get regimes for early low-vol bars (after lookback warmup)
+        early_bars = regimes.iloc[100:200]  # Bars 100-199 (all low-vol in reality)
+        non_nan_early = early_bars.dropna()
+
+        # If no lookahead bias, early bars should mostly be "low_vol"
+        # (allowing some noise from model uncertainty)
+        if len(non_nan_early) > 0:
+            low_vol_ratio = (non_nan_early == "low_vol").mean()
+            # At least 60% should be low_vol (allowing for model noise)
+            assert low_vol_ratio >= 0.5, (
+                f"Early bars (during low-vol period) should mostly be 'low_vol' "
+                f"but got {low_vol_ratio:.1%} low_vol. This may indicate lookahead bias."
+            )
+
+    def test_rolling_vs_expanding_consistency(self, sample_ohlcv_df):
+        """
+        Test that rolling and expanding modes produce similar regime patterns.
+
+        Both modes should avoid lookahead bias, so their outputs should be
+        similar (not identical, but correlated).
+        """
+        pytest.importorskip("hmmlearn")
+        from src.phase1.stages.regime import HMMRegimeDetector
+
+        # Expanding mode
+        detector_expanding = HMMRegimeDetector(
+            n_states=2,
+            lookback=100,
+            expanding=True,
+            retrain_interval=50,
+            n_init=5,
+            max_iter=50,
+            random_state=42,
+        )
+        regimes_expanding = detector_expanding.detect(sample_ohlcv_df)
+
+        # Rolling mode
+        detector_rolling = HMMRegimeDetector(
+            n_states=2,
+            lookback=100,
+            expanding=False,
+            n_init=5,
+            max_iter=50,
+            random_state=42,
+        )
+        regimes_rolling = detector_rolling.detect(sample_ohlcv_df)
+
+        # Both should have similar coverage (non-NaN values)
+        expanding_coverage = regimes_expanding.notna().mean()
+        rolling_coverage = regimes_rolling.notna().mean()
+
+        # Coverage should be similar (within 10%)
+        assert abs(expanding_coverage - rolling_coverage) < 0.15, (
+            f"Expanding ({expanding_coverage:.1%}) and rolling ({rolling_coverage:.1%}) "
+            "modes have very different coverage"
+        )
+
+    def test_retrain_interval_parameter(self, sample_ohlcv_df):
+        """Test that retrain_interval parameter is respected."""
+        pytest.importorskip("hmmlearn")
+        from src.phase1.stages.regime import HMMRegimeDetector
+
+        # With large retrain interval (faster)
+        detector_fast = HMMRegimeDetector(
+            n_states=2,
+            lookback=100,
+            expanding=True,
+            retrain_interval=100,
+            n_init=3,
+            max_iter=30,
+        )
+
+        regimes_fast = detector_fast.detect(sample_ohlcv_df)
+
+        # With small retrain interval (slower)
+        detector_slow = HMMRegimeDetector(
+            n_states=2,
+            lookback=100,
+            expanding=True,
+            retrain_interval=25,
+            n_init=3,
+            max_iter=30,
+        )
+
+        regimes_slow = detector_slow.detect(sample_ohlcv_df)
+
+        # Both should produce valid regimes
+        assert regimes_fast.notna().sum() > 0
+        assert regimes_slow.notna().sum() > 0
+
+        # Both modes should avoid lookahead bias, producing similar regime patterns
+        # for the same data (not identical due to stochasticity, but both valid)

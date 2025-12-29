@@ -11,8 +11,9 @@ Public API:
 
 import logging
 import random
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import optuna
@@ -20,7 +21,6 @@ import pandas as pd
 from optuna.samplers import TPESampler
 
 from src.phase1.stages.labeling import triple_barrier_numba
-from src.phase1.config import TRANSACTION_COSTS
 
 from .fitness import calculate_fitness
 
@@ -36,14 +36,14 @@ MAX_BARS_MIN, MAX_BARS_MAX = 2.0, 3.0
 class ConvergenceRecord:
     """Track convergence across trials for compatibility with plotting."""
 
-    trials: List[Dict[str, Any]] = field(default_factory=list)
+    trials: list[dict[str, Any]] = field(default_factory=list)
 
     def add_trial(
         self,
         trial_number: int,
         value: float,
         best_value: float,
-        params: Dict[str, float],
+        params: dict[str, float],
     ) -> None:
         """Add a trial record."""
         self.trials.append({
@@ -53,7 +53,7 @@ class ConvergenceRecord:
             "params": params,
         })
 
-    def to_convergence_list(self) -> List[Dict[str, Any]]:
+    def to_convergence_list(self) -> list[dict[str, Any]]:
         """
         Convert to the format expected by plotting.plot_convergence.
 
@@ -109,7 +109,7 @@ class OptunaConvergenceCallback:
             )
 
 
-def get_seeded_trials(symbol: str) -> List[Dict[str, float]]:
+def get_seeded_trials(symbol: str) -> list[dict[str, float]]:
     """
     Get symbol-specific seeded starting points for Optuna.
 
@@ -252,7 +252,7 @@ def run_optuna_optimization(
     n_startup_trials: int = 10,
     regime: str = "low_vol",
     include_slippage: bool = True,
-) -> Tuple[Dict[str, Any], ConvergenceRecord]:
+) -> tuple[dict[str, Any], ConvergenceRecord]:
     """
     Run Optuna TPE optimization to find optimal labeling parameters.
 
@@ -453,3 +453,117 @@ def run_optuna_optimization(
     }
 
     return results, callback.record
+
+
+def run_optuna_optimization_safe(
+    df: pd.DataFrame,
+    horizon: int,
+    symbol: str = "MES",
+    train_ratio: float = 0.70,
+    n_trials: int = 100,
+    subset_fraction: float = 0.3,
+    atr_column: str = "atr_14",
+    seed: int = 42,
+    show_progress: bool = True,
+    n_startup_trials: int = 10,
+    regime: str = "low_vol",
+    include_slippage: bool = True,
+) -> tuple[dict[str, Any], ConvergenceRecord]:
+    """
+    Run Optuna TPE optimization using ONLY training data portion to prevent test data leakage.
+
+    This is the SAFE version of run_optuna_optimization that ensures no data from the
+    future test set influences the optimized barrier parameters. This prevents the
+    critical data leakage issue where parameters are tuned on data that will later
+    be used for testing.
+
+    IMPORTANT: This function enforces temporal integrity by only using the first
+    `train_ratio` portion of the data for optimization. The remaining data is
+    reserved for validation/test and is NEVER seen during parameter optimization.
+
+    Parameters:
+    -----------
+    df : DataFrame with OHLCV and ATR (time-ordered)
+    horizon : Horizon to optimize for
+    symbol : 'MES' or 'MGC' for symbol-specific optimization
+    train_ratio : Fraction of data to use for optimization (default: 0.70)
+                  This MUST match the train_ratio used in the splits stage.
+    n_trials : Number of optimization trials (default: 100)
+    subset_fraction : Fraction of TRAINING data to use for speed (default: 0.3)
+    atr_column : ATR column name (default: 'atr_14')
+    seed : Random seed for reproducibility (default: 42)
+    show_progress : Show progress bar (default: True)
+    n_startup_trials : Random trials before TPE kicks in (default: 10)
+    regime : Volatility regime (default: 'low_vol')
+    include_slippage : Include slippage in cost calculation (default: True)
+
+    Returns:
+    --------
+    results : dict with best parameters and statistics
+    convergence_record : ConvergenceRecord for plotting
+
+    Example:
+    --------
+    >>> # Use only first 70% of data (same as train split)
+    >>> results, record = run_optuna_optimization_safe(
+    ...     df=full_df,
+    ...     horizon=20,
+    ...     train_ratio=0.70,  # Must match splits stage
+    ...     symbol='MES'
+    ... )
+    """
+    n_total = len(df)
+    train_end = int(n_total * train_ratio)
+
+    # Enforce minimum training size
+    if train_end < 500:
+        raise ValueError(
+            f"Training portion too small: {train_end} samples. "
+            f"Need at least 500 samples for meaningful optimization."
+        )
+
+    # Extract ONLY training portion (first train_ratio% of data)
+    df_train = df.iloc[:train_end].copy()
+
+    logger.info("")
+    logger.info("=" * 60)
+    logger.info("SAFE MODE: Test Data Leakage Prevention ENABLED")
+    logger.info("=" * 60)
+    logger.info(f"  Total dataset size: {n_total:,} samples")
+    logger.info(f"  Training portion: {train_end:,} samples ({train_ratio*100:.0f}%)")
+    logger.info(f"  Reserved for test: {n_total - train_end:,} samples ({(1-train_ratio)*100:.0f}%)")
+    logger.info("")
+    logger.info("  Optimization will ONLY use training portion.")
+    logger.info(f"  Test data (last {(1 - train_ratio) * 100:.0f}%) is NEVER seen during parameter tuning.")
+    logger.info("=" * 60)
+
+    # Run optimization on training data only
+    results, convergence = run_optuna_optimization(
+        df=df_train,  # ONLY training data
+        horizon=horizon,
+        symbol=symbol,
+        n_trials=n_trials,
+        subset_fraction=subset_fraction,
+        atr_column=atr_column,
+        seed=seed,
+        show_progress=show_progress,
+        n_startup_trials=n_startup_trials,
+        regime=regime,
+        include_slippage=include_slippage,
+    )
+
+    # Mark results as safe-mode
+    results["safe_mode"] = True
+    results["train_ratio_used"] = train_ratio
+    results["train_samples"] = train_end
+    results["total_samples"] = n_total
+
+    # Update validation section to clarify it's train-only
+    results["validation"]["note"] = "Statistics computed on training portion only (safe mode)"
+
+    logger.info("")
+    logger.info("SAFE MODE optimization complete.")
+    logger.info(f"  Parameters were tuned on {train_end:,} training samples only.")
+    logger.info(f"  Test data ({n_total - train_end:,} samples) was NOT used.")
+
+    return results, convergence

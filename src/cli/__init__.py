@@ -5,16 +5,16 @@ This module provides the main CLI application and aggregates commands from submo
 """
 import typer
 
-from .utils import console, show_error, show_success, show_info, show_warning
-from .run_commands import run_command, rerun_command, models_command
+from .preset_commands import presets_command
+from .run_commands import models_command, rerun_command, run_command
 from .status_commands import (
+    clean_command,
+    compare_command,
+    list_runs_command,
     status_command,
     validate_command,
-    list_runs_command,
-    compare_command,
-    clean_command,
 )
-from .preset_commands import presets_command
+from .utils import console, show_error, show_info, show_success, show_warning
 
 # Create main app
 app = typer.Typer(

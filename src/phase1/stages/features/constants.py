@@ -15,7 +15,6 @@ Example:
 """
 
 import math
-from typing import Dict
 
 import numpy as np
 
@@ -33,7 +32,7 @@ TRADING_HOURS_EXTENDED = 23.0
 TRADING_DAYS_PER_YEAR = 252
 
 # Timeframe to minutes mapping
-TIMEFRAME_MINUTES: Dict[str, int] = {
+TIMEFRAME_MINUTES: dict[str, int] = {
     '1min': 1,
     '5min': 5,
     '10min': 10,
@@ -138,13 +137,13 @@ def get_annualization_factor(timeframe: str, extended_hours: bool = False) -> fl
 # =============================================================================
 
 # Bars per day for common timeframes (regular 6.5-hour session)
-BARS_PER_DAY_MAP: Dict[str, float] = {
+BARS_PER_DAY_MAP: dict[str, float] = {
     tf: get_bars_per_day(tf, extended_hours=False)
     for tf in TIMEFRAME_MINUTES.keys()
 }
 
 # Annualization factors for common timeframes (regular session)
-ANNUALIZATION_FACTOR_MAP: Dict[str, float] = {
+ANNUALIZATION_FACTOR_MAP: dict[str, float] = {
     tf: get_annualization_factor(tf, extended_hours=False)
     for tf in TIMEFRAME_MINUTES.keys()
 }

@@ -4,7 +4,6 @@ Label column definitions and templates.
 Centralizes all label-related column naming conventions and templates
 used across the pipeline stages for consistency.
 """
-from typing import Dict, List
 
 # =============================================================================
 # LABEL COLUMN TEMPLATES
@@ -12,13 +11,13 @@ from typing import Dict, List
 # These templates use Python .format() syntax with {h} for horizon values.
 
 # Required label columns that must exist for each horizon
-REQUIRED_LABEL_TEMPLATES: List[str] = [
+REQUIRED_LABEL_TEMPLATES: list[str] = [
     "label_h{h}",           # Primary label: -1 (short), 0 (neutral), 1 (long)
     "sample_weight_h{h}",   # Quality-based sample weights
 ]
 
 # Optional label columns that may exist for each horizon
-OPTIONAL_LABEL_TEMPLATES: List[str] = [
+OPTIONAL_LABEL_TEMPLATES: list[str] = [
     "quality_h{h}",          # Label quality score (0-1)
     "bars_to_hit_h{h}",      # Bars until barrier hit
     "label_end_time_h{h}",   # Datetime when label outcome is known (for purging)
@@ -33,14 +32,14 @@ OPTIONAL_LABEL_TEMPLATES: List[str] = [
 ]
 
 # All label templates combined
-ALL_LABEL_TEMPLATES: List[str] = REQUIRED_LABEL_TEMPLATES + OPTIONAL_LABEL_TEMPLATES
+ALL_LABEL_TEMPLATES: list[str] = REQUIRED_LABEL_TEMPLATES + OPTIONAL_LABEL_TEMPLATES
 
 
 # =============================================================================
 # LABEL COLUMN RESOLUTION
 # =============================================================================
 
-def get_required_label_columns(horizon: int) -> List[str]:
+def get_required_label_columns(horizon: int) -> list[str]:
     """
     Get required label column names for a horizon.
 
@@ -53,7 +52,7 @@ def get_required_label_columns(horizon: int) -> List[str]:
     return [template.format(h=horizon) for template in REQUIRED_LABEL_TEMPLATES]
 
 
-def get_optional_label_columns(horizon: int) -> List[str]:
+def get_optional_label_columns(horizon: int) -> list[str]:
     """
     Get optional label column names for a horizon.
 
@@ -66,7 +65,7 @@ def get_optional_label_columns(horizon: int) -> List[str]:
     return [template.format(h=horizon) for template in OPTIONAL_LABEL_TEMPLATES]
 
 
-def get_all_label_columns(horizon: int) -> List[str]:
+def get_all_label_columns(horizon: int) -> list[str]:
     """
     Get all possible label column names for a horizon.
 
@@ -101,7 +100,7 @@ def is_label_column(column_name: str) -> bool:
 # LABEL METADATA
 # =============================================================================
 
-LABEL_COLUMN_METADATA: Dict[str, Dict] = {
+LABEL_COLUMN_METADATA: dict[str, dict] = {
     "label_h{h}": {
         "description": "Primary triple-barrier label",
         "dtype": "int8",
@@ -164,7 +163,7 @@ LABEL_COLUMN_METADATA: Dict[str, Dict] = {
 }
 
 
-def get_label_metadata(column_template: str, horizon: int) -> Dict:
+def get_label_metadata(column_template: str, horizon: int) -> dict:
     """
     Get metadata for a specific label column.
 

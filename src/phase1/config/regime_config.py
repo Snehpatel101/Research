@@ -3,12 +3,11 @@ Regime detection and adaptive barrier configuration.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from src.phase1.config.barriers_config import get_barrier_params
 
-
-REGIME_CONFIG: Dict[str, Dict[str, Any]] = {
+REGIME_CONFIG: dict[str, dict[str, Any]] = {
     "volatility": {
         "enabled": True,
         "atr_period": 14,
@@ -33,7 +32,7 @@ REGIME_CONFIG: Dict[str, Dict[str, Any]] = {
 }
 
 
-REGIME_BARRIER_ADJUSTMENTS: Dict[str, Dict[str, Dict[str, float]]] = {
+REGIME_BARRIER_ADJUSTMENTS: dict[str, dict[str, dict[str, float]]] = {
     "volatility": {
         "high": {"k_up_mult": 1.2, "k_down_mult": 1.2, "max_bars_mult": 1.1},
         "low": {"k_up_mult": 0.9, "k_down_mult": 0.9, "max_bars_mult": 0.9},
@@ -52,7 +51,7 @@ REGIME_BARRIER_ADJUSTMENTS: Dict[str, Dict[str, Dict[str, float]]] = {
 }
 
 
-def _normalize_regime(value: Any, mapping: Dict[str, str]) -> str:
+def _normalize_regime(value: Any, mapping: dict[str, str]) -> str:
     if value is None:
         return "normal"
     normalized = str(value).strip().lower().replace(" ", "_")
@@ -65,7 +64,7 @@ def get_regime_adjusted_barriers(
     volatility_regime: str,
     trend_regime: str,
     structure_regime: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Apply regime multipliers to base barrier parameters.
     """
@@ -89,7 +88,7 @@ def get_regime_adjusted_barriers(
         ),
     }
 
-    adjustments: Dict[str, Dict[str, float | str]] = {}
+    adjustments: dict[str, dict[str, float | str]] = {}
 
     for category, regime_value in regime_map.items():
         multipliers = REGIME_BARRIER_ADJUSTMENTS.get(category, {}).get(

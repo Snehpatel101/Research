@@ -18,7 +18,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import joblib
 import numpy as np
@@ -67,12 +67,12 @@ class VotingEnsemble(BaseModel):
         metrics = ensemble.fit(X_train, y_train, X_val, y_val)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._base_models: List[BaseModel] = []
-        self._base_model_names: List[str] = []
-        self._weights: Optional[np.ndarray] = None
-        self._feature_names: Optional[List[str]] = None
+        self._base_models: list[BaseModel] = []
+        self._base_model_names: list[str] = []
+        self._weights: np.ndarray | None = None
+        self._feature_names: list[str] | None = None
 
     @property
     def model_family(self) -> str:
@@ -112,7 +112,7 @@ class VotingEnsemble(BaseModel):
                     return True
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "voting": "soft",  # "hard" or "soft"
             "weights": None,  # Optional model weights [w1, w2, ...]
@@ -125,8 +125,8 @@ class VotingEnsemble(BaseModel):
 
     def set_base_models(
         self,
-        models: List[BaseModel],
-        weights: Optional[List[float]] = None,
+        models: list[BaseModel],
+        weights: list[float] | None = None,
     ) -> None:
         """
         Set pre-trained base models for the ensemble.
@@ -185,9 +185,9 @@ class VotingEnsemble(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
-        label_end_times: Optional[np.ndarray] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
+        label_end_times: np.ndarray | None = None,
     ) -> TrainingMetrics:
         """
         Train all base models from scratch.
@@ -306,7 +306,7 @@ class VotingEnsemble(BaseModel):
 
     def _collect_predictions_parallel(
         self, X: np.ndarray
-    ) -> Tuple[List[PredictionOutput], float]:
+    ) -> tuple[list[PredictionOutput], float]:
         """
         Collect predictions from all base models in parallel.
 
@@ -322,7 +322,7 @@ class VotingEnsemble(BaseModel):
         start = time.perf_counter()
         outputs = [None] * len(self._base_models)
 
-        def predict_model(idx: int) -> Tuple[int, PredictionOutput]:
+        def predict_model(idx: int) -> tuple[int, PredictionOutput]:
             return idx, self._base_models[idx].predict(X)
 
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
@@ -339,7 +339,7 @@ class VotingEnsemble(BaseModel):
 
     def _collect_predictions_sequential(
         self, X: np.ndarray
-    ) -> Tuple[List[PredictionOutput], float]:
+    ) -> tuple[list[PredictionOutput], float]:
         """Collect predictions from all base models sequentially."""
         start = time.perf_counter()
         outputs = []
@@ -490,7 +490,7 @@ class VotingEnsemble(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded VotingEnsemble from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Aggregate feature importances from base models."""
         if not self._is_fitted:
             return None
@@ -518,14 +518,14 @@ class VotingEnsemble(BaseModel):
 
         return avg_importance
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
         for model in self._base_models:
             if hasattr(model, "set_feature_names"):
                 model.set_feature_names(names)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         output = self.predict(X)
         y_pred = output.class_predictions

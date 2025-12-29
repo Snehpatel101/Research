@@ -4,7 +4,6 @@ Feature set definitions for modular model training.
 Provides named feature sets that can be selected without code edits.
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -29,15 +28,15 @@ class FeatureSetDefinition:
     """
     name: str
     description: str
-    include_prefixes: List[str] = field(default_factory=list)
-    exclude_prefixes: List[str] = field(default_factory=list)
-    include_columns: List[str] = field(default_factory=list)
-    exclude_columns: List[str] = field(default_factory=list)
+    include_prefixes: list[str] = field(default_factory=list)
+    exclude_prefixes: list[str] = field(default_factory=list)
+    include_columns: list[str] = field(default_factory=list)
+    exclude_columns: list[str] = field(default_factory=list)
     include_mtf: bool = False
-    supported_model_types: List[str] = field(default_factory=lambda: [
+    supported_model_types: list[str] = field(default_factory=lambda: [
         "tabular", "sequential", "tree"
     ])
-    default_sequence_length: Optional[int] = None
+    default_sequence_length: int | None = None
     recommended_scaler: str = "robust"
 
 
@@ -68,7 +67,7 @@ class FeatureSetDefinition:
 #   4. Collect more training data when possible
 # =============================================================================
 
-FEATURE_SET_DEFINITIONS: Dict[str, FeatureSetDefinition] = {
+FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
     "core_min": FeatureSetDefinition(
         name="core_min",
         description="Minimal base-timeframe feature set (no MTF). Single symbol only.",
@@ -352,7 +351,7 @@ FEATURE_SET_ALIASES = {
 }
 
 
-def get_feature_set_definitions() -> Dict[str, FeatureSetDefinition]:
+def get_feature_set_definitions() -> dict[str, FeatureSetDefinition]:
     """Return a copy of feature set definitions."""
     return FEATURE_SET_DEFINITIONS.copy()
 
@@ -369,7 +368,7 @@ def resolve_feature_set_name(name: str) -> str:
     return canonical
 
 
-def resolve_feature_set_names(name: str) -> List[str]:
+def resolve_feature_set_names(name: str) -> list[str]:
     """
     Resolve a feature set selection into a list of canonical names.
 
@@ -378,23 +377,23 @@ def resolve_feature_set_names(name: str) -> List[str]:
     if not name:
         raise ValueError("feature_set must be a non-empty string")
     selections = [part.strip() for part in name.split(",") if part.strip()]
-    resolved: List[str] = []
+    resolved: list[str] = []
     for selection in selections:
         canonical = resolve_feature_set_name(selection)
         if canonical == "all":
             return sorted(FEATURE_SET_DEFINITIONS.keys())
         resolved.append(canonical)
     # De-duplicate while preserving order
-    unique: List[str] = []
+    unique: list[str] = []
     for item in resolved:
         if item not in unique:
             unique.append(item)
     return unique
 
 
-def validate_feature_set_config(feature_set: str) -> List[str]:
+def validate_feature_set_config(feature_set: str) -> list[str]:
     """Validate feature set selection."""
-    errors: List[str] = []
+    errors: list[str] = []
     try:
         resolve_feature_set_names(feature_set)
     except ValueError as exc:

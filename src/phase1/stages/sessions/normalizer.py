@@ -17,19 +17,17 @@ Created: 2025-12-22
 """
 
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
 from .config import (
-    SessionConfig,
+    DEFAULT_SESSIONS_CONFIG,
+    SESSIONS,
     SessionName,
     SessionsConfig,
-    SESSIONS,
-    DEFAULT_SESSIONS_CONFIG,
 )
 from .filter import SessionFilter
 
@@ -54,12 +52,12 @@ class SessionVolatilityStats:
     min_volatility: float
     max_volatility: float
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict) -> 'SessionVolatilityStats':
+    def from_dict(cls, d: dict) -> 'SessionVolatilityStats':
         """Create from dictionary."""
         return cls(**d)
 
@@ -70,10 +68,10 @@ class NormalizationReport:
     timestamp: str
     n_samples: int
     n_features_normalized: int
-    sessions_stats: Dict[str, Dict]
-    warnings: List[str]
+    sessions_stats: dict[str, dict]
+    warnings: list[str]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -98,7 +96,7 @@ class SessionNormalizer:
 
     def __init__(
         self,
-        config: Optional[SessionsConfig] = None,
+        config: SessionsConfig | None = None,
         datetime_column: str = 'datetime',
         method: str = 'zscore'
     ):
@@ -125,12 +123,12 @@ class SessionNormalizer:
 
         self._session_filter = SessionFilter(self.config, datetime_column)
         self._is_fitted = False
-        self._feature_names: List[str] = []
-        self._volatility_col: Optional[str] = None
+        self._feature_names: list[str] = []
+        self._volatility_col: str | None = None
 
         # Statistics per session
-        self._session_stats: Dict[SessionName, SessionVolatilityStats] = {}
-        self._feature_stats: Dict[SessionName, Dict[str, Dict]] = {}
+        self._session_stats: dict[SessionName, SessionVolatilityStats] = {}
+        self._feature_stats: dict[SessionName, dict[str, dict]] = {}
 
     @property
     def is_fitted(self) -> bool:
@@ -209,9 +207,9 @@ class SessionNormalizer:
     def _compute_feature_stats_for_session(
         self,
         df: pd.DataFrame,
-        feature_cols: List[str],
+        feature_cols: list[str],
         session_name: SessionName
-    ) -> Dict[str, Dict]:
+    ) -> dict[str, dict]:
         """Compute feature statistics for a session."""
         mask = self._get_session_mask(df, session_name)
         session_df = df.loc[mask]
@@ -253,8 +251,8 @@ class SessionNormalizer:
     def fit(
         self,
         df: pd.DataFrame,
-        feature_cols: List[str],
-        volatility_col: Optional[str] = None
+        feature_cols: list[str],
+        volatility_col: str | None = None
     ) -> 'SessionNormalizer':
         """
         Fit the normalizer on training data.
@@ -390,8 +388,8 @@ class SessionNormalizer:
     def fit_transform(
         self,
         df: pd.DataFrame,
-        feature_cols: List[str],
-        volatility_col: Optional[str] = None,
+        feature_cols: list[str],
+        volatility_col: str | None = None,
         suffix: str = '_session_norm'
     ) -> pd.DataFrame:
         """
@@ -409,7 +407,7 @@ class SessionNormalizer:
         self.fit(df, feature_cols, volatility_col)
         return self.transform(df, suffix)
 
-    def get_session_stats(self) -> Dict[str, Dict]:
+    def get_session_stats(self) -> dict[str, dict]:
         """
         Get volatility statistics for all sessions.
 
@@ -457,12 +455,12 @@ class SessionNormalizer:
 
 def normalize_by_session(
     df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     datetime_column: str = 'datetime',
     method: str = 'zscore',
-    volatility_col: Optional[str] = None,
+    volatility_col: str | None = None,
     suffix: str = '_session_norm'
-) -> Tuple[pd.DataFrame, SessionNormalizer]:
+) -> tuple[pd.DataFrame, SessionNormalizer]:
     """
     Convenience function to normalize features by session.
 
@@ -498,7 +496,7 @@ def get_session_volatility_ratios(
     df: pd.DataFrame,
     volatility_col: str = 'atr_20',
     datetime_column: str = 'datetime'
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Calculate volatility ratios between sessions.
 

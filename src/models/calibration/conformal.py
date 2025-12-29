@@ -29,9 +29,9 @@ from __future__ import annotations
 
 import logging
 import pickle
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Literal
 
 import numpy as np
 
@@ -87,12 +87,12 @@ class ConformalMetrics:
     average_set_size: float
     singleton_rate: float
     empty_set_rate: float
-    conditional_coverage: Dict[int, float]
+    conditional_coverage: dict[int, float]
     method_used: str
     n_samples: int
     threshold: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "empirical_coverage": self.empirical_coverage,
@@ -137,7 +137,7 @@ class ConformalPredictor:
         >>> print(f"Average set size: {sizes.mean():.2f}")
     """
 
-    def __init__(self, config: Optional[ConformalConfig] = None) -> None:
+    def __init__(self, config: ConformalConfig | None = None) -> None:
         """
         Initialize conformal predictor.
 
@@ -148,7 +148,7 @@ class ConformalPredictor:
         self._is_fitted: bool = False
         self._threshold: float = 0.0
         self._n_classes: int = 0
-        self._calibration_scores: Optional[np.ndarray] = None
+        self._calibration_scores: np.ndarray | None = None
 
     @property
     def is_fitted(self) -> bool:
@@ -235,7 +235,7 @@ class ConformalPredictor:
     def predict_sets(
         self,
         probabilities: np.ndarray,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Generate prediction sets with coverage guarantee.
 
@@ -310,7 +310,7 @@ class ConformalPredictor:
         self,
         probabilities: np.ndarray,
         reject_threshold: int = 2,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Predict with rejection for ambiguous cases.
 
@@ -443,7 +443,7 @@ class ConformalPredictor:
             threshold=self._threshold,
         )
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         """
         Save fitted conformal predictor.
 
@@ -467,7 +467,7 @@ class ConformalPredictor:
         logger.info(f"Saved conformal predictor to {path}")
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "ConformalPredictor":
+    def load(cls, path: str | Path) -> ConformalPredictor:
         """
         Load fitted conformal predictor.
 
@@ -501,7 +501,7 @@ def validate_coverage(
     prediction_sets: np.ndarray,
     expected_coverage: float,
     tolerance: float = 0.05,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Validate that empirical coverage meets expected level.
 

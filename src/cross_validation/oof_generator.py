@@ -18,28 +18,27 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
-from src.cross_validation.purged_kfold import PurgedKFold
-from src.models.registry import ModelRegistry
-
 # Import from specialized modules
 from src.cross_validation.oof_core import (
-    OOFPrediction,
     CoreOOFGenerator,
+    OOFPrediction,
 )
+from src.cross_validation.oof_io import OOFDatasetIO
 from src.cross_validation.oof_sequence import (
-    SequenceOOFGenerator,
     DEFAULT_SEQUENCE_LENGTH,
+    SequenceOOFGenerator,
 )
 from src.cross_validation.oof_stacking import (
     StackingDataset,
     StackingDatasetBuilder,
 )
 from src.cross_validation.oof_validation import OOFValidator, _grade_diversity
-from src.cross_validation.oof_io import OOFDatasetIO
+from src.cross_validation.purged_kfold import PurgedKFold
+from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +86,13 @@ class OOFGenerator:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        model_configs: Dict[str, Dict[str, Any]],
-        sample_weights: Optional[pd.Series] = None,
-        feature_subset: Optional[List[str]] = None,
+        model_configs: dict[str, dict[str, Any]],
+        sample_weights: pd.Series | None = None,
+        feature_subset: list[str] | None = None,
         calibrate: bool = False,
         calibration_method: str = "auto",
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Dict[str, OOFPrediction]:
+        label_end_times: pd.Series | None = None,
+    ) -> dict[str, OOFPrediction]:
         """
         Generate OOF predictions for all models.
 
@@ -117,7 +116,7 @@ class OOFGenerator:
             that sample). The calibrator learns the mapping between OOF
             probability outputs and actual outcomes.
         """
-        oof_results: Dict[str, OOFPrediction] = {}
+        oof_results: dict[str, OOFPrediction] = {}
 
         # Apply feature subset if specified
         if feature_subset:
@@ -154,9 +153,9 @@ class OOFGenerator:
         X: pd.DataFrame,
         y: pd.Series,
         model_name: str,
-        config: Dict[str, Any],
-        sample_weights: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
+        config: dict[str, Any],
+        sample_weights: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
     ) -> OOFPrediction:
         """Generate OOF predictions for a single model."""
         # Check if model requires sequences
@@ -190,9 +189,9 @@ class OOFGenerator:
 
     def validate_oof_coverage(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
+        oof_predictions: dict[str, OOFPrediction],
         original_index: pd.Index,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Validate that OOF predictions cover all samples.
 
@@ -207,7 +206,7 @@ class OOFGenerator:
 
     def build_stacking_dataset(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
+        oof_predictions: dict[str, OOFPrediction],
         y_true: pd.Series,
         horizon: int,
         add_derived_features: bool = True,
@@ -266,7 +265,7 @@ class OOFGenerator:
 
 def analyze_prediction_correlation(
     stacking_df: pd.DataFrame,
-    model_names: List[str],
+    model_names: list[str],
 ) -> pd.DataFrame:
     """
     Analyze correlation between model predictions.

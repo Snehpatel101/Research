@@ -3,7 +3,6 @@ Data integrity validation checks.
 """
 import logging
 import re
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -12,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 def check_duplicate_timestamps(
-    df: pd.DataFrame, issues_found: List[str]
-) -> Dict:
+    df: pd.DataFrame, issues_found: list[str]
+) -> dict:
     """
     Check for duplicate timestamps per symbol.
 
@@ -48,7 +47,7 @@ def check_duplicate_timestamps(
         return {'total': dups}
 
 
-def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
+def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
     """
     Check for NaN values in the DataFrame.
 
@@ -119,7 +118,7 @@ def check_nan_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
         return {}
 
 
-def check_infinite_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
+def check_infinite_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
     """
     Check for infinite values in numeric columns.
 
@@ -148,7 +147,7 @@ def check_infinite_values(df: pd.DataFrame, issues_found: List[str]) -> Dict:
     return inf_counts
 
 
-def analyze_time_gaps(df: pd.DataFrame) -> List[Dict]:
+def analyze_time_gaps(df: pd.DataFrame) -> list[dict]:
     """
     Analyze time gaps in the data.
 
@@ -195,7 +194,7 @@ def analyze_time_gaps(df: pd.DataFrame) -> List[Dict]:
     return gaps
 
 
-def verify_date_range(df: pd.DataFrame) -> Dict:
+def verify_date_range(df: pd.DataFrame) -> dict:
     """
     Verify and report the date range of the data.
 
@@ -222,7 +221,7 @@ def verify_date_range(df: pd.DataFrame) -> Dict:
     return date_range
 
 
-def check_data_integrity(df: pd.DataFrame, issues_found: List[str]) -> Dict:
+def check_data_integrity(df: pd.DataFrame, issues_found: list[str]) -> dict:
     """
     Run all data integrity checks.
 

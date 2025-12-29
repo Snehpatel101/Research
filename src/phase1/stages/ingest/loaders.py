@@ -9,20 +9,19 @@ Handles:
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 import pandas as pd
 
-from .validators import SecurityError, validate_path
+from .validators import validate_path
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
 def load_data(
-    file_path: Union[str, Path],
-    allowed_dirs: List[Path],
-    file_format: Optional[str] = None
+    file_path: str | Path,
+    allowed_dirs: list[Path],
+    file_format: str | None = None
 ) -> pd.DataFrame:
     """
     Load data from CSV or Parquet file.
@@ -75,7 +74,7 @@ def load_data(
     except pd.errors.ParserError as e:
         logger.error(f"Error parsing CSV file: {e}")
         raise
-    except (OSError, IOError) as e:
+    except OSError as e:
         logger.error(f"Error reading file: {e}")
         raise
     except ValueError as e:
@@ -90,7 +89,7 @@ def save_parquet(
     df: pd.DataFrame,
     symbol: str,
     output_dir: Path,
-    metadata: Optional[Dict] = None
+    metadata: dict | None = None
 ) -> Path:
     """
     Save DataFrame to Parquet format.

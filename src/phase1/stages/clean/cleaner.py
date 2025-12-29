@@ -14,15 +14,15 @@ Created: 2025-12-20
 Updated: 2025-12-22 - Extracted gap handling to gap_handler.py
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from typing import Union, Dict, Optional, Tuple
-import logging
 import json
+import logging
+from pathlib import Path
 
-from .utils import validate_ohlc, calculate_atr_numba, resample_ohlcv
+import numpy as np
+import pandas as pd
+
 from .gap_handler import GapHandler
+from .utils import calculate_atr_numba, resample_ohlcv, validate_ohlc
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -39,8 +39,8 @@ class DataCleaner:
 
     def __init__(
         self,
-        input_dir: Union[str, Path],
-        output_dir: Union[str, Path],
+        input_dir: str | Path,
+        output_dir: str | Path,
         timeframe: str = '1min',
         target_timeframe: str = '5min',
         gap_fill_method: str = 'forward',
@@ -111,7 +111,7 @@ class DataCleaner:
             calendar_aware=self.calendar_aware
         )
 
-        logger.info(f"Initialized DataCleaner")
+        logger.info("Initialized DataCleaner")
         logger.info(f"Input dir: {self.input_dir}")
         logger.info(f"Output dir: {self.output_dir}")
         logger.info(f"Source timeframe: {timeframe} ({self.freq_minutes} minutes)")
@@ -130,7 +130,7 @@ class DataCleaner:
         -------
         ValueError : If target_timeframe is not supported
         """
-        from src.phase1.config import SUPPORTED_TIMEFRAMES, validate_timeframe
+        from src.phase1.config import validate_timeframe
         validate_timeframe(target_timeframe)
 
     def _parse_timeframe(self, timeframe: str) -> int:
@@ -145,7 +145,7 @@ class DataCleaner:
         else:
             return 1  # Default to 1 minute
 
-    def detect_gaps(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+    def detect_gaps(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         """
         Detect gaps in time series.
 
@@ -161,7 +161,7 @@ class DataCleaner:
         """
         return self._gap_handler.detect_gaps(df)
 
-    def fill_gaps(self, df: pd.DataFrame, max_fill_bars: Optional[int] = None) -> pd.DataFrame:
+    def fill_gaps(self, df: pd.DataFrame, max_fill_bars: int | None = None) -> pd.DataFrame:
         """
         Fill gaps in time series.
 
@@ -178,7 +178,7 @@ class DataCleaner:
         """
         return self._gap_handler.fill_gaps(df, max_fill_bars)
 
-    def detect_duplicates(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+    def detect_duplicates(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         """
         Detect and remove duplicate timestamps.
 
@@ -293,7 +293,7 @@ class DataCleaner:
 
         return spikes.fillna(False).values
 
-    def clean_outliers(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+    def clean_outliers(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         """
         Detect and remove outliers based on configured method.
 
@@ -343,7 +343,7 @@ class DataCleaner:
 
         return df, outlier_report
 
-    def handle_contract_rolls(self, df: pd.DataFrame, symbol: str) -> Tuple[pd.DataFrame, Dict]:
+    def handle_contract_rolls(self, df: pd.DataFrame, symbol: str) -> tuple[pd.DataFrame, dict]:
         """
         Detect and handle contract rolls for futures data.
 
@@ -384,7 +384,7 @@ class DataCleaner:
     def resample_data(
         self,
         df: pd.DataFrame,
-        target_timeframe: Optional[str] = None,
+        target_timeframe: str | None = None,
         include_metadata: bool = True
     ) -> pd.DataFrame:
         """
@@ -442,7 +442,7 @@ class DataCleaner:
         # Use the generic resampling function
         return resample_ohlcv(df, target_timeframe, include_metadata)
 
-    def clean_file(self, file_path: Path) -> Tuple[pd.DataFrame, Dict]:
+    def clean_file(self, file_path: Path) -> tuple[pd.DataFrame, dict]:
         """
         Complete cleaning pipeline for a single file.
 
@@ -524,7 +524,7 @@ class DataCleaner:
 
         return df, cleaning_report
 
-    def save_results(self, df: pd.DataFrame, symbol: str, cleaning_report: Dict) -> Tuple[Path, Path]:
+    def save_results(self, df: pd.DataFrame, symbol: str, cleaning_report: dict) -> tuple[Path, Path]:
         """
         Save cleaned data and report.
 
@@ -551,7 +551,7 @@ class DataCleaner:
 
         return data_path, report_path
 
-    def clean_directory(self, pattern: str = "*.parquet") -> Dict[str, Dict]:
+    def clean_directory(self, pattern: str = "*.parquet") -> dict[str, dict]:
         """
         Clean all files in input directory.
 

@@ -15,20 +15,20 @@ Stage 9: Report Generation - Comprehensive Phase 1 summary with charts
 """
 
 # Core stage imports
-from .ingest import DataIngestor
 from .clean import DataCleaner
 from .features import FeatureEngineer
+from .ingest import DataIngestor
+
+# Feature scaler imports
+from .scaling import (
+    FeatureScaler,
+    FeatureScalingConfig,
+    scale_splits,
+)
 
 # Extended stage imports
 from .splits.core import create_chronological_splits
 from .validation.run import run_validation
-
-# Feature scaler imports
-from .scaling import (
-    FeatureScalingConfig,
-    FeatureScaler,
-    scale_splits,
-)
 
 __all__ = [
     # Core stages

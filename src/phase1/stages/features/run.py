@@ -9,15 +9,13 @@ Uses the modular feature engineering implementation from stages.features.
 import logging
 import traceback
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
-import numpy as np
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +24,10 @@ from .engineer import FeatureEngineer
 
 # StageResult imports - adjust path based on pipeline structure
 try:
-    from src.pipeline.utils import StageResult, StageStatus, create_stage_result, create_failed_result
+    from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
 except ImportError:
     # Fallback for different import paths
-    from pipeline.utils import StageResult, StageStatus, create_stage_result, create_failed_result
+    from pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 
 def run_feature_engineering(

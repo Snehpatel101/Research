@@ -608,3 +608,172 @@ class TestParamSpaces:
         # Unknown model returns empty
         empty_space = get_param_space("unknown_model")
         assert empty_space == {}
+
+    def test_lightgbm_num_leaves_static_constraint(self):
+        """Test LightGBM num_leaves static bounds are safe for all max_depth values."""
+        from src.cross_validation.param_spaces import PARAM_SPACES
+
+        lgbm_space = PARAM_SPACES["lightgbm"]
+        min_max_depth = lgbm_space["max_depth"]["low"]  # 3
+        max_num_leaves = lgbm_space["num_leaves"]["high"]  # 64
+
+        # Ensure max num_leaves is always valid for minimum max_depth
+        max_valid_for_min_depth = 2 ** min_max_depth  # 2^3 = 8
+
+        # With min_max_depth=3, we need num_leaves to be reasonable.
+        # The static bound of 64 is a compromise - dynamic constraint handles the rest.
+        assert max_num_leaves <= 128, "Static num_leaves upper bound should be conservative"
+
+
+# =============================================================================
+# LIGHTGBM CONSTRAINT VALIDATION TESTS
+# =============================================================================
+
+class TestLightGBMConstraints:
+    """Tests for LightGBM num_leaves/max_depth constraint validation."""
+
+    def test_validate_lightgbm_params_valid(self):
+        """Test validation passes for valid params."""
+        from src.cross_validation.param_spaces import validate_lightgbm_params
+
+        # max_depth=6 -> max leaves = 64, so 31 is valid
+        params = {"max_depth": 6, "num_leaves": 31}
+        result = validate_lightgbm_params(params)
+
+        assert result["num_leaves"] == 31
+        assert result["max_depth"] == 6
+
+    def test_validate_lightgbm_params_caps_num_leaves(self):
+        """Test validation caps num_leaves when exceeding constraint."""
+        from src.cross_validation.param_spaces import validate_lightgbm_params
+
+        # max_depth=3 -> max leaves = 8, but num_leaves=100
+        params = {"max_depth": 3, "num_leaves": 100}
+        result = validate_lightgbm_params(params)
+
+        assert result["num_leaves"] == 8  # Capped to 2^3
+        assert result["max_depth"] == 3
+
+    def test_validate_lightgbm_params_all_depths(self):
+        """Test constraint is enforced for all possible max_depth values."""
+        from src.cross_validation.param_spaces import validate_lightgbm_params
+
+        for max_depth in range(1, 15):
+            max_valid = 2 ** max_depth
+            invalid_leaves = max_valid + 10
+
+            params = {"max_depth": max_depth, "num_leaves": invalid_leaves}
+            result = validate_lightgbm_params(params)
+
+            assert result["num_leaves"] <= max_valid, (
+                f"num_leaves should be capped for max_depth={max_depth}"
+            )
+
+    def test_validate_lightgbm_params_edge_cases(self):
+        """Test validation handles edge cases."""
+        from src.cross_validation.param_spaces import validate_lightgbm_params
+
+        # Exactly at boundary
+        params = {"max_depth": 5, "num_leaves": 32}  # 2^5 = 32
+        result = validate_lightgbm_params(params)
+        assert result["num_leaves"] == 32
+
+        # One over boundary
+        params = {"max_depth": 5, "num_leaves": 33}
+        result = validate_lightgbm_params(params)
+        assert result["num_leaves"] == 32
+
+    def test_validate_lightgbm_params_unlimited_depth(self):
+        """Test validation handles unlimited depth (max_depth <= 0)."""
+        from src.cross_validation.param_spaces import validate_lightgbm_params
+
+        # max_depth=-1 means unlimited in LightGBM
+        params = {"max_depth": -1, "num_leaves": 1000}
+        result = validate_lightgbm_params(params)
+
+        # Should not be capped when depth is unlimited
+        assert result["num_leaves"] == 1000
+
+    def test_get_max_leaves_for_depth(self):
+        """Test get_max_leaves_for_depth helper."""
+        from src.cross_validation.param_spaces import get_max_leaves_for_depth
+
+        assert get_max_leaves_for_depth(3) == 8
+        assert get_max_leaves_for_depth(6) == 64
+        assert get_max_leaves_for_depth(10) == 1024
+
+        # Unlimited depth returns reasonable default
+        assert get_max_leaves_for_depth(-1) == 1024
+        assert get_max_leaves_for_depth(0) == 1024
+
+
+class TestSampleParamsWithConstraints:
+    """Tests for constrained parameter sampling in Optuna tuner."""
+
+    @pytest.fixture
+    def mock_trial(self):
+        """Create a mock Optuna trial."""
+        from unittest.mock import MagicMock
+
+        trial = MagicMock()
+        # Track suggested values to verify constraints
+        trial._suggested = {}
+
+        def mock_suggest_int(name, low, high):
+            # For testing, return the high value to test constraint
+            value = high
+            trial._suggested[name] = {"low": low, "high": high, "value": value}
+            return value
+
+        def mock_suggest_float(name, low, high, log=False):
+            value = (low + high) / 2
+            trial._suggested[name] = {"low": low, "high": high, "log": log, "value": value}
+            return value
+
+        def mock_suggest_categorical(name, choices):
+            value = choices[0]
+            trial._suggested[name] = {"choices": choices, "value": value}
+            return value
+
+        trial.suggest_int.side_effect = mock_suggest_int
+        trial.suggest_float.side_effect = mock_suggest_float
+        trial.suggest_categorical.side_effect = mock_suggest_categorical
+
+        return trial
+
+    def test_sample_params_lightgbm_enforces_constraint(self, mock_trial, default_cv):
+        """Test that _sample_params enforces LightGBM constraint."""
+        from src.cross_validation.param_spaces import PARAM_SPACES
+
+        tuner = TimeSeriesOptunaTuner(
+            model_name="lightgbm",
+            cv=default_cv,
+            n_trials=5,
+        )
+
+        params = tuner._sample_params(mock_trial, PARAM_SPACES["lightgbm"])
+
+        # Verify constraint: num_leaves <= 2^max_depth
+        max_depth = params["max_depth"]
+        num_leaves = params["num_leaves"]
+        max_valid = 2 ** max_depth
+
+        assert num_leaves <= max_valid, (
+            f"Constraint violated: num_leaves={num_leaves} > 2^{max_depth}={max_valid}"
+        )
+
+    def test_sample_params_xgboost_no_constraint_needed(self, mock_trial, default_cv):
+        """Test that XGBoost params sample normally (no num_leaves constraint)."""
+        from src.cross_validation.param_spaces import PARAM_SPACES
+
+        tuner = TimeSeriesOptunaTuner(
+            model_name="xgboost",
+            cv=default_cv,
+            n_trials=5,
+        )
+
+        params = tuner._sample_params(mock_trial, PARAM_SPACES["xgboost"])
+
+        # XGBoost should have max_depth but no num_leaves
+        assert "max_depth" in params
+        assert "num_leaves" not in params

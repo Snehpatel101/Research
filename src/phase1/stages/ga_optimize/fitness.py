@@ -6,13 +6,13 @@ Contains:
     - evaluate_individual: Evaluate a GA individual (parameter set)
 """
 
-from typing import List, Tuple
 
 import numpy as np
 
+from src.phase1.config import LABEL_BALANCE_CONSTRAINTS, TICK_VALUES, get_total_trade_cost
+
 # Import labeling function and config
 from src.phase1.stages.labeling import triple_barrier_numba
-from src.phase1.config import TICK_VALUES, get_total_trade_cost, LABEL_BALANCE_CONSTRAINTS
 
 
 def calculate_fitness(
@@ -281,7 +281,7 @@ def calculate_fitness(
 
 
 def evaluate_individual(
-    individual: List[float],
+    individual: list[float],
     close: np.ndarray,
     high: np.ndarray,
     low: np.ndarray,
@@ -291,7 +291,7 @@ def evaluate_individual(
     symbol: str = "MES",
     regime: str = "low_vol",
     include_slippage: bool = True,
-) -> Tuple[float]:
+) -> tuple[float]:
     """
     Evaluate a GA individual (parameter set).
 

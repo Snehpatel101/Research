@@ -55,9 +55,8 @@ Updated: 2025-12-24 - Added model-family scaling documentation
 """
 
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -95,9 +94,9 @@ class ScalerConfig:
     """
     scaler_type: str = 'robust'
     clip_outliers: bool = True
-    clip_range: Tuple[float, float] = (-5.0, 5.0)
+    clip_range: tuple[float, float] = (-5.0, 5.0)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             'scaler_type': self.scaler_type,
             'clip_outliers': self.clip_outliers,
@@ -105,7 +104,7 @@ class ScalerConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict) -> 'ScalerConfig':
+    def from_dict(cls, d: dict) -> 'ScalerConfig':
         return cls(
             scaler_type=d.get('scaler_type', 'robust'),
             clip_outliers=d.get('clip_outliers', True),
@@ -126,7 +125,7 @@ class FeatureCategory(Enum):
 
 
 # Feature categorization rules
-FEATURE_PATTERNS: Dict[FeatureCategory, List[str]] = {
+FEATURE_PATTERNS: dict[FeatureCategory, list[str]] = {
     FeatureCategory.RETURNS: [
         'return', 'log_return', 'simple_return', 'pct_change',
         'close_to_sma', 'close_to_ema', 'close_to_vwap', 'price_to_',
@@ -173,7 +172,7 @@ FEATURE_PATTERNS: Dict[FeatureCategory, List[str]] = {
 }
 
 # Default scaling strategy per category
-DEFAULT_SCALING_STRATEGY: Dict[FeatureCategory, ScalerType] = {
+DEFAULT_SCALING_STRATEGY: dict[FeatureCategory, ScalerType] = {
     FeatureCategory.RETURNS: ScalerType.NONE,          # Already normalized
     FeatureCategory.OSCILLATOR: ScalerType.MINMAX,     # Keep 0-100 range
     FeatureCategory.PRICE_LEVEL: ScalerType.ROBUST,    # Log transform recommended
@@ -198,7 +197,7 @@ class FeatureScalingConfig:
     apply_log_transform: bool = False
     log_shift: float = 0.0
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             'feature_name': self.feature_name,
             'category': self.category.value,
@@ -208,7 +207,7 @@ class FeatureScalingConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict) -> 'FeatureScalingConfig':
+    def from_dict(cls, d: dict) -> 'FeatureScalingConfig':
         return cls(
             feature_name=d['feature_name'],
             category=FeatureCategory(d['category']),
@@ -236,11 +235,11 @@ class ScalingStatistics:
     nan_count: int = 0
     inf_count: int = 0
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict) -> 'ScalingStatistics':
+    def from_dict(cls, d: dict) -> 'ScalingStatistics':
         return cls(**d)
 
 
@@ -251,11 +250,11 @@ class ScalingReport:
     n_features: int
     n_samples_train: int
     scaler_type: str
-    features_by_category: Dict[str, List[str]]
-    features_by_scaler: Dict[str, List[str]]
-    statistics: Dict[str, Dict]
-    warnings: List[str]
-    errors: List[str]
+    features_by_category: dict[str, list[str]]
+    features_by_scaler: dict[str, list[str]]
+    statistics: dict[str, dict]
+    warnings: list[str]
+    errors: list[str]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return asdict(self)

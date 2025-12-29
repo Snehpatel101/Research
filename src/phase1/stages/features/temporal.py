@@ -5,15 +5,15 @@ This module provides functions to calculate time-based features
 including cyclical time encoding and trading session indicators.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def add_temporal_features(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_temporal_features(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add temporal features with sin/cos encoding.
 
@@ -82,7 +82,7 @@ def add_temporal_features(df: pd.DataFrame, feature_metadata: Dict[str, str]) ->
     return df
 
 
-def add_session_features(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_session_features(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add trading session features only.
 

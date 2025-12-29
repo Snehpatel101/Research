@@ -10,15 +10,15 @@ Author: ML Pipeline
 Created: 2025-12-19
 """
 
+import json
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import logging
-from typing import Dict, List, Tuple, Optional, Set
-from dataclasses import dataclass, field
-from pathlib import Path
-import json
 
-from src.phase1.utils.feature_sets import METADATA_COLUMNS, LABEL_PREFIXES
+from src.phase1.utils.feature_sets import LABEL_PREFIXES, METADATA_COLUMNS
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -27,14 +27,14 @@ logger.addHandler(logging.NullHandler())
 @dataclass
 class FeatureSelectionResult:
     """Container for feature selection results."""
-    selected_features: List[str]
-    removed_features: Dict[str, str]  # feature -> reason
+    selected_features: list[str]
+    removed_features: dict[str, str]  # feature -> reason
     original_count: int
     final_count: int
-    correlation_groups: List[List[str]]
-    low_variance_features: List[str]
+    correlation_groups: list[list[str]]
+    low_variance_features: list[str]
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
             'selected_features': self.selected_features,
@@ -157,7 +157,7 @@ def get_feature_priority(feature_name: str) -> int:
     return FEATURE_PRIORITY.get(feature_name, DEFAULT_PRIORITY)
 
 
-def identify_feature_columns(df: pd.DataFrame) -> List[str]:
+def identify_feature_columns(df: pd.DataFrame) -> list[str]:
     """
     Identify feature columns in the dataframe.
 
@@ -181,9 +181,9 @@ def identify_feature_columns(df: pd.DataFrame) -> List[str]:
 
 def filter_low_variance(
     df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     variance_threshold: float = 0.01
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Remove features with variance below threshold.
 
@@ -229,9 +229,9 @@ def filter_low_variance(
 
 def build_correlation_groups(
     df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     correlation_threshold: float = 0.85
-) -> List[Set[str]]:
+) -> list[set[str]]:
     """
     Build groups of highly correlated features using union-find.
 
@@ -276,7 +276,7 @@ def build_correlation_groups(
                 union(col1, col2)
 
     # Build groups from union-find structure
-    groups_dict: Dict[str, Set[str]] = {}
+    groups_dict: dict[str, set[str]] = {}
     for col in feature_cols:
         root = find(col)
         if root not in groups_dict:
@@ -289,7 +289,7 @@ def build_correlation_groups(
     return correlated_groups
 
 
-def select_from_correlated_group(group: Set[str]) -> Tuple[str, List[str]]:
+def select_from_correlated_group(group: set[str]) -> tuple[str, list[str]]:
     """
     Select the best feature from a correlated group.
 
@@ -321,9 +321,9 @@ def select_from_correlated_group(group: Set[str]) -> Tuple[str, List[str]]:
 
 def filter_correlated_features(
     df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     correlation_threshold: float = 0.85
-) -> Tuple[List[str], Dict[str, str], List[List[str]]]:
+) -> tuple[list[str], dict[str, str], list[list[str]]]:
     """
     Remove highly correlated features, keeping the most interpretable from each group.
 
@@ -339,8 +339,8 @@ def filter_correlated_features(
     correlation_groups = build_correlation_groups(df, feature_cols, correlation_threshold)
 
     # Track which features are removed and why
-    removed_features: Dict[str, str] = {}
-    features_to_remove: Set[str] = set()
+    removed_features: dict[str, str] = {}
+    features_to_remove: set[str] = set()
 
     # Convert groups to lists for JSON serialization
     groups_as_lists = []
@@ -363,7 +363,7 @@ def select_features(
     df: pd.DataFrame,
     correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
-    feature_cols: Optional[List[str]] = None
+    feature_cols: list[str] | None = None
 ) -> FeatureSelectionResult:
     """
     Main feature selection function.
@@ -391,7 +391,7 @@ def select_features(
     original_count = len(feature_cols)
     logger.info(f"Starting with {original_count} features")
 
-    all_removed: Dict[str, str] = {}
+    all_removed: dict[str, str] = {}
 
     # Step 1: Remove low variance features
     logger.info(f"\n1. Low variance filter (threshold={variance_threshold})")
@@ -439,7 +439,7 @@ def select_features(
     )
 
     # Summary
-    logger.info(f"\n" + "="*60)
+    logger.info("\n" + "="*60)
     logger.info("FEATURE SELECTION SUMMARY")
     logger.info("="*60)
     logger.info(f"Original features:  {result.original_count}")
@@ -492,7 +492,7 @@ def save_feature_selection_report(
 
 def apply_feature_selection(
     df: pd.DataFrame,
-    selected_features: List[str],
+    selected_features: list[str],
     keep_metadata: bool = True
 ) -> pd.DataFrame:
     """

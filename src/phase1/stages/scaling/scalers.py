@@ -10,11 +10,11 @@ Updated: 2025-12-20 - Extracted from feature_scaler.py
 """
 
 import logging
-import numpy as np
-from typing import Optional, Union, Tuple
-from sklearn.preprocessing import RobustScaler, StandardScaler, MinMaxScaler
 
-from .core import ScalerType, FeatureCategory
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+
+from .core import FeatureCategory, ScalerType
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -73,7 +73,7 @@ def should_log_transform(feature_name: str, category: FeatureCategory) -> bool:
     return False
 
 
-def create_scaler(scaler_type: ScalerType, robust_quantile_range: Tuple[float, float] = (25.0, 75.0)) -> Optional[Union[RobustScaler, StandardScaler, MinMaxScaler]]:
+def create_scaler(scaler_type: ScalerType, robust_quantile_range: tuple[float, float] = (25.0, 75.0)) -> RobustScaler | StandardScaler | MinMaxScaler | None:
     """Create a sklearn scaler instance based on type."""
     if scaler_type == ScalerType.ROBUST:
         return RobustScaler(quantile_range=robust_quantile_range)

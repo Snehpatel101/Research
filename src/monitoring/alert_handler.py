@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from src.monitoring.drift_detector import DriftResult, DriftSeverity, DriftType
 
@@ -40,7 +41,7 @@ class AlertRecord:
     result: DriftResult
     timestamp: float
     acknowledged: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class AlertHandler:
@@ -62,7 +63,7 @@ class AlertHandler:
         ...     handler.handle(result)
     """
 
-    def __init__(self, config: Optional[AlertConfig] = None) -> None:
+    def __init__(self, config: AlertConfig | None = None) -> None:
         """
         Initialize AlertHandler.
 
@@ -70,9 +71,9 @@ class AlertHandler:
             config: Alert configuration
         """
         self.config = config or AlertConfig()
-        self._callbacks: List[Callable[[DriftResult], None]] = []
-        self._history: List[AlertRecord] = []
-        self._last_alert_time: Dict[str, float] = {}  # feature -> timestamp
+        self._callbacks: list[Callable[[DriftResult], None]] = []
+        self._history: list[AlertRecord] = []
+        self._last_alert_time: dict[str, float] = {}  # feature -> timestamp
         self._max_history = 1000
 
     def add_callback(
@@ -152,8 +153,8 @@ class AlertHandler:
 
     def handle_batch(
         self,
-        results: List[DriftResult],
-    ) -> Dict[str, int]:
+        results: list[DriftResult],
+    ) -> dict[str, int]:
         """
         Handle multiple drift results.
 
@@ -217,10 +218,10 @@ class AlertHandler:
 
     def get_history(
         self,
-        n_recent: Optional[int] = None,
-        drift_type: Optional[DriftType] = None,
-        feature_name: Optional[str] = None,
-    ) -> List[AlertRecord]:
+        n_recent: int | None = None,
+        drift_type: DriftType | None = None,
+        feature_name: str | None = None,
+    ) -> list[AlertRecord]:
         """
         Get alert history with optional filtering.
 
@@ -247,8 +248,8 @@ class AlertHandler:
 
     def get_alert_counts(
         self,
-        window_seconds: Optional[float] = None,
-    ) -> Dict[str, int]:
+        window_seconds: float | None = None,
+    ) -> dict[str, int]:
         """
         Get alert counts by type and severity.
 
@@ -299,7 +300,7 @@ class AlertHandler:
 
     def acknowledge(
         self,
-        feature_name: Optional[str] = None,
+        feature_name: str | None = None,
     ) -> int:
         """
         Acknowledge alerts.
@@ -349,7 +350,7 @@ class DriftAlertAggregator:
         """
         self.window_seconds = window_seconds
         self.min_alerts_to_report = min_alerts_to_report
-        self._alerts: List[DriftResult] = []
+        self._alerts: list[DriftResult] = []
         self._window_start = time.time()
 
     def add(self, result: DriftResult) -> None:
@@ -364,7 +365,7 @@ class DriftAlertAggregator:
 
         return window_elapsed and has_enough_alerts
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get aggregated summary of alerts."""
         if not self._alerts:
             return {"n_alerts": 0, "features": [], "max_severity": None}

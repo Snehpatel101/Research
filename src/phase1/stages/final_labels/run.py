@@ -9,20 +9,20 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from .core import apply_optimized_labels, generate_labeling_report
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _get_git_commit_hash(project_root: Path) -> Optional[str]:
+def _get_git_commit_hash(project_root: Path) -> str | None:
     """Get current git commit hash."""
     git_dir = project_root / ".git"
     if not git_dir.exists():
@@ -81,7 +81,7 @@ def run_final_labels(
 
         artifacts = []
         all_dfs = {}
-        label_params: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        label_params: dict[str, dict[str, dict[str, Any]]] = {}
 
         target_timeframe = config.target_timeframe
 
@@ -98,14 +98,14 @@ def run_final_labels(
             df = pd.read_parquet(features_path)
             logger.info(f"Loaded {len(df):,} rows from features")
 
-            symbol_params: Dict[str, Dict[str, Any]] = {}
+            symbol_params: dict[str, dict[str, Any]] = {}
 
             # Apply optimized labels for each horizon
             for horizon in config.label_horizons:
                 results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
 
                 if results_path.exists():
-                    with open(results_path, 'r') as f:
+                    with open(results_path) as f:
                         results = json.load(f)
                     best_params = {
                         'k_up': results['best_k_up'],

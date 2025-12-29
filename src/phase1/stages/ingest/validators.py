@@ -9,7 +9,6 @@ Handles:
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -22,7 +21,7 @@ class SecurityError(Exception):
     pass
 
 
-def validate_path(file_path: Path, allowed_dirs: List[Path]) -> Path:
+def validate_path(file_path: Path, allowed_dirs: list[Path]) -> Path:
     """
     Validate that a file path is safe and within allowed directories.
 
@@ -84,7 +83,7 @@ def validate_ohlcv_relationships(
     auto_fix: bool = True,
     dry_run: bool = False,
     copy: bool = True
-) -> Tuple[pd.DataFrame, Dict]:
+) -> tuple[pd.DataFrame, dict]:
     """
     Validate OHLC relationships (high >= low, etc.).
 

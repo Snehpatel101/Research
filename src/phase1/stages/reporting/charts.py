@@ -4,7 +4,6 @@ Generates matplotlib visualizations for label distributions, quality scores, etc
 """
 import logging
 from pathlib import Path
-from typing import List
 
 import matplotlib
 import matplotlib.pyplot as plt

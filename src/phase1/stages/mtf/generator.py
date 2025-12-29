@@ -22,24 +22,23 @@ Key Design Decisions:
 """
 
 import logging
-from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 
 from .constants import (
-    MTF_TIMEFRAMES,
-    REQUIRED_OHLCV_COLS,
-    DEFAULT_MTF_TIMEFRAMES,
     DEFAULT_MTF_MODE,
+    DEFAULT_MTF_TIMEFRAMES,
     MIN_BASE_BARS,
     MIN_MTF_BARS,
+    MTF_TIMEFRAMES,
     PANDAS_FREQ_MAP,
+    REQUIRED_OHLCV_COLS,
     MTFMode,
 )
 from .validators import (
-    validate_ohlcv_dataframe,
     validate_mtf_timeframes,
+    validate_ohlcv_dataframe,
 )
 
 # Configure logging
@@ -76,10 +75,10 @@ class MTFFeatureGenerator:
     def __init__(
         self,
         base_timeframe: str = '5min',
-        mtf_timeframes: Optional[List[str]] = None,
-        mode: Union[MTFMode, str] = DEFAULT_MTF_MODE,
-        include_ohlcv: Optional[bool] = None,
-        include_indicators: Optional[bool] = None
+        mtf_timeframes: list[str] | None = None,
+        mode: MTFMode | str = DEFAULT_MTF_MODE,
+        include_ohlcv: bool | None = None,
+        include_indicators: bool | None = None
     ):
         """Initialize MTF feature generator with validation."""
         self.base_timeframe = base_timeframe
@@ -296,7 +295,7 @@ class MTFFeatureGenerator:
         self,
         df_base: pd.DataFrame,
         df_mtf: pd.DataFrame,
-        mtf_columns: List[str]
+        mtf_columns: list[str]
     ) -> pd.DataFrame:
         """
         Align MTF features to base timeframe using forward-fill.
@@ -452,7 +451,7 @@ class MTFFeatureGenerator:
         logger.info(f"Lookahead validation passed for {len(mtf_cols)} MTF columns")
         return True
 
-    def get_mtf_column_names(self) -> Dict[str, List[str]]:
+    def get_mtf_column_names(self) -> dict[str, list[str]]:
         """
         Get expected MTF column names for each timeframe.
 
@@ -484,7 +483,7 @@ class MTFFeatureGenerator:
 
         return result
 
-    def get_bar_column_names(self) -> Dict[str, List[str]]:
+    def get_bar_column_names(self) -> dict[str, list[str]]:
         """
         Get expected MTF bar column names for each timeframe.
 
@@ -499,7 +498,7 @@ class MTFFeatureGenerator:
             result[tf] = [f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS]
         return result
 
-    def get_indicator_column_names(self) -> Dict[str, List[str]]:
+    def get_indicator_column_names(self) -> dict[str, list[str]]:
         """
         Get expected MTF indicator column names for each timeframe.
 

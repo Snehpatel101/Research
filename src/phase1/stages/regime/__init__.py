@@ -39,30 +39,12 @@ Created: 2025-12-22
 
 # Base classes and enums
 from .base import (
-    RegimeType,
-    VolatilityRegimeLabel,
-    TrendRegimeLabel,
-    StructureRegimeLabel,
     RegimeConfig,
     RegimeDetector,
-)
-
-# Individual detectors
-from .volatility import (
-    VolatilityRegimeDetector,
-    calculate_atr,
-)
-
-from .trend import (
-    TrendRegimeDetector,
-    calculate_adx,
-    calculate_sma,
-)
-
-from .structure import (
-    MarketStructureDetector,
-    calculate_hurst_exponent,
-    calculate_rolling_hurst,
+    RegimeType,
+    StructureRegimeLabel,
+    TrendRegimeLabel,
+    VolatilityRegimeLabel,
 )
 
 # Composite detector
@@ -74,14 +56,29 @@ from .composite import (
 
 # HMM-based regime detection
 from .hmm import (
-    HMMRegimeDetector,
     HMMConfig,
+    HMMRegimeDetector,
     HMMRegimeLabel,
     RegimeRouter,
     fit_gaussian_hmm,
     order_states_by_volatility,
 )
+from .structure import (
+    MarketStructureDetector,
+    calculate_hurst_exponent,
+    calculate_rolling_hurst,
+)
+from .trend import (
+    TrendRegimeDetector,
+    calculate_adx,
+    calculate_sma,
+)
 
+# Individual detectors
+from .volatility import (
+    VolatilityRegimeDetector,
+    calculate_atr,
+)
 
 __all__ = [
     # Base classes

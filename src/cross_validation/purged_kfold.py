@@ -13,8 +13,8 @@ Key concepts:
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -53,7 +53,7 @@ class PurgedKFoldConfig:
     purge_bars: int = 60
     embargo_bars: int = 1440
     min_train_size: float = 0.3
-    timeframe: Optional[str] = None  # For documentation/tracking purposes
+    timeframe: str | None = None  # For documentation/tracking purposes
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -73,8 +73,8 @@ class PurgedKFoldConfig:
         n_splits: int = 5,
         purge_bars: int = 60,
         min_train_size: float = 0.3,
-        embargo_time_minutes: Optional[int] = None,
-    ) -> "PurgedKFoldConfig":
+        embargo_time_minutes: int | None = None,
+    ) -> PurgedKFoldConfig:
         """
         Create config with timeframe-aware embargo calculation.
 
@@ -125,7 +125,7 @@ class PurgedKFoldConfig:
 # CV STRATEGIES BY MODEL FAMILY
 # =============================================================================
 
-CV_STRATEGIES: Dict[str, Dict] = {
+CV_STRATEGIES: dict[str, dict] = {
     "boosting": {
         "n_splits": 5,
         "tuning_trials": 100,
@@ -213,10 +213,10 @@ class PurgedKFold:
     def split(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        y: pd.Series | None = None,
+        groups: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Generate train/test indices for each fold.
 
@@ -300,14 +300,14 @@ class PurgedKFold:
 
     def get_n_splits(
         self,
-        X: Optional[pd.DataFrame] = None,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
+        X: pd.DataFrame | None = None,
+        y: pd.Series | None = None,
+        groups: pd.Series | None = None,
     ) -> int:
         """Return number of splits (sklearn API compatibility)."""
         return self.config.n_splits
 
-    def get_fold_info(self, X: pd.DataFrame) -> List[Dict]:
+    def get_fold_info(self, X: pd.DataFrame) -> list[dict]:
         """
         Get detailed information about each fold.
 
@@ -348,7 +348,7 @@ class PurgedKFold:
 
         return info
 
-    def validate_coverage(self, X: pd.DataFrame) -> Dict:
+    def validate_coverage(self, X: pd.DataFrame) -> dict:
         """
         Validate that CV covers all samples at least once.
 
@@ -419,9 +419,9 @@ class ModelAwareCV:
     def get_cv_splits(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        y: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Return appropriate number of splits for model family.
 

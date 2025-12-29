@@ -19,7 +19,8 @@ Example:
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Type
+from collections.abc import Callable
+from typing import Any
 
 from .base import BaseModel
 
@@ -53,9 +54,9 @@ class ModelRegistry:
         {'boosting': ['my_model']}
     """
 
-    _models: Dict[str, Type[BaseModel]] = {}
-    _families: Dict[str, List[str]] = {}
-    _metadata: Dict[str, Dict[str, Any]] = {}
+    _models: dict[str, type[BaseModel]] = {}
+    _families: dict[str, list[str]] = {}
+    _metadata: dict[str, dict[str, Any]] = {}
 
     @classmethod
     def register(
@@ -63,8 +64,8 @@ class ModelRegistry:
         name: str,
         family: str,
         description: str = "",
-        aliases: Optional[List[str]] = None,
-    ) -> Callable[[Type[BaseModel]], Type[BaseModel]]:
+        aliases: list[str] | None = None,
+    ) -> Callable[[type[BaseModel]], type[BaseModel]]:
         """
         Decorator to register a model class.
 
@@ -91,7 +92,7 @@ class ModelRegistry:
         """
         aliases = aliases or []
 
-        def decorator(model_class: Type[BaseModel]) -> Type[BaseModel]:
+        def decorator(model_class: type[BaseModel]) -> type[BaseModel]:
             # Validate model class
             if not issubclass(model_class, BaseModel):
                 raise TypeError(
@@ -145,7 +146,7 @@ class ModelRegistry:
     def create(
         cls,
         name: str,
-        config: Optional[Dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> BaseModel:
         """
@@ -180,7 +181,7 @@ class ModelRegistry:
         return model_class(config=config, **kwargs)
 
     @classmethod
-    def get(cls, name: str) -> Type[BaseModel]:
+    def get(cls, name: str) -> type[BaseModel]:
         """
         Get a model class by name.
 
@@ -204,7 +205,7 @@ class ModelRegistry:
         return cls._models[name_lower]
 
     @classmethod
-    def list_models(cls) -> Dict[str, List[str]]:
+    def list_models(cls) -> dict[str, list[str]]:
         """
         List all registered models by family.
 
@@ -223,7 +224,7 @@ class ModelRegistry:
         return {family: list(models) for family, models in cls._families.items()}
 
     @classmethod
-    def list_all(cls) -> List[str]:
+    def list_all(cls) -> list[str]:
         """
         List all registered model names.
 
@@ -236,7 +237,7 @@ class ModelRegistry:
         )
 
     @classmethod
-    def list_family(cls, family: str) -> List[str]:
+    def list_family(cls, family: str) -> list[str]:
         """
         List all models in a specific family.
 
@@ -260,7 +261,7 @@ class ModelRegistry:
         return list(cls._families[family_lower])
 
     @classmethod
-    def get_metadata(cls, name: str) -> Dict[str, Any]:
+    def get_metadata(cls, name: str) -> dict[str, Any]:
         """
         Get metadata for a registered model.
 
@@ -302,7 +303,7 @@ class ModelRegistry:
         }
 
     @classmethod
-    def get_model_info(cls, name: str) -> Dict[str, Any]:
+    def get_model_info(cls, name: str) -> dict[str, Any]:
         """
         Get detailed info about a model including runtime properties.
 
@@ -369,7 +370,7 @@ class ModelRegistry:
         logger.debug("Cleared all registered models")
 
     @classmethod
-    def families(cls) -> List[str]:
+    def families(cls) -> list[str]:
         """
         Get list of all model families.
 
@@ -422,8 +423,8 @@ def register(
     name: str,
     family: str,
     description: str = "",
-    aliases: Optional[List[str]] = None,
-) -> Callable[[Type[BaseModel]], Type[BaseModel]]:
+    aliases: list[str] | None = None,
+) -> Callable[[type[BaseModel]], type[BaseModel]]:
     """
     Convenience decorator for model registration.
 

@@ -7,16 +7,15 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
+from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +23,10 @@ logger = logging.getLogger(__name__)
 def generate_report_content(
     config: 'PipelineConfig',
     combined_df: pd.DataFrame,
-    split_config: Dict[str, Any],
-    feature_cols: List[str],
-    label_stats: Dict[int, Dict[str, int]],
-    stage_results: Dict[str, StageResult]
+    split_config: dict[str, Any],
+    feature_cols: list[str],
+    label_stats: dict[int, dict[str, int]],
+    stage_results: dict[str, StageResult]
 ) -> str:
     """
     Generate the report markdown content.
@@ -156,7 +155,7 @@ sample_weights = train_df['sample_weight_h5'].values
 def run_generate_report(
     config: 'PipelineConfig',
     manifest: 'ArtifactManifest',
-    stage_results: Dict[str, StageResult]
+    stage_results: dict[str, StageResult]
 ) -> StageResult:
     """
     Stage 9: Generate Completion Report.
@@ -185,7 +184,7 @@ def run_generate_report(
         combined_path = config.final_data_dir / "combined_final_labeled.parquet"
         combined_df = pd.read_parquet(combined_path)
 
-        with open(config.splits_dir / "split_config.json", 'r') as f:
+        with open(config.splits_dir / "split_config.json") as f:
             split_config = json.load(f)
 
         excluded_prefixes = (

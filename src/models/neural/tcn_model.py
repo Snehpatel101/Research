@@ -12,7 +12,7 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -108,7 +108,7 @@ class TCNNetwork(nn.Module):
     def __init__(
         self,
         input_size: int,
-        num_channels: List[int],
+        num_channels: list[int],
         kernel_size: int,
         dropout: float,
         dilation_base: int = 2,
@@ -170,13 +170,34 @@ class TCNModel(BaseRNNModel):
     - AdamW optimizer with cosine annealing
     - Gradient clipping and early stopping
 
+    Production Safety:
+        TCN uses causal convolutions that only look at past data, making it
+        inherently production-safe for real-time trading inference.
+
     Example:
         >>> from src.models import ModelRegistry
         >>> model = ModelRegistry.create("tcn", config={"num_channels": [64, 64, 64, 64]})
         >>> metrics = model.fit(X_train, y_train, X_val, y_val)
     """
 
-    def get_default_config(self) -> Dict[str, Any]:
+    @property
+    def is_production_safe(self) -> bool:
+        """
+        Check if this model configuration is safe for production trading.
+
+        TCN uses causal convolutions that only look at past data, so it is
+        always production-safe.
+
+        Returns:
+            True - TCN is always production-safe due to causal convolutions.
+        """
+        return True
+
+    def _log_bidirectional_warning(self) -> None:
+        """TCN uses causal convolutions, so no warning needed."""
+        pass  # TCN is inherently causal - no warning
+
+    def get_default_config(self) -> dict[str, Any]:
         """Return default TCN hyperparameters."""
         defaults = super().get_default_config()
         defaults.update({
@@ -203,7 +224,7 @@ class TCNModel(BaseRNNModel):
         """Return model type string."""
         return "tcn"
 
-    def _on_training_start(self, train_config: Dict[str, Any], seq_len: int) -> Dict[str, Any]:
+    def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
         Log TCN-specific receptive field information at training start.
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 from scipy import stats
@@ -97,7 +97,7 @@ class PBOResult:
     best_is_oos_rank: float
     config: PBOConfig
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "pbo": self.pbo,
@@ -157,7 +157,7 @@ def _compute_logit(w_bar: float) -> float:
 
 def compute_pbo(
     performance_matrix: np.ndarray,
-    config: Optional[PBOConfig] = None,
+    config: PBOConfig | None = None,
 ) -> PBOResult:
     """
     Compute Probability of Backtest Overfitting.
@@ -344,7 +344,7 @@ def compute_pbo(
 
 def compute_pbo_from_returns(
     returns_matrix: np.ndarray,
-    config: Optional[PBOConfig] = None,
+    config: PBOConfig | None = None,
     use_sharpe: bool = True,
 ) -> PBOResult:
     """
@@ -401,7 +401,7 @@ def compute_pbo_from_returns(
 def pbo_gate(
     pbo_result: PBOResult,
     strict: bool = False,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """
     Gate function for deployment decisions based on PBO.
 
@@ -428,9 +428,9 @@ def pbo_gate(
 
 def analyze_overfitting_risk(
     performance_matrix: np.ndarray,
-    strategy_names: Optional[List[str]] = None,
-    config: Optional[PBOConfig] = None,
-) -> Dict[str, Any]:
+    strategy_names: list[str] | None = None,
+    config: PBOConfig | None = None,
+) -> dict[str, Any]:
     """
     Comprehensive overfitting risk analysis.
 

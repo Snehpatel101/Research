@@ -12,8 +12,7 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -115,11 +114,11 @@ class GRUModel(BaseRNNModel):
         >>> predictions = model.predict(X_test)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
         logger.debug(f"Initialized GRUModel with config: {self._config}")
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         """Return default GRU hyperparameters."""
         defaults = super().get_default_config()
         # GRU-specific defaults
@@ -148,7 +147,7 @@ class GRUModel(BaseRNNModel):
         """Return model type string."""
         return "gru"
 
-    def get_hidden_states(self, X: "np.ndarray") -> Optional["np.ndarray"]:
+    def get_hidden_states(self, X: np.ndarray) -> np.ndarray | None:
         """
         Return hidden states from the GRU for interpretability.
 
@@ -159,7 +158,6 @@ class GRUModel(BaseRNNModel):
             Hidden states array, shape (n_samples, seq_len, hidden_size)
             or None if model is not fitted
         """
-        import numpy as np
 
         if not self._is_fitted:
             return None
@@ -172,7 +170,7 @@ class GRUModel(BaseRNNModel):
             output, _ = self._model.rnn(X_tensor)
             return output.cpu().numpy()
 
-    def get_gate_values(self, X: "np.ndarray") -> Optional[Dict[str, "np.ndarray"]]:
+    def get_gate_values(self, X: np.ndarray) -> dict[str, np.ndarray] | None:
         """
         Return gate values from the GRU for interpretability.
 

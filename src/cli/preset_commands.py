@@ -1,13 +1,12 @@
 """
 CLI Preset Commands - commands for viewing and managing trading presets.
 """
-from typing import Optional
 
 import typer
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
-from .utils import console, show_info
+from .utils import console
 
 # Lazy imports to avoid circular dependencies
 _presets_module = None
@@ -23,7 +22,7 @@ def _get_presets_module():
 
 
 def presets_command(
-    preset_name: Optional[str] = typer.Argument(
+    preset_name: str | None = typer.Argument(
         None,
         help="Preset name to show details for (optional)"
     ),

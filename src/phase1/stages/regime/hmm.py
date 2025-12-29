@@ -18,8 +18,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -73,7 +72,7 @@ class HMMConfig:
                 f"for {self.n_states} states"
             )
         if self.input_type not in ("returns", "volatility"):
-            raise ValueError(f"input_type must be 'returns' or 'volatility'")
+            raise ValueError("input_type must be 'returns' or 'volatility'")
         if self.covariance_type not in ("spherical", "diag", "full", "tied"):
             raise ValueError(f"Invalid covariance_type: {self.covariance_type}")
 
@@ -89,7 +88,7 @@ def fit_gaussian_hmm(
     max_iter: int = 100,
     n_init: int = 10,
     random_state: int = 42,
-) -> Tuple[Any, np.ndarray, np.ndarray]:
+) -> tuple[Any, np.ndarray, np.ndarray]:
     """
     Fit Gaussian HMM and return model with hidden states.
 
@@ -165,7 +164,7 @@ def fit_gaussian_hmm(
 def order_states_by_volatility(
     model: Any,
     current_states: np.ndarray,
-) -> Tuple[np.ndarray, Dict[int, int]]:
+) -> tuple[np.ndarray, dict[int, int]]:
     """
     Reorder HMM states by increasing volatility for interpretability.
 
@@ -237,6 +236,7 @@ class HMMRegimeDetector(RegimeDetector):
         n_init: int = 10,
         random_state: int = 42,
         expanding: bool = True,
+        retrain_interval: int = 50,
     ) -> None:
         """
         Initialize HMM regime detector.
@@ -249,7 +249,13 @@ class HMMRegimeDetector(RegimeDetector):
             max_iter: Maximum EM iterations
             n_init: Number of random initializations
             random_state: Random seed
-            expanding: If True, use expanding window; else rolling
+            expanding: If True, use expanding window (retrained periodically); else rolling
+            retrain_interval: For expanding mode, retrain HMM every N bars (default 50).
+                Smaller values are more accurate but slower. Use 1 for per-bar retraining.
+
+        Note:
+            Both expanding and rolling modes avoid lookahead bias by only using
+            data up to (and including) the current bar for predictions.
         """
         super().__init__(RegimeType.COMPOSITE)  # Use COMPOSITE until HMM added
 
@@ -263,10 +269,11 @@ class HMMRegimeDetector(RegimeDetector):
             random_state=random_state,
         )
         self.expanding = expanding
+        self.retrain_interval = max(1, retrain_interval)
         self._fitted_model = None
         self._state_mapping = None
 
-    def get_required_columns(self) -> List[str]:
+    def get_required_columns(self) -> list[str]:
         """Required columns for detection."""
         return ["close"]
 
@@ -286,7 +293,7 @@ class HMMRegimeDetector(RegimeDetector):
     def detect_with_probabilities(
         self,
         df: pd.DataFrame,
-    ) -> Tuple[pd.Series, pd.DataFrame]:
+    ) -> tuple[pd.Series, pd.DataFrame]:
         """
         Detect regimes with state probabilities.
 
@@ -327,34 +334,82 @@ class HMMRegimeDetector(RegimeDetector):
         start_idx = self.config.lookback
 
         if self.expanding:
-            # Fit once on full history, predict for all
-            try:
-                window_obs = observations[:n_samples]
-                self._fitted_model, raw_states, raw_probs = fit_gaussian_hmm(
-                    window_obs,
-                    n_states=self.config.n_states,
-                    covariance_type=self.config.covariance_type,
-                    max_iter=self.config.max_iter,
-                    n_init=self.config.n_init,
-                    random_state=self.config.random_state,
+            # Expanding mode: retrain periodically using only past data (no lookahead).
+            # Model is retrained every retrain_interval bars for efficiency.
+            logger.info(
+                f"HMM expanding mode: Retraining every {self.retrain_interval} bars "
+                "(no lookahead bias - uses only past data at each point)."
+            )
+
+            min_samples = max(self.config.lookback, self.config.n_states * 20)
+            current_model = None
+            current_mapping = None
+
+            for i in range(min_samples, n_samples):
+                # Retrain model at intervals or when we don't have a model yet
+                needs_retrain = (
+                    current_model is None
+                    or (i - min_samples) % self.retrain_interval == 0
                 )
 
-                # Reorder by volatility
-                ordered_states, self._state_mapping = order_states_by_volatility(
-                    self._fitted_model, raw_states
-                )
+                if needs_retrain:
+                    try:
+                        # Train on data from start up to current bar (no future data)
+                        window_obs = observations[:i + 1]
 
-                states = ordered_states
+                        current_model, raw_s, raw_p = fit_gaussian_hmm(
+                            window_obs,
+                            n_states=self.config.n_states,
+                            covariance_type=self.config.covariance_type,
+                            max_iter=self.config.max_iter,
+                            n_init=self.config.n_init,
+                            random_state=self.config.random_state,
+                        )
 
-                # Reorder probability columns to match state reordering
-                # state_mapping maps old_state -> new_state
-                probs_reordered = np.zeros_like(raw_probs)
-                for old_state, new_state in self._state_mapping.items():
-                    probs_reordered[:, new_state] = raw_probs[:, old_state]
-                probs = probs_reordered
+                        # Reorder by volatility
+                        ordered_s, current_mapping = order_states_by_volatility(
+                            current_model, raw_s
+                        )
 
-            except Exception as e:
-                logger.warning(f"HMM fitting failed: {e}")
+                        # Assign state for current bar
+                        states[i] = ordered_s[-1]
+
+                        # Reorder probability for current bar
+                        reordered_p = np.zeros(self.config.n_states)
+                        for old_state, new_state in current_mapping.items():
+                            reordered_p[new_state] = raw_p[-1, old_state]
+                        probs[i] = reordered_p
+
+                    except Exception as e:
+                        logger.debug(f"HMM expanding retrain failed at index {i}: {e}")
+
+                elif current_model is not None:
+                    # Use existing model to predict current bar (no retraining)
+                    try:
+                        # Predict using lookback window ending at current bar
+                        predict_window = observations[max(0, i - self.config.lookback):i + 1]
+                        predict_window = predict_window.reshape(-1, 1) if predict_window.ndim == 1 else predict_window
+
+                        # Remove NaN for prediction
+                        valid_mask = ~np.isnan(predict_window).any(axis=1)
+                        if valid_mask.sum() >= self.config.n_states:
+                            clean_window = predict_window[valid_mask]
+                            raw_state = current_model.predict(clean_window)[-1]
+                            raw_prob = current_model.predict_proba(clean_window)[-1]
+
+                            # Apply state mapping
+                            states[i] = current_mapping.get(raw_state, raw_state)
+                            reordered_p = np.zeros(self.config.n_states)
+                            for old_state, new_state in current_mapping.items():
+                                reordered_p[new_state] = raw_prob[old_state]
+                            probs[i] = reordered_p
+
+                    except Exception as e:
+                        logger.debug(f"HMM expanding predict failed at index {i}: {e}")
+
+            # Store final model
+            self._fitted_model = current_model
+            self._state_mapping = current_mapping
         else:
             # Rolling window fitting
             for i in range(start_idx, n_samples):
@@ -396,7 +451,7 @@ class HMMRegimeDetector(RegimeDetector):
 
         return regimes, prob_df
 
-    def _get_state_labels(self) -> Dict[int, str]:
+    def _get_state_labels(self) -> dict[int, str]:
         """Map state indices to human-readable labels."""
         n = self.config.n_states
 
@@ -409,7 +464,7 @@ class HMMRegimeDetector(RegimeDetector):
         else:
             return {i: f"state_{i}" for i in range(n)}
 
-    def get_transition_matrix(self) -> Optional[np.ndarray]:
+    def get_transition_matrix(self) -> np.ndarray | None:
         """
         Get the fitted transition probability matrix.
 
@@ -420,7 +475,7 @@ class HMMRegimeDetector(RegimeDetector):
             return None
         return self._fitted_model.transmat_
 
-    def get_state_means(self) -> Optional[np.ndarray]:
+    def get_state_means(self) -> np.ndarray | None:
         """
         Get the fitted state means.
 
@@ -431,7 +486,7 @@ class HMMRegimeDetector(RegimeDetector):
             return None
         return self._fitted_model.means_
 
-    def get_state_variances(self) -> Optional[np.ndarray]:
+    def get_state_variances(self) -> np.ndarray | None:
         """
         Get the fitted state variances.
 
@@ -474,8 +529,8 @@ class RegimeRouter:
 
     def __init__(
         self,
-        regime_model_map: Dict[str, str],
-        default_model: Optional[str] = None,
+        regime_model_map: dict[str, str],
+        default_model: str | None = None,
     ) -> None:
         """
         Initialize regime router.
@@ -511,7 +566,7 @@ class RegimeRouter:
         """
         return regimes.map(lambda r: self.route(r))
 
-    def get_routing_summary(self, regimes: pd.Series) -> Dict[str, Any]:
+    def get_routing_summary(self, regimes: pd.Series) -> dict[str, Any]:
         """
         Get summary of routing decisions.
 

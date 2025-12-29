@@ -11,11 +11,10 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import pandas as pd
 
-from .base import BaseBarBuilder, BarBuilderRegistry
+from .base import BarBuilderRegistry, BaseBarBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +74,7 @@ class TimeBarBuilder(BaseBarBuilder):
     def build(
         self,
         df: pd.DataFrame,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         include_metadata: bool = True,
     ) -> pd.DataFrame:
         """

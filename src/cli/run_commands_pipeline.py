@@ -4,102 +4,101 @@ Pipeline execution commands - run and rerun.
 Provides CLI commands for running the Phase 1 data pipeline
 and resuming failed/incomplete runs.
 """
-from typing import Optional
 
 import typer
 from rich.table import Table
 
-from .utils import console, show_error, show_success, show_info, show_warning, get_project_root
 from .run_commands_core import (
+    _create_config_from_args,
     _get_pipeline_config,
     _get_pipeline_runner,
     _get_presets_module,
-    _create_config_from_args
 )
+from .utils import console, get_project_root, show_error, show_info, show_success, show_warning
 
 
 def run_command(
-    symbols: Optional[str] = typer.Option(
+    symbols: str | None = typer.Option(
         None,
         "--symbols",
         "-s",
         help="Comma-separated list of symbols (auto-detected from data/raw/ if not specified)"
     ),
-    preset: Optional[str] = typer.Option(
+    preset: str | None = typer.Option(
         None,
         "--preset",
         "-p",
         help="Trading preset: scalping, day_trading, swing (overrides defaults)"
     ),
-    timeframe: Optional[str] = typer.Option(
+    timeframe: str | None = typer.Option(
         None,
         "--timeframe",
         "-t",
         help="Target timeframe for resampling (e.g., 1min, 5min, 15min)"
     ),
-    start: Optional[str] = typer.Option(
+    start: str | None = typer.Option(
         None,
         "--start",
         help="Start date (YYYY-MM-DD)"
     ),
-    end: Optional[str] = typer.Option(
+    end: str | None = typer.Option(
         None,
         "--end",
         help="End date (YYYY-MM-DD)"
     ),
-    run_id: Optional[str] = typer.Option(
+    run_id: str | None = typer.Option(
         None,
         "--run-id",
         help="Custom run ID (defaults to YYYYMMDD_HHMMSS)"
     ),
-    description: Optional[str] = typer.Option(
+    description: str | None = typer.Option(
         None,
         "--description",
         "-d",
         help="Description of this run"
     ),
-    train_ratio: Optional[float] = typer.Option(
+    train_ratio: float | None = typer.Option(
         None,
         "--train-ratio",
         help="Training set ratio (default: 0.70)"
     ),
-    val_ratio: Optional[float] = typer.Option(
+    val_ratio: float | None = typer.Option(
         None,
         "--val-ratio",
         help="Validation set ratio (default: 0.15)"
     ),
-    test_ratio: Optional[float] = typer.Option(
+    test_ratio: float | None = typer.Option(
         None,
         "--test-ratio",
         help="Test set ratio (default: 0.15)"
     ),
-    purge_bars: Optional[int] = typer.Option(
+    purge_bars: int | None = typer.Option(
         None,
         "--purge-bars",
         help="Number of bars to purge at split boundaries"
     ),
-    embargo_bars: Optional[int] = typer.Option(
+    embargo_bars: int | None = typer.Option(
         None,
         "--embargo-bars",
         help="Embargo period in bars (~1 day for 5-min data)"
     ),
-    horizons: Optional[str] = typer.Option(
+    horizons: str | None = typer.Option(
         None,
         "--horizons",
         help="Comma-separated label horizons (overrides preset)"
     ),
-    feature_set: Optional[str] = typer.Option(
+    feature_set: str | None = typer.Option(
         None,
         "--feature-set",
         help="Feature set: core_min, core_full, mtf_plus, boosting_optimal, neural_optimal, etc."
     ),
     # MTF settings
-    mtf_mode: Optional[str] = typer.Option(
+    mtf_mode: str | None = typer.Option(
         None,
         "--mtf-mode",
         help="MTF mode: bars, indicators, or both (default: both)"
     ),
-    mtf_timeframes: Optional[str] = typer.Option(
+    mtf_timeframes: str | None = typer.Option(
         None,
         "--mtf-timeframes",
         help="Comma-separated MTF timeframes (e.g., '15min,30min,1h,4h,daily')"
@@ -110,70 +109,70 @@ def run_command(
         help="Disable MTF feature generation entirely"
     ),
     # Feature toggles
-    enable_wavelets: Optional[bool] = typer.Option(
+    enable_wavelets: bool | None = typer.Option(
         None,
         "--enable-wavelets/--disable-wavelets",
         help="Enable/disable wavelet decomposition features"
     ),
-    enable_microstructure: Optional[bool] = typer.Option(
+    enable_microstructure: bool | None = typer.Option(
         None,
         "--enable-microstructure/--disable-microstructure",
         help="Enable/disable microstructure features (bid-ask, order flow)"
     ),
-    enable_volume: Optional[bool] = typer.Option(
+    enable_volume: bool | None = typer.Option(
         None,
         "--enable-volume/--disable-volume",
         help="Enable/disable volume-based features"
     ),
-    enable_volatility: Optional[bool] = typer.Option(
+    enable_volatility: bool | None = typer.Option(
         None,
         "--enable-volatility/--disable-volatility",
         help="Enable/disable volatility features"
     ),
     # Labeling parameters
-    k_up: Optional[float] = typer.Option(
+    k_up: float | None = typer.Option(
         None,
         "--k-up",
         help="Upper barrier multiplier (overrides symbol-specific defaults)"
     ),
-    k_down: Optional[float] = typer.Option(
+    k_down: float | None = typer.Option(
         None,
         "--k-down",
         help="Lower barrier multiplier (overrides symbol-specific defaults)"
     ),
-    max_bars: Optional[int] = typer.Option(
+    max_bars: int | None = typer.Option(
         None,
         "--max-bars",
         help="Maximum bars for label timeout (overrides defaults)"
     ),
     # Scaling options
-    scaler_type: Optional[str] = typer.Option(
+    scaler_type: str | None = typer.Option(
         None,
         "--scaler-type",
         help="Scaler type: robust, standard, minmax, quantile, none (default: robust)"
     ),
     # Model selection (Phase 2+)
-    model_type: Optional[str] = typer.Option(
+    model_type: str | None = typer.Option(
         None,
         "--model-type",
         help="Target model type: xgboost, lightgbm, lstm, transformer, ensemble, etc."
     ),
-    base_models: Optional[str] = typer.Option(
+    base_models: str | None = typer.Option(
         None,
         "--base-models",
         help="Comma-separated base models for ensemble (e.g., 'xgboost,lstm,transformer')"
     ),
-    meta_learner: Optional[str] = typer.Option(
+    meta_learner: str | None = typer.Option(
         None,
         "--meta-learner",
         help="Meta-learner for ensemble stacking (e.g., logistic, xgboost)"
     ),
-    sequence_length: Optional[int] = typer.Option(
+    sequence_length: int | None = typer.Option(
         None,
         "--sequence-length",
         help="Sequence length for sequential models (LSTM, Transformer)"
     ),
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"
@@ -349,12 +348,12 @@ def rerun_command(
         ...,
         help="Run ID to resume"
     ),
-    from_stage: Optional[str] = typer.Option(
+    from_stage: str | None = typer.Option(
         None,
         "--from",
         help="Stage to resume from (e.g., 'labels', 'features')"
     ),
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"

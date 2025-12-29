@@ -367,3 +367,191 @@ class TestTripleBarrierAddToDataframe:
         assert 'high' in df_labeled.columns
         assert 'low' in df_labeled.columns
         assert 'open' in df_labeled.columns
+
+
+class TestTripleBarrierTransactionCosts:
+    """Tests for transaction cost adjustment in triple-barrier labeling."""
+
+    def test_transaction_costs_applied_by_default(self, sample_ohlcv_df):
+        """Test that transaction costs are applied by default."""
+        labeler = TripleBarrierLabeler()
+        result = labeler.compute_labels(sample_ohlcv_df, horizon=5)
+
+        # Metadata should contain cost information
+        assert result.metadata.get('transaction_cost_applied', False) is True
+        assert 'cost_in_atr' in result.metadata
+        assert result.metadata['cost_in_atr'] > 0
+
+    def test_transaction_costs_disabled(self, sample_ohlcv_df):
+        """Test that transaction costs can be disabled."""
+        labeler = TripleBarrierLabeler(apply_transaction_costs=False)
+        result = labeler.compute_labels(sample_ohlcv_df, horizon=5)
+
+        # Metadata should NOT contain cost information
+        assert result.metadata.get('transaction_cost_applied', False) is False
+        assert 'cost_in_atr' not in result.metadata
+
+    def test_transaction_costs_override_in_compute(self, sample_ohlcv_df):
+        """Test that transaction costs can be overridden in compute_labels."""
+        labeler = TripleBarrierLabeler(apply_transaction_costs=True)
+
+        # Override to disable costs
+        result = labeler.compute_labels(
+            sample_ohlcv_df, horizon=5, apply_transaction_costs=False
+        )
+
+        assert result.metadata.get('transaction_cost_applied', False) is False
+
+    def test_numba_with_costs_makes_upper_barrier_harder(self):
+        """Test that cost adjustment makes upper barrier harder to hit."""
+        from src.phase1.stages.labeling import triple_barrier_numba, triple_barrier_numba_with_costs
+
+        n = 30
+        close = np.full(n, 100.0)
+        high = close.copy()
+        low = close.copy()
+        open_ = close.copy()
+        atr = np.ones(n) * 2.0
+
+        # Create a price move that BARELY hits the upper barrier without costs
+        # Upper barrier at 100 + 2.0 * 2 = 104
+        # Price moves to exactly 104 on bar 1
+        high[1] = 104.0
+
+        # Without costs: should hit upper barrier (WIN)
+        labels_no_cost, _, _, _, touch_type_no_cost = triple_barrier_numba(
+            close, high, low, open_, atr, k_up=2.0, k_down=2.0, max_bars=15
+        )
+
+        # With costs (0.15 ATR): upper barrier at 100 + (2.0 + 0.15) * 2 = 104.3
+        # Price at 104 does NOT hit the adjusted barrier
+        labels_with_cost, _, _, _, touch_type_with_cost = triple_barrier_numba_with_costs(
+            close, high, low, open_, atr, k_up=2.0, k_down=2.0, max_bars=15, cost_in_atr=0.15
+        )
+
+        # Without costs: bar 0 should be labeled as WIN (+1)
+        assert labels_no_cost[0] == 1, f"Expected WIN without costs, got {labels_no_cost[0]}"
+        assert touch_type_no_cost[0] == 1
+
+        # With costs: bar 0 should NOT be WIN (timeout or different label)
+        assert labels_with_cost[0] != 1, f"Expected NOT WIN with costs, got {labels_with_cost[0]}"
+
+    def test_cost_adjustment_requires_more_profit_for_win(self):
+        """Verify that cost adjustment requires higher gross profit for WIN."""
+        from src.phase1.stages.labeling import triple_barrier_numba_with_costs
+
+        n = 30
+        close = np.full(n, 100.0)
+        high = close.copy()
+        low = close.copy()
+        open_ = close.copy()
+        atr = np.ones(n) * 2.0
+
+        k_up = 2.0
+        cost_in_atr = 0.25
+
+        # With costs, effective upper barrier = 100 + (2.0 + 0.25) * 2 = 104.5
+        # Price at 104.5 should just barely hit the upper barrier
+        high[1] = 104.5
+
+        labels, bars_to_hit, _, _, touch_type = triple_barrier_numba_with_costs(
+            close, high, low, open_, atr, k_up=k_up, k_down=2.0, max_bars=15, cost_in_atr=cost_in_atr
+        )
+
+        # Should now hit upper barrier with the adjusted higher price
+        assert labels[0] == 1, f"Expected WIN with sufficient profit, got {labels[0]}"
+        assert touch_type[0] == 1
+        assert bars_to_hit[0] == 1
+
+    def test_cost_in_atr_calculation(self, sample_ohlcv_df):
+        """Test that cost_in_atr is calculated correctly for different symbols."""
+        labeler = TripleBarrierLabeler(symbol='MES', volatility_regime='low_vol')
+        result_mes = labeler.compute_labels(sample_ohlcv_df, horizon=5)
+
+        labeler_mgc = TripleBarrierLabeler(symbol='MGC', volatility_regime='low_vol')
+        result_mgc = labeler_mgc.compute_labels(sample_ohlcv_df, horizon=5)
+
+        # Both should have cost_in_atr, values may differ based on tick values
+        assert result_mes.metadata.get('cost_in_atr', 0) > 0
+        assert result_mgc.metadata.get('cost_in_atr', 0) > 0
+
+    def test_high_volatility_regime_higher_costs(self, sample_ohlcv_df):
+        """Test that high volatility regime results in higher cost adjustment."""
+        labeler_low = TripleBarrierLabeler(
+            symbol='MES', volatility_regime='low_vol'
+        )
+        labeler_high = TripleBarrierLabeler(
+            symbol='MES', volatility_regime='high_vol'
+        )
+
+        result_low = labeler_low.compute_labels(sample_ohlcv_df, horizon=5)
+        result_high = labeler_high.compute_labels(sample_ohlcv_df, horizon=5)
+
+        cost_low = result_low.metadata.get('cost_in_atr', 0)
+        cost_high = result_high.metadata.get('cost_in_atr', 0)
+
+        # High volatility should have higher costs (more slippage)
+        assert cost_high > cost_low, (
+            f"High vol cost ({cost_high}) should be > low vol cost ({cost_low})"
+        )
+
+    def test_symbol_override_in_compute_labels(self, sample_ohlcv_df):
+        """Test that symbol can be overridden in compute_labels."""
+        labeler = TripleBarrierLabeler(symbol='MES')
+
+        result = labeler.compute_labels(sample_ohlcv_df, horizon=5, symbol='MGC')
+
+        assert result.metadata.get('symbol') == 'MGC'
+
+    def test_backward_compatibility_with_disabled_costs(self, sample_ohlcv_df):
+        """Test that disabling costs produces identical results to old behavior."""
+        from src.phase1.stages.labeling import triple_barrier_numba
+
+        labeler = TripleBarrierLabeler(apply_transaction_costs=False)
+        result = labeler.compute_labels(
+            sample_ohlcv_df, horizon=5, k_up=2.0, k_down=2.0, max_bars=10
+        )
+
+        # Compare with direct numba call (old behavior)
+        close = sample_ohlcv_df['close'].values
+        high = sample_ohlcv_df['high'].values
+        low = sample_ohlcv_df['low'].values
+        open_prices = sample_ohlcv_df['open'].values
+        atr = sample_ohlcv_df['atr_14'].values
+
+        labels_direct, _, _, _, _ = triple_barrier_numba(
+            close, high, low, open_prices, atr, k_up=2.0, k_down=2.0, max_bars=10
+        )
+
+        np.testing.assert_array_equal(result.labels, labels_direct)
+
+    def test_lower_barrier_not_affected_by_costs(self):
+        """Test that the lower barrier is NOT adjusted by transaction costs."""
+        from src.phase1.stages.labeling import triple_barrier_numba, triple_barrier_numba_with_costs
+
+        n = 30
+        close = np.full(n, 100.0)
+        high = close.copy()
+        low = close.copy()
+        open_ = close.copy()
+        atr = np.ones(n) * 2.0
+
+        # Lower barrier at 100 - 2.0 * 2 = 96
+        # Price drops to exactly 96 on bar 1
+        low[1] = 96.0
+
+        # Without costs
+        labels_no_cost, _, _, _, touch_type_no_cost = triple_barrier_numba(
+            close, high, low, open_, atr, k_up=2.0, k_down=2.0, max_bars=15
+        )
+
+        # With costs (should NOT affect lower barrier)
+        labels_with_cost, _, _, _, touch_type_with_cost = triple_barrier_numba_with_costs(
+            close, high, low, open_, atr, k_up=2.0, k_down=2.0, max_bars=15, cost_in_atr=0.5
+        )
+
+        # Both should hit lower barrier (LOSS)
+        assert labels_no_cost[0] == -1
+        assert labels_with_cost[0] == -1
+        assert touch_type_no_cost[0] == -1
+        assert touch_type_with_cost[0] == -1

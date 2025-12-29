@@ -7,17 +7,17 @@ for sequence models (LSTM, GRU, TCN, Transformer).
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.purged_kfold import PurgedKFold
 from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from src.cross_validation.sequence_cv import SequenceCVBuilder
 from src.cross_validation.oof_core import OOFPrediction
-from src.models.registry import ModelRegistry
+from src.cross_validation.purged_kfold import PurgedKFold
+from src.cross_validation.sequence_cv import SequenceCVBuilder
 from src.models.base import PredictionOutput
+from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +54,11 @@ class SequenceOOFGenerator:
         X: pd.DataFrame,
         y: pd.Series,
         model_name: str,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         seq_len: int,
-        sample_weights: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-        symbol_column: Optional[str] = "symbol",
+        sample_weights: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+        symbol_column: str | None = "symbol",
     ) -> OOFPrediction:
         """
         Generate OOF predictions for a sequence model (LSTM, GRU, TCN, etc.).
@@ -94,7 +94,7 @@ class SequenceOOFGenerator:
         oof_probs = np.full((n_samples, n_classes), np.nan)
         oof_preds = np.full(n_samples, np.nan)
         oof_confidence = np.full(n_samples, np.nan)
-        fold_info: List[Dict[str, Any]] = []
+        fold_info: list[dict[str, Any]] = []
 
         # Create sequence builder with symbol awareness
         # Check if symbol column exists

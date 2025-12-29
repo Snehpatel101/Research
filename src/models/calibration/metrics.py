@@ -10,7 +10,6 @@ match actual frequencies:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 import numpy as np
 
@@ -24,7 +23,7 @@ class ReliabilityBins:
     bin_counts: np.ndarray
     n_bins: int
 
-    def to_dict(self) -> Dict[str, list]:
+    def to_dict(self) -> dict[str, list]:
         """Convert to serializable dict."""
         return {
             "bin_centers": self.bin_centers.tolist(),

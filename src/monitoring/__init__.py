@@ -8,6 +8,12 @@ Provides online drift detection and alerting:
 - Alert handlers with rate limiting and callbacks
 """
 
+from src.monitoring.alert_handler import (
+    AlertConfig,
+    AlertHandler,
+    AlertRecord,
+    DriftAlertAggregator,
+)
 from src.monitoring.drift_detector import (
     ADWINDetector,
     BaseDriftDetector,
@@ -17,13 +23,6 @@ from src.monitoring.drift_detector import (
     FeatureDriftMonitor,
     KSDetector,
     PSIDetector,
-)
-
-from src.monitoring.alert_handler import (
-    AlertConfig,
-    AlertHandler,
-    AlertRecord,
-    DriftAlertAggregator,
 )
 
 __all__ = [

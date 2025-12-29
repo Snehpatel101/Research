@@ -9,12 +9,12 @@ Updated: 2025-12-20 - Extracted from feature_scaler.py
 """
 
 import logging
-import pandas as pd
 from pathlib import Path
-from typing import Optional, Tuple, List
 
-from .scaler import FeatureScaler
+import pandas as pd
+
 from .core import ScalerConfig
+from .scaler import FeatureScaler
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -24,10 +24,10 @@ def scale_splits(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    feature_cols: List[str],
-    scaler_path: Optional[Path] = None,
-    config: Optional[ScalerConfig] = None
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
+    feature_cols: list[str],
+    scaler_path: Path | None = None,
+    config: ScalerConfig | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
     """
     Scale train/val/test splits with train-only fitting.
 
@@ -74,12 +74,12 @@ def scale_train_val_test(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     scaler_type: str = 'robust',
-    save_path: Optional[Path] = None,
+    save_path: Path | None = None,
     clip_outliers: bool = True,
-    clip_range: Tuple[float, float] = (-5.0, 5.0)
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
+    clip_range: tuple[float, float] = (-5.0, 5.0)
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
     """
     Scale train/val/test data with a scaler fitted on training data only.
 

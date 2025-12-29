@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -39,9 +39,9 @@ class StackingDataset:
         metadata: Additional metadata
     """
     data: pd.DataFrame
-    model_names: List[str]
+    model_names: list[str]
     horizon: int
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def n_samples(self) -> int:
@@ -77,8 +77,8 @@ class StackingDataset:
 # =============================================================================
 
 def find_valid_samples_mask(
-    oof_predictions: Dict[str, OOFPrediction],
-) -> Tuple[np.ndarray, Dict[str, int]]:
+    oof_predictions: dict[str, OOFPrediction],
+) -> tuple[np.ndarray, dict[str, int]]:
     """
     Find samples with valid predictions across all models.
 
@@ -103,7 +103,7 @@ def find_valid_samples_mask(
 
     # Start with all True, then AND with each model's valid mask
     valid_mask = np.ones(n_samples, dtype=bool)
-    nan_counts: Dict[str, int] = {}
+    nan_counts: dict[str, int] = {}
 
     for model_name, oof_pred in oof_predictions.items():
         # Check the prediction column for NaN
@@ -134,7 +134,7 @@ class StackingDatasetBuilder:
 
     def build_stacking_dataset(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
+        oof_predictions: dict[str, OOFPrediction],
         y_true: pd.Series,
         horizon: int,
         add_derived_features: bool = True,
@@ -255,7 +255,7 @@ class StackingDatasetBuilder:
     def _add_stacking_features(
         self,
         df: pd.DataFrame,
-        model_names: List[str],
+        model_names: list[str],
     ) -> pd.DataFrame:
         """Add derived features for meta-learner."""
         df = df.copy()

@@ -2,7 +2,6 @@
 Feature normalization validation checks.
 """
 import logging
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,7 +10,7 @@ from scipy import stats
 logger = logging.getLogger(__name__)
 
 
-def get_feature_columns(df: pd.DataFrame) -> List[str]:
+def get_feature_columns(df: pd.DataFrame) -> list[str]:
     """
     Identify feature columns in the DataFrame.
 
@@ -40,9 +39,9 @@ def get_feature_columns(df: pd.DataFrame) -> List[str]:
 
 def compute_feature_statistics(
     df: pd.DataFrame,
-    feature_cols: List[str],
-    warnings_found: List[str]
-) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    feature_cols: list[str],
+    warnings_found: list[str]
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Compute distribution statistics for all features.
 
@@ -159,10 +158,10 @@ def compute_feature_statistics(
 
 def detect_outliers(
     df: pd.DataFrame,
-    feature_cols: List[str],
-    warnings_found: List[str],
+    feature_cols: list[str],
+    warnings_found: list[str],
     z_threshold: float = 3.0
-) -> Tuple[List[Dict], List[Dict]]:
+) -> tuple[list[dict], list[dict]]:
     """
     Detect outliers using z-score analysis.
 
@@ -239,10 +238,10 @@ def detect_outliers(
 
 def analyze_feature_ranges(
     df: pd.DataFrame,
-    feature_cols: List[str],
-    issues_found: List[str],
-    warnings_found: List[str]
-) -> List[Dict]:
+    feature_cols: list[str],
+    issues_found: list[str],
+    warnings_found: list[str]
+) -> list[dict]:
     """
     Analyze feature value ranges for issues.
 
@@ -310,10 +309,10 @@ def analyze_feature_ranges(
 
 
 def generate_recommendations(
-    unnormalized_features: List[Dict],
-    high_skew_features: List[Dict],
-    extreme_outlier_features: List[Dict]
-) -> List[Dict]:
+    unnormalized_features: list[dict],
+    high_skew_features: list[dict],
+    extreme_outlier_features: list[dict]
+) -> list[dict]:
     """
     Generate normalization recommendations.
 
@@ -369,11 +368,11 @@ def generate_recommendations(
 
 def check_feature_normalization(
     df: pd.DataFrame,
-    issues_found: List[str],
-    warnings_found: List[str],
+    issues_found: list[str],
+    warnings_found: list[str],
     z_threshold: float = 3.0,
     extreme_threshold: float = 5.0
-) -> Dict:
+) -> dict:
     """
     Run all feature normalization checks.
 

@@ -11,21 +11,20 @@ Created: 2025-12-20
 Updated: 2025-12-22 - Added MTF support with configurable target_timeframe
 """
 
-import pandas as pd
-from pathlib import Path
-from typing import Union, Optional
 import logging
+from pathlib import Path
+
+import pandas as pd
 
 from .utils import (
-    validate_ohlc,
+    DEFAULT_ROLL_GAP_THRESHOLD,
+    DEFAULT_ROLL_WINDOW_BARS,
+    add_roll_flags,
+    add_session_id,
     detect_gaps_simple,
     fill_gaps_simple,
     resample_ohlcv,
-    resample_to_5min,  # Kept for backward compatibility
-    add_roll_flags,
-    add_session_id,
-    DEFAULT_ROLL_GAP_THRESHOLD,
-    DEFAULT_ROLL_WINDOW_BARS,
+    validate_ohlc,
 )
 
 logger = logging.getLogger(__name__)

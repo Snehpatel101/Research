@@ -10,19 +10,19 @@ import logging
 import pickle
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import xgboost as xgb
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
-from ..common import map_labels_to_classes, map_classes_to_labels
+from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
 logger = logging.getLogger(__name__)
 
 # Module-level cache for CUDA availability check
-_CUDA_AVAILABLE: Optional[bool] = None
+_CUDA_AVAILABLE: bool | None = None
 
 
 def _check_cuda_available() -> bool:
@@ -71,10 +71,10 @@ def _check_cuda_available() -> bool:
 class XGBoostModel(BaseModel):
     """XGBoost gradient boosting classifier with GPU support."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._model: Optional[xgb.Booster] = None
-        self._feature_names: Optional[List[str]] = None
+        self._model: xgb.Booster | None = None
+        self._feature_names: list[str] | None = None
         self._n_classes: int = 3
         self._use_gpu: bool = self._config.get("use_gpu", False)
 
@@ -97,7 +97,7 @@ class XGBoostModel(BaseModel):
     def requires_sequences(self) -> bool:
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "n_estimators": 500,
             "max_depth": 6,
@@ -123,8 +123,8 @@ class XGBoostModel(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """Train XGBoost model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
@@ -150,7 +150,7 @@ class XGBoostModel(BaseModel):
             class_weight_values = n_samples / (n_classes * class_counts)
 
             # Create mapping from class to weight (handles missing classes)
-            class_weight_dict = dict(zip(unique_classes, class_weight_values))
+            class_weight_dict = dict(zip(unique_classes, class_weight_values, strict=False))
 
             # Map weights to samples using the dictionary
             sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_xgb])
@@ -173,7 +173,7 @@ class XGBoostModel(BaseModel):
         early_stopping = train_config.get("early_stopping_rounds", 50)
 
         evals = [(dtrain, "train"), (dval, "val")]
-        evals_result: Dict[str, Dict[str, List[float]]] = {}
+        evals_result: dict[str, dict[str, list[float]]] = {}
 
         logger.info(
             f"Training XGBoost: n_estimators={n_estimators}, "
@@ -291,7 +291,7 @@ class XGBoostModel(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded XGBoost model from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances by gain."""
         if not self._is_fitted:
             return None
@@ -311,11 +311,11 @@ class XGBoostModel(BaseModel):
 
         return importance
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
 
-    def _build_params(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_params(self, config: dict[str, Any]) -> dict[str, Any]:
         """Build XGBoost parameter dict."""
         params = {
             "objective": "multi:softprob",
@@ -350,7 +350,7 @@ class XGBoostModel(BaseModel):
         """Convert labels from 0,1,2 to -1,0,1."""
         return map_classes_to_labels(labels)
 
-    def _compute_metrics(self, dmatrix: xgb.DMatrix, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, dmatrix: xgb.DMatrix, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
 

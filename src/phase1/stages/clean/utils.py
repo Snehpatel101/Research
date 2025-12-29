@@ -12,10 +12,10 @@ Created: 2025-12-20
 Updated: 2025-12-20 - Extracted from stage2_clean.py
 """
 
-import pandas as pd
-import numpy as np
-from datetime import timedelta
 import logging
+
+import numpy as np
+import pandas as pd
 from numba import jit
 
 logger = logging.getLogger(__name__)
@@ -278,11 +278,7 @@ def resample_ohlcv(
     >>> df_30min = resample_ohlcv(df_5min, '30min')  # Can resample from 5min to 30min
     """
     # Import validation function from config
-    from src.phase1.config import (
-        SUPPORTED_TIMEFRAMES,
-        validate_timeframe,
-        parse_timeframe_to_minutes
-    )
+    from src.phase1.config import parse_timeframe_to_minutes, validate_timeframe
 
     # Validate target timeframe
     validate_timeframe(target_timeframe)

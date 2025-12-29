@@ -17,9 +17,8 @@ Created: 2025-12-22
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -48,8 +47,8 @@ class SessionConfig:
     """
     name: str
     session_id: SessionName
-    start_utc: Tuple[int, int]  # (hour, minute)
-    end_utc: Tuple[int, int]    # (hour, minute)
+    start_utc: tuple[int, int]  # (hour, minute)
+    end_utc: tuple[int, int]    # (hour, minute)
     timezone: str
     description: str = ""
     crosses_midnight: bool = False
@@ -59,7 +58,7 @@ class SessionConfig:
         self._validate_time(self.start_utc, "start_utc")
         self._validate_time(self.end_utc, "end_utc")
 
-    def _validate_time(self, time_tuple: Tuple[int, int], field_name: str) -> None:
+    def _validate_time(self, time_tuple: tuple[int, int], field_name: str) -> None:
         """Validate time tuple format."""
         if not isinstance(time_tuple, tuple) or len(time_tuple) != 2:
             raise ValueError(f"{field_name} must be a tuple of (hour, minute)")
@@ -95,7 +94,7 @@ class SessionConfig:
 # These are the PRIMARY trading sessions for CME futures
 # Times are in UTC to avoid DST complexity in core logic
 
-SESSIONS: Dict[SessionName, SessionConfig] = {
+SESSIONS: dict[SessionName, SessionConfig] = {
     # New York Session: NYSE/CME primary hours
     # US Eastern: 09:30-16:00 ET
     # UTC: 14:30-21:00 (during EST) / 13:30-20:00 (during EDT)
@@ -148,14 +147,14 @@ class SessionOverlap:
     Overlaps often exhibit higher volatility and liquidity.
     """
     name: str
-    sessions: Tuple[SessionName, SessionName]
-    start_utc: Tuple[int, int]
-    end_utc: Tuple[int, int]
+    sessions: tuple[SessionName, SessionName]
+    start_utc: tuple[int, int]
+    end_utc: tuple[int, int]
     description: str = ""
 
 
 # Session overlaps - periods when multiple major markets are open
-SESSION_OVERLAPS: Dict[str, SessionOverlap] = {
+SESSION_OVERLAPS: dict[str, SessionOverlap] = {
     'london_ny': SessionOverlap(
         name='London-New York',
         sessions=(SessionName.LONDON, SessionName.NEW_YORK),
@@ -181,10 +180,10 @@ class SessionsConfig:
     This is the main configuration class used throughout the sessions module.
     """
     # Which sessions to include in analysis (None = all)
-    include_sessions: Optional[List[SessionName]] = None
+    include_sessions: list[SessionName] | None = None
 
     # Which sessions to exclude from analysis
-    exclude_sessions: Optional[List[SessionName]] = None
+    exclude_sessions: list[SessionName] | None = None
 
     # Whether to add session flags as features
     add_session_flags: bool = True
@@ -217,7 +216,7 @@ class SessionsConfig:
                     f"Sessions cannot be both included and excluded: {overlap}"
                 )
 
-    def get_active_sessions(self) -> List[SessionName]:
+    def get_active_sessions(self) -> list[SessionName]:
         """Get list of sessions that should be active based on config."""
         all_sessions = list(SessionName)
 
@@ -231,7 +230,7 @@ class SessionsConfig:
 
         return active
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
             'include_sessions': [s.value for s in self.include_sessions] if self.include_sessions else None,
@@ -245,7 +244,7 @@ class SessionsConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict) -> 'SessionsConfig':
+    def from_dict(cls, d: dict) -> 'SessionsConfig':
         """Create from dictionary."""
         include = None
         if d.get('include_sessions'):
@@ -290,7 +289,7 @@ def get_session_config(session_name: SessionName) -> SessionConfig:
     return SESSIONS[session_name]
 
 
-def get_all_sessions() -> List[SessionConfig]:
+def get_all_sessions() -> list[SessionConfig]:
     """Get all session configurations."""
     return list(SESSIONS.values())
 

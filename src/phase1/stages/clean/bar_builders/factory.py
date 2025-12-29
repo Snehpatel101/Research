@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import pandas as pd
 
@@ -52,7 +52,7 @@ class BarConfig:
     min_bars_per_output: int = 1
     use_vwap: bool = False
     include_metadata: bool = True
-    extra_params: Dict[str, Any] = field(default_factory=dict)
+    extra_params: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         valid_types = BarBuilderRegistry.list_all() or ["time", "volume", "dollar"]
@@ -62,7 +62,7 @@ class BarConfig:
                 f"Available: {valid_types}"
             )
 
-    def get_builder_kwargs(self) -> Dict[str, Any]:
+    def get_builder_kwargs(self) -> dict[str, Any]:
         """Get keyword arguments for the builder."""
         bar_type = self.bar_type.lower()
 
@@ -89,9 +89,9 @@ class BarConfig:
 
 def build_bars(
     df: pd.DataFrame,
-    bar_type: Optional[str] = None,
-    config: Optional[BarConfig] = None,
-    symbol: Optional[str] = None,
+    bar_type: str | None = None,
+    config: BarConfig | None = None,
+    symbol: str | None = None,
     **kwargs: Any,
 ) -> pd.DataFrame:
     """
@@ -171,8 +171,8 @@ def create_builder(
 def estimate_bar_count(
     df: pd.DataFrame,
     bar_type: str,
-    threshold: Optional[float] = None,
-    target_timeframe: Optional[str] = None,
+    threshold: float | None = None,
+    target_timeframe: str | None = None,
 ) -> int:
     """
     Estimate the number of output bars without building.

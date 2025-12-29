@@ -4,7 +4,7 @@ Each function generates a specific markdown section.
 """
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -23,8 +23,8 @@ def generate_header(data_path: Path) -> str:
 
 def generate_executive_summary(
     df: pd.DataFrame,
-    feature_cols: List[str],
-    validation_data: Optional[Dict[str, Any]]
+    feature_cols: list[str],
+    validation_data: dict[str, Any] | None
 ) -> str:
     """Generate executive summary section."""
     total_samples = len(df)
@@ -67,8 +67,8 @@ Phase 1 data preparation pipeline has completed successfully with the following 
 
 
 def generate_data_health_section(
-    validation_data: Optional[Dict[str, Any]],
-    charts_dir: Optional[Path]
+    validation_data: dict[str, Any] | None,
+    charts_dir: Path | None
 ) -> str:
     """Generate data health summary section."""
     if not validation_data:
@@ -124,7 +124,7 @@ Validation report not available.
     section += f"| Time Gaps | {gap_status} | {len(gaps)} large gaps detected |\n"
 
     if charts_dir:
-        section += f"""
+        section += """
 ### Visualizations
 
 ![Label Distribution](charts/label_distribution.png)
@@ -137,8 +137,8 @@ Validation report not available.
 
 
 def generate_feature_section(
-    feature_cols: List[str],
-    validation_data: Optional[Dict[str, Any]]
+    feature_cols: list[str],
+    validation_data: dict[str, Any] | None
 ) -> str:
     """Generate feature overview section."""
     # Categorize features
@@ -213,8 +213,8 @@ def generate_feature_section(
 
 def generate_label_section(
     df: pd.DataFrame,
-    horizons: List[int],
-    charts_dir: Optional[Path]
+    horizons: list[int],
+    charts_dir: Path | None
 ) -> str:
     """Generate label distribution section."""
     section = """## Label Analysis
@@ -259,7 +259,7 @@ See `charts/label_distribution.png` for visual representation.
     return section
 
 
-def generate_split_section(split_config: Optional[Dict[str, Any]]) -> str:
+def generate_split_section(split_config: dict[str, Any] | None) -> str:
     """Generate split information section."""
     if not split_config:
         return """## Data Splits
@@ -270,7 +270,7 @@ Split configuration not available.
 
     total = split_config['total_samples']
 
-    section = f"""## Data Splits
+    section = """## Data Splits
 
 ### Split Configuration
 
@@ -307,8 +307,8 @@ Split configuration not available.
 
 
 def generate_backtest_section(
-    backtest_results: Dict[int, Dict[str, Any]],
-    charts_dir: Optional[Path]
+    backtest_results: dict[int, dict[str, Any]],
+    charts_dir: Path | None
 ) -> str:
     """Generate baseline backtest results section."""
     if not backtest_results:
@@ -363,9 +363,9 @@ See `baseline_backtest/` directory for equity curve plots.
 
 def generate_quality_gates(
     df: pd.DataFrame,
-    validation_data: Optional[Dict[str, Any]],
-    split_config: Optional[Dict[str, Any]],
-    backtest_results: Dict[int, Dict[str, Any]]
+    validation_data: dict[str, Any] | None,
+    split_config: dict[str, Any] | None,
+    backtest_results: dict[int, dict[str, Any]]
 ) -> str:
     """Generate quality gates checklist section."""
     gates = []
@@ -428,8 +428,8 @@ def generate_quality_gates(
 
 
 def generate_recommendations(
-    validation_data: Optional[Dict[str, Any]],
-    backtest_results: Dict[int, Dict[str, Any]]
+    validation_data: dict[str, Any] | None,
+    backtest_results: dict[int, dict[str, Any]]
 ) -> str:
     """Generate recommendations for Phase 2 section."""
     recommendations = []
@@ -486,8 +486,8 @@ def generate_recommendations(
 
 def generate_footer(
     data_path: Path,
-    validation_report_path: Optional[Path],
-    split_config_path: Optional[Path]
+    validation_report_path: Path | None,
+    split_config_path: Path | None
 ) -> str:
     """Generate report footer with output files summary."""
     validation_name = validation_report_path.name if validation_report_path else 'N/A'

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import joblib
 import numpy as np
@@ -17,7 +17,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
-from ..common import map_labels_to_classes, map_classes_to_labels
+from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -37,10 +37,10 @@ class RandomForestModel(BaseModel):
     for time-series classification. Supports feature importance extraction.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._model: Optional[RandomForestClassifier] = None
-        self._feature_names: Optional[List[str]] = None
+        self._model: RandomForestClassifier | None = None
+        self._feature_names: list[str] | None = None
         self._n_classes: int = 3
 
     @property
@@ -56,7 +56,7 @@ class RandomForestModel(BaseModel):
     def requires_sequences(self) -> bool:
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "n_estimators": 200,
             "max_depth": 10,
@@ -77,8 +77,8 @@ class RandomForestModel(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """
         Train Random Forest model.
@@ -229,7 +229,7 @@ class RandomForestModel(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded RandomForest model from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances (Gini importance)."""
         if not self._is_fitted:
             return None
@@ -239,9 +239,9 @@ class RandomForestModel(BaseModel):
             f"f{i}" for i in range(len(importance))
         ]
 
-        return dict(zip(feature_names, importance.tolist()))
+        return dict(zip(feature_names, importance.tolist(), strict=False))
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
 
@@ -253,7 +253,7 @@ class RandomForestModel(BaseModel):
         """Convert labels from 0,1,2 to -1,0,1."""
         return map_classes_to_labels(labels)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         y_pred_sk = self._model.predict(X)
         y_pred = self._convert_labels_from_sklearn(y_pred_sk)

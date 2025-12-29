@@ -2,7 +2,6 @@
 CLI Utilities - Shared functions for CLI commands.
 """
 from pathlib import Path
-from typing import Optional
 
 from rich.console import Console
 
@@ -29,7 +28,7 @@ def show_warning(message: str) -> None:
     console.print(f"[bold yellow]⚠[/bold yellow] {message}")
 
 
-def get_project_root(project_root: Optional[str] = None) -> Path:
+def get_project_root(project_root: str | None = None) -> Path:
     """
     Get the project root path.
 

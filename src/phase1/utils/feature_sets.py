@@ -1,7 +1,7 @@
 """
 Feature set resolution utilities.
 """
-from typing import Dict, Iterable, List, Sequence
+from collections.abc import Sequence
 
 import pandas as pd
 
@@ -21,7 +21,7 @@ LABEL_PREFIXES = (
 )
 
 
-def _mtf_suffixes() -> List[str]:
+def _mtf_suffixes() -> list[str]:
     suffixes = set()
     for tf in MTF_TIMEFRAMES.keys():
         if tf.endswith("min"):
@@ -40,7 +40,7 @@ def _is_mtf_column(name: str) -> bool:
     return any(name.endswith(suffix) for suffix in _mtf_suffixes())
 
 
-def _base_feature_columns(df: pd.DataFrame) -> List[str]:
+def _base_feature_columns(df: pd.DataFrame) -> list[str]:
     return [
         col for col in df.columns
         if col not in METADATA_COLUMNS
@@ -51,7 +51,7 @@ def _base_feature_columns(df: pd.DataFrame) -> List[str]:
 def resolve_feature_set(
     df: pd.DataFrame,
     definition: FeatureSetDefinition
-) -> List[str]:
+) -> list[str]:
     """
     Resolve a feature set definition into a concrete column list.
     """
@@ -91,12 +91,12 @@ def resolve_feature_set(
 
 def build_feature_set_manifest(
     df: pd.DataFrame,
-    definitions: Dict[str, FeatureSetDefinition]
-) -> Dict[str, Dict]:
+    definitions: dict[str, FeatureSetDefinition]
+) -> dict[str, dict]:
     """
     Build a manifest of all feature sets against a reference DataFrame.
     """
-    manifest: Dict[str, Dict] = {}
+    manifest: dict[str, dict] = {}
     for name, definition in definitions.items():
         features = resolve_feature_set(df, definition)
         mtf_count = sum(1 for col in features if _is_mtf_column(col))

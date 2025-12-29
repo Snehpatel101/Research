@@ -1,7 +1,6 @@
 """
 Feature drift checks for scaled datasets.
 """
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -38,19 +37,19 @@ def compute_psi(expected: pd.Series, actual: pd.Series, bins: int = 10) -> float
 def check_feature_drift(
     train_df: pd.DataFrame,
     compare_df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     bins: int = 10,
     psi_threshold: float = 0.2,
     max_features: int = 200
-) -> Dict:
+) -> dict:
     """
     Compute drift metrics between train and a comparison split.
     """
     if not feature_cols:
         raise ValueError("feature_cols must be non-empty for drift checks")
 
-    metrics: Dict[str, float] = {}
-    drifted: List[Tuple[str, float]] = []
+    metrics: dict[str, float] = {}
+    drifted: list[tuple[str, float]] = []
 
     for col in feature_cols[:max_features]:
         psi = compute_psi(train_df[col], compare_df[col], bins=bins)

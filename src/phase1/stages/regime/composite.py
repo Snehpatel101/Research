@@ -7,19 +7,14 @@ trend, and market structure regimes into composite regime features.
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .base import (
-    RegimeDetector,
-    RegimeType,
-    RegimeConfig,
-)
-from .volatility import VolatilityRegimeDetector
-from .trend import TrendRegimeDetector
 from .structure import MarketStructureDetector
+from .trend import TrendRegimeDetector
+from .volatility import VolatilityRegimeDetector
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -35,8 +30,8 @@ class CompositeRegimeResult:
         detector_configs: Dict of detector configurations used
     """
     regimes: pd.DataFrame
-    summaries: Dict[str, Dict[str, Any]]
-    detector_configs: Dict[str, Dict[str, Any]]
+    summaries: dict[str, dict[str, Any]]
+    detector_configs: dict[str, dict[str, Any]]
 
 
 class CompositeRegimeDetector:
@@ -67,9 +62,9 @@ class CompositeRegimeDetector:
 
     def __init__(
         self,
-        volatility_detector: Optional[VolatilityRegimeDetector] = None,
-        trend_detector: Optional[TrendRegimeDetector] = None,
-        structure_detector: Optional[MarketStructureDetector] = None
+        volatility_detector: VolatilityRegimeDetector | None = None,
+        trend_detector: TrendRegimeDetector | None = None,
+        structure_detector: MarketStructureDetector | None = None
     ):
         """
         Initialize composite regime detector.
@@ -84,7 +79,7 @@ class CompositeRegimeDetector:
         self.structure_detector = structure_detector
 
         # Track which detectors are enabled
-        self._enabled_detectors: List[str] = []
+        self._enabled_detectors: list[str] = []
         if volatility_detector:
             self._enabled_detectors.append('volatility')
         if trend_detector:
@@ -93,7 +88,7 @@ class CompositeRegimeDetector:
             self._enabled_detectors.append('structure')
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> 'CompositeRegimeDetector':
+    def from_config(cls, config: dict[str, Any]) -> 'CompositeRegimeDetector':
         """
         Create composite detector from configuration dict.
 
@@ -185,7 +180,7 @@ class CompositeRegimeDetector:
             structure_detector=MarketStructureDetector()
         )
 
-    def get_required_columns(self) -> List[str]:
+    def get_required_columns(self) -> list[str]:
         """Get all required columns for enabled detectors."""
         required = set()
 
@@ -202,15 +197,20 @@ class CompositeRegimeDetector:
         """
         Run all enabled regime detectors.
 
+        ANTI-LOOKAHEAD: All regime columns are shifted by 1 bar before being
+        returned. This ensures that the regime classification at bar N only
+        uses information available up to bar N-1, preventing lookahead bias
+        when regime features are used in model training.
+
         Args:
             df: DataFrame with OHLC data
 
         Returns:
-            CompositeRegimeResult with regime columns and summaries
+            CompositeRegimeResult with regime columns (shifted by 1 bar) and summaries
         """
         regimes = pd.DataFrame(index=df.index)
-        summaries: Dict[str, Dict[str, Any]] = {}
-        configs: Dict[str, Dict[str, Any]] = {}
+        summaries: dict[str, dict[str, Any]] = {}
+        configs: dict[str, dict[str, Any]] = {}
 
         # Volatility regime
         if self.volatility_detector:
@@ -263,6 +263,18 @@ class CompositeRegimeDetector:
                 logger.warning(f"Failed to detect structure regime: {e}")
                 regimes['structure_regime'] = np.nan
 
+        # ANTI-LOOKAHEAD: Shift all regime columns by 1 bar
+        # This ensures regime at bar N only uses data from bars 0..N-1
+        regime_columns = [col for col in regimes.columns if col.endswith('_regime')]
+        if regime_columns:
+            logger.info(
+                f"ANTI-LOOKAHEAD: Shifting {len(regime_columns)} regime columns by 1 bar"
+            )
+            for col in regime_columns:
+                regimes[col] = regimes[col].shift(1)
+                # First row becomes NaN after shift - this is expected and correct
+                # Downstream code should handle NaN appropriately (drop or fill)
+
         return CompositeRegimeResult(
             regimes=regimes,
             summaries=summaries,
@@ -277,12 +289,15 @@ class CompositeRegimeDetector:
         """
         Add regime columns to DataFrame in-place style (returns copy).
 
+        ANTI-LOOKAHEAD: Regime columns are shifted by 1 bar internally
+        (see detect_all). The first row of each regime column will be NaN.
+
         Args:
             df: Input DataFrame with OHLC data
             encode_numeric: If True, also add numeric encoded columns
 
         Returns:
-            DataFrame with regime columns added
+            DataFrame with regime columns added (shifted by 1 bar)
         """
         result = self.detect_all(df)
         df_out = df.copy()
@@ -339,8 +354,8 @@ class CompositeRegimeDetector:
 
 def add_regime_features_to_dataframe(
     df: pd.DataFrame,
-    config: Optional[Dict[str, Any]] = None,
-    feature_metadata: Optional[Dict[str, str]] = None
+    config: dict[str, Any] | None = None,
+    feature_metadata: dict[str, str] | None = None
 ) -> pd.DataFrame:
     """
     Convenience function to add all regime features to a DataFrame.
@@ -348,13 +363,17 @@ def add_regime_features_to_dataframe(
     This function is designed to integrate with the existing feature
     engineering pipeline.
 
+    ANTI-LOOKAHEAD: Regime columns are shifted by 1 bar to prevent lookahead
+    bias. The regime at bar N reflects the regime computed using data from
+    bars 0..N-1 only.
+
     Args:
         df: DataFrame with OHLC data
         config: Optional regime configuration dict
         feature_metadata: Optional dict to store feature descriptions
 
     Returns:
-        DataFrame with regime columns added
+        DataFrame with regime columns added (shifted by 1 bar)
     """
     if config is None:
         detector = CompositeRegimeDetector.with_defaults()
@@ -364,24 +383,25 @@ def add_regime_features_to_dataframe(
     df_out = detector.add_regime_columns(df, encode_numeric=True)
 
     # Update feature metadata if provided
+    # Note: All regime columns are shifted by 1 bar to prevent lookahead
     if feature_metadata is not None:
         if 'volatility_regime' in df_out.columns:
             feature_metadata['volatility_regime'] = \
-                "Volatility regime (low/normal/high) based on ATR percentile"
+                "Volatility regime (low/normal/high) based on ATR percentile (shifted by 1 bar)"
             feature_metadata['volatility_regime_encoded'] = \
-                "Volatility regime numeric encoding (-1=NaN, 0=low, 1=normal, 2=high)"
+                "Volatility regime numeric encoding (shifted by 1 bar)"
 
         if 'trend_regime' in df_out.columns:
             feature_metadata['trend_regime'] = \
-                "Trend regime (uptrend/downtrend/sideways) based on ADX + SMA"
+                "Trend regime (uptrend/downtrend/sideways) based on ADX + SMA (shifted by 1 bar)"
             feature_metadata['trend_regime_encoded'] = \
-                "Trend regime numeric encoding (-1=NaN, 0=downtrend, 1=sideways, 2=uptrend)"
+                "Trend regime numeric encoding (shifted by 1 bar)"
 
         if 'structure_regime' in df_out.columns:
             feature_metadata['structure_regime'] = \
-                "Market structure (mean_reverting/random/trending) based on Hurst exponent"
+                "Market structure (mean_reverting/random/trending) based on Hurst (shifted by 1 bar)"
             feature_metadata['structure_regime_encoded'] = \
-                "Structure regime numeric encoding (-1=NaN, 0=mean_reverting, 1=random, 2=trending)"
+                "Structure regime numeric encoding (shifted by 1 bar)"
 
     return df_out
 

@@ -1,10 +1,10 @@
 """Configuration validation functions."""
-from typing import Any, Dict, List
+from typing import Any
 
 from .exceptions import ConfigValidationError
 
 
-def validate_model_config_structure(config: Dict[str, Any]) -> List[str]:
+def validate_model_config_structure(config: dict[str, Any]) -> list[str]:
     """Validate structured config (checks model/defaults/training/device sections)."""
     errors = []
 
@@ -40,7 +40,7 @@ def validate_model_config_structure(config: Dict[str, Any]) -> List[str]:
     return errors
 
 
-def validate_config(config: Dict[str, Any], model_name: str) -> List[str]:
+def validate_config(config: dict[str, Any], model_name: str) -> list[str]:
     """Validate flattened config (checks ranges and valid values)."""
     errors = []
 
@@ -88,10 +88,10 @@ def validate_config(config: Dict[str, Any], model_name: str) -> List[str]:
 
 
 def validate_config_strict(
-    config: Dict[str, Any],
+    config: dict[str, Any],
     model_name: str,
     raise_on_error: bool = True,
-) -> List[str]:
+) -> list[str]:
     """Validate config and optionally raise ConfigValidationError."""
     errors = validate_config(config, model_name)
     if errors and raise_on_error:

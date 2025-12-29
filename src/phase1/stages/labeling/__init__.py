@@ -35,15 +35,10 @@ Usage Examples
 """
 
 # Base classes and types
-from .base import LabelingResult, LabelingStrategy, LabelingType
-
 # Concrete implementations
 from .adaptive_barriers import AdaptiveTripleBarrierLabeler
+from .base import LabelingResult, LabelingStrategy, LabelingType
 from .directional import DirectionalLabeler
-from .meta import BetSizeMethod, MetaLabeler
-from .regression import RegressionLabeler
-from .threshold import ThresholdLabeler
-from .triple_barrier import TripleBarrierLabeler, triple_barrier_numba
 
 # Factory functions
 from .factory import (
@@ -51,6 +46,14 @@ from .factory import (
     get_available_strategies,
     get_labeler,
     register_strategy,
+)
+from .meta import BetSizeMethod, MetaLabeler
+from .regression import RegressionLabeler
+from .threshold import ThresholdLabeler
+from .triple_barrier import (
+    TripleBarrierLabeler,
+    triple_barrier_numba,
+    triple_barrier_numba_with_costs,
 )
 
 __all__ = [
@@ -66,8 +69,9 @@ __all__ = [
     'RegressionLabeler',
     'MetaLabeler',
     'BetSizeMethod',
-    # Numba functions (for backward compatibility)
+    # Numba functions (for backward compatibility and direct usage)
     'triple_barrier_numba',
+    'triple_barrier_numba_with_costs',
     # Factory functions
     'get_labeler',
     'get_available_strategies',

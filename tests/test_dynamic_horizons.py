@@ -547,5 +547,110 @@ class TestTimeframeScalingConfig:
         assert HORIZON_TIMEFRAME_MINUTES['1h'] == 60
 
 
+class TestHorizonConfigConsistency:
+    """Tests for horizon configuration consistency across modules.
+
+    Ensures all modules use the canonical source from src.common.horizon_config.
+    """
+
+    def test_all_active_horizons_match_canonical(self):
+        """All ACTIVE_HORIZONS aliases should match the canonical source."""
+        from src.common.horizon_config import (
+            HORIZONS,
+            ACTIVE_HORIZONS,
+            LABEL_HORIZONS,
+        )
+
+        # All should reference the same values
+        assert set(HORIZONS) == set(ACTIVE_HORIZONS)
+        assert set(ACTIVE_HORIZONS) == set(LABEL_HORIZONS)
+
+    def test_phase1_config_imports_from_canonical(self):
+        """Phase 1 config should import horizons from canonical source."""
+        from src.common.horizon_config import ACTIVE_HORIZONS as canonical
+        from src.phase1.config import ACTIVE_HORIZONS as phase1
+
+        assert canonical is phase1, "Phase 1 config should import, not duplicate"
+
+    def test_common_exports_label_horizons(self):
+        """src.common should export LABEL_HORIZONS."""
+        from src.common import LABEL_HORIZONS
+
+        assert LABEL_HORIZONS is not None
+        assert isinstance(LABEL_HORIZONS, list)
+
+    def test_phase1_config_exports_label_horizons(self):
+        """src.phase1.config should export LABEL_HORIZONS."""
+        from src.phase1.config import LABEL_HORIZONS
+
+        assert LABEL_HORIZONS is not None
+        assert isinstance(LABEL_HORIZONS, list)
+
+    def test_label_horizons_equals_active_horizons(self):
+        """LABEL_HORIZONS should be an alias for ACTIVE_HORIZONS."""
+        from src.common.horizon_config import ACTIVE_HORIZONS, LABEL_HORIZONS
+
+        # Should be the same object, not just equal values
+        assert LABEL_HORIZONS is ACTIVE_HORIZONS
+
+    def test_pipeline_config_default_uses_canonical(self):
+        """PipelineConfig default horizons should match canonical source."""
+        from src.common.horizon_config import ACTIVE_HORIZONS
+        from src.phase1.pipeline_config import PipelineConfig
+
+        config = PipelineConfig(symbols=['MES'])
+        assert config.label_horizons == list(ACTIVE_HORIZONS)
+
+    def test_horizon_config_default_uses_canonical(self):
+        """HorizonConfig default horizons should match canonical source."""
+        from src.common.horizon_config import ACTIVE_HORIZONS, HorizonConfig
+
+        config = HorizonConfig()
+        assert config.horizons == list(ACTIVE_HORIZONS)
+
+    def test_no_duplicate_definitions(self):
+        """Verify no duplicate SUPPORTED_HORIZONS definitions in features.py."""
+        # This test ensures the features.py file imports rather than defines
+        import src.phase1.config.features as features_module
+
+        # Check that the module doesn't define its own SUPPORTED_HORIZONS
+        # It should only have LABEL_HORIZONS imported as an alias
+        module_attrs = dir(features_module)
+        assert 'SUPPORTED_HORIZONS' not in module_attrs or features_module.SUPPORTED_HORIZONS is None, (
+            "features.py should import LABEL_HORIZONS, not define SUPPORTED_HORIZONS"
+        )
+
+    def test_all_horizons_are_integers(self):
+        """All horizon values should be positive integers."""
+        from src.common.horizon_config import (
+            HORIZONS,
+            SUPPORTED_HORIZONS,
+            ACTIVE_HORIZONS,
+            LABEL_HORIZONS,
+            LOOKBACK_HORIZONS,
+        )
+
+        for horizon_list, name in [
+            (HORIZONS, 'HORIZONS'),
+            (SUPPORTED_HORIZONS, 'SUPPORTED_HORIZONS'),
+            (ACTIVE_HORIZONS, 'ACTIVE_HORIZONS'),
+            (LABEL_HORIZONS, 'LABEL_HORIZONS'),
+            (LOOKBACK_HORIZONS, 'LOOKBACK_HORIZONS'),
+        ]:
+            for h in horizon_list:
+                assert isinstance(h, int), f"{name} contains non-int: {h}"
+                assert h > 0, f"{name} contains non-positive value: {h}"
+
+    def test_active_horizons_subset_of_supported(self):
+        """ACTIVE_HORIZONS should be a subset of SUPPORTED_HORIZONS."""
+        from src.common.horizon_config import ACTIVE_HORIZONS, SUPPORTED_HORIZONS
+
+        active_set = set(ACTIVE_HORIZONS)
+        supported_set = set(SUPPORTED_HORIZONS)
+        assert active_set.issubset(supported_set), (
+            f"ACTIVE_HORIZONS {active_set} not subset of SUPPORTED_HORIZONS {supported_set}"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

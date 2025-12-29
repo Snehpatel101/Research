@@ -6,7 +6,6 @@ Implements ADWIN (concept drift), PSI (feature drift), and KS (distribution comp
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
 
 import numpy as np
 from scipy import stats
@@ -78,10 +77,10 @@ class ADWINDetector(BaseDriftDetector):
                 "Install with: pip install river"
             )
             self._adwin = None
-            self._fallback_window: List[float] = []
+            self._fallback_window: list[float] = []
             self._fallback_max_size = 1000
 
-    def update(self, value: float) -> Optional[DriftResult]:
+    def update(self, value: float) -> DriftResult | None:
         """
         Update ADWIN with new value and check for drift.
 
@@ -123,7 +122,7 @@ class ADWINDetector(BaseDriftDetector):
             # Fallback implementation
             return self._fallback_update(value)
 
-    def _fallback_update(self, value: float) -> Optional[DriftResult]:
+    def _fallback_update(self, value: float) -> DriftResult | None:
         """Simple fallback when river not available."""
         self._fallback_window.append(value)
         if len(self._fallback_window) > self._fallback_max_size:
@@ -188,7 +187,7 @@ class ADWINDetector(BaseDriftDetector):
         self._init_adwin()
 
     @property
-    def current_mean(self) -> Optional[float]:
+    def current_mean(self) -> float | None:
         """Current estimated mean."""
         if self._adwin is not None:
             return self._adwin.estimation
@@ -248,14 +247,14 @@ class PSIDetector(BaseDriftDetector):
         self.n_bins = n_bins
         self.threshold_low = threshold_low
         self.threshold_high = threshold_high
-        self._reference_bins: Optional[np.ndarray] = None
-        self._bin_edges: Optional[np.ndarray] = None
-        self._feature_name: Optional[str] = None
+        self._reference_bins: np.ndarray | None = None
+        self._bin_edges: np.ndarray | None = None
+        self._feature_name: str | None = None
 
     def set_reference(
         self,
         reference_data: np.ndarray,
-        feature_name: Optional[str] = None,
+        feature_name: str | None = None,
     ) -> None:
         """
         Set reference distribution for comparison.
@@ -278,7 +277,7 @@ class PSIDetector(BaseDriftDetector):
 
         logger.debug(f"PSI reference set with {len(reference_data)} samples")
 
-    def update(self, value: float) -> Optional[DriftResult]:
+    def update(self, value: float) -> DriftResult | None:
         """
         Not used for PSI - use compare() instead.
 
@@ -291,7 +290,7 @@ class PSIDetector(BaseDriftDetector):
     def compare(
         self,
         current_data: np.ndarray,
-        feature_name: Optional[str] = None,
+        feature_name: str | None = None,
     ) -> DriftResult:
         """
         Compare current distribution to reference.
@@ -389,19 +388,19 @@ class KSDetector(BaseDriftDetector):
         """
         super().__init__(name)
         self.alpha = alpha
-        self._reference_data: Optional[np.ndarray] = None
-        self._feature_name: Optional[str] = None
+        self._reference_data: np.ndarray | None = None
+        self._feature_name: str | None = None
 
     def set_reference(
         self,
         reference_data: np.ndarray,
-        feature_name: Optional[str] = None,
+        feature_name: str | None = None,
     ) -> None:
         """Set reference distribution."""
         self._reference_data = np.asarray(reference_data).ravel()
         self._feature_name = feature_name
 
-    def update(self, value: float) -> Optional[DriftResult]:
+    def update(self, value: float) -> DriftResult | None:
         """Not used for KS - use compare() instead."""
         raise NotImplementedError(
             "KS uses batch comparison. Use compare() instead of update()."
@@ -410,7 +409,7 @@ class KSDetector(BaseDriftDetector):
     def compare(
         self,
         current_data: np.ndarray,
-        feature_name: Optional[str] = None,
+        feature_name: str | None = None,
     ) -> DriftResult:
         """Compare current distribution to reference using KS test."""
         if self._reference_data is None:

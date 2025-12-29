@@ -6,9 +6,9 @@ for maximum performance. These are the core computational routines
 used by the feature engineering modules.
 """
 
+
 import numpy as np
 from numba import jit
-from typing import Tuple
 
 
 @jit(nopython=True)
@@ -198,7 +198,7 @@ def calculate_stochastic_numba(
     close: np.ndarray,
     k_period: int = 14,
     d_period: int = 3
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate Stochastic Oscillator using Numba.
 
@@ -246,7 +246,7 @@ def calculate_adx_numba(
     low: np.ndarray,
     close: np.ndarray,
     period: int = 14
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate ADX, +DI, -DI using Numba.
 

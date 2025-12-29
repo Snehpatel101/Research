@@ -21,9 +21,10 @@ Example:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from dataclasses import dataclass
 from itertools import combinations
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -99,14 +100,14 @@ class CPCVConfig:
 class CPCVPathResult:
     """Results from a single CPCV path (combination)."""
     path_id: int
-    test_groups: Tuple[int, ...]
+    test_groups: tuple[int, ...]
     train_size: int
     test_size: int
-    train_groups: Tuple[int, ...]
+    train_groups: tuple[int, ...]
     accuracy: float = 0.0
     f1: float = 0.0
     sharpe: float = 0.0
-    returns: Optional[np.ndarray] = None
+    returns: np.ndarray | None = None
 
 
 @dataclass
@@ -121,7 +122,7 @@ class CPCVResult:
         horizon: Label horizon
     """
     config: CPCVConfig
-    path_results: List[CPCVPathResult]
+    path_results: list[CPCVPathResult]
     model_name: str = ""
     horizon: int = 0
 
@@ -177,7 +178,7 @@ class CPCVResult:
 
         return np.column_stack(padded)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "model_name": self.model_name,
@@ -237,9 +238,9 @@ class CombinatorialPurgedCV:
             config: CPCVConfig with CPCV parameters
         """
         self.config = config
-        self._group_boundaries: Optional[List[Tuple[int, int]]] = None
+        self._group_boundaries: list[tuple[int, int]] | None = None
 
-    def _compute_group_boundaries(self, n_samples: int) -> List[Tuple[int, int]]:
+    def _compute_group_boundaries(self, n_samples: int) -> list[tuple[int, int]]:
         """Compute start/end indices for each group."""
         group_size = n_samples // self.config.n_groups
         boundaries = []
@@ -254,7 +255,7 @@ class CombinatorialPurgedCV:
 
         return boundaries
 
-    def _get_purge_embargo_sizes(self, n_samples: int) -> Tuple[int, int]:
+    def _get_purge_embargo_sizes(self, n_samples: int) -> tuple[int, int]:
         """Compute purge and embargo sizes in bars."""
         purge_size = max(1, int(n_samples * self.config.purge_pct))
         embargo_size = max(1, int(n_samples * self.config.embargo_pct))
@@ -263,10 +264,10 @@ class CombinatorialPurgedCV:
     def split(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray, int]]:
+        y: pd.Series | None = None,
+        groups: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray, int]]:
         """
         Generate train/test indices for each CPCV combination.
 
@@ -366,14 +367,14 @@ class CombinatorialPurgedCV:
 
     def get_n_splits(
         self,
-        X: Optional[pd.DataFrame] = None,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
+        X: pd.DataFrame | None = None,
+        y: pd.Series | None = None,
+        groups: pd.Series | None = None,
     ) -> int:
         """Return number of splits (combinations)."""
         return min(self.config.total_combinations, self.config.max_combinations)
 
-    def get_path_info(self, X: pd.DataFrame) -> List[Dict[str, Any]]:
+    def get_path_info(self, X: pd.DataFrame) -> list[dict[str, Any]]:
         """
         Get detailed information about each CPCV path.
 
@@ -409,7 +410,7 @@ class CombinatorialPurgedCV:
 
         return info
 
-    def validate_coverage(self, X: pd.DataFrame) -> Dict[str, Any]:
+    def validate_coverage(self, X: pd.DataFrame) -> dict[str, Any]:
         """
         Validate CPCV coverage statistics.
 

@@ -6,8 +6,8 @@ their data requirements, and ensemble configurations.
 """
 from rich.table import Table
 
-from .utils import console
 from .run_commands_core import _get_model_config
+from .utils import console
 
 
 def models_command() -> None:

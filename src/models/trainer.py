@@ -28,8 +28,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -117,9 +116,9 @@ class Trainer:
 
     def run(
         self,
-        container: "TimeSeriesDataContainer",
+        container: TimeSeriesDataContainer,
         skip_save: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute complete training pipeline.
 
@@ -160,8 +159,8 @@ class Trainer:
         label_end_times = container.get_label_end_times("train")
         if label_end_times is not None:
             logger.info(
-                f"Label end times available for purging overlapping labels "
-                f"(prevents leakage in stacking/blending ensembles)"
+                "Label end times available for purging overlapping labels "
+                "(prevents leakage in stacking/blending ensembles)"
             )
 
         # Log data shapes
@@ -258,8 +257,8 @@ class Trainer:
 
     def _evaluate_test_set(
         self,
-        container: "TimeSeriesDataContainer",
-    ) -> tuple[Optional[Dict[str, Any]], Optional[PredictionOutput]]:
+        container: TimeSeriesDataContainer,
+    ) -> tuple[dict[str, Any] | None, PredictionOutput | None]:
         """
         Evaluate model on test set with warnings about one-shot evaluation.
 
@@ -331,10 +330,10 @@ class Trainer:
     def _save_artifacts(
         self,
         training_metrics: TrainingMetrics,
-        eval_metrics: Dict[str, Any],
+        eval_metrics: dict[str, Any],
         predictions: PredictionOutput,
-        test_metrics: Optional[Dict[str, Any]] = None,
-        test_predictions: Optional[PredictionOutput] = None,
+        test_metrics: dict[str, Any] | None = None,
+        test_predictions: PredictionOutput | None = None,
     ) -> None:
         """Save training artifacts."""
         # Training metrics
@@ -398,7 +397,6 @@ class Trainer:
 
 
 # Re-export for backward compatibility
-from .metrics import compute_classification_metrics, compute_trading_metrics
 from .training_utils import evaluate_model, train_model
 
 __all__ = [

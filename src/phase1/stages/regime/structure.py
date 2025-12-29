@@ -6,7 +6,6 @@ and trending regimes using the Hurst exponent calculated via R/S analysis.
 """
 
 import logging
-from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -279,7 +278,7 @@ class MarketStructureDetector(RegimeDetector):
 
         return regimes
 
-    def detect_with_hurst(self, df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+    def detect_with_hurst(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
         """
         Detect regime and return Hurst values for debugging.
 

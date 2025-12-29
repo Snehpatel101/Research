@@ -1,10 +1,10 @@
 """Persistence functions for PipelineConfig."""
+import json
+import logging
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Type, TypeVar, Any
-import json
-import logging
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def save_config_to_file(config: Any, path: Path) -> Path:
     return path
 
 
-def load_config_from_file(cls: Type[T], path: Path) -> T:
+def load_config_from_file(cls: type[T], path: Path) -> T:
     """
     Load configuration from JSON file.
 
@@ -57,7 +57,7 @@ def load_config_from_file(cls: Type[T], path: Path) -> T:
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
 
-    with open(path, 'r') as f:
+    with open(path) as f:
         config_dict = json.load(f)
 
     # Remove metadata if present
@@ -72,7 +72,7 @@ def load_config_from_file(cls: Type[T], path: Path) -> T:
 
 
 def load_config_from_run_id(
-    cls: Type[T], run_id: str, project_root: Optional[Path] = None
+    cls: type[T], run_id: str, project_root: Path | None = None
 ) -> T:
     """
     Load configuration from a run ID.
@@ -98,7 +98,7 @@ def load_config_from_run_id(
 class PipelinePersistenceMixin:
     """Mixin providing save/load methods for PipelineConfig."""
 
-    def save_config(self, path: Optional[Path] = None) -> Path:
+    def save_config(self, path: Path | None = None) -> Path:
         """
         Save configuration to JSON file.
 
@@ -120,7 +120,7 @@ class PipelinePersistenceMixin:
 
     @classmethod
     def load_from_run_id(
-        cls, run_id: str, project_root: Optional[Path] = None
+        cls, run_id: str, project_root: Path | None = None
     ) -> 'PipelinePersistenceMixin':
         """Load configuration from a run ID."""
         return load_config_from_run_id(cls, run_id, project_root)

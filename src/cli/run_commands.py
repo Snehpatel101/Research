@@ -16,9 +16,9 @@ from specialized submodules for better organization.
 """
 
 # Re-export all commands from submodules
-from .run_commands_pipeline import run_command, rerun_command
-from .run_commands_info import models_command
 from .run_commands_core import _create_config_from_args
+from .run_commands_info import models_command
+from .run_commands_pipeline import rerun_command, run_command
 
 __all__ = [
     'run_command',

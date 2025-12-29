@@ -28,13 +28,13 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.models.base import PredictionOutput
 from src.inference.bundle import ModelBundle
+from src.models.base import PredictionOutput
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class InferenceResult:
     model_name: str
     horizon: int
     n_samples: int
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert predictions to DataFrame."""
@@ -86,7 +86,7 @@ class EnsembleResult:
         inference_time_ms: Total time in milliseconds
     """
     predictions: PredictionOutput
-    individual_results: List[InferenceResult]
+    individual_results: list[InferenceResult]
     voting_method: str
     inference_time_ms: float
 
@@ -136,7 +136,7 @@ class InferencePipeline:
 
     def __init__(
         self,
-        bundles: List[ModelBundle],
+        bundles: list[ModelBundle],
         default_voting: str = "soft_vote",
     ) -> None:
         """
@@ -163,7 +163,7 @@ class InferencePipeline:
         self._primary_bundle = bundles[0]
 
     @classmethod
-    def from_bundle(cls, path: Union[str, Path]) -> "InferencePipeline":
+    def from_bundle(cls, path: str | Path) -> InferencePipeline:
         """
         Create pipeline from a single bundle.
 
@@ -179,9 +179,9 @@ class InferencePipeline:
     @classmethod
     def from_bundles(
         cls,
-        paths: List[Union[str, Path]],
+        paths: list[str | Path],
         default_voting: str = "soft_vote",
-    ) -> "InferencePipeline":
+    ) -> InferencePipeline:
         """
         Create pipeline from multiple bundles.
 
@@ -201,12 +201,12 @@ class InferencePipeline:
         return len(self.bundles)
 
     @property
-    def model_names(self) -> List[str]:
+    def model_names(self) -> list[str]:
         """Names of all models."""
         return [b.metadata.model_name for b in self.bundles]
 
     @property
-    def feature_columns(self) -> List[str]:
+    def feature_columns(self) -> list[str]:
         """Feature columns from primary bundle."""
         return self._primary_bundle.feature_columns
 
@@ -217,7 +217,7 @@ class InferencePipeline:
 
     def predict(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
     ) -> InferenceResult:
         """
@@ -234,9 +234,9 @@ class InferencePipeline:
 
     def predict_all(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
-    ) -> List[InferenceResult]:
+    ) -> list[InferenceResult]:
         """
         Get predictions from all models.
 
@@ -254,9 +254,9 @@ class InferencePipeline:
 
     def predict_ensemble(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
-        method: Optional[str] = None,
-        weights: Optional[List[float]] = None,
+        X: pd.DataFrame | np.ndarray,
+        method: str | None = None,
+        weights: list[float] | None = None,
         calibrate: bool = True,
     ) -> EnsembleResult:
         """
@@ -294,7 +294,7 @@ class InferencePipeline:
     def _predict_single(
         self,
         bundle: ModelBundle,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool,
     ) -> InferenceResult:
         """Make predictions with a single bundle."""
@@ -318,9 +318,9 @@ class InferencePipeline:
 
     def _combine_predictions(
         self,
-        results: List[InferenceResult],
+        results: list[InferenceResult],
         method: str,
-        weights: Optional[List[float]],
+        weights: list[float] | None,
     ) -> PredictionOutput:
         """Combine predictions from multiple models."""
         if method == "soft_vote":
@@ -336,8 +336,8 @@ class InferencePipeline:
 
     def _soft_vote(
         self,
-        results: List[InferenceResult],
-        weights: Optional[List[float]],
+        results: list[InferenceResult],
+        weights: list[float] | None,
     ) -> PredictionOutput:
         """Average probabilities across models."""
         if weights is None:
@@ -351,7 +351,7 @@ class InferencePipeline:
         n_classes = results[0].predictions.n_classes
         avg_probs = np.zeros((n_samples, n_classes))
 
-        for result, w in zip(results, weights):
+        for result, w in zip(results, weights, strict=False):
             avg_probs += w * result.predictions.class_probabilities
 
         # Get predictions from averaged probabilities
@@ -367,8 +367,8 @@ class InferencePipeline:
 
     def _hard_vote(
         self,
-        results: List[InferenceResult],
-        weights: Optional[List[float]],
+        results: list[InferenceResult],
+        weights: list[float] | None,
     ) -> PredictionOutput:
         """Majority vote on class predictions."""
         if weights is None:
@@ -379,7 +379,7 @@ class InferencePipeline:
 
         # Count votes per class (weighted)
         vote_counts = np.zeros((n_samples, n_classes))
-        for result, w in zip(results, weights):
+        for result, w in zip(results, weights, strict=False):
             preds = result.predictions.class_predictions + 1  # Map to 0, 1, 2
             for i, pred in enumerate(preds):
                 vote_counts[i, int(pred)] += w
@@ -404,7 +404,7 @@ class InferencePipeline:
             metadata={"method": "hard_vote", "n_models": len(results)},
         )
 
-    def get_model_info(self) -> List[Dict[str, Any]]:
+    def get_model_info(self) -> list[dict[str, Any]]:
         """Get information about all models in pipeline."""
         return [
             {
@@ -418,7 +418,7 @@ class InferencePipeline:
             for b in self.bundles
         ]
 
-    def validate(self) -> Dict[str, Any]:
+    def validate(self) -> dict[str, Any]:
         """Validate all bundles in pipeline."""
         validations = {}
         all_valid = True

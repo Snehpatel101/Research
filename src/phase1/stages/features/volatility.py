@@ -6,12 +6,12 @@ indicators including ATR, Bollinger Bands, Keltner Channels, and various
 historical volatility measures.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict, List, Optional
 
-from .constants import ANNUALIZATION_FACTOR, get_annualization_factor
+import numpy as np
+import pandas as pd
+
+from .constants import get_annualization_factor
 from .numba_functions import calculate_atr_numba, calculate_ema_numba
 
 logger = logging.getLogger(__name__)
@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 def add_atr(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Average True Range features.
@@ -69,7 +69,7 @@ def add_atr(
 
 def add_bollinger_bands(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20,
     std_mult: float = 2.0
 ) -> pd.DataFrame:
@@ -137,7 +137,7 @@ def add_bollinger_bands(
 
 def add_keltner_channels(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20,
     atr_mult: float = 2.0
 ) -> pd.DataFrame:
@@ -200,8 +200,8 @@ def add_keltner_channels(
 
 def add_historical_volatility(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None,
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None,
     timeframe: str = '5min'
 ) -> pd.DataFrame:
     """
@@ -244,7 +244,7 @@ def add_historical_volatility(
 
 def add_parkinson_volatility(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20,
     timeframe: str = '5min'
 ) -> pd.DataFrame:
@@ -286,7 +286,7 @@ def add_parkinson_volatility(
 
 def add_garman_klass_volatility(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20,
     timeframe: str = '5min'
 ) -> pd.DataFrame:
@@ -328,8 +328,8 @@ def add_garman_klass_volatility(
 
 def add_higher_moments(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add rolling skewness and kurtosis of returns.
@@ -375,7 +375,7 @@ def add_higher_moments(
 
 def add_rogers_satchell_volatility(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20,
     timeframe: str = '5min'
 ) -> pd.DataFrame:
@@ -434,7 +434,7 @@ def add_rogers_satchell_volatility(
 
 def add_yang_zhang_volatility(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20,
     timeframe: str = '5min'
 ) -> pd.DataFrame:

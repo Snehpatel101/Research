@@ -11,7 +11,7 @@ import logging
 import pickle
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
@@ -23,13 +23,13 @@ except ImportError:
     lgb = None
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
-from ..common import map_labels_to_classes, map_classes_to_labels
+from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
 logger = logging.getLogger(__name__)
 
 # Module-level cache for CUDA availability check
-_LIGHTGBM_CUDA_AVAILABLE: Optional[bool] = None
+_LIGHTGBM_CUDA_AVAILABLE: bool | None = None
 
 
 def _check_cuda_available() -> bool:
@@ -101,14 +101,14 @@ def _check_cuda_available() -> bool:
 class LightGBMModel(BaseModel):
     """LightGBM gradient boosting classifier with GPU support."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         if not LIGHTGBM_AVAILABLE:
             raise ImportError(
                 "LightGBM is not installed. Install with: pip install lightgbm"
             )
         super().__init__(config)
-        self._model: Optional[lgb.Booster] = None
-        self._feature_names: Optional[List[str]] = None
+        self._model: lgb.Booster | None = None
+        self._feature_names: list[str] | None = None
         self._n_classes: int = 3
         self._use_gpu: bool = self._config.get("use_gpu", False)
 
@@ -131,7 +131,7 @@ class LightGBMModel(BaseModel):
     def requires_sequences(self) -> bool:
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "n_estimators": 500,
             "max_depth": 6,
@@ -156,8 +156,8 @@ class LightGBMModel(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """Train LightGBM model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
@@ -183,7 +183,7 @@ class LightGBMModel(BaseModel):
             class_weight_values = n_samples / (n_classes * class_counts)
 
             # Create mapping from class to weight (handles missing classes)
-            class_weight_dict = dict(zip(unique_classes, class_weight_values))
+            class_weight_dict = dict(zip(unique_classes, class_weight_values, strict=False))
 
             # Map weights to samples using the dictionary
             sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_lgb])
@@ -224,7 +224,7 @@ class LightGBMModel(BaseModel):
             f"gpu={'on' if self._use_gpu else 'off'}"
         )
 
-        evals_result: Dict[str, Dict[str, List[float]]] = {}
+        evals_result: dict[str, dict[str, list[float]]] = {}
 
         callbacks = [
             lgb.early_stopping(stopping_rounds=early_stopping, verbose=False),
@@ -344,7 +344,7 @@ class LightGBMModel(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded LightGBM model from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances by gain."""
         if not self._is_fitted:
             return None
@@ -354,21 +354,38 @@ class LightGBMModel(BaseModel):
             f"f{i}" for i in range(len(importance))
         ]
 
-        return dict(zip(feature_names, importance.tolist()))
+        return dict(zip(feature_names, importance.tolist(), strict=False))
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
 
-    def _build_params(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Build LightGBM parameter dict."""
+    def _build_params(self, config: dict[str, Any]) -> dict[str, Any]:
+        """
+        Build LightGBM parameter dict.
+
+        Enforces constraint: num_leaves <= 2^max_depth
+        """
+        max_depth = config.get("max_depth", 6)
+        num_leaves = config.get("num_leaves", 31)
+
+        # Enforce LightGBM constraint: num_leaves <= 2^max_depth
+        if max_depth > 0:
+            max_valid_leaves = 2 ** max_depth
+            if num_leaves > max_valid_leaves:
+                logger.warning(
+                    f"num_leaves ({num_leaves}) exceeds max for max_depth={max_depth} "
+                    f"(max={max_valid_leaves}). Capping to {max_valid_leaves}."
+                )
+                num_leaves = max_valid_leaves
+
         params = {
             "objective": "multiclass",
             "num_class": self._n_classes,
             "metric": "multi_logloss",
             "boosting_type": config.get("boosting_type", "gbdt"),
-            "max_depth": config.get("max_depth", 6),
-            "num_leaves": config.get("num_leaves", 31),
+            "max_depth": max_depth,
+            "num_leaves": num_leaves,
             "min_child_samples": config.get("min_child_samples", 20),
             "subsample": config.get("subsample", 0.8),
             "colsample_bytree": config.get("colsample_bytree", 0.8),
@@ -398,7 +415,7 @@ class LightGBMModel(BaseModel):
         """Convert labels from 0,1,2 to -1,0,1."""
         return map_classes_to_labels(labels)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
 

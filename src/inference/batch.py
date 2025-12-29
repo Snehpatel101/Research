@@ -18,15 +18,13 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union
+from typing import Any
 
-import numpy as np
 import pandas as pd
 
-from src.models.base import PredictionOutput
-from src.inference.bundle import ModelBundle
 from src.inference.pipeline import InferencePipeline, InferenceResult
 
 logger = logging.getLogger(__name__)
@@ -76,9 +74,9 @@ class BatchResult:
     n_batches: int
     total_time_seconds: float
     samples_per_second: float
-    errors: List[Dict[str, Any]] = field(default_factory=list)
+    errors: list[dict[str, Any]] = field(default_factory=list)
 
-    def save(self, path: Union[str, Path]) -> Path:
+    def save(self, path: str | Path) -> Path:
         """Save predictions to parquet."""
         path = Path(path)
         self.predictions_df.to_parquet(path, index=False)
@@ -128,9 +126,9 @@ class BatchPredictor:
     @classmethod
     def from_bundle(
         cls,
-        path: Union[str, Path],
+        path: str | Path,
         batch_size: int = 10000,
-    ) -> "BatchPredictor":
+    ) -> BatchPredictor:
         """Create BatchPredictor from a model bundle."""
         pipeline = InferencePipeline.from_bundle(path)
         return cls(pipeline, default_batch_size=batch_size)
@@ -138,19 +136,19 @@ class BatchPredictor:
     @classmethod
     def from_bundles(
         cls,
-        paths: List[Union[str, Path]],
+        paths: list[str | Path],
         batch_size: int = 10000,
-    ) -> "BatchPredictor":
+    ) -> BatchPredictor:
         """Create BatchPredictor from multiple bundles."""
         pipeline = InferencePipeline.from_bundles(paths)
         return cls(pipeline, default_batch_size=batch_size)
 
     def predict_batch(
         self,
-        data: Union[pd.DataFrame, Path, str],
-        batch_size: Optional[int] = None,
-        output_path: Optional[Union[str, Path]] = None,
-        progress_callback: Optional[Callable[[BatchProgress], None]] = None,
+        data: pd.DataFrame | Path | str,
+        batch_size: int | None = None,
+        output_path: str | Path | None = None,
+        progress_callback: Callable[[BatchProgress], None] | None = None,
         error_handling: str = "warn",  # "warn", "raise", "skip"
         calibrate: bool = True,
     ) -> BatchResult:
@@ -256,8 +254,8 @@ class BatchPredictor:
 
     def predict_streaming(
         self,
-        data: Union[pd.DataFrame, Path, str],
-        batch_size: Optional[int] = None,
+        data: pd.DataFrame | Path | str,
+        batch_size: int | None = None,
         calibrate: bool = True,
     ) -> Iterator[pd.DataFrame]:
         """
@@ -323,9 +321,9 @@ class BatchPredictor:
 # =============================================================================
 
 def run_batch_inference(
-    bundle_path: Union[str, Path],
-    data_path: Union[str, Path],
-    output_path: Union[str, Path],
+    bundle_path: str | Path,
+    data_path: str | Path,
+    output_path: str | Path,
     batch_size: int = 10000,
     show_progress: bool = True,
 ) -> BatchResult:

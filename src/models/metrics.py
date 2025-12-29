@@ -6,7 +6,7 @@ for evaluating model performance.
 """
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 import numpy as np
 
@@ -15,7 +15,7 @@ def compute_classification_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     y_proba: np.ndarray,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Compute classification metrics.
 
@@ -29,11 +29,10 @@ def compute_classification_metrics(
     """
     from sklearn.metrics import (
         accuracy_score,
+        confusion_matrix,
         f1_score,
         precision_score,
         recall_score,
-        confusion_matrix,
-        classification_report,
     )
 
     # Basic metrics
@@ -63,7 +62,7 @@ def compute_classification_metrics(
         "recall": float(recall),
         "per_class_f1": {
             class_names.get(c, str(c)): float(f1)
-            for c, f1 in zip(classes, per_class_f1)
+            for c, f1 in zip(classes, per_class_f1, strict=False)
         },
         "confusion_matrix": cm.tolist(),
         "n_samples": len(y_true),
@@ -73,7 +72,7 @@ def compute_classification_metrics(
 def compute_trading_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Compute trading metrics for quick model comparison.
 

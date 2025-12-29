@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,9 @@ class ValidationResult:
     def __init__(
         self,
         is_valid: bool,
-        errors: Optional[List[str]] = None,
-        warnings: Optional[List[str]] = None,
-        suggestions: Optional[List[str]] = None,
+        errors: list[str] | None = None,
+        warnings: list[str] | None = None,
+        suggestions: list[str] | None = None,
     ):
         self.is_valid = is_valid
         self.errors = errors or []
@@ -46,7 +46,7 @@ class ValidationResult:
         """Add a suggestion message."""
         self.suggestions.append(message)
 
-    def merge(self, other: "ValidationResult") -> None:
+    def merge(self, other: ValidationResult) -> None:
         """Merge another validation result into this one."""
         if not other.is_valid:
             self.is_valid = False
@@ -140,9 +140,10 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
             )
 
     # Check horizons
+    from src.common.horizon_config import ACTIVE_HORIZONS
     horizons = config_dict.get("horizons") or config_dict.get("label_horizons")
     if not horizons:
-        result.add_warning("No label horizons specified (will use default [5,10,15,20])")
+        result.add_warning(f"No label horizons specified (will use default {ACTIVE_HORIZONS})")
     elif not all(isinstance(h, int) and h > 0 for h in horizons):
         result.add_error(f"Invalid horizons: {horizons}. Must be positive integers")
 
@@ -200,7 +201,7 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
 # =============================================================================
 
 
-def validate_trainer_config(config: Dict[str, Any]) -> ValidationResult:
+def validate_trainer_config(config: dict[str, Any]) -> ValidationResult:
     """
     Validate Phase 2 trainer configuration.
 
@@ -285,7 +286,7 @@ def validate_trainer_config(config: Dict[str, Any]) -> ValidationResult:
 # =============================================================================
 
 
-def validate_cv_config(config: Dict[str, Any]) -> ValidationResult:
+def validate_cv_config(config: dict[str, Any]) -> ValidationResult:
     """
     Validate Phase 3 cross-validation configuration.
 
@@ -377,7 +378,7 @@ def validate_cv_config(config: Dict[str, Any]) -> ValidationResult:
 # =============================================================================
 
 
-def validate_ensemble_config(config: Dict[str, Any]) -> ValidationResult:
+def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
     """
     Validate Phase 4 ensemble configuration.
 
@@ -487,7 +488,7 @@ def validate_ensemble_config(config: Dict[str, Any]) -> ValidationResult:
 
 
 def run_all_validations(
-    config_dict: Dict[str, Any], phases: Optional[List[str]] = None
+    config_dict: dict[str, Any], phases: list[str] | None = None
 ) -> ValidationResult:
     """
     Run all applicable validations on a configuration.
@@ -549,7 +550,7 @@ def run_all_validations(
 
 
 def generate_validation_report(
-    config_dict: Dict[str, Any], phases: Optional[List[str]] = None
+    config_dict: dict[str, Any], phases: list[str] | None = None
 ) -> str:
     """
     Generate human-readable validation report.
@@ -595,7 +596,7 @@ def generate_validation_report(
 
 def quick_validate(
     phase: str, **kwargs: Any
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Quick validation helper for command-line scripts.
 

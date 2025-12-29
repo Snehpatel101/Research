@@ -2,29 +2,28 @@
 Pipeline Configuration Management System
 Handles all configuration for Phase 1 pipeline with validation and persistence.
 """
-from dataclasses import dataclass, field, asdict
+import logging
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-import logging
+from typing import Any
 
-# Import HorizonConfig from the dedicated horizon module
+# Import HorizonConfig and active horizons from the dedicated horizon module
 # Re-exported here for backward compatibility
-from src.common.horizon_config import HorizonConfig
-
-# Import MTF configuration
-from src.phase1.stages.mtf.constants import (
-    MTFMode,
-    DEFAULT_MTF_TIMEFRAMES,
-    DEFAULT_MTF_MODE,
-)
+from src.common.horizon_config import ACTIVE_HORIZONS, HorizonConfig
+from src.phase1.config.pipeline_defaults import create_default_config
 
 # Import extracted modules
 from src.phase1.config.pipeline_paths import PipelinePathMixin
 from src.phase1.config.pipeline_persistence import PipelinePersistenceMixin
-from src.phase1.config.pipeline_validation import validate_pipeline_config
 from src.phase1.config.pipeline_summary import generate_pipeline_summary
-from src.phase1.config.pipeline_defaults import create_default_config
+from src.phase1.config.pipeline_validation import validate_pipeline_config
+
+# Import MTF configuration
+from src.phase1.stages.mtf.constants import (
+    DEFAULT_MTF_MODE,
+    DEFAULT_MTF_TIMEFRAMES,
+)
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -46,9 +45,9 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
     # Data parameters
     # Symbols to process. Each symbol is processed in complete isolation.
-    symbols: List[str] = field(default_factory=list)
-    start_date: Optional[str] = None  # YYYY-MM-DD format
-    end_date: Optional[str] = None    # YYYY-MM-DD format
+    symbols: list[str] = field(default_factory=list)
+    start_date: str | None = None  # YYYY-MM-DD format
+    end_date: str | None = None    # YYYY-MM-DD format
 
     # Timeframe configuration
     target_timeframe: str = '5min'
@@ -56,21 +55,21 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
     # Feature engineering
     feature_set: str = 'full'  # 'full', 'minimal', 'custom'
-    sma_periods: List[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
-    ema_periods: List[int] = field(default_factory=lambda: [9, 21, 50])
-    atr_periods: List[int] = field(default_factory=lambda: [7, 14, 21])
+    sma_periods: list[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
+    ema_periods: list[int] = field(default_factory=lambda: [9, 21, 50])
+    atr_periods: list[int] = field(default_factory=lambda: [7, 14, 21])
     rsi_period: int = 14
-    macd_params: Dict[str, int] = field(default_factory=lambda: {'fast': 12, 'slow': 26, 'signal': 9})
+    macd_params: dict[str, int] = field(default_factory=lambda: {'fast': 12, 'slow': 26, 'signal': 9})
     bb_period: int = 20
     bb_std: float = 2.0
 
     # Multi-Timeframe (MTF) configuration
-    mtf_timeframes: List[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
+    mtf_timeframes: list[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
     mtf_mode: str = field(default_factory=lambda: DEFAULT_MTF_MODE.value)
 
     # Labeling parameters - Dynamic Horizon Configuration
-    horizon_config: Optional[HorizonConfig] = None
-    label_horizons: List[int] = field(default_factory=lambda: [5, 10, 15, 20])
+    horizon_config: HorizonConfig | None = None
+    label_horizons: list[int] = field(default_factory=lambda: list(ACTIVE_HORIZONS))
     max_bars_ahead: int = 50
     auto_scale_purge_embargo: bool = True
 
@@ -81,12 +80,16 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     purge_bars: int = 60
     embargo_bars: int = 1440
 
-    # Genetic Algorithm settings (for future Phase 2)
+    # Genetic Algorithm / Optuna settings (for Phase 2)
     ga_population_size: int = 50
     ga_generations: int = 100
     ga_crossover_rate: float = 0.8
     ga_mutation_rate: float = 0.1
     ga_elite_size: int = 5
+    # CRITICAL: Safe mode prevents test data leakage in barrier optimization
+    # When True, optimization only uses training data (first train_ratio% of data)
+    # Set to False ONLY for research purposes when you understand the implications
+    ga_safe_mode: bool = True
 
     # Processing options
     n_jobs: int = -1  # -1 for all cores
@@ -94,10 +97,10 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     allow_batch_symbols: bool = False
 
     # Optional configurations
-    feature_toggles: Optional[Dict[str, bool]] = None
-    barrier_overrides: Optional[Dict[str, float]] = None
+    feature_toggles: dict[str, bool] | None = None
+    barrier_overrides: dict[str, float] | None = None
     scaler_type: str = 'robust'
-    model_config: Optional[Dict[str, Any]] = None
+    model_config: dict[str, Any] | None = None
 
     # Paths (auto-generated from run_id)
     project_root: Path = field(default=None)
@@ -105,11 +108,10 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     def __post_init__(self):
         """Validate configuration after initialization."""
         from src.phase1.config import (
-            SUPPORTED_TIMEFRAMES,
-            validate_timeframe,
-            auto_scale_purge_embargo,
             SUPPORTED_HORIZONS,
+            auto_scale_purge_embargo,
             validate_feature_set_config,
+            validate_timeframe,
         )
         from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
@@ -193,7 +195,7 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
                 f"Use --batch-symbols flag or set allow_batch_symbols=True."
             )
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """Validate configuration and return list of issues."""
         return validate_pipeline_config(self)
 
@@ -201,7 +203,7 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
         """Generate a human-readable summary of the configuration."""
         return generate_pipeline_summary(self)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""
         config_dict = asdict(self)
         config_dict['project_root'] = str(self.project_root)

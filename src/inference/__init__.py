@@ -32,22 +32,22 @@ Usage:
     result = predictor.predict_batch(df, output_path="predictions.parquet")
 """
 
-from src.inference.bundle import (
-    ModelBundle,
-    BundleMetadata,
-    BundleManifest,
-    BUNDLE_VERSION,
-)
-from src.inference.pipeline import (
-    InferencePipeline,
-    InferenceResult,
-    EnsembleResult,
-)
 from src.inference.batch import (
     BatchPredictor,
     BatchProgress,
     BatchResult,
     run_batch_inference,
+)
+from src.inference.bundle import (
+    BUNDLE_VERSION,
+    BundleManifest,
+    BundleMetadata,
+    ModelBundle,
+)
+from src.inference.pipeline import (
+    EnsembleResult,
+    InferencePipeline,
+    InferenceResult,
 )
 from src.inference.server import (
     ModelServer,

@@ -6,7 +6,7 @@ Monitors multiple features simultaneously using PSI or KS tests.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -54,13 +54,13 @@ class FeatureDriftMonitor:
         self.n_bins = n_bins
         self.threshold = threshold
         self.alpha = alpha
-        self._detectors: Dict[str, Union[PSIDetector, KSDetector]] = {}
-        self._feature_names: List[str] = []
+        self._detectors: dict[str, PSIDetector | KSDetector] = {}
+        self._feature_names: list[str] = []
 
     def set_reference(
         self,
         X_reference: np.ndarray,
-        feature_names: Optional[List[str]] = None,
+        feature_names: list[str] | None = None,
     ) -> None:
         """
         Set reference distribution for all features.
@@ -106,7 +106,7 @@ class FeatureDriftMonitor:
     def check_drift(
         self,
         X_current: np.ndarray,
-    ) -> List[DriftResult]:
+    ) -> list[DriftResult]:
         """
         Check all features for drift.
 
@@ -140,7 +140,7 @@ class FeatureDriftMonitor:
     def get_drift_summary(
         self,
         X_current: np.ndarray,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get summary of drift detection across all features.
 

@@ -6,16 +6,15 @@ extracting the orchestration logic from pipeline/stages/labeling.py.
 """
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from .triple_barrier import triple_barrier_numba
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ def run_initial_labeling(
         labels_dir.mkdir(parents=True, exist_ok=True)
 
         artifacts = []
-        label_stats: Dict[str, Dict[str, Any]] = {}
+        label_stats: dict[str, dict[str, Any]] = {}
 
         target_timeframe = config.target_timeframe
 

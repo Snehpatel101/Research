@@ -7,16 +7,16 @@ for tabular (non-sequence) models.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.purged_kfold import PurgedKFold
 from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from src.models.registry import ModelRegistry
+from src.cross_validation.purged_kfold import PurgedKFold
 from src.models.base import PredictionOutput
 from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
+from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class OOFPrediction:
         self,
         model_name: str,
         predictions: pd.DataFrame,
-        fold_info: List[Dict[str, Any]],
+        fold_info: list[dict[str, Any]],
         coverage: float = 1.0,
     ):
         self.model_name = model_name
@@ -85,9 +85,9 @@ class CoreOOFGenerator:
         X: pd.DataFrame,
         y: pd.Series,
         model_name: str,
-        config: Dict[str, Any],
-        sample_weights: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
+        config: dict[str, Any],
+        sample_weights: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
     ) -> OOFPrediction:
         """
         Generate OOF predictions for a tabular model.
@@ -111,7 +111,7 @@ class CoreOOFGenerator:
         oof_probs = np.full((n_samples, n_classes), np.nan)
         oof_preds = np.full(n_samples, np.nan)
         oof_confidence = np.full(n_samples, np.nan)
-        fold_info: List[Dict[str, Any]] = []
+        fold_info: list[dict[str, Any]] = []
 
         # Determine scaling method based on model requirements
         scaling_method = get_scaling_method_for_model(model_name)
@@ -198,10 +198,10 @@ class CoreOOFGenerator:
 
     def calibrate_oof_predictions(
         self,
-        oof_results: Dict[str, OOFPrediction],
+        oof_results: dict[str, OOFPrediction],
         y_true: pd.Series,
         calibration_method: str = "auto",
-    ) -> Dict[str, OOFPrediction]:
+    ) -> dict[str, OOFPrediction]:
         """
         Apply probability calibration to OOF predictions.
 

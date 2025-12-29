@@ -5,10 +5,10 @@ This module provides functions to calculate price-based features
 including returns and price ratios.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     return numerator / denominator.replace(0, np.nan)
 
 
-def add_returns(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_returns(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add return features.
 
@@ -56,7 +56,7 @@ def add_returns(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFr
     return df
 
 
-def add_price_ratios(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_price_ratios(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add price ratio features.
 
@@ -100,7 +100,7 @@ def add_price_ratios(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.D
 
 def add_autocorrelation(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     lags: list = None,
     period: int = 20
 ) -> pd.DataFrame:
@@ -154,7 +154,7 @@ def add_autocorrelation(
     return df
 
 
-def add_clv(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_clv(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add Close Location Value (CLV).
 

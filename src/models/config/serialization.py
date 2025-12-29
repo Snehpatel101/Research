@@ -2,14 +2,14 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any
 
 import yaml
 
 logger = logging.getLogger(__name__)
 
 
-def save_config(config: Dict[str, Any], path: Union[str, Path]) -> None:
+def save_config(config: dict[str, Any], path: str | Path) -> None:
     """Save configuration to YAML file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -18,7 +18,7 @@ def save_config(config: Dict[str, Any], path: Union[str, Path]) -> None:
     logger.info(f"Saved config to {path}")
 
 
-def save_config_json(config: Dict[str, Any], path: Union[str, Path]) -> None:
+def save_config_json(config: dict[str, Any], path: str | Path) -> None:
     """Save configuration to JSON file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

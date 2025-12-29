@@ -7,28 +7,27 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
-from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
 from src.phase1.stages.scaling import (
     FeatureScaler,
     ScalerConfig,
+    validate_no_leakage,
     validate_scaling,
-    validate_no_leakage
 )
+from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _identify_feature_columns(df: pd.DataFrame) -> List[str]:
+def _identify_feature_columns(df: pd.DataFrame) -> list[str]:
     """
     Identify feature columns to scale (exclude labels, metadata, OHLCV).
 
@@ -165,7 +164,7 @@ def run_feature_scaling(
         val_scaled.to_parquet(val_scaled_path, index=False)
         test_scaled.to_parquet(test_scaled_path, index=False)
 
-        logger.info(f"\nSaved scaled data:")
+        logger.info("\nSaved scaled data:")
         logger.info(f"  Train: {train_scaled_path}")
         logger.info(f"  Val:   {val_scaled_path}")
         logger.info(f"  Test:  {test_scaled_path}")
@@ -211,10 +210,10 @@ def run_feature_scaling(
         logger.info("SCALING SUMMARY")
         logger.info("-" * 50)
         logger.info(f"Features scaled: {len(feature_cols)}")
-        logger.info(f"Scaler type: robust")
-        logger.info(f"Outlier clipping: [-5.0, 5.0]")
+        logger.info("Scaler type: robust")
+        logger.info("Outlier clipping: [-5.0, 5.0]")
         logger.info(f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'WARNINGS'}")
-        logger.info(f"Leakage check: PASSED")
+        logger.info("Leakage check: PASSED")
 
         artifacts = [
             train_scaled_path,

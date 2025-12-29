@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 # =============================================================================
 # SUPPORTED AND ACTIVE HORIZONS
@@ -41,9 +40,10 @@ SUPPORTED_HORIZONS = [1, 5, 10, 15, 20, 30, 60, 120]
 # Modify this list to enable/disable specific horizons.
 HORIZONS = [5, 10, 15, 20]  # Default active horizons (configurable)
 
-# Legacy alias for backward compatibility
+# Legacy aliases for backward compatibility
 LOOKBACK_HORIZONS = [1, 5, 20]  # For labeling (includes H1)
 ACTIVE_HORIZONS = [5, 10, 15, 20]  # For training (excludes H1)
+LABEL_HORIZONS = ACTIVE_HORIZONS  # Alias for trainer validation
 
 
 # =============================================================================
@@ -100,7 +100,7 @@ MIN_EMBARGO_BARS = 1440  # Deprecated: use compute_embargo_bars() instead
 # =============================================================================
 # HORIZON VALIDATION
 # =============================================================================
-def validate_horizons(horizons: List[int], data_length: int = None) -> None:
+def validate_horizons(horizons: list[int], data_length: int = None) -> None:
     """
     Validate horizons against supported values and optionally against data length.
 
@@ -152,10 +152,10 @@ def validate_horizons(horizons: List[int], data_length: int = None) -> None:
 # TIMEFRAME-AWARE HORIZON SCALING
 # =============================================================================
 def get_scaled_horizons(
-    horizons: List[int],
+    horizons: list[int],
     source_tf: str,
     target_tf: str
-) -> List[int]:
+) -> list[int]:
     """
     Scale horizons when changing timeframe.
 
@@ -300,12 +300,12 @@ def compute_embargo_bars(
 # AUTO-SCALE PURGE AND EMBARGO
 # =============================================================================
 def auto_scale_purge_embargo(
-    horizons: List[int],
+    horizons: list[int],
     purge_multiplier: float = None,
     embargo_multiplier: float = None,
-    timeframe: Optional[str] = None,
-    embargo_time_minutes: Optional[int] = None,
-) -> Tuple[int, int]:
+    timeframe: str | None = None,
+    embargo_time_minutes: int | None = None,
+) -> tuple[int, int]:
     """
     Auto-calculate purge and embargo bars based on max horizon.
 
@@ -477,8 +477,8 @@ class HorizonConfig:
     """
 
     # Active horizons for model training
-    # Must be subset of SUPPORTED_HORIZONS from config.py
-    horizons: List[int] = field(default_factory=lambda: [5, 10, 15, 20])
+    # Must be subset of SUPPORTED_HORIZONS from this module
+    horizons: list[int] = field(default_factory=lambda: list(ACTIVE_HORIZONS))
 
     # Source timeframe (for horizon scaling when resampling)
     source_timeframe: str = '5min'
@@ -487,14 +487,14 @@ class HorizonConfig:
     auto_scale_purge_embargo: bool = True
 
     # Manual overrides (used when auto_scale_purge_embargo=False)
-    manual_purge_bars: Optional[int] = None
-    manual_embargo_bars: Optional[int] = None
+    manual_purge_bars: int | None = None
+    manual_embargo_bars: int | None = None
 
     # Purge/embargo multipliers (used when auto_scale=True)
     purge_multiplier: float = 3.0
     embargo_multiplier: float = 15.0
 
-    def get_purge_embargo(self, target_timeframe: Optional[str] = None) -> Tuple[int, int]:
+    def get_purge_embargo(self, target_timeframe: str | None = None) -> tuple[int, int]:
         """
         Get purge and embargo bars based on configuration.
 
@@ -540,7 +540,7 @@ class HorizonConfig:
             embargo = self.manual_embargo_bars if self.manual_embargo_bars is not None else 288
             return purge, embargo
 
-    def get_scaled_horizons(self, target_timeframe: str) -> List[int]:
+    def get_scaled_horizons(self, target_timeframe: str) -> list[int]:
         """
         Get horizons scaled to a target timeframe.
 
@@ -564,7 +564,7 @@ class HorizonConfig:
         """
         return get_scaled_horizons(self.horizons, self.source_timeframe, target_timeframe)
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """
         Validate horizon configuration.
 

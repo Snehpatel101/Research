@@ -33,7 +33,7 @@ import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -75,10 +75,10 @@ class BundleMetadata:
     requires_sequences: bool = False
     sequence_length: int = 0
     has_calibrator: bool = False
-    training_metrics: Dict[str, Any] = field(default_factory=dict)
-    extra: Dict[str, Any] = field(default_factory=dict)
+    training_metrics: dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "created_at": self.created_at,
@@ -95,7 +95,7 @@ class BundleMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BundleMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> BundleMetadata:
         return cls(
             version=data["version"],
             created_at=data["created_at"],
@@ -116,10 +116,10 @@ class BundleMetadata:
 class BundleManifest:
     """Manifest listing all files in a bundle."""
     version: str
-    files: List[str]
-    checksums: Dict[str, str]
+    files: list[str]
+    checksums: dict[str, str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "files": self.files,
@@ -127,7 +127,7 @@ class BundleManifest:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BundleManifest":
+    def from_dict(cls, data: dict[str, Any]) -> BundleManifest:
         return cls(
             version=data["version"],
             files=data["files"],
@@ -177,10 +177,10 @@ class ModelBundle:
     def __init__(
         self,
         model: BaseModel,
-        scaler: Optional[Union[RobustScaler, StandardScaler]],
-        feature_columns: List[str],
+        scaler: RobustScaler | StandardScaler | None,
+        feature_columns: list[str],
         metadata: BundleMetadata,
-        calibrator: Optional[Any] = None,
+        calibrator: Any | None = None,
     ) -> None:
         """
         Initialize ModelBundle.
@@ -202,13 +202,13 @@ class ModelBundle:
     def from_training(
         cls,
         model: BaseModel,
-        scaler: Optional[Union[RobustScaler, StandardScaler]],
-        feature_columns: List[str],
+        scaler: RobustScaler | StandardScaler | None,
+        feature_columns: list[str],
         horizon: int,
-        calibrator: Optional[Any] = None,
-        training_metrics: Optional[Dict[str, Any]] = None,
-        extra_metadata: Optional[Dict[str, Any]] = None,
-    ) -> "ModelBundle":
+        calibrator: Any | None = None,
+        training_metrics: dict[str, Any] | None = None,
+        extra_metadata: dict[str, Any] | None = None,
+    ) -> ModelBundle:
         """
         Create a bundle from trained components.
 
@@ -260,7 +260,7 @@ class ModelBundle:
             calibrator=calibrator,
         )
 
-    def save(self, path: Union[str, Path], overwrite: bool = False) -> Path:
+    def save(self, path: str | Path, overwrite: bool = False) -> Path:
         """
         Save bundle to disk.
 
@@ -342,7 +342,7 @@ class ModelBundle:
         return path
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "ModelBundle":
+    def load(cls, path: str | Path) -> ModelBundle:
         """
         Load bundle from disk.
 
@@ -413,7 +413,7 @@ class ModelBundle:
 
     def predict(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
     ) -> PredictionOutput:
         """
@@ -451,7 +451,7 @@ class ModelBundle:
 
     def _prepare_input(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
     ) -> np.ndarray:
         """Prepare and validate input data."""
         if isinstance(X, pd.DataFrame):
@@ -497,7 +497,7 @@ class ModelBundle:
             metadata={**output.metadata, "calibrated": True},
         )
 
-    def validate(self) -> Dict[str, Any]:
+    def validate(self) -> dict[str, Any]:
         """
         Validate bundle integrity.
 

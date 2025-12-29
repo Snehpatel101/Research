@@ -5,40 +5,41 @@ This module provides the FeatureEngineer class that orchestrates
 all feature engineering operations and manages the complete pipeline.
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from typing import Union, Dict, Tuple, Optional, List
+import json
 import logging
 from datetime import datetime
-import json
+from pathlib import Path
 
-# Import all feature modules
-from .price_features import add_returns, add_price_ratios, add_autocorrelation, add_clv
-from .moving_averages import add_sma, add_ema
-from .momentum import (
-    add_rsi, add_macd, add_stochastic, add_williams_r,
-    add_roc, add_cci, add_mfi
-)
-from .volatility import (
-    add_atr, add_bollinger_bands, add_keltner_channels,
-    add_historical_volatility, add_parkinson_volatility,
-    add_garman_klass_volatility, add_higher_moments,
-    add_rogers_satchell_volatility, add_yang_zhang_volatility
-)
-# Re-import here for wrapper methods
-from .volume import add_volume_features, add_vwap, add_obv, add_dollar_volume
-from .trend import add_adx, add_supertrend
-from .temporal import add_temporal_features, add_session_features
-from .regime import add_regime_features
-from .microstructure import add_microstructure_features
-from .scaling import PeriodScaler, create_period_config
-from .wavelets import add_wavelet_features, PYWT_AVAILABLE
-from .nan_handling import clean_nan_columns
-
+import pandas as pd
 
 # MTF Features - import from sibling module
-from ..mtf import add_mtf_features, MTFFeatureGenerator
+from ..mtf import add_mtf_features
+from .microstructure import add_microstructure_features
+from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
+from .moving_averages import add_ema, add_sma
+from .nan_handling import clean_nan_columns
+
+# Import all feature modules
+from .price_features import add_autocorrelation, add_clv, add_price_ratios, add_returns
+from .regime import add_regime_features
+from .scaling import PeriodScaler, create_period_config
+from .temporal import add_temporal_features
+from .trend import add_adx, add_supertrend
+from .volatility import (
+    add_atr,
+    add_bollinger_bands,
+    add_garman_klass_volatility,
+    add_higher_moments,
+    add_historical_volatility,
+    add_keltner_channels,
+    add_parkinson_volatility,
+    add_rogers_satchell_volatility,
+    add_yang_zhang_volatility,
+)
+
+# Re-import here for wrapper methods
+from .volume import add_dollar_volume, add_volume_features, add_vwap
+from .wavelets import PYWT_AVAILABLE, add_wavelet_features
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -65,11 +66,11 @@ class FeatureEngineer:
 
     def __init__(
         self,
-        input_dir: Union[str, Path],
-        output_dir: Union[str, Path],
+        input_dir: str | Path,
+        output_dir: str | Path,
         timeframe: str = '5min',
         enable_mtf: bool = True,
-        mtf_timeframes: Optional[list] = None,
+        mtf_timeframes: list | None = None,
         mtf_include_ohlcv: bool = True,
         mtf_include_indicators: bool = True,
         scale_periods: bool = True,
@@ -166,7 +167,7 @@ class FeatureEngineer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Feature metadata
-        self.feature_metadata: Dict[str, str] = {}
+        self.feature_metadata: dict[str, str] = {}
 
         logger.info("Initialized FeatureEngineer")
         logger.info(f"Input dir: {self.input_dir}")
@@ -185,7 +186,7 @@ class FeatureEngineer:
         self,
         df: pd.DataFrame,
         symbol: str
-    ) -> Tuple[pd.DataFrame, Dict]:
+    ) -> tuple[pd.DataFrame, dict]:
         """
         Complete feature engineering pipeline.
 
@@ -402,7 +403,7 @@ class FeatureEngineer:
         logger.info(f"\nFeature engineering complete for {symbol}")
         logger.info(f"Columns: {initial_cols} -> {len(df.columns)} (+{feature_report['features_added']} features, -{cols_dropped} dropped for NaN)")
         logger.info(f"Rows: {initial_rows:,} -> {len(df):,} (-{rows_dropped:,} for NaN)")
-        logger.info(f"Symbol isolation: each symbol processed independently")
+        logger.info("Symbol isolation: each symbol processed independently")
         if mtf_cols_added > 0:
             logger.info(f"MTF features: {mtf_cols_added} columns from {self.mtf_timeframes}")
         if wavelet_cols_added > 0:
@@ -416,8 +417,8 @@ class FeatureEngineer:
         self,
         df: pd.DataFrame,
         symbol: str,
-        feature_report: Dict
-    ) -> Tuple[Path, Path]:
+        feature_report: dict
+    ) -> tuple[Path, Path]:
         """
         Save features and metadata.
 
@@ -458,7 +459,7 @@ class FeatureEngineer:
 
         return data_path, metadata_path
 
-    def process_file(self, file_path: Union[str, Path]) -> Dict:
+    def process_file(self, file_path: str | Path) -> dict:
         """
         Process a single file.
 
@@ -486,7 +487,7 @@ class FeatureEngineer:
 
         return feature_report
 
-    def process_directory(self, pattern: str = "*.parquet") -> Dict[str, Dict]:
+    def process_directory(self, pattern: str = "*.parquet") -> dict[str, dict]:
         """
         Process all files in directory.
 
@@ -534,8 +535,8 @@ class FeatureEngineer:
 
     def process_multi_symbol(
         self,
-        symbol_files: Dict[str, Union[str, Path]]
-    ) -> Dict[str, Dict]:
+        symbol_files: dict[str, str | Path]
+    ) -> dict[str, dict]:
         """
         Process multiple symbols independently (no cross-symbol correlation).
 

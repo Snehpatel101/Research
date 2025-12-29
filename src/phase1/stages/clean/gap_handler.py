@@ -15,10 +15,10 @@ Author: ML Pipeline
 Created: 2025-12-22
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, Optional, Tuple
 import logging
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -210,7 +210,7 @@ class GapHandler:
         self.calendar_aware = calendar_aware
         self.timezone = timezone
 
-    def detect_gaps(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+    def detect_gaps(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         """
         Detect gaps in time series.
 
@@ -315,7 +315,7 @@ class GapHandler:
 
         return df, gap_report
 
-    def fill_gaps(self, df: pd.DataFrame, max_fill_bars: Optional[int] = None) -> pd.DataFrame:
+    def fill_gaps(self, df: pd.DataFrame, max_fill_bars: int | None = None) -> pd.DataFrame:
         """
         Fill gaps in time series.
 

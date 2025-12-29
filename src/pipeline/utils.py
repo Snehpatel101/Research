@@ -4,12 +4,12 @@ Pipeline utilities and data classes.
 This module contains shared data structures and helper functions used across
 the pipeline stages.
 """
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,13 @@ class StageResult:
     stage_name: str
     status: StageStatus
     start_time: datetime
-    end_time: Optional[datetime] = None
+    end_time: datetime | None = None
     duration_seconds: float = 0.0
-    artifacts: List[Path] = field(default_factory=list)
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    artifacts: list[Path] = field(default_factory=list)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             'stage_name': self.stage_name,
@@ -49,7 +49,7 @@ class StageResult:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'StageResult':
+    def from_dict(cls, data: dict[str, Any]) -> 'StageResult':
         """Create StageResult from dictionary."""
         return cls(
             stage_name=data['stage_name'],
@@ -66,8 +66,8 @@ class StageResult:
 def create_stage_result(
     stage_name: str,
     start_time: datetime,
-    artifacts: Optional[List[Path]] = None,
-    metadata: Optional[Dict[str, Any]] = None
+    artifacts: list[Path] | None = None,
+    metadata: dict[str, Any] | None = None
 ) -> StageResult:
     """
     Create a successful StageResult.
@@ -97,7 +97,7 @@ def create_failed_result(
     stage_name: str,
     start_time: datetime,
     error: str,
-    artifacts: Optional[List[Path]] = None
+    artifacts: list[Path] | None = None
 ) -> StageResult:
     """
     Create a failed StageResult.
@@ -130,7 +130,7 @@ def log_stage_header(stage_num: int, stage_name: str, logger: logging.Logger) ->
     logger.info("=" * 70)
 
 
-def log_stage_summary(title: str, items: Dict[str, Any], logger: logging.Logger) -> None:
+def log_stage_summary(title: str, items: dict[str, Any], logger: logging.Logger) -> None:
     """Log a formatted summary section."""
     logger.info("\n" + "-" * 50)
     logger.info(title)

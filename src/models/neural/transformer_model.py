@@ -14,8 +14,7 @@ from __future__ import annotations
 
 import logging
 import math
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -153,7 +152,7 @@ class TransformerNetwork(nn.Module):
         self._init_weights()
 
         # Store attention weights for interpretability
-        self._last_attention_weights: Optional[torch.Tensor] = None
+        self._last_attention_weights: torch.Tensor | None = None
 
     def _init_weights(self) -> None:
         """Initialize weights using Xavier uniform initialization."""
@@ -265,6 +264,13 @@ class TransformerModel(BaseRNNModel):
     - Layer normalization and residual connections
     - Attention weight extraction for interpretability
 
+    Note on Causality:
+        Standard Transformer self-attention is inherently bidirectional - each
+        position attends to ALL other positions in the sequence (past and future
+        within the window). This is fundamentally non-causal. For production
+        trading models requiring strict causality, consider using LSTM/GRU with
+        bidirectional=False, or TCN which uses causal convolutions.
+
     Example:
         >>> from src.models import ModelRegistry
         >>> model = ModelRegistry.create("transformer", config={
@@ -277,11 +283,54 @@ class TransformerModel(BaseRNNModel):
         >>> attention = model.get_attention_weights(X_test[:10])
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    # Track whether the non-causal warning has been logged
+    _noncausal_warning_logged: bool = False
+
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
+        self._noncausal_warning_logged = False
         logger.debug(f"Initialized TransformerModel with config: {self._config}")
 
-    def get_default_config(self) -> Dict[str, Any]:
+    @property
+    def is_production_safe(self) -> bool:
+        """
+        Check if this model configuration is safe for production trading.
+
+        Standard Transformer self-attention is inherently non-causal (attends
+        to all positions). This implementation does NOT use causal masking,
+        so it always returns False.
+
+        Returns:
+            False - standard Transformer is not production-safe for trading.
+        """
+        return False
+
+    def _log_bidirectional_warning(self) -> None:
+        """
+        Log a warning about non-causal self-attention (only once).
+
+        Overrides parent method since Transformer has different concerns than
+        bidirectional RNNs.
+        """
+        if self._noncausal_warning_logged:
+            return
+
+        logger.warning(
+            "TRANSFORMER NON-CAUSAL ATTENTION: Standard self-attention allows each "
+            "position to attend to ALL other positions in the sequence window, including "
+            "future positions. This is inherently non-causal.\n"
+            "Implications:\n"
+            "  - Each prediction uses information from later timesteps in the window\n"
+            "  - Patterns learned may not be available during real-time inference\n"
+            "  - Model may perform differently in live trading vs backtesting\n"
+            "Recommendations:\n"
+            "  - For production trading: Use LSTM/GRU (bidirectional=False) or TCN\n"
+            "  - For research/pattern analysis: Transformer is acceptable\n"
+            "  - To add causality: Would require implementing causal attention mask"
+        )
+        self._noncausal_warning_logged = True
+
+    def get_default_config(self) -> dict[str, Any]:
         """Return default Transformer hyperparameters."""
         defaults = super().get_default_config()
         # Transformer-specific defaults
@@ -376,7 +425,7 @@ class TransformerModel(BaseRNNModel):
             },
         )
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """
         Return feature importance based on input projection weights.
 
@@ -404,7 +453,7 @@ class TransformerModel(BaseRNNModel):
 
     def get_attention_weights(
         self, X: np.ndarray, sample_idx: int = 0
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """
         Extract attention weights for interpretability.
 
@@ -440,7 +489,7 @@ class TransformerModel(BaseRNNModel):
 
     def get_attention_summary(
         self, X: np.ndarray, n_samples: int = 10
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         """
         Get attention statistics across multiple samples.
 
@@ -480,7 +529,7 @@ class TransformerModel(BaseRNNModel):
 
     def visualize_attention_pattern(
         self, X: np.ndarray, sample_idx: int = 0, layer_idx: int = -1
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """
         Get attention pattern suitable for visualization.
 

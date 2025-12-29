@@ -670,3 +670,202 @@ class TestNeuralModelConsistency:
             assert output.class_predictions.shape == (n_samples,)
             assert output.class_probabilities.shape == (n_samples, 3)
             assert output.confidence.shape == (n_samples,)
+
+
+# =============================================================================
+# PRODUCTION SAFETY AND BIDIRECTIONAL WARNING TESTS
+# =============================================================================
+
+@requires_torch
+class TestProductionSafety:
+    """Tests for is_production_safe property."""
+
+    def test_lstm_production_safe_default(self):
+        """LSTM with default config (bidirectional=False) is production-safe."""
+        from src.models.neural import LSTMModel
+        model = LSTMModel()
+        assert model.is_production_safe is True
+
+    def test_lstm_production_unsafe_bidirectional(self):
+        """LSTM with bidirectional=True is not production-safe."""
+        from src.models.neural import LSTMModel
+        model = LSTMModel(config={"bidirectional": True})
+        assert model.is_production_safe is False
+
+    def test_gru_production_safe_default(self):
+        """GRU with default config (bidirectional=False) is production-safe."""
+        from src.models.neural import GRUModel
+        model = GRUModel()
+        assert model.is_production_safe is True
+
+    def test_gru_production_unsafe_bidirectional(self):
+        """GRU with bidirectional=True is not production-safe."""
+        from src.models.neural import GRUModel
+        model = GRUModel(config={"bidirectional": True})
+        assert model.is_production_safe is False
+
+    def test_tcn_always_production_safe(self):
+        """TCN is always production-safe (causal convolutions)."""
+        from src.models.neural import TCNModel
+        model = TCNModel()
+        assert model.is_production_safe is True
+
+    def test_transformer_never_production_safe(self):
+        """Transformer is never production-safe (bidirectional attention)."""
+        from src.models.neural import TransformerModel
+        model = TransformerModel()
+        assert model.is_production_safe is False
+
+
+@requires_torch
+class TestBidirectionalWarning:
+    """Tests for bidirectional/non-causal warnings."""
+
+    def test_bidirectional_warning_logged(self, small_sequence_data, caplog):
+        """Verify bidirectional=True logs a warning during fit."""
+        import logging
+        from src.models.neural import LSTMModel
+
+        model = LSTMModel(config={
+            "bidirectional": True,
+            "hidden_size": 16,
+            "num_layers": 1,
+            "batch_size": 16,
+            "max_epochs": 1,
+            "device": "cpu",
+            "mixed_precision": False,
+            "num_workers": 0,
+        })
+
+        with caplog.at_level(logging.WARNING):
+            model.fit(
+                small_sequence_data["X_train"],
+                small_sequence_data["y_train"],
+                small_sequence_data["X_val"],
+                small_sequence_data["y_val"],
+            )
+
+        assert "BIDIRECTIONAL RNN ENABLED" in caplog.text
+        assert "production trading models" in caplog.text
+
+    def test_no_warning_when_not_bidirectional(self, small_sequence_data, caplog):
+        """Verify no bidirectional warning when bidirectional=False."""
+        import logging
+        from src.models.neural import LSTMModel
+
+        model = LSTMModel(config={
+            "bidirectional": False,
+            "hidden_size": 16,
+            "num_layers": 1,
+            "batch_size": 16,
+            "max_epochs": 1,
+            "device": "cpu",
+            "mixed_precision": False,
+            "num_workers": 0,
+        })
+
+        with caplog.at_level(logging.WARNING):
+            model.fit(
+                small_sequence_data["X_train"],
+                small_sequence_data["y_train"],
+                small_sequence_data["X_val"],
+                small_sequence_data["y_val"],
+            )
+
+        assert "BIDIRECTIONAL RNN ENABLED" not in caplog.text
+
+    def test_warning_logged_only_once(self, small_sequence_data, caplog):
+        """Verify bidirectional warning is only logged once per model."""
+        import logging
+        from src.models.neural import LSTMModel
+
+        model = LSTMModel(config={
+            "bidirectional": True,
+            "hidden_size": 16,
+            "num_layers": 1,
+            "batch_size": 16,
+            "max_epochs": 1,
+            "device": "cpu",
+            "mixed_precision": False,
+            "num_workers": 0,
+        })
+
+        # First fit
+        with caplog.at_level(logging.WARNING):
+            model.fit(
+                small_sequence_data["X_train"],
+                small_sequence_data["y_train"],
+                small_sequence_data["X_val"],
+                small_sequence_data["y_val"],
+            )
+
+        first_count = caplog.text.count("BIDIRECTIONAL RNN ENABLED")
+        assert first_count == 1
+
+        # Second fit on same model instance - no new warning
+        caplog.clear()
+        with caplog.at_level(logging.WARNING):
+            model.fit(
+                small_sequence_data["X_train"],
+                small_sequence_data["y_train"],
+                small_sequence_data["X_val"],
+                small_sequence_data["y_val"],
+            )
+
+        # Should not have logged another warning
+        assert "BIDIRECTIONAL RNN ENABLED" not in caplog.text
+
+    def test_transformer_noncausal_warning_logged(self, small_sequence_data, caplog):
+        """Verify Transformer logs non-causal attention warning."""
+        import logging
+        from src.models.neural import TransformerModel
+
+        model = TransformerModel(config={
+            "d_model": 16,
+            "n_heads": 2,
+            "n_layers": 1,
+            "d_ff": 32,
+            "batch_size": 16,
+            "max_epochs": 1,
+            "device": "cpu",
+            "mixed_precision": False,
+            "num_workers": 0,
+        })
+
+        with caplog.at_level(logging.WARNING):
+            model.fit(
+                small_sequence_data["X_train"],
+                small_sequence_data["y_train"],
+                small_sequence_data["X_val"],
+                small_sequence_data["y_val"],
+            )
+
+        assert "TRANSFORMER NON-CAUSAL ATTENTION" in caplog.text
+        assert "production trading" in caplog.text
+
+    def test_tcn_no_warning(self, small_sequence_data, caplog):
+        """Verify TCN does not log any causality warnings."""
+        import logging
+        from src.models.neural import TCNModel
+
+        model = TCNModel(config={
+            "num_channels": [8, 8],
+            "kernel_size": 2,
+            "batch_size": 16,
+            "max_epochs": 1,
+            "device": "cpu",
+            "mixed_precision": False,
+            "num_workers": 0,
+        })
+
+        with caplog.at_level(logging.WARNING):
+            model.fit(
+                small_sequence_data["X_train"],
+                small_sequence_data["y_train"],
+                small_sequence_data["X_val"],
+                small_sequence_data["y_val"],
+            )
+
+        # TCN is causal, no warnings about bidirectional or non-causal
+        assert "BIDIRECTIONAL" not in caplog.text
+        assert "NON-CAUSAL" not in caplog.text

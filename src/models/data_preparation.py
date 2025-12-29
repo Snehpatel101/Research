@@ -6,20 +6,21 @@ into formats suitable for different model types (tabular vs sequential).
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
+
     from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
 
 def prepare_training_data(
-    container: "TimeSeriesDataContainer",
+    container: TimeSeriesDataContainer,
     requires_sequences: bool,
     sequence_length: int = 60,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare data for training based on model requirements.
 
@@ -57,10 +58,10 @@ def prepare_training_data(
 
 
 def prepare_test_data(
-    container: "TimeSeriesDataContainer",
+    container: TimeSeriesDataContainer,
     requires_sequences: bool,
     sequence_length: int = 60,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare test data for final evaluation.
 
@@ -89,8 +90,8 @@ def prepare_test_data(
 
 
 def dataset_to_arrays(
-    dataset: "Dataset",
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    dataset: Dataset,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Convert PyTorch dataset to numpy arrays.
 

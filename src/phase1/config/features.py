@@ -143,8 +143,8 @@ def validate_horizons(horizons: list) -> list:
     return errors
 
 
-# Default supported horizons for labeling
-SUPPORTED_HORIZONS = [5, 10, 15, 20]
+# Import canonical horizon definitions from the centralized module
+# Do NOT define horizons locally - always import from src.common.horizon_config
 
 # =============================================================================
 # FEATURE SELECTION CONFIGURATION

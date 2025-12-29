@@ -5,9 +5,9 @@ This module provides functions for auditing and cleaning NaN values
 in DataFrames, with configurable thresholds for column dropping.
 """
 
-import pandas as pd
 import logging
-from typing import Dict, List, Optional, Tuple
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def audit_nan_columns(
     df: pd.DataFrame,
     nan_threshold: float = 0.9
-) -> Dict:
+) -> dict:
     """
     Audit NaN values per column and categorize by severity.
 
@@ -67,8 +67,8 @@ def clean_nan_columns(
     df: pd.DataFrame,
     symbol: str,
     nan_threshold: float = 0.9,
-    protected_columns: Optional[List[str]] = None
-) -> Tuple[pd.DataFrame, Dict]:
+    protected_columns: list[str] | None = None
+) -> tuple[pd.DataFrame, dict]:
     """
     Audit NaN values and clean problematic columns before row-wise dropna.
 

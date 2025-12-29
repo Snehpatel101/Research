@@ -10,10 +10,10 @@ Provides DWT features that decompose price/volume signals into frequency compone
 Wavelets capture non-stationary patterns that pure MTF resampling misses.
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
-import logging
-from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ DEFAULT_WINDOW = 64
 
 def _compute_dwt_rolling(
     signal: np.ndarray, wavelet: str, level: int, window_size: int
-) -> Tuple[np.ndarray, List[np.ndarray]]:
+) -> tuple[np.ndarray, list[np.ndarray]]:
     """Compute DWT on rolling windows to ensure causality (no lookahead)."""
     n = len(signal)
     approx = np.full(n, np.nan)
@@ -69,7 +69,7 @@ def _compute_dwt_rolling(
 
 def _compute_energy_rolling(
     signal: np.ndarray, wavelet: str, level: int, window_size: int
-) -> Tuple[np.ndarray, List[np.ndarray]]:
+) -> tuple[np.ndarray, list[np.ndarray]]:
     """Compute wavelet energy at each decomposition level."""
     n = len(signal)
     approx_energy = np.full(n, np.nan)
@@ -93,7 +93,7 @@ def _compute_energy_rolling(
 
 
 def _compute_energy_ratio(
-    approx_energy: np.ndarray, detail_energies: List[np.ndarray]
+    approx_energy: np.ndarray, detail_energies: list[np.ndarray]
 ) -> np.ndarray:
     """Compute ratio of approximation energy to total energy."""
     total_energy = approx_energy.copy()
@@ -123,7 +123,7 @@ def _get_freq_label(lev: int) -> str:
 
 def add_wavelet_coefficients(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     price_col: str = 'close',
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
@@ -170,7 +170,7 @@ def add_wavelet_coefficients(
 
 def add_wavelet_energy(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     price_col: str = 'close',
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
@@ -211,7 +211,7 @@ def add_wavelet_energy(
 
 def add_wavelet_volatility(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     price_col: str = 'close',
     wavelet: str = DEFAULT_WAVELET,
     window: int = DEFAULT_WINDOW,
@@ -252,7 +252,7 @@ def add_wavelet_volatility(
 
 def add_wavelet_trend_strength(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     price_col: str = 'close',
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
@@ -301,7 +301,7 @@ def add_wavelet_trend_strength(
 
 def add_wavelet_features(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     price_col: str = 'close',
     volume_col: str = 'volume',
     wavelet: str = DEFAULT_WAVELET,

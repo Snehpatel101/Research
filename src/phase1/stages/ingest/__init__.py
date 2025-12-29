@@ -17,7 +17,6 @@ Public API:
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -79,10 +78,10 @@ class DataIngestor:
 
     def __init__(
         self,
-        raw_data_dir: Union[str, Path],
-        output_dir: Union[str, Path],
+        raw_data_dir: str | Path,
+        output_dir: str | Path,
         source_timezone: str = 'UTC',
-        symbol_col: Optional[str] = 'symbol'
+        symbol_col: str | None = 'symbol'
     ):
         """
         Initialize data ingestor.
@@ -121,8 +120,8 @@ class DataIngestor:
 
     def load_data(
         self,
-        file_path: Union[str, Path],
-        file_format: Optional[str] = None
+        file_path: str | Path,
+        file_format: str | None = None
     ) -> pd.DataFrame:
         """
         Load data from CSV or Parquet file.
@@ -149,7 +148,7 @@ class DataIngestor:
         auto_fix: bool = True,
         dry_run: bool = False,
         copy: bool = True
-    ) -> Tuple[pd.DataFrame, Dict]:
+    ) -> tuple[pd.DataFrame, dict]:
         """Validate OHLC relationships (high >= low, etc.)."""
         return validate_ohlcv_relationships(df, auto_fix, dry_run, copy)
 
@@ -163,10 +162,10 @@ class DataIngestor:
 
     def ingest_file(
         self,
-        file_path: Union[str, Path],
-        symbol: Optional[str] = None,
+        file_path: str | Path,
+        symbol: str | None = None,
         validate: bool = True
-    ) -> Tuple[pd.DataFrame, Dict]:
+    ) -> tuple[pd.DataFrame, dict]:
         """
         Complete ingestion pipeline for a single file.
 
@@ -255,7 +254,7 @@ class DataIngestor:
             sample_df = pd.read_parquet(file_path)
             if self.symbol_col and self.symbol_col in sample_df.columns:
                 symbol = sample_df[self.symbol_col].iloc[0] if len(sample_df) > 0 else None
-        except (OSError, IOError, FileNotFoundError) as e:
+        except (OSError, FileNotFoundError) as e:
             logger.debug(f"Could not read parquet file to extract symbol: {e}")
         except (KeyError, IndexError) as e:
             logger.debug(f"Symbol column not found in data: {e}")
@@ -270,7 +269,7 @@ class DataIngestor:
         self,
         df: pd.DataFrame,
         symbol: str,
-        metadata: Optional[Dict] = None
+        metadata: dict | None = None
     ) -> Path:
         """Save DataFrame to Parquet format."""
         return save_parquet(df, symbol, self.output_dir, metadata)
@@ -279,7 +278,7 @@ class DataIngestor:
         self,
         pattern: str = "*.parquet",
         validate: bool = True
-    ) -> Dict[str, Dict]:
+    ) -> dict[str, dict]:
         """
         Ingest all files matching pattern in raw data directory.
 

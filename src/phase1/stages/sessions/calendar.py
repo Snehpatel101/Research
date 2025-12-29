@@ -25,9 +25,8 @@ Created: 2025-12-22
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -62,7 +61,7 @@ class TradingDay:
     date: date
     day_type: TradingDayType
     description: str = ""
-    early_close_time: Optional[time] = None  # UTC time if early close
+    early_close_time: time | None = None  # UTC time if early close
 
 
 # =============================================================================
@@ -71,7 +70,7 @@ class TradingDay:
 # CME Globex is closed on these days (no trading)
 # Dates are updated annually - check CME Group website for updates
 
-CME_HOLIDAYS: Dict[int, List[date]] = {
+CME_HOLIDAYS: dict[int, list[date]] = {
     2024: [
         date(2024, 1, 1),   # New Year's Day
         date(2024, 1, 15),  # Martin Luther King Jr. Day
@@ -111,7 +110,7 @@ CME_HOLIDAYS: Dict[int, List[date]] = {
 }
 
 # Early close days (trading ends early, typically 12:00 ET / 17:00 UTC)
-CME_EARLY_CLOSE: Dict[int, List[date]] = {
+CME_EARLY_CLOSE: dict[int, list[date]] = {
     2024: [
         date(2024, 7, 3),   # Day before Independence Day
         date(2024, 11, 29), # Day after Thanksgiving
@@ -146,8 +145,8 @@ class CMECalendar:
 
     def __init__(self):
         """Initialize CME calendar."""
-        self._holiday_set: Set[date] = set()
-        self._early_close_set: Set[date] = set()
+        self._holiday_set: set[date] = set()
+        self._early_close_set: set[date] = set()
 
         # Build lookup sets
         for year_holidays in CME_HOLIDAYS.values():
@@ -236,7 +235,7 @@ class CMECalendar:
         self,
         start: date,
         end: date
-    ) -> List[date]:
+    ) -> list[date]:
         """
         Get all CME holidays in a date range.
 
@@ -256,7 +255,7 @@ class CMECalendar:
         self,
         start: date,
         end: date
-    ) -> List[date]:
+    ) -> list[date]:
         """
         Get all trading days in a date range.
 
@@ -312,7 +311,7 @@ class CMECalendar:
         self,
         df: pd.DataFrame,
         datetime_column: str = 'datetime',
-        feature_metadata: Optional[Dict[str, str]] = None
+        feature_metadata: dict[str, str] | None = None
     ) -> pd.DataFrame:
         """
         Add trading day type features to DataFrame.
@@ -390,8 +389,7 @@ class DSTHandler:
         if dt.tzinfo is None:
             # Assume UTC, convert to local
             if ZONEINFO_AVAILABLE:
-                from datetime import timezone as dt_tz
-                dt_utc = dt.replace(tzinfo=dt_tz.utc)
+                dt_utc = dt.replace(tzinfo=UTC)
                 dt_local = dt_utc.astimezone(self._tz)
             elif PYTZ_AVAILABLE:
                 dt_utc = pytz.UTC.localize(dt)
@@ -423,8 +421,7 @@ class DSTHandler:
         """
         if dt.tzinfo is None:
             if ZONEINFO_AVAILABLE:
-                from datetime import timezone as dt_tz
-                dt_utc = dt.replace(tzinfo=dt_tz.utc)
+                dt_utc = dt.replace(tzinfo=UTC)
                 dt_local = dt_utc.astimezone(self._tz)
             elif PYTZ_AVAILABLE:
                 dt_utc = pytz.UTC.localize(dt)
@@ -442,7 +439,7 @@ class DSTHandler:
     def get_dst_transition_dates(
         self,
         year: int
-    ) -> Tuple[Optional[date], Optional[date]]:
+    ) -> tuple[date | None, date | None]:
         """
         Get DST transition dates for a given year.
 
@@ -492,10 +489,10 @@ class DSTHandler:
 
     def adjust_session_times_for_dst(
         self,
-        base_start_utc: Tuple[int, int],
-        base_end_utc: Tuple[int, int],
+        base_start_utc: tuple[int, int],
+        base_end_utc: tuple[int, int],
         dt: datetime
-    ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
         """
         Adjust session times for DST.
 
@@ -522,7 +519,7 @@ class DSTHandler:
         self,
         df: pd.DataFrame,
         datetime_column: str = 'datetime',
-        feature_metadata: Optional[Dict[str, str]] = None
+        feature_metadata: dict[str, str] | None = None
     ) -> pd.DataFrame:
         """
         Add DST-related features to DataFrame.
@@ -557,7 +554,7 @@ class DSTHandler:
 
 
 # Module-level calendar instance for convenience
-_calendar: Optional[CMECalendar] = None
+_calendar: CMECalendar | None = None
 
 
 def get_calendar() -> CMECalendar:

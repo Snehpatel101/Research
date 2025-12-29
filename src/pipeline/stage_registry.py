@@ -3,8 +3,8 @@ Pipeline Stage Registry.
 
 Defines the PipelineStage dataclass and provides stage registration utilities.
 """
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
 
 
 @dataclass
@@ -12,7 +12,7 @@ class PipelineStage:
     """Definition of a pipeline stage."""
     name: str
     function: Callable
-    dependencies: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
     description: str = ""
     required: bool = True
     can_run_parallel: bool = False
@@ -26,7 +26,7 @@ class PipelineStage:
             raise ValueError(f"Stage function for '{self.name}' must be callable")
 
 
-def get_stage_definitions() -> List[dict]:
+def get_stage_definitions() -> list[dict]:
     """
     Get the ordered list of stage definitions.
 
@@ -124,12 +124,12 @@ def get_stage_definitions() -> List[dict]:
     ]
 
 
-def get_stage_order() -> List[str]:
+def get_stage_order() -> list[str]:
     """Get ordered list of stage names."""
     return [s["name"] for s in get_stage_definitions()]
 
 
-def get_stage_by_name(name: str) -> Optional[dict]:
+def get_stage_by_name(name: str) -> dict | None:
     """Get stage definition by name."""
     for stage in get_stage_definitions():
         if stage["name"] == name:

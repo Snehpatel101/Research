@@ -3,16 +3,16 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
-from .exceptions import ConfigError
 from .environment import detect_environment
+from .exceptions import ConfigError
 from .loaders import (
-    load_yaml_config,
-    load_model_config,
-    flatten_model_config,
     find_model_config,
+    flatten_model_config,
     get_environment_overrides,
+    load_model_config,
+    load_yaml_config,
 )
 from .trainer_config import TrainerConfig
 
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 def merge_configs(
-    base: Dict[str, Any],
-    override: Dict[str, Any],
+    base: dict[str, Any],
+    override: dict[str, Any],
     deep: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Merge configs (override takes precedence, supports deep merge)."""
     result = base.copy()
 
@@ -43,11 +43,11 @@ def merge_configs(
 
 def build_config(
     model_name: str,
-    cli_args: Optional[Dict[str, Any]] = None,
-    config_file: Optional[Union[str, Path]] = None,
-    defaults: Optional[Dict[str, Any]] = None,
+    cli_args: dict[str, Any] | None = None,
+    config_file: str | Path | None = None,
+    defaults: dict[str, Any] | None = None,
     apply_environment_overrides: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build complete model configuration from multiple sources.
 
@@ -135,8 +135,8 @@ def build_config(
 def create_trainer_config(
     model_name: str,
     horizon: int = 20,
-    cli_args: Optional[Dict[str, Any]] = None,
-    config_file: Optional[Union[str, Path]] = None,
+    cli_args: dict[str, Any] | None = None,
+    config_file: str | Path | None = None,
 ) -> TrainerConfig:
     """
     Create TrainerConfig from CLI args and config files.

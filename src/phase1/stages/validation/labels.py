@@ -2,7 +2,6 @@
 Label sanity validation checks.
 """
 import logging
-from typing import Dict, List
 
 import pandas as pd
 
@@ -11,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 def check_label_distribution(
     df: pd.DataFrame, label_col: str
-) -> Dict:
+) -> dict:
     """
     Calculate label distribution for a horizon.
 
@@ -35,7 +34,7 @@ def check_label_distribution(
 
 
 def check_label_balance(
-    label_dist: Dict, horizon: int, warnings_found: List[str]
+    label_dist: dict, horizon: int, warnings_found: list[str]
 ) -> None:
     """
     Check if labels are balanced, add warnings if not.
@@ -60,7 +59,7 @@ def check_label_balance(
             )
 
 
-def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> Dict:
+def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
     """
     Calculate label distribution per symbol.
 
@@ -91,7 +90,7 @@ def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> Dict:
             'neutral_pct': float(neutrals / total * 100)
         }
 
-    logger.info(f"\n  Per-symbol distribution:")
+    logger.info("\n  Per-symbol distribution:")
     for symbol, stats in symbol_stats.items():
         logger.info(
             f"    {symbol}: L={stats['long_pct']:.1f}% "
@@ -101,7 +100,7 @@ def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> Dict:
     return symbol_stats
 
 
-def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> Dict:
+def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> dict:
     """
     Calculate bars-to-hit statistics.
 
@@ -132,7 +131,7 @@ def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> Dict:
         'median_hit': float(median_bars_hit)
     }
 
-    logger.info(f"\n  Bars to hit statistics:")
+    logger.info("\n  Bars to hit statistics:")
     logger.info(f"    Mean (all): {avg_bars:.2f}")
     logger.info(f"    Mean (hit): {avg_bars_hit:.2f}")
     logger.info(f"    Median (hit): {median_bars_hit:.2f}")
@@ -140,7 +139,7 @@ def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> Dict:
     return bars_stats
 
 
-def check_quality_scores(df: pd.DataFrame, quality_col: str) -> Dict:
+def check_quality_scores(df: pd.DataFrame, quality_col: str) -> dict:
     """
     Calculate quality score statistics.
 
@@ -159,7 +158,7 @@ def check_quality_scores(df: pd.DataFrame, quality_col: str) -> Dict:
         'max': float(df[quality_col].max())
     }
 
-    logger.info(f"\n  Quality score statistics:")
+    logger.info("\n  Quality score statistics:")
     logger.info(f"    Mean: {quality_stats['mean']:.3f}")
     logger.info(f"    Median: {quality_stats['median']:.3f}")
     logger.info(f"    Std: {quality_stats['std']:.3f}")
@@ -170,9 +169,9 @@ def check_quality_scores(df: pd.DataFrame, quality_col: str) -> Dict:
 
 def check_label_sanity(
     df: pd.DataFrame,
-    horizons: List[int],
-    warnings_found: List[str]
-) -> Dict:
+    horizons: list[int],
+    warnings_found: list[str]
+) -> dict:
     """
     Run all label sanity checks.
 

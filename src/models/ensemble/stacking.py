@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import joblib
 import numpy as np
@@ -17,6 +17,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
 from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
 from .validator import validate_base_model_compatibility
@@ -52,14 +53,14 @@ class StackingEnsemble(BaseModel):
         output = ensemble.predict(X_test)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._base_models: List[List[BaseModel]] = []  # [model_idx][fold_idx]
-        self._meta_learner: Optional[BaseModel] = None
-        self._base_model_names: List[str] = []
+        self._base_models: list[list[BaseModel]] = []  # [model_idx][fold_idx]
+        self._meta_learner: BaseModel | None = None
+        self._base_model_names: list[str] = []
         self._meta_learner_name: str = ""
         self._n_folds: int = 5
-        self._feature_names: Optional[List[str]] = None
+        self._feature_names: list[str] | None = None
 
     @property
     def model_family(self) -> str:
@@ -101,7 +102,7 @@ class StackingEnsemble(BaseModel):
                     return True
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "base_model_names": ["xgboost", "lightgbm"],
             "base_model_configs": {},  # Per-model config overrides for FINAL models
@@ -122,9 +123,9 @@ class StackingEnsemble(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
-        label_end_times: Optional[pd.Series] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
+        label_end_times: pd.Series | None = None,
     ) -> TrainingMetrics:
         """
         Train stacking ensemble with OOF predictions.
@@ -182,7 +183,7 @@ class StackingEnsemble(BaseModel):
 
         if use_default_for_oof:
             # Use empty configs (defaults) for OOF to prevent leakage
-            oof_base_configs: Dict[str, Dict] = {}
+            oof_base_configs: dict[str, dict] = {}
             logger.info(
                 "Using DEFAULT configs for OOF generation (leakage prevention enabled)"
             )
@@ -287,14 +288,14 @@ class StackingEnsemble(BaseModel):
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        base_model_names: List[str],
-        base_model_configs: Dict[str, Dict],
-        sample_weights: Optional[np.ndarray],
+        base_model_names: list[str],
+        base_model_configs: dict[str, dict],
+        sample_weights: np.ndarray | None,
         use_probabilities: bool,
-        label_end_times: Optional[pd.Series] = None,
+        label_end_times: pd.Series | None = None,
         purge_bars: int = 60,
         embargo_bars: int = 1440,
-    ) -> Tuple[np.ndarray, List[List[BaseModel]]]:
+    ) -> tuple[np.ndarray, list[list[BaseModel]]]:
         """
         Generate out-of-fold predictions for all base models.
 
@@ -327,7 +328,7 @@ class StackingEnsemble(BaseModel):
             n_features = len(base_model_names)
 
         oof_predictions = np.zeros((n_samples, n_features))
-        fold_models: List[List[BaseModel]] = [[] for _ in base_model_names]
+        fold_models: list[list[BaseModel]] = [[] for _ in base_model_names]
 
         # Create PurgedKFold splitter to prevent label leakage
         purged_kfold_config = PurgedKFoldConfig(
@@ -384,7 +385,7 @@ class StackingEnsemble(BaseModel):
     def _generate_base_predictions(
         self,
         X: np.ndarray,
-        fold_models: List[List[BaseModel]],
+        fold_models: list[list[BaseModel]],
         use_probabilities: bool,
     ) -> np.ndarray:
         """Generate predictions from base models (averaging across folds)."""
@@ -532,7 +533,7 @@ class StackingEnsemble(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded StackingEnsemble from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Return meta-learner feature importances."""
         if not self._is_fitted or self._meta_learner is None:
             return None
@@ -540,7 +541,7 @@ class StackingEnsemble(BaseModel):
         # Meta-learner importance tells which base model predictions matter
         return self._meta_learner.get_feature_importance()
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for base models."""
         self._feature_names = names
         for fold_models in self._base_models:
@@ -548,7 +549,7 @@ class StackingEnsemble(BaseModel):
                 if hasattr(model, "set_feature_names"):
                     model.set_feature_names(names)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         output = self.predict(X)
         y_pred = output.class_predictions

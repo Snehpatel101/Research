@@ -22,8 +22,8 @@ Example:
     from src.models import ModelRegistry
     model = ModelRegistry.create("random_forest")
 """
-from .random_forest import RandomForestModel
 from .logistic import LogisticModel
+from .random_forest import RandomForestModel
 from .svm import SVMModel
 
 __all__ = [

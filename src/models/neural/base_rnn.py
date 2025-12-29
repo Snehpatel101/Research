@@ -16,7 +16,7 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import torch
@@ -24,7 +24,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
-from ..common import map_labels_to_classes, map_classes_to_labels
+from ..common import map_classes_to_labels, map_labels_to_classes
 from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class EarlyStoppingState:
     best_loss: float = float("inf")
     best_epoch: int = 0
     patience_counter: int = 0
-    best_state_dict: Optional[Dict[str, Any]] = None
+    best_state_dict: dict[str, Any] | None = None
 
     def check(
         self, val_loss: float, epoch: int, model: nn.Module, patience: int, min_delta: float
@@ -96,7 +96,7 @@ class RNNNetwork(nn.Module):
         self.num_directions = 2 if bidirectional else 1
 
         # RNN layer placeholder - subclasses set this
-        self.rnn: Optional[nn.Module] = None
+        self.rnn: nn.Module | None = None
 
         # Output dimension from RNN
         rnn_output_size = hidden_size * self.num_directions
@@ -171,13 +171,20 @@ class BaseRNNModel(BaseModel):
     - AdamW optimizer with cosine annealing
     - Gradient clipping
     - Early stopping on validation loss
+
+    Note on Bidirectional Mode:
+        When bidirectional=True, the backward RNN pass sees 'future' positions
+        within each sequence window. While not technically lookahead bias (data
+        is within the observed window), this can capture non-causal patterns
+        that may not generalize to real-time inference.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._model: Optional[nn.Module] = None
+        self._model: nn.Module | None = None
         self._n_classes: int = 3
-        self._n_features: Optional[int] = None
+        self._n_features: int | None = None
+        self._bidirectional_warning_logged: bool = False
 
         # Device setup with "auto" detection support
         device_config = self._config.get("device", "auto")
@@ -216,6 +223,38 @@ class BaseRNNModel(BaseModel):
     def requires_sequences(self) -> bool:
         return True
 
+    @property
+    def is_production_safe(self) -> bool:
+        """
+        Check if this model configuration is safe for production trading.
+
+        A model is considered production-safe when it uses only causal patterns
+        that will be available during real-time inference (i.e., only past data).
+
+        Returns:
+            True if bidirectional=False (causal model), False otherwise.
+        """
+        return not self._config.get("bidirectional", False)
+
+    def _log_bidirectional_warning(self) -> None:
+        """Log a warning about bidirectional mode implications (only once)."""
+        if self._bidirectional_warning_logged:
+            return
+
+        if self._config.get("bidirectional", False):
+            logger.warning(
+                "BIDIRECTIONAL RNN ENABLED: The backward pass sees 'future' positions "
+                "within each sequence window (not calendar future, but later indices in "
+                "the current input sequence). While not technically lookahead bias "
+                "(data is within the observed window), this can capture non-causal patterns "
+                "that may not generalize to real-time inference.\n"
+                "Recommendations:\n"
+                "  - For production trading models: Set bidirectional=False\n"
+                "  - For research/analysis: Acceptable if you understand the implications\n"
+                "  - For real-time inference: Predictions use incomplete backward context"
+            )
+            self._bidirectional_warning_logged = True
+
     @abstractmethod
     def _create_network(self, input_size: int) -> nn.Module:
         """Create the neural network. Implemented by subclasses."""
@@ -226,7 +265,7 @@ class BaseRNNModel(BaseModel):
         """Return model type string (lstm/gru). Implemented by subclasses."""
         pass
 
-    def _on_training_start(self, train_config: Dict[str, Any], seq_len: int) -> Dict[str, Any]:
+    def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
         Hook called at the start of training, after model is created.
 
@@ -242,7 +281,7 @@ class BaseRNNModel(BaseModel):
         """
         return {}
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         """Return default hyperparameters."""
         return {
             "hidden_size": 256,
@@ -270,8 +309,8 @@ class BaseRNNModel(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """Train the RNN model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
@@ -290,6 +329,9 @@ class BaseRNNModel(BaseModel):
         # Create network
         self._model = self._create_network(n_features)
         self._model = self._model.to(self._device)
+
+        # Log bidirectional warning if applicable (only logged once per model)
+        self._log_bidirectional_warning()
 
         # Call training start hook for subclass-specific setup/logging
         extra_metadata = self._on_training_start(train_config, seq_len)
@@ -316,7 +358,7 @@ class BaseRNNModel(BaseModel):
 
         # Training state
         early_stopping = EarlyStoppingState()
-        history: Dict[str, List[float]] = {
+        history: dict[str, list[float]] = {
             "train_loss": [],
             "val_loss": [],
             "train_acc": [],
@@ -488,8 +530,8 @@ class BaseRNNModel(BaseModel):
         self,
         X: np.ndarray,
         y: np.ndarray,
-        sample_weights: Optional[np.ndarray],
-        config: Dict[str, Any],
+        sample_weights: np.ndarray | None,
+        config: dict[str, Any],
         shuffle: bool,
     ) -> DataLoader:
         """Create a DataLoader from numpy arrays."""
@@ -511,7 +553,7 @@ class BaseRNNModel(BaseModel):
             drop_last=False,
         )
 
-    def _create_optimizer(self, config: Dict[str, Any]) -> torch.optim.Optimizer:
+    def _create_optimizer(self, config: dict[str, Any]) -> torch.optim.Optimizer:
         """Create AdamW optimizer."""
         return torch.optim.AdamW(
             self._model.parameters(),
@@ -522,7 +564,7 @@ class BaseRNNModel(BaseModel):
     def _create_scheduler(
         self,
         optimizer: torch.optim.Optimizer,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         steps_per_epoch: int,
     ) -> torch.optim.lr_scheduler.LRScheduler:
         """Create cosine annealing scheduler with warmup."""
@@ -547,10 +589,10 @@ class BaseRNNModel(BaseModel):
         optimizer: torch.optim.Optimizer,
         criterion: nn.Module,
         scheduler: torch.optim.lr_scheduler.LRScheduler,
-        scaler: Optional[torch.amp.GradScaler],
+        scaler: torch.amp.GradScaler | None,
         amp_dtype: torch.dtype,
         grad_clip: float,
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """Run one training epoch."""
         self._model.train()
         total_loss = 0.0
@@ -611,7 +653,7 @@ class BaseRNNModel(BaseModel):
         loader: DataLoader,
         criterion: nn.Module,
         amp_dtype: torch.dtype,
-    ) -> Tuple[float, float]:
+    ) -> tuple[float, float]:
         """Run one validation epoch."""
         self._model.eval()
         total_loss = 0.0
@@ -637,7 +679,7 @@ class BaseRNNModel(BaseModel):
             return 0.0, 0.0
         return total_loss / total, correct / total
 
-    def _compute_final_metrics(self, loader: DataLoader, amp_dtype: torch.dtype, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_final_metrics(self, loader: DataLoader, amp_dtype: torch.dtype, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
         self._model.eval()

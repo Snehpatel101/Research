@@ -5,14 +5,14 @@ This module provides functions to calculate momentum-based technical
 indicators including RSI, MACD, Stochastic, Williams %R, ROC, CCI, and MFI.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict, List, Optional
+
+import numpy as np
+import pandas as pd
 
 from .numba_functions import (
-    calculate_rsi_numba,
     calculate_ema_numba,
+    calculate_rsi_numba,
     calculate_stochastic_numba,
 )
 
@@ -26,7 +26,7 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 def add_rsi(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 14
 ) -> pd.DataFrame:
     """
@@ -67,7 +67,7 @@ def add_rsi(
 
 def add_macd(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     fast_period: int = 12,
     slow_period: int = 26,
     signal_period: int = 9
@@ -128,7 +128,7 @@ def add_macd(
 
 def add_stochastic(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     k_period: int = 14,
     d_period: int = 3
 ) -> pd.DataFrame:
@@ -181,7 +181,7 @@ def add_stochastic(
 
 def add_williams_r(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 14
 ) -> pd.DataFrame:
     """
@@ -218,8 +218,8 @@ def add_williams_r(
 
 def add_roc(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Rate of Change features.
@@ -258,7 +258,7 @@ def add_roc(
 
 def add_cci(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20
 ) -> pd.DataFrame:
     """
@@ -297,7 +297,7 @@ def add_cci(
 
 def add_mfi(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 14
 ) -> pd.DataFrame:
     """

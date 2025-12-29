@@ -2,11 +2,10 @@
 Core splitting logic with purging and embargo.
 """
 import logging
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
-from pathlib import Path
-from typing import Dict, Tuple, List
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -94,8 +93,8 @@ def validate_label_distribution(
     train_indices: np.ndarray,
     val_indices: np.ndarray,
     test_indices: np.ndarray,
-    horizons: List[int] = None
-) -> Dict:
+    horizons: list[int] = None
+) -> dict:
     """
     Validate label distribution across splits, excluding invalid labels.
 
@@ -172,7 +171,7 @@ def create_chronological_splits(
     purge_bars: int = 60,
     embargo_bars: int = 1440,
     datetime_col: str = 'datetime'
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Dict]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
     Create chronological train/val/test splits with purging and embargo.
 
@@ -285,13 +284,13 @@ def create_chronological_splits(
     val_dates = df.iloc[val_indices][datetime_col]
     test_dates = df.iloc[test_indices][datetime_col]
 
-    logger.info(f"\nSplit sizes:")
+    logger.info("\nSplit sizes:")
     logger.info(f"  Train: {len(train_indices):,} samples ({len(train_indices)/n:.1%})")
     logger.info(f"  Val:   {len(val_indices):,} samples ({len(val_indices)/n:.1%})")
     logger.info(f"  Test:  {len(test_indices):,} samples ({len(test_indices)/n:.1%})")
     logger.info(f"  Lost to purge/embargo: {n - len(train_indices) - len(val_indices) - len(test_indices):,} samples")
 
-    logger.info(f"\nDate ranges:")
+    logger.info("\nDate ranges:")
     logger.info(f"  Train: {train_dates.min()} to {train_dates.max()}")
     logger.info(f"  Val:   {val_dates.min()} to {val_dates.max()}")
     logger.info(f"  Test:  {test_dates.min()} to {test_dates.max()}")

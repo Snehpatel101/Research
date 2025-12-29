@@ -5,10 +5,10 @@ This module provides functions to calculate trend-based technical
 indicators including ADX and Supertrend.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict
+
+import numpy as np
+import pandas as pd
 
 from .numba_functions import calculate_adx_numba, calculate_atr_numba
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def add_adx(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 14
 ) -> pd.DataFrame:
     """
@@ -70,7 +70,7 @@ def add_adx(
 
 def add_supertrend(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 10,
     multiplier: float = 3.0
 ) -> pd.DataFrame:

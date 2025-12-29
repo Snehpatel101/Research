@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 
 from src.common.horizon_config import HORIZONS, auto_scale_purge_embargo
 from src.phase1.config.barriers_config import BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
 from src.phase1.config.features import parse_timeframe_to_minutes
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"
@@ -22,7 +20,7 @@ RUNS_DIR = PROJECT_ROOT / "runs"
 CONFIG_DIR = PROJECT_ROOT / "config"
 
 
-def detect_available_symbols(raw_dir: Path = None) -> List[str]:
+def detect_available_symbols(raw_dir: Path = None) -> list[str]:
     """
     Auto-detect available symbols from raw data directory.
 
@@ -87,7 +85,7 @@ def validate_config() -> None:
         )
 
 
-def get_timeframe_metadata(timeframe: str) -> Dict[str, float | str]:
+def get_timeframe_metadata(timeframe: str) -> dict[str, float | str]:
     """Return basic metadata for a timeframe string."""
     minutes = parse_timeframe_to_minutes(timeframe)
     bars_per_hour = 60 / minutes

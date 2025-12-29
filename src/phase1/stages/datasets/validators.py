@@ -14,7 +14,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -38,9 +38,9 @@ MIN_SEQUENCES_PER_SYMBOL = 100
 @dataclass
 class ValidationResult:
     """Result of model-ready validation with errors (blocking) and warnings."""
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    metadata: Dict = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
     @property
     def is_valid(self) -> bool:
@@ -52,7 +52,7 @@ class ValidationResult:
     def add_warning(self, msg: str) -> None:
         self.warnings.append(msg)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "is_valid": self.is_valid, "error_count": len(self.errors),
             "warning_count": len(self.warnings), "errors": self.errors,
@@ -63,7 +63,7 @@ class ValidationResult:
         return f"ValidationResult({'VALID' if self.is_valid else 'INVALID'}, errors={len(self.errors)}, warnings={len(self.warnings)})"
 
 
-def _validate_features(container: "TimeSeriesDataContainer", result: ValidationResult) -> None:
+def _validate_features(container: TimeSeriesDataContainer, result: ValidationResult) -> None:
     """Check features: no NaN/Inf, expected range, no constant features."""
     for name, split in container.splits.items():
         if not split.feature_columns:
@@ -90,7 +90,7 @@ def _validate_features(container: "TimeSeriesDataContainer", result: ValidationR
             result.add_warning(f"{name}: {len(constant)} constant features: {constant[:5]}")
 
 
-def _validate_labels(container: "TimeSeriesDataContainer", result: ValidationResult) -> None:
+def _validate_labels(container: TimeSeriesDataContainer, result: ValidationResult) -> None:
     """Check labels: valid values, class balance, invalid count."""
     for name, split in container.splits.items():
         if split.label_column not in split.df.columns:
@@ -121,7 +121,7 @@ def _validate_labels(container: "TimeSeriesDataContainer", result: ValidationRes
         result.metadata.setdefault("label_distribution", {})[name] = balance
 
 
-def _validate_sequences(container: "TimeSeriesDataContainer", result: ValidationResult, seq_len: int) -> None:
+def _validate_sequences(container: TimeSeriesDataContainer, result: ValidationResult, seq_len: int) -> None:
     """Check datetime continuity and sufficient sequences per symbol."""
     for name, split in container.splits.items():
         if split.datetime_column not in split.df.columns:
@@ -141,7 +141,7 @@ def _validate_sequences(container: "TimeSeriesDataContainer", result: Validation
                 result.metadata.setdefault("sequences_per_symbol", {}).setdefault(name, {})[sym] = n_seq
 
 
-def _validate_integration(container: "TimeSeriesDataContainer", result: ValidationResult) -> None:
+def _validate_integration(container: TimeSeriesDataContainer, result: ValidationResult) -> None:
     """Check cross-split consistency: feature columns match, weights in range."""
     splits = list(container.splits.items())
 
@@ -175,7 +175,7 @@ def _validate_integration(container: "TimeSeriesDataContainer", result: Validati
             result.add_error(f"{name}: Extra {len(extra)} features not in {ref_name}: {list(extra)[:5]}")
 
 
-def validate_model_ready(container: "TimeSeriesDataContainer", seq_len: int = 60) -> ValidationResult:
+def validate_model_ready(container: TimeSeriesDataContainer, seq_len: int = 60) -> ValidationResult:
     """
     Validate Phase 1 outputs are ready for model training.
 

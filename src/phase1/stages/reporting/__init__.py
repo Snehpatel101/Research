@@ -9,7 +9,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -39,9 +39,9 @@ class Phase1ReportGenerator:
     def __init__(
         self,
         data_path: Path,
-        validation_report_path: Optional[Path] = None,
-        split_config_path: Optional[Path] = None,
-        backtest_results_dir: Optional[Path] = None
+        validation_report_path: Path | None = None,
+        split_config_path: Path | None = None,
+        backtest_results_dir: Path | None = None
     ):
         self.data_path = data_path
         self.validation_report_path = validation_report_path
@@ -62,9 +62,9 @@ class Phase1ReportGenerator:
         # Load backtest results
         self.backtest_results = self._load_backtest_results(backtest_results_dir)
 
-        self.charts_dir: Optional[Path] = None
+        self.charts_dir: Path | None = None
 
-    def _load_json(self, path: Optional[Path]) -> Optional[Dict[str, Any]]:
+    def _load_json(self, path: Path | None) -> dict[str, Any] | None:
         """Load JSON file if it exists."""
         if path and path.exists():
             logger.info(f"Loading {path}")
@@ -74,8 +74,8 @@ class Phase1ReportGenerator:
 
     def _load_backtest_results(
         self,
-        results_dir: Optional[Path]
-    ) -> Dict[int, Dict[str, Any]]:
+        results_dir: Path | None
+    ) -> dict[int, dict[str, Any]]:
         """Load backtest results from directory."""
         results = {}
         if results_dir and results_dir.exists():
@@ -86,7 +86,7 @@ class Phase1ReportGenerator:
                     results[horizon] = json.load(f)
         return results
 
-    def identify_feature_columns(self) -> List[str]:
+    def identify_feature_columns(self) -> list[str]:
         """Identify feature columns by excluding known non-feature columns."""
         excluded = [
             'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
@@ -178,10 +178,10 @@ class Phase1ReportGenerator:
 def generate_phase1_report(
     data_path: Path,
     output_dir: Path,
-    validation_report_path: Optional[Path] = None,
-    split_config_path: Optional[Path] = None,
-    backtest_results_dir: Optional[Path] = None
-) -> Dict[str, Path]:
+    validation_report_path: Path | None = None,
+    split_config_path: Path | None = None,
+    backtest_results_dir: Path | None = None
+) -> dict[str, Path]:
     """
     Generate comprehensive Phase 1 summary report.
 
@@ -231,7 +231,7 @@ def generate_phase1_report(
     logger.info("\n" + "=" * 70)
     logger.info("REPORT GENERATION COMPLETE")
     logger.info("=" * 70)
-    logger.info(f"\nGenerated files:")
+    logger.info("\nGenerated files:")
     logger.info(f"  Markdown: {md_path}")
     logger.info(f"  HTML:     {html_path}")
     logger.info(f"  JSON:     {json_path}")

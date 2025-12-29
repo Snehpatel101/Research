@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -31,7 +30,7 @@ class FoldScalingResult:
     """Result from fold-aware scaling."""
     X_train_scaled: np.ndarray
     X_val_scaled: np.ndarray
-    scaler: Union[RobustScaler, StandardScaler]
+    scaler: RobustScaler | StandardScaler
     method: str
     n_features: int
 
@@ -141,7 +140,7 @@ class FoldAwareScaler:
         self,
         X_train: pd.DataFrame,
         X_val: pd.DataFrame,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         DataFrame-preserving version of fit_transform_fold.
 
@@ -168,19 +167,19 @@ class FoldAwareScaler:
         return X_train_scaled_df, X_val_scaled_df
 
     @property
-    def current_scaler(self) -> Optional[Union[RobustScaler, StandardScaler]]:
+    def current_scaler(self) -> RobustScaler | StandardScaler | None:
         """Get the most recently fit scaler (for inspection/serialization)."""
         return self._current_scaler
 
 
 def scale_cv_fold(
-    X: Union[pd.DataFrame, np.ndarray],
+    X: pd.DataFrame | np.ndarray,
     train_idx: np.ndarray,
     val_idx: np.ndarray,
     method: str = "robust",
     clip_outliers: bool = True,
     clip_std: float = 5.0,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Convenience function to scale a CV fold.
 

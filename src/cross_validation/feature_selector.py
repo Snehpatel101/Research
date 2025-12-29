@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -73,17 +73,17 @@ class FeatureSelectionResult:
         importance_history: Per-fold importance scores
         n_folds: Total number of folds
     """
-    stable_features: List[str]
-    feature_counts: Dict[str, int]
-    per_fold_selections: List[Set[str]]
-    importance_history: List[Dict[str, Any]]
+    stable_features: list[str]
+    feature_counts: dict[str, int]
+    per_fold_selections: list[set[str]]
+    importance_history: list[dict[str, Any]]
     n_folds: int = field(default=0)
 
     def __post_init__(self) -> None:
         if self.n_folds == 0:
             self.n_folds = len(self.per_fold_selections)
 
-    def get_stability_scores(self) -> Dict[str, float]:
+    def get_stability_scores(self) -> dict[str, float]:
         """Return stability score (fraction of folds selected) for each feature."""
         if self.n_folds == 0:
             return {}
@@ -145,8 +145,8 @@ class WalkForwardFeatureSelector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        cv_splits: List[Tuple[np.ndarray, np.ndarray]],
-        sample_weights: Optional[pd.Series] = None,
+        cv_splits: list[tuple[np.ndarray, np.ndarray]],
+        sample_weights: pd.Series | None = None,
     ) -> FeatureSelectionResult:
         """
         Perform walk-forward feature selection across CV folds.
@@ -167,8 +167,8 @@ class WalkForwardFeatureSelector:
         Returns:
             FeatureSelectionResult with stable features and selection stats
         """
-        feature_selections: List[Set[str]] = []
-        importance_history: List[Dict[str, Any]] = []
+        feature_selections: list[set[str]] = []
+        importance_history: list[dict[str, Any]] = []
 
         n_folds = len(cv_splits)
         logger.info(f"Running walk-forward feature selection across {n_folds} folds")
@@ -226,7 +226,7 @@ class WalkForwardFeatureSelector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        sample_weights: Optional[pd.Series] = None,
+        sample_weights: pd.Series | None = None,
     ) -> pd.Series:
         """Compute feature importance using configured method."""
         if self.config.use_clustered_importance:
@@ -246,7 +246,7 @@ class WalkForwardFeatureSelector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        sample_weights: Optional[pd.Series] = None,
+        sample_weights: pd.Series | None = None,
     ) -> pd.Series:
         """
         Mean Decrease in Impurity (built-in RF importance).
@@ -266,7 +266,7 @@ class WalkForwardFeatureSelector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        sample_weights: Optional[pd.Series] = None,
+        sample_weights: pd.Series | None = None,
     ) -> pd.Series:
         """
         Mean Decrease in Accuracy (permutation importance).
@@ -298,7 +298,7 @@ class WalkForwardFeatureSelector:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        sample_weights: Optional[pd.Series] = None,
+        sample_weights: pd.Series | None = None,
     ) -> pd.Series:
         """
         MDA importance with feature clustering.
@@ -331,7 +331,7 @@ class WalkForwardFeatureSelector:
         feature_clusters = pd.Series(clusters, index=X.columns)
 
         # Compute importance per cluster
-        cluster_importance: Dict[int, float] = {}
+        cluster_importance: dict[int, float] = {}
         for cluster_id in np.unique(clusters):
             cluster_features = feature_clusters[feature_clusters == cluster_id].index.tolist()
 
@@ -347,7 +347,7 @@ class WalkForwardFeatureSelector:
             cluster_importance[cluster_id] = float(rf.feature_importances_[0])
 
         # Distribute importance within cluster equally
-        feature_importance: Dict[str, float] = {}
+        feature_importance: dict[str, float] = {}
         for feature in X.columns:
             cluster_id = feature_clusters[feature]
             n_features_in_cluster = int((feature_clusters == cluster_id).sum())
@@ -403,8 +403,8 @@ class CVIntegratedFeatureSelector:
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
-        sample_weights: Optional[pd.Series] = None,
-    ) -> List[str]:
+        sample_weights: pd.Series | None = None,
+    ) -> list[str]:
         """
         Select top N features for a single fold.
 

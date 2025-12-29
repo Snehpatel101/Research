@@ -1,7 +1,6 @@
 """Path properties mixin for PipelineConfig."""
-from pathlib import Path
-from typing import List
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +81,7 @@ class PipelinePathMixin:
 
     def create_directories(self) -> None:
         """Create all required directories for this run."""
-        directories: List[Path] = [
+        directories: list[Path] = [
             self.raw_data_dir,
             self.run_data_dir,
             self.clean_data_dir,

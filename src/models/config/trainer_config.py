@@ -1,7 +1,7 @@
 """TrainerConfig dataclass for model training configuration."""
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .environment import resolve_device
 
@@ -17,9 +17,9 @@ class TrainerConfig:
     max_epochs: int = 100
     early_stopping_patience: int = 15
     random_seed: int = 42
-    experiment_name: Optional[str] = None
+    experiment_name: str | None = None
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
-    model_config: Dict[str, Any] = field(default_factory=dict)
+    model_config: dict[str, Any] = field(default_factory=dict)
     device: str = "auto"
     mixed_precision: bool = True
     num_workers: int = 4
@@ -46,7 +46,7 @@ class TrainerConfig:
         if isinstance(self.output_dir, str):
             self.output_dir = Path(self.output_dir)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "model_name": self.model_name,
@@ -70,7 +70,7 @@ class TrainerConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TrainerConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "TrainerConfig":
         """Create TrainerConfig from dictionary."""
         return cls(**data)
 

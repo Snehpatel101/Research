@@ -4,12 +4,12 @@ Pipeline Runner - Main Orchestrator.
 Manages stage execution, dependency tracking, and artifact management for
 the Phase 1 data preparation pipeline.
 """
-import sys
 import json
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Set
+
 import numpy as np
 
 
@@ -26,24 +26,24 @@ class NumpyEncoder(json.JSONEncoder):
             return str(obj)
         return super().default(obj)
 
-from .utils import StageResult, StageStatus
 from .stage_registry import PipelineStage, get_stage_definitions
 
 # Import stage execution functions
 from .stages import (
-    run_data_generation,
+    run_build_datasets,
+    run_create_splits,
     run_data_cleaning,
+    run_data_generation,
     run_feature_engineering,
-    run_initial_labeling,
+    run_feature_scaling,
     run_final_labels,
     run_ga_optimization,
-    run_create_splits,
-    run_feature_scaling,
-    run_build_datasets,
+    run_generate_report,
+    run_initial_labeling,
     run_scaled_validation,
     run_validation,
-    run_generate_report,
 )
+from .utils import StageResult, StageStatus
 
 
 class PipelineRunner:
@@ -57,7 +57,6 @@ class PipelineRunner:
             config: Pipeline configuration
             resume: Whether to resume from last successful stage
         """
-        from src.phase1.pipeline_config import PipelineConfig
         from src.common.manifest import ArtifactManifest
 
         self.config = config
@@ -72,9 +71,9 @@ class PipelineRunner:
         self.logger = logging.getLogger(__name__)
 
         # Stage tracking
-        self.stages: List[PipelineStage] = []
-        self.stage_results: Dict[str, StageResult] = {}
-        self.completed_stages: Set[str] = set()
+        self.stages: list[PipelineStage] = []
+        self.stage_results: dict[str, StageResult] = {}
+        self.completed_stages: set[str] = set()
 
         # Define pipeline stages
         self._define_stages()
@@ -143,7 +142,7 @@ class PipelineRunner:
                 stage_number=stage_def["stage_number"]
             ))
 
-    def run(self, from_stage: Optional[str] = None) -> bool:
+    def run(self, from_stage: str | None = None) -> bool:
         """
         Run the complete pipeline.
 
@@ -223,7 +222,7 @@ class PipelineRunner:
 
         return all_success
 
-    def _get_stages_to_run(self, from_stage: Optional[str]) -> List[PipelineStage]:
+    def _get_stages_to_run(self, from_stage: str | None) -> list[PipelineStage]:
         """Determine which stages to run based on resume point."""
         if from_stage is None:
             return self.stages
@@ -273,7 +272,7 @@ class PipelineRunner:
             self.logger.warning("No previous state found. Starting from beginning.")
             return
 
-        with open(state_path, 'r') as f:
+        with open(state_path) as f:
             state = json.load(f)
 
         self.completed_stages = set(state.get('completed_stages', []))
@@ -290,7 +289,7 @@ class PipelineRunner:
         except FileNotFoundError:
             self.logger.warning("No previous manifest found.")
 
-    def get_stage_status(self, stage_name: str) -> Optional[StageStatus]:
+    def get_stage_status(self, stage_name: str) -> StageStatus | None:
         """Get the status of a specific stage."""
         if stage_name in self.stage_results:
             return self.stage_results[stage_name].status
@@ -298,10 +297,10 @@ class PipelineRunner:
             return StageStatus.COMPLETED
         return StageStatus.PENDING
 
-    def get_completed_stages(self) -> List[str]:
+    def get_completed_stages(self) -> list[str]:
         """Get list of completed stage names."""
         return list(self.completed_stages)
 
-    def get_stage_result(self, stage_name: str) -> Optional[StageResult]:
+    def get_stage_result(self, stage_name: str) -> StageResult | None:
         """Get the result of a specific stage."""
         return self.stage_results.get(stage_name)

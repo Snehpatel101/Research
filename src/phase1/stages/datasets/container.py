@@ -32,7 +32,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -43,7 +43,6 @@ if TYPE_CHECKING:
 # Import shared constants from canonical source
 from src.phase1.utils.feature_sets import (
     METADATA_COLUMNS,
-    LABEL_PREFIXES,
     _is_label_column,
 )
 
@@ -70,7 +69,7 @@ INVALID_LABEL = -99
 class DataContainerConfig:
     """Configuration for TimeSeriesDataContainer."""
     horizon: int
-    feature_columns: List[str] = field(default_factory=list)
+    feature_columns: list[str] = field(default_factory=list)
     label_column: str = ""
     weight_column: str = ""
     symbol_column: str = "symbol"
@@ -90,7 +89,7 @@ class DataContainerConfig:
 class SplitData:
     """Data for a single split (train/val/test)."""
     df: pd.DataFrame
-    feature_columns: List[str]
+    feature_columns: list[str]
     label_column: str
     weight_column: str
     symbol_column: str
@@ -105,7 +104,7 @@ class SplitData:
         return len(self.feature_columns)
 
     @property
-    def symbols(self) -> List[str]:
+    def symbols(self) -> list[str]:
         if self.symbol_column in self.df.columns:
             return list(self.df[self.symbol_column].unique())
         return []
@@ -121,8 +120,8 @@ class SplitData:
 def _extract_feature_columns(
     df: pd.DataFrame,
     horizon: int,
-    explicit_features: Optional[List[str]] = None
-) -> List[str]:
+    explicit_features: list[str] | None = None
+) -> list[str]:
     """
     Extract feature columns from DataFrame.
 
@@ -190,8 +189,8 @@ class TimeSeriesDataContainer:
     def __init__(
         self,
         config: DataContainerConfig,
-        splits: Dict[str, SplitData],
-        metadata: Optional[Dict] = None
+        splits: dict[str, SplitData],
+        metadata: dict | None = None
     ) -> None:
         """
         Initialize TimeSeriesDataContainer.
@@ -210,11 +209,11 @@ class TimeSeriesDataContainer:
     @classmethod
     def from_parquet_dir(
         cls,
-        path: Union[str, Path],
+        path: str | Path,
         horizon: int,
-        feature_columns: Optional[List[str]] = None,
+        feature_columns: list[str] | None = None,
         exclude_invalid_labels: bool = True
-    ) -> "TimeSeriesDataContainer":
+    ) -> TimeSeriesDataContainer:
         """
         Load container from Phase 1 scaled parquet directory.
 
@@ -257,7 +256,7 @@ class TimeSeriesDataContainer:
         )
 
         # Load splits
-        splits: Dict[str, SplitData] = {}
+        splits: dict[str, SplitData] = {}
         split_files = {
             "train": path / "train_scaled.parquet",
             "val": path / "val_scaled.parquet",
@@ -328,13 +327,13 @@ class TimeSeriesDataContainer:
     @classmethod
     def from_dataframes(
         cls,
-        train_df: Optional[pd.DataFrame] = None,
-        val_df: Optional[pd.DataFrame] = None,
-        test_df: Optional[pd.DataFrame] = None,
+        train_df: pd.DataFrame | None = None,
+        val_df: pd.DataFrame | None = None,
+        test_df: pd.DataFrame | None = None,
         horizon: int = 20,
-        feature_columns: Optional[List[str]] = None,
+        feature_columns: list[str] | None = None,
         exclude_invalid_labels: bool = True
-    ) -> "TimeSeriesDataContainer":
+    ) -> TimeSeriesDataContainer:
         """
         Create container directly from DataFrames.
 
@@ -346,7 +345,7 @@ class TimeSeriesDataContainer:
             exclude_invalid_labels=exclude_invalid_labels
         )
 
-        splits: Dict[str, SplitData] = {}
+        splits: dict[str, SplitData] = {}
         split_dfs = {"train": train_df, "val": val_df, "test": test_df}
 
         for split_name, df in split_dfs.items():
@@ -392,12 +391,12 @@ class TimeSeriesDataContainer:
         return self.splits[split]
 
     @property
-    def available_splits(self) -> List[str]:
+    def available_splits(self) -> list[str]:
         """List of available split names."""
         return list(self.splits.keys())
 
     @property
-    def feature_columns(self) -> List[str]:
+    def feature_columns(self) -> list[str]:
         """Feature column names."""
         return self.config.feature_columns
 
@@ -415,7 +414,7 @@ class TimeSeriesDataContainer:
     # LABEL END TIMES (FOR PURGED CV)
     # =========================================================================
 
-    def get_label_end_times(self, split: str) -> Optional[pd.Series]:
+    def get_label_end_times(self, split: str) -> pd.Series | None:
         """
         Get label end times for purged cross-validation.
 
@@ -448,8 +447,7 @@ class TimeSeriesDataContainer:
         self,
         split: str,
         return_df: bool = False
-    ) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray],
-               Tuple[pd.DataFrame, pd.Series, pd.Series]]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[pd.DataFrame, pd.Series, pd.Series]:
         """
         Get data in sklearn format: (X, y, weights).
 
@@ -492,7 +490,7 @@ class TimeSeriesDataContainer:
         seq_len: int,
         stride: int = 1,
         symbol_isolated: bool = True
-    ) -> "Dataset":
+    ) -> Dataset:
         """
         Get PyTorch Dataset with sliding window sequences.
 
@@ -603,7 +601,7 @@ class TimeSeriesDataContainer:
     # UTILITIES
     # =========================================================================
 
-    def describe(self) -> Dict:
+    def describe(self) -> dict:
         """Return summary statistics for the container."""
         summary = {
             "horizon": self.config.horizon,

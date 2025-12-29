@@ -10,9 +10,7 @@ Point-in-Time Contract:
 Invalid Label Sentinel: -99 (excluded from training/evaluation)
 """
 from dataclasses import dataclass
-from typing import Dict, List, Set
 
-import numpy as np
 import pandas as pd
 
 
@@ -21,15 +19,15 @@ class DataContract:
     """Defines expected schema and constraints for pipeline data."""
 
     # Required OHLCV columns
-    REQUIRED_OHLCV: Set[str] = None  # Initialized in __post_init__
+    REQUIRED_OHLCV: set[str] = None  # Initialized in __post_init__
 
     # Valid label values (excluding sentinel)
-    VALID_LABELS: Set[int] = None  # Initialized in __post_init__
+    VALID_LABELS: set[int] = None  # Initialized in __post_init__
 
     INVALID_LABEL_SENTINEL: int = -99
 
     # Numeric columns that must be positive
-    POSITIVE_COLUMNS: Set[str] = None  # Initialized in __post_init__
+    POSITIVE_COLUMNS: set[str] = None  # Initialized in __post_init__
 
     def __post_init__(self):
         """Initialize class-level sets."""
@@ -41,7 +39,7 @@ class DataContract:
             self.POSITIVE_COLUMNS = {'open', 'high', 'low', 'close', 'volume'}
 
     @staticmethod
-    def validate_ohlc_relationships(df: pd.DataFrame) -> List[str]:
+    def validate_ohlc_relationships(df: pd.DataFrame) -> list[str]:
         """Validate high >= low, high >= open/close, low <= open/close."""
         errors = []
 
@@ -133,7 +131,7 @@ def validate_ohlcv_schema(df: pd.DataFrame, stage: str = "unknown") -> None:
         )
 
 
-def validate_labels(df: pd.DataFrame, label_columns: List[str]) -> None:
+def validate_labels(df: pd.DataFrame, label_columns: list[str]) -> None:
     """
     Validate label columns meet contract requirements.
 
@@ -167,7 +165,7 @@ def validate_labels(df: pd.DataFrame, label_columns: List[str]) -> None:
         )
 
 
-def filter_invalid_labels(df: pd.DataFrame, label_columns: List[str]) -> pd.DataFrame:
+def filter_invalid_labels(df: pd.DataFrame, label_columns: list[str]) -> pd.DataFrame:
     """
     Remove rows with invalid label sentinel (-99) from any label column.
 
@@ -187,7 +185,7 @@ def filter_invalid_labels(df: pd.DataFrame, label_columns: List[str]) -> pd.Data
     return df[mask].copy()
 
 
-def get_dataset_fingerprint(df: pd.DataFrame) -> Dict:
+def get_dataset_fingerprint(df: pd.DataFrame) -> dict:
     """
     Generate fingerprint for data lineage tracking.
 
@@ -209,8 +207,8 @@ def get_dataset_fingerprint(df: pd.DataFrame) -> Dict:
 
 def validate_feature_lookahead(
     df: pd.DataFrame,
-    feature_columns: List[str],
-    label_columns: List[str]
+    feature_columns: list[str],
+    label_columns: list[str]
 ) -> None:
     """
     Validate that features do not leak future information.
@@ -255,8 +253,8 @@ def validate_feature_lookahead(
 
 def summarize_label_distribution(
     df: pd.DataFrame,
-    label_columns: List[str]
-) -> Dict[str, Dict]:
+    label_columns: list[str]
+) -> dict[str, dict]:
     """
     Summarize label distribution for each label column.
 

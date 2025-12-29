@@ -5,12 +5,12 @@ This module provides functions to calculate Simple Moving Averages (SMA)
 and Exponential Moving Averages (EMA) along with price-to-MA ratios.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict, List, Optional
 
-from .numba_functions import calculate_sma_numba, calculate_ema_numba
+import numpy as np
+import pandas as pd
+
+from .numba_functions import calculate_ema_numba, calculate_sma_numba
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,8 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 def add_sma(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Simple Moving Averages.
@@ -68,8 +68,8 @@ def add_sma(
 
 def add_ema(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Exponential Moving Averages.

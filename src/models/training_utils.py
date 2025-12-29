@@ -7,7 +7,7 @@ without directly instantiating the Trainer class.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -21,11 +21,11 @@ if TYPE_CHECKING:
 
 def train_model(
     model_name: str,
-    container: "TimeSeriesDataContainer",
+    container: TimeSeriesDataContainer,
     horizon: int = 20,
-    config_overrides: Optional[Dict[str, Any]] = None,
-    output_dir: Optional[Path] = None,
-) -> Dict[str, Any]:
+    config_overrides: dict[str, Any] | None = None,
+    output_dir: Path | None = None,
+) -> dict[str, Any]:
     """
     Convenience function to train a model.
 
@@ -68,9 +68,9 @@ def train_model(
 
 def evaluate_model(
     model: BaseModel,
-    container: "TimeSeriesDataContainer",
+    container: TimeSeriesDataContainer,
     split: str = "test",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Evaluate a trained model on a data split.
 

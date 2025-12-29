@@ -14,7 +14,6 @@ see the `stages.regime` package.
 """
 
 import logging
-from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -25,9 +24,9 @@ logger.addHandler(logging.NullHandler())
 
 def add_regime_features(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     use_advanced: bool = False,
-    regime_config: Optional[Dict] = None
+    regime_config: dict | None = None
 ) -> pd.DataFrame:
     """
     Add regime indicators to DataFrame.
@@ -72,7 +71,7 @@ def add_regime_features(
 
 def _add_basic_regime_features(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str]
+    feature_metadata: dict[str, str]
 ) -> pd.DataFrame:
     """
     Add basic regime features using pre-computed indicators.
@@ -124,8 +123,8 @@ def _add_basic_regime_features(
 
 def _add_advanced_regime_features(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    regime_config: Optional[Dict] = None
+    feature_metadata: dict[str, str],
+    regime_config: dict | None = None
 ) -> pd.DataFrame:
     """
     Add advanced regime features using the regime detection package.
@@ -146,13 +145,11 @@ def _add_advanced_regime_features(
     """
     try:
         from src.phase1.stages.regime import (
-            CompositeRegimeDetector,
             add_regime_features_to_dataframe,
         )
     except ImportError:
         try:
             from stages.regime import (
-                CompositeRegimeDetector,
                 add_regime_features_to_dataframe,
             )
         except ImportError as e:
@@ -176,7 +173,7 @@ def _add_advanced_regime_features(
 
 def add_volatility_regime(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str]
+    feature_metadata: dict[str, str]
 ) -> pd.DataFrame:
     """
     Add volatility regime indicator only.
@@ -212,7 +209,7 @@ def add_volatility_regime(
 
 def add_trend_regime(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str]
+    feature_metadata: dict[str, str]
 ) -> pd.DataFrame:
     """
     Add trend regime indicator only.
@@ -256,7 +253,7 @@ def add_trend_regime(
 
 def add_structure_regime(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     lookback: int = 100
 ) -> pd.DataFrame:
     """
@@ -264,6 +261,9 @@ def add_structure_regime(
 
     This function uses the advanced regime detection package for
     Hurst exponent calculation.
+
+    ANTI-LOOKAHEAD: The regime is shifted by 1 bar to prevent lookahead bias.
+    The regime at bar N reflects the market structure from bars 0..N-1.
 
     Parameters
     ----------
@@ -277,30 +277,34 @@ def add_structure_regime(
     Returns
     -------
     pd.DataFrame
-        DataFrame with structure regime added
+        DataFrame with structure regime added (shifted by 1 bar)
     """
     logger.info("Adding structure regime...")
 
     try:
-        from stages.regime import MarketStructureDetector
+        from src.phase1.stages.regime import MarketStructureDetector
+    except ImportError:
+        try:
+            from stages.regime import MarketStructureDetector
+        except ImportError as e:
+            logger.warning(f"Structure regime not available: {e}")
+            return df
 
-        detector = MarketStructureDetector(lookback=lookback)
-        regimes = detector.detect(df)
+    detector = MarketStructureDetector(lookback=lookback)
+    regimes = detector.detect(df)
 
-        df['structure_regime'] = regimes
-        feature_metadata['structure_regime'] = \
-            "Market structure (mean_reverting/random/trending) based on Hurst exponent"
-
-    except ImportError as e:
-        logger.warning(f"Structure regime not available: {e}")
+    # ANTI-LOOKAHEAD: Shift by 1 bar to prevent using current bar data
+    df['structure_regime'] = regimes.shift(1)
+    feature_metadata['structure_regime'] = \
+        "Market structure (mean_reverting/random/trending) based on Hurst (shifted by 1 bar)"
 
     return df
 
 
 def add_all_regime_features(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    config: Optional[Dict] = None
+    feature_metadata: dict[str, str],
+    config: dict | None = None
 ) -> pd.DataFrame:
     """
     Add all available regime features using advanced detection.

@@ -45,15 +45,15 @@ Example:
         "holdout_fraction": 0.2,
     })
 """
-from .voting import VotingEnsemble
-from .stacking import StackingEnsemble
 from .blending import BlendingEnsemble
+from .stacking import StackingEnsemble
 from .validator import (
-    validate_ensemble_config,
-    validate_base_model_compatibility,
-    get_compatible_models,
     EnsembleCompatibilityError,
+    get_compatible_models,
+    validate_base_model_compatibility,
+    validate_ensemble_config,
 )
+from .voting import VotingEnsemble
 
 __all__ = [
     "VotingEnsemble",

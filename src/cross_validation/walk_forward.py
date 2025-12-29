@@ -14,8 +14,9 @@ Reference: Pardo (2008) "The Evaluation and Optimization of Trading Strategies"
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -97,10 +98,10 @@ class WindowMetrics:
     train_end_idx: int
     test_start_idx: int
     test_end_idx: int
-    train_start_time: Optional[pd.Timestamp] = None
-    train_end_time: Optional[pd.Timestamp] = None
-    test_start_time: Optional[pd.Timestamp] = None
-    test_end_time: Optional[pd.Timestamp] = None
+    train_start_time: pd.Timestamp | None = None
+    train_end_time: pd.Timestamp | None = None
+    test_start_time: pd.Timestamp | None = None
+    test_end_time: pd.Timestamp | None = None
     accuracy: float = 0.0
     f1: float = 0.0
     precision: float = 0.0
@@ -123,7 +124,7 @@ class WalkForwardResult:
     """
     model_name: str
     horizon: int
-    window_metrics: List[WindowMetrics]
+    window_metrics: list[WindowMetrics]
     predictions: pd.DataFrame
     config: WalkForwardConfig
     total_time: float = 0.0
@@ -155,7 +156,7 @@ class WalkForwardResult:
             return 0.0
         return float(np.std([m.accuracy for m in self.window_metrics]))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "model_name": self.model_name,
@@ -215,10 +216,10 @@ class WalkForwardEvaluator:
     def split(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        y: pd.Series | None = None,
+        groups: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Generate train/test indices for each walk-forward window.
 
@@ -318,9 +319,9 @@ class WalkForwardEvaluator:
 
     def get_n_splits(
         self,
-        X: Optional[pd.DataFrame] = None,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
+        X: pd.DataFrame | None = None,
+        y: pd.Series | None = None,
+        groups: pd.Series | None = None,
     ) -> int:
         """Return number of windows (sklearn API compatibility)."""
         return self.config.n_windows
@@ -328,9 +329,9 @@ class WalkForwardEvaluator:
     def get_window_info(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> List[Dict[str, Any]]:
+        y: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Get detailed information about each walk-forward window.
 
@@ -376,9 +377,9 @@ class WalkForwardEvaluator:
     def validate_coverage(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Dict[str, Any]:
+        y: pd.Series | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> dict[str, Any]:
         """
         Validate that walk-forward covers expected samples.
 

@@ -27,9 +27,9 @@ Example:
     model = ModelRegistry.create("lgbm", config={"num_leaves": 63})
     # catboost only available if installed
 """
-from .xgboost_model import XGBoostModel
+from .catboost_model import CATBOOST_AVAILABLE, CatBoostModel
 from .lightgbm_model import LightGBMModel
-from .catboost_model import CatBoostModel, CATBOOST_AVAILABLE
+from .xgboost_model import XGBoostModel
 
 __all__ = [
     "XGBoostModel",

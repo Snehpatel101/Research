@@ -29,8 +29,8 @@ Usage:
     runner = PipelineRunner(config)
     success = runner.run()
 """
-from .utils import StageStatus, StageResult
 from .stage_registry import PipelineStage, get_stage_definitions, get_stage_order
+from .utils import StageResult, StageStatus
 
 __all__ = [
     'PipelineRunner',

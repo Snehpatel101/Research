@@ -16,19 +16,19 @@ from the refactored submodules.
 """
 from __future__ import annotations
 
+# Import all detector implementations
+from .drift_detectors import (
+    ADWINDetector,
+    KSDetector,
+    PSIDetector,
+)
+
 # Import all types and base classes
 from .drift_types import (
     BaseDriftDetector,
     DriftResult,
     DriftSeverity,
     DriftType,
-)
-
-# Import all detector implementations
-from .drift_detectors import (
-    ADWINDetector,
-    KSDetector,
-    PSIDetector,
 )
 
 # Import multi-feature monitor

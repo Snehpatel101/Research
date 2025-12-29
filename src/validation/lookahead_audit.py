@@ -12,8 +12,9 @@ proper `closed` and `label` settings.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Literal, Optional, Set, Tuple
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -41,16 +42,16 @@ class ResampleConfig:
     label: Literal["left", "right"] = "left"
 
     @classmethod
-    def ohlcv_default(cls) -> "ResampleConfig":
+    def ohlcv_default(cls) -> ResampleConfig:
         """Standard OHLCV resampling config (no lookahead)."""
         return cls(closed="left", label="left")
 
 
 def validate_resample_config(
-    closed: Optional[str] = None,
-    label: Optional[str] = None,
-    expected: Optional[ResampleConfig] = None,
-) -> Tuple[bool, List[str]]:
+    closed: str | None = None,
+    label: str | None = None,
+    expected: ResampleConfig | None = None,
+) -> tuple[bool, list[str]]:
     """
     Validate resample parameters against expected config.
 
@@ -108,12 +109,12 @@ class LookaheadAuditResult:
     """Result of lookahead audit for a feature function."""
     feature_name: str
     has_lookahead: bool
-    affected_columns: List[str] = field(default_factory=list)
+    affected_columns: list[str] = field(default_factory=list)
     max_affected_rows: int = 0
     corruption_point: int = 0
     details: str = ""
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to serializable dict."""
         return {
             "feature_name": self.feature_name,
@@ -176,7 +177,7 @@ class LookaheadAuditor:
         df: pd.DataFrame,
         feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
         name: str,
-        price_cols: Optional[List[str]] = None,
+        price_cols: list[str] | None = None,
     ) -> LookaheadAuditResult:
         """
         Audit a feature function for lookahead bias.
@@ -306,7 +307,7 @@ class LookaheadAuditor:
         self,
         df: pd.DataFrame,
         start_idx: int,
-        columns: List[str],
+        columns: list[str],
     ) -> pd.DataFrame:
         """Corrupt data from start_idx onwards."""
         rng = np.random.default_rng(self.random_seed)
@@ -342,7 +343,7 @@ def audit_mtf_alignment(
     df_mtf: pd.DataFrame,
     base_tf_minutes: int,
     mtf_minutes: int,
-) -> Tuple[bool, List[str]]:
+) -> tuple[bool, list[str]]:
     """
     Audit MTF alignment for lookahead bias.
 
@@ -409,8 +410,8 @@ def audit_feature_lookahead(
     df: pd.DataFrame,
     feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
     name: str,
-    corruption_points: Optional[List[float]] = None,
-) -> List[LookaheadAuditResult]:
+    corruption_points: list[float] | None = None,
+) -> list[LookaheadAuditResult]:
     """
     Convenience function to audit features at multiple corruption points.
 

@@ -11,13 +11,13 @@ Created: 2025-12-20
 Updated: 2025-12-20 - Extracted from feature_scaler.py
 """
 
+import json
 import logging
+from datetime import datetime
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from typing import Dict, List, Optional
-from pathlib import Path
-import json
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -28,9 +28,9 @@ def validate_scaling(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     z_threshold: float = 5.0
-) -> Dict:
+) -> dict:
     """
     Validate that scaling was done correctly.
 
@@ -124,7 +124,7 @@ def validate_no_leakage(
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
     scaler: 'FeatureScaler'
-) -> Dict:
+) -> dict:
     """
     Validate that no data leakage occurred during scaling.
 
@@ -195,10 +195,10 @@ def validate_scaling_for_splits(
     train_path: Path,
     val_path: Path,
     test_path: Path,
-    feature_cols: Optional[List[str]] = None,
+    feature_cols: list[str] | None = None,
     scaler_type: str = 'robust',
-    output_path: Optional[Path] = None
-) -> Dict:
+    output_path: Path | None = None
+) -> dict:
     """
     Validate that scaling works correctly for train/val/test splits.
 
@@ -313,9 +313,9 @@ def add_scaling_validation_to_stage8(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     scaler_type: str = 'robust'
-) -> Dict:
+) -> dict:
     """
     Add scaling validation results to a Stage 8 DataValidator.
 

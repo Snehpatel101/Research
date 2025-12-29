@@ -1,15 +1,15 @@
 """Utility functions for model configuration."""
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from .paths import CONFIG_DIR
 from .exceptions import ConfigError
-from .loaders import load_yaml_config, find_model_config
+from .loaders import find_model_config, load_yaml_config
+from .paths import CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
 
-def list_available_models() -> List[str]:
+def list_available_models() -> list[str]:
     """List all models with configuration files."""
     if not CONFIG_DIR.exists():
         return []
@@ -19,7 +19,7 @@ def list_available_models() -> List[str]:
 def get_model_info(
     model_name: str,
     explicit: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get basic info about a model from its config.
 

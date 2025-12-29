@@ -6,7 +6,6 @@ and sideways regimes using ADX strength and price-to-SMA relationship.
 """
 
 import logging
-from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -26,7 +25,7 @@ def calculate_adx(
     low: np.ndarray,
     close: np.ndarray,
     period: int = 14
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate ADX, +DI, -DI.
 
@@ -154,8 +153,8 @@ class TrendRegimeDetector(RegimeDetector):
         adx_period: int = 14,
         sma_period: int = 50,
         adx_threshold: float = 25.0,
-        adx_column: Optional[str] = None,
-        sma_column: Optional[str] = None
+        adx_column: str | None = None,
+        sma_column: str | None = None
     ):
         """
         Initialize trend regime detector.
@@ -261,7 +260,7 @@ class TrendRegimeDetector(RegimeDetector):
     def detect_with_components(
         self,
         df: pd.DataFrame
-    ) -> Tuple[pd.Series, pd.Series, pd.Series]:
+    ) -> tuple[pd.Series, pd.Series, pd.Series]:
         """
         Detect regime and return component values for debugging.
 

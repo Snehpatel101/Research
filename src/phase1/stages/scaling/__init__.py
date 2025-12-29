@@ -41,41 +41,40 @@ Updated: 2025-12-20 - Refactored into modular package
 """
 
 # Core classes and configuration
+# Convenience functions
+from .convenience import (
+    scale_splits,
+    scale_train_val_test,
+)
 from .core import (
-    ScalerType,
-    ScalerConfig,
+    DEFAULT_SCALING_STRATEGY,
+    FEATURE_PATTERNS,
     FeatureCategory,
     FeatureScalingConfig,
-    ScalingStatistics,
+    ScalerConfig,
+    ScalerType,
     ScalingReport,
-    FEATURE_PATTERNS,
-    DEFAULT_SCALING_STRATEGY,
-)
-
-# Scaler implementations and utilities
-from .scalers import (
-    categorize_feature,
-    get_default_scaler_type,
-    should_log_transform,
-    create_scaler,
-    compute_statistics,
+    ScalingStatistics,
 )
 
 # Main scaler class
 from .scaler import FeatureScaler
 
-# Validation functions
-from .validators import (
-    validate_scaling,
-    validate_no_leakage,
-    validate_scaling_for_splits,
-    add_scaling_validation_to_stage8,
+# Scaler implementations and utilities
+from .scalers import (
+    categorize_feature,
+    compute_statistics,
+    create_scaler,
+    get_default_scaler_type,
+    should_log_transform,
 )
 
-# Convenience functions
-from .convenience import (
-    scale_splits,
-    scale_train_val_test,
+# Validation functions
+from .validators import (
+    add_scaling_validation_to_stage8,
+    validate_no_leakage,
+    validate_scaling,
+    validate_scaling_for_splits,
 )
 
 __all__ = [

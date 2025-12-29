@@ -15,10 +15,10 @@ Academic References:
 - Kyle (1985): "Continuous Auctions and Insider Trading"
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict, Optional, List
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -36,8 +36,8 @@ def _safe_divide(
 
 def add_amihud_illiquidity(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Amihud illiquidity ratio.
@@ -92,7 +92,7 @@ def add_amihud_illiquidity(
 
 def add_roll_spread(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20
 ) -> pd.DataFrame:
     """
@@ -148,7 +148,7 @@ def add_roll_spread(
 
 def add_kyle_lambda(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     volume_period: int = 20
 ) -> pd.DataFrame:
     """
@@ -197,7 +197,7 @@ def add_kyle_lambda(
 
 def add_corwin_schultz_spread(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str]
+    feature_metadata: dict[str, str]
 ) -> pd.DataFrame:
     """
     Add Corwin-Schultz high-low spread estimator.
@@ -267,8 +267,8 @@ def add_corwin_schultz_spread(
 
 def add_relative_spread(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add relative spread (high-low range normalized by close).
@@ -315,7 +315,7 @@ def add_relative_spread(
 
 def add_volume_imbalance(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str]
+    feature_metadata: dict[str, str]
 ) -> pd.DataFrame:
     """
     Add volume imbalance proxy.
@@ -366,8 +366,8 @@ def add_volume_imbalance(
 
 def add_trade_intensity(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add trade intensity (volume relative to recent average).
@@ -416,8 +416,8 @@ def add_trade_intensity(
 
 def add_price_efficiency(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
-    periods: Optional[List[int]] = None
+    feature_metadata: dict[str, str],
+    periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add price efficiency ratio.
@@ -470,7 +470,7 @@ def add_price_efficiency(
 
 def add_realized_volatility_ratio(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     short_period: int = 5,
     long_period: int = 20
 ) -> pd.DataFrame:
@@ -520,7 +520,7 @@ def add_realized_volatility_ratio(
 
 def add_microstructure_features(
     df: pd.DataFrame,
-    feature_metadata: Optional[Dict[str, str]] = None,
+    feature_metadata: dict[str, str] | None = None,
     include_amihud: bool = True,
     include_roll: bool = True,
     include_kyle: bool = True,

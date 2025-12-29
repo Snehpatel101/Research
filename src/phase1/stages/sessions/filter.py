@@ -12,20 +12,17 @@ Created: 2025-12-22
 """
 
 import logging
-from datetime import datetime, time
-from typing import Dict, List, Optional, Set, Tuple
+from datetime import datetime
 
-import numpy as np
 import pandas as pd
 
 from .config import (
+    DEFAULT_SESSIONS_CONFIG,
+    SESSION_OVERLAPS,
+    SESSIONS,
     SessionConfig,
     SessionName,
-    SessionOverlap,
     SessionsConfig,
-    SESSIONS,
-    SESSION_OVERLAPS,
-    DEFAULT_SESSIONS_CONFIG,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,7 +48,7 @@ class SessionFilter:
 
     def __init__(
         self,
-        config: Optional[SessionsConfig] = None,
+        config: SessionsConfig | None = None,
         datetime_column: str = 'datetime'
     ):
         """
@@ -126,7 +123,7 @@ class SessionFilter:
             # Normal session: e.g., 08:00 to 16:30
             return start <= time_minutes < end
 
-    def classify_session(self, dt: datetime) -> Optional[SessionName]:
+    def classify_session(self, dt: datetime) -> SessionName | None:
         """
         Classify which session a datetime belongs to.
 
@@ -178,7 +175,7 @@ class SessionFilter:
     def get_session_flags(
         self,
         datetimes: pd.Series
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """
         Generate session flag columns for a series of datetimes.
 
@@ -211,7 +208,7 @@ class SessionFilter:
     def get_overlap_flags(
         self,
         datetimes: pd.Series
-    ) -> Dict[str, pd.Series]:
+    ) -> dict[str, pd.Series]:
         """
         Generate overlap flag columns for a series of datetimes.
 
@@ -251,7 +248,7 @@ class SessionFilter:
     def add_session_features(
         self,
         df: pd.DataFrame,
-        feature_metadata: Optional[Dict[str, str]] = None
+        feature_metadata: dict[str, str] | None = None
     ) -> pd.DataFrame:
         """
         Add session and overlap flags as features to DataFrame.
@@ -363,7 +360,7 @@ class SessionFilter:
 
         return df
 
-    def get_session_stats(self, df: pd.DataFrame) -> Dict[str, Dict]:
+    def get_session_stats(self, df: pd.DataFrame) -> dict[str, dict]:
         """
         Calculate statistics for each session in the DataFrame.
 
@@ -409,8 +406,8 @@ class SessionFilter:
 
 
 def create_session_filter(
-    include: Optional[List[str]] = None,
-    exclude: Optional[List[str]] = None,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
     add_flags: bool = True,
     add_overlaps: bool = True
 ) -> SessionFilter:

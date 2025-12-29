@@ -38,25 +38,25 @@ Usage:
     if not result.is_valid:
         raise ValueError(f"Validation failed: {result.errors}")
 """
-from src.phase1.stages.datasets.run import run_build_datasets
 from src.phase1.stages.datasets.container import (
-    TimeSeriesDataContainer,
+    INVALID_LABEL,
+    METADATA_COLUMNS,
     DataContainerConfig,
     SplitData,
-    METADATA_COLUMNS,
-    LABEL_PREFIXES,
-    INVALID_LABEL,
+    TimeSeriesDataContainer,
 )
+from src.phase1.utils.feature_sets import LABEL_PREFIXES
+from src.phase1.stages.datasets.run import run_build_datasets
 from src.phase1.stages.datasets.sequences import (
-    SequenceDataset,
     SequenceConfig,
-    create_sequence_dataset,
+    SequenceDataset,
     build_sequence_indices,
+    create_sequence_dataset,
     find_symbol_boundaries,
 )
 from src.phase1.stages.datasets.validators import (
-    validate_model_ready,
     ValidationResult,
+    validate_model_ready,
 )
 
 __all__ = [

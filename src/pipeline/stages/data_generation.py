@@ -5,11 +5,8 @@ Wrapper that delegates to src/stages/ingest/run.py
 """
 from typing import TYPE_CHECKING
 
-from ..utils import StageResult
-
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
-    from manifest import ArtifactManifest
+    pass
 
 # Import orchestration logic from stage subdirectory
 from src.phase1.stages.ingest.run import run_data_generation

@@ -26,9 +26,9 @@ Usage:
 >>> updated_config = apply_preset_to_config(TradingPreset.SCALPING, config_dict)
 """
 
-from enum import Enum
-from typing import Dict, List, Any
 import logging
+from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class TradingPreset(Enum):
 # Each preset provides parameters optimized for a specific trading style.
 # These configurations are designed to be merged with PipelineConfig.
 
-PRESET_CONFIGS: Dict[TradingPreset, Dict[str, Any]] = {
+PRESET_CONFIGS: dict[TradingPreset, dict[str, Any]] = {
     # =========================================================================
     # SCALPING PRESET
     # =========================================================================
@@ -234,7 +234,7 @@ def validate_preset(preset_name: str) -> bool:
     return True
 
 
-def list_available_presets() -> List[str]:
+def list_available_presets() -> list[str]:
     """
     List all available trading presets.
 
@@ -251,7 +251,7 @@ def list_available_presets() -> List[str]:
     return [p.value for p in TradingPreset]
 
 
-def get_preset(preset_name: str) -> Dict[str, Any]:
+def get_preset(preset_name: str) -> dict[str, Any]:
     """
     Get configuration dictionary for a trading preset.
 
@@ -321,9 +321,9 @@ def _get_preset_enum(preset: TradingPreset | str) -> TradingPreset:
 
 def apply_preset_to_config(
     preset: TradingPreset | str,
-    base_config: Dict[str, Any],
+    base_config: dict[str, Any],
     override_conflicts: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Apply a trading preset to an existing configuration dictionary.
 
@@ -477,7 +477,7 @@ def get_adjusted_barrier_params(
     preset: TradingPreset | str,
     symbol: str,
     horizon: int
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get barrier parameters adjusted by the preset's barrier multiplier.
 

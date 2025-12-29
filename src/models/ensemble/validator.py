@@ -7,7 +7,6 @@ shape mismatches (2D vs 3D inputs).
 from __future__ import annotations
 
 import logging
-from typing import List, Tuple
 
 from ..registry import ModelRegistry
 
@@ -19,7 +18,7 @@ class EnsembleCompatibilityError(ValueError):
     pass
 
 
-def validate_ensemble_config(base_model_names: List[str]) -> Tuple[bool, str]:
+def validate_ensemble_config(base_model_names: list[str]) -> tuple[bool, str]:
     """
     Validate that base models are compatible for ensemble creation.
 
@@ -98,8 +97,8 @@ def validate_ensemble_config(base_model_names: List[str]) -> Tuple[bool, str]:
 
 
 def _build_compatibility_error_message(
-    tabular_models: List[str],
-    sequence_models: List[str],
+    tabular_models: list[str],
+    sequence_models: list[str],
 ) -> str:
     """
     Build a detailed error message for incompatible ensemble configurations.
@@ -154,7 +153,7 @@ def _build_compatibility_error_message(
     return "\n".join(msg)
 
 
-def validate_base_model_compatibility(base_model_names: List[str]) -> None:
+def validate_base_model_compatibility(base_model_names: list[str]) -> None:
     """
     Validate base model compatibility and raise exception if incompatible.
 
@@ -173,7 +172,7 @@ def validate_base_model_compatibility(base_model_names: List[str]) -> None:
         raise EnsembleCompatibilityError(error_msg)
 
 
-def get_compatible_models(reference_model: str) -> List[str]:
+def get_compatible_models(reference_model: str) -> list[str]:
     """
     Get list of models compatible with a reference model for ensembles.
 

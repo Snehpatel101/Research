@@ -6,10 +6,10 @@ This package provides shared functionality for:
 """
 
 from .label_mapping import (
-    LABEL_TO_CLASS,
     CLASS_TO_LABEL,
-    map_labels_to_classes,
+    LABEL_TO_CLASS,
     map_classes_to_labels,
+    map_labels_to_classes,
 )
 
 __all__ = [

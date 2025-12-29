@@ -2,7 +2,6 @@
 Feature quality validation checks.
 """
 import logging
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,7 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 logger = logging.getLogger(__name__)
 
 
-def get_feature_columns(df: pd.DataFrame) -> List[str]:
+def get_feature_columns(df: pd.DataFrame) -> list[str]:
     """
     Identify feature columns in the DataFrame.
 
@@ -43,10 +42,10 @@ def get_feature_columns(df: pd.DataFrame) -> List[str]:
 
 def check_feature_correlations(
     feature_df: pd.DataFrame,
-    feature_cols: List[str],
-    warnings_found: List[str],
+    feature_cols: list[str],
+    warnings_found: list[str],
     threshold: float = 0.85
-) -> List[Dict]:
+) -> list[dict]:
     """
     Check for highly correlated feature pairs.
 
@@ -95,11 +94,11 @@ def check_feature_correlations(
 def compute_feature_importance(
     df: pd.DataFrame,
     feature_df: pd.DataFrame,
-    feature_cols: List[str],
+    feature_cols: list[str],
     label_col: str,
     seed: int = 42,
     sample_size: int = 10000
-) -> Tuple[List[Dict], bool]:
+) -> tuple[list[dict], bool]:
     """
     Compute feature importance using Random Forest.
 
@@ -165,8 +164,8 @@ def compute_feature_importance(
 
 
 def run_stationarity_tests(
-    df: pd.DataFrame, feature_cols: List[str]
-) -> List[Dict]:
+    df: pd.DataFrame, feature_cols: list[str]
+) -> list[dict]:
     """
     Run Augmented Dickey-Fuller tests on selected features.
 
@@ -223,11 +222,11 @@ def run_stationarity_tests(
 
 def check_feature_quality(
     df: pd.DataFrame,
-    horizons: List[int],
-    warnings_found: List[str],
+    horizons: list[int],
+    warnings_found: list[str],
     seed: int = 42,
     max_features: int = 50
-) -> Dict:
+) -> dict:
     """
     Run all feature quality checks.
 

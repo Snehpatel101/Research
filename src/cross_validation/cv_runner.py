@@ -12,15 +12,19 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.purged_kfold import PurgedKFold, ModelAwareCV
 from src.cross_validation.feature_selector import WalkForwardFeatureSelector
 from src.cross_validation.oof_generator import OOFGenerator, OOFPrediction, StackingDataset
-from src.cross_validation.param_spaces import PARAM_SPACES
+from src.cross_validation.param_spaces import (
+    PARAM_SPACES,
+    get_max_leaves_for_depth,
+    validate_lightgbm_params,
+)
+from src.cross_validation.purged_kfold import ModelAwareCV, PurgedKFold
 from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
@@ -43,7 +47,7 @@ class FoldMetrics:
     training_time: float
     val_loss: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "fold": self.fold,
             "train_size": self.train_size,
@@ -74,11 +78,11 @@ class CVResult:
     """
     model_name: str
     horizon: int
-    fold_metrics: List[FoldMetrics]
+    fold_metrics: list[FoldMetrics]
     oos_predictions: pd.DataFrame
     feature_importance: pd.DataFrame = field(default_factory=pd.DataFrame)
-    tuned_params: Dict[str, Any] = field(default_factory=dict)
-    selected_features: List[str] = field(default_factory=list)
+    tuned_params: dict[str, Any] = field(default_factory=dict)
+    selected_features: list[str] = field(default_factory=list)
     total_time: float = 0.0
 
     @property
@@ -103,7 +107,7 @@ class CVResult:
         std = self.std_f1
         return std / mean if mean > 0 else float("inf")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "model_name": self.model_name,
             "horizon": self.horizon,
@@ -148,9 +152,9 @@ class TimeSeriesOptunaTuner:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        sample_weights: Optional[pd.Series] = None,
-        param_space: Optional[Dict] = None,
-    ) -> Dict[str, Any]:
+        sample_weights: pd.Series | None = None,
+        param_space: dict | None = None,
+    ) -> dict[str, Any]:
         """
         Run hyperparameter tuning.
 
@@ -219,10 +223,39 @@ class TimeSeriesOptunaTuner:
             "n_trials": len(study.trials),
         }
 
-    def _sample_params(self, trial, param_space: Dict) -> Dict:
-        """Sample parameters from search space."""
+    def _sample_params(self, trial, param_space: dict) -> dict:
+        """
+        Sample parameters from search space with constraint enforcement.
+
+        For LightGBM, enforces: num_leaves <= 2^max_depth
+        """
         params = {}
+
+        # For LightGBM, sample max_depth first to constrain num_leaves
+        is_lightgbm = "num_leaves" in param_space and "max_depth" in param_space
+
+        if is_lightgbm:
+            # Sample max_depth first
+            depth_spec = param_space["max_depth"]
+            max_depth = trial.suggest_int("max_depth", depth_spec["low"], depth_spec["high"])
+            params["max_depth"] = max_depth
+
+            # Constrain num_leaves based on max_depth
+            leaves_spec = param_space["num_leaves"]
+            max_valid_leaves = get_max_leaves_for_depth(max_depth)
+            # Use the smaller of: spec upper bound, 2^max_depth, or 128 (for regularization)
+            constrained_high = min(leaves_spec["high"], max_valid_leaves, 128)
+            constrained_low = min(leaves_spec["low"], constrained_high)
+
+            params["num_leaves"] = trial.suggest_int(
+                "num_leaves", constrained_low, constrained_high
+            )
+
+        # Sample remaining parameters
         for name, spec in param_space.items():
+            if name in params:
+                continue  # Already sampled (max_depth, num_leaves for LightGBM)
+
             if spec["type"] == "int":
                 params[name] = trial.suggest_int(name, spec["low"], spec["high"])
             elif spec["type"] == "float":
@@ -232,6 +265,11 @@ class TimeSeriesOptunaTuner:
                 )
             elif spec["type"] == "categorical":
                 params[name] = trial.suggest_categorical(name, spec["choices"])
+
+        # Apply validation as a safety net
+        if is_lightgbm:
+            params = validate_lightgbm_params(params)
+
         return params
 
 
@@ -272,8 +310,8 @@ class CrossValidationRunner:
     def __init__(
         self,
         cv: PurgedKFold,
-        models: List[str],
-        horizons: List[int],
+        models: list[str],
+        horizons: list[int],
         tune_hyperparams: bool = True,
         select_features: bool = True,
         n_features_to_select: int = 50,
@@ -313,7 +351,7 @@ class CrossValidationRunner:
 
     def _validate_label_end_times(
         self,
-        label_end_times: Optional[pd.Series],
+        label_end_times: pd.Series | None,
         model_family: str,
     ) -> None:
         """
@@ -339,8 +377,8 @@ class CrossValidationRunner:
 
     def run(
         self,
-        container: "TimeSeriesDataContainer",
-    ) -> Dict[Tuple[str, int], CVResult]:
+        container: TimeSeriesDataContainer,
+    ) -> dict[tuple[str, int], CVResult]:
         """
         Run cross-validation for all models and horizons.
 
@@ -350,9 +388,8 @@ class CrossValidationRunner:
         Returns:
             Dict mapping (model_name, horizon) to CVResult
         """
-        from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
-        results: Dict[Tuple[str, int], CVResult] = {}
+        results: dict[tuple[str, int], CVResult] = {}
 
         for model_name in self.models:
             for horizon in self.horizons:
@@ -370,7 +407,7 @@ class CrossValidationRunner:
 
     def _run_single_cv(
         self,
-        container: "TimeSeriesDataContainer",
+        container: TimeSeriesDataContainer,
         model_name: str,
         horizon: int,
     ) -> CVResult:
@@ -411,7 +448,7 @@ class CrossValidationRunner:
         # For more accuracy at the cost of speed, set tune_per_fold=True to
         # tune HPs inside each fold after feature selection.
         # ==================================================================
-        tuned_params: Dict[str, Any] = {}
+        tuned_params: dict[str, Any] = {}
         if self.tune_hyperparams and not self.tune_per_fold:
             logger.debug(
                 "Tuning hyperparameters on full feature set (tune_per_fold=False). "
@@ -513,12 +550,12 @@ class CrossValidationRunner:
         self,
         X: pd.DataFrame,
         y: pd.Series,
-        weights: Optional[pd.Series],
-        cv_splits: List[Tuple[np.ndarray, np.ndarray]],
+        weights: pd.Series | None,
+        cv_splits: list[tuple[np.ndarray, np.ndarray]],
         model_name: str,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         tune_per_fold: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run CV with per-fold feature selection to prevent leakage.
 
@@ -544,15 +581,16 @@ class CrossValidationRunner:
         Returns:
             Dict with oof_prediction, selected_features, fold_metrics
         """
-        from sklearn.feature_selection import mutual_info_classif
         from collections import Counter
+
+        from sklearn.feature_selection import mutual_info_classif
 
         n_samples = len(X)
         n_classes = 3
         all_features = list(X.columns)
 
         # Track which features are selected in each fold
-        fold_selected_features: List[List[str]] = []
+        fold_selected_features: list[list[str]] = []
 
         # Initialize OOF prediction storage
         oof_predictions = np.full(n_samples, np.nan)
@@ -584,7 +622,7 @@ class CrossValidationRunner:
             )
 
             # Select top N features based on MI scores from training data only
-            feature_scores = list(zip(all_features, mi_scores))
+            feature_scores = list(zip(all_features, mi_scores, strict=False))
             feature_scores.sort(key=lambda x: x[1], reverse=True)
             fold_features = [f[0] for f in feature_scores[:self.n_features_to_select]]
             fold_selected_features.append(fold_features)
@@ -706,7 +744,7 @@ class CrossValidationRunner:
 
     def _validate_stacking_consistency(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
+        oof_predictions: dict[str, OOFPrediction],
         horizon: int,
     ) -> None:
         """
@@ -760,9 +798,9 @@ class CrossValidationRunner:
 
     def build_stacking_datasets(
         self,
-        cv_results: Dict[Tuple[str, int], CVResult],
-        container: "TimeSeriesDataContainer",
-    ) -> Dict[int, StackingDataset]:
+        cv_results: dict[tuple[str, int], CVResult],
+        container: TimeSeriesDataContainer,
+    ) -> dict[int, StackingDataset]:
         """
         Build stacking datasets from CV results.
 
@@ -776,11 +814,11 @@ class CrossValidationRunner:
         Raises:
             ValueError: If OOF predictions have inconsistent sample counts
         """
-        stacking_datasets: Dict[int, StackingDataset] = {}
+        stacking_datasets: dict[int, StackingDataset] = {}
 
         for horizon in self.horizons:
             # Collect all model predictions for this horizon
-            oof_predictions: Dict[str, OOFPrediction] = {}
+            oof_predictions: dict[str, OOFPrediction] = {}
 
             for (model_name, h), result in cv_results.items():
                 if h != horizon:
@@ -816,8 +854,8 @@ class CrossValidationRunner:
 
     def save_results(
         self,
-        cv_results: Dict[Tuple[str, int], CVResult],
-        stacking_datasets: Dict[int, StackingDataset],
+        cv_results: dict[tuple[str, int], CVResult],
+        stacking_datasets: dict[int, StackingDataset],
         output_dir: Path,
     ) -> None:
         """
@@ -875,7 +913,7 @@ class CrossValidationRunner:
 # =============================================================================
 
 def analyze_cv_stability(
-    cv_results: Dict[Tuple[str, int], CVResult],
+    cv_results: dict[tuple[str, int], CVResult],
 ) -> pd.DataFrame:
     """
     Analyze stability of models across CV folds.
@@ -931,4 +969,6 @@ __all__ = [
     "CrossValidationRunner",
     "analyze_cv_stability",
     "PARAM_SPACES",
+    "validate_lightgbm_params",
+    "get_max_leaves_for_depth",
 ]

@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from .base import LabelingResult, LabelingType
-from .triple_barrier import TripleBarrierLabeler, triple_barrier_numba
+from .triple_barrier import TripleBarrierLabeler
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

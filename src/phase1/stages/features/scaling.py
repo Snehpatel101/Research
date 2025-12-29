@@ -9,7 +9,6 @@ Example:
     RSI-14 on 5-min bars = 70 min lookback
     When using 15-min bars, we scale to RSI-5 to maintain ~70 min lookback
 """
-from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,7 @@ logger.addHandler(logging.NullHandler())
 BASE_TIMEFRAME_MINUTES = 5
 
 # Timeframe string to minutes mapping
-TIMEFRAME_MINUTES: Dict[str, int] = {
+TIMEFRAME_MINUTES: dict[str, int] = {
     '1min': 1,
     '5min': 5,
     '10min': 10,
@@ -119,10 +118,10 @@ def scale_period(period: int, source_tf: str, target_tf: str) -> int:
 
 
 def get_scaled_periods(
-    periods: List[int],
+    periods: list[int],
     target_tf: str,
     base_tf: str = '5min'
-) -> List[int]:
+) -> list[int]:
     """
     Scale a list of periods to target timeframe.
 
@@ -144,10 +143,10 @@ def get_scaled_periods(
 
 
 def get_unique_scaled_periods(
-    periods: List[int],
+    periods: list[int],
     target_tf: str,
     base_tf: str = '5min'
-) -> List[int]:
+) -> list[int]:
     """
     Scale periods and remove duplicates, preserving order.
 
@@ -178,7 +177,7 @@ def get_unique_scaled_periods(
 
 # Default base periods (defined for 5-min bars)
 # These represent the "standard" indicator periods used in technical analysis
-DEFAULT_BASE_PERIODS: Dict[str, List[int]] = {
+DEFAULT_BASE_PERIODS: dict[str, list[int]] = {
     # Moving averages
     'sma': [10, 20, 50, 100, 200],
     'ema': [9, 12, 21, 26, 50],
@@ -216,8 +215,8 @@ DEFAULT_BASE_PERIODS: Dict[str, List[int]] = {
 def create_period_config(
     target_tf: str,
     base_tf: str = '5min',
-    base_periods: Optional[Dict[str, List[int]]] = None
-) -> Dict[str, List[int]]:
+    base_periods: dict[str, list[int]] | None = None
+) -> dict[str, list[int]]:
     """
     Create scaled period configuration for all indicators.
 
@@ -305,7 +304,7 @@ class PeriodScaler:
         self.base_tf = base_tf
         self._config = create_period_config(target_tf, base_tf)
 
-    def get_periods(self, indicator: str) -> List[int]:
+    def get_periods(self, indicator: str) -> list[int]:
         """Get scaled periods for an indicator."""
         if indicator not in self._config:
             raise KeyError(
@@ -329,7 +328,7 @@ class PeriodScaler:
         return scale_period(period, self.base_tf, self.target_tf)
 
     @property
-    def config(self) -> Dict[str, List[int]]:
+    def config(self) -> dict[str, list[int]]:
         """Return the full scaled configuration."""
         return self._config
 

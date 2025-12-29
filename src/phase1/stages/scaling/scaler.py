@@ -9,19 +9,23 @@ Created: 2025-12-20
 Updated: 2025-12-20 - Extracted from feature_scaler.py
 """
 
+import json
 import logging
+import pickle
+from datetime import datetime
+from pathlib import Path
+from typing import Union
+
 import numpy as np
 import pandas as pd
-import pickle
-import json
-from pathlib import Path
-from typing import Dict, List, Optional, Union, Tuple
-from datetime import datetime
 
-from .core import ScalerType, FeatureScalingConfig, ScalerConfig, ScalingStatistics
+from .core import FeatureScalingConfig, ScalerConfig, ScalerType, ScalingStatistics
 from .scalers import (
-    categorize_feature, get_default_scaler_type, should_log_transform,
-    create_scaler, compute_statistics
+    categorize_feature,
+    compute_statistics,
+    create_scaler,
+    get_default_scaler_type,
+    should_log_transform,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,12 +55,12 @@ class FeatureScaler:
     def __init__(
         self,
         scaler_type: str = 'robust',
-        feature_config: Optional[Dict[str, Dict]] = None,
+        feature_config: dict[str, dict] | None = None,
         apply_log_to_price_volume: bool = True,
-        robust_quantile_range: Tuple[float, float] = (25.0, 75.0),
+        robust_quantile_range: tuple[float, float] = (25.0, 75.0),
         clip_outliers: bool = True,
-        clip_range: Tuple[float, float] = (-5.0, 5.0),
-        config: Optional[ScalerConfig] = None
+        clip_range: tuple[float, float] = (-5.0, 5.0),
+        config: ScalerConfig | None = None
     ):
         """
         Initialize the FeatureScaler.
@@ -88,17 +92,17 @@ class FeatureScaler:
 
         # State (populated during fit)
         self.is_fitted: bool = False
-        self.feature_names: List[str] = []
-        self.scalers: Dict[str, Union] = {}
-        self.configs: Dict[str, FeatureScalingConfig] = {}
-        self.statistics: Dict[str, ScalingStatistics] = {}
-        self.log_shifts: Dict[str, float] = {}
+        self.feature_names: list[str] = []
+        self.scalers: dict[str, Union] = {}
+        self.configs: dict[str, FeatureScalingConfig] = {}
+        self.statistics: dict[str, ScalingStatistics] = {}
+        self.log_shifts: dict[str, float] = {}
 
         # Metadata
-        self.fit_timestamp: Optional[str] = None
+        self.fit_timestamp: str | None = None
         self.n_samples_train: int = 0
-        self.warnings: List[str] = []
-        self.errors: List[str] = []
+        self.warnings: list[str] = []
+        self.errors: list[str] = []
 
     def _create_config_for_feature(self, feature_name: str) -> FeatureScalingConfig:
         """
@@ -142,7 +146,7 @@ class FeatureScaler:
     def fit(
         self,
         train_df: pd.DataFrame,
-        feature_cols: List[str]
+        feature_cols: list[str]
     ) -> 'FeatureScaler':
         """
         Fit scalers on training data only.
@@ -185,8 +189,8 @@ class FeatureScaler:
         logger.info(f"Features to scale: {len(self.feature_names)}")
 
         # Track category counts
-        category_counts: Dict[str, int] = {}
-        scaler_counts: Dict[str, int] = {}
+        category_counts: dict[str, int] = {}
+        scaler_counts: dict[str, int] = {}
 
         for fname in self.feature_names:
             col_data = train_df[fname].values.astype(np.float64).copy()
@@ -318,7 +322,7 @@ class FeatureScaler:
     def fit_transform(
         self,
         train_df: pd.DataFrame,
-        feature_cols: List[str]
+        feature_cols: list[str]
     ) -> pd.DataFrame:
         """
         Fit on training data and transform it.
@@ -338,7 +342,7 @@ class FeatureScaler:
     def inverse_transform(
         self,
         df: pd.DataFrame,
-        features: Optional[List[str]] = None
+        features: list[str] | None = None
     ) -> pd.DataFrame:
         """
         Reverse the scaling transformation.
@@ -506,7 +510,7 @@ class FeatureScaler:
 
         return scaler
 
-    def get_scaling_report(self) -> Dict:
+    def get_scaling_report(self) -> dict:
         """
         Get a comprehensive report of scaling configuration and statistics.
 
@@ -517,7 +521,7 @@ class FeatureScaler:
             return {'is_fitted': False}
 
         # Group features by category
-        features_by_category: Dict[str, List[str]] = {}
+        features_by_category: dict[str, list[str]] = {}
         for fname, config in self.configs.items():
             cat = config.category.value
             if cat not in features_by_category:
@@ -525,7 +529,7 @@ class FeatureScaler:
             features_by_category[cat].append(fname)
 
         # Group features by scaler type
-        features_by_scaler: Dict[str, List[str]] = {}
+        features_by_scaler: dict[str, list[str]] = {}
         for fname, config in self.configs.items():
             stype = config.scaler_type.value
             if stype not in features_by_scaler:

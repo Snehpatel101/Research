@@ -11,23 +11,17 @@ Key Principles:
 - LONGEST sequences: Create sequences with max length across models
 - SAVE multiple scalers: Persist scalers for each model family's preferences
 """
-from dataclasses import dataclass, field
-from typing import Dict, List, Set, Optional
 import logging
+from dataclasses import dataclass, field
 
-from .model_config import (
-    ModelDataRequirements,
-    MODEL_DATA_REQUIREMENTS,
-    ENSEMBLE_CONFIGS,
-    get_model_requirements,
-    get_combined_requirements,
-    ScalerType,
-    ModelFamily,
-)
 from .feature_sets import (
-    FeatureSetDefinition,
     FEATURE_SET_DEFINITIONS,
-    resolve_feature_set_name,
+)
+from .model_config import (
+    ENSEMBLE_CONFIGS,
+    MODEL_DATA_REQUIREMENTS,
+    ModelFamily,
+    ScalerType,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,13 +45,13 @@ class MultiModelPipelineConfig:
         max_features: Minimum of all max_features constraints (conservative)
         save_unscaled: Whether to also save unscaled data (for boosting models)
     """
-    model_names: List[str]
-    feature_sets: Set[str] = field(default_factory=set)
+    model_names: list[str]
+    feature_sets: set[str] = field(default_factory=set)
     requires_scaling: bool = False
-    scaler_types_needed: Set[ScalerType] = field(default_factory=set)
+    scaler_types_needed: set[ScalerType] = field(default_factory=set)
     requires_sequences: bool = False
     sequence_length: int = 60
-    max_features: Optional[int] = None
+    max_features: int | None = None
     save_unscaled: bool = False
 
     def __post_init__(self):
@@ -66,7 +60,7 @@ class MultiModelPipelineConfig:
             if name.lower() not in MODEL_DATA_REQUIREMENTS:
                 logger.warning(f"Unknown model: {name}")
 
-    def get_all_feature_prefixes(self) -> List[str]:
+    def get_all_feature_prefixes(self) -> list[str]:
         """Get union of all feature prefixes from all feature sets."""
         all_prefixes = set()
         for fs_name in self.feature_sets:
@@ -75,7 +69,7 @@ class MultiModelPipelineConfig:
                 all_prefixes.update(fs.include_prefixes)
         return sorted(all_prefixes)
 
-    def get_all_include_columns(self) -> List[str]:
+    def get_all_include_columns(self) -> list[str]:
         """Get union of all explicitly included columns."""
         all_columns = set()
         for fs_name in self.feature_sets:
@@ -93,7 +87,7 @@ class MultiModelPipelineConfig:
         return False
 
 
-def build_multi_model_config(model_names: List[str]) -> MultiModelPipelineConfig:
+def build_multi_model_config(model_names: list[str]) -> MultiModelPipelineConfig:
     """
     Build pipeline configuration for multiple models.
 
@@ -127,10 +121,10 @@ def build_multi_model_config(model_names: List[str]) -> MultiModelPipelineConfig
     model_names = [m.lower().strip() for m in model_names]
 
     # Collect all requirements
-    feature_sets: Set[str] = set()
-    scaler_types: Set[ScalerType] = set()
-    sequence_lengths: List[int] = []
-    max_features_list: List[int] = []
+    feature_sets: set[str] = set()
+    scaler_types: set[ScalerType] = set()
+    sequence_lengths: list[int] = []
+    max_features_list: list[int] = []
     requires_scaling = False
     requires_sequences = False
     has_boosting = False
@@ -182,7 +176,7 @@ def build_multi_model_config(model_names: List[str]) -> MultiModelPipelineConfig
     )
 
 
-def expand_ensemble_models(model_names: List[str]) -> List[str]:
+def expand_ensemble_models(model_names: list[str]) -> list[str]:
     """
     Expand ensemble names to their constituent base models.
 
@@ -222,7 +216,7 @@ def expand_ensemble_models(model_names: List[str]) -> List[str]:
     return unique
 
 
-def get_recommended_feature_set(model_names: List[str]) -> str:
+def get_recommended_feature_set(model_names: list[str]) -> str:
     """
     Get the most appropriate single feature set for a list of models.
 
@@ -278,7 +272,7 @@ def get_recommended_feature_set(model_names: List[str]) -> str:
     return "core_full"
 
 
-def validate_multi_model_setup(model_names: List[str]) -> List[str]:
+def validate_multi_model_setup(model_names: list[str]) -> list[str]:
     """
     Validate a multi-model setup and return any warnings.
 

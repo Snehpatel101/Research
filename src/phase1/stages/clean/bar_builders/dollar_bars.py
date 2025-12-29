@@ -16,12 +16,10 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
-from .base import BaseBarBuilder, BarBuilderRegistry, BarMetadata
+from .base import BarBuilderRegistry, BaseBarBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +63,7 @@ class DollarBarBuilder(BaseBarBuilder):
         if dollar_threshold <= 0:
             raise ValueError(f"dollar_threshold must be > 0, got {dollar_threshold}")
         if min_bars_per_output < 1:
-            raise ValueError(f"min_bars_per_output must be >= 1")
+            raise ValueError("min_bars_per_output must be >= 1")
 
         self.dollar_threshold = dollar_threshold
         self.min_bars_per_output = min_bars_per_output
@@ -78,7 +76,7 @@ class DollarBarBuilder(BaseBarBuilder):
     def build(
         self,
         df: pd.DataFrame,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         include_metadata: bool = True,
     ) -> pd.DataFrame:
         """

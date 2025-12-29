@@ -1,12 +1,12 @@
 """Default configuration factory for PipelineConfig."""
-from typing import List, Optional, Any
+from typing import Any
 
 
 def create_default_config(
-    symbols: Optional[List[str]] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    run_id: Optional[str] = None,
+    symbols: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    run_id: str | None = None,
     **kwargs: Any
 ):
     """

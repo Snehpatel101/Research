@@ -6,7 +6,7 @@ Validates coverage, correlation, and ensemble diversity.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -24,9 +24,9 @@ class OOFValidator:
 
     @staticmethod
     def validate_coverage(
-        oof_predictions: Dict[str, OOFPrediction],
+        oof_predictions: dict[str, OOFPrediction],
         original_index: pd.Index,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Validate that OOF predictions cover all samples.
 
@@ -59,7 +59,7 @@ class OOFValidator:
     @staticmethod
     def analyze_prediction_correlation(
         stacking_df: pd.DataFrame,
-        model_names: List[str],
+        model_names: list[str],
     ) -> pd.DataFrame:
         """
         Analyze correlation between model predictions.

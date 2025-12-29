@@ -5,12 +5,11 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.table import Table
 
-from .utils import console, show_error, show_success, show_info, show_warning, get_project_root
+from .utils import console, get_project_root, show_error, show_info, show_success, show_warning
 
 # Lazy imports to avoid circular dependencies
 _pipeline_config = None
@@ -40,7 +39,7 @@ def status_command(
         ...,
         help="Run ID to check"
     ),
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"
@@ -100,7 +99,7 @@ def status_command(
 
     # Show paths
     if verbose:
-        console.print(f"[bold]Paths:[/bold]")
+        console.print("[bold]Paths:[/bold]")
         console.print(f"  Run directory: {run_dir}")
         console.print(f"  Config: {run_dir / 'config' / 'config.json'}")
         console.print(f"  Logs: {run_dir / 'logs' / 'pipeline.log'}")
@@ -114,7 +113,7 @@ def _display_pipeline_state(run_dir: Path) -> None:
         show_warning("No pipeline state found. Run may not have started.")
         return
 
-    with open(state_path, 'r') as f:
+    with open(state_path) as f:
         state = json.load(f)
 
     completed_stages = set(state.get('completed_stages', []))
@@ -189,7 +188,7 @@ def _display_manifest_info(run_id: str, project_path: Path, manifest_mod, verbos
         manifest = manifest_mod.ArtifactManifest.load(run_id, project_path)
         summary = manifest.get_summary()
 
-        console.print(f"[bold]Artifacts:[/bold]")
+        console.print("[bold]Artifacts:[/bold]")
         console.print(f"  Total: {summary['total_artifacts']}")
         console.print(f"  Size: {summary['total_size_mb']:.2f} MB")
         console.print()
@@ -221,7 +220,7 @@ def _display_manifest_info(run_id: str, project_path: Path, manifest_mod, verbos
 
 
 def validate_command(
-    run_id: Optional[str] = typer.Option(
+    run_id: str | None = typer.Option(
         None,
         "--run-id",
         help="Run ID to validate (validates new config if not provided)"
@@ -231,7 +230,7 @@ def validate_command(
         "--symbols",
         help="Comma-separated list of symbols"
     ),
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"
@@ -312,7 +311,7 @@ def validate_command(
 
 
 def list_runs_command(
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"
@@ -369,7 +368,7 @@ def list_runs_command(
             config = pipeline_config.PipelineConfig.load_from_run_id(run_id, project_root_path)
             description = config.description
             symbols = ", ".join(config.symbols)
-        except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError) as e:
+        except (FileNotFoundError, json.JSONDecodeError, KeyError, TypeError):
             # Handle specific exceptions that can occur when loading config:
             # - FileNotFoundError: config file doesn't exist
             # - JSONDecodeError: config file is malformed
@@ -380,7 +379,7 @@ def list_runs_command(
         # Check status
         state_path = run_dir / "artifacts" / "pipeline_state.json"
         if state_path.exists():
-            with open(state_path, 'r') as f:
+            with open(state_path) as f:
                 state = json.load(f)
             completed = len(state.get('completed_stages', []))
             # Get total from stage registry
@@ -406,7 +405,7 @@ def list_runs_command(
 def compare_command(
     run1: str = typer.Argument(..., help="First run ID"),
     run2: str = typer.Argument(..., help="Second run ID"),
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"
@@ -461,7 +460,7 @@ def compare_command(
 
 def clean_command(
     run_id: str = typer.Argument(..., help="Run ID to clean"),
-    project_root: Optional[str] = typer.Option(
+    project_root: str | None = typer.Option(
         None,
         "--project-root",
         help="Project root directory"

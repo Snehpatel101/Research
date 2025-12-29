@@ -18,17 +18,14 @@ Note:
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
-import pandas as pd
 
-from src.inference.bundle import ModelBundle
 from src.inference.pipeline import InferencePipeline
 
 logger = logging.getLogger(__name__)
@@ -56,12 +53,12 @@ class ServerConfig:
 @dataclass
 class PredictionRequest:
     """Request format for predictions."""
-    features: List[List[float]]  # 2D array of features
+    features: list[list[float]]  # 2D array of features
     calibrate: bool = True
     return_probabilities: bool = True
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "PredictionRequest":
+    def from_dict(cls, data: dict[str, Any]) -> PredictionRequest:
         return cls(
             features=data["features"],
             calibrate=data.get("calibrate", True),
@@ -72,14 +69,14 @@ class PredictionRequest:
 @dataclass
 class PredictionResponse:
     """Response format for predictions."""
-    predictions: List[int]
-    probabilities: Optional[List[List[float]]] = None
-    confidence: Optional[List[float]] = None
+    predictions: list[int]
+    probabilities: list[list[float]] | None = None
+    confidence: list[float] | None = None
     inference_time_ms: float = 0.0
     model_name: str = ""
     horizon: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         result = {
             "predictions": self.predictions,
             "inference_time_ms": self.inference_time_ms,
@@ -115,7 +112,7 @@ class ModelServer:
     def __init__(
         self,
         pipeline: InferencePipeline,
-        config: Optional[ServerConfig] = None,
+        config: ServerConfig | None = None,
     ) -> None:
         """
         Initialize ModelServer.
@@ -137,9 +134,9 @@ class ModelServer:
     @classmethod
     def from_bundle(
         cls,
-        path: Union[str, Path],
-        config: Optional[ServerConfig] = None,
-    ) -> "ModelServer":
+        path: str | Path,
+        config: ServerConfig | None = None,
+    ) -> ModelServer:
         """Create server from a model bundle."""
         pipeline = InferencePipeline.from_bundle(path)
         return cls(pipeline, config)
@@ -147,9 +144,9 @@ class ModelServer:
     @classmethod
     def from_bundles(
         cls,
-        paths: List[Union[str, Path]],
-        config: Optional[ServerConfig] = None,
-    ) -> "ModelServer":
+        paths: list[str | Path],
+        config: ServerConfig | None = None,
+    ) -> ModelServer:
         """Create server from multiple bundles (ensemble)."""
         pipeline = InferencePipeline.from_bundles(paths)
         return cls(pipeline, config)
@@ -290,9 +287,9 @@ class ModelServer:
 
     def run(
         self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        debug: Optional[bool] = None,
+        host: str | None = None,
+        port: int | None = None,
+        debug: bool | None = None,
     ) -> None:
         """
         Run the server.
@@ -320,7 +317,7 @@ class ModelServer:
 # =============================================================================
 
 def start_server(
-    bundle_path: Union[str, Path],
+    bundle_path: str | Path,
     host: str = "0.0.0.0",
     port: int = 8080,
     debug: bool = False,

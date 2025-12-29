@@ -10,17 +10,16 @@ but internally use Optuna TPE which is 27% more sample-efficient.
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from .optimization import run_ga_optimization
+from .optimization import run_ga_optimization, run_ga_optimization_safe
 from .plotting import plot_convergence
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ def run_ga_optimization_stage(
         plots_dir.mkdir(parents=True, exist_ok=True)
 
         artifacts = []
-        all_results: Dict[str, Dict[int, Dict[str, Any]]] = {}
+        all_results: dict[str, dict[int, dict[str, Any]]] = {}
 
         # GA configuration
         population_size = config.ga_population_size
@@ -85,7 +84,7 @@ def run_ga_optimization_stage(
             df = pd.read_parquet(labels_path)
             logger.info(f"Loaded {len(df):,} rows")
 
-            symbol_results: Dict[int, Dict[str, Any]] = {}
+            symbol_results: dict[int, dict[str, Any]] = {}
 
             for horizon in config.label_horizons:
                 # Check if already optimized (skip if results exist AND are valid)
@@ -97,7 +96,7 @@ def run_ga_optimization_stage(
                 MIN_VALID_FITNESS = -100.0
 
                 if results_path.exists():
-                    with open(results_path, 'r') as f:
+                    with open(results_path) as f:
                         cached_results = json.load(f)
 
                     cached_fitness = cached_results.get('best_fitness', float('-inf'))
@@ -124,25 +123,44 @@ def run_ga_optimization_stage(
                             f"\n  Horizon {horizon}: Cached results INVALID (fitness={cached_fitness:.2f} < {MIN_VALID_FITNESS})"
                         )
                         logger.warning(
-                            f"    Negative fitness indicates constraint violation (e.g., <10% neutral)"
+                            "    Negative fitness indicates constraint violation (e.g., <10% neutral)"
                         )
                         logger.warning(
-                            f"    Re-running optimization with stricter constraints..."
+                            "    Re-running optimization with stricter constraints..."
                         )
                         # Remove invalid cached file
                         results_path.unlink()
 
                 # Run Optuna TPE optimization
-                logger.info(f"\n  Horizon {horizon}: Running Optuna TPE optimization...")
+                # Check if safe mode is enabled (prevents test data leakage)
+                safe_mode = getattr(config, 'ga_safe_mode', True)  # Default to safe
 
-                results, logbook = run_ga_optimization(
-                    df, horizon,
-                    symbol=symbol,
-                    population_size=population_size,
-                    generations=min(generations, 30),  # Cap at 30 for performance
-                    subset_fraction=0.3,
-                    atr_column='atr_14'
-                )
+                if safe_mode:
+                    logger.info(f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization...")
+                    logger.info("    (Safe mode: using only training portion to prevent test data leakage)")
+                    results, logbook = run_ga_optimization_safe(
+                        df, horizon,
+                        symbol=symbol,
+                        train_ratio=config.train_ratio,  # Use config's train ratio
+                        population_size=population_size,
+                        generations=min(generations, 30),  # Cap at 30 for performance
+                        subset_fraction=0.3,
+                        atr_column='atr_14',
+                        seed=config.random_seed,
+                    )
+                else:
+                    logger.warning(f"\n  Horizon {horizon}: Running UNSAFE Optuna TPE optimization...")
+                    logger.warning("    WARNING: Safe mode disabled - test data may influence optimization!")
+                    logger.warning("    Only use this for research when you understand the implications.")
+                    results, logbook = run_ga_optimization(
+                        df, horizon,
+                        symbol=symbol,
+                        population_size=population_size,
+                        generations=min(generations, 30),  # Cap at 30 for performance
+                        subset_fraction=0.3,
+                        atr_column='atr_14',
+                        seed=config.random_seed,
+                    )
 
                 # CRITICAL: Validate new results before saving
                 new_fitness = results.get('best_fitness', float('-inf'))
@@ -153,10 +171,10 @@ def run_ga_optimization_stage(
                         f"\n  Horizon {horizon}: Optimization FAILED (fitness={new_fitness:.2f})"
                     )
                     logger.error(
-                        f"    Could not find parameters satisfying constraints (neutral >= 10%, etc.)"
+                        "    Could not find parameters satisfying constraints (neutral >= 10%, etc.)"
                     )
                     logger.warning(
-                        f"    Falling back to default barrier parameters..."
+                        "    Falling back to default barrier parameters..."
                     )
 
                     # Import defaults
@@ -225,7 +243,7 @@ def run_ga_optimization_stage(
             all_results[symbol] = symbol_results
 
         # Save combined summary
-        summary: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        summary: dict[str, dict[str, dict[str, Any]]] = {}
         for symbol, symbol_results in all_results.items():
             summary[symbol] = {
                 str(h): {

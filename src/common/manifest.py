@@ -5,9 +5,10 @@ Tracks artifacts, checksums, and changes between pipeline runs
 import hashlib
 import json
 import logging
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from pathlib import Path
+from typing import Any
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,8 @@ class ArtifactManifest:
         self.project_root = Path(project_root)
         self.run_dir = self.project_root / "runs" / run_id
         self.manifest_path = self.run_dir / "artifacts" / "manifest.json"
-        self.artifacts: Dict[str, Dict[str, Any]] = {}
-        self.metadata: Dict[str, Any] = {
+        self.artifacts: dict[str, dict[str, Any]] = {}
+        self.metadata: dict[str, Any] = {
             'run_id': run_id,
             'created_at': datetime.now().isoformat(),
             'manifest_version': '1.0'
@@ -91,10 +92,10 @@ class ArtifactManifest:
     def add_artifact(
         self,
         name: str,
-        file_path: Optional[Path] = None,
+        file_path: Path | None = None,
         artifact_type: str = 'file',
         stage: str = 'unknown',
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         compute_checksum: bool = True
     ):
         """
@@ -108,7 +109,7 @@ class ArtifactManifest:
             metadata: Additional metadata
             compute_checksum: Whether to compute file checksum
         """
-        artifact_info: Dict[str, Any] = {
+        artifact_info: dict[str, Any] = {
             'name': name,
             'type': artifact_type,
             'stage': stage,
@@ -139,8 +140,8 @@ class ArtifactManifest:
     def add_stage_artifacts(
         self,
         stage: str,
-        files: List[Path],
-        metadata: Optional[Dict[str, Any]] = None
+        files: list[Path],
+        metadata: dict[str, Any] | None = None
     ):
         """
         Add multiple artifacts from a pipeline stage.
@@ -163,11 +164,11 @@ class ArtifactManifest:
 
         logger.info(f"Added {len(files)} artifacts from stage: {stage}")
 
-    def get_artifact(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_artifact(self, name: str) -> dict[str, Any] | None:
         """Get artifact information by name."""
         return self.artifacts.get(name)
 
-    def get_stage_artifacts(self, stage: str) -> Dict[str, Dict[str, Any]]:
+    def get_stage_artifacts(self, stage: str) -> dict[str, dict[str, Any]]:
         """Get all artifacts for a specific stage."""
         return {
             name: info
@@ -212,7 +213,7 @@ class ArtifactManifest:
 
         return True
 
-    def verify_all_artifacts(self) -> Dict[str, bool]:
+    def verify_all_artifacts(self) -> dict[str, bool]:
         """
         Verify all artifacts in the manifest.
 
@@ -229,7 +230,7 @@ class ArtifactManifest:
 
         return results
 
-    def save(self, path: Optional[Path] = None):
+    def save(self, path: Path | None = None):
         """
         Save manifest to JSON file.
 
@@ -270,7 +271,7 @@ class ArtifactManifest:
         if not manifest.manifest_path.exists():
             raise FileNotFoundError(f"Manifest not found: {manifest.manifest_path}")
 
-        with open(manifest.manifest_path, 'r') as f:
+        with open(manifest.manifest_path) as f:
             data = json.load(f)
 
         manifest.metadata = data.get('metadata', manifest.metadata)
@@ -279,7 +280,7 @@ class ArtifactManifest:
         logger.info(f"Loaded manifest with {len(manifest.artifacts)} artifacts")
         return manifest
 
-    def compare_with(self, other: 'ArtifactManifest') -> Dict[str, Any]:
+    def compare_with(self, other: 'ArtifactManifest') -> dict[str, Any]:
         """
         Compare this manifest with another to find changes.
 
@@ -315,7 +316,7 @@ class ArtifactManifest:
             'unchanged': sorted(common - set(modified))
         }
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get summary statistics about the manifest."""
         stages = set(artifact['stage'] for artifact in self.artifacts.values())
         total_size = sum(
@@ -352,8 +353,8 @@ class ArtifactManifest:
 def compare_runs(
     run_id_1: str,
     run_id_2: str,
-    project_root: Optional[Path] = None
-) -> Dict[str, Any]:
+    project_root: Path | None = None
+) -> dict[str, Any]:
     """
     Compare manifests between two runs.
 

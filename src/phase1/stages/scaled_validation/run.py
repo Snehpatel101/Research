@@ -7,20 +7,19 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
 from src.phase1.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
 from src.phase1.config.features import get_drift_config
 from src.phase1.stages.validation.drift import check_feature_drift
 from src.phase1.utils.feature_sets import resolve_feature_set
+from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +95,7 @@ def run_scaled_validation(
         definitions = get_feature_set_definitions()
         feature_set_names = resolve_feature_set_names(config.feature_set)
 
-        drift_report: Dict[str, Dict] = {
+        drift_report: dict[str, dict] = {
             "run_id": config.run_id,
             "created_at": datetime.now().isoformat(),
             "enabled": True,

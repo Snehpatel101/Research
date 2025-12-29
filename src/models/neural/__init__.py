@@ -24,10 +24,10 @@ Example:
     model = ModelRegistry.create("transformer", config={"d_model": 256, "n_heads": 8})
 """
 from .base_rnn import BaseRNNModel, RNNNetwork
-from .lstm_model import LSTMModel, LSTMNetwork
 from .gru_model import GRUModel, GRUNetwork
-from .tcn_model import TCNModel, TCNNetwork, TemporalBlock, CausalConv1d
-from .transformer_model import TransformerModel, TransformerNetwork, PositionalEncoding
+from .lstm_model import LSTMModel, LSTMNetwork
+from .tcn_model import CausalConv1d, TCNModel, TCNNetwork, TemporalBlock
+from .transformer_model import PositionalEncoding, TransformerModel, TransformerNetwork
 
 __all__ = [
     # Base classes

@@ -14,12 +14,12 @@ import logging
 import pickle
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
-from ..common import map_labels_to_classes, map_classes_to_labels
+from ..common import map_classes_to_labels, map_labels_to_classes
 
 logger = logging.getLogger(__name__)
 
@@ -58,14 +58,14 @@ def _check_cuda_available() -> bool:
 class CatBoostModel(BaseModel):
     """CatBoost gradient boosting classifier with GPU support."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         if not CATBOOST_AVAILABLE:
             raise ImportError(
                 "CatBoost is not installed. Install with: pip install catboost"
             )
         super().__init__(config)
-        self._model: Optional[CatBoostClassifier] = None
-        self._feature_names: Optional[List[str]] = None
+        self._model: CatBoostClassifier | None = None
+        self._feature_names: list[str] | None = None
         self._n_classes: int = 3
 
         # Check if task_type is explicitly set to CPU (force CPU mode)
@@ -94,7 +94,7 @@ class CatBoostModel(BaseModel):
     def requires_sequences(self) -> bool:
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "iterations": 500,
             "depth": 6,
@@ -116,8 +116,8 @@ class CatBoostModel(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """Train CatBoost model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
@@ -143,7 +143,7 @@ class CatBoostModel(BaseModel):
             class_weight_values = n_samples / (n_classes * class_counts)
 
             # Create mapping from class to weight (handles missing classes)
-            class_weight_dict = dict(zip(unique_classes, class_weight_values))
+            class_weight_dict = dict(zip(unique_classes, class_weight_values, strict=False))
 
             # Map weights to samples using the dictionary
             sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_cat])
@@ -279,7 +279,7 @@ class CatBoostModel(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded CatBoost model from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances."""
         if not self._is_fitted:
             return None
@@ -289,13 +289,13 @@ class CatBoostModel(BaseModel):
             f"f{i}" for i in range(len(importance))
         ]
 
-        return dict(zip(feature_names, importance.tolist()))
+        return dict(zip(feature_names, importance.tolist(), strict=False))
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
 
-    def _build_model(self, config: Dict[str, Any]) -> CatBoostClassifier:
+    def _build_model(self, config: dict[str, Any]) -> CatBoostClassifier:
         """Build CatBoostClassifier with config."""
         params = {
             "iterations": config.get("iterations", 500),
@@ -331,7 +331,7 @@ class CatBoostModel(BaseModel):
         """Convert labels from 0,1,2 to -1,0,1."""
         return map_classes_to_labels(labels)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
 

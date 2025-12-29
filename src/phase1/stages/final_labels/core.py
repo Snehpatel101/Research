@@ -5,13 +5,12 @@ Applies optimized triple-barrier labels with quality scoring and sample weights.
 """
 import logging
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 import pandas as pd
 
-from src.phase1.stages.labeling import triple_barrier_numba
 from src.phase1.config import TRANSACTION_COSTS
+from src.phase1.stages.labeling import triple_barrier_numba
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -214,7 +213,7 @@ def assign_sample_weights(quality_scores: np.ndarray) -> np.ndarray:
     tier2_count = ((quality_scores >= p20) & (quality_scores < p80)).sum()
     tier3_count = (quality_scores < p20).sum()
 
-    logger.info(f"  Sample weight distribution:")
+    logger.info("  Sample weight distribution:")
     logger.info(f"    Tier 1 (1.5x): {tier1_count:6d} ({tier1_count/n*100:5.1f}%)")
     logger.info(f"    Tier 2 (1.0x): {tier2_count:6d} ({tier2_count/n*100:5.1f}%)")
     logger.info(f"    Tier 3 (0.5x): {tier3_count:6d} ({tier3_count/n*100:5.1f}%)")
@@ -240,7 +239,7 @@ def add_forward_return_columns(
 def apply_optimized_labels(
     df: pd.DataFrame,
     horizon: int,
-    best_params: Dict,
+    best_params: dict,
     symbol: str = 'MES',
     atr_column: str = 'atr_14'
 ) -> pd.DataFrame:
@@ -329,13 +328,13 @@ def apply_optimized_labels(
         label_end_times = pd.Series(datetime_arr[forward_indices], index=datetime_col.index)
 
         df[f'label_end_time_h{horizon}'] = label_end_times
-        logger.info(f"  Added label_end_time column for purging (gap-aware lookup)")
+        logger.info("  Added label_end_time column for purging (gap-aware lookup)")
 
     # Log statistics
     label_counts = pd.Series(labels).value_counts().sort_index()
     total = len(labels)
 
-    logger.info(f"  Label distribution:")
+    logger.info("  Label distribution:")
     for label_val in [-1, 0, 1]:
         count = label_counts.get(label_val, 0)
         pct = count / total * 100
@@ -367,7 +366,7 @@ def apply_optimized_labels(
 
 
 def generate_labeling_report(
-    all_results: Dict[str, pd.DataFrame],
+    all_results: dict[str, pd.DataFrame],
     output_dir: Path,
     horizons: list[int],
 ) -> Path:

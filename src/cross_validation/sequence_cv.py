@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -118,8 +117,8 @@ class SequenceCVBuilder:
         X: pd.DataFrame,
         y: pd.Series,
         seq_len: int,
-        weights: Optional[pd.Series] = None,
-        symbol_column: Optional[str] = None,
+        weights: pd.Series | None = None,
+        symbol_column: str | None = None,
     ) -> None:
         """
         Initialize SequenceCVBuilder.
@@ -145,8 +144,8 @@ class SequenceCVBuilder:
         self.n_samples = len(X)
 
         # Build symbol boundary information FIRST (needs original X)
-        self._symbol_boundaries: Optional[np.ndarray] = None
-        self._symbol_ids: Optional[np.ndarray] = None
+        self._symbol_boundaries: np.ndarray | None = None
+        self._symbol_ids: np.ndarray | None = None
         self._boundary_detection_method = "none"
 
         if symbol_column and symbol_column in X.columns:
@@ -397,8 +396,8 @@ def build_sequences_for_cv_fold(
     y: pd.Series,
     fold_indices: np.ndarray,
     seq_len: int,
-    weights: Optional[pd.Series] = None,
-    symbol_column: Optional[str] = None,
+    weights: pd.Series | None = None,
+    symbol_column: str | None = None,
     allow_lookback_outside: bool = True,
 ) -> SequenceFoldResult:
     """
@@ -436,7 +435,7 @@ def validate_sequence_cv_coverage(
     y: pd.Series,
     cv,
     seq_len: int,
-    symbol_column: Optional[str] = None,
+    symbol_column: str | None = None,
 ) -> dict:
     """
     Validate sequence coverage across all CV folds.

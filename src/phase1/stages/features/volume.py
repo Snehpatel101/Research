@@ -5,10 +5,10 @@ This module provides functions to calculate volume-based technical
 indicators including OBV, VWAP, volume ratios, and volume z-scores.
 """
 
-import pandas as pd
-import numpy as np
 import logging
-from typing import Dict
+
+import numpy as np
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 def add_volume_features(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     period: int = 20
 ) -> pd.DataFrame:
     """
@@ -78,7 +78,7 @@ def add_volume_features(
     return df
 
 
-def add_vwap(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_vwap(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add VWAP (session-based).
 
@@ -134,7 +134,7 @@ def add_vwap(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame
     return df
 
 
-def add_obv(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
+def add_obv(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add On Balance Volume indicator.
 
@@ -169,7 +169,7 @@ def add_obv(df: pd.DataFrame, feature_metadata: Dict[str, str]) -> pd.DataFrame:
 
 def add_dollar_volume(
     df: pd.DataFrame,
-    feature_metadata: Dict[str, str],
+    feature_metadata: dict[str, str],
     periods: list = None
 ) -> pd.DataFrame:
     """

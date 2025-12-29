@@ -6,11 +6,11 @@ Contains both initial triple-barrier labeling and final optimized labeling.
 import logging
 from typing import TYPE_CHECKING
 
-from ..utils import StageResult, create_stage_result, create_failed_result
+from ..utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 

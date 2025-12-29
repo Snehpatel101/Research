@@ -7,7 +7,6 @@ Handles:
 """
 
 import logging
-from typing import Dict
 
 import pandas as pd
 import pytz
@@ -20,7 +19,7 @@ logger.addHandler(logging.NullHandler())
 STANDARD_COLS = ['datetime', 'open', 'high', 'low', 'close', 'volume']
 
 # Common column name mappings (case-insensitive)
-COLUMN_MAPPINGS: Dict[str, str] = {
+COLUMN_MAPPINGS: dict[str, str] = {
     'timestamp': 'datetime',
     'time': 'datetime',
     'date': 'datetime',
@@ -35,7 +34,7 @@ COLUMN_MAPPINGS: Dict[str, str] = {
 }
 
 # Timezone mappings
-TIMEZONE_MAP: Dict[str, str] = {
+TIMEZONE_MAP: dict[str, str] = {
     'EST': 'America/New_York',
     'EDT': 'America/New_York',
     'CST': 'America/Chicago',
@@ -49,7 +48,7 @@ TIMEZONE_MAP: Dict[str, str] = {
 
 def standardize_columns(
     df: pd.DataFrame,
-    column_mappings: Dict[str, str] = None,
+    column_mappings: dict[str, str] = None,
     copy: bool = True
 ) -> pd.DataFrame:
     """
@@ -100,7 +99,7 @@ def standardize_columns(
 def handle_timezone(
     df: pd.DataFrame,
     source_timezone: str = 'UTC',
-    timezone_map: Dict[str, str] = None,
+    timezone_map: dict[str, str] = None,
     copy: bool = True
 ) -> pd.DataFrame:
     """

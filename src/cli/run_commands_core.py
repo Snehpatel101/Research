@@ -5,7 +5,6 @@ Provides configuration creation, lazy imports, and shared utilities
 for pipeline execution commands.
 """
 from pathlib import Path
-from typing import Optional
 
 from .utils import show_info
 
@@ -53,40 +52,40 @@ def _get_model_config():
 
 
 def _create_config_from_args(
-    preset: Optional[str],
-    symbols: Optional[str],
-    timeframe: Optional[str],
-    horizons: Optional[str],
-    feature_set: Optional[str],
-    start: Optional[str],
-    end: Optional[str],
-    run_id: Optional[str],
-    description: Optional[str],
-    train_ratio: Optional[float],
-    val_ratio: Optional[float],
-    test_ratio: Optional[float],
-    purge_bars: Optional[int],
-    embargo_bars: Optional[int],
+    preset: str | None,
+    symbols: str | None,
+    timeframe: str | None,
+    horizons: str | None,
+    feature_set: str | None,
+    start: str | None,
+    end: str | None,
+    run_id: str | None,
+    description: str | None,
+    train_ratio: float | None,
+    val_ratio: float | None,
+    test_ratio: float | None,
+    purge_bars: int | None,
+    embargo_bars: int | None,
     # MTF settings
-    mtf_mode: Optional[str],
-    mtf_timeframes: Optional[str],
-    mtf_enable: Optional[bool],
+    mtf_mode: str | None,
+    mtf_timeframes: str | None,
+    mtf_enable: bool | None,
     # Feature toggles
-    enable_wavelets: Optional[bool],
-    enable_microstructure: Optional[bool],
-    enable_volume_features: Optional[bool],
-    enable_volatility_features: Optional[bool],
+    enable_wavelets: bool | None,
+    enable_microstructure: bool | None,
+    enable_volume_features: bool | None,
+    enable_volatility_features: bool | None,
     # Labeling parameters
-    k_up: Optional[float],
-    k_down: Optional[float],
-    max_bars: Optional[int],
+    k_up: float | None,
+    k_down: float | None,
+    max_bars: int | None,
     # Scaling options
-    scaler_type: Optional[str],
+    scaler_type: str | None,
     # Model selection (Phase 2+)
-    model_type: Optional[str],
-    base_models: Optional[str],
-    meta_learner: Optional[str],
-    sequence_length: Optional[int],
+    model_type: str | None,
+    base_models: str | None,
+    meta_learner: str | None,
+    sequence_length: int | None,
     # Common
     project_root_path: Path,
     pipeline_config,
@@ -164,7 +163,9 @@ def _create_config_from_args(
 
             # Map preset values to config kwargs
             config_kwargs['target_timeframe'] = preset_config.get('target_timeframe', '5min')
-            config_kwargs['label_horizons'] = preset_config.get('horizons', [5, 10, 15, 20])
+            # Import canonical horizons as fallback
+            from src.common.horizon_config import ACTIVE_HORIZONS
+            config_kwargs['label_horizons'] = preset_config.get('horizons', list(ACTIVE_HORIZONS))
             config_kwargs['max_bars_ahead'] = preset_config.get('max_bars_ahead', 50)
 
             # Apply feature config from preset

@@ -14,10 +14,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
-
 
 # =============================================================================
 # PREDICTION OUTPUT
@@ -46,7 +45,7 @@ class PredictionOutput:
     class_predictions: np.ndarray
     class_probabilities: np.ndarray
     confidence: np.ndarray
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate prediction output shapes."""
@@ -74,7 +73,7 @@ class PredictionOutput:
         """Number of classes."""
         return self.class_probabilities.shape[1]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "class_predictions": self.class_predictions.tolist(),
@@ -124,9 +123,9 @@ class TrainingMetrics:
     epochs_trained: int
     training_time_seconds: float
     early_stopped: bool
-    best_epoch: Optional[int]
-    history: Dict[str, List[float]] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    best_epoch: int | None
+    history: dict[str, list[float]] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate metrics are in valid ranges."""
@@ -137,7 +136,7 @@ class TrainingMetrics:
                 f"training_time_seconds must be >= 0, got {self.training_time_seconds}"
             )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "train_loss": self.train_loss,
@@ -199,7 +198,7 @@ class BaseModel(ABC):
         ...         return PredictionOutput(...)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         """
         Initialize the model.
 
@@ -210,7 +209,7 @@ class BaseModel(ABC):
         self._config = self._merge_config(config)
         self._is_fitted = False
 
-    def _merge_config(self, config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge_config(self, config: dict[str, Any] | None) -> dict[str, Any]:
         """Merge provided config with defaults."""
         defaults = self.get_default_config()
         if config is None:
@@ -220,7 +219,7 @@ class BaseModel(ABC):
         return merged
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> dict[str, Any]:
         """Current model configuration."""
         return self._config
 
@@ -271,7 +270,7 @@ class BaseModel(ABC):
     # =========================================================================
 
     @abstractmethod
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         """
         Return default hyperparameters for this model.
 
@@ -291,8 +290,8 @@ class BaseModel(ABC):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """
         Train the model.
@@ -366,7 +365,7 @@ class BaseModel(ABC):
     # OPTIONAL METHODS (can override)
     # =========================================================================
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """
         Return feature importances if available.
 
@@ -379,7 +378,7 @@ class BaseModel(ABC):
         """
         return None
 
-    def get_attention_weights(self) -> Optional[np.ndarray]:
+    def get_attention_weights(self) -> np.ndarray | None:
         """
         Return attention weights if available.
 

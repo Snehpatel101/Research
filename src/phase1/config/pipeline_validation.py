@@ -1,11 +1,11 @@
 """Validation functions for PipelineConfig."""
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.phase1.pipeline_config import PipelineConfig
 
 
-def validate_timeframe_config(target_timeframe: str) -> List[str]:
+def validate_timeframe_config(target_timeframe: str) -> list[str]:
     """Validate target timeframe."""
     from src.phase1.config import SUPPORTED_TIMEFRAMES
     issues = []
@@ -17,7 +17,7 @@ def validate_timeframe_config(target_timeframe: str) -> List[str]:
     return issues
 
 
-def validate_ratios(train: float, val: float, test: float) -> List[str]:
+def validate_ratios(train: float, val: float, test: float) -> list[str]:
     """Validate train/val/test ratios."""
     issues = []
     total = train + val + test
@@ -32,7 +32,7 @@ def validate_ratios(train: float, val: float, test: float) -> List[str]:
     return issues
 
 
-def validate_symbols(symbols: List[str], allow_batch: bool) -> List[str]:
+def validate_symbols(symbols: list[str], allow_batch: bool) -> list[str]:
     """Validate symbol configuration."""
     issues = []
     if not symbols:
@@ -49,7 +49,7 @@ def validate_symbols(symbols: List[str], allow_batch: bool) -> List[str]:
     return issues
 
 
-def validate_horizons(label_horizons: List[int], max_bars_ahead: int) -> List[str]:
+def validate_horizons(label_horizons: list[int], max_bars_ahead: int) -> list[str]:
     """Validate horizon configuration."""
     issues = []
     if not label_horizons:
@@ -64,7 +64,7 @@ def validate_horizons(label_horizons: List[int], max_bars_ahead: int) -> List[st
     return issues
 
 
-def validate_purge_embargo(purge_bars: int, embargo_bars: int) -> List[str]:
+def validate_purge_embargo(purge_bars: int, embargo_bars: int) -> list[str]:
     """Validate purge and embargo settings."""
     issues = []
     if purge_bars < 0:
@@ -76,7 +76,7 @@ def validate_purge_embargo(purge_bars: int, embargo_bars: int) -> List[str]:
 
 def validate_ga_params(
     pop_size: int, generations: int, crossover: float, mutation: float, elite: int
-) -> List[str]:
+) -> list[str]:
     """Validate genetic algorithm parameters."""
     issues = []
     if pop_size < 2:
@@ -93,8 +93,8 @@ def validate_ga_params(
 
 
 def validate_feature_params(
-    sma_periods: List[int], ema_periods: List[int], atr_periods: List[int], rsi_period: int
-) -> List[str]:
+    sma_periods: list[int], ema_periods: list[int], atr_periods: list[int], rsi_period: int
+) -> list[str]:
     """Validate feature engineering parameters."""
     issues = []
     if not sma_periods:
@@ -108,7 +108,7 @@ def validate_feature_params(
     return issues
 
 
-def validate_mtf_config(mtf_mode: str, mtf_timeframes: List[str]) -> List[str]:
+def validate_mtf_config(mtf_mode: str, mtf_timeframes: list[str]) -> list[str]:
     """Validate MTF configuration."""
     from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
     issues = []
@@ -124,7 +124,7 @@ def validate_mtf_config(mtf_mode: str, mtf_timeframes: List[str]) -> List[str]:
     return issues
 
 
-def validate_scaler_type(scaler_type: str) -> List[str]:
+def validate_scaler_type(scaler_type: str) -> list[str]:
     """Validate scaler type."""
     valid = ['robust', 'standard', 'minmax', 'quantile', 'none']
     if scaler_type not in valid:
@@ -132,7 +132,7 @@ def validate_scaler_type(scaler_type: str) -> List[str]:
     return []
 
 
-def validate_feature_toggles(toggles: Optional[Dict[str, bool]]) -> List[str]:
+def validate_feature_toggles(toggles: dict[str, bool] | None) -> list[str]:
     """Validate feature toggle keys."""
     if toggles is None:
         return []
@@ -144,7 +144,7 @@ def validate_feature_toggles(toggles: Optional[Dict[str, bool]]) -> List[str]:
     return issues
 
 
-def validate_barrier_overrides(overrides: Optional[Dict[str, float]]) -> List[str]:
+def validate_barrier_overrides(overrides: dict[str, float] | None) -> list[str]:
     """Validate barrier override configuration."""
     if overrides is None:
         return []
@@ -160,7 +160,7 @@ def validate_barrier_overrides(overrides: Optional[Dict[str, float]]) -> List[st
     return issues
 
 
-def validate_model_config_dict(model_config: Optional[Dict[str, Any]]) -> List[str]:
+def validate_model_config_dict(model_config: dict[str, Any] | None) -> list[str]:
     """Validate model configuration dictionary."""
     if model_config is None:
         return []
@@ -176,7 +176,7 @@ def validate_model_config_dict(model_config: Optional[Dict[str, Any]]) -> List[s
     return issues
 
 
-def validate_pipeline_config(config: 'PipelineConfig') -> List[str]:
+def validate_pipeline_config(config: 'PipelineConfig') -> list[str]:
     """
     Run all validation checks on a PipelineConfig.
 

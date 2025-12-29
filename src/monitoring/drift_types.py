@@ -8,8 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 # =============================================================================
 # DRIFT TYPES AND RESULTS
@@ -39,11 +38,11 @@ class DriftResult:
     severity: DriftSeverity
     metric_value: float
     threshold: float
-    feature_name: Optional[str] = None
-    timestamp: Optional[float] = None
-    details: Dict[str, Any] = field(default_factory=dict)
+    feature_name: str | None = None
+    timestamp: float | None = None
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dict."""
         return {
             "drift_detected": self.drift_detected,
@@ -69,7 +68,7 @@ class BaseDriftDetector(ABC):
         self._n_updates = 0
 
     @abstractmethod
-    def update(self, value: float) -> Optional[DriftResult]:
+    def update(self, value: float) -> DriftResult | None:
         """Update detector with new value and check for drift."""
         pass
 

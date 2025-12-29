@@ -29,7 +29,13 @@ Example:
 """
 
 # Main class
-from .engineer import FeatureEngineer
+# MTF Features
+from ..mtf import (
+    MTF_TIMEFRAMES,
+    MTFFeatureGenerator,
+    add_mtf_features,
+    validate_mtf_alignment,
+)
 from .cli import main
 
 # Constants
@@ -45,55 +51,78 @@ from .constants import (
     get_annualization_factor,
     get_bars_per_day,
 )
+from .engineer import FeatureEngineer
 
-# Numba functions
-from .numba_functions import (
-    calculate_sma_numba,
-    calculate_ema_numba,
-    calculate_rsi_numba,
-    calculate_atr_numba,
-    calculate_stochastic_numba,
-    calculate_adx_numba,
-)
-
-# Feature functions - Price
-from .price_features import (
-    add_returns,
-    add_price_ratios,
-)
-
-# Feature functions - Moving Averages
-from .moving_averages import (
-    add_sma,
-    add_ema,
+# Feature functions - Microstructure
+from .microstructure import (
+    add_amihud_illiquidity,
+    add_corwin_schultz_spread,
+    add_kyle_lambda,
+    add_microstructure_features,
+    add_price_efficiency,
+    add_realized_volatility_ratio,
+    add_relative_spread,
+    add_roll_spread,
+    add_trade_intensity,
+    add_volume_imbalance,
 )
 
 # Feature functions - Momentum
 from .momentum import (
-    add_rsi,
+    add_cci,
     add_macd,
+    add_mfi,
+    add_roc,
+    add_rsi,
     add_stochastic,
     add_williams_r,
-    add_roc,
-    add_cci,
-    add_mfi,
 )
 
-# Feature functions - Volatility
-from .volatility import (
-    add_atr,
-    add_bollinger_bands,
-    add_keltner_channels,
-    add_historical_volatility,
-    add_parkinson_volatility,
-    add_garman_klass_volatility,
+# Feature functions - Moving Averages
+from .moving_averages import (
+    add_ema,
+    add_sma,
 )
 
-# Feature functions - Volume
-from .volume import (
-    add_volume_features,
-    add_vwap,
-    add_obv,
+# Numba functions
+from .numba_functions import (
+    calculate_adx_numba,
+    calculate_atr_numba,
+    calculate_ema_numba,
+    calculate_rsi_numba,
+    calculate_sma_numba,
+    calculate_stochastic_numba,
+)
+
+# Feature functions - Price
+from .price_features import (
+    add_price_ratios,
+    add_returns,
+)
+
+# Feature functions - Regime
+from .regime import (
+    add_regime_features,
+    add_trend_regime,
+    add_volatility_regime,
+)
+
+# Period scaling
+from .scaling import (
+    BASE_TIMEFRAME_MINUTES,
+    DEFAULT_BASE_PERIODS,
+    PeriodScaler,
+    create_period_config,
+    get_scaled_periods,
+    get_timeframe_minutes,
+    get_unique_scaled_periods,
+    scale_period,
+)
+
+# Feature functions - Temporal
+from .temporal import (
+    add_session_features,
+    add_temporal_features,
 )
 
 # Feature functions - Trend
@@ -102,65 +131,35 @@ from .trend import (
     add_supertrend,
 )
 
-# Feature functions - Temporal
-from .temporal import (
-    add_temporal_features,
-    add_session_features,
+# Feature functions - Volatility
+from .volatility import (
+    add_atr,
+    add_bollinger_bands,
+    add_garman_klass_volatility,
+    add_historical_volatility,
+    add_keltner_channels,
+    add_parkinson_volatility,
 )
 
-# Feature functions - Regime
-from .regime import (
-    add_regime_features,
-    add_volatility_regime,
-    add_trend_regime,
-)
-
-# Feature functions - Microstructure
-from .microstructure import (
-    add_microstructure_features,
-    add_amihud_illiquidity,
-    add_roll_spread,
-    add_kyle_lambda,
-    add_corwin_schultz_spread,
-    add_relative_spread,
-    add_volume_imbalance,
-    add_trade_intensity,
-    add_price_efficiency,
-    add_realized_volatility_ratio,
+# Feature functions - Volume
+from .volume import (
+    add_obv,
+    add_volume_features,
+    add_vwap,
 )
 
 # Feature functions - Wavelets
 from .wavelets import (
-    add_wavelet_features,
-    add_wavelet_coefficients,
-    add_wavelet_energy,
-    add_wavelet_volatility,
-    add_wavelet_trend_strength,
-    SUPPORTED_WAVELETS,
-    DEFAULT_WAVELET,
     DEFAULT_LEVEL,
+    DEFAULT_WAVELET,
     DEFAULT_WINDOW,
     PYWT_AVAILABLE,
-)
-
-# Period scaling
-from .scaling import (
-    scale_period,
-    get_scaled_periods,
-    get_unique_scaled_periods,
-    create_period_config,
-    get_timeframe_minutes,
-    PeriodScaler,
-    DEFAULT_BASE_PERIODS,
-    BASE_TIMEFRAME_MINUTES,
-)
-
-# MTF Features
-from ..mtf import (
-    MTFFeatureGenerator,
-    add_mtf_features,
-    validate_mtf_alignment,
-    MTF_TIMEFRAMES,
+    SUPPORTED_WAVELETS,
+    add_wavelet_coefficients,
+    add_wavelet_energy,
+    add_wavelet_features,
+    add_wavelet_trend_strength,
+    add_wavelet_volatility,
 )
 
 __all__ = [

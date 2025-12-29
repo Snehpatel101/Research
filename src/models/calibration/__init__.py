@@ -22,17 +22,17 @@ from src.models.calibration.calibrator import (
     CalibrationMetrics,
     ProbabilityCalibrator,
 )
+from src.models.calibration.conformal import (
+    ConformalConfig,
+    ConformalMetrics,
+    ConformalPredictor,
+    validate_coverage,
+)
 from src.models.calibration.metrics import (
     ReliabilityBins,
     compute_brier_score,
     compute_ece,
     compute_reliability_bins,
-)
-from src.models.calibration.conformal import (
-    ConformalPredictor,
-    ConformalConfig,
-    ConformalMetrics,
-    validate_coverage,
 )
 
 __all__ = [

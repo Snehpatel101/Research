@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import joblib
 import numpy as np
@@ -58,13 +58,13 @@ class BlendingEnsemble(BaseModel):
         output = ensemble.predict(X_test)
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._base_models: List[BaseModel] = []
-        self._meta_learner: Optional[BaseModel] = None
-        self._base_model_names: List[str] = []
+        self._base_models: list[BaseModel] = []
+        self._meta_learner: BaseModel | None = None
+        self._base_model_names: list[str] = []
         self._meta_learner_name: str = ""
-        self._feature_names: Optional[List[str]] = None
+        self._feature_names: list[str] | None = None
 
     @property
     def model_family(self) -> str:
@@ -100,7 +100,7 @@ class BlendingEnsemble(BaseModel):
                     return True
         return False
 
-    def get_default_config(self) -> Dict[str, Any]:
+    def get_default_config(self) -> dict[str, Any]:
         return {
             "base_model_names": ["xgboost", "lightgbm"],
             "base_model_configs": {},
@@ -118,9 +118,9 @@ class BlendingEnsemble(BaseModel):
         y_train: np.ndarray,
         X_val: np.ndarray,
         y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
-        label_end_times: Optional[Any] = None,
+        sample_weights: np.ndarray | None = None,
+        config: dict[str, Any] | None = None,
+        label_end_times: Any | None = None,
     ) -> TrainingMetrics:
         """
         Train blending ensemble.
@@ -305,7 +305,7 @@ class BlendingEnsemble(BaseModel):
     def _generate_predictions(
         self,
         X: np.ndarray,
-        models: List[BaseModel],
+        models: list[BaseModel],
         use_probabilities: bool,
     ) -> np.ndarray:
         """Generate predictions from base models."""
@@ -425,7 +425,7 @@ class BlendingEnsemble(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded BlendingEnsemble from {path}")
 
-    def get_feature_importance(self) -> Optional[Dict[str, float]]:
+    def get_feature_importance(self) -> dict[str, float] | None:
         """Aggregate feature importances from base models."""
         if not self._is_fitted:
             return None
@@ -450,14 +450,14 @@ class BlendingEnsemble(BaseModel):
 
         return avg_importance
 
-    def set_feature_names(self, names: List[str]) -> None:
+    def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
         for model in self._base_models:
             if hasattr(model, "set_feature_names"):
                 model.set_feature_names(names)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> Dict[str, float]:
+    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         output = self.predict(X)
         y_pred = output.class_predictions

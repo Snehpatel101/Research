@@ -6,7 +6,6 @@ regimes using rolling percentile analysis of Average True Range (ATR).
 """
 
 import logging
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -94,7 +93,7 @@ class VolatilityRegimeDetector(RegimeDetector):
         lookback: int = 100,
         low_percentile: float = 25.0,
         high_percentile: float = 75.0,
-        atr_column: Optional[str] = None
+        atr_column: str | None = None
     ):
         """
         Initialize volatility regime detector.

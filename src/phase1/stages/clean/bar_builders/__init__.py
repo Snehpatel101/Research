@@ -23,18 +23,18 @@ Usage:
     bars = build_bars(df, bar_type='time', target_timeframe='5min')
 """
 from src.phase1.stages.clean.bar_builders.base import (
-    BaseBarBuilder,
     BarBuilderRegistry,
+    BaseBarBuilder,
 )
-from src.phase1.stages.clean.bar_builders.volume_bars import VolumeBarBuilder
 from src.phase1.stages.clean.bar_builders.dollar_bars import DollarBarBuilder
-from src.phase1.stages.clean.bar_builders.time_bars import TimeBarBuilder
 from src.phase1.stages.clean.bar_builders.factory import (
-    build_bars,
     BarConfig,
+    build_bars,
     create_builder,
     estimate_bar_count,
 )
+from src.phase1.stages.clean.bar_builders.time_bars import TimeBarBuilder
+from src.phase1.stages.clean.bar_builders.volume_bars import VolumeBarBuilder
 
 __all__ = [
     # Base

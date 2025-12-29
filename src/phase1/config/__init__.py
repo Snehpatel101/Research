@@ -2,134 +2,126 @@
 
 Provides barrier, labeling, and feature set configurations.
 """
+from src.common.horizon_config import (
+    ACTIVE_HORIZONS,
+    HORIZON_TIMEFRAME_MINUTES,
+    HORIZONS,
+    LABEL_HORIZONS,
+    LOOKBACK_HORIZONS,
+    SUPPORTED_HORIZONS,
+    auto_scale_purge_embargo,
+    get_default_barrier_params_for_horizon,
+    get_scaled_horizons,
+    validate_horizons,
+)
 from src.phase1.config.barriers_config import (
     BARRIER_PARAMS,
     BARRIER_PARAMS_DEFAULT,
     PERCENTAGE_BARRIER_PARAMS,
-    TRANSACTION_COSTS,
     SLIPPAGE_TICKS,
     TICK_VALUES,
+    TRANSACTION_COSTS,
     get_barrier_params,
+    get_max_bars_across_all_params,
     get_slippage_ticks,
     get_total_trade_cost,
-    get_max_bars_across_all_params,
     validate_barrier_params,
 )
-
-from src.phase1.config.labeling_config import (
-    LabelingStrategyType,
-    DEFAULT_LABELING_STRATEGY,
-    LABELING_STRATEGY_CONFIGS,
-    LABEL_BALANCE_CONSTRAINTS,
-    MULTI_LABEL_CONFIG,
-    get_labeling_strategy_config,
-    get_multi_label_config,
-    validate_labeling_config,
-)
-
-from src.phase1.config.regime_config import (
-    REGIME_CONFIG,
-    REGIME_BARRIER_ADJUSTMENTS,
-    get_regime_adjusted_barriers,
-)
-
 from src.phase1.config.feature_sets import (
-    FeatureSetDefinition,
-    FEATURE_SET_DEFINITIONS,
     FEATURE_SET_ALIASES,
+    FEATURE_SET_DEFINITIONS,
+    FeatureSetDefinition,
     get_feature_set_definitions,
     resolve_feature_set_name,
     resolve_feature_set_names,
     validate_feature_set_config,
 )
-
 from src.phase1.config.features import (
+    # Feature thresholds
+    CORRELATION_THRESHOLD,
+    DRIFT_CONFIG,
+    MTF_CONFIG,
+    STATIONARITY_TESTS,
     # Timeframe config
     SUPPORTED_TIMEFRAMES,
     TIMEFRAME_TO_FREQ,
-    validate_timeframe,
-    parse_timeframe_to_minutes,
-    # Feature thresholds
-    CORRELATION_THRESHOLD,
     VARIANCE_THRESHOLD,
-    MTF_CONFIG,
-    STATIONARITY_TESTS,
-    DRIFT_CONFIG,
-    get_mtf_config,
-    validate_mtf_config,
-    validate_feature_thresholds,
-    get_stationarity_config,
-    validate_stationarity_config,
     get_drift_config,
+    get_mtf_config,
+    get_stationarity_config,
+    parse_timeframe_to_minutes,
     validate_drift_config,
+    validate_feature_thresholds,
+    validate_mtf_config,
+    validate_stationarity_config,
+    validate_timeframe,
 )
-
-from src.common.horizon_config import (
-    HORIZONS,
-    SUPPORTED_HORIZONS,
-    ACTIVE_HORIZONS,
-    LOOKBACK_HORIZONS,
-    HORIZON_TIMEFRAME_MINUTES,
-    validate_horizons,
-    get_scaled_horizons,
-    auto_scale_purge_embargo,
-    get_default_barrier_params_for_horizon,
+from src.phase1.config.labeling_config import (
+    DEFAULT_LABELING_STRATEGY,
+    LABEL_BALANCE_CONSTRAINTS,
+    LABELING_STRATEGY_CONFIGS,
+    MULTI_LABEL_CONFIG,
+    LabelingStrategyType,
+    get_labeling_strategy_config,
+    get_multi_label_config,
+    validate_labeling_config,
 )
-
-from src.phase1.config.runtime import (
-    PROJECT_ROOT,
-    DATA_DIR,
-    RAW_DATA_DIR,
-    RESULTS_DIR,
-    RUNS_DIR,
-    CONFIG_DIR,
-    SYMBOLS,
-    TARGET_TIMEFRAME,
-    TRAIN_RATIO,
-    VAL_RATIO,
-    TEST_RATIO,
-    RANDOM_SEED,
-    PURGE_BARS,
-    EMBARGO_BARS,
-    set_global_seeds,
-    validate_config,
-    get_timeframe_metadata,
-)
-
 from src.phase1.config.labels import (
-    REQUIRED_LABEL_TEMPLATES,
-    OPTIONAL_LABEL_TEMPLATES,
     ALL_LABEL_TEMPLATES,
     LABEL_COLUMN_METADATA,
-    get_required_label_columns,
-    get_optional_label_columns,
+    OPTIONAL_LABEL_TEMPLATES,
+    REQUIRED_LABEL_TEMPLATES,
     get_all_label_columns,
-    is_label_column,
     get_label_metadata,
+    get_optional_label_columns,
+    get_required_label_columns,
+    is_label_column,
 )
-
 from src.phase1.config.model_config import (
+    ENSEMBLE_CONFIGS,
+    MODEL_DATA_REQUIREMENTS,
+    EnsembleConfig,
+    ModelDataRequirements,
     ModelFamily,
     ScalerType,
-    ModelDataRequirements,
-    EnsembleConfig,
-    MODEL_DATA_REQUIREMENTS,
-    ENSEMBLE_CONFIGS,
-    get_model_requirements,
-    get_ensemble_config,
-    get_models_by_family,
-    get_combined_requirements,
-    validate_model_config,
-    get_all_model_names,
     get_all_ensemble_names,
+    get_all_model_names,
+    get_combined_requirements,
+    get_ensemble_config,
+    get_model_requirements,
+    get_models_by_family,
+    validate_model_config,
 )
-
 from src.phase1.config.multi_model import (
     MultiModelPipelineConfig,
     build_multi_model_config,
     expand_ensemble_models,
     get_recommended_feature_set,
     validate_multi_model_setup,
+)
+from src.phase1.config.regime_config import (
+    REGIME_BARRIER_ADJUSTMENTS,
+    REGIME_CONFIG,
+    get_regime_adjusted_barriers,
+)
+from src.phase1.config.runtime import (
+    CONFIG_DIR,
+    DATA_DIR,
+    EMBARGO_BARS,
+    PROJECT_ROOT,
+    PURGE_BARS,
+    RANDOM_SEED,
+    RAW_DATA_DIR,
+    RESULTS_DIR,
+    RUNS_DIR,
+    SYMBOLS,
+    TARGET_TIMEFRAME,
+    TEST_RATIO,
+    TRAIN_RATIO,
+    VAL_RATIO,
+    get_timeframe_metadata,
+    set_global_seeds,
+    validate_config,
 )
 
 __all__ = [
@@ -172,6 +164,7 @@ __all__ = [
     'HORIZONS',
     'SUPPORTED_HORIZONS',
     'ACTIVE_HORIZONS',
+    'LABEL_HORIZONS',
     'LOOKBACK_HORIZONS',
     'HORIZON_TIMEFRAME_MINUTES',
     'validate_timeframe',

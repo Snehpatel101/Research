@@ -14,7 +14,7 @@ import logging
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 import numpy as np
 from sklearn.isotonic import IsotonicRegression
@@ -65,7 +65,7 @@ class CalibrationMetrics:
             return 0.0
         return (self.ece_before - self.ece_after) / self.ece_before
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dict."""
         return {
             "brier_before": self.brier_before,
@@ -98,7 +98,7 @@ class ProbabilityCalibrator:
         >>> print(f"Brier improved: {metrics.brier_improvement:.1%}")
     """
 
-    def __init__(self, config: Optional[CalibrationConfig] = None) -> None:
+    def __init__(self, config: CalibrationConfig | None = None) -> None:
         """
         Initialize ProbabilityCalibrator.
 
@@ -106,7 +106,7 @@ class ProbabilityCalibrator:
             config: Calibration configuration. Uses defaults if None.
         """
         self.config = config or CalibrationConfig()
-        self._calibrators: Dict[int, Any] = {}  # class -> calibrator
+        self._calibrators: dict[int, Any] = {}  # class -> calibrator
         self._is_fitted: bool = False
         self._n_classes: int = 0
         self._method_used: str = ""
@@ -289,7 +289,7 @@ class ProbabilityCalibrator:
         logger.debug(f"Saved calibrator to {path}")
 
     @classmethod
-    def load(cls, path: Path) -> "ProbabilityCalibrator":
+    def load(cls, path: Path) -> ProbabilityCalibrator:
         """
         Load calibrator from disk.
 

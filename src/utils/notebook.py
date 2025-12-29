@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import logging
-import os
 import sys
 import warnings
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 
@@ -24,7 +24,7 @@ def setup_notebook(
     seed: int = 42,
     max_display_rows: int = 100,
     max_display_cols: int = 50,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Initialize notebook environment with optimal settings."""
     import pandas as pd
 
@@ -67,10 +67,7 @@ def setup_notebook(
         pass
 
     # Get environment info
-    from src.models.device import (
-        is_colab, is_kaggle, is_notebook, get_best_gpu,
-        get_environment_info, get_mixed_precision_config
-    )
+    from src.models.device import get_best_gpu, get_environment_info, get_mixed_precision_config
 
     env_info = get_environment_info()
     gpu_info = get_best_gpu()
@@ -107,9 +104,9 @@ def setup_notebook(
 
 
 def install_dependencies(
-    packages: Optional[List[str]] = None,
+    packages: list[str] | None = None,
     quiet: bool = True,
-) -> Dict[str, bool]:
+) -> dict[str, bool]:
     """Install required packages in Colab/Kaggle."""
     import subprocess
 
@@ -165,8 +162,8 @@ def mount_drive(mount_path: str = "/content/drive") -> bool:
 
 def download_sample_data(
     output_dir: str = "data/sample",
-    symbols: Optional[List[str]] = None,
-) -> Dict[str, str]:
+    symbols: list[str] | None = None,
+) -> dict[str, str]:
     """Generate synthetic OHLCV data for testing."""
     import pandas as pd
 
@@ -234,12 +231,11 @@ def download_sample_data(
 
 
 def display_metrics(
-    results: Dict[str, Any],
+    results: dict[str, Any],
     title: str = "Model Results",
     show_confusion: bool = True,
 ) -> None:
     """Pretty-print model results as formatted table."""
-    from src.models.device import is_notebook
 
     print("\n" + "=" * 60)
     print(f" {title}")
@@ -307,11 +303,11 @@ def display_metrics(
 def plot_confusion_matrix(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    labels: Optional[List[str]] = None,
+    labels: list[str] | None = None,
     title: str = "Confusion Matrix",
-    figsize: Tuple[int, int] = (8, 6),
+    figsize: tuple[int, int] = (8, 6),
     cmap: str = "Blues",
-    save_path: Optional[str] = None,
+    save_path: str | None = None,
 ) -> None:
     """Plot confusion matrix with matplotlib."""
     import matplotlib.pyplot as plt
@@ -358,11 +354,11 @@ def plot_confusion_matrix(
 
 
 def plot_training_history(
-    history: Dict[str, List[float]],
-    metrics: Optional[List[str]] = None,
+    history: dict[str, list[float]],
+    metrics: list[str] | None = None,
     title: str = "Training History",
-    figsize: Tuple[int, int] = (12, 4),
-    save_path: Optional[str] = None,
+    figsize: tuple[int, int] = (12, 4),
+    save_path: str | None = None,
 ) -> None:
     """Plot training loss/accuracy curves."""
     import matplotlib.pyplot as plt
@@ -439,11 +435,11 @@ def plot_training_history(
 
 
 def plot_model_comparison(
-    results: Dict[str, Dict[str, Any]],
+    results: dict[str, dict[str, Any]],
     metric: str = "macro_f1",
     title: str = "Model Comparison",
-    figsize: Tuple[int, int] = (10, 6),
-    save_path: Optional[str] = None,
+    figsize: tuple[int, int] = (10, 6),
+    save_path: str | None = None,
 ) -> None:
     """Compare multiple models on a given metric."""
     import matplotlib.pyplot as plt
@@ -463,8 +459,8 @@ def plot_model_comparison(
         return
 
     # Sort by value
-    sorted_pairs = sorted(zip(models, values), key=lambda x: x[1], reverse=True)
-    models, values = zip(*sorted_pairs)
+    sorted_pairs = sorted(zip(models, values, strict=False), key=lambda x: x[1], reverse=True)
+    models, values = zip(*sorted_pairs, strict=False)
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -476,7 +472,7 @@ def plot_model_comparison(
     ax.grid(True, axis="x", alpha=0.3)
 
     # Add value labels
-    for bar, value in zip(bars, values):
+    for bar, value in zip(bars, values, strict=False):
         ax.text(
             value + 0.005, bar.get_y() + bar.get_height() / 2,
             f"{value:.4f}", va="center", fontsize=10,
@@ -500,7 +496,7 @@ def get_sample_config(
     model_name: str,
     horizon: int = 20,
     quick_mode: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get sample training configuration for a model."""
     base_config = {
         "model_type": model_name,
@@ -533,7 +529,7 @@ def create_progress_callback(total_epochs: int, description: str = "Training") -
 
     pbar = tqdm(total=total_epochs, desc=description, unit="epoch")
 
-    def callback(epoch: int, metrics: Dict[str, float]) -> None:
+    def callback(epoch: int, metrics: dict[str, float]) -> None:
         pbar.update(1)
         postfix = {k: f"{v:.4f}" for k, v in metrics.items() if isinstance(v, (int, float))}
         pbar.set_postfix(postfix)

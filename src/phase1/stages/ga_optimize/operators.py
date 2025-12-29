@@ -12,7 +12,6 @@ NOTE: DEAP-specific functions (create_toolbox) have been removed.
 
 import logging
 import random
-from typing import List
 
 import pandas as pd
 
@@ -62,7 +61,7 @@ def get_contiguous_subset(
     return df.iloc[start_idx:end_idx].copy()
 
 
-def check_bounds(individual: List[float]) -> List[float]:
+def check_bounds(individual: list[float]) -> list[float]:
     """
     Enforce parameter bounds on an individual.
 
@@ -83,7 +82,7 @@ def check_bounds(individual: List[float]) -> List[float]:
     return individual
 
 
-def get_seeded_individuals(symbol: str) -> List[List[float]]:
+def get_seeded_individuals(symbol: str) -> list[list[float]]:
     """
     Get symbol-specific seeded starting points for optimization.
 

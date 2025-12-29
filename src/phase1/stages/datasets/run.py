@@ -8,28 +8,28 @@ import logging
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.pipeline.utils import StageResult, create_stage_result, create_failed_result
 from src.phase1.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
-from src.phase1.config.labels import REQUIRED_LABEL_TEMPLATES, OPTIONAL_LABEL_TEMPLATES
+from src.phase1.config.labels import OPTIONAL_LABEL_TEMPLATES, REQUIRED_LABEL_TEMPLATES
 from src.phase1.utils.feature_sets import (
     METADATA_COLUMNS,
     build_feature_set_manifest,
     resolve_feature_set,
     validate_feature_set_columns,
 )
+from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
-    from pipeline_config import PipelineConfig
     from manifest import ArtifactManifest
+    from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _select_label_columns(df: pd.DataFrame, horizon: int) -> List[str]:
+def _select_label_columns(df: pd.DataFrame, horizon: int) -> list[str]:
     """Select label columns for a given horizon."""
     required = [t.format(h=horizon) for t in REQUIRED_LABEL_TEMPLATES]
     missing = [col for col in required if col not in df.columns]
@@ -44,7 +44,7 @@ def _select_label_columns(df: pd.DataFrame, horizon: int) -> List[str]:
     return required + optional
 
 
-def _select_metadata_columns(df: pd.DataFrame) -> List[str]:
+def _select_metadata_columns(df: pd.DataFrame) -> list[str]:
     """Select metadata columns present in DataFrame."""
     return [col for col in df.columns if col in METADATA_COLUMNS]
 
@@ -96,8 +96,8 @@ def run_build_datasets(
         with open(feature_set_manifest_path, "w") as f:
             json.dump(feature_set_manifest, f, indent=2)
 
-        artifacts: List[Path] = [feature_set_manifest_path]
-        dataset_manifest: Dict[str, Dict] = {
+        artifacts: list[Path] = [feature_set_manifest_path]
+        dataset_manifest: dict[str, dict] = {
             "run_id": config.run_id,
             "created_at": datetime.now().isoformat(),
             "feature_sets": {},
@@ -170,7 +170,7 @@ def run_build_datasets(
             metadata={"feature_sets": feature_set_names},
         )
 
-        logger.info(f"\nDataset build complete:")
+        logger.info("\nDataset build complete:")
         logger.info(f"  Feature sets: {len(feature_set_names)}")
         logger.info(f"  Horizons: {len(config.label_horizons)}")
         logger.info(f"  Total datasets: {len(feature_set_names) * len(config.label_horizons)}")

@@ -16,12 +16,10 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
-from .base import BaseBarBuilder, BarBuilderRegistry, BarMetadata
+from .base import BarBuilderRegistry, BaseBarBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +58,7 @@ class VolumeBarBuilder(BaseBarBuilder):
         if volume_threshold <= 0:
             raise ValueError(f"volume_threshold must be > 0, got {volume_threshold}")
         if min_bars_per_output < 1:
-            raise ValueError(f"min_bars_per_output must be >= 1")
+            raise ValueError("min_bars_per_output must be >= 1")
 
         self.volume_threshold = volume_threshold
         self.min_bars_per_output = min_bars_per_output
@@ -72,7 +70,7 @@ class VolumeBarBuilder(BaseBarBuilder):
     def build(
         self,
         df: pd.DataFrame,
-        symbol: Optional[str] = None,
+        symbol: str | None = None,
         include_metadata: bool = True,
     ) -> pd.DataFrame:
         """
