@@ -1,51 +1,54 @@
-# Codebase Alignment Plan: Production-Grade ML Factory for OHLCV Trading
+# Codebase Alignment Plan: Dynamic ML Factory for OHLCV Trading
 
-**Generated:** 2025-12-29
+**Generated:** 2025-12-29 (Updated with dynamic registry architecture)
 **Status:** Actionable roadmap to production-grade ML factory
-**Estimated Effort:** 10-14 weeks (1 engineer) | 6-8 weeks (2 engineers)
-**Model Strategy:** Prune 6 models → Add 9 models → **7 core + 9 new = 16 total models**
+**Estimated Effort:** 12-16 weeks (1 engineer) | 7-10 weeks (2 engineers)
+**Architecture:** **Dynamic factory with plug-and-play registries** (not hardcoded model selection)
 
 ---
 
 ## Executive Summary
 
-The Research codebase is **54% aligned** with the target vision of a production-grade, model-agnostic ML factory for OHLCV time-series research and deployment.
+The Research codebase is evolving into a **dynamic, registry-based ML factory** where users can mix-and-match any combination of models, ensembles, calibration, and inference strategies via configuration—without code changes.
+
+### Core Philosophy: Configuration > Code
+
+**Not this:** "Train these 3 specific models in this hardcoded ensemble"
+**Instead:** "Select any models from registry + any ensemble method + any calibration + optional RL policy"
 
 ### Current State Assessment
 
-- ✅ **Strong foundation:** 15-stage data pipeline with 150+ features, OOF-based stacking infrastructure
-- ⚠️ **Critical blockers:** 3 data pipeline bugs creating leakage, 1 non-causal model (Transformer)
-- 🔴 **Model quality issues:** 6/13 models unsuitable for OHLCV (redundant, slow, or leaking future data)
-- 🔴 **Missing SOTA architectures:** No PatchTST, iTransformer, N-BEATS, DLinear, or foundation models
+- ✅ **Strong foundation:** 15-stage data pipeline, 13 models, OOF stacking infrastructure
+- ⚠️ **Critical blockers:** 3 data pipeline bugs creating leakage
+- 🔴 **Missing architecture:** No dynamic registries, hardcoded model selection
+- 🔴 **Missing models:** 15+ SOTA architectures (PatchTST, N-BEATS, DeepAR, etc.)
+- 🔴 **Missing inference layer:** No calibration, conformal prediction, or gating
 
 ### Transformation Strategy
 
-**Phase 0 (Week 1):** Prune 6 unsuitable models (CatBoost, GRU, Transformer, Random Forest, SVM, Blending)
-→ **Result:** 7 production-safe core models
+**Phase 1 (Week 1-2):** Fix 3 critical data pipeline bugs → Zero-leakage pipeline
 
-**Phase 1 (Week 1-2):** Fix 3 critical data pipeline bugs
-→ **Result:** Zero-leakage pipeline
+**Phase 2 (Week 3-4):** Build dynamic registry system → Config-driven model selection
 
-**Phase 2 (Week 3-8):** Add 9 SOTA models (PatchTST, iTransformer, TimesNet, N-BEATS, DLinear, S-Mamba, Chronos, TimesFM, TiDE)
-→ **Result:** 16 total models across 6 families
+**Phase 3 (Week 5-10):** Add 15+ models across 5 families → 28+ total models
 
-**Phase 3 (Week 9-11):** Regime-aware meta-learning
-→ **Result:** Adaptive ensembles
+**Phase 4 (Week 11-12):** Add meta-learners, calibration, conformal → Inference layer
 
-**Phase 4 (Week 12-14):** Production infrastructure
-→ **Result:** One-command train→bundle→deploy
+**Phase 5 (Week 13-14):** Add optional RL policy layer → Adaptive trading
+
+**Phase 6 (Week 15-16):** Production infrastructure → One-command deploy
 
 ---
 
 ## Table of Contents
 
 1. [Target System Vision](#part-1-target-system-vision)
-2. [Model Strategy: Prune & Add](#part-2-model-strategy-prune--add)
-3. [Critical Data Pipeline Bugs](#part-3-critical-data-pipeline-bugs)
-4. [Missing SOTA Architectures](#part-4-missing-sota-architectures)
-5. [Implementation Roadmap](#part-5-implementation-roadmap)
-6. [Quick Wins](#part-6-quick-wins)
-7. [Execution Order](#part-7-execution-order)
+2. [Dynamic Registry Architecture](#part-2-dynamic-registry-architecture)
+3. [Full Model Menu (28+ Models)](#part-3-full-model-menu)
+4. [Contracts & Artifacts](#part-4-contracts--artifacts)
+5. [Critical Data Pipeline Bugs](#part-5-critical-data-pipeline-bugs)
+6. [Implementation Roadmap](#part-6-implementation-roadmap)
+7. [Quick Wins](#part-7-quick-wins)
 8. [Risk Analysis](#part-8-risk-analysis)
 9. [Testing Strategy](#part-9-testing-strategy)
 
@@ -55,595 +58,473 @@ The Research codebase is **54% aligned** with the target vision of a production-
 
 ### What You're Building
 
-A **production-grade, model-agnostic ML factory** for systematic futures trading where:
+A **dynamic, registry-based ML factory** for systematic futures trading where model selection, ensemble strategy, calibration, and RL policies are **configuration-driven**—not hardcoded.
 
-#### 1. Single Data Source → Many Model Families
+#### 1. Single Data Source → Dynamic Model Selection
 
 - **Input:** Raw OHLCV (one contract: MES, MGC, etc.)
-- **Output:** Standardized datasets for 6 model families
-  - Tabular models (XGBoost, LightGBM) → 2D feature matrices
-  - Sequence models (LSTM, TCN) → 3D windowed tensors
-  - Transformers (PatchTST, iTransformer) → Patched sequences
-  - State-space models (S-Mamba, N-BEATS) → Decomposed components
-  - Foundation models (Chronos, TimesFM) → Normalized OHLCV windows
-  - Meta-learners (Stacking, MoE) → OOF predictions + regime features
+- **Output:** Any combination of models from 5 families (28+ options)
+- **Selection:** Via YAML config, not code changes
 
-#### 2. Fair Evaluation Under Identical Controls
+```yaml
+# Example: Mix tabular + sequence + foundation models
+base_models:
+  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
+  - {name: tcn, view: window_tensor, outputs: [E_r]}
+  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
+  - {name: chronos, view: window_tensor, outputs: [p_up], zero_shot: true}
+```
 
-- All models trained on **same leakage-safe data** (purge=60, embargo=1440)
-- Identical transaction costs, slippage, and risk constraints
-- Standardized metrics: Sharpe, win rate, max drawdown, regime performance
-- Cross-validation with PurgedKFold, walk-forward, CPCV, PBO
+#### 2. Dynamic Ensembling (Not Hardcoded Recipes)
 
-#### 3. Ensemble via Meta-Learning
+- **Ensemble methods:** Voting, Stacking (Ridge, Elastic Net, LightGBM meta, CatBoost meta, MLP meta), Blending
+- **Gating:** Softmax gate, HMM regime gate, Markov switching, Contextual bandit
+- **Selection:** Via config
 
-- **OOF predictions** from diverse base learners (leakage-free stacking datasets)
-- **Regime-aware meta-learners** that learn *when to trust which model*
-  - High volatility → favor boosting models (XGBoost, LightGBM)
-  - Trending markets → favor sequence models (LSTM, TCN, PatchTST)
-  - Mean-reverting → favor foundation models (Chronos, TimesFM)
-- **Mixture of Experts (MoE)** with gating networks for dynamic routing
+```yaml
+ensemble:
+  method: stacking
+  meta_learner: ridge  # or elastic_net, lightgbm_meta, catboost_meta, mlp_meta
+  oof: true
+  gating:
+    enabled: true
+    method: hmm_regime  # or softmax, markov_switching, contextual_bandit
+```
 
-#### 4. Inference as First-Class Workflow
+#### 3. Inference Layer (Calibration + Uncertainty)
 
-- **Train/serve parity:** Same feature pipelines in research and production
-- **One-command deployment:** `train_model.py --create-bundle` → inference-ready artifact
-- **Predictable outputs:** Class probabilities, expected return, confidence intervals
-- **Deterministic resampling:** Identical OHLCV processing in training and serving
+- **Calibration:** Temperature scaling, Isotonic, Platt, Beta
+- **Conformal prediction:** CQR, Split Conformal, CV+/Jackknife+
+- **Selection:** Via config
+
+```yaml
+inference:
+  calibrate: [temperature_scaling, isotonic]
+  uncertainty:
+    method: cqr  # or split_conformal, cv_plus, jackknife_plus
+    coverage: 0.90
+```
+
+#### 4. Optional RL Policy Layer
+
+- **RL as consumer** of inference outputs (not replacement for stacking)
+- **Inputs:** `p_up`, `E[r]`, `q05/q50/q95`, `uncertainty`, `regime_score`, costs
+- **Outputs:** Position size, entry/exit thresholds, risk throttles
+- **Algorithms:** SAC, TD3, PPO, DQN, Contextual Bandits
+
+```yaml
+policy:
+  enabled: true
+  algorithm: sac  # or td3, ppo, dqn, contextual_bandit
+  inputs: [p_up, E_r, q05, q50, q95, uncertainty, regime_score]
+  outputs: [position_size, entry_threshold, exit_threshold]
+```
+
+#### 5. Plug-and-Play via Contracts
+
+Every model/ensemble/inference component adheres to strict contracts:
+
+- **Input View Contract:** `feature_matrix`, `window_tensor`, `mtf_bundle`
+- **Output Contract:** `p_up`, `E[r]`, `q05/q50/q95`, `regime_score`
+- **Artifact Contract:** `preproc + schema + model + metrics + inference_signature`
 
 ### Strategic Differentiators
 
 | Feature | Implementation | Value Proposition |
 |---------|----------------|-------------------|
-| **Model-Specific Representations** | PatchTST gets patches, N-BEATS gets decomposition, XGBoost gets feature matrix | Each architecture receives optimal input format |
+| **Dynamic Selection** | All models/ensembles/inference via config, not code | Experiment without rewriting pipelines |
+| **Strict Contracts** | Every component emits standardized outputs | Mix tabular + sequence + foundation models freely |
 | **Leakage Paranoia** | Purge (60 bars), embargo (1440 bars), train-only scaling, causal models only | Prevents overfitting to future data |
-| **Regime-Aware Ensembles** | Meta-learners learn model performance by volatility/trend/structure regime | Adaptive performance across market conditions |
-| **Foundation Model Integration** | Chronos, TimesFM as zero-shot baselines | Fast baselines without custom training |
-| **Probabilistic Forecasts** | Quantile outputs for distribution-aware trading | Risk-aware position sizing |
+| **Inference Layer** | Calibration + conformal prediction + gating | Production-grade uncertainty quantification |
+| **Optional RL** | RL as policy consumer (not model replacement) | Adaptive position sizing + risk management |
 
 ---
 
-## Part 2: Model Strategy: Prune & Add
+## Part 2: Dynamic Registry Architecture
 
-### Current State: 13 Models (6 Must Go)
+### Philosophy: Registries Replace Hardcoded Logic
 
-The existing codebase has **quality issues**:
-- ❌ 1 model leaks future data (Transformer - non-causal)
-- ❌ 3 models are redundant (CatBoost, GRU, Blending)
-- ❌ 2 models are too slow/weak (SVM, Random Forest)
-
-### Target State: 16 Models (7 Core + 9 New)
-
-**Phase 0: Prune to 7 core models** (production-safe, non-redundant)
-**Phase 2: Add 9 SOTA models** (competitive advantage)
-
----
-
-### 🔴 PHASE 0: MODELS TO PRUNE (Remove 6/13)
-
-#### 1. CatBoost - REDUNDANT
-
-**File:** `src/models/boosting/catboost_model.py`
-
-**Why Remove:**
-- Marginal differences from XGBoost/LightGBM don't justify maintenance burden
-- "Ordered boosting" provides <1% accuracy gain on OHLCV time series
-- Categorical feature handling is irrelevant (OHLCV data is continuous)
-- Slower training than LightGBM, lower GPU utilization than XGBoost
-- **Replacement:** Use XGBoost for interpretability, LightGBM for speed
-
-**Impact:** Low - XGBoost + LightGBM cover all boosting use cases
-
-**Removal Steps:**
-1. Delete `src/models/boosting/catboost_model.py`
-2. Remove `@register` entry from registry
-3. Delete tests: `tests/models/test_catboost.py`
-4. Update docs: Remove from `CLAUDE.md` model list
-
----
-
-#### 2. GRU - REDUNDANT
-
-**File:** `src/models/neural/gru_model.py`
-
-**Why Remove:**
-- Too similar to LSTM (2 gates vs 3 gates)
-- LSTM's forget gate provides better long-term memory for price sequences
-- Performance differences <2% on financial time series benchmarks
-- Maintaining both LSTM + GRU adds no ensemble diversity
-- **Replacement:** LSTM handles all GRU use cases with equal/better performance
-
-**Impact:** Low - LSTM is superior for long-term dependencies in OHLCV
-
-**Removal Steps:**
-1. Delete `src/models/neural/gru_model.py`
-2. Remove `@register` entry
-3. Delete tests: `tests/models/test_gru.py`
-4. Update configs: Remove GRU from default ensemble recipes
-
----
-
-#### 3. Transformer - NON-CAUSAL (CRITICAL PRODUCTION BUG)
-
-**File:** `src/models/neural/transformer_model.py`
-
-**Why Remove:**
-- ⚠️ **CRITICAL:** Standard self-attention is inherently non-causal
-- Each position attends to ALL positions (including future data)
-- `is_production_safe` property explicitly returns `False`
-- Creates artificially inflated backtest performance that won't generalize
-- Will fail in live trading when future data is unavailable
-- **Replacement:** Use causal models (LSTM with bidirectional=False, TCN) or replace with PatchTST (causal variant)
-
-**From Code (lines 295-306):**
+Instead of:
 ```python
-@property
-def is_production_safe(self) -> bool:
-    """
-    Standard Transformer self-attention is inherently non-causal (attends
-    to all positions). This implementation does NOT use causal masking,
-    so it always returns False.
-    """
-    return False
+# BAD: Hardcoded
+if model_name == "xgboost":
+    model = XGBoost()
+elif model_name == "lstm":
+    model = LSTM()
 ```
 
-**Impact:** **HIGH** - This model leaks future data and produces invalid results
-
-**Removal Steps:**
-1. Delete `src/models/neural/transformer_model.py`
-2. Remove `@register` entry
-3. Delete tests: `tests/models/test_transformer.py`
-4. Add deprecation warning in `CHANGELOG.md`
-5. **Replace with:** PatchTST (causal, SOTA) or iTransformer
-
----
-
-#### 4. Random Forest - INFERIOR TO BOOSTING
-
-**File:** `src/models/classical/random_forest.py`
-
-**Why Remove:**
-- Gradient boosting (XGBoost/LightGBM) is strictly superior for tabular data
-- 2-3x slower training than LightGBM
-- 2-5% lower F1 score than XGBoost on financial features
-- No temporal modeling (treats samples independently)
-- Only 200 trees (vs 500 for boosting) - underpowered
-- **Replacement:** XGBoost/LightGBM for all tabular use cases
-
-**Performance Comparison:**
-| Metric | Random Forest | XGBoost | LightGBM |
-|--------|--------------|---------|----------|
-| Training Time | 120s | 45s | 40s |
-| F1 Score | 0.52 | 0.57 | 0.56 |
-| Feature Importance | Basic | SHAP | SHAP |
-
-**Impact:** Low - Boosting models are better in every dimension
-
-**Removal Steps:**
-1. Delete `src/models/classical/random_forest.py`
-2. Remove `@register` entry
-3. Delete tests: `tests/models/test_random_forest.py`
-4. Update benchmark scripts to remove RF comparisons
-
----
-
-#### 5. SVM - TOO SLOW FOR PRODUCTION
-
-**File:** `src/models/classical/svm.py`
-
-**Why Remove:**
-- **O(n²) to O(n³) complexity** - prohibitive for OHLCV datasets (50k-500k samples)
-- Training on 100k samples takes 30+ minutes (vs 2 minutes for XGBoost)
-- RBF kernel has no interpretability or feature importance
-- Requires extensive hyperparameter tuning (C, gamma)
-- No temporal modeling, no sequence awareness
-- **Replacement:** Boosting models are 10-100x faster with better accuracy
-
-**From Code Warning (lines 131-135):**
+Use:
 ```python
-if n_samples > 50000:
-    logger.warning(
-        f"SVM training on {n_samples} samples may be slow. "
-        f"Consider subsampling or using a different model."
-    )
+# GOOD: Registry-based
+model = ModelRegistry.create(config["model_name"], config["model_params"])
 ```
 
-**Impact:** Low - Rarely used due to performance issues
+### Four Registry Types
 
-**Removal Steps:**
-1. Delete `src/models/classical/svm.py`
-2. Remove `@register` entry
-3. Delete tests: `tests/models/test_svm.py`
-4. Remove from slow model warnings in trainer
+#### A) Model Registry (Base Learners)
 
----
+**Purpose:** All trainable models (tabular, sequence, foundation)
 
-#### 6. Blending - INFERIOR TO VOTING + STACKING
-
-**File:** `src/models/ensemble/blending.py`
-
-**Why Remove:**
-- **Wastes 20% of training data** on holdout set for meta-learner
-- Higher variance than Stacking (which uses cross-validation OOF predictions)
-- Doesn't offer simplicity advantage over Voting
-- Doesn't offer performance advantage over Stacking
-- For time series with limited data, throwing away 20% is unacceptable
-- **Replacement:** Use **Voting** for speed, **Stacking** for performance
-
-**Ensemble Comparison:**
-| Method | Data Efficiency | Overfitting Risk | Complexity | Use Case |
-|--------|----------------|------------------|------------|----------|
-| Voting | 100% (trains once) | Low | Lowest | Fast ensemble baseline |
-| Stacking | 100% (OOF uses all data) | Lowest | Highest | Best performance |
-| Blending | 80% (wastes holdout) | Higher | Medium | ❌ No advantage |
-
-**Impact:** Low - Stacking + Voting cover all ensemble needs
-
-**Removal Steps:**
-1. Delete `src/models/ensemble/blending.py`
-2. Remove `@register` entry
-3. Delete tests: `tests/models/test_blending.py`
-4. Update ensemble docs to recommend Stacking over Blending
-
----
-
-### ✅ CORE MODELS TO KEEP (7 Models)
-
-After pruning, these production-safe models remain:
-
-#### Boosting (2 models)
-1. **XGBoost** - GPU support, SHAP importance, industry standard
-2. **LightGBM** - Fastest training, lowest memory, leaf-wise growth
-
-#### Neural (2 models)
-3. **LSTM** - Long-term dependencies, mixed precision, bidirectional=False (causal)
-4. **TCN** - Dilated causal convolutions, parallelizable, modern RNN alternative
-
-#### Classical (1 model)
-5. **Logistic Regression** - Fast baseline, excellent meta-learner for stacking
-
-#### Ensemble (2 models)
-6. **Voting** - Simple weighted averaging, low latency (~6ms for 3 models)
-7. **Stacking** - OOF-based meta-learning, PurgedKFold, best ensemble performance
-
----
-
-### 🚀 PHASE 2: MODELS TO ADD (9 New Models)
-
-These SOTA architectures align with your target system goals:
-
----
-
-#### Advanced Transformers (4 models)
-
-##### 1. PatchTST - SOTA Long-Term Forecasting
-
-**Implementation:** `src/models/transformer/patchtst.py`
-
-**Architecture:**
-- Patch-based attention (16-token patches from 512-bar context)
-- Reduces attention complexity from O(L²) to O((L/P)²) where P=patch_length
-- Channel-independence: Each feature (OHLC, volume) processed separately
-- **Causal variant** available (production-safe)
-
-**Why Add:**
-- **21% MSE reduction** vs vanilla Transformer on financial time series
-- Handles long sequences (1000+ bars) efficiently
-- SOTA on multiple time-series benchmarks (2023-2024)
-- Production-safe with causal masking
-
-**Use Case:** Long-horizon forecasting (20-60 bars ahead), daily/weekly predictions
-
-**Config:**
-```yaml
-model: patchtst
-patch_length: 16
-stride: 8
-context_length: 512
-d_model: 256
-n_heads: 8
-n_layers: 3
-causal: true  # Production-safe
+**Entry Schema (`ModelSpec`):**
+```python
+@dataclass
+class ModelSpec:
+    name: str                    # "lightgbm", "patchtst", "chronos"
+    family: str                  # "boosting", "transformer", "foundation"
+    input_view: str              # "feature_matrix" or "window_tensor"
+    outputs: List[str]           # ["p_up", "E_r", "q05", "q50", "q95", "regime_score"]
+    needs: Dict[str, Any]        # {normalization, lookback, covariates, categorical_support}
+    artifacts: Dict[str, str]    # {preproc, schema, weights, metrics, inference_signature}
+    is_causal: bool              # Production safety (no future leakage)
+    zero_shot: bool              # Foundation models (no training)
 ```
 
-**Estimated Effort:** 4 days
-
----
-
-##### 2. iTransformer - Inverted Attention for Multivariate
-
-**Implementation:** `src/models/transformer/itransformer.py`
-
-**Architecture:**
-- **Inverted attention:** Features as tokens (not time steps)
-- Captures correlations between OHLCV variables
-- Better for multivariate time series than standard transformers
-- Layernorm on variate dimension instead of time
-
-**Why Add:**
-- Captures OHLC price relationships, volume-price dynamics
-- 15% better multivariate forecasting than PatchTST
-- Smaller model size (fewer parameters for same performance)
-
-**Use Case:** When OHLC correlations matter (spread trading, multi-contract portfolios)
-
-**Config:**
-```yaml
-model: itransformer
-n_variates: 150  # Number of features
-d_model: 128
-n_heads: 4
-n_layers: 2
+**Example Registration:**
+```python
+@register_model(
+    name="patchtst",
+    family="transformer",
+    input_view="window_tensor",
+    outputs=["p_up", "E_r", "q05", "q50", "q95"],
+    is_causal=True,
+    zero_shot=False
+)
+class PatchTSTModel(BaseModel):
+    ...
 ```
 
-**Estimated Effort:** 3 days
-
 ---
 
-##### 3. TimesNet - 2D Convolutions on Periodicities
+#### B) Ensemble Registry (How Base Models Combine)
 
-**Implementation:** `src/models/transformer/timesnet.py`
+**Purpose:** Stacking, voting, blending, gating strategies
 
-**Architecture:**
-- Detects multiple periodicities in time series (intraday, daily, weekly cycles)
-- Converts 1D time series to 2D tensor based on detected periods
-- Applies 2D convolutions (InceptionNet-style blocks)
-- Aggregates multi-period representations
-
-**Why Add:**
-- Excellent for OHLCV data with strong intraday/weekly seasonality
-- Captures multi-scale temporal patterns (5min, 1hr, daily cycles)
-- SOTA on datasets with complex periodicities
-
-**Use Case:** Markets with strong session effects (futures open/close patterns)
-
-**Config:**
-```yaml
-model: timesnet
-top_k: 5  # Number of periodicities to detect
-d_model: 64
-kernel_sizes: [3, 5, 7]  # Multi-scale convolutions
+**Entry Schema (`EnsembleSpec`):**
+```python
+@dataclass
+class EnsembleSpec:
+    name: str                    # "ridge_stacking", "lightgbm_meta", "hmm_gating"
+    method: str                  # "stacking", "voting", "blending", "gating"
+    meta_learner: Optional[str]  # For stacking: "ridge", "elastic_net", "lightgbm_meta"
+    gating_method: Optional[str] # For gating: "softmax", "hmm_regime", "markov_switching"
+    requires_oof: bool           # True for stacking/blending
+    supports_heterogeneous: bool # Can mix tabular + sequence models?
 ```
 
-**Estimated Effort:** 4 days
-
----
-
-##### 4. Autoformer - Decomposition + Auto-Correlation
-
-**Implementation:** `src/models/transformer/autoformer.py`
-
-**Architecture:**
-- Series decomposition (trend + seasonal components)
-- Auto-correlation mechanism (replaces self-attention)
-- Progressive decomposition at each layer
-- Aggregates sub-series for better long-term dependencies
-
-**Why Add:**
-- Best Sharpe ratio in financial time-series benchmarks (2022-2023)
-- Explicit trend/seasonality modeling (interpretable)
-- Handles non-stationary OHLCV data well
-
-**Use Case:** Trending markets, long-horizon forecasting with decomposition
-
-**Config:**
-```yaml
-model: autoformer
-moving_avg: 25  # Trend extraction window
-d_model: 256
-n_heads: 8
-decomp_layers: 3
+**Example Registration:**
+```python
+@register_ensemble(
+    name="ridge_stacking",
+    method="stacking",
+    meta_learner="ridge",
+    requires_oof=True,
+    supports_heterogeneous=True  # Can mix any model families
+)
+class RidgeStackingEnsemble(BaseEnsemble):
+    ...
 ```
 
-**Estimated Effort:** 4 days
-
 ---
 
-#### State-Space & MLP Models (3 models)
+#### C) Inference Registry (Calibration + Uncertainty)
 
-##### 5. S-Mamba - Linear Complexity State-Space
+**Purpose:** Post-processors for probabilities and prediction intervals
 
-**Implementation:** `src/models/ssm/mamba.py`
-
-**Architecture:**
-- State-space model with selective attention
-- **O(L) complexity** (vs O(L²) for transformers)
-- 78% fewer parameters than iTransformer for same performance
-- Handles extremely long sequences (10k+ bars)
-
-**Why Add:**
-- Most efficient model for long-context OHLCV data
-- Faster inference than transformers (critical for production)
-- Recent breakthrough (2023-2024) with strong results
-
-**Use Case:** Real-time trading with long lookback windows, low-latency inference
-
-**Config:**
-```yaml
-model: mamba
-d_model: 128
-d_state: 16
-d_conv: 4
-expand: 2
+**Entry Schema (`InferenceSpec`):**
+```python
+@dataclass
+class InferenceSpec:
+    name: str                    # "temperature_scaling", "cqr", "split_conformal"
+    category: str                # "calibration", "conformal", "gating"
+    inputs: List[str]            # ["p_up", "y_true"] for calibration
+    outputs: List[str]           # ["p_up_calibrated", "confidence_interval"]
+    requires_holdout: bool       # True for conformal methods
 ```
 
-**Estimated Effort:** 5 days (requires `mamba-ssm` package)
-
----
-
-##### 6. N-BEATS - Interpretable Basis Expansion
-
-**Implementation:** `src/models/mlp/nbeats.py`
-
-**Architecture:**
-- Neural basis expansion for time series
-- Decomposes forecast into **trend + seasonality stacks**
-- Pure MLP (no convolutions or attention)
-- Backward/forward residual connections
-
-**Why Add:**
-- **Highly interpretable:** Separate trend/seasonal predictions
-- Often beats complex models with simpler architecture
-- Fast training/inference (pure MLP)
-- Proven strong baseline in M4 competition
-
-**Use Case:** Explainable forecasts, regime analysis (trend strength), baseline comparisons
-
-**Config:**
-```yaml
-model: nbeats
-num_stacks: 2  # Trend + seasonality
-num_blocks_per_stack: 3
-hidden_layer_units: 256
+**Example Registration:**
+```python
+@register_inference(
+    name="cqr",
+    category="conformal",
+    inputs=["q05", "q50", "q95", "y_true"],
+    outputs=["q05_conf", "q95_conf", "coverage"],
+    requires_holdout=True
+)
+class CQRConformal(BaseInference):
+    ...
 ```
 
-**Estimated Effort:** 1 day (straightforward MLP architecture)
-
 ---
 
-##### 7. N-HiTS - Hierarchical Interpolation
+#### D) Policy Registry (Optional RL Layer)
 
-**Implementation:** `src/models/mlp/nhits.py`
+**Purpose:** Adaptive decision-making consuming inference outputs
 
-**Architecture:**
-- Hierarchical N-BEATS with multi-rate inputs
-- Processes short/medium/long-term patterns in parallel
-- Interpolation-based forecasting
-- Faster than N-BEATS with similar accuracy
-
-**Why Add:**
-- Multi-scale temporal modeling (5min + 1hr + daily patterns)
-- 2x faster than N-BEATS
-- Better long-horizon forecasting
-
-**Use Case:** Multi-timeframe OHLCV analysis, hierarchical forecasting
-
-**Config:**
-```yaml
-model: nhits
-num_stacks: 3  # Short/medium/long-term
-pooling_sizes: [2, 4, 8]
-hidden_size: 256
+**Entry Schema (`PolicySpec`):**
+```python
+@dataclass
+class PolicySpec:
+    name: str                    # "sac", "ppo", "dqn", "contextual_bandit"
+    algorithm: str               # "sac", "td3", "ppo", "dqn"
+    inputs: List[str]            # ["p_up", "E_r", "q05", "q50", "q95", "uncertainty", "regime_score"]
+    outputs: List[str]           # ["position_size", "entry_threshold", "exit_threshold"]
+    action_space: str            # "continuous", "discrete"
 ```
 
-**Estimated Effort:** 1 day (extends N-BEATS)
-
----
-
-#### Foundation Models (2 models)
-
-##### 8. Chronos-Bolt - Amazon Foundation Model
-
-**Implementation:** `src/models/foundation/chronos.py`
-
-**Architecture:**
-- Pre-trained on 100+ public time-series datasets
-- Transformer encoder with quantization-based tokenization
-- Zero-shot forecasting (no training required)
-- **250x faster** than original Chronos (via distillation)
-
-**Why Add:**
-- **51%+ directional accuracy** out-of-the-box (no training)
-- Fast baseline for new contracts (no historical data needed)
-- Validates whether custom training beats pre-trained models
-- HuggingFace API integration (easy deployment)
-
-**Use Case:** Quick baselines, new contract launches, benchmark comparisons
-
-**Config:**
-```yaml
-model: chronos
-model_id: "amazon/chronos-bolt-small"  # 200M params
-prediction_length: 20
-context_length: 512
+**Example Registration:**
+```python
+@register_policy(
+    name="sac",
+    algorithm="sac",
+    inputs=["p_up", "E_r", "q05", "q50", "q95", "uncertainty"],
+    outputs=["position_size"],
+    action_space="continuous"
+)
+class SACPolicy(BasePolicy):
+    ...
 ```
 
-**Estimated Effort:** 3 days (API wrapper + OHLCV adapter)
-
 ---
 
-##### 9. TimesFM 2.5 - Google Foundation Model
+### Registry Implementation Files
 
-**Implementation:** `src/models/foundation/timesfm.py`
-
-**Architecture:**
-- 200M parameter decoder-only transformer
-- Pre-trained on Google's internal time-series datasets
-- Probabilistic forecasts (quantiles: 0.05, 0.5, 0.95)
-- BigQuery integration for feature engineering
-
-**Why Add:**
-- Quantile forecasts for risk-aware trading
-- Comparable accuracy to Chronos with probabilistic outputs
-- Google Cloud integration (production deployment)
-- Alternative foundation model for ensemble diversity
-
-**Use Case:** Probabilistic baselines, confidence intervals, position sizing
-
-**Config:**
-```yaml
-model: timesfm
-model_id: "google/timesfm-2.5-200m"
-horizon: 20
-quantiles: [0.05, 0.5, 0.95]
+```
+src/registry/
+├── model_registry.py       # ModelRegistry, @register_model decorator
+├── ensemble_registry.py    # EnsembleRegistry, @register_ensemble
+├── inference_registry.py   # InferenceRegistry, @register_inference
+├── policy_registry.py      # PolicyRegistry, @register_policy
+└── contracts.py            # ModelSpec, EnsembleSpec, InferenceSpec, PolicySpec
 ```
 
-**Estimated Effort:** 3 days (API wrapper + quantile output adapter)
+---
+
+## Part 3: Full Model Menu (28+ Models)
+
+### Current Models (Keep All 13)
+
+**Boosting (3):**
+1. XGBoost - Stable benchmark, SHAP importance
+2. LightGBM - Fastest training, leaf-wise growth
+3. CatBoost - Robust default, categorical handling
+
+**Neural (4):**
+4. LSTM - Long-term dependencies, classic RNN
+5. GRU - Faster RNN, good "cheap" baseline
+6. TCN - Causal dilations, parallelizable
+7. Transformer - Basic self-attention (non-causal, research only)
+
+**Classical (3):**
+8. Random Forest - Diversity baseline, bagging
+9. Logistic Regression - Fast baseline, meta-learner
+10. SVM - Nonlinear kernel (slow, niche use)
+
+**Ensemble (3):**
+11. Voting - Simple averaging
+12. Stacking - OOF-based meta-learning
+13. Blending - Holdout-based meta-learning
 
 ---
 
-### Final Model Suite: 16 Models Across 6 Families
+### Models to Add (15+ New)
 
-| Family | Models (7 Core + 9 New) | Count | Use Case |
-|--------|-------------------------|-------|----------|
-| **Boosting** | XGBoost, LightGBM | 2 | Fast tabular baselines |
-| **Neural (RNN/CNN)** | LSTM, TCN | 2 | Temporal dependencies |
-| **Classical** | Logistic Regression | 1 | Meta-learner, baselines |
-| **Transformers** | PatchTST, iTransformer, TimesNet, Autoformer | 4 | Long-term, multivariate, periodicities |
-| **State-Space/MLP** | S-Mamba, N-BEATS, N-HiTS | 3 | Efficiency, interpretability |
+#### 1. Tabular / Feature-Matrix (Add 1)
+
+**14. ExtraTrees**
+- **Why:** Diversity from Random Forest (extra randomization)
+- **Use case:** Ensemble diversity, less overfitting than RF
+- **Effort:** 4 hours (similar to RandomForest)
+
+---
+
+#### 2. CNN / Local-Pattern Sequence (Add 3)
+
+**15. InceptionTime**
+- **Why:** Multi-kernel ensemble bias, strong classification
+- **Architecture:** Inception modules (parallel 3x1, 5x1, 7x1 convs)
+- **Effort:** 3 days
+
+**16. 1D ResNet**
+- **Why:** Strong baseline backbone, residual learning
+- **Architecture:** Residual blocks with 1D convolutions
+- **Effort:** 2 days
+
+**17. WaveNet**
+- **Why:** Long receptive field, dilated causal convs
+- **Architecture:** Stacked dilated conv blocks (similar to TCN but more layers)
+- **Effort:** 2 days
+
+---
+
+#### 3. Transformer / Long-Context (Add 3)
+
+**18. PatchTST**
+- **Why:** SOTA long-term forecasting, 21% MSE reduction
+- **Architecture:** Patch-based attention (16-token patches)
+- **Causal:** Yes (production-safe)
+- **Effort:** 4 days
+
+**19. iTransformer**
+- **Why:** Inverted attention for multivariate (features as tokens)
+- **Architecture:** Attention over features instead of time
+- **Effort:** 3 days
+
+**20. TFT (Temporal Fusion Transformer)**
+- **Why:** Rich covariates + multi-horizon + interpretability
+- **Architecture:** Variable selection + gating + multi-head attention
+- **Effort:** 5 days
+
+**21. Informer**
+- **Why:** Efficient long-seq transformer (ProbSparse attention)
+- **Architecture:** Sparse attention for O(L log L) complexity
+- **Effort:** 4 days
+
+---
+
+#### 4. Probabilistic Sequence (Add 2)
+
+**22. DeepAR**
+- **Why:** Distribution forecasting, calibrated uncertainty
+- **Architecture:** Auto-regressive RNN with probabilistic outputs
+- **Outputs:** `q05`, `q50`, `q95` (quantiles)
+- **Effort:** 4 days
+
+**23. Quantile RNN**
+- **Why:** Direct q05/q50/q95 for risk bands
+- **Architecture:** LSTM/GRU with quantile loss
+- **Effort:** 2 days
+
+---
+
+#### 5. MLP / Linear Baselines (Add 4)
+
+**24. N-BEATS**
+- **Why:** Interpretable decomposition (trend + seasonal), M4 winner
+- **Architecture:** Stacked blocks with basis expansion
+- **Effort:** 1 day
+
+**25. N-HiTS**
+- **Why:** Hierarchical N-BEATS, 2x faster
+- **Architecture:** Multi-rate inputs (short/medium/long-term)
+- **Effort:** 1 day
+
+**26. TSMixer**
+- **Why:** MLP mixing over time/features, good diversity
+- **Architecture:** Time-mixing + feature-mixing MLPs
+- **Effort:** 2 days
+
+**27. DLinear**
+- **Why:** Ultra-fast sanity gate, trend/seasonality baseline
+- **Architecture:** Decomposition + two linear layers
+- **Effort:** 4 hours
+
+---
+
+#### 6. Foundation Models (Add 2)
+
+**28. Chronos-Bolt**
+- **Why:** 51%+ directional accuracy (zero-shot)
+- **Architecture:** Pre-trained transformer (Amazon, 200M params)
+- **Zero-shot:** Yes (no training required)
+- **Effort:** 3 days (API wrapper)
+
+**29. TimesFM 2.5**
+- **Why:** Probabilistic forecasts (quantiles), Google foundation model
+- **Architecture:** Decoder-only transformer (200M params)
+- **Outputs:** `q05`, `q50`, `q95`
+- **Effort:** 3 days (API wrapper)
+
+---
+
+### Final Model Suite: 29 Models Across 6 Families
+
+| Family | Models | Count | Use Case |
+|--------|--------|-------|----------|
+| **Boosting** | XGBoost, LightGBM, CatBoost | 3 | Fast tabular baselines |
+| **Neural (RNN)** | LSTM, GRU | 2 | Temporal dependencies, probabilistic |
+| **Neural (CNN)** | TCN, InceptionTime, 1D ResNet, WaveNet | 4 | Local patterns, causal convolutions |
+| **Classical** | Random Forest, ExtraTrees, Logistic, SVM | 4 | Diversity baselines, meta-learners |
+| **Transformers** | Transformer, PatchTST, iTransformer, TFT, Informer | 5 | Long-term, multivariate, interpretable |
+| **Probabilistic** | DeepAR, Quantile RNN | 2 | Distribution forecasting, quantiles |
+| **MLP/Linear** | N-BEATS, N-HiTS, TSMixer, DLinear | 4 | Fast baselines, decomposition |
 | **Foundation** | Chronos, TimesFM | 2 | Zero-shot baselines |
-| **Ensemble** | Voting, Stacking | 2 | Model combination |
+| **Ensemble** | Voting, Stacking, Blending | 3 | Model combination |
 
-**Total: 16 models** (down from 13 after pruning 6 + adding 9)
+**Total: 29 models** (13 current + 16 new)
 
 ---
 
-## Part 3: Critical Data Pipeline Bugs
+## Part 4: Contracts & Artifacts
+
+### Input View Contract
+
+Every model declares its input format:
+
+| View | Shape | Models |
+|------|-------|--------|
+| `feature_matrix` | `(n_samples, n_features)` | XGBoost, LightGBM, CatBoost, RF, ExtraTrees, Logistic, SVM |
+| `window_tensor` | `(n_samples, seq_len, n_features)` | LSTM, GRU, TCN, InceptionTime, ResNet, WaveNet, PatchTST, iTransformer, TFT, Informer, DeepAR, Quantile RNN, N-BEATS, N-HiTS, TSMixer, DLinear, Chronos, TimesFM |
+| `mtf_bundle` | Multi-timeframe aligned set | (future extension) |
+
+### Output Contract
+
+Every model maps to standardized outputs:
+
+| Output | Type | Description | Example Models |
+|--------|------|-------------|----------------|
+| `p_up` | `float [0,1]` | Probability of up move | All classification models |
+| `E[r]` | `float` | Expected return | Regression models |
+| `q05` | `float` | 5th percentile (quantile) | DeepAR, Quantile RNN, TimesFM |
+| `q50` | `float` | Median (50th percentile) | DeepAR, Quantile RNN, TimesFM |
+| `q95` | `float` | 95th percentile (quantile) | DeepAR, Quantile RNN, TimesFM |
+| `regime_score` | `float [0,1]` | Regime confidence | (future: regime-aware models) |
+
+### Artifact Contract
+
+Every trained model emits:
+
+```python
+{
+    "preproc": "path/to/scaler.pkl",         # Preprocessing pipeline
+    "schema": "path/to/feature_schema.json", # Feature names + types
+    "weights": "path/to/model.pth",          # Model weights
+    "metrics": "path/to/metrics.json",       # Train/val/test performance
+    "inference_signature": {                 # API contract
+        "inputs": ["feature_matrix"],
+        "outputs": ["p_up", "E_r"],
+        "version": "v1.2.3"
+    }
+}
+```
+
+For ensembles, add:
+```python
+{
+    "oof_preds": "path/to/oof_predictions.parquet",  # Out-of-fold base model predictions
+    "meta_model": "path/to/meta_learner.pkl",        # Ridge/Elastic Net/LightGBM meta
+    "calibrator": "path/to/calibrator.pkl",          # Temperature scaling/Isotonic
+    "gating_model": "path/to/gate.pkl"               # Optional: HMM/Softmax gate
+}
+```
+
+---
+
+## Part 5: Critical Data Pipeline Bugs
+
+*(Same as before - 3 bugs to fix)*
 
 ### 🔴 Bug 1: HMM Lookahead Bias
 
 **File:** `src/phase1/stages/regime/hmm.py:329-354`
 
-**Problem:**
-```python
-# Line 329
-expanding = kwargs.get("expanding", True)  # DEFAULT IS TRUE - LEAKS FUTURE!
-```
-
-HMM trains on the **entire dataset including future data** when `expanding=True`. This creates regime features that "know the future" and leak into labels.
-
-**Impact:**
-- Regime features have artificially high predictive power in backtests
-- Models overfit to future regime transitions
-- Production performance will be significantly worse
+**Problem:** HMM trains on entire dataset including future data when `expanding=True`.
 
 **Fix:**
 ```python
-# Change default to False
-expanding = kwargs.get("expanding", False)
-
-# Add warning
-if expanding:
-    logger.warning(
-        "HMM expanding mode trains on future data. "
-        "Use only for research, NOT production."
-    )
+expanding = kwargs.get("expanding", False)  # Change default to False
 ```
 
-**Alternative:** Implement incremental HMM (fit on past data only at each time step)
-
 **Estimated Effort:** 2 days
-**Priority:** **CRITICAL**
 
 ---
 
@@ -651,35 +532,16 @@ if expanding:
 
 **File:** `src/phase1/stages/ga_optimize/optuna_optimizer.py`
 
-**Problem:**
-Optuna optimization runs on the **full dataset before train/val/test splits**. The barrier parameters (upper/lower thresholds) are optimized using future test data.
-
-**Current Flow:**
-```
-OHLCV → GA optimization (uses ALL data) → Splits (train/val/test)
-         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-         LEAKAGE: Test data influences parameter selection
-```
-
-**Impact:**
-- Barrier parameters are overfitted to the test set
-- Sharpe ratios are artificially inflated
-- Model performance won't generalize to unseen data
+**Problem:** Optuna optimization uses full dataset before train/val/test splits.
 
 **Fix:**
 ```python
-# Restrict optimization to train portion only
 train_end_idx = int(0.7 * len(df))
 train_df = df.iloc[:train_end_idx]
-
-# Run Optuna on train_df only
-study.optimize(objective, train_df)
+study.optimize(objective, train_df)  # Only train portion
 ```
 
-**Alternative:** Move GA optimization AFTER splits stage
-
 **Estimated Effort:** 2 days
-**Priority:** **CRITICAL**
 
 ---
 
@@ -687,99 +549,24 @@ study.optimize(objective, train_df)
 
 **File:** `src/phase1/stages/labeling/triple_barrier.py`
 
-**Problem:**
-Triple-barrier labels assume **zero transaction costs**. The upper/lower barriers are:
-
-```python
-upper_barrier = entry_price + k_up * atr
-lower_barrier = entry_price - k_down * atr
-```
-
-But in reality, round-trip costs (entry + exit slippage/fees) reduce net profit.
-
-**Impact:**
-- Labels are too optimistic (assume frictionless trading)
-- Models learn to take trades that are unprofitable after costs
-- Live trading will underperform backtests by 20-50%
+**Problem:** Triple-barrier labels assume zero transaction costs.
 
 **Fix:**
 ```python
-# Adjust barriers by transaction costs
 cost_in_atr = (cost_ticks * tick_value) / atr
-
 upper_barrier = entry_price + (k_up - cost_in_atr) * atr
 lower_barrier = entry_price - (k_down + cost_in_atr) * atr
 ```
 
-**Example for MES (E-mini S&P 500):**
-- Round-trip cost: 1.5 ticks = $7.50
-- Typical ATR: $50
-- `cost_in_atr = 7.50 / 50 = 0.15`
-- If `k_up = 1.5`, effective target becomes `1.5 - 0.15 = 1.35`
-
 **Estimated Effort:** 2 days
-**Priority:** **CRITICAL**
 
 ---
 
-## Part 4: Missing SOTA Architectures
-
-*(See Part 2 for detailed model descriptions)*
-
-**Summary of additions:**
-- 4 advanced transformers (PatchTST, iTransformer, TimesNet, Autoformer)
-- 3 state-space/MLP models (S-Mamba, N-BEATS, N-HiTS)
-- 2 foundation models (Chronos, TimesFM)
-
-**Total effort:** 3-4 weeks (parallelizable across multiple engineers)
-
----
-
-## Part 5: Implementation Roadmap
-
-### Phase 0: Model Pruning (Week 1, parallel with Phase 1)
-
-**Goal:** Remove 6 unsuitable models, clean registry.
-
-**Tasks:**
-1. Delete CatBoost (1 hour)
-2. Delete GRU (1 hour)
-3. Delete Transformer + add deprecation notice (2 hours)
-4. Delete Random Forest (1 hour)
-5. Delete SVM (1 hour)
-6. Delete Blending (1 hour)
-7. Update tests and docs (4 hours)
-8. Verify registry has exactly 7 models (1 hour)
-
-**Files to Delete:**
-```
-src/models/boosting/catboost_model.py
-src/models/neural/gru_model.py
-src/models/neural/transformer_model.py
-src/models/classical/random_forest.py
-src/models/classical/svm.py
-src/models/ensemble/blending.py
-tests/models/test_catboost.py
-tests/models/test_gru.py
-tests/models/test_transformer.py
-tests/models/test_random_forest.py
-tests/models/test_svm.py
-tests/models/test_blending.py
-```
-
-**Success Criteria:**
-- ✅ `len(ModelRegistry.list_all()) == 7`
-- ✅ All tests pass (no references to deleted models)
-- ✅ Documentation updated
-
-**Estimated Effort:** 1 day
-**Priority:** HIGH (cleans codebase before additions)
-
----
+## Part 6: Implementation Roadmap
 
 ### Phase 1: Fix Data Pipeline Bugs (Week 1-2)
 
-**Goal:** Make system production-safe and reliable.
+**Goal:** Zero-leakage pipeline
 
 **Tasks:**
 1. Fix HMM lookahead bias (2 days)
@@ -788,170 +575,172 @@ tests/models/test_blending.py
 4. Regression test suite (2 days)
 
 **Success Criteria:**
-- ✅ HMM uses only past data (`expanding=False` default)
-- ✅ GA optimization confined to train set (70%)
-- ✅ Labels include transaction costs
+- ✅ All 3 bugs fixed
 - ✅ All 2,060 tests pass
-
-**Files to Modify:**
-- `src/phase1/stages/regime/hmm.py` (line 329)
-- `src/phase1/stages/ga_optimize/optuna_optimizer.py` (full refactor)
-- `src/phase1/stages/labeling/triple_barrier.py` (barrier calculation)
 
 **Estimated Effort:** 1-2 weeks
 **Priority:** **CRITICAL**
 
 ---
 
-### Phase 2: Model Expansion (Week 3-8)
+### Phase 2: Build Dynamic Registry System (Week 3-4)
 
-**Goal:** Add 9 SOTA models.
+**Goal:** Config-driven model selection
 
-#### Week 3-4: Foundation Models + Simple Baselines
-1. Chronos-Bolt wrapper (3 days)
-2. TimesFM 2.5 wrapper (3 days)
-3. N-BEATS implementation (1 day)
-4. N-HiTS implementation (1 day)
-
-**Output:** 4 new models (total: 11)
-
-#### Week 5-6: Advanced Transformers (Part 1)
-5. PatchTST implementation (4 days)
-6. iTransformer implementation (3 days)
-7. TimesNet implementation (4 days)
-
-**Output:** 3 new models (total: 14)
-
-#### Week 7-8: Advanced Transformers (Part 2) + State-Space
-8. Autoformer implementation (4 days)
-9. S-Mamba implementation (5 days)
-
-**Output:** 2 new models (total: 16)
-
-**Success Criteria:**
-- ✅ 9 new models registered
-- ✅ `len(ModelRegistry.list_all()) == 16`
-- ✅ All trainable via `train_model.py --model <name>`
-- ✅ Performance benchmarks documented
+**Tasks:**
+1. Implement ModelRegistry + ModelSpec (3 days)
+2. Implement EnsembleRegistry + EnsembleSpec (2 days)
+3. Implement InferenceRegistry + InferenceSpec (2 days)
+4. Implement PolicyRegistry + PolicySpec (2 days)
+5. Update all 13 existing models to use @register_model (1 day)
+6. Add YAML config loading (1 day)
 
 **New Files:**
 ```
-src/models/foundation/chronos.py
-src/models/foundation/timesfm.py
-src/models/mlp/nbeats.py
-src/models/mlp/nhits.py
-src/models/transformer/patchtst.py
-src/models/transformer/itransformer.py
-src/models/transformer/timesnet.py
-src/models/transformer/autoformer.py
-src/models/ssm/mamba.py
+src/registry/
+├── model_registry.py
+├── ensemble_registry.py
+├── inference_registry.py
+├── policy_registry.py
+└── contracts.py
 ```
 
-**Estimated Effort:** 6 weeks (can parallelize: 3 weeks with 2 engineers)
+**Success Criteria:**
+- ✅ All 13 models registered
+- ✅ Config-driven training: `python scripts/train_model.py --config config.yaml`
+- ✅ Registry tests pass
+
+**Estimated Effort:** 2 weeks
 
 ---
 
-### Phase 3: Meta-Learning Enhancement (Week 9-11)
+### Phase 3: Add 16 New Models (Week 5-10)
 
-**Goal:** Regime-aware stacking and confidence calibration.
+**Goal:** 29 total models across 6 families
 
-**Tasks:**
-13. Regime-aware meta-learner (5 days)
-14. Confidence calibration integration (3 days)
-15. OOF stacking with regime features (4 days)
-16. Ensemble performance analysis (2 days)
+#### Week 5-6: Foundation + MLP Baselines (Quick Wins)
+1. Chronos-Bolt (3 days)
+2. TimesFM (3 days)
+3. N-BEATS (1 day)
+4. N-HiTS (1 day)
+5. DLinear (4 hours)
+6. TSMixer (2 days)
+
+**Output:** 6 new models (total: 19)
+
+#### Week 7-8: Advanced Transformers
+7. PatchTST (4 days)
+8. iTransformer (3 days)
+9. TFT (5 days)
+10. Informer (4 days)
+
+**Output:** 4 new models (total: 23)
+
+#### Week 9-10: CNN + Probabilistic
+11. InceptionTime (3 days)
+12. 1D ResNet (2 days)
+13. WaveNet (2 days)
+14. DeepAR (4 days)
+15. Quantile RNN (2 days)
+16. ExtraTrees (4 hours)
+
+**Output:** 6 new models (total: 29)
 
 **Success Criteria:**
-- ✅ Meta-learner learns regime-conditional weights
-- ✅ Calibrated probabilities match true frequencies
-- ✅ Ensemble Sharpe > best single model
+- ✅ 16 new models registered
+- ✅ All trainable via config
+- ✅ Benchmarks documented
 
-**Files to Modify:**
-- `src/models/ensemble/stacking.py` (extend meta-learner)
-- `src/cross_validation/oof_stacking.py` (add regime features)
-- Create `src/models/ensemble/regime_meta_learner.py`
-
-**Estimated Effort:** 2-3 weeks
+**Estimated Effort:** 6 weeks (3 weeks with 2 engineers)
 
 ---
 
-### Phase 4: Production Infrastructure (Week 12-14)
+### Phase 4: Add Inference Layer (Week 11-12)
 
-**Goal:** Automated train→bundle→deploy pipeline.
+**Goal:** Calibration + conformal prediction + gating
 
-**Tasks:**
-17. Auto-bundle generation (3 days)
-18. Test set evaluation script (2 days)
-19. Drift detection daemon (4 days)
-20. CI/CD pipeline (3 days)
+#### Calibration Methods (4)
+1. Temperature Scaling (1 day)
+2. Isotonic Regression (1 day)
+3. Platt Scaling (1 day)
+4. Beta Calibration (1 day)
+
+#### Conformal Prediction Methods (3)
+5. CQR (Conformalized Quantile Regression) (2 days)
+6. Split Conformal Prediction (2 days)
+7. CV+/Jackknife+ Conformal (2 days)
+
+#### Gating Methods (4)
+8. Softmax Gating Network (2 days)
+9. HMM Regime Gating (3 days)
+10. Markov Switching (3 days)
+11. Contextual Bandit (2 days)
+
+#### Meta-Learners (3 new, beyond Ridge/Logistic)
+12. Elastic Net meta-learner (1 day)
+13. LightGBM meta-learner (1 day)
+14. CatBoost meta-learner (1 day)
+15. Small MLP meta-learner (2 days)
 
 **Success Criteria:**
-- ✅ `train_model.py --create-bundle` works end-to-end
-- ✅ Test set evaluation is one command
-- ✅ Drift detection running in production
-- ✅ CI/CD pipeline green
+- ✅ 15 inference components registered
+- ✅ Config-driven: `inference: {calibrate: [temperature_scaling], uncertainty: cqr, gating: hmm_regime}`
 
-**Files to Create:**
-- `scripts/evaluate_test.py` (new)
-- `src/monitoring/drift_daemon.py` (new)
-- `.github/workflows/model_pipeline.yml` (new)
-
-**Estimated Effort:** 2-3 weeks
+**Estimated Effort:** 2 weeks
 
 ---
 
-## Part 6: Quick Wins
+### Phase 5: Add Optional RL Policy Layer (Week 13-14)
+
+**Goal:** Adaptive decision-making
+
+**RL Algorithms (4):**
+1. SAC (Soft Actor-Critic) (4 days)
+2. TD3 (Twin Delayed DDPG) (3 days)
+3. PPO (Proximal Policy Optimization) (4 days)
+4. DQN (Deep Q-Network) (3 days)
+5. Contextual Bandits (2 days)
+
+**Integration:**
+- Consume inference outputs: `p_up`, `E[r]`, `q05/q50/q95`, `uncertainty`, `regime_score`
+- Output: `position_size`, `entry_threshold`, `exit_threshold`
+- Config-driven: `policy: {enabled: true, algorithm: sac}`
+
+**Success Criteria:**
+- ✅ 5 RL policies registered
+- ✅ Optional via config (default: `enabled: false`)
+
+**Estimated Effort:** 2 weeks
+
+---
+
+### Phase 6: Production Infrastructure (Week 15-16)
+
+**Goal:** Automated train→bundle→deploy
+
+**Tasks:**
+1. Auto-bundle generation (3 days)
+2. Test set evaluation script (2 days)
+3. Drift detection daemon (4 days)
+4. CI/CD pipeline (3 days)
+
+**Success Criteria:**
+- ✅ One-command: `python scripts/train_model.py --config config.yaml --create-bundle`
+- ✅ Drift monitoring running
+
+**Estimated Effort:** 2 weeks
+
+---
+
+## Part 7: Quick Wins
 
 **High-impact changes with minimal effort:**
 
-1. **Prune CatBoost (1 hour)** - Immediate codebase simplification
-2. **Fix HMM expanding mode (1 hour)** - Immediate leakage fix
-3. **Add N-BEATS (1 day)** - Fast, interpretable baseline
-4. **Add DLinear (4 hours)** - Simplest SOTA model
-5. **Document current performance (4 hours)** - Baseline for comparisons
-
----
-
-## Part 7: Execution Order
-
-**Prioritized task list with dependencies:**
-
-### Week 1: Critical Path + Pruning
-1. ✅ Prune 6 unsuitable models (1 day)
-2. ✅ Fix HMM lookahead bias (2 days)
-3. ✅ Fix GA test data leakage (2 days)
-4. ✅ Fix transaction costs in labels (2 days)
-
-### Week 2: Validation
-5. ✅ Regression test suite (2 days)
-6. ✅ Document current performance (4 hours)
-7. ✅ Verify 7 core models pass all tests (1 day)
-
-### Week 3-4: Foundation Models (Fast ROI)
-8. ✅ Chronos-Bolt wrapper (3 days)
-9. ✅ TimesFM 2.5 wrapper (3 days)
-10. ✅ N-BEATS implementation (1 day)
-11. ✅ N-HiTS implementation (1 day)
-
-### Week 5-6: Advanced Transformers (Part 1)
-12. ✅ PatchTST implementation (4 days)
-13. ✅ iTransformer implementation (3 days)
-14. ✅ TimesNet implementation (4 days)
-
-### Week 7-8: Advanced Transformers (Part 2) + State-Space
-15. ✅ Autoformer implementation (4 days)
-16. ✅ S-Mamba implementation (5 days)
-
-### Week 9-11: Meta-Learning
-17. ✅ Regime-aware meta-learner (5 days)
-18. ✅ Confidence calibration integration (3 days)
-19. ✅ OOF stacking with regime features (4 days)
-
-### Week 12-14: Production Infrastructure
-20. ✅ Auto-bundle generation (3 days)
-21. ✅ Test set evaluation script (2 days)
-22. ✅ Drift detection daemon (4 days)
-23. ✅ CI/CD pipeline (3 days)
+1. **Fix HMM expanding mode (1 hour)** - Immediate leakage fix
+2. **Add DLinear (4 hours)** - Fastest SOTA baseline
+3. **Add N-BEATS (1 day)** - Interpretable decomposition
+4. **Add Temperature Scaling (1 day)** - Calibrated probabilities
+5. **Implement ModelRegistry (3 days)** - Unlocks config-driven selection
 
 ---
 
@@ -959,105 +748,160 @@ src/models/ssm/mamba.py
 
 ### High-Risk Items
 
-1. **S-Mamba dependency** - Requires `mamba-ssm` package (may conflict with PyTorch versions)
-   - **Mitigation:** Test in isolated conda environment first
+1. **Registry complexity** - 4 registries may introduce coupling
+   - **Mitigation:** Strict interfaces, unit tests for each registry
 
-2. **Foundation model API changes** - Chronos/TimesFM APIs may change
-   - **Mitigation:** Pin exact model versions, implement adapter layer
+2. **Config explosion** - Too many options may confuse users
+   - **Mitigation:** Provide preset configs (e.g., `config/presets/fast_baseline.yaml`)
 
-3. **HMM incremental training complexity** - Incremental fitting is non-trivial
-   - **Mitigation:** Start with `expanding=False`, defer incremental implementation
+3. **Heterogeneous ensemble bugs** - Mixing tabular + sequence models
+   - **Mitigation:** Compatibility validation in EnsembleRegistry
 
-4. **Test coverage regression** - Deleting 6 models may leave dead test code
-   - **Mitigation:** Run full test suite after pruning, verify 100% coverage on core 7
-
-### Medium-Risk Items
-
-5. **PatchTST causal masking** - Ensuring true production safety
-   - **Mitigation:** Unit tests for non-leakage, verify `is_production_safe=True`
-
-6. **Regime meta-learner overfitting** - Learning regime-specific weights on limited data
-   - **Mitigation:** Use regularization, validate on walk-forward splits
+4. **RL instability** - RL policies may diverge during training
+   - **Mitigation:** Make RL optional (default: `enabled: false`), provide stable baselines
 
 ---
 
 ## Part 9: Testing Strategy
 
-### Phase 0: Pruning Tests
-- [ ] Verify deleted models don't break registry
-- [ ] Ensure no dead imports in remaining code
-- [ ] Confirm 7 core models pass all existing tests
-
 ### Phase 1: Bug Fix Tests
-- [ ] HMM: Unit test that `expanding=False` uses only past data
-- [ ] GA: Integration test that optimization sees only train portion
-- [ ] Transaction costs: Validate barrier adjustment math
+- [ ] HMM: `expanding=False` uses only past data
+- [ ] GA: Optimization confined to train set
+- [ ] Transaction costs: Barrier adjustment math validated
 
-### Phase 2: New Model Tests
+### Phase 2: Registry Tests
+- [ ] ModelRegistry: Create models from config
+- [ ] EnsembleRegistry: Validate compatibility checks
+- [ ] InferenceRegistry: Calibration correctness
+- [ ] PolicyRegistry: RL policy creation
+
+### Phase 3: New Model Tests
 - [ ] Each new model: `test_fit()`, `test_predict()`, `test_save_load()`
-- [ ] PatchTST: Test causal masking prevents future leakage
-- [ ] Foundation models: Test zero-shot prediction without training
-- [ ] Regression: Compare new models vs baselines on same data
+- [ ] PatchTST: Causal masking verified
+- [ ] Foundation models: Zero-shot prediction (no training)
 
-### Phase 3: Meta-Learning Tests
-- [ ] Regime meta-learner: Validate regime features used in stacking
-- [ ] OOF generation: Ensure no leakage in fold construction
-- [ ] Ensemble performance: Compare regime-aware vs simple stacking
+### Phase 4: Inference Tests
+- [ ] Calibration: Reliability diagrams match
+- [ ] Conformal: Coverage matches target (e.g., 90%)
+- [ ] Gating: Regime weights sum to 1.0
 
-### Phase 4: Production Tests
-- [ ] Bundle creation: End-to-end test of `--create-bundle` flag
-- [ ] Drift detection: Simulate distribution shift, verify alerts
-- [ ] CI/CD: Verify automated testing triggers on PR
+### Phase 5: RL Tests
+- [ ] SAC/TD3/PPO: Policy converges on simple envs
+- [ ] Integration: RL consumes inference outputs correctly
 
 ---
 
 ## Success Metrics
 
-**Completion Criteria:**
-
 | Phase | Metric | Target |
 |-------|--------|--------|
-| Phase 0 | Model count after pruning | Exactly 7 models |
-| Phase 1 | Zero leakage bugs | All 3 bugs fixed + regression tests pass |
-| Phase 2 | Model count after additions | 16 models registered |
-| Phase 3 | Ensemble Sharpe | Regime-aware stacking > simple average by 10%+ |
-| Phase 4 | Deployment time | Train→bundle→deploy in one command (<5 min) |
+| Phase 1 | Zero leakage bugs | All 3 bugs fixed |
+| Phase 2 | Registry coverage | All 13 models registered |
+| Phase 3 | Model count | 29 models |
+| Phase 4 | Inference components | 15 calibration/conformal/gating methods |
+| Phase 5 | RL policies | 5 algorithms (optional) |
+| Phase 6 | Deployment time | <5 min train→bundle→deploy |
 
 **Final System Capabilities:**
 
-- ✅ 16 production-safe models (no leakage, no redundancy)
-- ✅ Fair evaluation under identical leakage-safe conditions
-- ✅ Regime-aware ensemble meta-learning
-- ✅ One-command train→bundle→deploy workflow
-- ✅ Automated drift detection and CI/CD
-- ✅ Probabilistic forecasts for risk management
+- ✅ 29+ models across 6 families
+- ✅ Config-driven selection (no code changes)
+- ✅ 15+ inference components (calibration, conformal, gating)
+- ✅ Optional RL policy layer (5 algorithms)
+- ✅ One-command deploy
+- ✅ Automated drift detection
 
 ---
 
-## Next Steps
+## Appendix A: Example Configs
 
-1. **Review this plan** with stakeholders
-2. **Start with Phase 0** (prune 6 models) - immediate cleanup
-3. **Execute Phase 1** (critical bugs) - cannot skip
-4. **Parallelize Phase 2** (model additions) if 2+ engineers available
-5. **Iterate** based on model performance benchmarks
+### Config 1: Fast Baseline (Boosting Only)
 
-**Track progress:** GitHub Issues/Projects, update this plan weekly.
+```yaml
+base_models:
+  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
+
+ensemble:
+  enabled: false
+
+inference:
+  calibrate: [temperature_scaling]
+
+policy:
+  enabled: false
+```
+
+### Config 2: Heterogeneous Ensemble (Tabular + Sequence + Foundation)
+
+```yaml
+base_models:
+  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
+  - {name: tcn, view: window_tensor, outputs: [E_r]}
+  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
+  - {name: chronos, view: window_tensor, outputs: [p_up], zero_shot: true}
+
+ensemble:
+  method: stacking
+  meta_learner: ridge
+  oof: true
+  gating:
+    enabled: true
+    method: hmm_regime
+
+inference:
+  calibrate: [temperature_scaling, isotonic]
+  uncertainty:
+    method: cqr
+    coverage: 0.90
+
+policy:
+  enabled: false
+```
+
+### Config 3: Full Stack (Ensemble + Calibration + RL)
+
+```yaml
+base_models:
+  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
+  - {name: catboost, view: feature_matrix, outputs: [p_up]}
+  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
+  - {name: deepar, view: window_tensor, outputs: [q05, q50, q95]}
+
+ensemble:
+  method: stacking
+  meta_learner: lightgbm_meta
+  oof: true
+  gating:
+    enabled: true
+    method: markov_switching
+
+inference:
+  calibrate: [beta_calibration]
+  uncertainty:
+    method: jackknife_plus
+    coverage: 0.95
+
+policy:
+  enabled: true
+  algorithm: sac
+  inputs: [p_up, E_r, q05, q50, q95, uncertainty, regime_score]
+  outputs: [position_size, entry_threshold, exit_threshold]
+```
 
 ---
 
-## Appendix: Model Implementation Checklist
+## Appendix B: Model Implementation Checklist
 
-For each new model, complete:
+For each new model:
 
 - [ ] Implement `BaseModel` interface (`fit`, `predict`, `save`, `load`)
-- [ ] Register with `@register(name=..., family=...)`
+- [ ] Register with `@register_model(name=..., family=..., input_view=..., outputs=...)`
 - [ ] Add config file: `config/models/<model_name>.yaml`
 - [ ] Write tests: `tests/models/test_<model_name>.py`
-- [ ] Add to model registry count assertion
-- [ ] Document in `CLAUDE.md` model list
-- [ ] Run performance benchmark vs baselines
-- [ ] Verify production safety (`is_production_safe` property)
-- [ ] Add example usage to `docs/phases/`
+- [ ] Verify `is_causal` property (production safety)
+- [ ] Add to model count assertion
+- [ ] Document in `CLAUDE.md`
+- [ ] Run benchmark vs baselines
+- [ ] Add example usage to `docs/`
 
-**Target:** 9 models × 9 checklist items = 81 tasks for Phase 2
+**Target:** 16 new models × 9 checklist items = 144 tasks
