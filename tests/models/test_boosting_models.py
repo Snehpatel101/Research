@@ -28,11 +28,11 @@ except ImportError:
     LIGHTGBM_AVAILABLE = False
     LightGBMModel = None
 
-try:
+# CatBoost uses conditional registration - import the availability flag
+from src.models.boosting.catboost_model import CATBOOST_AVAILABLE
+if CATBOOST_AVAILABLE:
     from src.models.boosting import CatBoostModel
-    CATBOOST_AVAILABLE = True
-except ImportError:
-    CATBOOST_AVAILABLE = False
+else:
     CatBoostModel = None
 
 

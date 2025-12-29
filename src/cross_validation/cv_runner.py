@@ -246,6 +246,22 @@ class CrossValidationRunner:
     Runs CV for all specified models and horizons, optionally including
     feature selection and hyperparameter tuning.
 
+    IMPORTANT: Feature selection is performed INSIDE each CV fold to prevent
+    data leakage. Features are selected using only training data from each fold,
+    ensuring validation data never influences feature selection.
+
+    Hyperparameter Tuning Trade-offs:
+        By default, hyperparameters are tuned on the FULL feature set before
+        per-fold feature selection. This is an efficiency trade-off:
+
+        - tune_per_fold=False (default): Faster, HPs tuned once on all features.
+          Each fold then uses its own selected feature subset with shared HPs.
+          This may be suboptimal if feature selection varies significantly.
+
+        - tune_per_fold=True: More accurate but slower. HPs are tuned inside
+          each fold AFTER feature selection, ensuring HPs match the actual
+          feature subset used. Use when fold-level feature variation is high.
+
     Example:
         >>> cv_config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=1440)
         >>> cv = PurgedKFold(cv_config)
@@ -262,6 +278,8 @@ class CrossValidationRunner:
         select_features: bool = True,
         n_features_to_select: int = 50,
         tuning_trials: int = 50,
+        feature_selection_inside_fold: bool = True,
+        tune_per_fold: bool = False,
     ) -> None:
         """
         Initialize CrossValidationRunner.
@@ -274,6 +292,13 @@ class CrossValidationRunner:
             select_features: Whether to run walk-forward feature selection
             n_features_to_select: Number of features to select
             tuning_trials: Number of Optuna trials per model
+            feature_selection_inside_fold: If True (default), feature selection is
+                performed inside each fold using only training data, preventing leakage.
+                If False, uses legacy behavior (NOT RECOMMENDED - causes leakage).
+            tune_per_fold: If True, hyperparameters are tuned inside each fold
+                AFTER feature selection. More accurate but significantly slower
+                (n_folds * n_trials evaluations). Default False tunes once on
+                full feature set for efficiency.
         """
         self.cv = cv
         self.models = models
@@ -282,6 +307,35 @@ class CrossValidationRunner:
         self.select_features = select_features
         self.n_features_to_select = n_features_to_select
         self.tuning_trials = tuning_trials
+        self.feature_selection_inside_fold = feature_selection_inside_fold
+        self.tune_per_fold = tune_per_fold
+        self._label_end_times_warning_shown = False
+
+    def _validate_label_end_times(
+        self,
+        label_end_times: Optional[pd.Series],
+        model_family: str,
+    ) -> None:
+        """
+        Warn if label_end_times not provided for trading models.
+
+        For triple-barrier or other overlapping label schemes, label_end_times
+        is critical for proper purging. Without it, the CV splitter cannot
+        properly purge samples whose labels overlap with validation data,
+        potentially causing label leakage.
+
+        Args:
+            label_end_times: Optional Series of datetime when each label is resolved
+            model_family: Model family (boosting, neural, etc.)
+        """
+        if label_end_times is None and not self._label_end_times_warning_shown:
+            logger.warning(
+                "label_end_times not provided. This may cause label leakage "
+                "for models with overlapping labels (e.g., triple-barrier labeling). "
+                "Consider providing label_end_times to TimeSeriesDataContainer for proper purging. "
+                "Set label_end_times=None explicitly to suppress this warning if labels are non-overlapping."
+            )
+            self._label_end_times_warning_shown = True
 
     def run(
         self,
@@ -325,6 +379,7 @@ class CrossValidationRunner:
 
         # Get data for this horizon
         X, y, weights = container.get_sklearn_arrays("train", return_df=True)
+        all_feature_names = list(X.columns)
 
         # Get model family for CV adaptation
         try:
@@ -333,25 +388,35 @@ class CrossValidationRunner:
         except ValueError:
             model_family = "boosting"
 
+        # Validate label_end_times is provided for proper purging
+        label_end_times = None
+        if hasattr(container, "get_label_end_times"):
+            label_end_times = container.get_label_end_times("train")
+        self._validate_label_end_times(label_end_times, model_family)
+
         # Adapt CV for model family
         model_cv = ModelAwareCV(model_family, self.cv)
         cv_splits = list(model_cv.get_cv_splits(X, y))
 
-        # Feature selection (if enabled)
-        selected_features = list(X.columns)
-        if self.select_features:
-            selector = WalkForwardFeatureSelector(
-                n_features_to_select=self.n_features_to_select
-            )
-            selection_result = selector.select_features_walkforward(X, y, cv_splits)
-            selected_features = selection_result.stable_features
-            if selected_features:
-                X = X[selected_features]
-            logger.debug(f"  Selected {len(selected_features)} stable features")
-
-        # Hyperparameter tuning (if enabled)
+        # ==================================================================
+        # HYPERPARAMETER TUNING (if enabled)
+        # ==================================================================
+        # By default (tune_per_fold=False), tuning is done on the FULL feature
+        # set before per-fold feature selection. This is an efficiency trade-off:
+        #
+        # Trade-off: The tuned HPs may not be optimal for the per-fold feature
+        # subsets if feature selection varies significantly between folds.
+        # However, this approach is much faster (tuning once vs. n_folds times).
+        #
+        # For more accuracy at the cost of speed, set tune_per_fold=True to
+        # tune HPs inside each fold after feature selection.
+        # ==================================================================
         tuned_params: Dict[str, Any] = {}
-        if self.tune_hyperparams:
+        if self.tune_hyperparams and not self.tune_per_fold:
+            logger.debug(
+                "Tuning hyperparameters on full feature set (tune_per_fold=False). "
+                "Set tune_per_fold=True for per-fold HP tuning after feature selection."
+            )
             tuner = TimeSeriesOptunaTuner(
                 model_name=model_name,
                 cv=self.cv,
@@ -368,30 +433,69 @@ class CrossValidationRunner:
             default_config = {}
         config = {**default_config, **tuned_params}
 
-        # Generate OOF predictions
-        oof_generator = OOFGenerator(self.cv)
-        oof_predictions = oof_generator.generate_oof_predictions(
-            X=X,
-            y=y,
-            model_configs={model_name: config},
-            sample_weights=weights,
-        )
+        # ==================================================================
+        # LEAKAGE-FREE FEATURE SELECTION AND OOF GENERATION
+        # ==================================================================
+        # Feature selection is now performed INSIDE each fold to prevent
+        # validation data from influencing feature selection.
+        # ==================================================================
 
-        oof_pred = oof_predictions[model_name]
+        if self.select_features and self.feature_selection_inside_fold:
+            # Per-fold feature selection (LEAKAGE-FREE)
+            oof_result = self._run_cv_with_per_fold_feature_selection(
+                X=X,
+                y=y,
+                weights=weights,
+                cv_splits=cv_splits,
+                model_name=model_name,
+                config=config,
+                tune_per_fold=self.tune_per_fold and self.tune_hyperparams,
+            )
+            oof_pred = oof_result["oof_prediction"]
+            selected_features = oof_result["selected_features"]
+            fold_metrics = oof_result["fold_metrics"]
+        else:
+            # Legacy behavior or no feature selection
+            selected_features = all_feature_names
 
-        # Extract fold metrics from OOF generation
-        fold_metrics = []
-        for fi in oof_pred.fold_info:
-            fold_metrics.append(FoldMetrics(
-                fold=fi["fold"],
-                train_size=fi["train_size"],
-                val_size=fi["val_size"],
-                accuracy=fi.get("val_accuracy", 0.0),
-                f1=fi.get("val_f1", 0.0),
-                precision=0.0,  # Not tracked in basic OOF
-                recall=0.0,
-                training_time=0.0,
-            ))
+            if self.select_features and not self.feature_selection_inside_fold:
+                # Legacy behavior with warning (NOT RECOMMENDED)
+                logger.warning(
+                    "Feature selection with feature_selection_inside_fold=False "
+                    "causes data leakage. Use feature_selection_inside_fold=True."
+                )
+                selector = WalkForwardFeatureSelector(
+                    n_features_to_select=self.n_features_to_select
+                )
+                selection_result = selector.select_features_walkforward(X, y, cv_splits)
+                selected_features = selection_result.stable_features
+                if selected_features:
+                    X = X[selected_features]
+
+            # Generate OOF predictions
+            oof_generator = OOFGenerator(self.cv)
+            oof_predictions = oof_generator.generate_oof_predictions(
+                X=X,
+                y=y,
+                model_configs={model_name: config},
+                sample_weights=weights,
+            )
+
+            oof_pred = oof_predictions[model_name]
+
+            # Extract fold metrics from OOF generation
+            fold_metrics = []
+            for fi in oof_pred.fold_info:
+                fold_metrics.append(FoldMetrics(
+                    fold=fi["fold"],
+                    train_size=fi["train_size"],
+                    val_size=fi["val_size"],
+                    accuracy=fi.get("val_accuracy", 0.0),
+                    f1=fi.get("val_f1", 0.0),
+                    precision=0.0,  # Not tracked in basic OOF
+                    recall=0.0,
+                    training_time=0.0,
+                ))
 
         total_time = time.time() - start_time
 
@@ -404,6 +508,255 @@ class CrossValidationRunner:
             selected_features=selected_features,
             total_time=total_time,
         )
+
+    def _run_cv_with_per_fold_feature_selection(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        weights: Optional[pd.Series],
+        cv_splits: List[Tuple[np.ndarray, np.ndarray]],
+        model_name: str,
+        config: Dict[str, Any],
+        tune_per_fold: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Run CV with per-fold feature selection to prevent leakage.
+
+        For each fold:
+        1. Select features using ONLY training data from that fold
+        2. Optionally tune hyperparameters on the selected features (if tune_per_fold=True)
+        3. Train model on selected features
+        4. Predict on validation set using selected features
+
+        This ensures validation data never influences feature selection,
+        eliminating the feature selection leakage issue.
+
+        Args:
+            X: Full feature DataFrame
+            y: Labels
+            weights: Sample weights
+            cv_splits: List of (train_idx, val_idx) tuples
+            model_name: Name of model to train
+            config: Model configuration (may be overridden by per-fold tuning)
+            tune_per_fold: If True, tune hyperparameters inside each fold after
+                feature selection. More accurate but slower.
+
+        Returns:
+            Dict with oof_prediction, selected_features, fold_metrics
+        """
+        from sklearn.feature_selection import mutual_info_classif
+        from collections import Counter
+
+        n_samples = len(X)
+        n_classes = 3
+        all_features = list(X.columns)
+
+        # Track which features are selected in each fold
+        fold_selected_features: List[List[str]] = []
+
+        # Initialize OOF prediction storage
+        oof_predictions = np.full(n_samples, np.nan)
+        oof_probabilities = np.full((n_samples, n_classes), np.nan)
+        fold_metrics_list = []
+
+        for fold_idx, (train_idx, val_idx) in enumerate(cv_splits):
+            fold_start = time.time()
+
+            # Extract fold data
+            X_train_fold = X.iloc[train_idx]
+            y_train_fold = y.iloc[train_idx]
+            X_val_fold = X.iloc[val_idx]
+            y_val_fold = y.iloc[val_idx]
+
+            w_train = None
+            if weights is not None:
+                w_train = weights.iloc[train_idx].values
+
+            # ============================================================
+            # LEAKAGE-FREE FEATURE SELECTION: Use only training data
+            # ============================================================
+            # Use mutual information to rank features using ONLY training data
+            mi_scores = mutual_info_classif(
+                X_train_fold.values,
+                y_train_fold.values,
+                discrete_features=False,
+                random_state=42,
+            )
+
+            # Select top N features based on MI scores from training data only
+            feature_scores = list(zip(all_features, mi_scores))
+            feature_scores.sort(key=lambda x: x[1], reverse=True)
+            fold_features = [f[0] for f in feature_scores[:self.n_features_to_select]]
+            fold_selected_features.append(fold_features)
+
+            # Subset data to selected features
+            X_train_selected = X_train_fold[fold_features]
+            X_val_selected = X_val_fold[fold_features]
+
+            # ==============================================================
+            # PER-FOLD HYPERPARAMETER TUNING (if enabled)
+            # ==============================================================
+            # When tune_per_fold=True, we tune hyperparameters on the selected
+            # feature subset using only this fold's training data. This ensures
+            # HPs are optimized for the actual features used in this fold.
+            # ==============================================================
+            fold_config = config.copy()
+            if tune_per_fold:
+                logger.debug(f"  Fold {fold_idx + 1}: Tuning HPs on {len(fold_features)} selected features...")
+                # Create a mini CV for tuning within the training fold
+                from src.cross_validation.purged_kfold import PurgedKFoldConfig
+                inner_cv_config = PurgedKFoldConfig(
+                    n_splits=min(3, len(train_idx) // 100),  # Fewer splits for inner CV
+                    purge_bars=self.cv.config.purge_bars,
+                    embargo_bars=self.cv.config.embargo_bars,
+                )
+                inner_cv = PurgedKFold(inner_cv_config)
+
+                tuner = TimeSeriesOptunaTuner(
+                    model_name=model_name,
+                    cv=inner_cv,
+                    n_trials=max(10, self.tuning_trials // 3),  # Fewer trials for inner tuning
+                )
+                tuning_result = tuner.tune(
+                    X_train_selected,
+                    y_train_fold,
+                    weights.iloc[train_idx] if weights is not None else None,
+                )
+                fold_tuned_params = tuning_result.get("best_params", {})
+                fold_config.update(fold_tuned_params)
+                logger.debug(f"    Fold {fold_idx + 1} tuned params: {fold_tuned_params}")
+
+            # Train model on selected features
+            model = ModelRegistry.create(model_name, config=fold_config)
+            model.fit(
+                X_train=X_train_selected.values,
+                y_train=y_train_fold.values,
+                X_val=X_val_selected.values,
+                y_val=y_val_fold.values,
+                sample_weights=w_train,
+            )
+
+            # Generate OOF predictions for this fold's validation set
+            output = model.predict(X_val_selected.values)
+            oof_predictions[val_idx] = output.class_predictions
+            oof_probabilities[val_idx] = output.class_probabilities
+
+            # Compute fold metrics
+            from sklearn.metrics import accuracy_score, f1_score
+            fold_accuracy = accuracy_score(y_val_fold.values, output.class_predictions)
+            fold_f1 = f1_score(y_val_fold.values, output.class_predictions, average="macro", zero_division=0)
+            fold_time = time.time() - fold_start
+
+            fold_metrics_list.append(FoldMetrics(
+                fold=fold_idx,
+                train_size=len(train_idx),
+                val_size=len(val_idx),
+                accuracy=fold_accuracy,
+                f1=fold_f1,
+                precision=0.0,
+                recall=0.0,
+                training_time=fold_time,
+            ))
+
+            logger.debug(
+                f"  Fold {fold_idx + 1}: selected {len(fold_features)} features, "
+                f"F1={fold_f1:.4f}"
+            )
+
+        # Aggregate selected features: keep features that appear in >= 60% of folds
+        feature_counts = Counter()
+        for fold_features in fold_selected_features:
+            feature_counts.update(fold_features)
+
+        min_frequency = 0.6
+        min_count = int(min_frequency * len(cv_splits))
+        stable_features = [
+            f for f, count in feature_counts.items()
+            if count >= min_count
+        ]
+        stable_features = stable_features[:self.n_features_to_select]  # Cap at max
+
+        logger.debug(
+            f"  Feature selection: {len(stable_features)} stable features "
+            f"(appeared in >= {min_frequency*100:.0f}% of folds)"
+        )
+
+        # Build OOF prediction object
+        oof_df = pd.DataFrame({
+            "prediction": oof_predictions,
+            "true_label": y.values,
+        }, index=y.index)
+
+        # Add probability columns
+        for c in range(n_classes):
+            oof_df[f"prob_class_{c}"] = oof_probabilities[:, c]
+
+        oof_prediction = OOFPrediction(
+            model_name=model_name,
+            predictions=oof_df,
+            fold_info=[m.to_dict() for m in fold_metrics_list],
+            coverage=float(np.sum(~np.isnan(oof_predictions)) / n_samples),
+        )
+
+        return {
+            "oof_prediction": oof_prediction,
+            "selected_features": stable_features,
+            "fold_metrics": fold_metrics_list,
+        }
+
+    def _validate_stacking_consistency(
+        self,
+        oof_predictions: Dict[str, OOFPrediction],
+        horizon: int,
+    ) -> None:
+        """
+        Verify all OOF results used consistent CV settings.
+
+        When building stacking datasets, all base models must have used the same
+        CV configuration (purge/embargo settings, number of folds) to ensure the
+        OOF predictions are comparable and properly aligned.
+
+        Args:
+            oof_predictions: Dict of OOF predictions by model name
+            horizon: Label horizon being validated
+
+        Raises:
+            ValueError: If sample counts are inconsistent across models
+        """
+        if not oof_predictions:
+            return
+
+        first_key = next(iter(oof_predictions))
+        reference = oof_predictions[first_key]
+        ref_n_samples = len(reference.predictions)
+
+        # Check for NaN patterns to detect sequence model gaps
+        ref_pred_col = "prediction" if "prediction" in reference.predictions.columns else reference.predictions.columns[0]
+        ref_valid_mask = ~reference.predictions[ref_pred_col].isna()
+
+        for model_name, result in oof_predictions.items():
+            # Check sample count matches
+            n_samples = len(result.predictions)
+            if n_samples != ref_n_samples:
+                raise ValueError(
+                    f"Inconsistent sample counts for horizon {horizon}: "
+                    f"{model_name} has {n_samples} samples, expected {ref_n_samples} "
+                    f"(based on {first_key}). All base models must use the same CV configuration."
+                )
+
+            # Check valid samples align (important for sequence models with different seq_len)
+            pred_col = "prediction" if "prediction" in result.predictions.columns else result.predictions.columns[0]
+            valid_mask = ~result.predictions[pred_col].isna()
+
+            if not np.array_equal(ref_valid_mask.values, valid_mask.values):
+                # Count mismatches for more informative warning
+                mismatches = np.sum(ref_valid_mask.values != valid_mask.values)
+                logger.warning(
+                    f"OOF valid masks differ for {model_name} vs {first_key} "
+                    f"(horizon {horizon}): {mismatches} samples differ. "
+                    "This may occur with sequence models of different lengths. "
+                    "Stacking dataset may have gaps for some samples."
+                )
 
     def build_stacking_datasets(
         self,
@@ -419,6 +772,9 @@ class CrossValidationRunner:
 
         Returns:
             Dict mapping horizon to StackingDataset
+
+        Raises:
+            ValueError: If OOF predictions have inconsistent sample counts
         """
         stacking_datasets: Dict[int, StackingDataset] = {}
 
@@ -440,6 +796,9 @@ class CrossValidationRunner:
             if not oof_predictions:
                 logger.warning(f"No predictions for horizon {horizon}")
                 continue
+
+            # Validate that all OOF results are consistent
+            self._validate_stacking_consistency(oof_predictions, horizon)
 
             # Get true labels
             _, y, _ = container.get_sklearn_arrays("train", return_df=True)

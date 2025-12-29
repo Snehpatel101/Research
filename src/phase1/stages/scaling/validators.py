@@ -159,9 +159,15 @@ def validate_no_leakage(
         computed_mean = np.mean(train_clean)
         computed_std = np.std(train_clean)
 
-        # Allow small floating point differences
+        # Allow small floating point differences using relative tolerance
+        # This accommodates float32 precision which may have larger errors
         mean_diff = abs(stored_mean - computed_mean)
         std_diff = abs(stored_std - computed_std)
+
+        # Use relative tolerance with a floor for near-zero values
+        # This handles both large values (relative error) and small values (absolute floor)
+        mean_tol = max(1e-5, 1e-5 * abs(stored_mean))
+        std_tol = max(1e-5, 1e-5 * abs(stored_std))
 
         check = {
             'feature': fname,
@@ -171,7 +177,7 @@ def validate_no_leakage(
             'stored_std': stored_std,
             'computed_std': computed_std,
             'std_diff': std_diff,
-            'passed': mean_diff < 1e-6 and std_diff < 1e-6
+            'passed': mean_diff < mean_tol and std_diff < std_tol
         }
         report['checks'].append(check)
 

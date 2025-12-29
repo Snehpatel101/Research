@@ -156,9 +156,17 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
                     logger.warning(f"Horizon {h} not in SUPPORTED_HORIZONS {SUPPORTED_HORIZONS}.")
 
         # Auto-scale purge and embargo bars based on horizons
+        # IMPORTANT: Pass target_timeframe to ensure embargo scales correctly
+        # with bar resolution (e.g., 15min bars need fewer bars than 5min for same time buffer)
         if self.auto_scale_purge_embargo:
-            self.purge_bars, self.embargo_bars = auto_scale_purge_embargo(self.label_horizons)
-            logger.debug(f"Auto-scaled purge={self.purge_bars}, embargo={self.embargo_bars}")
+            self.purge_bars, self.embargo_bars = auto_scale_purge_embargo(
+                self.label_horizons,
+                timeframe=self.target_timeframe,  # Timeframe-aware embargo calculation
+            )
+            logger.debug(
+                f"Auto-scaled purge={self.purge_bars}, embargo={self.embargo_bars} "
+                f"(timeframe={self.target_timeframe})"
+            )
 
         # Validate ratios sum to 1.0
         total_ratio = self.train_ratio + self.val_ratio + self.test_ratio

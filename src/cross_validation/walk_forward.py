@@ -274,11 +274,35 @@ class WalkForwardEvaluator:
             train_mask = np.zeros(n_samples, dtype=bool)
             train_mask[train_start:train_end] = True
 
+            # Apply embargo: exclude samples in embargo zones after ALL previous test periods
+            # This breaks autocorrelation between training and nearby tested samples
+            # For each previous test period [test_start_i, test_end_i], we exclude
+            # the embargo zone [test_end_i, test_end_i + embargo_bars] from training
+            embargo_excluded = 0
+            if self.config.embargo_bars > 0 and window_idx > 0:
+                # Check ALL previous test periods
+                for prev_window in range(window_idx):
+                    prev_test_start = min_train_size + prev_window * test_size
+                    prev_test_end = prev_test_start + test_size
+                    embargo_zone_end = min(prev_test_end + self.config.embargo_bars, train_end)
+
+                    # Remove embargo zone from training (samples right after this test period)
+                    for i in range(prev_test_end, embargo_zone_end):
+                        if train_mask[i]:
+                            train_mask[i] = False
+                            embargo_excluded += 1
+
+                if embargo_excluded > 0:
+                    logger.debug(
+                        f"Window {window_idx}: Excluded {embargo_excluded} samples "
+                        f"in embargo zones after {window_idx} previous test periods"
+                    )
+
             # Apply label-aware purging if label_end_times provided
             if label_end_times is not None and has_datetime_index:
                 test_start_time = X.index[test_start]
                 for i in range(train_start, train_end):
-                    if label_end_times.iloc[i] >= test_start_time:
+                    if train_mask[i] and label_end_times.iloc[i] >= test_start_time:
                         train_mask[i] = False
 
             train_indices = indices[train_mask]
@@ -286,8 +310,8 @@ class WalkForwardEvaluator:
 
             if len(train_indices) == 0:
                 raise ValueError(
-                    f"Window {window_idx}: Empty training set after purging. "
-                    "Increase min_train_pct or reduce gap_bars."
+                    f"Window {window_idx}: Empty training set after purging/embargo. "
+                    "Increase min_train_pct or reduce gap_bars/embargo_bars."
                 )
 
             yield train_indices, test_indices
@@ -333,6 +357,8 @@ class WalkForwardEvaluator:
                 "test_start_idx": int(test_idx[0]),
                 "test_end_idx": int(test_idx[-1]),
                 "window_type": self.config.window_type,
+                "embargo_bars": self.config.embargo_bars,
+                "gap_bars": self.config.gap_bars,
             }
 
             if has_datetime_index:
@@ -389,12 +415,17 @@ class WalkForwardEvaluator:
         }
 
     def __repr__(self) -> str:
-        return (
-            f"WalkForwardEvaluator(n_windows={self.config.n_windows}, "
-            f"type={self.config.window_type}, "
-            f"min_train={self.config.min_train_pct:.0%}, "
-            f"test={self.config.test_pct:.0%})"
-        )
+        parts = [
+            f"WalkForwardEvaluator(n_windows={self.config.n_windows}",
+            f"type={self.config.window_type}",
+            f"min_train={self.config.min_train_pct:.0%}",
+            f"test={self.config.test_pct:.0%}",
+        ]
+        if self.config.embargo_bars > 0:
+            parts.append(f"embargo={self.config.embargo_bars}")
+        if self.config.gap_bars > 0:
+            parts.append(f"gap={self.config.gap_bars}")
+        return ", ".join(parts) + ")"
 
 
 # =============================================================================

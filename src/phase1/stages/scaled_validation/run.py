@@ -50,7 +50,8 @@ def run_scaled_validation(
     try:
         drift_config = get_drift_config()
         if not drift_config.get("enabled", True):
-            report_path = config.results_dir / f"scaled_drift_report_{config.run_id}.json"
+            # Run-scoped output for reproducibility
+            report_path = config.run_artifacts_dir / f"scaled_drift_report_{config.run_id}.json"
             report_path.parent.mkdir(parents=True, exist_ok=True)
             drift_report = {
                 "run_id": config.run_id,
@@ -141,7 +142,8 @@ def run_scaled_validation(
             logger.info(f"  Val drift - drifted: {val_drifted}/{val_total} features")
             logger.info(f"  Test drift - drifted: {test_drifted}/{test_total} features")
 
-        report_path = config.results_dir / f"scaled_drift_report_{config.run_id}.json"
+        # Run-scoped output for reproducibility
+        report_path = config.run_artifacts_dir / f"scaled_drift_report_{config.run_id}.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         with open(report_path, "w") as f:
             json.dump(drift_report, f, indent=2)

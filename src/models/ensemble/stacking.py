@@ -73,18 +73,38 @@ class StackingEnsemble(BaseModel):
     @property
     def requires_sequences(self) -> bool:
         # Check if any base model requires sequences
-        if not self._base_models:
-            return False
-        return any(
-            m.requires_sequences
-            for fold_models in self._base_models
-            for m in fold_models
-        )
+        if self._base_models:
+            return any(
+                m.requires_sequences
+                for fold_models in self._base_models
+                for m in fold_models
+            )
+        # If base models not yet instantiated, check config for base_model_names
+        # This is critical for Trainer to prepare correct data shape (2D vs 3D)
+        base_model_names = self._config.get("base_model_names", [])
+        if base_model_names:
+            return self._check_configured_models_require_sequences(base_model_names)
+        return False
+
+    def _check_configured_models_require_sequences(
+        self, model_names: list[str]
+    ) -> bool:
+        """
+        Check if any configured base model requires sequences.
+
+        This enables correct data preparation before base models are instantiated.
+        """
+        for name in model_names:
+            if ModelRegistry.is_registered(name):
+                info = ModelRegistry.get_model_info(name)
+                if info.get("requires_sequences", False):
+                    return True
+        return False
 
     def get_default_config(self) -> Dict[str, Any]:
         return {
             "base_model_names": ["xgboost", "lightgbm"],
-            "base_model_configs": {},  # Per-model config overrides
+            "base_model_configs": {},  # Per-model config overrides for FINAL models
             "meta_learner_name": "logistic",  # LogisticModel from classical
             "meta_learner_config": {},
             "n_folds": 5,
@@ -92,6 +112,8 @@ class StackingEnsemble(BaseModel):
             "passthrough": False,  # Include original features in meta-learner
             "purge_bars": 60,  # Prevent overlapping label leakage
             "embargo_bars": 1440,  # Break serial correlation (5 days at 5min)
+            # CRITICAL: Use default configs for OOF to prevent leakage
+            "use_default_configs_for_oof": True,
         }
 
     def fit(
@@ -144,17 +166,46 @@ class StackingEnsemble(BaseModel):
         purge_bars = train_config.get("purge_bars", 60)
         embargo_bars = train_config.get("embargo_bars", 1440)
 
+        # ==================================================================
+        # LEAKAGE PREVENTION: Use default configs for OOF generation
+        # ==================================================================
+        # When use_default_configs_for_oof=True (default), OOF predictions
+        # are generated with default model configurations, NOT tuned configs.
+        # This prevents the meta-learner from training on optimistically
+        # biased OOF predictions from tuned base models.
+        #
+        # The tuned configs (base_model_configs) are only used for:
+        # 1. Final base models stored for inference
+        # 2. NOT for OOF generation that trains the meta-learner
+        # ==================================================================
+        use_default_for_oof = train_config.get("use_default_configs_for_oof", True)
+
+        if use_default_for_oof:
+            # Use empty configs (defaults) for OOF to prevent leakage
+            oof_base_configs: Dict[str, Dict] = {}
+            logger.info(
+                "Using DEFAULT configs for OOF generation (leakage prevention enabled)"
+            )
+        else:
+            # Legacy behavior: use provided configs (NOT RECOMMENDED)
+            oof_base_configs = base_model_configs
+            logger.warning(
+                "Using tuned configs for OOF generation. "
+                "This may cause leakage - set use_default_configs_for_oof=True"
+            )
+
         logger.info(
             f"Training StackingEnsemble: base_models={self._base_model_names}, "
             f"meta_learner={self._meta_learner_name}, n_folds={self._n_folds}"
         )
 
         # Step 1: Generate OOF predictions with PurgedKFold (prevents label leakage)
+        # IMPORTANT: Uses oof_base_configs (defaults) not base_model_configs (tuned)
         oof_predictions, fold_models = self._generate_oof_predictions(
             X_train=X_train,
             y_train=y_train,
             base_model_names=self._base_model_names,
-            base_model_configs=base_model_configs,
+            base_model_configs=oof_base_configs,  # Use defaults for OOF
             sample_weights=sample_weights,
             use_probabilities=use_probabilities,
             label_end_times=label_end_times,
@@ -227,6 +278,8 @@ class StackingEnsemble(BaseModel):
                 "meta_features_dim": meta_features_train.shape[1],
                 "use_probabilities": use_probabilities,
                 "passthrough": passthrough,
+                "use_default_configs_for_oof": use_default_for_oof,
+                "leakage_prevention": "enabled" if use_default_for_oof else "disabled",
             },
         )
 

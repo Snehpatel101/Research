@@ -257,7 +257,8 @@ class TestLogisticModelProperties:
         model = LogisticModel()
         config = model.get_default_config()
 
-        expected_keys = ["penalty", "C", "solver", "max_iter", "multi_class"]
+        # NOTE: sklearn 1.8+ uses l1_ratio instead of penalty, n_jobs removed
+        expected_keys = ["l1_ratio", "C", "solver", "max_iter", "class_weight"]
         for key in expected_keys:
             assert key in config, f"Missing key: {key}"
 

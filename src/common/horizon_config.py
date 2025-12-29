@@ -5,7 +5,7 @@ This module provides configuration and utility functions for the dynamic horizon
 labeling system. It supports:
 - Configurable horizons for triple-barrier labeling
 - Timeframe-aware horizon scaling
-- Auto-scaling of purge and embargo bars
+- Auto-scaling of purge and embargo bars (with timeframe awareness)
 - Dynamic barrier parameter generation
 - HorizonConfig dataclass for encapsulating horizon settings
 
@@ -18,7 +18,9 @@ Usage:
         validate_horizons,
         get_scaled_horizons,
         auto_scale_purge_embargo,
+        compute_embargo_bars,  # NEW: timeframe-aware embargo calculation
         get_default_barrier_params_for_horizon,
+        EMBARGO_TIME_MINUTES,  # NEW: embargo specified in calendar time
     )
 """
 from __future__ import annotations
@@ -74,7 +76,25 @@ HORIZON_TIMEFRAME_SCALING = HORIZON_TIMEFRAME_MINUTES
 # These multipliers determine purge and embargo bars based on max horizon.
 PURGE_MULTIPLIER = 3.0     # purge_bars = max_horizon * PURGE_MULTIPLIER
 EMBARGO_MULTIPLIER = 72.0  # embargo_bars = max_horizon * EMBARGO_MULTIPLIER (~5 days for H20)
-MIN_EMBARGO_BARS = 1440  # Minimum 5 days for 5-min data (ensures feature decorrelation)
+
+# TIMEFRAME-AWARE EMBARGO CONFIGURATION
+# Embargo is specified in TIME (minutes), not bars, to ensure consistent
+# decorrelation periods regardless of bar timeframe.
+#
+# PROBLEM THIS SOLVES:
+# Previously, MIN_EMBARGO_BARS=1440 assumed 5-minute bars (1440*5min = 5 days).
+# But at 15-minute bars, 1440 bars = 15 days - far too long!
+# At 1-minute bars, 1440 bars = 1 day - not enough!
+#
+# SOLUTION:
+# Specify embargo in calendar time (minutes), then convert to bars based on
+# the actual target_timeframe. This ensures ~5 days of buffer regardless of
+# the bar resolution used.
+EMBARGO_TIME_MINUTES = 7200  # 5 days * 24 hours * 60 minutes = 7200 minutes
+DEFAULT_TIMEFRAME_MINUTES = 5  # Default assumption when timeframe not specified
+
+# Legacy constant for backward compatibility (assumes 5-min bars)
+MIN_EMBARGO_BARS = 1440  # Deprecated: use compute_embargo_bars() instead
 
 
 # =============================================================================
@@ -203,18 +223,99 @@ def get_scaled_horizons(
 
 
 # =============================================================================
+# TIMEFRAME-AWARE EMBARGO CALCULATION
+# =============================================================================
+def compute_embargo_bars(
+    timeframe: str,
+    embargo_time_minutes: int = None,
+) -> int:
+    """
+    Compute embargo bars for a given timeframe to achieve a consistent time buffer.
+
+    This function converts embargo from TIME (minutes) to BARS based on the
+    actual timeframe being used. This ensures consistent decorrelation periods
+    regardless of bar resolution.
+
+    Parameters:
+    -----------
+    timeframe : str
+        The bar timeframe (e.g., '5min', '15min', '1h')
+    embargo_time_minutes : int, optional
+        Desired embargo duration in minutes (default: EMBARGO_TIME_MINUTES = 7200 = 5 days)
+
+    Returns:
+    --------
+    int : Number of bars for embargo
+
+    Examples:
+    ---------
+    >>> compute_embargo_bars('5min')   # 5 days at 5-min bars
+    1440
+
+    >>> compute_embargo_bars('15min')  # 5 days at 15-min bars
+    480
+
+    >>> compute_embargo_bars('1min')   # 5 days at 1-min bars
+    7200
+
+    >>> compute_embargo_bars('1h')     # 5 days at 1-hour bars
+    120
+    """
+    if embargo_time_minutes is None:
+        embargo_time_minutes = EMBARGO_TIME_MINUTES
+
+    if embargo_time_minutes <= 0:
+        raise ValueError(f"embargo_time_minutes must be positive, got {embargo_time_minutes}")
+
+    # Get timeframe in minutes
+    if timeframe in HORIZON_TIMEFRAME_MINUTES:
+        tf_minutes = HORIZON_TIMEFRAME_MINUTES[timeframe]
+    else:
+        # Try to parse common formats
+        tf_lower = timeframe.lower()
+        if tf_lower.endswith('min'):
+            try:
+                tf_minutes = int(tf_lower[:-3])
+            except ValueError:
+                raise ValueError(f"Cannot parse timeframe '{timeframe}'")
+        elif tf_lower.endswith('h'):
+            try:
+                tf_minutes = int(tf_lower[:-1]) * 60
+            except ValueError:
+                raise ValueError(f"Cannot parse timeframe '{timeframe}'")
+        else:
+            raise ValueError(
+                f"Unknown timeframe: '{timeframe}'. "
+                f"Supported: {list(HORIZON_TIMEFRAME_MINUTES.keys())} or formats like '15min', '1h'"
+            )
+
+    # Convert time to bars: embargo_bars = embargo_time_minutes / timeframe_minutes
+    embargo_bars = int(embargo_time_minutes / tf_minutes)
+
+    # Ensure at least 1 bar
+    return max(1, embargo_bars)
+
+
+# =============================================================================
 # AUTO-SCALE PURGE AND EMBARGO
 # =============================================================================
 def auto_scale_purge_embargo(
     horizons: List[int],
     purge_multiplier: float = None,
-    embargo_multiplier: float = None
+    embargo_multiplier: float = None,
+    timeframe: Optional[str] = None,
+    embargo_time_minutes: Optional[int] = None,
 ) -> Tuple[int, int]:
     """
     Auto-calculate purge and embargo bars based on max horizon.
 
     Purge bars prevent label leakage by removing samples near split boundaries.
     Embargo bars provide a buffer for feature decorrelation between splits.
+
+    IMPORTANT: If timeframe is provided, embargo is calculated based on actual
+    calendar time (EMBARGO_TIME_MINUTES = 5 days) to ensure consistent
+    decorrelation regardless of bar resolution. If timeframe is not provided,
+    falls back to legacy behavior assuming 5-minute bars.
 
     Parameters:
     -----------
@@ -224,6 +325,13 @@ def auto_scale_purge_embargo(
         Multiplier for purge bars (default: PURGE_MULTIPLIER)
     embargo_multiplier : float, optional
         Multiplier for embargo bars (default: EMBARGO_MULTIPLIER)
+        NOTE: Only used when timeframe is not provided (legacy mode)
+    timeframe : str, optional
+        Target timeframe (e.g., '5min', '15min'). When provided, embargo is
+        calculated as EMBARGO_TIME_MINUTES / timeframe_minutes to ensure
+        consistent ~5 day buffer regardless of bar resolution.
+    embargo_time_minutes : int, optional
+        Override for embargo duration in minutes (default: 7200 = 5 days)
 
     Returns:
     --------
@@ -232,28 +340,32 @@ def auto_scale_purge_embargo(
     Notes:
     ------
     - purge_bars = max_horizon * purge_multiplier (ensures all labels are valid)
-    - embargo_bars = max_horizon * embargo_multiplier (feature decorrelation)
+    - embargo_bars (with timeframe):
+        embargo_time_minutes / timeframe_minutes (consistent calendar time)
+    - embargo_bars (without timeframe, legacy):
+        max(max_horizon * embargo_multiplier, MIN_EMBARGO_BARS)
 
     Examples:
     ---------
-    >>> auto_scale_purge_embargo([5, 20])
-    (60, 300)  # For H20: purge=60 (20*3), embargo=300 (20*15)
+    >>> # Timeframe-aware (recommended)
+    >>> auto_scale_purge_embargo([5, 20], timeframe='5min')
+    (60, 1440)  # purge=60, embargo=1440 (5 days at 5min)
 
-    >>> auto_scale_purge_embargo([5, 20, 60])
-    (180, 900)  # For H60: purge=180 (60*3), embargo=900 (60*15)
+    >>> auto_scale_purge_embargo([5, 20], timeframe='15min')
+    (60, 480)   # purge=60, embargo=480 (5 days at 15min)
+
+    >>> # Legacy mode (no timeframe, assumes 5min bars)
+    >>> auto_scale_purge_embargo([5, 20])
+    (60, 1440)  # purge=60, embargo=1440 (assumes 5min bars)
     """
     if not horizons:
         raise ValueError("Horizons list cannot be empty for purge/embargo calculation")
 
     if purge_multiplier is None:
         purge_multiplier = PURGE_MULTIPLIER
-    if embargo_multiplier is None:
-        embargo_multiplier = EMBARGO_MULTIPLIER
 
     if purge_multiplier <= 0:
         raise ValueError(f"purge_multiplier must be positive, got {purge_multiplier}")
-    if embargo_multiplier <= 0:
-        raise ValueError(f"embargo_multiplier must be positive, got {embargo_multiplier}")
 
     max_horizon = max(horizons)
 
@@ -261,12 +373,23 @@ def auto_scale_purge_embargo(
     # max_bars is typically 2-3x horizon, so purge = max_horizon * 3
     purge_bars = int(max_horizon * purge_multiplier)
 
-    # Embargo: Must allow for feature decorrelation
-    # Financial features can have autocorrelation lasting several days
-    # For 5min data at H20, we want ~5 days = 288 * 5 = 1440 bars
-    # embargo = max_horizon * 72 gives ~5 days for H20
-    # Enforce minimum of MIN_EMBARGO_BARS (1440) to ensure adequate decorrelation
-    embargo_bars = max(int(max_horizon * embargo_multiplier), MIN_EMBARGO_BARS)
+    # Embargo: Calculate based on timeframe if provided
+    if timeframe is not None:
+        # TIMEFRAME-AWARE MODE (recommended)
+        # Embargo is calculated from calendar time, not bar count
+        embargo_bars = compute_embargo_bars(
+            timeframe=timeframe,
+            embargo_time_minutes=embargo_time_minutes,
+        )
+    else:
+        # LEGACY MODE (backward compatible)
+        # Uses multiplier with MIN_EMBARGO_BARS floor (assumes 5min bars)
+        if embargo_multiplier is None:
+            embargo_multiplier = EMBARGO_MULTIPLIER
+        if embargo_multiplier <= 0:
+            raise ValueError(f"embargo_multiplier must be positive, got {embargo_multiplier}")
+
+        embargo_bars = max(int(max_horizon * embargo_multiplier), MIN_EMBARGO_BARS)
 
     return purge_bars, embargo_bars
 
@@ -371,22 +494,45 @@ class HorizonConfig:
     purge_multiplier: float = 3.0
     embargo_multiplier: float = 15.0
 
-    def get_purge_embargo(self) -> Tuple[int, int]:
+    def get_purge_embargo(self, target_timeframe: Optional[str] = None) -> Tuple[int, int]:
         """
         Get purge and embargo bars based on configuration.
 
         When auto_scale_purge_embargo=True, calculates values from max horizon.
         Otherwise, uses manual_purge_bars and manual_embargo_bars.
 
+        IMPORTANT: If target_timeframe is provided (or defaults to source_timeframe),
+        embargo is calculated based on calendar time (5 days = 7200 minutes) to ensure
+        consistent decorrelation regardless of bar resolution.
+
+        Parameters:
+        -----------
+        target_timeframe : str, optional
+            Timeframe for embargo calculation. Defaults to source_timeframe.
+            When provided, embargo_bars = 7200 / timeframe_minutes.
+
         Returns:
         --------
         Tuple[int, int] : (purge_bars, embargo_bars)
+
+        Examples:
+        ---------
+        >>> config = HorizonConfig(horizons=[5, 20], source_timeframe='5min')
+        >>> config.get_purge_embargo()  # uses source_timeframe='5min'
+        (60, 1440)  # 5 days at 5-min bars
+
+        >>> config.get_purge_embargo(target_timeframe='15min')
+        (60, 480)   # 5 days at 15-min bars
         """
+        if target_timeframe is None:
+            target_timeframe = self.source_timeframe
+
         if self.auto_scale_purge_embargo:
             return auto_scale_purge_embargo(
                 self.horizons,
                 self.purge_multiplier,
-                self.embargo_multiplier
+                self.embargo_multiplier,
+                timeframe=target_timeframe,  # Use timeframe-aware calculation
             )
         else:
             # Use manual values, with defaults if not specified

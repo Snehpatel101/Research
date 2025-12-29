@@ -388,6 +388,34 @@ class ModelRegistry:
         """
         return len(cls._metadata)
 
+    @classmethod
+    def is_available(cls, name: str) -> bool:
+        """
+        Check if a model is registered AND can be instantiated.
+
+        This differs from is_registered() in that it also verifies the model's
+        dependencies are available. Useful for optional dependencies like CatBoost.
+
+        Args:
+            name: Model name to check
+
+        Returns:
+            True if model is registered and can be instantiated, False otherwise
+        """
+        if not cls.is_registered(name):
+            return False
+
+        try:
+            # Try to instantiate the model
+            model_class = cls._models[name.lower().strip()]
+            instance = model_class()
+            return True
+        except ImportError:
+            return False
+        except Exception:
+            # Other errors might indicate configuration issues, not availability
+            return True
+
 
 # Convenience function for cleaner imports
 def register(

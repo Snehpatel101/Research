@@ -88,9 +88,29 @@ class VotingEnsemble(BaseModel):
     @property
     def requires_sequences(self) -> bool:
         # Check if any base model requires sequences
-        if not self._base_models:
-            return False
-        return any(m.requires_sequences for m in self._base_models)
+        if self._base_models:
+            return any(m.requires_sequences for m in self._base_models)
+        # If base models not yet instantiated, check config for base_model_names
+        # This is critical for Trainer to prepare correct data shape (2D vs 3D)
+        base_model_names = self._config.get("base_model_names", [])
+        if base_model_names:
+            return self._check_configured_models_require_sequences(base_model_names)
+        return False
+
+    def _check_configured_models_require_sequences(
+        self, model_names: list[str]
+    ) -> bool:
+        """
+        Check if any configured base model requires sequences.
+
+        This enables correct data preparation before base models are instantiated.
+        """
+        for name in model_names:
+            if ModelRegistry.is_registered(name):
+                info = ModelRegistry.get_model_info(name)
+                if info.get("requires_sequences", False):
+                    return True
+        return False
 
     def get_default_config(self) -> Dict[str, Any]:
         return {

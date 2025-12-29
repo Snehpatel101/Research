@@ -30,17 +30,25 @@ def compute_quality_scores(
 
     Quality is based on:
     1. Speed score: faster hits (within reason) = higher quality
-    2. MAE score: lower adverse excursion = higher quality
-    3. MFE score: higher favorable excursion = higher quality
-    4. Pain-to-gain ratio: risk per unit profit (NEW)
-    5. Time-weighted drawdown: penalize trades that spend time in drawdown (NEW)
+    2. MAE score: lower adverse excursion = higher quality (DIRECTION-AWARE)
+    3. MFE score: higher favorable excursion = higher quality (DIRECTION-AWARE)
+    4. Pain-to-gain ratio: risk per unit profit
+    5. Time-weighted drawdown: penalize trades that spend time in drawdown
+
+    IMPORTANT: MAE/MFE from triple_barrier_numba are computed from a LONG perspective:
+      - MFE = max upside (positive) = favorable for LONG, adverse for SHORT
+      - MAE = max downside (negative) = adverse for LONG, favorable for SHORT
+
+    This function correctly interprets these values based on trade direction (label):
+      - For LONG (label=1): favorable=MFE, adverse=|MAE|
+      - For SHORT (label=-1): favorable=|MAE|, adverse=MFE
 
     Parameters:
     -----------
     bars_to_hit : array of bars until barrier hit
-    mae : Maximum Adverse Excursion (always negative or zero)
-    mfe : Maximum Favorable Excursion (always positive or zero)
-    labels : array of labels (-1, 0, 1)
+    mae : Maximum Adverse Excursion from long perspective (always negative or zero)
+    mfe : Maximum Favorable Excursion from long perspective (always positive or zero)
+    labels : array of labels (-1=short, 0=neutral, 1=long)
     horizon : horizon identifier
     symbol : 'MES' or 'MGC' for transaction cost consideration
 
@@ -67,20 +75,44 @@ def compute_quality_scores(
             deviation = abs(bars - ideal_speed) / ideal_speed
             speed_scores[i] = np.exp(-deviation ** 2)
 
-    # 2. MAE score (lower is better)
-    mae_abs = np.abs(mae)
-    mae_max = np.percentile(mae_abs[mae_abs > 0], 95) if np.any(mae_abs > 0) else 1.0
-    if mae_max > 0:
-        mae_normalized = mae_abs / mae_max
-        mae_scores = 1.0 - np.clip(mae_normalized, 0, 1)
+    # 2. & 3. DIRECTION-AWARE MAE/MFE scores
+    # MAE/MFE from triple_barrier_numba are computed from a LONG perspective:
+    #   - MFE = max upside (positive) = favorable for LONG, adverse for SHORT
+    #   - MAE = max downside (negative) = adverse for LONG, favorable for SHORT
+    #
+    # We compute "adverse excursion" and "favorable excursion" per-sample
+    # based on the actual trade direction (label).
+
+    # Compute direction-aware adverse and favorable excursions
+    adverse_excursion = np.zeros(n, dtype=np.float32)
+    favorable_excursion = np.zeros(n, dtype=np.float32)
+
+    for i in range(n):
+        if labels[i] == 1:  # LONG trade
+            # For longs: favorable = price up (MFE), adverse = price down (MAE)
+            favorable_excursion[i] = max(mfe[i], 0.0)
+            adverse_excursion[i] = abs(min(mae[i], 0.0))
+        elif labels[i] == -1:  # SHORT trade
+            # For shorts: favorable = price down (|MAE|), adverse = price up (MFE)
+            favorable_excursion[i] = abs(min(mae[i], 0.0))
+            adverse_excursion[i] = max(mfe[i], 0.0)
+        else:  # Neutral (label == 0)
+            # For neutrals, use absolute values (no directional bias)
+            favorable_excursion[i] = max(abs(mfe[i]), abs(mae[i]))
+            adverse_excursion[i] = min(abs(mfe[i]), abs(mae[i]))
+
+    # MAE score: lower adverse excursion = higher quality
+    ae_max = np.percentile(adverse_excursion[adverse_excursion > 0], 95) if np.any(adverse_excursion > 0) else 1.0
+    if ae_max > 0:
+        ae_normalized = adverse_excursion / ae_max
+        mae_scores = 1.0 - np.clip(ae_normalized, 0, 1)
     else:
         mae_scores = np.ones(n, dtype=np.float32)
 
-    # 3. MFE score (higher is better)
-    mfe_abs = np.abs(mfe)
-    mfe_max = np.percentile(mfe_abs[mfe_abs > 0], 95) if np.any(mfe_abs > 0) else 1.0
-    if mfe_max > 0:
-        mfe_scores = np.clip(mfe_abs / mfe_max, 0, 1)
+    # MFE score: higher favorable excursion = higher quality
+    fe_max = np.percentile(favorable_excursion[favorable_excursion > 0], 95) if np.any(favorable_excursion > 0) else 1.0
+    if fe_max > 0:
+        mfe_scores = np.clip(favorable_excursion / fe_max, 0, 1)
     else:
         mfe_scores = np.zeros(n, dtype=np.float32)
 
@@ -278,23 +310,26 @@ def apply_optimized_labels(
     df = add_forward_return_columns(df, horizon)
 
     # Compute label_end_time: datetime when label outcome is known
-    # This is entry_time + bars_to_hit * bar_duration (for purging overlapping labels)
+    # CRITICAL: We must look up the actual datetime of the bar that is bars_to_hit forward,
+    # NOT compute entry_time + bars_to_hit * bar_duration. The latter is WRONG when there
+    # are gaps (overnight, weekends, session breaks) because it under-estimates the true
+    # end time, leading to insufficient purging and label leakage.
     if 'datetime' in df.columns:
         datetime_col = pd.to_datetime(df['datetime'])
-        # Infer bar duration from datetime index
-        if len(datetime_col) > 1:
-            bar_duration = datetime_col.iloc[1] - datetime_col.iloc[0]
-        else:
-            bar_duration = pd.Timedelta(minutes=5)  # Default to 5-min
+        datetime_arr = datetime_col.values
+        n = len(datetime_col)
 
-        # Vectorized: label_end_time = entry_time + bars_to_hit * bar_duration
-        # Cap at max_datetime for end samples
-        label_end_times = datetime_col + pd.to_timedelta(bars_to_hit * bar_duration.total_seconds(), unit='s')
-        max_datetime = datetime_col.max()
-        label_end_times = label_end_times.clip(upper=max_datetime)
+        # Vectorized forward-lookup: for each bar i, find datetime at index i + bars_to_hit[i]
+        # This correctly handles gaps because we use actual bar indices, not time arithmetic
+        forward_indices = np.arange(n) + bars_to_hit
+        # Clip to valid range (last bar's datetime for samples near the end)
+        forward_indices = np.clip(forward_indices, 0, n - 1)
+
+        # Look up the actual datetime at those forward indices
+        label_end_times = pd.Series(datetime_arr[forward_indices], index=datetime_col.index)
 
         df[f'label_end_time_h{horizon}'] = label_end_times
-        logger.info(f"  Added label_end_time column for purging")
+        logger.info(f"  Added label_end_time column for purging (gap-aware lookup)")
 
     # Log statistics
     label_counts = pd.Series(labels).value_counts().sort_index()

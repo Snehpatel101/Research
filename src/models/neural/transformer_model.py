@@ -55,8 +55,9 @@ class PositionalEncoding(nn.Module):
             torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
         )
 
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
+        # Handle odd d_model: slice div_term to match the number of even/odd positions
+        pe[:, 0::2] = torch.sin(position * div_term[:pe[:, 0::2].shape[1]])
+        pe[:, 1::2] = torch.cos(position * div_term[:pe[:, 1::2].shape[1]])
         pe = pe.unsqueeze(0)  # (1, max_len, d_model)
 
         # Register as buffer (not a parameter, but should be saved with model)

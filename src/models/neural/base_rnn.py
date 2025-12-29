@@ -226,6 +226,22 @@ class BaseRNNModel(BaseModel):
         """Return model type string (lstm/gru). Implemented by subclasses."""
         pass
 
+    def _on_training_start(self, train_config: Dict[str, Any], seq_len: int) -> Dict[str, Any]:
+        """
+        Hook called at the start of training, after model is created.
+
+        Subclasses can override this to add model-specific logging or setup.
+        For example, TCN uses this to log receptive field information.
+
+        Args:
+            train_config: Training configuration dictionary
+            seq_len: Sequence length of training data
+
+        Returns:
+            Dict of additional metadata to include in TrainingMetrics
+        """
+        return {}
+
     def get_default_config(self) -> Dict[str, Any]:
         """Return default hyperparameters."""
         return {
@@ -274,6 +290,9 @@ class BaseRNNModel(BaseModel):
         # Create network
         self._model = self._create_network(n_features)
         self._model = self._model.to(self._device)
+
+        # Call training start hook for subclass-specific setup/logging
+        extra_metadata = self._on_training_start(train_config, seq_len)
 
         # Prepare data
         train_loader = self._create_dataloader(
@@ -361,6 +380,17 @@ class BaseRNNModel(BaseModel):
             f"val_f1={val_metrics['f1']:.4f}, time={training_time:.1f}s"
         )
 
+        # Build metadata with base info + any extra from subclass hook
+        metadata = {
+            "model_type": self._get_model_type(),
+            "n_features": n_features,
+            "n_train_samples": n_samples,
+            "n_val_samples": len(X_val),
+            "device": str(self._device),
+            "mixed_precision": self._use_amp,
+        }
+        metadata.update(extra_metadata)
+
         return TrainingMetrics(
             train_loss=history["train_loss"][-1],
             val_loss=early_stopping.best_loss,
@@ -373,14 +403,7 @@ class BaseRNNModel(BaseModel):
             early_stopped=epochs_trained < max_epochs,
             best_epoch=early_stopping.best_epoch,
             history=history,
-            metadata={
-                "model_type": self._get_model_type(),
-                "n_features": n_features,
-                "n_train_samples": n_samples,
-                "n_val_samples": len(X_val),
-                "device": str(self._device),
-                "mixed_precision": self._use_amp,
-            },
+            metadata=metadata,
         )
 
     def predict(self, X: np.ndarray) -> PredictionOutput:
@@ -552,7 +575,10 @@ class BaseRNNModel(BaseModel):
             with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                 logits = self._model(X_batch)
                 if weights is not None:
-                    loss = (criterion(logits, y_batch) * weights).mean()
+                    # Use reduction='none' to get per-sample losses for weighting
+                    criterion_unreduced = nn.CrossEntropyLoss(reduction='none')
+                    per_sample_loss = criterion_unreduced(logits, y_batch)
+                    loss = (per_sample_loss * weights).mean()
                 else:
                     loss = criterion(logits, y_batch)
 

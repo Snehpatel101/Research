@@ -47,8 +47,8 @@ def run_initial_labeling(
     logger.info("=" * 70)
 
     try:
-        # Create labels directory for GA input
-        labels_dir = config.project_root / 'data' / 'labels'
+        # Create labels directory for GA input (run-scoped)
+        labels_dir = config.run_data_dir / 'labels'
         labels_dir.mkdir(parents=True, exist_ok=True)
 
         artifacts = []

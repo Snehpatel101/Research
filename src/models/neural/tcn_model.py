@@ -12,18 +12,14 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-import time
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
 
-from ..base import TrainingMetrics
 from ..registry import register
-from .base_rnn import BaseRNNModel, EarlyStoppingState
+from .base_rnn import BaseRNNModel
 
 logger = logging.getLogger(__name__)
 
@@ -207,143 +203,29 @@ class TCNModel(BaseRNNModel):
         """Return model type string."""
         return "tcn"
 
-    def fit(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
-    ) -> TrainingMetrics:
+    def _on_training_start(self, train_config: Dict[str, Any], seq_len: int) -> Dict[str, Any]:
         """
-        Train the TCN with receptive field logging.
+        Log TCN-specific receptive field information at training start.
 
-        Overrides parent to add TCN-specific receptive field checks.
+        Overrides parent hook to add receptive field logging and validation.
+
+        Args:
+            train_config: Training configuration dictionary
+            seq_len: Sequence length of training data
+
+        Returns:
+            Dict with receptive_field metadata for TrainingMetrics
         """
-        self._validate_input_shape(X_train, "X_train")
-        self._validate_input_shape(X_val, "X_val")
-        start_time = time.time()
-
-        # Merge config
-        train_config = self._config.copy()
-        if config:
-            train_config.update(config)
-
-        # Extract dimensions
-        n_samples, seq_len, n_features = X_train.shape
-        self._n_features = n_features
-
-        # Create network
-        self._model = self._create_network(n_features)
-        self._model = self._model.to(self._device)
-
-        # Log receptive field
         rf = self._model.receptive_field
         logger.info(f"TCN receptive field: {rf} timesteps (seq_len={seq_len})")
+
         if rf < seq_len:
             logger.warning(
                 f"Receptive field ({rf}) < sequence length ({seq_len}). "
                 f"Consider adding more layers or increasing kernel_size."
             )
 
-        # Prepare data
-        train_loader = self._create_dataloader(
-            X_train, y_train, sample_weights, train_config, shuffle=True
-        )
-        val_loader = self._create_dataloader(X_val, y_val, None, train_config, shuffle=False)
-
-        # Setup training components
-        optimizer = self._create_optimizer(train_config)
-        scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
-        criterion = nn.CrossEntropyLoss()
-
-        # Mixed precision scaler (only needed for float16, not bfloat16)
-        scaler = (
-            torch.amp.GradScaler("cuda")
-            if self._use_grad_scaler and self._device.type == "cuda"
-            else None
-        )
-        # Use dynamically detected AMP dtype
-        amp_dtype = self._amp_dtype
-
-        early_stopping = EarlyStoppingState()
-        history: Dict[str, List[float]] = {
-            "train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []
-        }
-
-        max_epochs = train_config.get("max_epochs", 100)
-        patience = train_config.get("early_stopping_patience", 15)
-        min_delta = train_config.get("min_delta", 0.0001)
-        grad_clip = train_config.get("gradient_clip", 1.0)
-
-        logger.info(
-            f"Training TCN: epochs={max_epochs}, batch_size={train_config.get('batch_size')}, "
-            f"channels={train_config.get('num_channels')}, kernel={train_config.get('kernel_size')}, "
-            f"mixed_precision={'on' if self._use_amp else 'off'}"
-        )
-
-        for epoch in range(max_epochs):
-            train_loss, train_acc = self._train_epoch(
-                train_loader, optimizer, criterion, scheduler, scaler, amp_dtype, grad_clip
-            )
-            history["train_loss"].append(train_loss)
-            history["train_acc"].append(train_acc)
-
-            val_loss, val_acc = self._validate_epoch(val_loader, criterion, amp_dtype)
-            history["val_loss"].append(val_loss)
-            history["val_acc"].append(val_acc)
-
-            if (epoch + 1) % 10 == 0 or epoch == 0:
-                logger.info(
-                    f"Epoch {epoch + 1}/{max_epochs} - "
-                    f"train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f}, "
-                    f"train_acc: {train_acc:.4f}, val_acc: {val_acc:.4f}"
-                )
-
-            if early_stopping.check(val_loss, epoch, self._model, patience, min_delta):
-                logger.info(f"Early stopping at epoch {epoch + 1}")
-                break
-
-        if early_stopping.best_state_dict is not None:
-            self._model.load_state_dict(early_stopping.best_state_dict)
-
-        training_time = time.time() - start_time
-        epochs_trained = len(history["train_loss"])
-
-        train_metrics = self._compute_final_metrics(train_loader, amp_dtype, y_train)
-        val_metrics = self._compute_final_metrics(val_loader, amp_dtype, y_val)
-
-        self._is_fitted = True
-
-        logger.info(
-            f"Training complete: epochs={epochs_trained}, "
-            f"best_epoch={early_stopping.best_epoch + 1}, "
-            f"val_f1={val_metrics['f1']:.4f}, time={training_time:.1f}s"
-        )
-
-        return TrainingMetrics(
-            train_loss=history["train_loss"][-1],
-            val_loss=early_stopping.best_loss,
-            train_accuracy=train_metrics["accuracy"],
-            val_accuracy=val_metrics["accuracy"],
-            train_f1=train_metrics["f1"],
-            val_f1=val_metrics["f1"],
-            epochs_trained=epochs_trained,
-            training_time_seconds=training_time,
-            early_stopped=epochs_trained < max_epochs,
-            best_epoch=early_stopping.best_epoch,
-            history=history,
-            metadata={
-                "model_type": "tcn",
-                "n_features": n_features,
-                "n_train_samples": n_samples,
-                "n_val_samples": len(X_val),
-                "device": str(self._device),
-                "mixed_precision": self._use_amp,
-                "receptive_field": self._model.receptive_field,
-            },
-        )
+        return {"receptive_field": rf}
 
 
 __all__ = ["TCNModel", "TCNNetwork", "TemporalBlock", "CausalConv1d"]

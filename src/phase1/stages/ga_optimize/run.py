@@ -52,12 +52,12 @@ def run_ga_optimization_stage(
     logger.info("=" * 70)
 
     try:
-        # GA results directory
-        ga_results_dir = config.project_root / 'config' / 'ga_results'
+        # GA results directory (run-scoped for reproducibility)
+        ga_results_dir = config.run_artifacts_dir / 'ga_results'
         ga_results_dir.mkdir(parents=True, exist_ok=True)
 
-        # Plots directory
-        plots_dir = config.results_dir / 'ga_plots'
+        # Plots directory (run-scoped)
+        plots_dir = config.run_artifacts_dir / 'ga_plots'
         plots_dir.mkdir(parents=True, exist_ok=True)
 
         artifacts = []
@@ -75,8 +75,8 @@ def run_ga_optimization_stage(
             logger.info(f"Optimizing {symbol}")
             logger.info(f"{'='*50}")
 
-            # Load labels data
-            labels_dir = config.project_root / 'data' / 'labels'
+            # Load labels data (run-scoped)
+            labels_dir = config.run_data_dir / 'labels'
             labels_path = labels_dir / f"{symbol}_labels_init.parquet"
 
             if not labels_path.exists():

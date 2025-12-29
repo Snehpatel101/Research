@@ -236,6 +236,41 @@ class TestEmbargoZone:
 class TestLabelLeakagePrevention:
     """Tests for preventing label leakage with overlapping labels."""
 
+    def test_overlapping_labels_purged_both_sides(self, label_end_times_data):
+        """
+        Test that samples with labels overlapping test set are purged from BOTH sides.
+
+        BUG FIX TEST: The original implementation only checked samples before
+        purge_start for label overlap. In k-fold CV, training data exists on
+        BOTH sides of the test set. This test verifies that samples after the
+        embargo period whose labels still overlap with the test period are
+        also excluded.
+        """
+        config = PurgedKFoldConfig(n_splits=3, purge_bars=10, embargo_bars=10, min_train_size=0.1)
+        cv = PurgedKFold(config)
+
+        X = label_end_times_data["X"]
+        label_end_times = label_end_times_data["label_end_times"]
+
+        for fold_idx, (train_idx, test_idx) in enumerate(
+            cv.split(X, label_end_times=label_end_times)
+        ):
+            test_start_time = X.index[test_idx[0]]
+            test_end_time = X.index[test_idx[-1]]
+
+            # Check ALL training samples (both before AND after test period)
+            for idx in train_idx:
+                sample_time = X.index[idx]
+                label_end = label_end_times.iloc[idx]
+
+                # If label overlaps with test period, it should not be in training
+                if label_end >= test_start_time and sample_time <= test_end_time:
+                    raise AssertionError(
+                        f"Fold {fold_idx}: Sample at index {idx} (time={sample_time}) "
+                        f"has label_end_time={label_end} which overlaps with test period "
+                        f"[{test_start_time}, {test_end_time}]. This is label leakage!"
+                    )
+
     def test_overlapping_labels_purged(self, label_end_times_data):
         """Test that samples with labels overlapping test set are purged."""
         config = PurgedKFoldConfig(n_splits=3, purge_bars=10, embargo_bars=10, min_train_size=0.1)

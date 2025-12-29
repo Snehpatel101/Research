@@ -33,7 +33,11 @@ CME_WEEKEND_CLOSE_DAY = 4        # Friday (0=Monday)
 CME_WEEKEND_OPEN_DAY = 6         # Sunday (0=Monday)
 
 
-def is_cme_market_closed(dt: pd.Timestamp, tz: str = 'America/Chicago') -> bool:
+def is_cme_market_closed(
+    dt: pd.Timestamp,
+    tz: str = 'America/Chicago',
+    assume_utc: bool = True
+) -> bool:
     """
     Check if CME Globex is closed at the given timestamp.
 
@@ -44,19 +48,28 @@ def is_cme_market_closed(dt: pd.Timestamp, tz: str = 'America/Chicago') -> bool:
     Parameters
     ----------
     dt : pd.Timestamp
-        Timestamp to check (must be timezone-aware or will be localized to CT)
+        Timestamp to check (can be timezone-aware or naive)
     tz : str
-        Timezone for the check (default: America/Chicago for Central Time)
+        Target timezone for the check (default: America/Chicago for Central Time)
+    assume_utc : bool
+        If True and timestamp is tz-naive, assume UTC before converting.
+        If False and timestamp is tz-naive, assume already in target timezone.
 
     Returns
     -------
     bool
         True if market is closed, False if open
     """
-    # Convert to Central Time if not already
+    # Handle timezone conversion explicitly
     if dt.tzinfo is None:
-        dt = dt.tz_localize(tz)
-    else:
+        if assume_utc:
+            # Naive timestamp assumed to be UTC - localize then convert
+            dt = dt.tz_localize('UTC').tz_convert(tz)
+        else:
+            # Naive timestamp assumed to be in target timezone already
+            dt = dt.tz_localize(tz)
+    elif str(dt.tzinfo) != tz:
+        # Already has timezone but not the target - convert
         dt = dt.tz_convert(tz)
 
     hour = dt.hour
@@ -83,7 +96,8 @@ def is_cme_market_closed(dt: pd.Timestamp, tz: str = 'America/Chicago') -> bool:
 def is_expected_gap(
     gap_start: pd.Timestamp,
     gap_end: pd.Timestamp,
-    tz: str = 'America/Chicago'
+    tz: str = 'America/Chicago',
+    assume_utc: bool = True
 ) -> bool:
     """
     Check if a gap is expected due to market closure.
@@ -98,22 +112,32 @@ def is_expected_gap(
     gap_end : pd.Timestamp
         End of the gap (first bar after gap)
     tz : str
-        Timezone for the check
+        Target timezone for the check (default: America/Chicago for Central Time)
+    assume_utc : bool
+        If True and timestamps are tz-naive, assume UTC before converting.
+        If False and timestamps are tz-naive, assume already in target timezone.
 
     Returns
     -------
     bool
         True if gap is expected (spans market closure), False otherwise
     """
-    # Convert to Central Time
+    # Convert gap_start to target timezone
     if gap_start.tzinfo is None:
-        gap_start = gap_start.tz_localize(tz)
-    else:
+        if assume_utc:
+            gap_start = gap_start.tz_localize('UTC').tz_convert(tz)
+        else:
+            gap_start = gap_start.tz_localize(tz)
+    elif str(gap_start.tzinfo) != tz:
         gap_start = gap_start.tz_convert(tz)
 
+    # Convert gap_end to target timezone
     if gap_end.tzinfo is None:
-        gap_end = gap_end.tz_localize(tz)
-    else:
+        if assume_utc:
+            gap_end = gap_end.tz_localize('UTC').tz_convert(tz)
+        else:
+            gap_end = gap_end.tz_localize(tz)
+    elif str(gap_end.tzinfo) != tz:
         gap_end = gap_end.tz_convert(tz)
 
     # Check if gap spans a weekend

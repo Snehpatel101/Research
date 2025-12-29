@@ -464,12 +464,12 @@ class TestIntegrationWithRealModels:
 
     def test_catboost_is_registered(self):
         """CatBoost should be registered if available."""
-        try:
-            from src.models.boosting import CatBoostModel
-            assert ModelRegistry.is_registered("catboost")
-            assert ModelRegistry.is_registered("cat")  # alias
-        except ImportError:
+        from src.models.boosting.catboost_model import CATBOOST_AVAILABLE
+        if not CATBOOST_AVAILABLE:
             pytest.skip("CatBoost not installed")
+
+        assert ModelRegistry.is_registered("catboost")
+        assert ModelRegistry.is_registered("cat")  # alias
 
     def test_neural_models_registered(self):
         """Neural models should be registered if PyTorch available."""

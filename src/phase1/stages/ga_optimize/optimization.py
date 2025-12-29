@@ -102,6 +102,8 @@ def process_symbol_ga(
     population_size: int = 50,
     generations: int = 30,
     seed: int = 42,
+    labels_dir: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
 ) -> Dict[int, Dict]:
     """
     Run optimization for all horizons for a symbol.
@@ -118,20 +120,37 @@ def process_symbol_ga(
         (deprecated) Number of generations (default: 30)
     seed : int
         Random seed for reproducibility (default: 42)
+    labels_dir : Path, optional
+        Directory containing labels data. If None, uses global path (deprecated).
+    output_dir : Path, optional
+        Directory for outputs (ga_results, plots). If None, uses global path (deprecated).
 
     Returns:
     --------
     Dict[int, Dict] : Mapping of horizon -> optimization results
+
+    Note:
+        For reproducible runs, always pass explicit labels_dir and output_dir.
+        The global path fallback is deprecated and will be removed in a future version.
     """
     if horizons is None:
         from src.phase1.config import HORIZONS
 
         horizons = HORIZONS
 
-    # Load labels_init data
-    # Path: optimization.py -> ga_optimize -> stages -> phase1 -> src -> research (5 parents)
+    # Project root for fallback paths
     project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
-    labels_dir = project_root / "data" / "labels"
+
+    # Use provided labels_dir or fall back to global (deprecated)
+    if labels_dir is None:
+        import warnings
+        warnings.warn(
+            "Using global labels_dir is deprecated. Pass explicit labels_dir for reproducibility.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        labels_dir = project_root / "data" / "labels"
+
     input_path = labels_dir / f"{symbol}_labels_init.parquet"
 
     if not input_path.exists():
@@ -170,9 +189,22 @@ def process_symbol_ga(
             )
             logger.warning("  Consider adjusting search bounds or running more trials.")
 
-        # Save results
-        ga_results_dir = project_root / "config" / "ga_results"
+        # Determine output directories
+        if output_dir is not None:
+            ga_results_dir = output_dir / "ga_results"
+            plots_dir = output_dir / "ga_plots"
+        else:
+            import warnings
+            warnings.warn(
+                "Using global output paths is deprecated. Pass explicit output_dir for reproducibility.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            ga_results_dir = project_root / "config" / "ga_results"
+            plots_dir = project_root / "results" / "ga_plots"
+
         ga_results_dir.mkdir(parents=True, exist_ok=True)
+        plots_dir.mkdir(parents=True, exist_ok=True)
 
         results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
         with open(results_path, "w") as f:
@@ -180,8 +212,6 @@ def process_symbol_ga(
         logger.info(f"  Saved results to {results_path}")
 
         # Plot convergence
-        plots_dir = project_root / "results" / "ga_plots"
-        plots_dir.mkdir(parents=True, exist_ok=True)
         plot_path = plots_dir / f"{symbol}_ga_h{horizon}_convergence.png"
         plot_convergence(results, plot_path)
 

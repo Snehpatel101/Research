@@ -211,6 +211,7 @@ class OOFGenerator:
         y_true: pd.Series,
         horizon: int,
         add_derived_features: bool = True,
+        drop_nan_samples: bool = True,
     ) -> StackingDataset:
         """
         Build stacking dataset from OOF predictions.
@@ -221,17 +222,24 @@ class OOFGenerator:
         - Derived features (confidence, agreement, entropy)
         - y_true (label)
 
+        Handles NaN values from sequence models by either dropping affected
+        samples (recommended) or keeping them for downstream handling.
+
         Args:
             oof_predictions: Dict of OOF predictions by model
             y_true: True labels
             horizon: Label horizon (for metadata)
             add_derived_features: Whether to add derived features
+            drop_nan_samples: If True, drop samples with any NaN predictions.
+                This is REQUIRED when sequence models are included, as they
+                cannot predict samples at the beginning of segments due to
+                lookback requirements. Default True.
 
         Returns:
             StackingDataset for meta-learner training
         """
         return self._stacking_builder.build_stacking_dataset(
-            oof_predictions, y_true, horizon, add_derived_features
+            oof_predictions, y_true, horizon, add_derived_features, drop_nan_samples
         )
 
     def save_stacking_dataset(

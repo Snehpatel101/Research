@@ -76,8 +76,8 @@ def run_final_labels(
             logger.debug("src.__version__ not available")
             src_version = None
 
-        # GA results directory
-        ga_results_dir = config.project_root / 'config' / 'ga_results'
+        # GA results directory (run-scoped for reproducibility)
+        ga_results_dir = config.run_artifacts_dir / 'ga_results'
 
         artifacts = []
         all_dfs = {}
@@ -216,11 +216,11 @@ def run_final_labels(
             metadata={'symbols': config.symbols, 'horizons': config.label_horizons}
         )
 
-        # Generate labeling report
+        # Generate labeling report (run-scoped)
         if all_dfs:
             report_path = generate_labeling_report(
                 all_dfs,
-                config.results_dir,
+                config.run_artifacts_dir,
                 config.label_horizons,
             )
             if report_path.exists():

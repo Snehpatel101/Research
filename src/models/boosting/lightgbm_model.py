@@ -28,24 +28,68 @@ from ..registry import register
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache for CUDA availability check
+_LIGHTGBM_CUDA_AVAILABLE: Optional[bool] = None
+
 
 def _check_cuda_available() -> bool:
-    """Check if LightGBM GPU is available without running training."""
+    """Check if LightGBM GPU is available (cached).
+
+    Verifies both PyTorch CUDA availability and that LightGBM was built
+    with GPU support. Standard pip LightGBM doesn't include GPU support.
+    """
+    global _LIGHTGBM_CUDA_AVAILABLE
+    if _LIGHTGBM_CUDA_AVAILABLE is not None:
+        return _LIGHTGBM_CUDA_AVAILABLE
+
     if not LIGHTGBM_AVAILABLE:
+        _LIGHTGBM_CUDA_AVAILABLE = False
         return False
+
     try:
-        # Check if CUDA is available via torch (more reliable)
-        import torch
-        if not torch.cuda.is_available():
-            return False
-        # LightGBM GPU requires building with GPU support
-        # Check device parameter in version info
-        return True
-    except ImportError:
-        # Fallback: assume GPU available if use_gpu=True in config
-        return True
-    except Exception:
-        return False
+        # Check PyTorch CUDA first (fast check)
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                logger.debug("PyTorch CUDA not available, skipping LightGBM GPU check")
+                _LIGHTGBM_CUDA_AVAILABLE = False
+                return False
+        except ImportError:
+            # PyTorch not installed, proceed with LightGBM check
+            pass
+
+        # Try to create a small dataset with GPU device
+        # This will fail if LightGBM wasn't built with GPU support
+        params = {"device": "cuda", "verbose": -1}
+        data = lgb.Dataset(np.array([[1.0]]), label=np.array([0]))
+        data.construct()
+
+        # Attempt to create a booster with GPU params to verify GPU support
+        # LightGBM will raise an error if GPU support isn't compiled in
+        params_full = {
+            "device": "cuda",
+            "objective": "binary",
+            "verbose": -1,
+            "num_iterations": 0,
+        }
+        try:
+            bst = lgb.Booster(params=params_full, train_set=data)
+            del bst
+        except lgb.basic.LightGBMError as e:
+            # LightGBM raises specific error if GPU not supported
+            if "GPU" in str(e) or "cuda" in str(e).lower():
+                logger.debug(f"LightGBM GPU not supported in this build: {e}")
+                _LIGHTGBM_CUDA_AVAILABLE = False
+                return False
+            raise
+
+        _LIGHTGBM_CUDA_AVAILABLE = True
+        logger.debug("LightGBM CUDA check passed")
+    except Exception as e:
+        logger.debug(f"LightGBM GPU not available: {e}")
+        _LIGHTGBM_CUDA_AVAILABLE = False
+
+    return _LIGHTGBM_CUDA_AVAILABLE
 
 
 @register(
@@ -136,10 +180,13 @@ class LightGBMModel(BaseModel):
             unique_classes, class_counts = np.unique(y_train_lgb, return_counts=True)
             n_samples = len(y_train_lgb)
             n_classes = len(unique_classes)
-            class_weights = n_samples / (n_classes * class_counts)
+            class_weight_values = n_samples / (n_classes * class_counts)
 
-            # Map class weights to each sample
-            sample_class_weights = np.array([class_weights[int(c)] for c in y_train_lgb])
+            # Create mapping from class to weight (handles missing classes)
+            class_weight_dict = dict(zip(unique_classes, class_weight_values))
+
+            # Map weights to samples using the dictionary
+            sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_lgb])
 
             # Combine with existing sample weights
             if sample_weights is not None:
@@ -147,7 +194,7 @@ class LightGBMModel(BaseModel):
             else:
                 final_weights = sample_class_weights
 
-            logger.debug(f"Class weights applied: {dict(zip(unique_classes, class_weights))}")
+            logger.debug(f"Class weights applied: {class_weight_dict}")
 
         # Create Dataset objects
         # Note: free_raw_data=True (default) frees raw data after construction

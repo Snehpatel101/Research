@@ -446,8 +446,8 @@ class TestEnsembleValidation:
 
         All tabular or all sequence models should be compatible.
         """
-        # Test all-tabular ensemble
-        tabular_models = ["xgboost", "lightgbm", "catboost"]
+        # Test all-tabular ensemble (use always-available models, not optional catboost)
+        tabular_models = ["xgboost", "lightgbm", "random_forest"]
         is_valid, error = validate_ensemble_config(tabular_models)
         assert is_valid, f"Tabular ensemble rejected: {error}"
 
@@ -504,8 +504,9 @@ class TestEnsembleValidation:
             }
         )
 
-        # Create dummy data
-        X = np.random.randn(100, 10).astype(np.float32)
+        # Create dummy data - use 3D since ensemble contains lstm (requires_sequences=True)
+        # This allows shape validation to pass so compatibility validation can be tested
+        X = np.random.randn(100, 10, 5).astype(np.float32)  # 3D for sequence models
         y = np.random.choice([-1, 0, 1], size=100)
 
         # Try to fit - should raise validation error BEFORE training

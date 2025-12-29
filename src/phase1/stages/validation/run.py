@@ -52,11 +52,12 @@ def run_validation(
         if not combined_path.exists():
             raise FileNotFoundError(f"Combined labeled data not found: {combined_path}")
 
+        # Run-scoped output paths for reproducibility
         validation_report_path = (
-            config.results_dir / f"validation_report_{config.run_id}.json"
+            config.run_artifacts_dir / f"validation_report_{config.run_id}.json"
         )
         feature_selection_path = (
-            config.results_dir / f"feature_selection_{config.run_id}.json"
+            config.run_artifacts_dir / f"feature_selection_{config.run_id}.json"
         )
 
         logger.info(f"Validating combined dataset: {combined_path}")

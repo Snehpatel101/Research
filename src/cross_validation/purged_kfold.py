@@ -36,15 +36,24 @@ class PurgedKFoldConfig:
         purge_bars: Number of bars to remove before test set (default 60 = 3x max horizon)
         embargo_bars: Number of bars to skip after test set (default 1440 = 5 days at 5min)
         min_train_size: Minimum training set fraction (raises error if violated)
+        timeframe: Optional timeframe for auto-calculating embargo_bars from calendar time.
+            When provided, embargo_bars is computed as EMBARGO_TIME_MINUTES / timeframe_minutes.
+            This ensures consistent ~5 day buffer regardless of bar resolution.
 
     Example:
+        >>> # Legacy mode (assumes 5-min bars)
         >>> config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=1440)
         >>> cv = PurgedKFold(config)
+
+        >>> # Timeframe-aware mode (recommended)
+        >>> config = PurgedKFoldConfig.from_timeframe(n_splits=5, purge_bars=60, timeframe='15min')
+        >>> config.embargo_bars  # 480 bars (5 days at 15min)
     """
     n_splits: int = 5
     purge_bars: int = 60
     embargo_bars: int = 1440
     min_train_size: float = 0.3
+    timeframe: Optional[str] = None  # For documentation/tracking purposes
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -56,6 +65,60 @@ class PurgedKFoldConfig:
             raise ValueError(f"embargo_bars must be >= 0, got {self.embargo_bars}")
         if not 0 < self.min_train_size < 1:
             raise ValueError(f"min_train_size must be in (0, 1), got {self.min_train_size}")
+
+    @classmethod
+    def from_timeframe(
+        cls,
+        timeframe: str,
+        n_splits: int = 5,
+        purge_bars: int = 60,
+        min_train_size: float = 0.3,
+        embargo_time_minutes: Optional[int] = None,
+    ) -> "PurgedKFoldConfig":
+        """
+        Create config with timeframe-aware embargo calculation.
+
+        This factory method computes embargo_bars based on calendar time
+        (default 5 days = 7200 minutes) to ensure consistent decorrelation
+        periods regardless of bar resolution.
+
+        Args:
+            timeframe: Bar timeframe (e.g., '5min', '15min', '1h')
+            n_splits: Number of CV folds
+            purge_bars: Number of bars to purge before test set
+            min_train_size: Minimum training set fraction
+            embargo_time_minutes: Embargo duration in minutes (default: 7200 = 5 days)
+
+        Returns:
+            PurgedKFoldConfig with embargo_bars computed for the given timeframe
+
+        Examples:
+            >>> config = PurgedKFoldConfig.from_timeframe('5min')
+            >>> config.embargo_bars
+            1440  # 5 days at 5-min bars
+
+            >>> config = PurgedKFoldConfig.from_timeframe('15min')
+            >>> config.embargo_bars
+            480   # 5 days at 15-min bars
+
+            >>> config = PurgedKFoldConfig.from_timeframe('1h')
+            >>> config.embargo_bars
+            120   # 5 days at 1-hour bars
+        """
+        from src.common.horizon_config import compute_embargo_bars
+
+        embargo_bars = compute_embargo_bars(
+            timeframe=timeframe,
+            embargo_time_minutes=embargo_time_minutes,
+        )
+
+        return cls(
+            n_splits=n_splits,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
+            min_train_size=min_train_size,
+            timeframe=timeframe,
+        )
 
 
 # =============================================================================
@@ -205,11 +268,23 @@ class PurgedKFold:
             train_mask[test_end:embargo_end] = False
 
             # Additional purge for overlapping labels (if label_end_times provided)
+            # BUG FIX: Check ALL training samples, not just those before purge_start
+            # Training data can exist on BOTH sides of the test set in k-fold CV
+            # Any sample whose label extends into test period must be excluded
             if label_end_times is not None and has_datetime_index:
                 test_start_time = X.index[test_start]
-                for i in range(purge_start):
-                    if label_end_times.iloc[i] >= test_start_time:
-                        train_mask[i] = False
+                test_end_time = X.index[test_end - 1]
+
+                # Check every potential training sample for label overlap
+                for i in range(n_samples):
+                    if train_mask[i]:  # Only check samples still in training set
+                        label_end = label_end_times.iloc[i]
+                        # Remove if label's outcome period overlaps with test period
+                        # This handles:
+                        # 1. Samples before test whose labels extend into test period
+                        # 2. Samples after embargo whose labels started during test period
+                        if label_end >= test_start_time and X.index[i] <= test_end_time:
+                            train_mask[i] = False
 
             train_indices = indices[train_mask]
 

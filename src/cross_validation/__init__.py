@@ -63,6 +63,11 @@ from src.cross_validation.sequence_cv import (
     build_sequences_for_cv_fold,
     validate_sequence_cv_coverage,
 )
+from src.cross_validation.oof_sequence import SequenceOOFGenerator
+from src.cross_validation.oof_stacking import (
+    StackingDatasetBuilder,
+    find_valid_samples_mask,
+)
 
 __all__ = [
     "PurgedKFold",
@@ -100,4 +105,9 @@ __all__ = [
     "SequenceFoldResult",
     "build_sequences_for_cv_fold",
     "validate_sequence_cv_coverage",
+    # Sequence OOF
+    "SequenceOOFGenerator",
+    # Stacking
+    "StackingDatasetBuilder",
+    "find_valid_samples_mask",
 ]

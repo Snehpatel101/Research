@@ -21,16 +21,45 @@ from ..registry import register
 
 logger = logging.getLogger(__name__)
 
+# Module-level cache for CUDA availability check
+_CUDA_AVAILABLE: Optional[bool] = None
+
 
 def _check_cuda_available() -> bool:
-    """Check if XGBoost CUDA is available."""
+    """Check if XGBoost CUDA is available (cached).
+
+    Uses a lightweight check that creates a Booster without training,
+    avoiding the overhead of running actual training on every instantiation.
+    """
+    global _CUDA_AVAILABLE
+    if _CUDA_AVAILABLE is not None:
+        return _CUDA_AVAILABLE
+
     try:
-        test_params = {"device": "cuda", "tree_method": "hist"}
+        # Check PyTorch CUDA first (fast check)
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                logger.debug("PyTorch CUDA not available, skipping XGBoost GPU check")
+                _CUDA_AVAILABLE = False
+                return False
+        except ImportError:
+            # PyTorch not installed, proceed with XGBoost check
+            pass
+
+        # Verify XGBoost can use CUDA by creating a Booster (no training)
         test_data = xgb.DMatrix(np.array([[1.0]]), label=np.array([0]))
-        xgb.train(test_params, test_data, num_boost_round=1)
-        return True
-    except Exception:
-        return False
+        params = {"device": "cuda", "tree_method": "hist"}
+        # Create booster without training - much lighter than xgb.train()
+        bst = xgb.Booster(params, [test_data])
+        del bst
+        _CUDA_AVAILABLE = True
+        logger.debug("XGBoost CUDA check passed")
+    except Exception as e:
+        logger.debug(f"XGBoost CUDA not available: {e}")
+        _CUDA_AVAILABLE = False
+
+    return _CUDA_AVAILABLE
 
 
 @register(
@@ -118,10 +147,13 @@ class XGBoostModel(BaseModel):
             unique_classes, class_counts = np.unique(y_train_xgb, return_counts=True)
             n_samples = len(y_train_xgb)
             n_classes = len(unique_classes)
-            class_weights = n_samples / (n_classes * class_counts)
+            class_weight_values = n_samples / (n_classes * class_counts)
 
-            # Map class weights to each sample
-            sample_class_weights = np.array([class_weights[int(c)] for c in y_train_xgb])
+            # Create mapping from class to weight (handles missing classes)
+            class_weight_dict = dict(zip(unique_classes, class_weight_values))
+
+            # Map weights to samples using the dictionary
+            sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_xgb])
 
             # Combine with existing sample weights
             if sample_weights is not None:
@@ -129,7 +161,7 @@ class XGBoostModel(BaseModel):
             else:
                 final_weights = sample_class_weights
 
-            logger.debug(f"Class weights applied: {dict(zip(unique_classes, class_weights))}")
+            logger.debug(f"Class weights applied: {class_weight_dict}")
 
         # Create DMatrix objects
         dtrain = xgb.DMatrix(X_train, label=y_train_xgb, weight=final_weights)

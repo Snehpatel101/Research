@@ -4,6 +4,9 @@ CatBoost Model - Ordered boosting for 3-class prediction.
 Supports GPU training (task_type='GPU'), early stopping, sample weights,
 and feature importance extraction. Uses ordered boosting for better
 handling of categorical features and reduced overfitting.
+
+Note: This model is only registered if CatBoost is installed.
+Install with: pip install catboost
 """
 from __future__ import annotations
 
@@ -15,6 +18,12 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..common import map_labels_to_classes, map_classes_to_labels
+
+logger = logging.getLogger(__name__)
+
+# Check if CatBoost is available
 try:
     from catboost import CatBoostClassifier, Pool
     CATBOOST_AVAILABLE = True
@@ -22,12 +31,10 @@ except ImportError:
     CATBOOST_AVAILABLE = False
     CatBoostClassifier = None
     Pool = None
-
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
-from ..common import map_labels_to_classes, map_classes_to_labels
-from ..registry import register
-
-logger = logging.getLogger(__name__)
+    logger.debug(
+        "CatBoost not installed. CatBoostModel will not be registered. "
+        "Install with: pip install catboost"
+    )
 
 
 def _check_cuda_available() -> bool:
@@ -48,12 +55,6 @@ def _check_cuda_available() -> bool:
         return False
 
 
-@register(
-    name="catboost",
-    family="boosting",
-    description="CatBoost gradient boosting with GPU support",
-    aliases=["cat"],
-)
 class CatBoostModel(BaseModel):
     """CatBoost gradient boosting classifier with GPU support."""
 
@@ -139,10 +140,13 @@ class CatBoostModel(BaseModel):
             unique_classes, class_counts = np.unique(y_train_cat, return_counts=True)
             n_samples = len(y_train_cat)
             n_classes = len(unique_classes)
-            class_weights = n_samples / (n_classes * class_counts)
+            class_weight_values = n_samples / (n_classes * class_counts)
 
-            # Map class weights to each sample
-            sample_class_weights = np.array([class_weights[int(c)] for c in y_train_cat])
+            # Create mapping from class to weight (handles missing classes)
+            class_weight_dict = dict(zip(unique_classes, class_weight_values))
+
+            # Map weights to samples using the dictionary
+            sample_class_weights = np.array([class_weight_dict[int(c)] for c in y_train_cat])
 
             # Combine with existing sample weights
             if sample_weights is not None:
@@ -150,7 +154,7 @@ class CatBoostModel(BaseModel):
             else:
                 final_weights = sample_class_weights
 
-            logger.debug(f"Class weights applied: {dict(zip(unique_classes, class_weights))}")
+            logger.debug(f"Class weights applied: {class_weight_dict}")
 
         # Create Pool objects
         train_pool = Pool(data=X_train, label=y_train_cat, weight=final_weights)
@@ -341,4 +345,18 @@ class CatBoostModel(BaseModel):
         }
 
 
-__all__ = ["CatBoostModel"]
+# Conditional registration: Only register if CatBoost is available
+# This prevents the model from appearing in the registry when it cannot be instantiated
+if CATBOOST_AVAILABLE:
+    from ..registry import register
+
+    # Apply the decorator manually to register the class
+    CatBoostModel = register(
+        name="catboost",
+        family="boosting",
+        description="CatBoost gradient boosting with GPU support",
+        aliases=["cat"],
+    )(CatBoostModel)
+
+
+__all__ = ["CatBoostModel", "CATBOOST_AVAILABLE"]

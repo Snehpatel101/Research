@@ -7,26 +7,33 @@ without requiring scaling or sequential input.
 Models:
 - XGBoost: Fast, regularized gradient boosting with GPU support
 - LightGBM: Leaf-wise growth, handles large datasets efficiently
-- CatBoost: Excellent categorical feature handling with ordered boosting
+- CatBoost: Excellent categorical feature handling with ordered boosting (optional)
 
-All models auto-register with ModelRegistry on import.
+All models auto-register with ModelRegistry on import if their dependencies
+are available. CatBoost is optional and only registered when installed.
 
 Example:
     # Models register automatically when imported
-    from src.models.boosting import XGBoostModel, LightGBMModel, CatBoostModel
+    from src.models.boosting import XGBoostModel, LightGBMModel
 
-    # Or create via registry
+    # CatBoost is optional - check availability first
+    from src.models.boosting.catboost_model import CATBOOST_AVAILABLE
+    if CATBOOST_AVAILABLE:
+        from src.models.boosting import CatBoostModel
+
+    # Or create via registry (only registered models appear)
     from src.models import ModelRegistry
     model = ModelRegistry.create("xgboost", config={"max_depth": 8})
     model = ModelRegistry.create("lgbm", config={"num_leaves": 63})
-    model = ModelRegistry.create("catboost", config={"depth": 8})
+    # catboost only available if installed
 """
 from .xgboost_model import XGBoostModel
 from .lightgbm_model import LightGBMModel
-from .catboost_model import CatBoostModel
+from .catboost_model import CatBoostModel, CATBOOST_AVAILABLE
 
 __all__ = [
     "XGBoostModel",
     "LightGBMModel",
     "CatBoostModel",
+    "CATBOOST_AVAILABLE",
 ]

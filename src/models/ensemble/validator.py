@@ -55,8 +55,12 @@ def validate_ensemble_config(base_model_names: List[str]) -> Tuple[bool, str]:
     for model_name in base_model_names:
         if not ModelRegistry.is_registered(model_name):
             available = ModelRegistry.list_all()
+            # Provide helpful message for commonly expected but unavailable models
+            hint = ""
+            if model_name.lower() in ("catboost", "cat"):
+                hint = " (CatBoost is optional - install with: pip install catboost)"
             return False, (
-                f"Model '{model_name}' is not registered. "
+                f"Model '{model_name}' is not registered{hint}. "
                 f"Available models: {available}"
             )
 

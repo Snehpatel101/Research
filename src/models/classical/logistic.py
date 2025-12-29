@@ -3,6 +3,12 @@ Logistic Regression Model - Linear classifier for 3-class prediction.
 
 CPU-only implementation using scikit-learn. Useful as a meta-learner
 for stacking ensembles due to its simplicity and calibrated outputs.
+
+Regularization (sklearn 1.8+):
+- l1_ratio=0.0 (default): Pure L2 regularization
+- l1_ratio=1.0: Pure L1 regularization
+- 0 < l1_ratio < 1: Elastic net (L1+L2 mix)
+Note: Uses 'saga' solver for l1_ratio support.
 """
 from __future__ import annotations
 
@@ -33,7 +39,12 @@ class LogisticModel(BaseModel):
     """
     Logistic Regression classifier with sample weight support.
 
-    Uses scikit-learn's LogisticRegression with L2 regularization.
+    Uses scikit-learn's LogisticRegression with configurable regularization:
+    - l1_ratio=0.0: Pure L2 regularization (default)
+    - l1_ratio=1.0: Pure L1 regularization
+    - 0 < l1_ratio < 1: Elastic net (L1+L2 mix)
+
+    Uses 'saga' solver which supports all l1_ratio values.
     Requires scaled features for optimal performance.
     Commonly used as a meta-learner in stacking ensembles.
     """
@@ -58,14 +69,15 @@ class LogisticModel(BaseModel):
         return False
 
     def get_default_config(self) -> Dict[str, Any]:
+        # sklearn 1.8+ uses l1_ratio directly (penalty parameter is deprecated)
+        # l1_ratio: 0.0=pure L2, 1.0=pure L1, 0<x<1=elastic net
+        # solver='saga' supports all l1_ratio values
         return {
-            "penalty": "l2",
+            "l1_ratio": 0.0,  # 0.0=pure L2 (default), 1.0=L1, 0<x<1=elastic net
             "C": 1.0,
-            "solver": "lbfgs",
+            "solver": "saga",  # saga supports l1_ratio parameter
             "max_iter": 500,
-            "multi_class": "multinomial",
             "class_weight": "balanced",
-            "n_jobs": -1,
             "random_state": 42,
             "tol": 1e-4,
             "verbose": 0,
@@ -100,15 +112,17 @@ class LogisticModel(BaseModel):
         y_train_sk = self._convert_labels_to_sklearn(y_train)
         y_val_sk = self._convert_labels_to_sklearn(y_val)
 
-        # Build model
+        # Build model using sklearn 1.8+ API
+        # l1_ratio controls regularization: 0.0=L2, 1.0=L1, 0<x<1=elastic net
+        l1_ratio = train_config.get("l1_ratio", 0.0)
+        solver = train_config.get("solver", "saga")
+
         self._model = LogisticRegression(
-            penalty=train_config.get("penalty", "l2"),
+            l1_ratio=l1_ratio,
             C=train_config.get("C", 1.0),
-            solver=train_config.get("solver", "lbfgs"),
+            solver=solver,
             max_iter=train_config.get("max_iter", 500),
-            multi_class=train_config.get("multi_class", "multinomial"),
             class_weight=train_config.get("class_weight", "balanced"),
-            n_jobs=train_config.get("n_jobs", -1),
             random_state=train_config.get("random_state", 42),
             tol=train_config.get("tol", 1e-4),
             verbose=train_config.get("verbose", 0),
@@ -116,9 +130,8 @@ class LogisticModel(BaseModel):
         )
 
         logger.info(
-            f"Training LogisticRegression: C={train_config.get('C', 1.0)}, "
-            f"solver={train_config.get('solver', 'lbfgs')}, "
-            f"max_iter={train_config.get('max_iter', 500)}"
+            f"Training LogisticRegression: l1_ratio={l1_ratio}, C={train_config.get('C', 1.0)}, "
+            f"solver={solver}, max_iter={train_config.get('max_iter', 500)}"
         )
 
         # Train model

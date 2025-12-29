@@ -446,3 +446,141 @@ class TestLeakageDetection:
         # The fold-aware scaling should produce higher validation means
         # because it doesn't "know" about the future trend
         assert fold_val_mean > global_val_mean + 0.5
+
+
+# =============================================================================
+# SCALER PERSISTENCE TESTS
+# =============================================================================
+
+class TestScalerPersistence:
+    """Tests for scaler persistence and loading."""
+
+    def test_scaler_maintains_statistics_after_save_load(self, tmp_path):
+        """Saved scaler produces identical transforms after loading."""
+        import joblib
+
+        np.random.seed(42)
+        X_train = np.random.randn(100, 10)
+        X_test = np.random.randn(20, 10)
+
+        # Fit and transform
+        scaler = RobustScaler()
+        scaler.fit(X_train)
+        original_transform = scaler.transform(X_test)
+
+        # Save and load
+        save_path = tmp_path / "scaler.joblib"
+        joblib.dump(scaler, save_path)
+        loaded_scaler = joblib.load(save_path)
+
+        # Verify same output
+        loaded_transform = loaded_scaler.transform(X_test)
+        np.testing.assert_array_almost_equal(original_transform, loaded_transform)
+
+    def test_scaler_center_preserved_after_persistence(self, tmp_path):
+        """Scaler center (median) is preserved after save/load."""
+        import joblib
+
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5) * 3 + 10  # mean ~10
+
+        scaler = RobustScaler()
+        scaler.fit(X_train)
+        original_center = scaler.center_.copy()
+
+        save_path = tmp_path / "scaler.joblib"
+        joblib.dump(scaler, save_path)
+        loaded_scaler = joblib.load(save_path)
+
+        np.testing.assert_array_equal(original_center, loaded_scaler.center_)
+
+    def test_scaler_scale_preserved_after_persistence(self, tmp_path):
+        """Scaler scale (IQR) is preserved after save/load."""
+        import joblib
+
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5) * 3 + 10
+
+        scaler = RobustScaler()
+        scaler.fit(X_train)
+        original_scale = scaler.scale_.copy()
+
+        save_path = tmp_path / "scaler.joblib"
+        joblib.dump(scaler, save_path)
+        loaded_scaler = joblib.load(save_path)
+
+        np.testing.assert_array_equal(original_scale, loaded_scaler.scale_)
+
+    def test_standard_scaler_persistence(self, tmp_path):
+        """StandardScaler mean and std preserved after save/load."""
+        import joblib
+
+        np.random.seed(42)
+        X_train = np.random.randn(100, 5) * 2 + 5
+        X_test = np.random.randn(20, 5)
+
+        scaler = StandardScaler()
+        scaler.fit(X_train)
+        original_transform = scaler.transform(X_test)
+        original_mean = scaler.mean_.copy()
+        original_var = scaler.var_.copy()
+
+        save_path = tmp_path / "scaler.joblib"
+        joblib.dump(scaler, save_path)
+        loaded_scaler = joblib.load(save_path)
+
+        # Check parameters
+        np.testing.assert_array_almost_equal(original_mean, loaded_scaler.mean_)
+        np.testing.assert_array_almost_equal(original_var, loaded_scaler.var_)
+
+        # Check transform output
+        loaded_transform = loaded_scaler.transform(X_test)
+        np.testing.assert_array_almost_equal(original_transform, loaded_transform)
+
+    def test_fold_aware_scaler_result_can_be_persisted(self, tmp_path, sample_fold_data):
+        """FoldScalingResult scaler can be persisted."""
+        import joblib
+
+        X_train, X_val = sample_fold_data
+
+        fold_scaler = FoldAwareScaler(method="robust", clip_outliers=False)
+        result = fold_scaler.fit_transform_fold(X_train, X_val)
+
+        # Save the internal scaler
+        save_path = tmp_path / "fold_scaler.joblib"
+        joblib.dump(result.scaler, save_path)
+
+        # Load and verify
+        loaded_scaler = joblib.load(save_path)
+
+        # Transform new data
+        np.random.seed(99)
+        X_new = np.random.randn(10, X_train.shape[1])
+
+        original_transform = result.scaler.transform(X_new)
+        loaded_transform = loaded_scaler.transform(X_new)
+
+        np.testing.assert_array_almost_equal(original_transform, loaded_transform)
+
+    def test_pickle_compatibility(self, tmp_path):
+        """Scaler works with pickle (not just joblib)."""
+        np.random.seed(42)
+        X_train = np.random.randn(100, 10)
+        X_test = np.random.randn(20, 10)
+
+        scaler = RobustScaler()
+        scaler.fit(X_train)
+        original_transform = scaler.transform(X_test)
+
+        # Save with pickle
+        import pickle
+        save_path = tmp_path / "scaler.pkl"
+        with open(save_path, "wb") as f:
+            pickle.dump(scaler, f)
+
+        # Load with pickle
+        with open(save_path, "rb") as f:
+            loaded_scaler = pickle.load(f)
+
+        loaded_transform = loaded_scaler.transform(X_test)
+        np.testing.assert_array_almost_equal(original_transform, loaded_transform)

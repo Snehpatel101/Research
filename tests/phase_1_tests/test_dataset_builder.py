@@ -5,8 +5,9 @@ from src.phase1.pipeline_config import PipelineConfig
 from src.pipeline.stages.datasets import run_build_datasets
 
 
-def _write_scaled_splits(base_dir):
-    scaled_dir = base_dir / "data" / "splits" / "scaled"
+def _write_scaled_splits(config):
+    """Write test scaled splits to run-scoped directory."""
+    scaled_dir = config.splits_dir / "scaled"
     scaled_dir.mkdir(parents=True, exist_ok=True)
 
     df = pd.DataFrame(
@@ -40,7 +41,7 @@ def test_run_build_datasets(tmp_path):
     )
     config.create_directories()
 
-    _write_scaled_splits(tmp_path)
+    _write_scaled_splits(config)
 
     manifest = ArtifactManifest(config.run_id, config.project_root)
     result = run_build_datasets(config, manifest)

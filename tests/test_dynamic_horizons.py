@@ -417,9 +417,10 @@ class TestPipelineConfigHorizonIntegration:
 
         # max_horizon = 60
         # purge = 60 * 3 = 180
-        # embargo = max(60 * 72, 1440) = 4320
+        # embargo = EMBARGO_TIME_MINUTES / timeframe_minutes = 7200 / 5 = 1440
+        # (timeframe-aware: embargo is calculated from calendar time, not bar count)
         assert config.purge_bars == 180
-        assert config.embargo_bars == 4320
+        assert config.embargo_bars == 1440  # 5 days at 5-min bars
 
     def test_disable_auto_scale(self):
         """Disabling auto_scale should use default values."""
@@ -435,6 +436,42 @@ class TestPipelineConfigHorizonIntegration:
 
         assert config.purge_bars == 100
         assert config.embargo_bars == 500
+
+    def test_embargo_scales_with_timeframe(self):
+        """Embargo should scale inversely with bar timeframe to maintain ~5 days."""
+        from src.phase1.pipeline_config import PipelineConfig
+
+        # Test 5-min bars (default)
+        config_5min = PipelineConfig(
+            symbols=['MES'],
+            target_timeframe='5min',
+        )
+        # 5 days = 7200 minutes; at 5-min bars: 7200/5 = 1440 bars
+        assert config_5min.embargo_bars == 1440
+
+        # Test 15-min bars
+        config_15min = PipelineConfig(
+            symbols=['MES'],
+            target_timeframe='15min',
+        )
+        # 5 days = 7200 minutes; at 15-min bars: 7200/15 = 480 bars
+        assert config_15min.embargo_bars == 480
+
+        # Test 1-min bars
+        config_1min = PipelineConfig(
+            symbols=['MES'],
+            target_timeframe='1min',
+        )
+        # 5 days = 7200 minutes; at 1-min bars: 7200/1 = 7200 bars
+        assert config_1min.embargo_bars == 7200
+
+        # Verify all represent the same calendar time (~5 days)
+        def bars_to_days(bars, tf_minutes):
+            return (bars * tf_minutes) / (60 * 24)
+
+        assert abs(bars_to_days(config_5min.embargo_bars, 5) - 5.0) < 0.01
+        assert abs(bars_to_days(config_15min.embargo_bars, 15) - 5.0) < 0.01
+        assert abs(bars_to_days(config_1min.embargo_bars, 1) - 5.0) < 0.01
 
     def test_horizon_config_takes_priority(self):
         """HorizonConfig should take priority over label_horizons."""

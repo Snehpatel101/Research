@@ -105,12 +105,14 @@ def test_quality_scoring() -> bool:
 
     from src.phase1.stages.final_labels import compute_quality_scores
 
-    # Create test data
+    # Create test data with proper MAE/MFE conventions:
+    # - MAE (from long perspective) is always negative or zero (max downside)
+    # - MFE (from long perspective) is always positive or zero (max upside)
     n: int = 100
     np.random.seed(42)
     bars_to_hit: np.ndarray = np.random.randint(1, 20, n)
-    mae: np.ndarray = np.random.randn(n) * 0.01
-    mfe: np.ndarray = np.abs(np.random.randn(n) * 0.02)
+    mae: np.ndarray = -np.abs(np.random.randn(n) * 0.01)  # Always negative
+    mfe: np.ndarray = np.abs(np.random.randn(n) * 0.02)   # Always positive
     labels: np.ndarray = np.random.choice([-1, 0, 1], n)  # Random labels
     horizon: int = 5  # Using active horizon from TEST_HORIZONS
 
@@ -166,6 +168,52 @@ def test_sample_weights() -> bool:
     print(f"  ✓ Tier 3 (0.5x): {tier3} ({tier3/n*100:.1f}%)")
     print(f"  ✓ Sample weight assignment works correctly\n")
     return True
+
+
+def test_direction_aware_quality_scoring() -> None:
+    """
+    Test that quality scoring correctly handles trade direction.
+
+    MAE/MFE from triple_barrier_numba are computed from a LONG perspective:
+      - MFE = max upside (positive) = favorable for LONG, adverse for SHORT
+      - MAE = max downside (negative) = adverse for LONG, favorable for SHORT
+
+    This test verifies the fix for the direction inconsistency bug where
+    shorts were being scored incorrectly.
+    """
+    print("Testing direction-aware quality scoring...")
+
+    from src.phase1.stages.final_labels import compute_quality_scores
+
+    # Create controlled test data:
+    # Sample 0: LONG with good excursions (low adverse, high favorable)
+    # Sample 1: LONG with bad excursions (high adverse, low favorable)
+    # Sample 2: SHORT with good excursions (high |MAE| = profit, low MFE = low risk)
+    # Sample 3: SHORT with bad excursions (low |MAE| = low profit, high MFE = high risk)
+
+    bars = np.array([10, 10, 10, 10], dtype=np.int32)
+    # MAE: max downside from long perspective (always negative)
+    # MFE: max upside from long perspective (always positive)
+    mae_test = np.array([-0.001, -0.05, -0.05, -0.001], dtype=np.float32)
+    mfe_test = np.array([0.05, 0.001, 0.001, 0.05], dtype=np.float32)
+    labels_test = np.array([1, 1, -1, -1], dtype=np.int8)
+    horizon_test = 10
+
+    q, ptg, twdd = compute_quality_scores(bars, mae_test, mfe_test, labels_test, horizon_test)
+
+    # LONG trades: good = high MFE + low |MAE|, bad = low MFE + high |MAE|
+    assert q[0] > q[1], f"LONG good ({q[0]:.3f}) should score higher than LONG bad ({q[1]:.3f})"
+
+    # SHORT trades: good = high |MAE| (profit) + low MFE (risk), bad = opposite
+    # Sample 2: MAE=-0.05 (high profit), MFE=0.001 (low risk) -> GOOD
+    # Sample 3: MAE=-0.001 (low profit), MFE=0.05 (high risk) -> BAD
+    assert q[2] > q[3], f"SHORT good ({q[2]:.3f}) should score higher than SHORT bad ({q[3]:.3f})"
+
+    print(f"  ✓ LONG good quality: {q[0]:.3f}")
+    print(f"  ✓ LONG bad quality:  {q[1]:.3f}")
+    print(f"  ✓ SHORT good quality: {q[2]:.3f}")
+    print(f"  ✓ SHORT bad quality:  {q[3]:.3f}")
+    print(f"  ✓ Direction-aware quality scoring works correctly\n")
 
 
 def main() -> int:

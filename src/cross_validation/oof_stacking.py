@@ -3,12 +3,15 @@ Stacking dataset construction from OOF predictions.
 
 Builds meta-learner training data by combining OOF predictions
 from multiple base models with derived features.
+
+Handles NaN values from sequence models that cannot predict samples
+at the beginning of segments due to lookback requirements.
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -48,6 +51,16 @@ class StackingDataset:
     def n_models(self) -> int:
         return len(self.model_names)
 
+    @property
+    def n_original_samples(self) -> int:
+        """Original sample count before NaN removal."""
+        return self.metadata.get("n_original_samples", len(self.data))
+
+    @property
+    def n_dropped_samples(self) -> int:
+        """Number of samples dropped due to NaN values."""
+        return self.metadata.get("n_dropped_samples", 0)
+
     def get_features(self) -> pd.DataFrame:
         """Get feature columns for meta-learner."""
         # Exclude y_true and datetime columns
@@ -57,6 +70,54 @@ class StackingDataset:
     def get_labels(self) -> pd.Series:
         """Get true labels."""
         return self.data["y_true"]
+
+
+# =============================================================================
+# NAN HANDLING UTILITIES
+# =============================================================================
+
+def find_valid_samples_mask(
+    oof_predictions: Dict[str, OOFPrediction],
+) -> Tuple[np.ndarray, Dict[str, int]]:
+    """
+    Find samples with valid predictions across all models.
+
+    For sequence models (LSTM, GRU, TCN, etc.), samples at the beginning
+    of each segment cannot have predictions due to lookback requirements.
+    This function identifies samples with complete predictions from all models.
+
+    Args:
+        oof_predictions: Dict of OOF predictions by model name
+
+    Returns:
+        Tuple of:
+            - valid_mask: Boolean array where True = sample has predictions from all models
+            - nan_counts: Dict of NaN count per model (for logging)
+    """
+    if not oof_predictions:
+        raise ValueError("oof_predictions cannot be empty")
+
+    # Get sample count from first model
+    first_model = next(iter(oof_predictions.keys()))
+    n_samples = len(oof_predictions[first_model].predictions)
+
+    # Start with all True, then AND with each model's valid mask
+    valid_mask = np.ones(n_samples, dtype=bool)
+    nan_counts: Dict[str, int] = {}
+
+    for model_name, oof_pred in oof_predictions.items():
+        # Check the prediction column for NaN
+        pred_col = f"{model_name}_pred"
+        model_preds = oof_pred.predictions[pred_col].values
+        model_valid = ~np.isnan(model_preds)
+
+        nan_count = int((~model_valid).sum())
+        nan_counts[model_name] = nan_count
+
+        # Update overall mask
+        valid_mask = valid_mask & model_valid
+
+    return valid_mask, nan_counts
 
 
 # =============================================================================
@@ -77,6 +138,7 @@ class StackingDatasetBuilder:
         y_true: pd.Series,
         horizon: int,
         add_derived_features: bool = True,
+        drop_nan_samples: bool = True,
     ) -> StackingDataset:
         """
         Build stacking dataset from OOF predictions.
@@ -87,16 +149,55 @@ class StackingDatasetBuilder:
         - Derived features (confidence, agreement, entropy)
         - y_true (label)
 
+        Handles NaN values from sequence models by either dropping affected
+        samples (recommended) or keeping them for downstream handling.
+
         Args:
             oof_predictions: Dict of OOF predictions by model
             y_true: True labels
             horizon: Label horizon (for metadata)
             add_derived_features: Whether to add derived features
+            drop_nan_samples: If True, drop samples with any NaN predictions.
+                This is REQUIRED when sequence models are included, as they
+                cannot predict samples at the beginning of segments due to
+                lookback requirements. Default True.
 
         Returns:
             StackingDataset for meta-learner training
+
+        Raises:
+            ValueError: If drop_nan_samples=False but NaN values exist
+                (explicit handling required)
         """
         model_names = list(oof_predictions.keys())
+        n_original = len(y_true)
+
+        # Find valid samples (no NaN in any model's predictions)
+        valid_mask, nan_counts = find_valid_samples_mask(oof_predictions)
+        n_valid = int(valid_mask.sum())
+        n_dropped = n_original - n_valid
+
+        # Log NaN statistics per model
+        has_nans = any(count > 0 for count in nan_counts.values())
+        if has_nans:
+            logger.info(
+                f"Stacking dataset: {n_valid}/{n_original} samples valid "
+                f"({100 * n_valid / n_original:.1f}%)"
+            )
+            for model_name, count in nan_counts.items():
+                if count > 0:
+                    logger.info(
+                        f"  {model_name}: {count} NaN samples "
+                        f"({100 * count / n_original:.1f}%)"
+                    )
+
+        # Handle NaN samples
+        if n_dropped > 0 and not drop_nan_samples:
+            raise ValueError(
+                f"Found {n_dropped} samples with NaN predictions but drop_nan_samples=False. "
+                f"Set drop_nan_samples=True to remove incomplete samples, or handle NaN "
+                f"values manually before calling build_stacking_dataset."
+            )
 
         # Start with first model's predictions
         first_model = model_names[0]
@@ -113,18 +214,36 @@ class StackingDatasetBuilder:
         # Add true labels
         stacking_df["y_true"] = y_true.values
 
-        # Add derived features for meta-learner
+        # Drop NaN samples if requested (filter BEFORE adding derived features)
+        if drop_nan_samples and n_dropped > 0:
+            stacking_df = stacking_df.loc[valid_mask].reset_index(drop=True)
+            logger.info(
+                f"Dropped {n_dropped} samples with incomplete predictions. "
+                f"Stacking dataset size: {len(stacking_df)}"
+            )
+
+        # Add derived features for meta-learner (after NaN removal)
         if add_derived_features:
             stacking_df = self._add_stacking_features(stacking_df, model_names)
 
-        # Compute metadata
+        # Compute metadata with NaN handling info
         metadata = {
             "horizon": horizon,
             "n_models": len(model_names),
             "model_names": model_names,
             "n_samples": len(stacking_df),
+            "n_original_samples": n_original,
+            "n_dropped_samples": n_dropped,
+            "nan_counts_per_model": nan_counts,
             "coverage": {m: oof_predictions[m].coverage for m in model_names},
+            "effective_coverage": n_valid / n_original if n_original > 0 else 0.0,
         }
+
+        if n_dropped > 0:
+            logger.info(
+                f"Stacking dataset built: {len(stacking_df)} samples "
+                f"(effective coverage: {metadata['effective_coverage']:.1%})"
+            )
 
         return StackingDataset(
             data=stacking_df,
@@ -191,4 +310,5 @@ class StackingDatasetBuilder:
 __all__ = [
     "StackingDataset",
     "StackingDatasetBuilder",
+    "find_valid_samples_mask",
 ]

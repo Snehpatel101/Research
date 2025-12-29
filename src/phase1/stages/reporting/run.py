@@ -222,8 +222,9 @@ def run_generate_report(
             stage_results=stage_results
         )
 
+        # Run-scoped output for reproducibility
         report_path = (
-            config.results_dir / f"PHASE1_COMPLETION_REPORT_{config.run_id}.md"
+            config.run_artifacts_dir / f"PHASE1_COMPLETION_REPORT_{config.run_id}.md"
         )
         with open(report_path, 'w') as f:
             f.write(report)
