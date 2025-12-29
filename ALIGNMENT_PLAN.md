@@ -1,185 +1,1103 @@
-# Codebase Alignment Plan: Dynamic ML Factory for OHLCV Trading
+# ML Factory Charter & Implementation Plan
 
-**Generated:** 2025-12-29 (Updated with dynamic registry architecture)
-**Status:** Actionable roadmap to production-grade ML factory
-**Estimated Effort:** 12-16 weeks (1 engineer) | 7-10 weeks (2 engineers)
-**Architecture:** **Dynamic factory with plug-and-play registries** (not hardcoded model selection)
-
----
-
-## Executive Summary
-
-The Research codebase is evolving into a **dynamic, registry-based ML factory** where users can mix-and-match any combination of models, ensembles, calibration, and inference strategies via configuration—without code changes.
-
-### Core Philosophy: Configuration > Code
-
-**Not this:** "Train these 3 specific models in this hardcoded ensemble"
-**Instead:** "Select any models from registry + any ensemble method + any calibration + optional RL policy"
-
-### Current State Assessment
-
-- ✅ **Strong foundation:** 15-stage data pipeline, 13 models, OOF stacking infrastructure
-- ⚠️ **Critical blockers:** 3 data pipeline bugs creating leakage
-- 🔴 **Missing architecture:** No dynamic registries, hardcoded model selection
-- 🔴 **Missing models:** 15+ SOTA architectures (PatchTST, N-BEATS, DeepAR, etc.)
-- 🔴 **Missing inference layer:** No calibration, conformal prediction, or gating
-
-### Transformation Strategy
-
-**Phase 1 (Week 1-2):** Fix 3 critical data pipeline bugs → Zero-leakage pipeline
-
-**Phase 2 (Week 3-4):** Build dynamic registry system → Config-driven model selection
-
-**Phase 3 (Week 5-10):** Add 15+ models across 5 families → 28+ total models
-
-**Phase 4 (Week 11-12):** Add meta-learners, calibration, conformal → Inference layer
-
-**Phase 5 (Week 13-14):** Add optional RL policy layer → Adaptive trading
-
-**Phase 6 (Week 15-16):** Production infrastructure → One-command deploy
+**Generated:** 2025-12-29 (Final production-grade specification)
+**Architecture:** Dynamic, registry-based ML factory for OHLCV trading
+**Model Count:** **19 models** (optimized from 29, cutting redundancy)
+**Estimated Effort:** 12-14 weeks (1 engineer) | 7-9 weeks (2 engineers)
 
 ---
 
 ## Table of Contents
 
-1. [Target System Vision](#part-1-target-system-vision)
-2. [Dynamic Registry Architecture](#part-2-dynamic-registry-architecture)
-3. [Full Model Menu (28+ Models)](#part-3-full-model-menu)
-4. [Contracts & Artifacts](#part-4-contracts--artifacts)
-5. [Critical Data Pipeline Bugs](#part-5-critical-data-pipeline-bugs)
-6. [Implementation Roadmap](#part-6-implementation-roadmap)
-7. [Quick Wins](#part-7-quick-wins)
-8. [Risk Analysis](#part-8-risk-analysis)
-9. [Testing Strategy](#part-9-testing-strategy)
+1. [Factory Charter](#factory-charter)
+2. [Core Design Principles](#core-design-principles)
+3. [Final Model Suite (19 Models)](#final-model-suite-19-models)
+4. [Sample Ensemble Configurations](#sample-ensemble-configurations)
+5. [Robustness Requirements](#robustness-requirements)
+6. [Dynamic Registry Architecture](#dynamic-registry-architecture)
+7. [Contracts & Artifacts](#contracts--artifacts)
+8. [Critical Data Pipeline Bugs](#critical-data-pipeline-bugs)
+9. [Implementation Roadmap](#implementation-roadmap)
+10. [Testing Strategy](#testing-strategy)
 
 ---
 
-## Part 1: Target System Vision
+## Factory Charter
 
-### What You're Building
+### Objective
 
-A **dynamic, registry-based ML factory** for systematic futures trading where model selection, ensemble strategy, calibration, and RL policies are **configuration-driven**—not hardcoded.
+Build a **production-grade, model-agnostic ML factory** for **single-contract OHLCV time-series research and deployment**. The factory ingests **one canonical dataset** (one contract, one base timeframe) and **deterministically** produces:
 
-#### 1. Single Data Source → Dynamic Model Selection
+* **Multi-timeframe training corpora** (aligned, leakage-safe)
+* **Model-specific representations** (feature matrices, window tensors, patches)
+* **Standardized artifacts** (train/eval/inference bundles)
 
-- **Input:** Raw OHLCV (one contract: MES, MGC, etc.)
-- **Output:** Any combination of models from 5 families (28+ options)
-- **Selection:** Via YAML config, not code changes
+**Goal:** Any model (single or ensemble) can be trained and compared under **identical experimental controls**.
+
+---
+
+### Core Philosophy: One Data Source → Many Model Backends
+
+**Not this:** "Force all models to consume the same 2D feature matrix"
+**Instead:** "Adapt the data contract per model family while preserving leakage discipline"
+
+**Examples:**
+- **Tabular models** (LightGBM, XGBoost) → Feature matrix engineered for stationarity, monotonic relationships, sparse interactions
+- **Sequence models** (PatchTST, TCN, LSTM) → Windowed tensors with correct normalization and temporal alignment
+- **Foundation models** (Chronos, TimesFM) → Normalized OHLCV windows for zero-shot inference
+
+**Non-negotiables:** Reproducibility, leakage control, fair evaluation, deterministic dataset generation.
+
+---
+
+### Inference Is First-Class (Not an Afterthought)
+
+Training and serving must share identical pipelines:
+
+* **Consistent feature pipelines** between train and serve (no training-only transforms)
+* **Deterministic resampling** (multi-timeframe alignment must match exactly at runtime)
+* **Fixed schema contracts** (explicit column sets, dtypes, shapes, time alignment rules)
+* **Packaging** that emits predictable outputs:
+  - `p_up` (class probabilities)
+  - `E[r]` (expected return)
+  - `q05/q50/q95` (quantiles for risk bands)
+  - `uncertainty` (calibrated confidence intervals)
+  - `regime_score` (volatility/trend/structure regime)
+
+**Goal:** Research artifacts become **deployable inference components** consumable by a trading engine with clear semantics and risk-aware thresholds.
+
+---
+
+### Meta-Learning / Stacking Layer (Leakage-Safe)
+
+Ensembling must be principled, not a naive average.
+
+The factory supports a **stacking / meta-learning stage** where base models act as feature generators:
+
+* Generate **out-of-fold (OOF) predictions** for all base learners
+* Train meta-models only on **OOF meta-features** (prevents leakage)
+* Enforce fold-consistent preprocessing and **time-series-aware splits** (PurgedKFold)
+* Ensemble learns **when to trust which model** under different market conditions
+
+**Supported ensemble methods:**
+- **Stacking** (OOF-trained meta-learner: Ridge, Elastic Net, LightGBM meta, Logistic)
+- **Voting** (weighted averaging, soft/hard)
+- **Gating** (regime-conditional weighting: HMM, Softmax, Markov Switching)
+
+---
+
+### Factory Must Be Dynamic (Config-Driven Selection)
+
+**Nothing is "the one model trio."** The system allows **configurable selections:**
+
+* Train **any single model** from any family
+* Train **any set of base models** across families (heterogeneous ensembles)
+* Optionally attach **ensemble stage** (stacking/voting/gating)
+* Optionally attach **calibration** (Temperature Scaling, Isotonic, CQR)
+* Optionally attach **RL policy layer** (SAC, TD3, PPO for adaptive position sizing)
+* Preserve **identical evaluation controls** across all runs
+
+**Selection via YAML config, not code changes.**
+
+---
+
+## Core Design Principles
+
+### 1. Single-Contract Architecture
+
+**This is a single-contract ML factory.** Each contract is trained in complete isolation.
+
+- **One contract at a time:** Pipeline processes exactly one futures contract per run (MES, MGC, etc.)
+- **Complete isolation:** No cross-symbol correlation or feature engineering
+- **Symbol configurability:** Easy to switch between contracts via config
 
 ```yaml
-# Example: Mix tabular + sequence + foundation models
-base_models:
-  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
-  - {name: tcn, view: window_tensor, outputs: [E_r]}
-  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
-  - {name: chronos, view: window_tensor, outputs: [p_up], zero_shot: true}
+symbol: "MES"  # or "MGC", "ES", "GC"
 ```
 
-#### 2. Dynamic Ensembling (Not Hardcoded Recipes)
+### 2. Leakage Paranoia
 
-- **Ensemble methods:** Voting, Stacking (Ridge, Elastic Net, LightGBM meta, CatBoost meta, MLP meta), Blending
-- **Gating:** Softmax gate, HMM regime gate, Markov switching, Contextual bandit
-- **Selection:** Via config
+All models trained on **same leakage-safe data:**
+
+- **Purge:** 60 bars (prevents label leakage from overlapping barrier windows)
+- **Embargo:** 1440 bars (~5 days at 5-min bars, prevents serial correlation)
+- **Train-only scaling:** Fit scalers on train set, transform all splits
+- **Causal models only:** No future-attending transformers (basic Transformer removed)
+
+### 3. Fair Evaluation Under Identical Controls
+
+- Identical transaction costs, slippage, risk constraints
+- Standardized metrics: Sharpe, win rate, max drawdown, regime performance
+- Cross-validation: PurgedKFold, walk-forward, CPCV, PBO
+
+### 4. Reproducibility
+
+- Dataset fingerprint + config hash for every run
+- Deterministic resampling (fixed seeds)
+- Versioned artifacts (preproc + schema + weights + metrics)
+
+---
+
+## Final Model Suite (19 Models)
+
+**Optimized from 29 → 19** by removing 10 redundant/weak models.
+
+### Models Removed (10 Total)
+
+| Model | Reason | Replacement |
+|-------|--------|-------------|
+| CatBoost | 3rd boosting model is overkill | XGBoost (stable) + LightGBM (fast) |
+| GRU | Too similar to LSTM (<2% difference) | LSTM (better long-term memory) |
+| Transformer (basic) | Non-causal, leaks future data | PatchTST (causal, SOTA) |
+| WaveNet | Redundant with TCN (both dilated CNN) | TCN (same architecture class) |
+| Random Forest | Inferior to boosting in every way | XGBoost/LightGBM |
+| ExtraTrees | Extra randomization adds minimal value | (removed with Random Forest) |
+| SVM | O(n²-n³) too slow for OHLCV | XGBoost (10-100x faster) |
+| Blending | Wastes 20% data on holdout | Stacking (OOF) + Voting (speed) |
+| Informer | Replaced by better transformers | PatchTST/iTransformer |
+| TSMixer | Covered by N-BEATS/N-HiTS/DLinear | (MLP baselines sufficient) |
+
+---
+
+### Final 19 Models by Family
+
+#### 1. Boosting (2 models)
+
+**1. XGBoost**
+- **Use case:** Stable benchmark, SHAP importance, mature tooling
+- **Input:** `feature_matrix` (2D)
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** ✅ Already implemented
+
+**2. LightGBM**
+- **Use case:** Fastest training, lowest memory, leaf-wise growth
+- **Input:** `feature_matrix` (2D)
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** ✅ Already implemented
+
+---
+
+#### 2. Neural (RNN) - 1 model
+
+**3. LSTM**
+- **Use case:** Long-term dependencies, classic RNN baseline
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `p_up`, `E[r]`
+- **Causal:** Yes (bidirectional=False)
+- **Effort:** ✅ Already implemented
+
+---
+
+#### 3. Neural (CNN) - 3 models
+
+**4. TCN (Temporal Convolutional Network)**
+- **Use case:** Causal dilations, parallelizable, modern RNN alternative
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `p_up`, `E[r]`
+- **Causal:** Yes (dilated causal convolutions)
+- **Effort:** ✅ Already implemented
+
+**5. InceptionTime**
+- **Use case:** Multi-scale kernels (3x1, 5x1, 7x1), ensemble-in-architecture
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** 3 days
+
+**6. 1D ResNet**
+- **Use case:** Residual learning for deep networks, stable baseline
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** 2 days
+
+---
+
+#### 4. Transformers (Advanced) - 3 models
+
+**7. PatchTST**
+- **Use case:** SOTA long-term forecasting, 21% MSE reduction vs vanilla
+- **Architecture:** Patch-based attention (16-token patches, 512-bar context)
+- **Input:** `window_tensor` (3D) → patches
+- **Outputs:** `p_up`, `E[r]`, `q05`, `q50`, `q95`
+- **Causal:** Yes (production-safe)
+- **Effort:** 4 days
+
+**8. iTransformer**
+- **Use case:** Multivariate correlations (features as tokens, not time steps)
+- **Architecture:** Inverted attention over features
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** 3 days
+
+**9. TFT (Temporal Fusion Transformer)**
+- **Use case:** Interpretable attention + variable selection + multi-horizon
+- **Architecture:** Gating + multi-head attention + static/known/unknown features
+- **Input:** `window_tensor` (3D) + covariates
+- **Outputs:** `p_up`, `E[r]`, `q05`, `q50`, `q95`
+- **Effort:** 5 days
+
+---
+
+#### 5. Probabilistic Sequence (2 models)
+
+**10. DeepAR**
+- **Use case:** Distribution forecasting, calibrated uncertainty
+- **Architecture:** Auto-regressive RNN with probabilistic outputs
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `q05`, `q50`, `q95`
+- **Effort:** 4 days
+
+**11. Quantile RNN**
+- **Use case:** Direct q05/q50/q95 for risk bands, position sizing
+- **Architecture:** LSTM/GRU with quantile loss
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `q05`, `q50`, `q95`
+- **Effort:** 2 days
+
+---
+
+#### 6. MLP / Linear Baselines (3 models)
+
+**12. N-BEATS**
+- **Use case:** Interpretable decomposition (trend + seasonal), M4 winner
+- **Architecture:** Stacked blocks with basis expansion
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `E[r]`, `trend`, `seasonal`
+- **Effort:** 1 day
+
+**13. N-HiTS**
+- **Use case:** Hierarchical N-BEATS, 2x faster, multi-scale
+- **Architecture:** Multi-rate inputs (short/medium/long-term)
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `E[r]`
+- **Effort:** 1 day
+
+**14. DLinear**
+- **Use case:** Ultra-fast sanity gate, trend/seasonality baseline
+- **Architecture:** Decomposition + two linear layers
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `E[r]`
+- **Effort:** 4 hours
+
+---
+
+#### 7. Foundation Models (2 models)
+
+**15. Chronos-Bolt**
+- **Use case:** Zero-shot baseline (51%+ directional accuracy, no training)
+- **Architecture:** Pre-trained transformer (Amazon, 200M params)
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `p_up`
+- **Zero-shot:** Yes (no training required)
+- **Effort:** 3 days (API wrapper)
+
+**16. TimesFM 2.5**
+- **Use case:** Probabilistic zero-shot forecasts (quantiles)
+- **Architecture:** Decoder-only transformer (Google, 200M params)
+- **Input:** `window_tensor` (3D)
+- **Outputs:** `q05`, `q50`, `q95`
+- **Zero-shot:** Yes
+- **Effort:** 3 days (API wrapper)
+
+---
+
+#### 8. Classical (1 model)
+
+**17. Logistic Regression**
+- **Use case:** Fast baseline, meta-learner for stacking ensembles
+- **Input:** `feature_matrix` (2D)
+- **Outputs:** `p_up`
+- **Effort:** ✅ Already implemented
+
+---
+
+#### 9. Ensemble (2 models)
+
+**18. Voting Ensemble**
+- **Use case:** Simple weighted averaging, low latency (~6ms for 3 models)
+- **Input:** Base model predictions
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** ✅ Already implemented
+
+**19. Stacking Ensemble**
+- **Use case:** OOF-based meta-learning, best ensemble performance
+- **Architecture:** PurgedKFold OOF + Ridge/Elastic Net/LightGBM meta-learner
+- **Input:** OOF predictions + optional regime features
+- **Outputs:** `p_up`, `E[r]`
+- **Effort:** ✅ Already implemented (extend with regime features)
+
+---
+
+### Summary Table
+
+| Family | Models | Count | Primary Use Case |
+|--------|--------|-------|------------------|
+| **Boosting** | XGBoost, LightGBM | 2 | Fast tabular baselines |
+| **Neural (RNN)** | LSTM | 1 | Long-term dependencies |
+| **Neural (CNN)** | TCN, InceptionTime, 1D ResNet | 3 | Causal + multi-scale + residual |
+| **Transformers** | PatchTST, iTransformer, TFT | 3 | SOTA long-term, multivariate, interpretable |
+| **Probabilistic** | DeepAR, Quantile RNN | 2 | Uncertainty quantification, risk bands |
+| **MLP/Linear** | N-BEATS, N-HiTS, DLinear | 3 | Interpretable + hierarchical + ultra-fast |
+| **Foundation** | Chronos, TimesFM | 2 | Zero-shot baselines |
+| **Classical** | Logistic Regression | 1 | Meta-learner |
+| **Ensemble** | Voting, Stacking | 2 | Model combination |
+
+**Total: 19 models** (13 existing + 6 new after cutting 10 redundant)
+
+---
+
+## Sample Ensemble Configurations
+
+### Config 1: Fast Baseline (Single Model)
+
+**Use case:** Quick iteration, debugging, baseline comparison
 
 ```yaml
+base_models:
+  - name: lightgbm
+    view: feature_matrix
+    outputs: [p_up]
+    config:
+      n_estimators: 500
+      learning_rate: 0.05
+      max_depth: 7
+
 ensemble:
+  enabled: false
+
+inference:
+  calibrate: [temperature_scaling]
+  uncertainty: null
+
+policy:
+  enabled: false
+```
+
+**Expected runtime:** 2-5 minutes (train + eval)
+**Expected Sharpe:** 0.3-0.6 (baseline)
+
+---
+
+### Config 2: Tabular Duo + Ridge Stacking
+
+**Use case:** Fast ensemble, interpretable meta-learner
+
+```yaml
+base_models:
+  - name: xgboost
+    view: feature_matrix
+    outputs: [p_up]
+    config:
+      n_estimators: 500
+      max_depth: 6
+
+  - name: lightgbm
+    view: feature_matrix
+    outputs: [p_up]
+    config:
+      n_estimators: 500
+      learning_rate: 0.05
+
+ensemble:
+  enabled: true
   method: stacking
-  meta_learner: ridge  # or elastic_net, lightgbm_meta, catboost_meta, mlp_meta
-  oof: true
+  meta_learner: ridge
+  oof:
+    n_folds: 5
+    purge_bars: 60
+    embargo_bars: 1440
+
+inference:
+  calibrate: [temperature_scaling]
+  uncertainty: null
+
+policy:
+  enabled: false
+```
+
+**Expected runtime:** 10-15 minutes
+**Expected Sharpe:** 0.5-0.8 (ensemble boost)
+**Meta-learner:** Ridge regression on 2 OOF predictions
+
+---
+
+### Config 3: Heterogeneous Trio (Tabular + CNN + Transformer)
+
+**Use case:** Model diversity across families
+
+```yaml
+base_models:
+  - name: lightgbm
+    view: feature_matrix
+    outputs: [p_up]
+
+  - name: tcn
+    view: window_tensor
+    outputs: [E_r]
+    config:
+      num_channels: [64, 128, 256]
+      kernel_size: 3
+      dropout: 0.2
+      seq_len: 60
+
+  - name: patchtst
+    view: window_tensor
+    outputs: [p_up, E_r]
+    config:
+      patch_length: 16
+      stride: 8
+      context_length: 512
+      d_model: 256
+      n_heads: 8
+      causal: true
+
+ensemble:
+  enabled: true
+  method: stacking
+  meta_learner: ridge
+  oof:
+    n_folds: 5
+    purge_bars: 60
+    embargo_bars: 1440
+
+inference:
+  calibrate: [temperature_scaling]
+  uncertainty: null
+
+policy:
+  enabled: false
+```
+
+**Expected runtime:** 30-45 minutes
+**Expected Sharpe:** 0.7-1.1 (heterogeneous boost)
+**Meta-learner:** Ridge on 3 diverse predictions (boosting + CNN + transformer)
+
+---
+
+### Config 4: Probabilistic Trio + CQR Uncertainty
+
+**Use case:** Risk-aware trading with quantile forecasts
+
+```yaml
+base_models:
+  - name: patchtst
+    view: window_tensor
+    outputs: [q05, q50, q95]
+    config:
+      patch_length: 16
+      d_model: 256
+      causal: true
+
+  - name: deepar
+    view: window_tensor
+    outputs: [q05, q50, q95]
+    config:
+      hidden_size: 128
+      num_layers: 3
+
+  - name: timesfm
+    view: window_tensor
+    outputs: [q05, q50, q95]
+    zero_shot: true
+    config:
+      model_id: "google/timesfm-2.5-200m"
+
+ensemble:
+  enabled: true
+  method: voting
+  voting_type: soft  # Average quantiles across models
+
+inference:
+  calibrate: null  # Quantiles already calibrated
+  uncertainty:
+    method: cqr  # Conformalized Quantile Regression
+    coverage: 0.90
+    holdout_fraction: 0.2
+
+policy:
+  enabled: false
+```
+
+**Expected runtime:** 40-60 minutes (foundation model is slower)
+**Expected Sharpe:** 0.6-0.9 (probabilistic trading)
+**Output:** Conformalized 90% prediction intervals for position sizing
+
+---
+
+### Config 5: Full Stack (3 Base + Meta-Learner + Gating + RL)
+
+**Use case:** Production deployment with adaptive position sizing
+
+```yaml
+base_models:
+  - name: lightgbm
+    view: feature_matrix
+    outputs: [p_up]
+
+  - name: patchtst
+    view: window_tensor
+    outputs: [E_r, q05, q50, q95]
+    config:
+      patch_length: 16
+      d_model: 256
+      causal: true
+
+  - name: chronos
+    view: window_tensor
+    outputs: [p_up]
+    zero_shot: true
+
+ensemble:
+  enabled: true
+  method: stacking
+  meta_learner: lightgbm_meta  # Nonlinear meta-learner
+  oof:
+    n_folds: 5
+    purge_bars: 60
+    embargo_bars: 1440
   gating:
     enabled: true
-    method: hmm_regime  # or softmax, markov_switching, contextual_bandit
-```
+    method: hmm_regime  # HMM learns regime-conditional weights
+    regime_features: [volatility_regime, trend_regime, structure_regime]
 
-#### 3. Inference Layer (Calibration + Uncertainty)
-
-- **Calibration:** Temperature scaling, Isotonic, Platt, Beta
-- **Conformal prediction:** CQR, Split Conformal, CV+/Jackknife+
-- **Selection:** Via config
-
-```yaml
 inference:
-  calibrate: [temperature_scaling, isotonic]
+  calibrate: [isotonic, temperature_scaling]  # Double calibration
   uncertainty:
-    method: cqr  # or split_conformal, cv_plus, jackknife_plus
-    coverage: 0.90
-```
+    method: jackknife_plus
+    coverage: 0.95
 
-#### 4. Optional RL Policy Layer
-
-- **RL as consumer** of inference outputs (not replacement for stacking)
-- **Inputs:** `p_up`, `E[r]`, `q05/q50/q95`, `uncertainty`, `regime_score`, costs
-- **Outputs:** Position size, entry/exit thresholds, risk throttles
-- **Algorithms:** SAC, TD3, PPO, DQN, Contextual Bandits
-
-```yaml
 policy:
   enabled: true
-  algorithm: sac  # or td3, ppo, dqn, contextual_bandit
+  algorithm: sac  # Soft Actor-Critic for continuous position sizing
   inputs: [p_up, E_r, q05, q50, q95, uncertainty, regime_score]
   outputs: [position_size, entry_threshold, exit_threshold]
+  config:
+    learning_rate: 0.0003
+    gamma: 0.99
+    tau: 0.005
 ```
 
-#### 5. Plug-and-Play via Contracts
-
-Every model/ensemble/inference component adheres to strict contracts:
-
-- **Input View Contract:** `feature_matrix`, `window_tensor`, `mtf_bundle`
-- **Output Contract:** `p_up`, `E[r]`, `q05/q50/q95`, `regime_score`
-- **Artifact Contract:** `preproc + schema + model + metrics + inference_signature`
-
-### Strategic Differentiators
-
-| Feature | Implementation | Value Proposition |
-|---------|----------------|-------------------|
-| **Dynamic Selection** | All models/ensembles/inference via config, not code | Experiment without rewriting pipelines |
-| **Strict Contracts** | Every component emits standardized outputs | Mix tabular + sequence + foundation models freely |
-| **Leakage Paranoia** | Purge (60 bars), embargo (1440 bars), train-only scaling, causal models only | Prevents overfitting to future data |
-| **Inference Layer** | Calibration + conformal prediction + gating | Production-grade uncertainty quantification |
-| **Optional RL** | RL as policy consumer (not model replacement) | Adaptive position sizing + risk management |
+**Expected runtime:** 1-2 hours
+**Expected Sharpe:** 0.9-1.4 (full adaptive system)
+**Components:**
+- 3 diverse base models (boosting + transformer + foundation)
+- LightGBM nonlinear meta-learner
+- HMM regime-aware gating
+- Double calibration (isotonic + temperature scaling)
+- Jackknife+ 95% conformal intervals
+- SAC RL policy for adaptive position sizing
 
 ---
 
-## Part 2: Dynamic Registry Architecture
+### Config 6: Research Comparison (All Model Families)
 
-### Philosophy: Registries Replace Hardcoded Logic
+**Use case:** Benchmark all 19 models, no ensemble
 
-Instead of:
-```python
-# BAD: Hardcoded
-if model_name == "xgboost":
-    model = XGBoost()
-elif model_name == "lstm":
-    model = LSTM()
+```yaml
+base_models:
+  # Boosting
+  - {name: xgboost, view: feature_matrix, outputs: [p_up]}
+  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
+
+  # RNN
+  - {name: lstm, view: window_tensor, outputs: [p_up], config: {seq_len: 60}}
+
+  # CNN
+  - {name: tcn, view: window_tensor, outputs: [E_r], config: {seq_len: 60}}
+  - {name: inceptiontime, view: window_tensor, outputs: [p_up], config: {seq_len: 60}}
+  - {name: resnet_1d, view: window_tensor, outputs: [p_up], config: {seq_len: 60}}
+
+  # Transformers
+  - {name: patchtst, view: window_tensor, outputs: [p_up, q05, q50, q95]}
+  - {name: itransformer, view: window_tensor, outputs: [p_up]}
+  - {name: tft, view: window_tensor, outputs: [p_up, q05, q50, q95]}
+
+  # Probabilistic
+  - {name: deepar, view: window_tensor, outputs: [q05, q50, q95]}
+  - {name: quantile_rnn, view: window_tensor, outputs: [q05, q50, q95]}
+
+  # MLP
+  - {name: nbeats, view: window_tensor, outputs: [E_r]}
+  - {name: nhits, view: window_tensor, outputs: [E_r]}
+  - {name: dlinear, view: window_tensor, outputs: [E_r]}
+
+  # Foundation
+  - {name: chronos, view: window_tensor, outputs: [p_up], zero_shot: true}
+  - {name: timesfm, view: window_tensor, outputs: [q05, q50, q95], zero_shot: true}
+
+  # Classical
+  - {name: logistic, view: feature_matrix, outputs: [p_up]}
+
+ensemble:
+  enabled: false  # Train all models individually
+
+inference:
+  calibrate: [temperature_scaling]  # Apply to all
+
+policy:
+  enabled: false
+
+# Output: Comparison table of all 19 models
+# Metrics: Sharpe, win rate, max DD, training time, inference latency
 ```
 
-Use:
+**Expected runtime:** 3-6 hours (all 19 models)
+**Expected output:** Benchmark table ranking models by Sharpe/speed/interpretability
+
+---
+
+## Robustness Requirements
+
+### 1. Data Pipeline Robustness
+
+#### A) Leakage Prevention (CRITICAL)
+
+**Requirements:**
+- [ ] HMM regime detection uses only past data (`expanding=False` default)
+- [ ] GA optimization confined to train set (70% of data, before splits)
+- [ ] Transaction costs included in triple-barrier labels
+- [ ] All feature engineering uses only past data (no lookahead)
+- [ ] Scaling fit only on train set, transform all splits
+- [ ] Purge (60 bars) and embargo (1440 bars) enforced in all CV folds
+
+**Test Coverage:**
+- Unit tests for each stage verify no future data access
+- Integration test: Generate features at time T, verify no data from T+1 onwards used
+- Regression tests: Lock down leakage fixes with assertions
+
+---
+
+#### B) Deterministic Resampling
+
+**Requirements:**
+- [ ] OHLCV resampling (1min → 5min) is deterministic (fixed seeds)
+- [ ] Multi-timeframe alignment is reproducible
+- [ ] Same resampling code used in training AND inference
+- [ ] Gap handling (missing bars) is consistent
+
+**Implementation:**
 ```python
-# GOOD: Registry-based
-model = ModelRegistry.create(config["model_name"], config["model_params"])
+# src/phase1/stages/clean/resample.py
+def resample_ohlcv(df, freq="5min", seed=42):
+    """Deterministic OHLCV resampling."""
+    np.random.seed(seed)  # For any gap filling
+    # ... resampling logic
+    return df_resampled
+
+# MUST use same function in:
+# - Training: scripts/run_pipeline.py
+# - Inference: src/inference/pipeline.py
+```
+
+**Test Coverage:**
+- Run resampling 100 times with same seed → assert identical output
+- Verify training and inference use same function (import check)
+
+---
+
+#### C) Schema Validation
+
+**Requirements:**
+- [ ] Every pipeline stage validates input schema (column names, dtypes, shapes)
+- [ ] Feature schema is versioned and stored with artifacts
+- [ ] Inference validates incoming data matches training schema
+- [ ] Missing columns raise clear errors (not silent failures)
+
+**Implementation:**
+```python
+# src/phase1/validation/schema.py
+@dataclass
+class FeatureSchema:
+    columns: List[str]
+    dtypes: Dict[str, str]
+    shape: Tuple[int, int]
+    hash: str  # SHA256 of sorted column names
+
+def validate_schema(df: pd.DataFrame, expected: FeatureSchema):
+    if set(df.columns) != set(expected.columns):
+        raise SchemaError(f"Missing columns: {set(expected.columns) - set(df.columns)}")
+    # ... dtype, shape validation
+```
+
+**Test Coverage:**
+- Test schema mismatch detection (missing column, wrong dtype)
+- Test schema hash collisions
+
+---
+
+### 2. Model Training Robustness
+
+#### A) Reproducibility
+
+**Requirements:**
+- [ ] All models seed RNGs (NumPy, PyTorch, TensorFlow, XGBoost)
+- [ ] GPU operations are deterministic (set `CUDA_DETERMINISTIC=True`)
+- [ ] Training produces identical results across runs (same data + seed)
+
+**Implementation:**
+```python
+# src/models/trainer.py
+def set_seeds(seed=42):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ["PYTHONHASHSEED"] = str(seed)
+```
+
+**Test Coverage:**
+- Train model 10 times with same seed → assert identical metrics
+- Test GPU determinism (if available)
+
+---
+
+#### B) Hyperparameter Validation
+
+**Requirements:**
+- [ ] All hyperparameters validated at config load (not runtime)
+- [ ] Invalid configs raise errors before training starts
+- [ ] Sensible defaults provided for all optional params
+
+**Implementation:**
+```python
+# src/models/config/validation.py
+def validate_model_config(config: Dict[str, Any], model_name: str):
+    schema = MODEL_CONFIG_SCHEMAS[model_name]
+    for param, constraints in schema.items():
+        if param not in config:
+            config[param] = constraints["default"]
+        if not constraints["validator"](config[param]):
+            raise ConfigError(f"{param}={config[param]} violates {constraints}")
+    return config
+```
+
+**Test Coverage:**
+- Test invalid configs raise errors (negative learning rate, etc.)
+- Test defaults are applied correctly
+
+---
+
+#### C) Early Stopping & Checkpointing
+
+**Requirements:**
+- [ ] All models support early stopping (patience=10 epochs default)
+- [ ] Best model checkpoint saved (not last epoch)
+- [ ] Training can resume from checkpoint (if interrupted)
+
+**Implementation:**
+```python
+# src/models/trainer.py
+class EarlyStopping:
+    def __init__(self, patience=10, min_delta=0.001):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.best_loss = float('inf')
+        self.counter = 0
+
+    def __call__(self, val_loss):
+        if val_loss < self.best_loss - self.min_delta:
+            self.best_loss = val_loss
+            self.counter = 0
+            return False  # Don't stop
+        else:
+            self.counter += 1
+            return self.counter >= self.patience  # Stop if patience exceeded
+```
+
+**Test Coverage:**
+- Test early stopping triggers correctly
+- Test checkpoint restoration produces identical predictions
+
+---
+
+### 3. Ensemble Robustness
+
+#### A) OOF Prediction Integrity
+
+**Requirements:**
+- [ ] OOF predictions cover 100% of training samples (no gaps)
+- [ ] Each sample predicted exactly once by out-of-fold model
+- [ ] OOF predictions never leak fold information
+
+**Validation:**
+```python
+# src/cross_validation/oof_validation.py
+def validate_oof_coverage(oof_preds: np.ndarray, y_true: np.ndarray):
+    assert len(oof_preds) == len(y_true), "OOF length mismatch"
+    assert not np.any(np.isnan(oof_preds)), "OOF has NaN predictions"
+    # For sequence models, first seq_len samples may be NaN (no lookback)
+    # ... handle edge cases
+```
+
+**Test Coverage:**
+- Test OOF coverage for all model types (tabular + sequence)
+- Test fold assignments don't leak
+
+---
+
+#### B) Meta-Learner Regularization
+
+**Requirements:**
+- [ ] Meta-learners use regularization to prevent overfitting to base predictions
+- [ ] Ridge/Elastic Net: alpha >= 0.1 (default: 1.0)
+- [ ] LightGBM meta: max_depth <= 3, n_estimators <= 100
+
+**Implementation:**
+```python
+# src/models/ensemble/stacking.py
+DEFAULT_META_CONFIGS = {
+    "ridge": {"alpha": 1.0},
+    "elastic_net": {"alpha": 1.0, "l1_ratio": 0.5},
+    "lightgbm_meta": {"max_depth": 3, "n_estimators": 50, "learning_rate": 0.05},
+}
+```
+
+**Test Coverage:**
+- Test meta-learner doesn't overfit to OOF predictions
+- Compare meta-learner train/val performance (gap should be small)
+
+---
+
+#### C) Heterogeneous Ensemble Compatibility
+
+**Requirements:**
+- [ ] Validate all base models have compatible output shapes
+- [ ] Tabular + sequence models can be mixed (stacking handles different input views)
+- [ ] Error raised if outputs don't align (e.g., mixing `p_up` and `q05/q50/q95`)
+
+**Implementation:**
+```python
+# src/models/ensemble/validator.py
+def validate_ensemble_compatibility(base_models: List[BaseModel]):
+    output_types = [model.output_contract for model in base_models]
+    if len(set(output_types)) > 1:
+        raise EnsembleCompatibilityError(
+            f"Base models have incompatible outputs: {output_types}"
+        )
+```
+
+**Test Coverage:**
+- Test tabular + sequence mixing works
+- Test incompatible output error handling
+
+---
+
+### 4. Inference Robustness
+
+#### A) Bundle Integrity
+
+**Requirements:**
+- [ ] ModelBundle includes all artifacts (preproc, schema, weights, metrics)
+- [ ] Bundle checksum validates integrity on load
+- [ ] Missing artifacts raise errors (not silent failures)
+
+**Implementation:**
+```python
+# src/inference/bundle.py
+@dataclass
+class ModelBundle:
+    model: BaseModel
+    scaler: StandardScaler
+    feature_schema: FeatureSchema
+    calibrator: Optional[Calibrator]
+    metadata: Dict[str, Any]
+    checksum: str  # SHA256 of all artifacts
+
+    def save(self, path: Path):
+        # Save all artifacts + compute checksum
+        checksum = compute_bundle_checksum(path)
+        metadata["checksum"] = checksum
+
+    @classmethod
+    def load(cls, path: Path):
+        # Load + verify checksum
+        expected_checksum = metadata["checksum"]
+        actual_checksum = compute_bundle_checksum(path)
+        if expected_checksum != actual_checksum:
+            raise BundleCorruptionError("Checksum mismatch")
+```
+
+**Test Coverage:**
+- Test bundle save/load round-trip
+- Test checksum validation catches corruption
+
+---
+
+#### B) Calibration Validation
+
+**Requirements:**
+- [ ] Calibrated probabilities are valid (0 ≤ p ≤ 1)
+- [ ] Reliability diagrams show calibration quality
+- [ ] Calibration fit only on validation set (not train or test)
+
+**Validation:**
+```python
+# src/models/calibration/validation.py
+def validate_calibration(y_true: np.ndarray, y_prob: np.ndarray):
+    assert np.all((y_prob >= 0) & (y_prob <= 1)), "Probabilities outside [0,1]"
+    # Compute reliability diagram (bin probabilities, compare to empirical)
+    bins = np.linspace(0, 1, 11)
+    bin_indices = np.digitize(y_prob, bins)
+    reliability = []
+    for i in range(1, len(bins)):
+        mask = bin_indices == i
+        if mask.sum() > 0:
+            reliability.append((bins[i], y_true[mask].mean()))
+    return reliability
+```
+
+**Test Coverage:**
+- Test calibration improves reliability diagrams
+- Test calibration fit only on validation set
+
+---
+
+#### C) Conformal Prediction Coverage
+
+**Requirements:**
+- [ ] Conformal intervals achieve target coverage (e.g., 90%)
+- [ ] Coverage validated on holdout set (not calibration set)
+- [ ] Adaptive intervals (wider when uncertain, tighter when confident)
+
+**Validation:**
+```python
+# src/models/calibration/conformal.py
+def validate_coverage(y_true, intervals, target_coverage=0.90):
+    lower, upper = intervals
+    coverage = ((y_true >= lower) & (y_true <= upper)).mean()
+    assert abs(coverage - target_coverage) < 0.05, \
+        f"Coverage {coverage:.2f} too far from target {target_coverage}"
+```
+
+**Test Coverage:**
+- Test CQR achieves 90% coverage
+- Test intervals adapt to uncertainty
+
+---
+
+### 5. Production Deployment Robustness
+
+#### A) Drift Detection
+
+**Requirements:**
+- [ ] Monitor feature distributions (KL divergence, Wasserstein distance)
+- [ ] Alert when drift exceeds threshold (e.g., KL > 0.5)
+- [ ] Log drift metrics for post-mortem analysis
+
+**Implementation:**
+```python
+# src/monitoring/drift_detector.py
+class DriftDetector:
+    def __init__(self, reference_data: np.ndarray, threshold=0.5):
+        self.reference_mean = reference_data.mean(axis=0)
+        self.reference_std = reference_data.std(axis=0)
+        self.threshold = threshold
+
+    def detect(self, new_data: np.ndarray):
+        kl_div = compute_kl_divergence(self.reference_data, new_data)
+        if kl_div > self.threshold:
+            raise DriftAlert(f"KL divergence {kl_div:.2f} exceeds threshold")
+```
+
+**Test Coverage:**
+- Test drift detection on synthetic drifted data
+- Test alert mechanism
+
+---
+
+#### B) Model Versioning
+
+**Requirements:**
+- [ ] Every model has a semantic version (v1.2.3)
+- [ ] Breaking changes increment major version
+- [ ] Inference API is versioned (v1, v2 routes)
+
+**Implementation:**
+```python
+# src/inference/versioning.py
+@dataclass
+class ModelVersion:
+    major: int  # Breaking changes
+    minor: int  # New features (backward compatible)
+    patch: int  # Bug fixes
+
+    def __str__(self):
+        return f"v{self.major}.{self.minor}.{self.patch}"
+```
+
+**Test Coverage:**
+- Test version comparison (v1.2.3 < v2.0.0)
+- Test API routes (/v1/predict, /v2/predict)
+
+---
+
+#### C) Graceful Degradation
+
+**Requirements:**
+- [ ] If primary model fails, fall back to simpler model (e.g., LightGBM)
+- [ ] Log failures for debugging
+- [ ] Never return NaN predictions (use fallback)
+
+**Implementation:**
+```python
+# src/inference/pipeline.py
+class InferencePipeline:
+    def __init__(self, primary_model, fallback_model):
+        self.primary = primary_model
+        self.fallback = fallback_model
+
+    def predict(self, X):
+        try:
+            return self.primary.predict(X)
+        except Exception as e:
+            logger.error(f"Primary model failed: {e}. Using fallback.")
+            return self.fallback.predict(X)
+```
+
+**Test Coverage:**
+- Test fallback triggers on primary failure
+- Test fallback predictions are valid
+
+---
+
+## Dynamic Registry Architecture
+
+### Philosophy: Configuration > Code
+
+```yaml
+# Example: config.yaml
+base_models:
+  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
+  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
+
+ensemble:
+  method: stacking
+  meta_learner: ridge
+
+inference:
+  calibrate: [temperature_scaling]
+  uncertainty: {method: cqr, coverage: 0.90}
 ```
 
 ### Four Registry Types
 
-#### A) Model Registry (Base Learners)
+#### 1. Model Registry
 
 **Purpose:** All trainable models (tabular, sequence, foundation)
 
-**Entry Schema (`ModelSpec`):**
+**Entry Schema:**
 ```python
 @dataclass
 class ModelSpec:
-    name: str                    # "lightgbm", "patchtst", "chronos"
-    family: str                  # "boosting", "transformer", "foundation"
+    name: str                    # "lightgbm", "patchtst"
+    family: str                  # "boosting", "transformer"
     input_view: str              # "feature_matrix" or "window_tensor"
-    outputs: List[str]           # ["p_up", "E_r", "q05", "q50", "q95", "regime_score"]
-    needs: Dict[str, Any]        # {normalization, lookback, covariates, categorical_support}
-    artifacts: Dict[str, str]    # {preproc, schema, weights, metrics, inference_signature}
-    is_causal: bool              # Production safety (no future leakage)
-    zero_shot: bool              # Foundation models (no training)
+    outputs: List[str]           # ["p_up", "E_r", "q05", "q50", "q95"]
+    is_causal: bool              # Production safety
+    zero_shot: bool              # Foundation models
 ```
 
-**Example Registration:**
+**Registration:**
 ```python
 @register_model(
     name="patchtst",
@@ -195,301 +1113,82 @@ class PatchTSTModel(BaseModel):
 
 ---
 
-#### B) Ensemble Registry (How Base Models Combine)
+#### 2. Ensemble Registry
 
-**Purpose:** Stacking, voting, blending, gating strategies
+**Purpose:** Stacking, voting, gating strategies
 
-**Entry Schema (`EnsembleSpec`):**
+**Entry Schema:**
 ```python
 @dataclass
 class EnsembleSpec:
-    name: str                    # "ridge_stacking", "lightgbm_meta", "hmm_gating"
-    method: str                  # "stacking", "voting", "blending", "gating"
-    meta_learner: Optional[str]  # For stacking: "ridge", "elastic_net", "lightgbm_meta"
-    gating_method: Optional[str] # For gating: "softmax", "hmm_regime", "markov_switching"
-    requires_oof: bool           # True for stacking/blending
-    supports_heterogeneous: bool # Can mix tabular + sequence models?
-```
-
-**Example Registration:**
-```python
-@register_ensemble(
-    name="ridge_stacking",
-    method="stacking",
-    meta_learner="ridge",
-    requires_oof=True,
-    supports_heterogeneous=True  # Can mix any model families
-)
-class RidgeStackingEnsemble(BaseEnsemble):
-    ...
+    name: str                    # "ridge_stacking"
+    method: str                  # "stacking", "voting", "gating"
+    meta_learner: Optional[str]  # "ridge", "elastic_net", "lightgbm_meta"
+    requires_oof: bool           # True for stacking
+    supports_heterogeneous: bool # Can mix tabular + sequence?
 ```
 
 ---
 
-#### C) Inference Registry (Calibration + Uncertainty)
+#### 3. Inference Registry
 
-**Purpose:** Post-processors for probabilities and prediction intervals
+**Purpose:** Calibration, conformal prediction, gating
 
-**Entry Schema (`InferenceSpec`):**
+**Entry Schema:**
 ```python
 @dataclass
 class InferenceSpec:
-    name: str                    # "temperature_scaling", "cqr", "split_conformal"
+    name: str                    # "temperature_scaling", "cqr"
     category: str                # "calibration", "conformal", "gating"
-    inputs: List[str]            # ["p_up", "y_true"] for calibration
-    outputs: List[str]           # ["p_up_calibrated", "confidence_interval"]
     requires_holdout: bool       # True for conformal methods
 ```
 
-**Example Registration:**
-```python
-@register_inference(
-    name="cqr",
-    category="conformal",
-    inputs=["q05", "q50", "q95", "y_true"],
-    outputs=["q05_conf", "q95_conf", "coverage"],
-    requires_holdout=True
-)
-class CQRConformal(BaseInference):
-    ...
-```
-
 ---
 
-#### D) Policy Registry (Optional RL Layer)
+#### 4. Policy Registry (Optional RL)
 
-**Purpose:** Adaptive decision-making consuming inference outputs
+**Purpose:** Adaptive decision-making
 
-**Entry Schema (`PolicySpec`):**
+**Entry Schema:**
 ```python
 @dataclass
 class PolicySpec:
-    name: str                    # "sac", "ppo", "dqn", "contextual_bandit"
+    name: str                    # "sac", "ppo"
     algorithm: str               # "sac", "td3", "ppo", "dqn"
-    inputs: List[str]            # ["p_up", "E_r", "q05", "q50", "q95", "uncertainty", "regime_score"]
-    outputs: List[str]           # ["position_size", "entry_threshold", "exit_threshold"]
     action_space: str            # "continuous", "discrete"
 ```
 
-**Example Registration:**
-```python
-@register_policy(
-    name="sac",
-    algorithm="sac",
-    inputs=["p_up", "E_r", "q05", "q50", "q95", "uncertainty"],
-    outputs=["position_size"],
-    action_space="continuous"
-)
-class SACPolicy(BasePolicy):
-    ...
-```
-
 ---
 
-### Registry Implementation Files
-
-```
-src/registry/
-├── model_registry.py       # ModelRegistry, @register_model decorator
-├── ensemble_registry.py    # EnsembleRegistry, @register_ensemble
-├── inference_registry.py   # InferenceRegistry, @register_inference
-├── policy_registry.py      # PolicyRegistry, @register_policy
-└── contracts.py            # ModelSpec, EnsembleSpec, InferenceSpec, PolicySpec
-```
-
----
-
-## Part 3: Full Model Menu (28+ Models)
-
-### Current Models (Keep All 13)
-
-**Boosting (3):**
-1. XGBoost - Stable benchmark, SHAP importance
-2. LightGBM - Fastest training, leaf-wise growth
-3. CatBoost - Robust default, categorical handling
-
-**Neural (4):**
-4. LSTM - Long-term dependencies, classic RNN
-5. GRU - Faster RNN, good "cheap" baseline
-6. TCN - Causal dilations, parallelizable
-7. Transformer - Basic self-attention (non-causal, research only)
-
-**Classical (3):**
-8. Random Forest - Diversity baseline, bagging
-9. Logistic Regression - Fast baseline, meta-learner
-10. SVM - Nonlinear kernel (slow, niche use)
-
-**Ensemble (3):**
-11. Voting - Simple averaging
-12. Stacking - OOF-based meta-learning
-13. Blending - Holdout-based meta-learning
-
----
-
-### Models to Add (15+ New)
-
-#### 1. Tabular / Feature-Matrix (Add 1)
-
-**14. ExtraTrees**
-- **Why:** Diversity from Random Forest (extra randomization)
-- **Use case:** Ensemble diversity, less overfitting than RF
-- **Effort:** 4 hours (similar to RandomForest)
-
----
-
-#### 2. CNN / Local-Pattern Sequence (Add 3)
-
-**15. InceptionTime**
-- **Why:** Multi-kernel ensemble bias, strong classification
-- **Architecture:** Inception modules (parallel 3x1, 5x1, 7x1 convs)
-- **Effort:** 3 days
-
-**16. 1D ResNet**
-- **Why:** Strong baseline backbone, residual learning
-- **Architecture:** Residual blocks with 1D convolutions
-- **Effort:** 2 days
-
-**17. WaveNet**
-- **Why:** Long receptive field, dilated causal convs
-- **Architecture:** Stacked dilated conv blocks (similar to TCN but more layers)
-- **Effort:** 2 days
-
----
-
-#### 3. Transformer / Long-Context (Add 3)
-
-**18. PatchTST**
-- **Why:** SOTA long-term forecasting, 21% MSE reduction
-- **Architecture:** Patch-based attention (16-token patches)
-- **Causal:** Yes (production-safe)
-- **Effort:** 4 days
-
-**19. iTransformer**
-- **Why:** Inverted attention for multivariate (features as tokens)
-- **Architecture:** Attention over features instead of time
-- **Effort:** 3 days
-
-**20. TFT (Temporal Fusion Transformer)**
-- **Why:** Rich covariates + multi-horizon + interpretability
-- **Architecture:** Variable selection + gating + multi-head attention
-- **Effort:** 5 days
-
-**21. Informer**
-- **Why:** Efficient long-seq transformer (ProbSparse attention)
-- **Architecture:** Sparse attention for O(L log L) complexity
-- **Effort:** 4 days
-
----
-
-#### 4. Probabilistic Sequence (Add 2)
-
-**22. DeepAR**
-- **Why:** Distribution forecasting, calibrated uncertainty
-- **Architecture:** Auto-regressive RNN with probabilistic outputs
-- **Outputs:** `q05`, `q50`, `q95` (quantiles)
-- **Effort:** 4 days
-
-**23. Quantile RNN**
-- **Why:** Direct q05/q50/q95 for risk bands
-- **Architecture:** LSTM/GRU with quantile loss
-- **Effort:** 2 days
-
----
-
-#### 5. MLP / Linear Baselines (Add 4)
-
-**24. N-BEATS**
-- **Why:** Interpretable decomposition (trend + seasonal), M4 winner
-- **Architecture:** Stacked blocks with basis expansion
-- **Effort:** 1 day
-
-**25. N-HiTS**
-- **Why:** Hierarchical N-BEATS, 2x faster
-- **Architecture:** Multi-rate inputs (short/medium/long-term)
-- **Effort:** 1 day
-
-**26. TSMixer**
-- **Why:** MLP mixing over time/features, good diversity
-- **Architecture:** Time-mixing + feature-mixing MLPs
-- **Effort:** 2 days
-
-**27. DLinear**
-- **Why:** Ultra-fast sanity gate, trend/seasonality baseline
-- **Architecture:** Decomposition + two linear layers
-- **Effort:** 4 hours
-
----
-
-#### 6. Foundation Models (Add 2)
-
-**28. Chronos-Bolt**
-- **Why:** 51%+ directional accuracy (zero-shot)
-- **Architecture:** Pre-trained transformer (Amazon, 200M params)
-- **Zero-shot:** Yes (no training required)
-- **Effort:** 3 days (API wrapper)
-
-**29. TimesFM 2.5**
-- **Why:** Probabilistic forecasts (quantiles), Google foundation model
-- **Architecture:** Decoder-only transformer (200M params)
-- **Outputs:** `q05`, `q50`, `q95`
-- **Effort:** 3 days (API wrapper)
-
----
-
-### Final Model Suite: 29 Models Across 6 Families
-
-| Family | Models | Count | Use Case |
-|--------|--------|-------|----------|
-| **Boosting** | XGBoost, LightGBM, CatBoost | 3 | Fast tabular baselines |
-| **Neural (RNN)** | LSTM, GRU | 2 | Temporal dependencies, probabilistic |
-| **Neural (CNN)** | TCN, InceptionTime, 1D ResNet, WaveNet | 4 | Local patterns, causal convolutions |
-| **Classical** | Random Forest, ExtraTrees, Logistic, SVM | 4 | Diversity baselines, meta-learners |
-| **Transformers** | Transformer, PatchTST, iTransformer, TFT, Informer | 5 | Long-term, multivariate, interpretable |
-| **Probabilistic** | DeepAR, Quantile RNN | 2 | Distribution forecasting, quantiles |
-| **MLP/Linear** | N-BEATS, N-HiTS, TSMixer, DLinear | 4 | Fast baselines, decomposition |
-| **Foundation** | Chronos, TimesFM | 2 | Zero-shot baselines |
-| **Ensemble** | Voting, Stacking, Blending | 3 | Model combination |
-
-**Total: 29 models** (13 current + 16 new)
-
----
-
-## Part 4: Contracts & Artifacts
+## Contracts & Artifacts
 
 ### Input View Contract
 
-Every model declares its input format:
-
 | View | Shape | Models |
 |------|-------|--------|
-| `feature_matrix` | `(n_samples, n_features)` | XGBoost, LightGBM, CatBoost, RF, ExtraTrees, Logistic, SVM |
-| `window_tensor` | `(n_samples, seq_len, n_features)` | LSTM, GRU, TCN, InceptionTime, ResNet, WaveNet, PatchTST, iTransformer, TFT, Informer, DeepAR, Quantile RNN, N-BEATS, N-HiTS, TSMixer, DLinear, Chronos, TimesFM |
-| `mtf_bundle` | Multi-timeframe aligned set | (future extension) |
+| `feature_matrix` | `(n_samples, n_features)` | XGBoost, LightGBM, Logistic |
+| `window_tensor` | `(n_samples, seq_len, n_features)` | LSTM, TCN, InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, DeepAR, Quantile RNN, N-BEATS, N-HiTS, DLinear, Chronos, TimesFM |
 
 ### Output Contract
 
-Every model maps to standardized outputs:
-
-| Output | Type | Description | Example Models |
-|--------|------|-------------|----------------|
-| `p_up` | `float [0,1]` | Probability of up move | All classification models |
-| `E[r]` | `float` | Expected return | Regression models |
-| `q05` | `float` | 5th percentile (quantile) | DeepAR, Quantile RNN, TimesFM |
-| `q50` | `float` | Median (50th percentile) | DeepAR, Quantile RNN, TimesFM |
-| `q95` | `float` | 95th percentile (quantile) | DeepAR, Quantile RNN, TimesFM |
-| `regime_score` | `float [0,1]` | Regime confidence | (future: regime-aware models) |
+| Output | Type | Description |
+|--------|------|-------------|
+| `p_up` | `float [0,1]` | Probability of up move |
+| `E[r]` | `float` | Expected return |
+| `q05` | `float` | 5th percentile |
+| `q50` | `float` | Median |
+| `q95` | `float` | 95th percentile |
+| `regime_score` | `float [0,1]` | Regime confidence |
 
 ### Artifact Contract
 
-Every trained model emits:
-
 ```python
 {
-    "preproc": "path/to/scaler.pkl",         # Preprocessing pipeline
-    "schema": "path/to/feature_schema.json", # Feature names + types
-    "weights": "path/to/model.pth",          # Model weights
-    "metrics": "path/to/metrics.json",       # Train/val/test performance
-    "inference_signature": {                 # API contract
+    "preproc": "path/to/scaler.pkl",
+    "schema": "path/to/feature_schema.json",
+    "weights": "path/to/model.pth",
+    "metrics": "path/to/metrics.json",
+    "inference_signature": {
         "inputs": ["feature_matrix"],
         "outputs": ["p_up", "E_r"],
         "version": "v1.2.3"
@@ -500,18 +1199,16 @@ Every trained model emits:
 For ensembles, add:
 ```python
 {
-    "oof_preds": "path/to/oof_predictions.parquet",  # Out-of-fold base model predictions
-    "meta_model": "path/to/meta_learner.pkl",        # Ridge/Elastic Net/LightGBM meta
-    "calibrator": "path/to/calibrator.pkl",          # Temperature scaling/Isotonic
-    "gating_model": "path/to/gate.pkl"               # Optional: HMM/Softmax gate
+    "oof_preds": "path/to/oof_predictions.parquet",
+    "meta_model": "path/to/meta_learner.pkl",
+    "calibrator": "path/to/calibrator.pkl",
+    "gating_model": "path/to/gate.pkl"  # Optional
 }
 ```
 
 ---
 
-## Part 5: Critical Data Pipeline Bugs
-
-*(Same as before - 3 bugs to fix)*
+## Critical Data Pipeline Bugs
 
 ### 🔴 Bug 1: HMM Lookahead Bias
 
@@ -562,9 +1259,9 @@ lower_barrier = entry_price - (k_down + cost_in_atr) * atr
 
 ---
 
-## Part 6: Implementation Roadmap
+## Implementation Roadmap
 
-### Phase 1: Fix Data Pipeline Bugs (Week 1-2)
+### Phase 1: Fix Data Pipeline Bugs (Week 1-2) ⚠️ CRITICAL
 
 **Goal:** Zero-leakage pipeline
 
@@ -578,8 +1275,7 @@ lower_barrier = entry_price - (k_down + cost_in_atr) * atr
 - ✅ All 3 bugs fixed
 - ✅ All 2,060 tests pass
 
-**Estimated Effort:** 1-2 weeks
-**Priority:** **CRITICAL**
+**Priority:** **CRITICAL** (blocks all production use)
 
 ---
 
@@ -608,113 +1304,81 @@ src/registry/
 **Success Criteria:**
 - ✅ All 13 models registered
 - ✅ Config-driven training: `python scripts/train_model.py --config config.yaml`
-- ✅ Registry tests pass
 
 **Estimated Effort:** 2 weeks
 
 ---
 
-### Phase 3: Add 16 New Models (Week 5-10)
+### Phase 3: Add 6 New Models (Week 5-7)
 
-**Goal:** 29 total models across 6 families
+**Goal:** 19 total models
 
-#### Week 5-6: Foundation + MLP Baselines (Quick Wins)
+#### Week 5: Foundation + MLP (Quick Wins)
 1. Chronos-Bolt (3 days)
 2. TimesFM (3 days)
-3. N-BEATS (1 day)
-4. N-HiTS (1 day)
-5. DLinear (4 hours)
-6. TSMixer (2 days)
+3. DLinear (4 hours)
 
-**Output:** 6 new models (total: 19)
+#### Week 6: Advanced Transformers
+4. PatchTST (4 days)
+5. iTransformer (3 days)
 
-#### Week 7-8: Advanced Transformers
-7. PatchTST (4 days)
-8. iTransformer (3 days)
-9. TFT (5 days)
-10. Informer (4 days)
-
-**Output:** 4 new models (total: 23)
-
-#### Week 9-10: CNN + Probabilistic
-11. InceptionTime (3 days)
-12. 1D ResNet (2 days)
-13. WaveNet (2 days)
-14. DeepAR (4 days)
-15. Quantile RNN (2 days)
-16. ExtraTrees (4 hours)
-
-**Output:** 6 new models (total: 29)
+#### Week 7: CNN + Probabilistic
+6. InceptionTime (3 days)
+7. 1D ResNet (2 days)
+8. TFT (5 days - complex)
+9. DeepAR (4 days)
+10. Quantile RNN (2 days)
+11. N-BEATS (1 day)
+12. N-HiTS (1 day)
 
 **Success Criteria:**
-- ✅ 16 new models registered
+- ✅ 6 new models registered (total: 19)
 - ✅ All trainable via config
 - ✅ Benchmarks documented
 
-**Estimated Effort:** 6 weeks (3 weeks with 2 engineers)
+**Estimated Effort:** 3 weeks
 
 ---
 
-### Phase 4: Add Inference Layer (Week 11-12)
+### Phase 4: Add Inference Layer (Week 8-9)
 
-**Goal:** Calibration + conformal prediction + gating
+**Goal:** Calibration + conformal + gating
 
-#### Calibration Methods (4)
+**Components:**
 1. Temperature Scaling (1 day)
 2. Isotonic Regression (1 day)
-3. Platt Scaling (1 day)
-4. Beta Calibration (1 day)
-
-#### Conformal Prediction Methods (3)
-5. CQR (Conformalized Quantile Regression) (2 days)
-6. Split Conformal Prediction (2 days)
-7. CV+/Jackknife+ Conformal (2 days)
-
-#### Gating Methods (4)
-8. Softmax Gating Network (2 days)
-9. HMM Regime Gating (3 days)
-10. Markov Switching (3 days)
-11. Contextual Bandit (2 days)
-
-#### Meta-Learners (3 new, beyond Ridge/Logistic)
-12. Elastic Net meta-learner (1 day)
-13. LightGBM meta-learner (1 day)
-14. CatBoost meta-learner (1 day)
-15. Small MLP meta-learner (2 days)
+3. CQR (2 days)
+4. Split Conformal (2 days)
+5. HMM Regime Gating (3 days)
+6. Elastic Net meta-learner (1 day)
+7. LightGBM meta-learner (1 day)
 
 **Success Criteria:**
-- ✅ 15 inference components registered
-- ✅ Config-driven: `inference: {calibrate: [temperature_scaling], uncertainty: cqr, gating: hmm_regime}`
+- ✅ 7 inference components registered
+- ✅ Config-driven: `inference: {calibrate: [temperature_scaling], uncertainty: cqr}`
 
 **Estimated Effort:** 2 weeks
 
 ---
 
-### Phase 5: Add Optional RL Policy Layer (Week 13-14)
+### Phase 5: Add Optional RL Policy Layer (Week 10-11)
 
 **Goal:** Adaptive decision-making
 
-**RL Algorithms (4):**
-1. SAC (Soft Actor-Critic) (4 days)
-2. TD3 (Twin Delayed DDPG) (3 days)
-3. PPO (Proximal Policy Optimization) (4 days)
-4. DQN (Deep Q-Network) (3 days)
-5. Contextual Bandits (2 days)
-
-**Integration:**
-- Consume inference outputs: `p_up`, `E[r]`, `q05/q50/q95`, `uncertainty`, `regime_score`
-- Output: `position_size`, `entry_threshold`, `exit_threshold`
-- Config-driven: `policy: {enabled: true, algorithm: sac}`
+**Algorithms:**
+1. SAC (4 days)
+2. TD3 (3 days)
+3. PPO (4 days)
 
 **Success Criteria:**
-- ✅ 5 RL policies registered
+- ✅ 3 RL policies registered
 - ✅ Optional via config (default: `enabled: false`)
 
 **Estimated Effort:** 2 weeks
 
 ---
 
-### Phase 6: Production Infrastructure (Week 15-16)
+### Phase 6: Production Infrastructure (Week 12-14)
 
 **Goal:** Automated train→bundle→deploy
 
@@ -728,41 +1392,11 @@ src/registry/
 - ✅ One-command: `python scripts/train_model.py --config config.yaml --create-bundle`
 - ✅ Drift monitoring running
 
-**Estimated Effort:** 2 weeks
+**Estimated Effort:** 2-3 weeks
 
 ---
 
-## Part 7: Quick Wins
-
-**High-impact changes with minimal effort:**
-
-1. **Fix HMM expanding mode (1 hour)** - Immediate leakage fix
-2. **Add DLinear (4 hours)** - Fastest SOTA baseline
-3. **Add N-BEATS (1 day)** - Interpretable decomposition
-4. **Add Temperature Scaling (1 day)** - Calibrated probabilities
-5. **Implement ModelRegistry (3 days)** - Unlocks config-driven selection
-
----
-
-## Part 8: Risk Analysis
-
-### High-Risk Items
-
-1. **Registry complexity** - 4 registries may introduce coupling
-   - **Mitigation:** Strict interfaces, unit tests for each registry
-
-2. **Config explosion** - Too many options may confuse users
-   - **Mitigation:** Provide preset configs (e.g., `config/presets/fast_baseline.yaml`)
-
-3. **Heterogeneous ensemble bugs** - Mixing tabular + sequence models
-   - **Mitigation:** Compatibility validation in EnsembleRegistry
-
-4. **RL instability** - RL policies may diverge during training
-   - **Mitigation:** Make RL optional (default: `enabled: false`), provide stable baselines
-
----
-
-## Part 9: Testing Strategy
+## Testing Strategy
 
 ### Phase 1: Bug Fix Tests
 - [ ] HMM: `expanding=False` uses only past data
@@ -773,7 +1407,6 @@ src/registry/
 - [ ] ModelRegistry: Create models from config
 - [ ] EnsembleRegistry: Validate compatibility checks
 - [ ] InferenceRegistry: Calibration correctness
-- [ ] PolicyRegistry: RL policy creation
 
 ### Phase 3: New Model Tests
 - [ ] Each new model: `test_fit()`, `test_predict()`, `test_save_load()`
@@ -782,7 +1415,7 @@ src/registry/
 
 ### Phase 4: Inference Tests
 - [ ] Calibration: Reliability diagrams match
-- [ ] Conformal: Coverage matches target (e.g., 90%)
+- [ ] Conformal: Coverage matches target (90%)
 - [ ] Gating: Regime weights sum to 1.0
 
 ### Phase 5: RL Tests
@@ -797,111 +1430,18 @@ src/registry/
 |-------|--------|--------|
 | Phase 1 | Zero leakage bugs | All 3 bugs fixed |
 | Phase 2 | Registry coverage | All 13 models registered |
-| Phase 3 | Model count | 29 models |
-| Phase 4 | Inference components | 15 calibration/conformal/gating methods |
-| Phase 5 | RL policies | 5 algorithms (optional) |
+| Phase 3 | Model count | 19 models |
+| Phase 4 | Inference components | 7 calibration/conformal/gating methods |
+| Phase 5 | RL policies | 3 algorithms (optional) |
 | Phase 6 | Deployment time | <5 min train→bundle→deploy |
 
 **Final System Capabilities:**
 
-- ✅ 29+ models across 6 families
+- ✅ 19 production-safe models (no redundancy)
 - ✅ Config-driven selection (no code changes)
-- ✅ 15+ inference components (calibration, conformal, gating)
-- ✅ Optional RL policy layer (5 algorithms)
+- ✅ 7+ inference components (calibration, conformal, gating)
+- ✅ Optional RL policy layer (3 algorithms)
 - ✅ One-command deploy
 - ✅ Automated drift detection
-
----
-
-## Appendix A: Example Configs
-
-### Config 1: Fast Baseline (Boosting Only)
-
-```yaml
-base_models:
-  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
-
-ensemble:
-  enabled: false
-
-inference:
-  calibrate: [temperature_scaling]
-
-policy:
-  enabled: false
-```
-
-### Config 2: Heterogeneous Ensemble (Tabular + Sequence + Foundation)
-
-```yaml
-base_models:
-  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
-  - {name: tcn, view: window_tensor, outputs: [E_r]}
-  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
-  - {name: chronos, view: window_tensor, outputs: [p_up], zero_shot: true}
-
-ensemble:
-  method: stacking
-  meta_learner: ridge
-  oof: true
-  gating:
-    enabled: true
-    method: hmm_regime
-
-inference:
-  calibrate: [temperature_scaling, isotonic]
-  uncertainty:
-    method: cqr
-    coverage: 0.90
-
-policy:
-  enabled: false
-```
-
-### Config 3: Full Stack (Ensemble + Calibration + RL)
-
-```yaml
-base_models:
-  - {name: lightgbm, view: feature_matrix, outputs: [p_up]}
-  - {name: catboost, view: feature_matrix, outputs: [p_up]}
-  - {name: patchtst, view: window_tensor, outputs: [E_r, q05, q50, q95]}
-  - {name: deepar, view: window_tensor, outputs: [q05, q50, q95]}
-
-ensemble:
-  method: stacking
-  meta_learner: lightgbm_meta
-  oof: true
-  gating:
-    enabled: true
-    method: markov_switching
-
-inference:
-  calibrate: [beta_calibration]
-  uncertainty:
-    method: jackknife_plus
-    coverage: 0.95
-
-policy:
-  enabled: true
-  algorithm: sac
-  inputs: [p_up, E_r, q05, q50, q95, uncertainty, regime_score]
-  outputs: [position_size, entry_threshold, exit_threshold]
-```
-
----
-
-## Appendix B: Model Implementation Checklist
-
-For each new model:
-
-- [ ] Implement `BaseModel` interface (`fit`, `predict`, `save`, `load`)
-- [ ] Register with `@register_model(name=..., family=..., input_view=..., outputs=...)`
-- [ ] Add config file: `config/models/<model_name>.yaml`
-- [ ] Write tests: `tests/models/test_<model_name>.py`
-- [ ] Verify `is_causal` property (production safety)
-- [ ] Add to model count assertion
-- [ ] Document in `CLAUDE.md`
-- [ ] Run benchmark vs baselines
-- [ ] Add example usage to `docs/`
-
-**Target:** 16 new models × 9 checklist items = 144 tasks
+- ✅ Zero leakage (all 3 bugs fixed)
+- ✅ Robust artifacts (checksums, versioning, schema validation)
