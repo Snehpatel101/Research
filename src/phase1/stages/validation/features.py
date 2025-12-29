@@ -2,7 +2,8 @@
 Feature quality validation checks.
 """
 import logging
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -50,6 +51,8 @@ def check_feature_correlations(
     """
     Check for highly correlated feature pairs.
 
+    DEPRECATED: Use validate_feature_correlation for more detailed analysis.
+
     Args:
         feature_df: DataFrame with feature columns
         feature_cols: List of feature column names
@@ -90,6 +93,387 @@ def check_feature_correlations(
         logger.info(f"  No highly correlated features found (>{threshold})")
 
     return high_corr_pairs
+
+
+def validate_feature_correlation(
+    feature_df: pd.DataFrame,
+    feature_cols: List[str],
+    warnings_found: List[str],
+    highly_correlated_threshold: float = 0.95,
+    moderately_correlated_threshold: float = 0.80,
+    artifacts_dir: Optional[Path] = None,
+    save_visualizations: bool = False
+) -> Dict:
+    """
+    Enhanced feature correlation analysis with detailed statistics and recommendations.
+
+    Computes Pearson correlation matrix and identifies:
+    - Highly correlated pairs (|correlation| > 0.95)
+    - Moderately correlated pairs (|correlation| > 0.80)
+    - Provides recommendations for feature removal
+    - Optionally generates visualizations
+
+    Args:
+        feature_df: DataFrame with feature columns
+        feature_cols: List of feature column names
+        warnings_found: List to append warnings to (mutated)
+        highly_correlated_threshold: Threshold for highly correlated pairs (default: 0.95)
+        moderately_correlated_threshold: Threshold for moderately correlated pairs (default: 0.80)
+        artifacts_dir: Optional directory to save visualizations
+        save_visualizations: Whether to save correlation heatmap (default: False)
+
+    Returns:
+        Dictionary with correlation statistics:
+        - correlation_matrix: Full correlation matrix (as dict)
+        - highly_correlated_pairs: List of pairs with |corr| > 0.95
+        - moderately_correlated_pairs: List of pairs with 0.80 < |corr| <= 0.95
+        - summary_statistics: Overall correlation stats
+        - recommendations: Features to consider removing
+    """
+    logger.info("\n1. Feature Correlation Analysis...")
+    logger.info(f"   - Highly correlated threshold: {highly_correlated_threshold}")
+    logger.info(f"   - Moderately correlated threshold: {moderately_correlated_threshold}")
+
+    # Compute correlation matrix
+    corr_matrix = feature_df.corr()
+
+    # Extract correlation pairs
+    highly_correlated_pairs = []
+    moderately_correlated_pairs = []
+    all_correlations = []
+
+    for i in range(len(corr_matrix.columns)):
+        for j in range(i + 1, len(corr_matrix.columns)):
+            corr_val = corr_matrix.iloc[i, j]
+            abs_corr = abs(corr_val)
+
+            # Skip NaN correlations
+            if np.isnan(corr_val):
+                continue
+
+            all_correlations.append(abs_corr)
+
+            if abs_corr > highly_correlated_threshold:
+                pair = {
+                    'feature1': corr_matrix.columns[i],
+                    'feature2': corr_matrix.columns[j],
+                    'correlation': float(corr_val),
+                    'abs_correlation': float(abs_corr)
+                }
+                highly_correlated_pairs.append(pair)
+            elif abs_corr > moderately_correlated_threshold:
+                pair = {
+                    'feature1': corr_matrix.columns[i],
+                    'feature2': corr_matrix.columns[j],
+                    'correlation': float(corr_val),
+                    'abs_correlation': float(abs_corr)
+                }
+                moderately_correlated_pairs.append(pair)
+
+    # Sort pairs by absolute correlation (descending)
+    highly_correlated_pairs.sort(key=lambda x: x['abs_correlation'], reverse=True)
+    moderately_correlated_pairs.sort(key=lambda x: x['abs_correlation'], reverse=True)
+
+    # Compute summary statistics
+    summary_stats = {
+        'total_features': len(feature_cols),
+        'total_pairs_analyzed': len(all_correlations),
+        'mean_abs_correlation': float(np.mean(all_correlations)) if all_correlations else 0.0,
+        'median_abs_correlation': float(np.median(all_correlations)) if all_correlations else 0.0,
+        'max_abs_correlation': float(np.max(all_correlations)) if all_correlations else 0.0,
+        'highly_correlated_count': len(highly_correlated_pairs),
+        'moderately_correlated_count': len(moderately_correlated_pairs)
+    }
+
+    # Log summary
+    logger.info(f"\n   Correlation Summary:")
+    logger.info(f"   - Total features: {summary_stats['total_features']}")
+    logger.info(f"   - Total pairs: {summary_stats['total_pairs_analyzed']:,}")
+    logger.info(f"   - Mean |correlation|: {summary_stats['mean_abs_correlation']:.3f}")
+    logger.info(f"   - Median |correlation|: {summary_stats['median_abs_correlation']:.3f}")
+    logger.info(f"   - Max |correlation|: {summary_stats['max_abs_correlation']:.3f}")
+
+    # Log highly correlated pairs
+    if highly_correlated_pairs:
+        logger.warning(
+            f"\n   Found {len(highly_correlated_pairs)} HIGHLY correlated pairs "
+            f"(|r| > {highly_correlated_threshold}):"
+        )
+        for pair in highly_correlated_pairs[:20]:
+            logger.warning(
+                f"      {pair['feature1']:30s} <-> {pair['feature2']:30s}: "
+                f"{pair['correlation']:+.4f}"
+            )
+        if len(highly_correlated_pairs) > 20:
+            logger.warning(f"      ... and {len(highly_correlated_pairs) - 20} more")
+
+        warnings_found.append(
+            f"{len(highly_correlated_pairs)} highly correlated feature pairs (|r| > {highly_correlated_threshold})"
+        )
+    else:
+        logger.info(f"\n   No highly correlated pairs found (|r| > {highly_correlated_threshold})")
+
+    # Log moderately correlated pairs
+    if moderately_correlated_pairs:
+        logger.info(
+            f"\n   Found {len(moderately_correlated_pairs)} MODERATELY correlated pairs "
+            f"({moderately_correlated_threshold} < |r| <= {highly_correlated_threshold}):"
+        )
+        for pair in moderately_correlated_pairs[:10]:
+            logger.info(
+                f"      {pair['feature1']:30s} <-> {pair['feature2']:30s}: "
+                f"{pair['correlation']:+.4f}"
+            )
+        if len(moderately_correlated_pairs) > 10:
+            logger.info(f"      ... and {len(moderately_correlated_pairs) - 10} more")
+    else:
+        logger.info(
+            f"\n   No moderately correlated pairs found "
+            f"({moderately_correlated_threshold} < |r| <= {highly_correlated_threshold})"
+        )
+
+    # Generate recommendations
+    recommendations = _generate_correlation_recommendations(
+        highly_correlated_pairs,
+        moderately_correlated_pairs,
+        feature_cols
+    )
+
+    if recommendations['features_to_consider_removing']:
+        logger.info(f"\n   Recommendations:")
+        logger.info(
+            f"   - Consider removing {len(recommendations['features_to_consider_removing'])} "
+            f"redundant features"
+        )
+        logger.info(f"   - This would reduce feature count from "
+                   f"{summary_stats['total_features']} to "
+                   f"{summary_stats['total_features'] - len(recommendations['features_to_consider_removing'])}")
+
+    # Save visualizations if requested
+    if save_visualizations and artifacts_dir:
+        _save_correlation_visualizations(
+            corr_matrix,
+            highly_correlated_pairs,
+            moderately_correlated_pairs,
+            artifacts_dir
+        )
+
+    return {
+        'summary_statistics': summary_stats,
+        'highly_correlated_pairs': highly_correlated_pairs,
+        'moderately_correlated_pairs': moderately_correlated_pairs,
+        'recommendations': recommendations
+    }
+
+
+def _generate_correlation_recommendations(
+    highly_correlated_pairs: List[Dict],
+    moderately_correlated_pairs: List[Dict],
+    feature_cols: List[str]
+) -> Dict:
+    """
+    Generate recommendations for which features to consider removing.
+
+    Strategy:
+    - For highly correlated pairs, recommend removing one feature from each pair
+    - Prefer removing features that appear in multiple correlated pairs
+    - Keep features with more interpretable names (e.g., prefer 'sma_20' over 'sma_20_copy')
+
+    Args:
+        highly_correlated_pairs: List of highly correlated feature pairs
+        moderately_correlated_pairs: List of moderately correlated feature pairs
+        feature_cols: All feature column names
+
+    Returns:
+        Dictionary with recommendations
+    """
+    from collections import Counter
+
+    # Count how many times each feature appears in highly correlated pairs
+    feature_frequency = Counter()
+    for pair in highly_correlated_pairs:
+        feature_frequency[pair['feature1']] += 1
+        feature_frequency[pair['feature2']] += 1
+
+    # Identify features to remove (greedy approach)
+    # Remove features that appear most frequently in correlated pairs
+    features_to_remove = set()
+    covered_pairs = set()
+
+    for pair_idx, pair in enumerate(highly_correlated_pairs):
+        feat1, feat2 = pair['feature1'], pair['feature2']
+        pair_key = frozenset([feat1, feat2])
+
+        if pair_key in covered_pairs:
+            continue
+
+        # Decide which feature to remove based on:
+        # 1. Which appears in more correlated pairs
+        # 2. Name heuristics (prefer simpler names)
+        freq1 = feature_frequency[feat1]
+        freq2 = feature_frequency[feat2]
+
+        if freq1 > freq2:
+            to_remove = feat1
+        elif freq2 > freq1:
+            to_remove = feat2
+        else:
+            # Same frequency - use name heuristics
+            # Prefer to remove features with '_copy', '_dup', longer names, etc.
+            to_remove = _choose_feature_to_remove(feat1, feat2)
+
+        features_to_remove.add(to_remove)
+        covered_pairs.add(pair_key)
+
+    # Generate detailed recommendations
+    recommendations = {
+        'features_to_consider_removing': sorted(list(features_to_remove)),
+        'removal_rationale': {},
+        'feature_frequency_in_correlations': dict(feature_frequency.most_common())
+    }
+
+    # Add rationale for each recommended removal
+    for feat in features_to_remove:
+        correlated_with = [
+            pair['feature1'] if pair['feature2'] == feat else pair['feature2']
+            for pair in highly_correlated_pairs
+            if feat in [pair['feature1'], pair['feature2']]
+        ]
+        recommendations['removal_rationale'][feat] = {
+            'appears_in_pairs': feature_frequency[feat],
+            'correlated_with': correlated_with[:5]  # Top 5
+        }
+
+    return recommendations
+
+
+def _choose_feature_to_remove(feat1: str, feat2: str) -> str:
+    """
+    Choose which feature to remove based on name heuristics.
+
+    Prefers to remove:
+    - Features with '_copy', '_dup', '_duplicate' suffixes
+    - Features with longer names (likely more derived)
+    - Features with higher numerical suffixes
+
+    Args:
+        feat1: First feature name
+        feat2: Second feature name
+
+    Returns:
+        Name of feature to remove
+    """
+    # Check for obvious copies
+    for suffix in ['_copy', '_dup', '_duplicate', '_temp']:
+        if suffix in feat1.lower() and suffix not in feat2.lower():
+            return feat1
+        elif suffix in feat2.lower() and suffix not in feat1.lower():
+            return feat2
+
+    # Prefer shorter names (less derived)
+    if len(feat1) > len(feat2):
+        return feat1
+    elif len(feat2) > len(feat1):
+        return feat2
+
+    # Alphabetical as fallback
+    return feat2 if feat1 < feat2 else feat1
+
+
+def _save_correlation_visualizations(
+    corr_matrix: pd.DataFrame,
+    highly_correlated_pairs: List[Dict],
+    moderately_correlated_pairs: List[Dict],
+    artifacts_dir: Path
+) -> None:
+    """
+    Save correlation visualizations to artifacts directory.
+
+    Creates:
+    - correlation_heatmap.png: Full correlation heatmap
+    - top_correlated_pairs.txt: List of top 50 correlated pairs
+
+    Args:
+        corr_matrix: Correlation matrix
+        highly_correlated_pairs: Highly correlated pairs
+        moderately_correlated_pairs: Moderately correlated pairs
+        artifacts_dir: Directory to save visualizations
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+    except ImportError:
+        logger.warning("matplotlib/seaborn not available - skipping visualizations")
+        return
+
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Save correlation heatmap (for subset of features if too large)
+    max_features_for_heatmap = 50
+    if len(corr_matrix) <= max_features_for_heatmap:
+        features_to_plot = corr_matrix.columns
+        title = "Feature Correlation Heatmap"
+    else:
+        # Plot only features involved in high correlations
+        features_in_pairs = set()
+        for pair in highly_correlated_pairs[:25]:
+            features_in_pairs.add(pair['feature1'])
+            features_in_pairs.add(pair['feature2'])
+        features_to_plot = sorted(list(features_in_pairs))[:max_features_for_heatmap]
+        title = f"Feature Correlation Heatmap (Top {len(features_to_plot)} Features)"
+
+    if features_to_plot:
+        fig, ax = plt.subplots(figsize=(12, 10))
+        corr_subset = corr_matrix.loc[features_to_plot, features_to_plot]
+
+        sns.heatmap(
+            corr_subset,
+            cmap='RdBu_r',
+            center=0,
+            vmin=-1,
+            vmax=1,
+            square=True,
+            linewidths=0.5,
+            cbar_kws={"shrink": 0.8},
+            ax=ax
+        )
+
+        ax.set_title(title, fontsize=14, fontweight='bold')
+        plt.tight_layout()
+
+        heatmap_path = artifacts_dir / "correlation_heatmap.png"
+        plt.savefig(heatmap_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        logger.info(f"   - Saved correlation heatmap: {heatmap_path}")
+
+    # 2. Save top correlated pairs as text file
+    pairs_path = artifacts_dir / "top_correlated_pairs.txt"
+    with open(pairs_path, 'w') as f:
+        f.write("TOP CORRELATED FEATURE PAIRS\n")
+        f.write("=" * 80 + "\n\n")
+
+        if highly_correlated_pairs:
+            f.write(f"HIGHLY CORRELATED PAIRS (|r| > 0.95): {len(highly_correlated_pairs)}\n")
+            f.write("-" * 80 + "\n")
+            for i, pair in enumerate(highly_correlated_pairs[:50], 1):
+                f.write(
+                    f"{i:3d}. {pair['feature1']:30s} <-> {pair['feature2']:30s}: "
+                    f"{pair['correlation']:+.6f}\n"
+                )
+            f.write("\n")
+
+        if moderately_correlated_pairs:
+            f.write(f"MODERATELY CORRELATED PAIRS (0.80 < |r| <= 0.95): {len(moderately_correlated_pairs)}\n")
+            f.write("-" * 80 + "\n")
+            for i, pair in enumerate(moderately_correlated_pairs[:50], 1):
+                f.write(
+                    f"{i:3d}. {pair['feature1']:30s} <-> {pair['feature2']:30s}: "
+                    f"{pair['correlation']:+.6f}\n"
+                )
+
+    logger.info(f"   - Saved correlated pairs list: {pairs_path}")
 
 
 def compute_feature_importance(
@@ -226,7 +610,9 @@ def check_feature_quality(
     horizons: List[int],
     warnings_found: List[str],
     seed: int = 42,
-    max_features: int = 50
+    max_features: int = 50,
+    artifacts_dir: Optional[Path] = None,
+    save_visualizations: bool = False
 ) -> Dict:
     """
     Run all feature quality checks.
@@ -237,6 +623,8 @@ def check_feature_quality(
         warnings_found: List to append warnings to (mutated)
         seed: Random seed for reproducibility
         max_features: Maximum features to analyze
+        artifacts_dir: Optional directory to save visualizations
+        save_visualizations: Whether to save correlation visualizations
 
     Returns:
         Dictionary with all feature quality results
@@ -260,10 +648,20 @@ def check_feature_quality(
     # Prepare feature DataFrame
     feature_df = df[feature_cols].fillna(0)
 
-    # Correlation analysis
-    results['high_correlations'] = check_feature_correlations(
-        feature_df, feature_cols, warnings_found
+    # Enhanced correlation analysis
+    correlation_results = validate_feature_correlation(
+        feature_df=feature_df,
+        feature_cols=feature_cols,
+        warnings_found=warnings_found,
+        highly_correlated_threshold=0.95,
+        moderately_correlated_threshold=0.80,
+        artifacts_dir=artifacts_dir,
+        save_visualizations=save_visualizations
     )
+    results['correlation_analysis'] = correlation_results
+
+    # Keep old format for backward compatibility
+    results['high_correlations'] = correlation_results['highly_correlated_pairs']
 
     # Feature importance
     label_col = f'label_h{horizons[0]}'

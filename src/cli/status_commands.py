@@ -11,28 +11,7 @@ import typer
 from rich.table import Table
 
 from .utils import console, show_error, show_success, show_info, show_warning, get_project_root
-
-# Lazy imports to avoid circular dependencies
-_pipeline_config = None
-_manifest = None
-
-
-def _get_pipeline_config():
-    """Lazy import pipeline_config module."""
-    global _pipeline_config
-    if _pipeline_config is None:
-        from .. import pipeline_config
-        _pipeline_config = pipeline_config
-    return _pipeline_config
-
-
-def _get_manifest():
-    """Lazy import manifest module."""
-    global _manifest
-    if _manifest is None:
-        from .. import manifest
-        _manifest = manifest
-    return _manifest
+from .run_commands_core import LazyImports
 
 
 def status_command(
@@ -59,8 +38,9 @@ def status_command(
         pipeline status 20241218_120000
         pipeline status phase1_v1 --verbose
     """
-    pipeline_config = _get_pipeline_config()
-    manifest_mod = _get_manifest()
+    lazy = LazyImports()
+    pipeline_config = lazy.pipeline_config
+    manifest_mod = lazy.manifest
 
     console.print(f"\n[bold cyan]Pipeline Run Status: {run_id}[/bold cyan]\n")
 
@@ -244,8 +224,9 @@ def validate_command(
         pipeline validate --symbols MES,MGC,MNQ
         pipeline validate --run-id 20241218_120000
     """
-    pipeline_config = _get_pipeline_config()
-    manifest_mod = _get_manifest()
+    lazy = LazyImports()
+    pipeline_config = lazy.pipeline_config
+    manifest_mod = lazy.manifest
 
     console.print("\n[bold cyan]Pipeline Validation[/bold cyan]\n")
 
@@ -331,7 +312,8 @@ def list_runs_command(
         pipeline list-runs
         pipeline list-runs --limit 20
     """
-    pipeline_config = _get_pipeline_config()
+    lazy = LazyImports()
+    pipeline_config = lazy.pipeline_config
 
     console.print("\n[bold cyan]Pipeline Runs[/bold cyan]\n")
 
@@ -418,7 +400,8 @@ def compare_command(
     Examples:
         pipeline compare 20241218_120000 20241218_130000
     """
-    manifest_mod = _get_manifest()
+    lazy = LazyImports()
+    manifest_mod = lazy.manifest
 
     console.print(f"\n[bold cyan]Comparing Runs: {run1} vs {run2}[/bold cyan]\n")
 

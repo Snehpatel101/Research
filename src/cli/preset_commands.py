@@ -8,18 +8,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 from .utils import console, show_info
-
-# Lazy imports to avoid circular dependencies
-_presets_module = None
-
-
-def _get_presets_module():
-    """Lazy import presets module."""
-    global _presets_module
-    if _presets_module is None:
-        from .. import presets
-        _presets_module = presets
-    return _presets_module
+from .run_commands_core import LazyImports
 
 
 def presets_command(
@@ -42,7 +31,8 @@ def presets_command(
         pipeline presets scalping         # Show scalping preset details
         pipeline presets day_trading -v   # Show day_trading with full config
     """
-    presets_mod = _get_presets_module()
+    lazy = LazyImports()
+    presets_mod = lazy.presets
 
     console.print("\n[bold cyan]Trading Presets[/bold cyan]\n")
 

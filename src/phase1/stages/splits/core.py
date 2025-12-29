@@ -134,11 +134,19 @@ def validate_label_distribution(
 
             valid_labels = split_labels[split_labels != INVALID_LABEL_SENTINEL]
             n_invalid = (split_labels == INVALID_LABEL_SENTINEL).sum()
-            invalid_pct = n_invalid / len(split_labels) * 100 if len(split_labels) > 0 else 0
+            split_size = len(split_labels)
+            invalid_pct = n_invalid / split_size * 100 if split_size > 0 else 0
+
+            if n_invalid > 0:
+                logger.info(
+                    f"{split_name} split: {n_invalid} invalid samples ({invalid_pct:.1f}%) "
+                    f"excluded (edge case: insufficient horizon at dataset end)"
+                )
 
             if invalid_pct > 10:
                 logger.warning(
-                    f"{split_name} split has {invalid_pct:.1f}% invalid labels in {label_col}"
+                    f"{split_name} split has {invalid_pct:.1f}% invalid labels in {label_col} - "
+                    f"consider reducing max_bars or increasing dataset size"
                 )
 
             counts = valid_labels.value_counts().sort_index()

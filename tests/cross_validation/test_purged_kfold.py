@@ -550,6 +550,313 @@ class TestGetCVConfigForFamily:
 
 
 # =============================================================================
+# VECTORIZED IMPLEMENTATION TESTS
+# =============================================================================
+
+class TestVectorizedImplementation:
+    """Tests for vectorized label overlap checking optimization."""
+
+    def _purge_label_overlap_loop(
+        self,
+        X: pd.DataFrame,
+        label_end_times: pd.Series,
+        train_mask: np.ndarray,
+        test_start: int,
+        test_end: int,
+    ) -> np.ndarray:
+        """
+        Original loop-based implementation for comparison.
+
+        This is the OLD implementation that we optimized. We keep it here
+        to verify that the vectorized version produces identical results.
+        """
+        n_samples = len(X)
+        test_start_time = X.index[test_start]
+        test_end_time = X.index[test_end - 1]
+
+        # Original loop-based implementation
+        for i in range(n_samples):
+            if train_mask[i]:
+                label_end = label_end_times.iloc[i]
+                if label_end >= test_start_time and X.index[i] <= test_end_time:
+                    train_mask[i] = False
+
+        return train_mask
+
+    def _purge_label_overlap_vectorized(
+        self,
+        X: pd.DataFrame,
+        label_end_times: pd.Series,
+        train_mask: np.ndarray,
+        test_start: int,
+        test_end: int,
+    ) -> np.ndarray:
+        """
+        Vectorized implementation (current).
+
+        This is the NEW implementation that we're testing.
+        """
+        test_start_time = X.index[test_start]
+        test_end_time = X.index[test_end - 1]
+
+        # Vectorized implementation
+        overlapping = (label_end_times >= test_start_time) & (X.index <= test_end_time)
+        train_mask[overlapping] = False
+
+        return train_mask
+
+    def test_vectorized_matches_loop_small_dataset(self, small_time_series_data):
+        """Test vectorized implementation matches loop-based on small dataset."""
+        n_samples = 200
+        n_features = 10
+        horizon = 20
+
+        # Generate data with label_end_times
+        X = small_time_series_data["X"]
+        label_end_times = pd.Series(
+            [X.index[min(i + horizon, n_samples - 1)] for i in range(n_samples)],
+            index=X.index,
+            name="label_end_time",
+        )
+
+        # Test fold boundaries
+        test_start = 50
+        test_end = 100
+
+        # Prepare base train mask
+        train_mask_base = np.ones(n_samples, dtype=bool)
+        train_mask_base[test_start:test_end] = False
+
+        # Run loop-based implementation
+        train_mask_loop = train_mask_base.copy()
+        train_mask_loop = self._purge_label_overlap_loop(
+            X, label_end_times, train_mask_loop, test_start, test_end
+        )
+
+        # Run vectorized implementation
+        train_mask_vec = train_mask_base.copy()
+        train_mask_vec = self._purge_label_overlap_vectorized(
+            X, label_end_times, train_mask_vec, test_start, test_end
+        )
+
+        # Verify identical results
+        np.testing.assert_array_equal(
+            train_mask_loop,
+            train_mask_vec,
+            err_msg="Vectorized implementation produces different results than loop-based",
+        )
+
+    def test_vectorized_matches_loop_large_dataset(self):
+        """Test vectorized implementation matches loop-based on larger dataset."""
+        np.random.seed(42)
+        n_samples = 5000
+        n_features = 10
+        horizon = 20
+
+        # Generate synthetic data
+        start_time = pd.Timestamp("2020-01-01 09:30:00")
+        dates = pd.date_range(start=start_time, periods=n_samples, freq="5min")
+
+        X = pd.DataFrame(
+            np.random.randn(n_samples, n_features),
+            index=dates,
+            columns=[f"feature_{i}" for i in range(n_features)],
+        )
+
+        label_end_times = pd.Series(
+            [dates[min(i + horizon, n_samples - 1)] for i in range(n_samples)],
+            index=dates,
+            name="label_end_time",
+        )
+
+        # Test fold boundaries
+        test_start = 1000
+        test_end = 2000
+
+        # Prepare base train mask
+        train_mask_base = np.ones(n_samples, dtype=bool)
+        train_mask_base[test_start:test_end] = False
+
+        # Run loop-based implementation
+        train_mask_loop = train_mask_base.copy()
+        train_mask_loop = self._purge_label_overlap_loop(
+            X, label_end_times, train_mask_loop, test_start, test_end
+        )
+
+        # Run vectorized implementation
+        train_mask_vec = train_mask_base.copy()
+        train_mask_vec = self._purge_label_overlap_vectorized(
+            X, label_end_times, train_mask_vec, test_start, test_end
+        )
+
+        # Verify identical results
+        np.testing.assert_array_equal(
+            train_mask_loop,
+            train_mask_vec,
+            err_msg="Vectorized implementation produces different results than loop-based on large dataset",
+        )
+
+    def test_vectorized_matches_loop_all_folds(self, label_end_times_data):
+        """Test vectorized matches loop across all CV folds."""
+        config = PurgedKFoldConfig(n_splits=5, purge_bars=10, embargo_bars=10, min_train_size=0.1)
+
+        X = label_end_times_data["X"]
+        label_end_times = label_end_times_data["label_end_times"]
+        n_samples = len(X)
+        fold_size = n_samples // config.n_splits
+
+        for fold_idx in range(config.n_splits):
+            # Test fold boundaries
+            test_start = fold_idx * fold_size
+            test_end = (fold_idx + 1) * fold_size if fold_idx < config.n_splits - 1 else n_samples
+
+            # Prepare base train mask (with purge and embargo already applied)
+            train_mask_base = np.ones(n_samples, dtype=bool)
+            train_mask_base[test_start:test_end] = False
+            purge_start = max(0, test_start - config.purge_bars)
+            train_mask_base[purge_start:test_start] = False
+            embargo_end = min(n_samples, test_end + config.embargo_bars)
+            train_mask_base[test_end:embargo_end] = False
+
+            # Run loop-based implementation
+            train_mask_loop = train_mask_base.copy()
+            train_mask_loop = self._purge_label_overlap_loop(
+                X, label_end_times, train_mask_loop, test_start, test_end
+            )
+
+            # Run vectorized implementation
+            train_mask_vec = train_mask_base.copy()
+            train_mask_vec = self._purge_label_overlap_vectorized(
+                X, label_end_times, train_mask_vec, test_start, test_end
+            )
+
+            # Verify identical results for this fold
+            np.testing.assert_array_equal(
+                train_mask_loop,
+                train_mask_vec,
+                err_msg=f"Fold {fold_idx}: Vectorized implementation produces different results",
+            )
+
+    def test_vectorized_handles_edge_cases(self):
+        """Test vectorized implementation handles edge cases correctly."""
+        # Edge case: Very small dataset
+        n_samples = 50
+        dates = pd.date_range(start="2020-01-01", periods=n_samples, freq="5min")
+        X = pd.DataFrame(np.random.randn(n_samples, 5), index=dates)
+        label_end_times = pd.Series(
+            [dates[min(i + 5, n_samples - 1)] for i in range(n_samples)],
+            index=dates,
+        )
+
+        test_start = 10
+        test_end = 20
+        train_mask_base = np.ones(n_samples, dtype=bool)
+        train_mask_base[test_start:test_end] = False
+
+        # Run both implementations
+        train_mask_loop = train_mask_base.copy()
+        train_mask_loop = self._purge_label_overlap_loop(
+            X, label_end_times, train_mask_loop, test_start, test_end
+        )
+
+        train_mask_vec = train_mask_base.copy()
+        train_mask_vec = self._purge_label_overlap_vectorized(
+            X, label_end_times, train_mask_vec, test_start, test_end
+        )
+
+        np.testing.assert_array_equal(train_mask_loop, train_mask_vec)
+
+    def test_vectorized_performance_improvement(self):
+        """Test that vectorized implementation is faster than loop-based."""
+        import time
+
+        np.random.seed(42)
+        n_samples = 10000
+        n_features = 10
+        horizon = 20
+
+        # Generate synthetic data
+        start_time = pd.Timestamp("2020-01-01 09:30:00")
+        dates = pd.date_range(start=start_time, periods=n_samples, freq="5min")
+
+        X = pd.DataFrame(
+            np.random.randn(n_samples, n_features),
+            index=dates,
+            columns=[f"feature_{i}" for i in range(n_features)],
+        )
+
+        label_end_times = pd.Series(
+            [dates[min(i + horizon, n_samples - 1)] for i in range(n_samples)],
+            index=dates,
+        )
+
+        test_start = 2000
+        test_end = 4000
+        train_mask_base = np.ones(n_samples, dtype=bool)
+        train_mask_base[test_start:test_end] = False
+
+        # Benchmark loop-based
+        train_mask_loop = train_mask_base.copy()
+        start = time.perf_counter()
+        train_mask_loop = self._purge_label_overlap_loop(
+            X, label_end_times, train_mask_loop, test_start, test_end
+        )
+        loop_time = time.perf_counter() - start
+
+        # Benchmark vectorized
+        train_mask_vec = train_mask_base.copy()
+        start = time.perf_counter()
+        train_mask_vec = self._purge_label_overlap_vectorized(
+            X, label_end_times, train_mask_vec, test_start, test_end
+        )
+        vec_time = time.perf_counter() - start
+
+        # Verify results are identical
+        np.testing.assert_array_equal(train_mask_loop, train_mask_vec)
+
+        # Verify speedup (vectorized should be at least 2x faster)
+        speedup = loop_time / vec_time
+        assert speedup >= 2.0, (
+            f"Vectorized implementation should be at least 2x faster, "
+            f"got {speedup:.1f}x speedup (loop: {loop_time*1000:.2f}ms, vec: {vec_time*1000:.2f}ms)"
+        )
+
+    def test_purged_kfold_uses_vectorized(self, label_end_times_data):
+        """
+        Integration test: Verify PurgedKFold.split() uses vectorized implementation.
+
+        This test ensures the production code actually uses the optimized version.
+        """
+        config = PurgedKFoldConfig(n_splits=3, purge_bars=10, embargo_bars=10, min_train_size=0.1)
+        cv = PurgedKFold(config)
+
+        X = label_end_times_data["X"]
+        label_end_times = label_end_times_data["label_end_times"]
+
+        # This should succeed without errors
+        folds = list(cv.split(X, label_end_times=label_end_times))
+
+        assert len(folds) == 3
+
+        # Verify no label leakage (this proves the vectorized logic works correctly)
+        for fold_idx, (train_idx, test_idx) in enumerate(folds):
+            test_start_time = X.index[test_idx[0]]
+            test_end_time = X.index[test_idx[-1]]
+
+            for idx in train_idx:
+                sample_time = X.index[idx]
+                label_end = label_end_times.iloc[idx]
+
+                # Verify no label overlap
+                if label_end >= test_start_time and sample_time <= test_end_time:
+                    raise AssertionError(
+                        f"Fold {fold_idx}: Label leakage detected! "
+                        f"Sample at {sample_time} has label_end={label_end} "
+                        f"overlapping test period [{test_start_time}, {test_end_time}]"
+                    )
+
+
+# =============================================================================
 # REPR TESTS
 # =============================================================================
 

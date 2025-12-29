@@ -115,6 +115,191 @@ class Trainer:
 
         logger.debug(f"Created output directory: {self.output_path}")
 
+    def _load_and_prepare_training_data(
+        self, container: "TimeSeriesDataContainer"
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray]]:
+        """
+        Load and prepare training data from container.
+
+        Args:
+            container: TimeSeriesDataContainer with train/val data
+
+        Returns:
+            Tuple of (X_train, y_train, w_train, X_val, y_val, label_end_times)
+        """
+        logger.info("Loading data from container...")
+        X_train, y_train, w_train, X_val, y_val = prepare_training_data(
+            container,
+            requires_sequences=self.model.requires_sequences,
+            sequence_length=self.config.sequence_length,
+        )
+
+        # Extract label_end_times for overlapping label purging
+        label_end_times = container.get_label_end_times("train")
+        if label_end_times is not None:
+            logger.info(
+                "Label end times available for purging overlapping labels "
+                "(prevents leakage in stacking/blending ensembles)"
+            )
+
+        # Log data shapes
+        logger.info(
+            f"Data shapes: "
+            f"X_train={X_train.shape}, y_train={y_train.shape}, "
+            f"X_val={X_val.shape}, y_val={y_val.shape}"
+        )
+
+        return X_train, y_train, w_train, X_val, y_val, label_end_times
+
+    def _train_model_with_config(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        w_train: np.ndarray,
+        label_end_times: Optional[np.ndarray],
+    ) -> TrainingMetrics:
+        """
+        Train model with appropriate configuration.
+
+        Args:
+            Training data arrays and label_end_times
+
+        Returns:
+            TrainingMetrics from model training
+        """
+        logger.info(f"Training {self.config.model_name}...")
+        fit_kwargs = {
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_val": X_val,
+            "y_val": y_val,
+            "sample_weights": w_train,
+            "config": self.config.model_config,
+        }
+
+        # Add label_end_times for ensemble models with internal CV
+        if self.model.model_family == "ensemble" and label_end_times is not None:
+            fit_kwargs["label_end_times"] = label_end_times
+
+        return self.model.fit(**fit_kwargs)
+
+    def _evaluate_on_validation(
+        self, X_val: np.ndarray, y_val: np.ndarray
+    ) -> tuple[Dict[str, Any], PredictionOutput]:
+        """
+        Evaluate model on validation set.
+
+        Args:
+            X_val: Validation features
+            y_val: Validation labels
+
+        Returns:
+            Tuple of (evaluation_metrics dict, predictions)
+        """
+        logger.info("Evaluating on validation set...")
+        val_predictions = self.model.predict(X_val)
+        eval_metrics = compute_classification_metrics(
+            y_true=y_val,
+            y_pred=val_predictions.class_predictions,
+            y_proba=val_predictions.class_probabilities,
+        )
+
+        # Add trading metrics
+        eval_metrics["trading"] = compute_trading_metrics(
+            y_true=y_val,
+            y_pred=val_predictions.class_predictions,
+        )
+
+        return eval_metrics, val_predictions
+
+    def _apply_probability_calibration(
+        self, y_val: np.ndarray, val_predictions: PredictionOutput, eval_metrics: Dict[str, Any]
+    ) -> None:
+        """
+        Apply probability calibration if enabled.
+
+        Args:
+            y_val: Validation labels
+            val_predictions: Validation predictions
+            eval_metrics: Evaluation metrics dict (modified in-place)
+        """
+        if not self.config.use_calibration:
+            self.calibrator = None
+            return
+
+        logger.info("Applying probability calibration...")
+        cal_config = CalibrationConfig(method=self.config.calibration_method)
+        self.calibrator = ProbabilityCalibrator(cal_config)
+        calibration_metrics = self.calibrator.fit(
+            y_true=y_val,
+            probabilities=val_predictions.class_probabilities,
+        )
+        eval_metrics["calibration"] = calibration_metrics.to_dict()
+
+    def _save_training_artifacts(
+        self,
+        training_metrics: TrainingMetrics,
+        eval_metrics: Dict[str, Any],
+        val_predictions: PredictionOutput,
+        test_metrics: Optional[Dict[str, Any]],
+        test_predictions: Optional[PredictionOutput],
+    ) -> None:
+        """
+        Save all training artifacts.
+
+        Args:
+            All metrics and predictions to save
+        """
+        self._save_artifacts(
+            training_metrics, eval_metrics, val_predictions,
+            test_metrics=test_metrics, test_predictions=test_predictions
+        )
+        self._save_model()
+        if self.calibrator is not None:
+            self._save_calibrator()
+
+    def _build_training_results(
+        self,
+        training_metrics: TrainingMetrics,
+        eval_metrics: Dict[str, Any],
+        test_metrics: Optional[Dict[str, Any]],
+        val_predictions: PredictionOutput,
+        y_val: np.ndarray,
+        total_time: float,
+    ) -> Dict[str, Any]:
+        """
+        Build final training results dictionary.
+
+        Args:
+            All metrics, predictions, and timing info
+
+        Returns:
+            Complete results dictionary
+        """
+        results = {
+            "run_id": self.run_id,
+            "model_name": self.config.model_name,
+            "horizon": self.config.horizon,
+            "training_metrics": training_metrics.to_dict(),
+            "evaluation_metrics": eval_metrics,
+            "test_metrics": test_metrics,
+            "output_path": str(self.output_path),
+            "total_time_seconds": total_time,
+            "val_predictions": val_predictions.class_predictions,
+            "val_true": y_val,
+        }
+
+        logger.info(
+            f"Training complete: "
+            f"val_f1={eval_metrics['macro_f1']:.4f}, "
+            f"val_accuracy={eval_metrics['accuracy']:.4f}, "
+            f"time={total_time:.1f}s"
+        )
+
+        return results
+
     def run(
         self,
         container: "TimeSeriesDataContainer",
@@ -144,117 +329,43 @@ class Trainer:
         """
         start_time = time.time()
 
-        # Setup
+        # Setup directories and save configuration
         self._setup_output_dir()
         self._save_config()
 
-        # Load data
-        logger.info("Loading data from container...")
-        X_train, y_train, w_train, X_val, y_val = prepare_training_data(
-            container,
-            requires_sequences=self.model.requires_sequences,
-            sequence_length=self.config.sequence_length,
+        # Load and prepare training data
+        X_train, y_train, w_train, X_val, y_val, label_end_times = (
+            self._load_and_prepare_training_data(container)
         )
 
-        # Extract label_end_times for overlapping label purging (used by ensemble models)
-        label_end_times = container.get_label_end_times("train")
-        if label_end_times is not None:
-            logger.info(
-                f"Label end times available for purging overlapping labels "
-                f"(prevents leakage in stacking/blending ensembles)"
-            )
-
-        # Log data shapes
-        logger.info(
-            f"Data shapes: "
-            f"X_train={X_train.shape}, y_train={y_train.shape}, "
-            f"X_val={X_val.shape}, y_val={y_val.shape}"
+        # Train model
+        training_metrics = self._train_model_with_config(
+            X_train, y_train, X_val, y_val, w_train, label_end_times
         )
 
-        # Train model (pass label_end_times for ensemble models with internal CV)
-        logger.info(f"Training {self.config.model_name}...")
-        fit_kwargs = {
-            "X_train": X_train,
-            "y_train": y_train,
-            "X_val": X_val,
-            "y_val": y_val,
-            "sample_weights": w_train,
-            "config": self.config.model_config,
-        }
+        # Evaluate on validation set
+        eval_metrics, val_predictions = self._evaluate_on_validation(X_val, y_val)
 
-        # Add label_end_times if model supports it (ensemble models with internal CV)
-        # Non-ensemble models ignore this parameter (not in their fit() signature)
-        if self.model.model_family == "ensemble" and label_end_times is not None:
-            fit_kwargs["label_end_times"] = label_end_times
-
-        training_metrics = self.model.fit(**fit_kwargs)
-
-        # Evaluate
-        logger.info("Evaluating on validation set...")
-        val_predictions = self.model.predict(X_val)
-        eval_metrics = compute_classification_metrics(
-            y_true=y_val,
-            y_pred=val_predictions.class_predictions,
-            y_proba=val_predictions.class_probabilities,
-        )
-
-        # Add trading metrics
-        eval_metrics["trading"] = compute_trading_metrics(
-            y_true=y_val,
-            y_pred=val_predictions.class_predictions,
-        )
-
-        # Test set evaluation (one-shot generalization estimate)
+        # Test set evaluation (optional, one-shot generalization estimate)
         test_metrics = None
         test_predictions = None
         if self.config.evaluate_test_set:
             test_metrics, test_predictions = self._evaluate_test_set(container)
 
-        # Probability calibration (leakage-safe: fits on held-out val set)
-        self.calibrator = None
-        if self.config.use_calibration:
-            logger.info("Applying probability calibration...")
-            cal_config = CalibrationConfig(method=self.config.calibration_method)
-            self.calibrator = ProbabilityCalibrator(cal_config)
-            calibration_metrics = self.calibrator.fit(
-                y_true=y_val,
-                probabilities=val_predictions.class_probabilities,
-            )
-            eval_metrics["calibration"] = calibration_metrics.to_dict()
+        # Apply probability calibration (leakage-safe: fits on held-out val set)
+        self._apply_probability_calibration(y_val, val_predictions, eval_metrics)
 
-        # Save artifacts
+        # Save all artifacts
         if not skip_save:
-            self._save_artifacts(
-                training_metrics, eval_metrics, val_predictions,
-                test_metrics=test_metrics, test_predictions=test_predictions
+            self._save_training_artifacts(
+                training_metrics, eval_metrics, val_predictions, test_metrics, test_predictions
             )
-            self._save_model()
-            if self.calibrator is not None:
-                self._save_calibrator()
 
+        # Build and return results
         total_time = time.time() - start_time
-
-        results = {
-            "run_id": self.run_id,
-            "model_name": self.config.model_name,
-            "horizon": self.config.horizon,
-            "training_metrics": training_metrics.to_dict(),
-            "evaluation_metrics": eval_metrics,
-            "test_metrics": test_metrics,
-            "output_path": str(self.output_path),
-            "total_time_seconds": total_time,
-            "val_predictions": val_predictions.class_predictions,
-            "val_true": y_val,
-        }
-
-        logger.info(
-            f"Training complete: "
-            f"val_f1={eval_metrics['macro_f1']:.4f}, "
-            f"val_accuracy={eval_metrics['accuracy']:.4f}, "
-            f"time={total_time:.1f}s"
+        return self._build_training_results(
+            training_metrics, eval_metrics, test_metrics, val_predictions, y_val, total_time
         )
-
-        return results
 
     def _evaluate_test_set(
         self,

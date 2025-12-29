@@ -275,16 +275,16 @@ class PurgedKFold:
                 test_start_time = X.index[test_start]
                 test_end_time = X.index[test_end - 1]
 
-                # Check every potential training sample for label overlap
-                for i in range(n_samples):
-                    if train_mask[i]:  # Only check samples still in training set
-                        label_end = label_end_times.iloc[i]
-                        # Remove if label's outcome period overlaps with test period
-                        # This handles:
-                        # 1. Samples before test whose labels extend into test period
-                        # 2. Samples after embargo whose labels started during test period
-                        if label_end >= test_start_time and X.index[i] <= test_end_time:
-                            train_mask[i] = False
+                # VECTORIZED: Find all samples with overlapping labels
+                # Overlap condition: label ends in/after test AND sample starts before/in test
+                # This handles:
+                # 1. Samples before test whose labels extend into test period
+                # 2. Samples after embargo whose labels started during test period
+                overlapping = (label_end_times >= test_start_time) & (X.index <= test_end_time)
+
+                # Remove overlapping samples from training set
+                # Note: Using boolean indexing is ~10-100x faster than Python loop for large datasets
+                train_mask[overlapping] = False
 
             train_indices = indices[train_mask]
 

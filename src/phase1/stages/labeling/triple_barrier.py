@@ -300,7 +300,10 @@ class TripleBarrierLabeler(LabelingStrategy):
                 'bars_to_hit': bars_to_hit,
                 'mae': mae,
                 'mfe': mfe,
-                'touch_type': touch_type
+                'touch_type': touch_type,
+                'max_bars': max_bars,
+                'k_up': k_up,
+                'k_down': k_down
             }
         )
 
@@ -317,6 +320,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         labels = result.labels
         valid_mask = labels != -99
         valid_labels = labels[valid_mask]
+        total_samples = len(labels)
 
         if len(valid_labels) == 0:
             logger.warning(f"No valid labels for horizon {horizon}")
@@ -340,10 +344,20 @@ class TripleBarrierLabeler(LabelingStrategy):
                 avg_bars = valid_bars.mean()
                 logger.info(f"  Avg bars to hit: {avg_bars:.1f}")
 
-        # Log invalid sample count
+        # Log edge case exclusions with clear explanation
         invalid_count = (~valid_mask).sum()
         if invalid_count > 0:
-            logger.info(f"  Invalid samples: {invalid_count} (excluded from training)")
+            invalid_pct = invalid_count / total_samples * 100
+            # Get max_bars from the result metadata or reconstruct from defaults
+            max_bars = result.metadata.get('max_bars', horizon * 3)
+            logger.info(
+                f"  Edge case exclusions: {invalid_count} samples ({invalid_pct:.1f}%) "
+                f"marked invalid at dataset end"
+            )
+            logger.info(
+                f"  Reason: Insufficient horizon (last {max_bars} bars cannot look forward {max_bars} bars "
+                f"to compute triple-barrier outcome)"
+            )
 
     def get_quality_metrics(self, result: LabelingResult) -> dict[str, float]:
         """

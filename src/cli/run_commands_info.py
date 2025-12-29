@@ -7,7 +7,7 @@ their data requirements, and ensemble configurations.
 from rich.table import Table
 
 from .utils import console
-from .run_commands_core import _get_model_config
+from .run_commands_core import LazyImports
 
 
 def models_command() -> None:
@@ -17,7 +17,8 @@ def models_command() -> None:
     Shows all supported models for Phase 2 training with their
     recommended feature sets, scaling requirements, and sequence lengths.
     """
-    model_config = _get_model_config()
+    lazy = LazyImports()
+    model_config = lazy.model_config
 
     console.print("\n[bold cyan]Available Model Types[/bold cyan]\n")
 

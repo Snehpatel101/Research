@@ -335,15 +335,30 @@ def apply_optimized_labels(
     label_counts = pd.Series(labels).value_counts().sort_index()
     total = len(labels)
 
-    logger.info(f"  Label distribution:")
+    # Log edge case exclusions first
+    invalid_count = label_counts.get(-99, 0)
+    if invalid_count > 0:
+        invalid_pct = invalid_count / total * 100
+        logger.info(
+            f"  Edge case exclusions: {invalid_count} samples ({invalid_pct:.1f}%) "
+            f"marked invalid at dataset end"
+        )
+        logger.info(
+            f"  Reason: Insufficient horizon (last {best_params['max_bars']} bars cannot look forward "
+            f"{best_params['max_bars']} bars to compute triple-barrier outcome)"
+        )
+
+    logger.info(f"  Label distribution (excluding invalid):")
     for label_val in [-1, 0, 1]:
         count = label_counts.get(label_val, 0)
-        pct = count / total * 100
+        valid_total = total - invalid_count
+        pct = count / valid_total * 100 if valid_total > 0 else 0
         label_name = {-1: "Short", 0: "Neutral", 1: "Long"}[label_val]
         logger.info(f"    {label_name:10s}: {count:6d} ({pct:5.1f}%)")
 
-    # Check neutral rate
-    neutral_pct = label_counts.get(0, 0) / total * 100
+    # Check neutral rate (excluding invalid samples)
+    valid_total = total - invalid_count
+    neutral_pct = label_counts.get(0, 0) / valid_total * 100 if valid_total > 0 else 0
     if 20 <= neutral_pct <= 30:
         neutral_status = "OK (target: 20-30%)"
     elif neutral_pct < 20:

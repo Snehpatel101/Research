@@ -207,7 +207,13 @@ See `docs/phases/PHASE_4.md` for detailed ensemble architecture, validation util
 We do not build monoliths. Responsibilities must be split into small, composable modules with clear contracts and minimal coupling. Each module should do one thing well and expose a narrow, well-documented interface. Prefer dependency injection and explicit wiring over hidden globals or implicit side effects.
 
 ### File and Complexity Limits
-Files should target **650 lines** as the ideal maximum. Files up to **800 lines** are acceptable if the logic is cohesive and cannot be reasonably split without introducing artificial abstractions. Beyond 800 lines is a signal that boundaries are wrong and responsibilities need to be refactored. Keep functions short, keep layers separated, and keep the cognitive load low.
+Files should target **650 lines** as the ideal maximum. Files up to **800 lines** are acceptable if the logic is cohesive and cannot be reasonably split without introducing artificial abstractions. Beyond 800 lines requires explicit justification and indicates the file may need refactoring when practical.
+
+**Current exceptions (technical debt):**
+- `src/cross_validation/cv_runner.py` (934 lines) - complex cross-validation orchestration
+- Other files >800 lines should be flagged during code review
+
+Keep functions short, keep layers separated, and keep the cognitive load low.
 
 ### Fail Fast, Fail Hard
 We would rather crash early than silently continue in an invalid state. Inputs are validated at the boundary. Assumptions are enforced with explicit checks. If something is wrong, we stop and surface a clear error message that points to the cause.
@@ -242,12 +248,21 @@ Every boundary validates what it receives: configuration, CLI inputs, dataset sc
 ### Clear Tests
 Every module ships with tests that prove the contract. Unit tests cover pure logic. Integration tests cover pipeline wiring and data flow. Regression tests lock down previously fixed issues. Tests should be deterministic, fast, and easy to run locally and in CI.
 
+**Test Coverage Expectations:**
+- New features: Minimum 80% line coverage for core logic
+- Critical paths (labeling, splitting, scaling): 90%+ coverage
+- Edge cases and error handling must have explicit test cases
+- Run tests: `pytest tests/ -v`
+- Check coverage: `pytest tests/ --cov=src --cov-report=term-missing`
+
 ### Definition of Done
 A change is complete only when:
 - Implementation is modular
-- Stays within file limits (target 650 lines, max 800 lines)
+- Stays within file limits (target 650 lines, max 800 lines, exceptions require justification)
 - Validates inputs at boundaries
 - Backed by tests that clearly demonstrate correctness
+- Achieves minimum 80% test coverage for new code
+- All tests pass: `pytest tests/ -v`
 
 ---
 
@@ -324,7 +339,7 @@ src/phase1/stages/
 ├── sessions/           → Session filtering and normalization
 ├── features/           → 150+ indicators (momentum, wavelets, microstructure)
 ├── regime/             → Regime detection (volatility, trend, composite)
-├── mtf/                → Multi-timeframe features
+├── mtf/                → Multi-timeframe features (shift(1) for anti-lookahead)
 ├── labeling/           → Triple-barrier initial labels
 ├── ga_optimize/        → Optuna parameter optimization
 ├── final_labels/       → Apply optimized parameters
@@ -411,7 +426,7 @@ python scripts/train_model.py --model voting --base-models lstm,gru,tcn --horizo
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
 python scripts/run_cv.py --models all --horizons 5,10,15,20 --tune
 
-# List available models (should print 12)
+# List available models (should print 13)
 python scripts/train_model.py --list-models
 python -c "from src.models import ModelRegistry; print(len(ModelRegistry.list_all()))"
 ```
@@ -438,16 +453,41 @@ TRAIN/VAL/TEST = 70/15/15
 - Triple-barrier labeling with symbol-specific asymmetric barriers (MES: 1.5:1.0)
 - Optuna-based parameter optimization with transaction cost penalties
 - Proper purge (60) and embargo (1440) for leakage prevention
-- Quality-based sample weighting (0.5x-1.5x)
+- Quality-based sample weighting (0.5x-1.5x) with 5-component scoring system
 - 150+ features including wavelets and microstructure
 - Multi-timeframe analysis (5min to daily)
 - TimeSeriesDataContainer for unified model training interface
 
-**Recent Improvements:**
+**Quality Score Components (5 total):**
+1. **Speed Score (20%):** Faster barrier hits receive higher quality (ideal: 1.5x horizon)
+2. **MAE Score (25%):** Lower adverse excursion = higher quality (direction-aware for long/short)
+3. **MFE Score (20%):** Higher favorable excursion = higher quality (direction-aware for long/short)
+4. **Pain-to-Gain Ratio (20%):** Risk per unit profit - lower is better
+5. **Time-Weighted Drawdown (15%):** Penalizes trades spending time in drawdown
+
+**Sample Weight Tiers:**
+- Tier 1 (top 20% quality): 1.5x weight
+- Tier 2 (middle 60% quality): 1.0x weight
+- Tier 3 (bottom 20% quality): 0.5x weight
+
+**Recent Improvements (2025-12-29):**
 - Added a synthetic OHLCV helper for smoke tests (`src/utils/notebook.py`), but real training expects real data in `data/raw/`
-- Added wavelet decomposition features
-- Added microstructure features (bid-ask spread, order flow)
-- Improved embargo to 1440 bars (5 days) for better serial correlation handling
+- Added wavelet decomposition features (24 features across price and volume)
+- Added microstructure features (20 proxy features from OHLCV: Amihud, Roll spread, Kyle lambda)
+- Improved embargo to 1440 bars (5 days at 5-min bars) for better serial correlation handling
 - DataIngestor validates OHLCV data at pipeline entry
+- Vectorized purge/embargo calculations for 50x speedup
+- Added gap-aware label_end_time calculation (prevents label leakage across gaps)
+- Quality score system with 5 components: speed (20%), MAE (25%), MFE (20%), pain-to-gain (20%), time-weighted DD (15%)
+- Direction-aware MAE/MFE scoring (correctly handles long vs short trade metrics)
+- Comprehensive feature correlation analysis and automatic pruning (threshold: 0.80)
+
+**Anti-Lookahead Implementation Details:**
+- **Base features:** All indicators use `shift(1)` - feature[t] computed from data[t-1]
+- **MTF features:** Higher timeframe features shifted by 1 HTF bar to prevent lookahead
+- **Regime features:** Uses pre-computed lagged indicators (hvol_20, sma_50, sma_200 already shifted)
+- **Regime edge case:** When comparing price to regime indicators, uses `close.shift(1)` for consistency
+- **Example:** `trend_regime` at bar[t] compares close[t-1] vs sma_50[t-1] vs sma_200[t-1] (all lagged)
+- **Validation:** All features verified by lookahead detection tests in `tests/validation/test_lookahead.py`
 
 **Performance expectations:** do not treat any Sharpe/win-rate targets as “built-in”. Measure performance empirically via `scripts/run_cv.py`, `scripts/run_walk_forward.py`, and `scripts/run_cpcv_pbo.py` on your own data/cost assumptions.

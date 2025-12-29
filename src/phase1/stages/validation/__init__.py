@@ -88,7 +88,8 @@ class DataValidator:
         self,
         df: pd.DataFrame,
         horizons: Optional[List[int]] = None,
-        seed: int = 42
+        seed: int = 42,
+        artifacts_dir: Optional[Path] = None
     ):
         """
         Initialize the validator.
@@ -97,10 +98,12 @@ class DataValidator:
             df: DataFrame to validate
             horizons: List of label horizons to validate (default: [1, 5, 20])
             seed: Random seed for reproducibility
+            artifacts_dir: Optional directory to save artifacts (visualizations, etc.)
         """
         self.df = df
         self.horizons = horizons if horizons is not None else [1, 5, 20]
         self.seed = seed
+        self.artifacts_dir = artifacts_dir
         self.validation_results: Dict = {}
         self.issues_found: List[str] = []
         self.warnings_found: List[str] = []
@@ -141,23 +144,36 @@ class DataValidator:
         self.validation_results['label_sanity'] = results
         return results
 
-    def check_feature_quality(self, max_features: int = 50) -> Dict:
+    def check_feature_quality(
+        self,
+        max_features: int = 50,
+        save_visualizations: bool = False
+    ) -> Dict:
         """
         Check feature correlations and basic importance.
 
         Checks for:
-        - Highly correlated feature pairs (>0.85)
+        - Highly correlated feature pairs (>0.95)
+        - Moderately correlated feature pairs (>0.80)
         - Feature importance via Random Forest
         - Stationarity tests (Augmented Dickey-Fuller)
+        - Optionally saves correlation heatmaps and pair lists
 
         Args:
             max_features: Maximum features to analyze (for performance)
+            save_visualizations: Whether to save correlation visualizations (default: False)
 
         Returns:
             Dictionary with feature quality results
         """
         results = check_feature_quality(
-            self.df, self.horizons, self.warnings_found, self.seed, max_features
+            df=self.df,
+            horizons=self.horizons,
+            warnings_found=self.warnings_found,
+            seed=self.seed,
+            max_features=max_features,
+            artifacts_dir=self.artifacts_dir,
+            save_visualizations=save_visualizations
         )
         self.validation_results['feature_quality'] = results
         return results
@@ -293,7 +309,9 @@ def validate_data(
     correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
     feature_selection_output_path: Optional[Path] = None,
-    seed: int = 42
+    seed: int = 42,
+    artifacts_dir: Optional[Path] = None,
+    save_visualizations: bool = True
 ) -> Tuple[Dict, Optional[FeatureSelectionResult]]:
     """
     Main validation function.
@@ -307,6 +325,8 @@ def validate_data(
         variance_threshold: Minimum variance to keep feature (default 0.01)
         feature_selection_output_path: Optional path to save feature selection report
         seed: Random seed for reproducibility (default: 42)
+        artifacts_dir: Optional directory to save artifacts (visualizations, etc.)
+        save_visualizations: Whether to save correlation visualizations (default: True)
 
     Returns:
         Tuple of (validation summary dict, FeatureSelectionResult or None)
@@ -321,13 +341,17 @@ def validate_data(
     df = pd.read_parquet(data_path)
     logger.info(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
 
+    # Determine artifacts directory if not provided
+    if artifacts_dir is None and output_path is not None:
+        artifacts_dir = output_path.parent / "correlation_artifacts"
+
     # Create validator with seed for reproducibility
-    validator = DataValidator(df, horizons=horizons, seed=seed)
+    validator = DataValidator(df, horizons=horizons, seed=seed, artifacts_dir=artifacts_dir)
 
     # Run all checks
     validator.check_data_integrity()
     validator.check_label_sanity()
-    validator.check_feature_quality()
+    validator.check_feature_quality(save_visualizations=save_visualizations)
     validator.check_feature_normalization()
 
     # Run feature selection if requested
