@@ -1,9 +1,28 @@
 # ML Factory Charter & Implementation Plan
 
-**Generated:** 2025-12-29 (Final production-grade specification)
+**Generated:** 2025-12-29 (Production deployment system for live trading)
+**Purpose:** **PRODUCTION SYSTEM** - Train and deploy live trading models, not research
 **Architecture:** Dynamic, registry-based ML factory for OHLCV trading
-**Model Count:** **19 models** (optimized from 29, cutting redundancy)
+**Model Count:** **19 models** (optimized for production deployment)
 **Estimated Effort:** 12-14 weeks (1 engineer) | 7-9 weeks (2 engineers)
+
+---
+
+## ⚠️ CRITICAL: This Is a Production System
+
+**This is NOT a research project.** This factory exists to:
+- ✅ Train production-grade models for live futures trading
+- ✅ Deploy ensembles to real markets with real capital
+- ✅ Mix and match models to build simple → complex ensembles
+- ✅ Generate reliable, reproducible, deployable artifacts
+
+**Every component must be production-safe:**
+- Zero leakage (purge/embargo enforced)
+- Deterministic (same data + seed = same results)
+- Robust (handles failures gracefully)
+- Auditable (version tracking, checksums, test-set integrity)
+
+**If a model/feature/ensemble isn't production-ready, it doesn't belong here.**
 
 ---
 
