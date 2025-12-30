@@ -77,12 +77,14 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 
 **Universal Indicator Pipeline:**
 - All models receive ~180 **indicator-derived** features (RSI, MACD, wavelets, microstructure, etc.)
-- MTF indicators from 5 timeframes (15min, 30min, 1h, 4h, daily)
+- MTF indicators from **5 timeframes** (15min, 30min, 1h, 4h, daily) - **intended: 9 timeframes** (1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h)
 - Data served in model-appropriate **shapes**:
-  - **Tabular models:** 2D arrays `(n_samples, 180)`
-  - **Sequence models:** 3D windows `(n_samples, seq_len, 180)`
+  - **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, 180)`
+  - **Sequence models** (Neural + CNN + Advanced): 3D windows `(n_samples, seq_len, 180)`
 
-**Limitation:** All features are pre-computed indicators. Sequence models receive indicators when they should ideally receive raw multi-resolution OHLCV bars for temporal learning.
+**Limitations:**
+1. Only 5 of 9 intended timeframes implemented
+2. All features are pre-computed indicators (sequence/CNN models should receive raw multi-resolution OHLCV bars)
 
 #### Intended Architecture (Roadmap)
 
@@ -91,25 +93,25 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 | Strategy | Data Type | Model Families | Status |
 |----------|-----------|----------------|--------|
 | **Strategy 1: Single-TF** | One timeframe, no MTF | All models (baselines) | ❌ Not implemented |
-| **Strategy 2: MTF Indicators** | Indicator features from multiple TFs | Tabular (XGBoost, LightGBM, RF) | ⚠️ Partial (all models get this) |
-| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from multiple TFs as multi-resolution tensors | Sequence (LSTM, TCN, Transformer) | ❌ Not implemented |
+| **Strategy 2: MTF Indicators** | Indicator features from 9 timeframes | Tabular: Boosting (XGBoost, LightGBM, CatBoost) + Classical (RF, Logistic, SVM) | ⚠️ Partial (5 TFs, all models get this) |
+| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from 9 timeframes as multi-resolution tensors | Sequence: Neural (LSTM, GRU, TCN, Transformer) + CNN (InceptionTime, 1D ResNet) + Advanced (PatchTST, iTransformer, TFT, N-BEATS) | ❌ Not implemented |
 
 **When Strategy 3 is implemented:**
-- **Tabular models** → Keep ~180 indicator-derived features (optimal for tree-based/linear models)
-- **Sequence models** → Receive raw MTF OHLCV bars: `{'5min': (T,60,4), '15min': (T,20,4), '1h': (T,5,4)}`
-- **Enables:** Multi-resolution temporal learning for models like TFT, PatchTST, TimesNet
+- **Tabular models** (Boosting + Classical) → Keep indicator-derived features from 9 timeframes
+- **Sequence models** (Neural + CNN + Advanced) → Receive raw MTF OHLCV bars from 9 timeframes: `{'5min': (T,60,4), '15min': (T,20,4), '30min': (T,10,4), '1h': (T,5,4)}`
+- **Enables:** Multi-resolution temporal learning for InceptionTime, PatchTST, iTransformer, TFT, N-BEATS
 
 **See:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md` for detailed analysis
 
 ### Core Contracts
 
 **Data Pipeline (Phase 1 - Complete):**
-- Raw 1-min OHLCV → 5-min base → ~150 indicator features → MTF upscaling (5 timeframes) → ~30 MTF indicators → ~180 total features
+- Raw 1-min OHLCV → 5-min base → ~150 indicator features → MTF upscaling (**5 of 9 timeframes**) → ~30 MTF indicators → ~180 total features
 - Triple-barrier labeling with Optuna optimization
 - No lookahead bias (proper purging + embargo, MTF uses shift(1))
 - Time-series aware train/val/test splits (70/15/15)
 - Quality-weighted samples
-- **All features are indicator-derived** (raw multi-resolution bars for Strategy 3 not yet implemented)
+- **Limitations:** Only 5 timeframes (intended: 9), all features are indicator-derived (raw multi-resolution bars for Strategy 3 not yet implemented)
 
 **Model Contract (Phase 2 - Complete):**
 ```python
@@ -181,16 +183,23 @@ python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,
 python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru,tcn
 ```
 
-### Model Families (13 Models Implemented)
+### Model Families (13 Implemented + 6 Planned = 19 Total)
 
-| Family | Models | Interface | Strengths | Status |
-|--------|--------|-----------|-----------|--------|
-| Boosting | XGBoost, LightGBM, CatBoost | `BoostingModel(BaseModel)` | Fast, interpretable, feature interactions | **Complete** |
-| Neural | LSTM, GRU, TCN, Transformer | `BaseRNNModel(BaseModel)` | Temporal dependencies, sequential patterns | **Complete** |
-| Classical | Random Forest, Logistic, SVM | `ClassicalModel(BaseModel)` | Robust baselines, interpretable | **Complete** |
-| Ensemble | Voting, Stacking, Blending | `EnsembleModel(BaseModel)` | Combines diverse model strengths | **Complete** |
+| Family | Models | Data Format | Strengths | Status |
+|--------|--------|-------------|-----------|--------|
+| **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Fast, interpretable, feature interactions | ✅ Complete |
+| **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Temporal dependencies, sequential patterns | ✅ Complete |
+| **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | Robust baselines, interpretable | ✅ Complete |
+| **Ensemble** (3) | Voting, Stacking, Blending | Mixed (all-tabular OR all-sequence) | Combines diverse model strengths | ✅ Complete |
+| **CNN** (2) | InceptionTime, 1D ResNet | 3D sequences | Multi-scale pattern detection, deep residual learning | 📋 Planned |
+| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 3D sequences | SOTA long-term forecasting, interpretable attention | 📋 Planned |
+| **MLP** (1) | N-BEATS | 3D sequences | Interpretable decomposition, M4 winner | 📋 Planned |
 
-**All 13 models** implement the same `BaseModel` interface and consume the same standardized datasets from Phase 1.
+**Input Format Summary:**
+- **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, n_features)` - 6 models ✅
+- **Sequence models** (Neural + CNN + Advanced + MLP): 3D windows `(n_samples, seq_len, n_features)` - 7 implemented + 6 planned = 13 models
+
+**See:** `docs/roadmaps/ADVANCED_MODELS_ROADMAP.md` for 6 planned models (14-18 days implementation)
 
 **Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 
@@ -356,7 +365,7 @@ src/phase1/stages/
 ├── sessions/           → Session filtering and normalization
 ├── features/           → 150+ indicators (momentum, wavelets, microstructure)
 ├── regime/             → Regime detection (volatility, trend, composite)
-├── mtf/                → Multi-timeframe indicator features (~30 MTF features from 5 timeframes)
+├── mtf/                → Multi-timeframe indicator features (~30 MTF features from 5 timeframes; intended: 9 timeframes)
 ├── labeling/           → Triple-barrier initial labels
 ├── ga_optimize/        → Optuna parameter optimization
 ├── final_labels/       → Apply optimized parameters
@@ -472,7 +481,8 @@ TRAIN/VAL/TEST = 70/15/15
 - Proper purge (60) and embargo (1440) for leakage prevention
 - Quality-based sample weighting (0.5x-1.5x)
 - 150+ base features including wavelets and microstructure
-- Multi-timeframe indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily) - Strategy 2 partial implementation
+- Multi-timeframe indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily) - **intended: 9-timeframe ladder** (1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h)
+- Strategy 2 MTF indicators partially implemented (5 of 9 timeframes)
 - TimeSeriesDataContainer for unified model training interface (2D for tabular, 3D for sequence)
 
 **Recent Improvements:**

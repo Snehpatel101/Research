@@ -49,16 +49,23 @@ python scripts/train_model.py --list-models
 
 ---
 
-## Available Models (13 Total)
+## Available Models (13 Implemented + 6 Planned = 19 Total)
 
-| Family | Models | GPU | Description |
-|--------|--------|-----|-------------|
-| **Boosting** | XGBoost, LightGBM, CatBoost | Optional | Fast, interpretable |
-| **Neural** | LSTM, GRU, TCN, Transformer | Required | Sequential patterns |
-| **Classical** | Random Forest, Logistic, SVM | No | Robust baselines |
-| **Ensemble** | Voting, Stacking, Blending | No | Combine models |
+| Family | Models | Input | GPU | Status |
+|--------|--------|-------|-----|--------|
+| **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Optional | ✅ Complete |
+| **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Required | ✅ Complete |
+| **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | No | ✅ Complete |
+| **Ensemble** (3) | Voting, Stacking, Blending | Mixed | No | ✅ Complete |
+| **CNN** (2) | InceptionTime, 1D ResNet | 3D sequences | Required | 📋 Planned |
+| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 3D sequences | Required | 📋 Planned |
+| **MLP** (1) | N-BEATS | 3D sequences | Optional | 📋 Planned |
 
-All models implement the unified `BaseModel` interface.
+**Model Categories:**
+- **Tabular (6):** Boosting + Classical → 2D input `(n_samples, n_features)`
+- **Sequence (13):** Neural + CNN + Advanced + MLP → 3D input `(n_samples, seq_len, n_features)`
+
+All models implement the unified `BaseModel` interface. See `docs/roadmaps/ADVANCED_MODELS_ROADMAP.md` for planned models.
 
 ---
 
@@ -106,8 +113,8 @@ Note: The notebook includes optional export helpers (e.g. ONNX) but the core tra
 - **Seeded**: Configuration includes a `random_seed` (full determinism depends on backend)
 - **Class Balanced**: Automatic class weight calculation
 - **Quality Weighted**: Pipeline quality scores used in training
-- **180+ Features**: ~150 base indicators + ~30 MTF indicators (all indicator-derived)
-- **Multi-Timeframe**: Indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily)
+- **180+ Features**: ~150 base indicators + ~30 MTF indicators (all indicator-derived, from 5 of 9 intended timeframes)
+- **Multi-Timeframe**: Indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily) - **intended: 9-timeframe ladder** (1min→1h)
 
 ---
 
@@ -119,13 +126,15 @@ The intended architecture (per `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`) in
 
 | Strategy | Data Type | Model Families | Status |
 |----------|-----------|----------------|--------|
-| **Strategy 1: Single-TF** | One timeframe, no MTF | All models (baselines) | ❌ Not implemented |
-| **Strategy 2: MTF Indicators** | Indicator features from multiple TFs | Tabular (XGBoost, LightGBM, RF) | ⚠️ Partial (all models get this) |
-| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from multiple TFs | Sequence (LSTM, TCN, Transformer) | ❌ Not implemented |
+| **Strategy 1: Single-TF** | One timeframe, no MTF | All 19 models (baselines) | ❌ Not implemented |
+| **Strategy 2: MTF Indicators** | Indicator features from 9 timeframes | **Tabular (6):** Boosting + Classical | ⚠️ Partial (5 of 9 TFs, all models get this) |
+| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from 9 timeframes | **Sequence (13):** Neural + CNN + Advanced + MLP | ❌ Not implemented |
 
 **Current Impact:**
-- **Tabular models** → Receive appropriate indicator features ✅
-- **Sequence models** → Receive indicators when they should ideally get raw multi-resolution OHLCV bars for temporal learning ⚠️
+- **Tabular models** (6: XGBoost, LightGBM, CatBoost, RF, Logistic, SVM) → Receive indicator features ✅ Appropriate, but only 5 of 9 timeframes
+- **Sequence models** (7 implemented + 6 planned = 13) → Receive indicators when they should get raw multi-resolution OHLCV bars ⚠️
+
+**Planned Sequence Models (6):** InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
 
 **See:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md` for detailed analysis
 

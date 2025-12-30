@@ -84,17 +84,23 @@ X_train, y_train, w_train = container.get_sklearn_arrays("train")
 
 ### Sequence Models (3D Input)
 
-**Models:** `lstm`, `gru`, `tcn`, `transformer`
+**Implemented (7):** `lstm`, `gru`, `tcn`, `transformer`
+
+**Planned (6):** `inceptiontime`, `resnet1d`, `patchtst`, `itransformer`, `tft`, `n_beats`
+
+**Total Sequence Models:** 13 (7 implemented + 6 planned)
 
 **Input Shape:** `(n_samples, seq_len, n_features)`
 
 **Data Access:** `container.get_pytorch_sequences("train", seq_len=60)` → returns SequenceDataset
 
-**Current Features:** All ~180 indicator-derived features (windowed into sequences)
+**Current Features:** All ~180 indicator-derived features from 5 of 9 timeframes (windowed into sequences)
 
-**Optimal Data (Strategy 3):** Multi-resolution raw OHLCV bars ❌ **Not implemented**
+**Optimal Data (Strategy 3):** Multi-resolution raw OHLCV bars from 9 timeframes ❌ **Not implemented**
 
-**Current Limitation:** Sequence models receive pre-computed indicators when they should ideally receive raw multi-resolution bars for temporal learning.
+**Current Limitations:**
+1. Sequence models receive pre-computed indicators when they should receive raw multi-resolution bars for temporal learning
+2. Only 5 of 9 intended timeframes implemented (missing: 1min, 10min, 20min, 25min)
 
 **Example of Current Implementation:**
 ```python
