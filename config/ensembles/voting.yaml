@@ -1,0 +1,269 @@
+# Voting Ensemble Configuration Templates
+# Copy and customize these configurations for your ensemble training
+
+# =============================================================================
+# TABULAR ENSEMBLES (2D Input)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# BOOSTING TRIO (Fast Baseline)
+# -----------------------------------------------------------------------------
+# Best for: Quick strong baseline, minimal tuning
+# Training time: 3-5 minutes
+# Expected lift: +0.01-0.03 F1 over single models
+# -----------------------------------------------------------------------------
+boosting_trio:
+  voting: soft
+  weights: null                    # Equal weights
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}           # Use defaults
+  parallel: true
+  n_workers: 3
+
+# -----------------------------------------------------------------------------
+# WEIGHTED BOOSTING TRIO
+# -----------------------------------------------------------------------------
+# Give more weight to stronger models based on validation performance
+# -----------------------------------------------------------------------------
+weighted_boosting_trio:
+  voting: soft
+  weights: [0.4, 0.35, 0.25]      # XGB=40%, LGB=35%, Cat=25%
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+  parallel: true
+  n_workers: 3
+
+# -----------------------------------------------------------------------------
+# BOOSTING + RANDOM FOREST (Balanced)
+# -----------------------------------------------------------------------------
+# Best for: Tree diversity with bagging
+# Training time: 4-6 minutes
+# More stable predictions
+# -----------------------------------------------------------------------------
+boosting_forest:
+  voting: soft
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - random_forest
+  base_model_configs: {}
+  parallel: true
+  n_workers: 3
+
+# -----------------------------------------------------------------------------
+# BOOSTING PAIR (Minimal)
+# -----------------------------------------------------------------------------
+# Best for: Speed-critical applications
+# Training time: 2-3 minutes
+# Minimal overhead
+# -----------------------------------------------------------------------------
+boosting_pair:
+  voting: soft
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+  parallel: true
+  n_workers: 2
+
+# -----------------------------------------------------------------------------
+# ALL TABULAR (Maximum Diversity)
+# -----------------------------------------------------------------------------
+# Best for: Large datasets (>50k samples)
+# Training time: 20-30 minutes
+# High variance, may overfit
+# -----------------------------------------------------------------------------
+all_tabular:
+  voting: soft
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+    - random_forest
+    - logistic
+    - svm
+  base_model_configs: {}
+  parallel: true
+  n_workers: 6
+
+# -----------------------------------------------------------------------------
+# HARD VOTING EXAMPLE
+# -----------------------------------------------------------------------------
+# Use majority vote instead of probability averaging
+# Good when probability calibration differs across models
+# -----------------------------------------------------------------------------
+hard_voting:
+  voting: hard                     # Majority vote
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+  parallel: true
+  n_workers: 3
+
+# =============================================================================
+# SEQUENCE ENSEMBLES (3D Input)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# RNN VARIANTS (Temporal Patterns)
+# -----------------------------------------------------------------------------
+# Best for: Sequential pattern diversity
+# Training time: 15-30 minutes (GPU) / 1-2 hours (CPU)
+# Good for trend-following
+# -----------------------------------------------------------------------------
+rnn_variants:
+  voting: soft
+  weights: null
+  base_model_names:
+    - lstm
+    - gru
+  base_model_configs: {}
+  parallel: false                  # GPU serialization, parallel doesn't help
+
+# -----------------------------------------------------------------------------
+# TEMPORAL STACK (RNN + Convolution)
+# -----------------------------------------------------------------------------
+# Best for: Complex temporal patterns
+# Training time: 30-45 minutes (GPU)
+# Better generalization
+# -----------------------------------------------------------------------------
+temporal_stack:
+  voting: soft
+  weights: null
+  base_model_names:
+    - lstm
+    - gru
+    - tcn
+  base_model_configs: {}
+  parallel: false
+
+# -----------------------------------------------------------------------------
+# ALL NEURAL (Maximum Temporal Diversity)
+# -----------------------------------------------------------------------------
+# Best for: Large datasets, resource-rich environments
+# Training time: 30-60 minutes (GPU) / 2-4 hours (CPU)
+# Highest variance
+# -----------------------------------------------------------------------------
+all_neural:
+  voting: soft
+  weights: null
+  base_model_names:
+    - lstm
+    - gru
+    - tcn
+    - transformer
+  base_model_configs: {}
+  parallel: false
+
+# =============================================================================
+# TUNED BASE MODELS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CUSTOM BASE MODEL CONFIGS
+# -----------------------------------------------------------------------------
+# Override hyperparameters for individual models
+# -----------------------------------------------------------------------------
+tuned_boosting:
+  voting: soft
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs:
+    xgboost:
+      max_depth: 8
+      n_estimators: 200
+      learning_rate: 0.05
+    lightgbm:
+      num_leaves: 64
+      n_estimators: 200
+      learning_rate: 0.05
+    catboost:
+      depth: 8
+      iterations: 200
+      learning_rate: 0.05
+  parallel: true
+  n_workers: 3
+
+# =============================================================================
+# LOW-LATENCY CONFIGURATIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PARALLEL PREDICTION (Production)
+# -----------------------------------------------------------------------------
+# For low-latency inference with boosting models
+# Sequential: ~15ms (sum of latencies)
+# Parallel: ~6ms (max of latencies + overhead)
+# -----------------------------------------------------------------------------
+low_latency:
+  voting: soft
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+  parallel: true                   # Enable parallel predictions
+  n_workers: 3                     # Match number of models
+
+# -----------------------------------------------------------------------------
+# SEQUENTIAL PREDICTION (Debugging)
+# -----------------------------------------------------------------------------
+# Disable parallel for easier debugging
+# -----------------------------------------------------------------------------
+sequential:
+  voting: soft
+  weights: null
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+  parallel: false                  # Disable parallel
+  n_workers: 1
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+# CLI Usage:
+# -----------
+# Use a template:
+# python scripts/train_model.py --model voting --horizon 20 \
+#   --base-models xgboost,lightgbm,catboost
+#
+# Override with custom config:
+# python scripts/train_model.py --model voting --horizon 20 \
+#   --base-models xgboost,lightgbm \
+#   --config '{"voting": "hard", "weights": [0.6, 0.4]}'
+#
+# Load from YAML:
+# python scripts/train_model.py --model voting --horizon 20 \
+#   --config-file config/ensembles/voting.yaml:boosting_trio
+
+# Python Usage:
+# -------------
+# from src.models import ModelRegistry
+# import yaml
+#
+# # Load config
+# with open("config/ensembles/voting.yaml") as f:
+#     configs = yaml.safe_load(f)
+#
+# # Create ensemble
+# ensemble = ModelRegistry.create("voting", config=configs["boosting_trio"])
+# metrics = ensemble.fit(X_train, y_train, X_val, y_val)

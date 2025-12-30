@@ -1,0 +1,113 @@
+# Full Benchmark Experiment Template
+# Comprehensive benchmark across all 13 models
+
+experiment:
+  name: full_benchmark
+  description: Benchmark all implemented models (13 total)
+  type: multi_model
+
+# Models to benchmark
+models:
+  boosting:
+    - xgboost
+    - lightgbm
+    - catboost
+
+  classical:
+    - random_forest
+    - logistic
+    - svm
+
+  neural:
+    - lstm
+    - gru
+    - tcn
+    - transformer
+
+  ensemble:
+    - voting
+    - stacking
+    - blending
+
+# Data configuration
+data:
+  symbols: [MES]  # Benchmark on single symbol
+  horizons: [5, 10, 15, 20]  # All supported horizons
+
+  # Splits
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+  # Leakage prevention
+  purge_bars: 60
+  embargo_bars: 1440
+
+# Training configuration
+training:
+  # Full training
+  max_epochs: 100
+  early_stopping_patience: 15
+
+  # Device
+  device: auto
+  mixed_precision: true
+
+  # Reproducibility
+  random_seed: 42
+
+# Validation
+validation:
+  # Cross-validation
+  run_cv: true
+  cv_splits: 5
+
+  # Walk-forward validation
+  run_walk_forward: true
+  wf_retrain_days: 30
+  wf_validation_days: 30
+
+  # CPCV/PBO
+  run_cpcv: true
+  cpcv_n_paths: 16
+
+# Comparison metrics
+metrics:
+  classification:
+    - accuracy
+    - precision_macro
+    - recall_macro
+    - f1_macro
+    - roc_auc_ovr
+
+  trading:
+    - sharpe_ratio
+    - max_drawdown
+    - win_rate
+    - profit_factor
+    - calmar_ratio
+
+# Output
+output:
+  # Save results
+  save_predictions: true
+  save_models: true
+
+  # Generate reports
+  generate_comparison_report: true
+  generate_performance_plots: true
+
+  # Export format
+  export_format: [json, csv, html]
+
+# Expected results
+expected:
+  total_runtime_hours: 12  # RTX 4070 Ti
+  best_f1_score: ">= 0.55"
+  best_sharpe: ">= 1.0"
+
+# Resource requirements
+resources:
+  min_gpu_memory_gb: 12
+  min_ram_gb: 32
+  recommended_gpu: "RTX 4070 Ti or better"

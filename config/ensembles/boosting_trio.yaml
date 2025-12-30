@@ -1,0 +1,44 @@
+# Boosting Trio Ensemble Configuration
+# Fast baseline ensemble combining three gradient boosting models
+
+ensemble:
+  name: boosting_trio
+  method: voting  # voting, stacking, or blending
+  description: Fast ensemble of XGBoost + LightGBM + CatBoost
+
+# Base models (all must be tabular models - 2D input)
+base_models:
+  - xgboost
+  - lightgbm
+  - catboost
+
+# Voting configuration
+voting:
+  # Weights for each base model (null = equal weights)
+  weights: null  # [1.0, 1.0, 1.0]
+
+  # Voting strategy
+  strategy: soft  # soft (probability averaging) or hard (majority vote)
+
+# Training settings
+training:
+  # Train base models if not already trained
+  train_base_models: true
+
+  # Use saved models if available
+  load_existing: false
+
+  # Cross-validation for base models
+  use_cv: true
+  n_splits: 5
+
+# Data settings
+data:
+  horizon: 20
+  feature_set: boosting_optimal
+
+# Expected performance
+expected:
+  training_time_minutes: 45  # RTX 4070 Ti
+  memory_gb: 8
+  baseline_f1: 0.52

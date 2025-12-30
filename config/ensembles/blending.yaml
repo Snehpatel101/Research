@@ -1,0 +1,540 @@
+# Blending Ensemble Configuration Templates
+# Faster alternative to stacking using holdout validation set
+
+# =============================================================================
+# TABULAR ENSEMBLES (2D Input)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# BOOSTING BLEND (Fast Baseline)
+# -----------------------------------------------------------------------------
+# Best for: Quick stacking alternative, large datasets
+# Training time: 5-10 minutes (much faster than stacking)
+# Expected lift: +0.01-0.03 F1 over voting
+# -----------------------------------------------------------------------------
+boosting_blend:
+  # Base models (Layer 1)
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  # Meta-learner (Layer 2)
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  # Holdout split (time-based: LAST 20% of data)
+  holdout_fraction: 0.2            # 20% for meta-learner training
+
+  # Meta-learner input
+  use_probabilities: true          # Use probs vs predictions
+  passthrough: false               # Exclude original features
+
+  # Retraining
+  retrain_on_full: true            # Retrain base models on full data
+
+# -----------------------------------------------------------------------------
+# BOOSTING PAIR (Minimal)
+# -----------------------------------------------------------------------------
+# Best for: Speed-critical applications
+# Training time: 3-5 minutes
+# Minimal overhead
+# -----------------------------------------------------------------------------
+boosting_pair:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# BOOSTING + CLASSICAL (Balanced)
+# -----------------------------------------------------------------------------
+# Best for: Tree diversity with linear models
+# Training time: 6-10 minutes
+# More stable predictions
+# -----------------------------------------------------------------------------
+boosting_classical:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - random_forest
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# ALL TABULAR (High Diversity)
+# -----------------------------------------------------------------------------
+# Best for: Large datasets (>50k samples)
+# Training time: 15-25 minutes
+# High variance
+# -----------------------------------------------------------------------------
+all_tabular:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+    - random_forest
+    - logistic
+    - svm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# =============================================================================
+# SEQUENCE ENSEMBLES (3D Input)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# RNN BLEND (Temporal Patterns)
+# -----------------------------------------------------------------------------
+# Best for: Sequential data, faster than RNN stacking
+# Training time: 20-40 minutes (GPU) / 1-2 hours (CPU)
+# Expected lift: +0.02-0.04 F1 over voting
+# -----------------------------------------------------------------------------
+rnn_blend:
+  base_model_names:
+    - lstm
+    - gru
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# TEMPORAL BLEND (RNN + Convolution)
+# -----------------------------------------------------------------------------
+# Best for: Complex temporal patterns
+# Training time: 30-60 minutes (GPU)
+# Better generalization
+# -----------------------------------------------------------------------------
+temporal_blend:
+  base_model_names:
+    - lstm
+    - gru
+    - tcn
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# ALL NEURAL (Maximum Temporal Diversity)
+# -----------------------------------------------------------------------------
+# Best for: Large datasets, complex patterns
+# Training time: 40-80 minutes (GPU)
+# Highest variance
+# -----------------------------------------------------------------------------
+all_neural:
+  base_model_names:
+    - lstm
+    - gru
+    - tcn
+    - transformer
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# =============================================================================
+# HOLDOUT FRACTION VARIANTS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# LARGE HOLDOUT (Small Datasets)
+# -----------------------------------------------------------------------------
+# Best for: Datasets <5k samples
+# More data for meta-learner (better estimates)
+# Less data for base models (may underfit)
+# -----------------------------------------------------------------------------
+large_holdout:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.3            # 30% holdout
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# SMALL HOLDOUT (Large Datasets)
+# -----------------------------------------------------------------------------
+# Best for: Datasets >20k samples
+# More data for base models (stronger)
+# Less data for meta-learner (may overfit)
+# -----------------------------------------------------------------------------
+small_holdout:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.15           # 15% holdout
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# =============================================================================
+# RETRAINING VARIANTS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# NO RETRAIN (Fastest)
+# -----------------------------------------------------------------------------
+# Skip retraining base models on full data
+# Best for: Very large datasets, slow-training models
+# Trade-off: Base models trained on 80% only
+# -----------------------------------------------------------------------------
+no_retrain:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: false           # Skip retraining (faster)
+
+# -----------------------------------------------------------------------------
+# NO RETRAIN + LARGE HOLDOUT
+# -----------------------------------------------------------------------------
+# Fastest configuration
+# Best for: Rapid prototyping, very large datasets
+# -----------------------------------------------------------------------------
+fast_blend:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.25           # More meta-learner data
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: false           # No retraining
+
+# =============================================================================
+# ADVANCED CONFIGURATIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# XGBOOST META-LEARNER
+# -----------------------------------------------------------------------------
+# Use XGBoost as meta-learner for complex interactions
+# Slower, may overfit
+# -----------------------------------------------------------------------------
+xgb_meta:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: xgboost       # XGBoost meta-learner
+  meta_learner_config:
+    max_depth: 3
+    n_estimators: 50
+    learning_rate: 0.1
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# PASSTHROUGH FEATURES
+# -----------------------------------------------------------------------------
+# Include original features in meta-learner input
+# Best for: Base models miss important features
+# Trade-off: Higher meta-learner complexity
+# -----------------------------------------------------------------------------
+passthrough:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: true                # Include original features
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# CLASS PREDICTIONS (Not Probabilities)
+# -----------------------------------------------------------------------------
+# Use class predictions instead of probabilities
+# Faster, fewer meta-learner features
+# -----------------------------------------------------------------------------
+class_predictions:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: false         # n_models features instead of 3*n_models
+  passthrough: false
+  retrain_on_full: true
+
+# =============================================================================
+# TUNED BASE MODELS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CUSTOM BASE MODEL CONFIGS
+# -----------------------------------------------------------------------------
+# Override hyperparameters for individual models
+# Applied to both blend_train and full retrain
+# -----------------------------------------------------------------------------
+tuned_models:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs:
+    xgboost:
+      max_depth: 8
+      n_estimators: 200
+      learning_rate: 0.05
+    lightgbm:
+      num_leaves: 64
+      n_estimators: 200
+      learning_rate: 0.05
+    catboost:
+      depth: 8
+      iterations: 200
+      learning_rate: 0.05
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# =============================================================================
+# PRODUCTION CONFIGURATIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PRODUCTION BLEND
+# -----------------------------------------------------------------------------
+# Balanced configuration for production deployment
+# Fast training, good performance, low variance
+# -----------------------------------------------------------------------------
+production:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config:
+    C: 1.0                         # Regularization
+    max_iter: 200
+
+  holdout_fraction: 0.2
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# RAPID PROTOTYPING
+# -----------------------------------------------------------------------------
+# Fastest possible configuration for experimentation
+# Use for quick iterations, not final models
+# -----------------------------------------------------------------------------
+prototype:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.25           # More meta-learner data
+  use_probabilities: false         # Fewer features
+  passthrough: false
+  retrain_on_full: false           # No retraining
+
+# =============================================================================
+# DATASET SIZE RECOMMENDATIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SMALL DATASET (<5k samples)
+# -----------------------------------------------------------------------------
+# Use larger holdout, consider stacking instead
+# -----------------------------------------------------------------------------
+small_dataset:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.3            # 30% for meta-learner
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# MEDIUM DATASET (5k-20k samples)
+# -----------------------------------------------------------------------------
+# Balanced configuration (recommended default)
+# -----------------------------------------------------------------------------
+medium_dataset:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.2            # 20% (default)
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# -----------------------------------------------------------------------------
+# LARGE DATASET (>20k samples)
+# -----------------------------------------------------------------------------
+# Smaller holdout, more base model data
+# -----------------------------------------------------------------------------
+large_dataset:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  holdout_fraction: 0.15           # 15% holdout
+  use_probabilities: true
+  passthrough: false
+  retrain_on_full: true
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+# CLI Usage:
+# -----------
+# Use defaults (boosting trio):
+# python scripts/train_model.py --model blending --horizon 20 \
+#   --base-models xgboost,lightgbm,catboost
+#
+# Custom holdout fraction:
+# python scripts/train_model.py --model blending --horizon 20 \
+#   --base-models xgboost,lightgbm \
+#   --config '{"holdout_fraction": 0.3}'
+#
+# No retraining (faster):
+# python scripts/train_model.py --model blending --horizon 20 \
+#   --base-models xgboost,lightgbm,catboost \
+#   --config '{"retrain_on_full": false}'
+#
+# Load from YAML:
+# python scripts/train_model.py --model blending --horizon 20 \
+#   --config-file config/ensembles/blending.yaml:boosting_blend
+
+# Python Usage:
+# -------------
+# from src.models import ModelRegistry
+# import yaml
+#
+# # Load config
+# with open("config/ensembles/blending.yaml") as f:
+#     configs = yaml.safe_load(f)
+#
+# # Create ensemble
+# ensemble = ModelRegistry.create("blending", config=configs["boosting_blend"])
+#
+# # Train
+# metrics = ensemble.fit(X_train, y_train, X_val, y_val)
+
+# =============================================================================
+# COMPARISON TO STACKING
+# =============================================================================
+#
+# Use Blending when:
+#   - Dataset is large (>10k samples)
+#   - Training time matters (2-3x faster than stacking)
+#   - Prototyping ensembles
+#   - Base models train slowly (neural networks)
+#
+# Use Stacking when:
+#   - Dataset is small (<10k samples)
+#   - Maximum performance needed
+#   - Production deployment
+#   - Statistical rigor matters
+#
+# Performance: Blending typically 0.01-0.02 F1 below stacking but 2-3x faster

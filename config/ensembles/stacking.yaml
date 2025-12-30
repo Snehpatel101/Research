@@ -1,0 +1,449 @@
+# Stacking Ensemble Configuration Templates
+# Two-layer architecture: Base models → OOF predictions → Meta-learner
+
+# =============================================================================
+# TABULAR ENSEMBLES (2D Input)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# BOOSTING STACK (Fast, Strong Baseline)
+# -----------------------------------------------------------------------------
+# Best for: Quick improvement over voting
+# Training time: 15-25 minutes (5 folds × 3 models)
+# Expected lift: +0.02-0.04 F1 over voting
+# -----------------------------------------------------------------------------
+boosting_stack:
+  # Base models (Layer 1)
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}           # Use defaults for OOF
+
+  # Meta-learner (Layer 2)
+  meta_learner_name: logistic      # Fast, calibrated, regularized
+  meta_learner_config: {}
+
+  # Cross-validation
+  n_folds: 5                       # 5 for boosting (fast retraining)
+
+  # Meta-learner input
+  use_probabilities: true          # 3*n_models features (9 features)
+  passthrough: false               # Exclude original features
+
+  # Leakage prevention (CRITICAL)
+  use_default_configs_for_oof: true  # Use defaults for OOF, tuned for final
+
+  # PurgedKFold settings
+  purge_bars: 60                   # 3x max horizon=20
+  embargo_bars: 1440               # 5 days at 5min
+
+# -----------------------------------------------------------------------------
+# BOOSTING + CLASSICAL (Maximum Diversity)
+# -----------------------------------------------------------------------------
+# Best for: Large datasets with rich features
+# Training time: 20-30 minutes
+# More stable (bagging diversity)
+# -----------------------------------------------------------------------------
+boosting_classical:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - random_forest
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# BOOSTING PAIR (Minimal)
+# -----------------------------------------------------------------------------
+# Best for: Speed-critical, baseline improvement
+# Training time: 10-15 minutes
+# Lower variance than larger ensembles
+# -----------------------------------------------------------------------------
+boosting_pair:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# ALL TABULAR (High Diversity, High Variance)
+# -----------------------------------------------------------------------------
+# Best for: Very large datasets (>50k samples)
+# Training time: 40-60 minutes
+# Requires careful validation
+# -----------------------------------------------------------------------------
+all_tabular:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+    - random_forest
+    - logistic
+    - svm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# =============================================================================
+# SEQUENCE ENSEMBLES (3D Input)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# RNN STACK (Temporal Patterns)
+# -----------------------------------------------------------------------------
+# Best for: Sequential data with temporal dependencies
+# Training time: 45-90 minutes (GPU) / 3-6 hours (CPU)
+# Expected lift: +0.03-0.06 F1 over voting
+# -----------------------------------------------------------------------------
+rnn_stack:
+  base_model_names:
+    - lstm
+    - gru
+    - tcn
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 3                       # Fewer folds for neural (slow training)
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# RNN VARIANTS (Minimal Neural)
+# -----------------------------------------------------------------------------
+# Best for: Faster neural ensemble
+# Training time: 30-60 minutes (GPU)
+# Good baseline for temporal patterns
+# -----------------------------------------------------------------------------
+rnn_variants:
+  base_model_names:
+    - lstm
+    - gru
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# ALL NEURAL (Maximum Temporal Diversity)
+# -----------------------------------------------------------------------------
+# Best for: Large datasets, complex patterns
+# Training time: 60-120 minutes (GPU)
+# Highest variance, most resource intensive
+# -----------------------------------------------------------------------------
+all_neural:
+  base_model_names:
+    - lstm
+    - gru
+    - tcn
+    - transformer
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# =============================================================================
+# ADVANCED CONFIGURATIONS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# XGBOOST META-LEARNER
+# -----------------------------------------------------------------------------
+# Use XGBoost as meta-learner for complex model interactions
+# Slower, may overfit
+# -----------------------------------------------------------------------------
+xgb_meta:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: xgboost       # XGBoost meta-learner
+  meta_learner_config:
+    max_depth: 3                   # Shallow trees to prevent overfit
+    n_estimators: 50
+    learning_rate: 0.1
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# PASSTHROUGH FEATURES
+# -----------------------------------------------------------------------------
+# Include original features in meta-learner input
+# Meta-learner learns residual patterns
+# Best for: Base models miss important features
+# -----------------------------------------------------------------------------
+passthrough:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: true                # Include original features
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# CLASS PREDICTIONS (Not Probabilities)
+# -----------------------------------------------------------------------------
+# Use class predictions instead of probabilities
+# Faster, fewer meta-learner features
+# -----------------------------------------------------------------------------
+class_predictions:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: false         # n_models features instead of 3*n_models
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# FEWER FOLDS (Faster Training)
+# -----------------------------------------------------------------------------
+# Reduce folds for faster training
+# Trade coverage for speed
+# -----------------------------------------------------------------------------
+fast_stack:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 3                       # Reduce from 5 to 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+
+# =============================================================================
+# TUNED BASE MODELS (LEAKAGE RISK)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# TUNED CONFIGS FOR FINAL MODELS ONLY
+# -----------------------------------------------------------------------------
+# IMPORTANT: base_model_configs are used for FINAL models, NOT OOF
+# OOF always uses defaults (prevents leakage)
+# -----------------------------------------------------------------------------
+tuned_final:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+
+  # These configs used for FINAL models (inference)
+  # OOF predictions use defaults (use_default_configs_for_oof=true)
+  base_model_configs:
+    xgboost:
+      max_depth: 8
+      n_estimators: 200
+      learning_rate: 0.05
+    lightgbm:
+      num_leaves: 64
+      n_estimators: 200
+      learning_rate: 0.05
+    catboost:
+      depth: 8
+      iterations: 200
+      learning_rate: 0.05
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true  # CRITICAL: Prevents leakage
+  purge_bars: 60
+  embargo_bars: 1440
+
+# -----------------------------------------------------------------------------
+# LEGACY: TUNED CONFIGS FOR OOF (NOT RECOMMENDED)
+# -----------------------------------------------------------------------------
+# WARNING: This may cause leakage
+# Meta-learner trains on optimistically biased OOF predictions
+# Only use for experimentation
+# -----------------------------------------------------------------------------
+legacy_tuned_oof:
+  base_model_names:
+    - xgboost
+    - lightgbm
+  base_model_configs:
+    xgboost:
+      max_depth: 8
+    lightgbm:
+      num_leaves: 64
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: false  # WARNING: Potential leakage
+  purge_bars: 60
+  embargo_bars: 1440
+
+# =============================================================================
+# PURGEDKFOLD VARIANTS
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# AGGRESSIVE PURGE (High Label Overlap)
+# -----------------------------------------------------------------------------
+# For longer horizons or volatile markets
+# More conservative leakage prevention
+# -----------------------------------------------------------------------------
+aggressive_purge:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 120                  # 6x max horizon (more aggressive)
+  embargo_bars: 2880               # 10 days at 5min
+
+# -----------------------------------------------------------------------------
+# MINIMAL PURGE (Low Label Overlap)
+# -----------------------------------------------------------------------------
+# For short horizons or stable markets
+# Less data loss
+# -----------------------------------------------------------------------------
+minimal_purge:
+  base_model_names:
+    - xgboost
+    - lightgbm
+    - catboost
+  base_model_configs: {}
+
+  meta_learner_name: logistic
+  meta_learner_config: {}
+
+  n_folds: 5
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 30                   # 1.5x max horizon (less aggressive)
+  embargo_bars: 720                # 2.5 days at 5min
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+# CLI Usage:
+# -----------
+# Use defaults (boosting trio):
+# python scripts/train_model.py --model stacking --horizon 20 \
+#   --base-models xgboost,lightgbm,catboost
+#
+# Custom config:
+# python scripts/train_model.py --model stacking --horizon 20 \
+#   --base-models xgboost,lightgbm \
+#   --config '{"meta_learner_name": "xgboost", "n_folds": 3}'
+#
+# Load from YAML:
+# python scripts/train_model.py --model stacking --horizon 20 \
+#   --config-file config/ensembles/stacking.yaml:boosting_stack
+
+# Python Usage:
+# -------------
+# from src.models import ModelRegistry
+# import yaml
+# import pandas as pd
+#
+# # Load config
+# with open("config/ensembles/stacking.yaml") as f:
+#     configs = yaml.safe_load(f)
+#
+# # Create ensemble
+# ensemble = ModelRegistry.create("stacking", config=configs["boosting_stack"])
+#
+# # Prepare label_end_times for purging
+# label_end_times = pd.Series(...)  # When each label is resolved
+#
+# # Train
+# metrics = ensemble.fit(
+#     X_train, y_train,
+#     X_val, y_val,
+#     label_end_times=label_end_times
+# )

@@ -1,0 +1,51 @@
+# Temporal Stack Ensemble Configuration
+# Stacking ensemble for sequential pattern learning
+
+ensemble:
+  name: temporal_stack
+  method: stacking
+  description: Stacking ensemble of LSTM + GRU + TCN with meta-learner
+
+# Base models (all must be sequence models - 3D input)
+base_models:
+  - lstm
+  - gru
+  - tcn
+
+# Stacking configuration
+stacking:
+  # Meta-learner model
+  meta_learner: logistic  # Must be tabular model
+
+  # Use out-of-fold predictions for training meta-learner
+  use_oof: true
+
+  # Include original features in meta-learner
+  passthrough: false
+
+  # Cross-validation for OOF generation
+  cv_splits: 5
+  cv_purge: 60
+  cv_embargo: 60
+
+# Training settings
+training:
+  # Train base models if not already trained
+  train_base_models: true
+
+  # Use saved models if available
+  load_existing: false
+
+  # Sequence length for all base models
+  sequence_length: 60
+
+# Data settings
+data:
+  horizon: 20
+  feature_set: neural_optimal
+
+# Expected performance
+expected:
+  training_time_minutes: 180  # RTX 4070 Ti, 3 models @ 60 mins each
+  memory_gb: 12
+  baseline_f1: 0.54

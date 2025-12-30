@@ -1,0 +1,67 @@
+# Baseline Experiment Template
+# Quick baseline run to validate pipeline and data quality
+
+experiment:
+  name: baseline_experiment
+  description: Fast baseline with XGBoost to validate data pipeline
+  type: single_model
+
+# Model configuration
+model:
+  name: xgboost
+  family: boosting
+
+# Data configuration
+data:
+  symbols: [MES]  # Single symbol for baseline
+  horizons: [20]  # Single horizon for baseline
+
+  # Splits
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+
+  # Leakage prevention
+  purge_bars: 60
+  embargo_bars: 1440
+
+  # Feature set
+  feature_set: boosting_optimal
+
+# Training configuration
+training:
+  # Quick training for baseline
+  max_epochs: 50  # Reduced from default 100
+  early_stopping_patience: 10
+
+  # Device
+  device: auto
+  mixed_precision: true
+
+  # Reproducibility
+  random_seed: 42
+
+# Validation
+validation:
+  # Run cross-validation
+  run_cv: false  # Skip CV for baseline
+
+  # Run walk-forward
+  run_walk_forward: false
+
+  # Run CPCV/PBO
+  run_cpcv: false
+
+# Expected results
+expected:
+  runtime_minutes: 15
+  f1_score: ">= 0.48"
+  sharpe_ratio: ">= 0.5"
+
+# Success criteria
+success_criteria:
+  - "Pipeline completes without errors"
+  - "Model trains successfully"
+  - "Predictions have correct shape"
+  - "Validation F1 > 0.45"
+  - "No data leakage detected"

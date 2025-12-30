@@ -1,0 +1,639 @@
+# Model-Specific Feature Requirements and Recommendations
+# ML Model Factory - Feature Lists by Model Family
+#
+# Reference: src/models/registry.py (13 models across 4 families)
+
+---
+
+# =============================================================================
+# FEATURE REQUIREMENTS BY MODEL FAMILY
+# =============================================================================
+
+model_families:
+
+  # ---------------------------------------------------------------------------
+  # TABULAR MODELS (2D input: samples × features)
+  # ---------------------------------------------------------------------------
+  tabular:
+    description: "Models expecting 2D tabular input (samples × features)"
+
+    models:
+      - xgboost
+      - lightgbm
+      - catboost
+      - random_forest
+      - logistic
+      - svm
+
+    input_shape: "2D (samples, features)"
+    feature_engineering_importance: "High (rely on engineered features)"
+
+    recommended_features:
+      min: 30
+      max: 100
+      default: 50-70
+
+    feature_selection:
+      required: true
+      recommended_method: "mda"
+      reason: "Tabular models benefit from feature selection (curse of dimensionality)"
+
+    feature_types:
+      all_supported: true
+      recommended:
+        - "Technical indicators (RSI, MACD, ATR, etc.)"
+        - "Price ratios and returns"
+        - "Volume features"
+        - "Volatility features"
+        - "Temporal features (sin/cos encoding)"
+        - "Regime features"
+        - "Microstructure features"
+        - "MTF features (if enabled)"
+
+    not_recommended:
+      - "Raw OHLCV prices (non-stationary)"
+      - "Cumulative indicators without normalization"
+
+  # ---------------------------------------------------------------------------
+  # SEQUENCE MODELS (3D input: samples × sequence_length × features)
+  # ---------------------------------------------------------------------------
+  sequence:
+    description: "Models expecting 3D sequence input (samples × seq_len × features)"
+
+    models:
+      - lstm
+      - gru
+      - tcn
+      - transformer
+
+    input_shape: "3D (samples, sequence_length, features)"
+    feature_engineering_importance: "Medium (learn representations, but good features help)"
+
+    recommended_features:
+      min: 20
+      max: 60
+      default: 30-50
+
+    sequence_parameters:
+      sequence_length:
+        min: 10
+        max: 120
+        default: 60
+        description: "Number of historical bars to look back"
+
+    feature_selection:
+      required: false  # Optional but recommended
+      recommended_method: "mda"
+      reason: "Sequence models can learn from moderate feature sets"
+
+    feature_types:
+      all_supported: true
+      recommended:
+        - "Returns and price ratios (stationary)"
+        - "Technical indicators (normalized)"
+        - "Volatility features"
+        - "Volume features (normalized)"
+        - "Temporal features"
+        - "MTF features (provides multi-scale context)"
+
+      not_recommended:
+        - "Raw prices (non-stationary, use returns instead)"
+        - "Redundant features (highly correlated)"
+        - "Too many features (>80) - risk of overfitting"
+
+    sequence_construction:
+      method: "Rolling window lookback"
+      example: |
+        For sequence_length=60 and prediction at bar t:
+        X[t] = features[t-60:t]  # 60 historical bars
+        y[t] = label[t]          # Current label
+
+  # ---------------------------------------------------------------------------
+  # ENSEMBLE MODELS (2D or 3D, depending on base models)
+  # ---------------------------------------------------------------------------
+  ensemble:
+    description: "Meta-learners combining multiple base models"
+
+    models:
+      - voting
+      - stacking
+      - blending
+
+    input_shape: "Same as base models (2D for tabular, 3D for sequence)"
+
+    compatibility_constraint:
+      rule: "All base models must have same input dimensionality"
+      valid:
+        - "All tabular (2D): xgboost + lightgbm + catboost"
+        - "All sequence (3D): lstm + gru + tcn"
+      invalid:
+        - "Mixed: xgboost + lstm (2D + 3D incompatible)"
+
+    recommended_features:
+      min: 40
+      max: 80
+      default: 50-70
+      reason: "Ensembles benefit from diverse features"
+
+    feature_selection:
+      required: true
+      recommended_method: "clustered_mda"
+      reason: "Prevent correlated base models from dominating"
+
+    feature_types:
+      same_as_base_models: true
+
+# =============================================================================
+# MODEL-SPECIFIC FEATURE RECOMMENDATIONS
+# =============================================================================
+
+models:
+
+  # ---------------------------------------------------------------------------
+  # XGBOOST
+  # ---------------------------------------------------------------------------
+  xgboost:
+    family: tabular
+    input_shape: "2D"
+
+    recommended_features: 50-70
+    feature_selection: "mda or hybrid"
+
+    strengths:
+      - "Handles missing values"
+      - "Captures non-linear interactions"
+      - "Feature importance via gain"
+
+    feature_preferences:
+      - "Technical indicators"
+      - "Price ratios and returns"
+      - "Volatility features"
+      - "MTF features (captures multi-scale patterns)"
+
+    avoid:
+      - "Too many correlated features (select via MDA)"
+      - "Raw prices (use returns/ratios)"
+
+  # ---------------------------------------------------------------------------
+  # LIGHTGBM
+  # ---------------------------------------------------------------------------
+  lightgbm:
+    family: tabular
+    input_shape: "2D"
+
+    recommended_features: 50-70
+    feature_selection: "mda or hybrid"
+
+    strengths:
+      - "Fast training (leaf-wise growth)"
+      - "Handles categorical features natively"
+      - "Low memory usage"
+
+    feature_preferences:
+      - "Same as XGBoost"
+      - "Can handle more features (faster than XGBoost)"
+
+    avoid:
+      - "Overfitting with too many features (use feature selection)"
+
+  # ---------------------------------------------------------------------------
+  # CATBOOST
+  # ---------------------------------------------------------------------------
+  catboost:
+    family: tabular
+    input_shape: "2D"
+
+    recommended_features: 50-70
+    feature_selection: "mda or hybrid"
+
+    strengths:
+      - "Handles categorical features optimally"
+      - "Robust to overfitting"
+      - "Ordered boosting (reduces target leakage)"
+
+    feature_preferences:
+      - "Technical indicators"
+      - "Regime features (can be treated as categorical)"
+      - "Temporal features (session indicators)"
+
+    special:
+      categorical_features:
+        - "volatility_regime"
+        - "trend_regime"
+        - "session_asia"
+        - "session_london"
+        - "session_ny"
+
+  # ---------------------------------------------------------------------------
+  # RANDOM FOREST
+  # ---------------------------------------------------------------------------
+  random_forest:
+    family: tabular
+    input_shape: "2D"
+
+    recommended_features: 30-50
+    feature_selection: "required (mda)"
+
+    strengths:
+      - "Robust baseline"
+      - "Handles non-linear relationships"
+      - "Interpretable feature importance"
+
+    weaknesses:
+      - "Prone to overfitting with many features"
+      - "Slower than boosting for same accuracy"
+
+    feature_preferences:
+      - "Strong individual features (RSI, ATR, returns)"
+      - "Avoid too many correlated features"
+
+    avoid:
+      - ">60 features (overfitting risk)"
+
+  # ---------------------------------------------------------------------------
+  # LOGISTIC REGRESSION
+  # ---------------------------------------------------------------------------
+  logistic:
+    family: tabular
+    input_shape: "2D"
+
+    recommended_features: 20-40
+    feature_selection: "required (strict, min_frequency=0.8)"
+
+    strengths:
+      - "Fast training and inference"
+      - "Interpretable coefficients"
+      - "Robust baseline"
+
+    weaknesses:
+      - "Linear decision boundary"
+      - "Sensitive to feature scaling"
+      - "Overfits easily with many features"
+
+    feature_preferences:
+      - "Normalized/standardized features"
+      - "Returns and price ratios (stationary)"
+      - "Oscillators (RSI, Stochastic, etc.)"
+
+    avoid:
+      - ">40 features (overfitting)"
+      - "Raw prices (non-stationary)"
+      - "Highly correlated features"
+
+    preprocessing:
+      scaling: "Required (StandardScaler)"
+      stationarity: "Critical (use returns, not prices)"
+
+  # ---------------------------------------------------------------------------
+  # SVM
+  # ---------------------------------------------------------------------------
+  svm:
+    family: tabular
+    input_shape: "2D"
+
+    recommended_features: 20-40
+    feature_selection: "required (strict)"
+
+    strengths:
+      - "Handles non-linear boundaries (RBF kernel)"
+      - "Effective in high-dimensional spaces"
+
+    weaknesses:
+      - "Slow training (O(n²) to O(n³))"
+      - "Sensitive to feature scaling"
+      - "Memory intensive"
+
+    feature_preferences:
+      - "Normalized features (critical)"
+      - "Uncorrelated features"
+
+    avoid:
+      - ">50 features (slow, overfitting)"
+      - "Raw prices"
+
+    preprocessing:
+      scaling: "Required (StandardScaler)"
+
+  # ---------------------------------------------------------------------------
+  # LSTM
+  # ---------------------------------------------------------------------------
+  lstm:
+    family: sequence
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 30-50
+    sequence_length: 60
+    feature_selection: "optional but recommended"
+
+    strengths:
+      - "Captures long-term dependencies"
+      - "Learns temporal patterns"
+
+    weaknesses:
+      - "Prone to overfitting"
+      - "Slow training"
+      - "Requires more data than tabular models"
+
+    feature_preferences:
+      - "Returns and normalized indicators"
+      - "Volatility features (regime shifts)"
+      - "MTF features (multi-scale context)"
+      - "Temporal features (session, hour)"
+
+    avoid:
+      - "Raw prices (use returns)"
+      - ">60 features (overfitting)"
+
+    preprocessing:
+      scaling: "Required (per-feature normalization)"
+      stationarity: "Important"
+
+  # ---------------------------------------------------------------------------
+  # GRU
+  # ---------------------------------------------------------------------------
+  gru:
+    family: sequence
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 30-50
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Simpler than LSTM (fewer parameters)"
+      - "Faster training than LSTM"
+      - "Similar performance to LSTM in many cases"
+
+    feature_preferences:
+      - "Same as LSTM"
+
+  # ---------------------------------------------------------------------------
+  # TCN (Temporal Convolutional Network)
+  # ---------------------------------------------------------------------------
+  tcn:
+    family: sequence
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 30-50
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Parallel computation (faster than RNNs)"
+      - "Dilated convolutions (large receptive field)"
+      - "No vanishing gradient issues"
+
+    feature_preferences:
+      - "Same as LSTM"
+      - "Benefits from MTF features (multi-scale)"
+
+  # ---------------------------------------------------------------------------
+  # TRANSFORMER
+  # ---------------------------------------------------------------------------
+  transformer:
+    family: sequence
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 40-60
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Attention mechanism (learns important timesteps)"
+      - "Parallel computation"
+      - "Captures long-range dependencies"
+
+    weaknesses:
+      - "Data-hungry (needs more samples than RNNs)"
+      - "Computationally expensive"
+
+    feature_preferences:
+      - "Normalized indicators"
+      - "MTF features (attention across scales)"
+      - "Temporal features (positional encoding alternative)"
+
+    preprocessing:
+      scaling: "Required"
+
+  # ---------------------------------------------------------------------------
+  # VOTING ENSEMBLE
+  # ---------------------------------------------------------------------------
+  voting:
+    family: ensemble
+    input_shape: "Same as base models"
+
+    base_model_constraint: "All base models must have same input dimensionality"
+
+    recommended_features: 50-70
+    feature_selection: "clustered_mda (handle correlation)"
+
+    recommended_base_combinations:
+      tabular:
+        - "xgboost + lightgbm + catboost"
+        - "xgboost + lightgbm + random_forest"
+      sequence:
+        - "lstm + gru"
+        - "lstm + gru + tcn"
+
+    feature_preferences:
+      - "Diverse features (support different base model strengths)"
+
+  # ---------------------------------------------------------------------------
+  # STACKING ENSEMBLE
+  # ---------------------------------------------------------------------------
+  stacking:
+    family: ensemble
+    input_shape: "Same as base models"
+
+    base_model_constraint: "All base models must have same input dimensionality"
+
+    recommended_features: 50-80
+    feature_selection: "clustered_mda"
+
+    recommended_base_combinations:
+      tabular:
+        - "xgboost + lightgbm + catboost"
+        - "xgboost + random_forest + logistic"
+      sequence:
+        - "lstm + gru + tcn"
+
+    meta_learner:
+      recommended: "Logistic Regression or LightGBM"
+      features: "OOF predictions from base models"
+
+  # ---------------------------------------------------------------------------
+  # BLENDING ENSEMBLE
+  # ---------------------------------------------------------------------------
+  blending:
+    family: ensemble
+    input_shape: "Same as base models"
+
+    base_model_constraint: "All base models must have same input dimensionality"
+
+    recommended_features: 50-70
+    feature_selection: "clustered_mda"
+
+    recommended_base_combinations:
+      same_as: stacking
+
+# =============================================================================
+# FEATURE SELECTION GUIDELINES BY MODEL
+# =============================================================================
+
+feature_selection_by_model:
+
+  # Boosting models (XGBoost, LightGBM, CatBoost)
+  boosting:
+    recommended_preset: "default"  # From selection_methods.yaml
+    n_features: 50-70
+    method: "mda or hybrid"
+    min_feature_frequency: 0.6
+
+  # Neural networks (LSTM, GRU, TCN, Transformer)
+  neural:
+    recommended_preset: "default"
+    n_features: 30-50
+    method: "mda"
+    min_feature_frequency: 0.6
+    note: "Feature selection less critical (learn representations)"
+
+  # Classical ML (Random Forest, Logistic, SVM)
+  classical:
+    recommended_preset: "stable"
+    n_features: 20-40
+    method: "mda"
+    min_feature_frequency: 0.7
+    note: "Strict selection prevents overfitting"
+
+  # Ensemble models
+  ensemble:
+    recommended_preset: "mtf or robust"
+    n_features: 50-80
+    method: "clustered_mda"
+    min_feature_frequency: 0.6
+    note: "Diverse features, handle correlation"
+
+# =============================================================================
+# MTF RECOMMENDATIONS BY MODEL
+# =============================================================================
+
+mtf_recommendations_by_model:
+
+  # Boosting models
+  boosting:
+    recommended_mtf: true
+    mtf_strategy: "default"  # [15min, 60min]
+    reason: "Boosting captures multi-scale patterns well"
+
+  # Neural networks
+  neural:
+    recommended_mtf: true
+    mtf_strategy: "minimal or default"  # [15min] or [15min, 60min]
+    reason: "MTF provides multi-scale context, but be mindful of dimensionality"
+
+  # Classical ML
+  classical:
+    recommended_mtf: false  # Optional
+    mtf_strategy: "minimal"  # [15min] only if used
+    reason: "Classical models prone to overfitting with many features"
+
+  # Ensemble models
+  ensemble:
+    recommended_mtf: true
+    mtf_strategy: "default or aggressive"
+    reason: "Ensembles benefit from diverse multi-scale features"
+
+# =============================================================================
+# COMPLETE FEATURE ENGINEERING CONFIGS BY MODEL
+# =============================================================================
+
+complete_configs:
+
+  # XGBoost default config
+  xgboost_default:
+    base_features:
+      enable: true
+      expected_count: 175
+    mtf:
+      strategy: "default"  # [15min, 60min]
+      expected_count: 40-50
+    total_features_before_selection: 215-225
+    feature_selection:
+      preset: "default"
+      n_features: 60
+      method: "mda"
+    final_features: 60
+
+  # LSTM default config
+  lstm_default:
+    base_features:
+      enable: true
+      expected_count: 175
+    mtf:
+      strategy: "minimal"  # [15min]
+      expected_count: 20-25
+    total_features_before_selection: 195-200
+    feature_selection:
+      preset: "default"
+      n_features: 40
+      method: "mda"
+    final_features: 40
+    sequence_length: 60
+
+  # Logistic Regression default config
+  logistic_default:
+    base_features:
+      enable: true
+      expected_count: 175
+    mtf:
+      strategy: "disabled"
+      expected_count: 0
+    total_features_before_selection: 175
+    feature_selection:
+      preset: "stable"
+      n_features: 30
+      method: "mda"
+      min_feature_frequency: 0.8
+    final_features: 30
+
+  # Voting Ensemble (tabular) default config
+  voting_tabular_default:
+    base_models:
+      - xgboost
+      - lightgbm
+      - catboost
+    base_features:
+      enable: true
+      expected_count: 175
+    mtf:
+      strategy: "default"  # [15min, 60min]
+      expected_count: 40-50
+    total_features_before_selection: 215-225
+    feature_selection:
+      preset: "mtf"  # Clustered MDA
+      n_features: 70
+      method: "clustered_mda"
+    final_features: 70
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+usage:
+  python: |
+    # Load model-specific feature config
+    import yaml
+    from pathlib import Path
+
+    config_path = Path("config/features/model_features.yaml")
+    with open(config_path) as f:
+        model_config = yaml.safe_load(f)
+
+    # Get recommended features for XGBoost
+    xgb_config = model_config['complete_configs']['xgboost_default']
+    print(f"XGBoost recommended features: {xgb_config['final_features']}")
+    print(f"MTF strategy: {xgb_config['mtf']['strategy']}")
+
+    # Get feature selection config for model family
+    boosting_selection = model_config['feature_selection_by_model']['boosting']
+    print(f"Boosting feature selection: {boosting_selection}")
