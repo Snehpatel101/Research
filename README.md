@@ -106,8 +106,28 @@ Note: The notebook includes optional export helpers (e.g. ONNX) but the core tra
 - **Seeded**: Configuration includes a `random_seed` (full determinism depends on backend)
 - **Class Balanced**: Automatic class weight calculation
 - **Quality Weighted**: Pipeline quality scores used in training
-- **150+ Features**: Momentum, volatility, wavelets, microstructure
-- **Multi-Timeframe**: 5min, 15min, 1hr, daily aggregations
+- **180+ Features**: ~150 base indicators + ~30 MTF indicators (all indicator-derived)
+- **Multi-Timeframe**: Indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily)
+
+---
+
+## ⚠️ Current MTF Limitations
+
+**All models currently receive the same indicator-derived features (~180 total).**
+
+The intended architecture (per `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`) includes **model-specific data strategies**:
+
+| Strategy | Data Type | Model Families | Status |
+|----------|-----------|----------------|--------|
+| **Strategy 1: Single-TF** | One timeframe, no MTF | All models (baselines) | ❌ Not implemented |
+| **Strategy 2: MTF Indicators** | Indicator features from multiple TFs | Tabular (XGBoost, LightGBM, RF) | ⚠️ Partial (all models get this) |
+| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from multiple TFs | Sequence (LSTM, TCN, Transformer) | ❌ Not implemented |
+
+**Current Impact:**
+- **Tabular models** → Receive appropriate indicator features ✅
+- **Sequence models** → Receive indicators when they should ideally get raw multi-resolution OHLCV bars for temporal learning ⚠️
+
+**See:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md` for detailed analysis
 
 ---
 

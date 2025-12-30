@@ -49,7 +49,7 @@ symbol = "MES"  # or "MGC", "ES", "GC", etc.
 
 We are building an **ML Model Factory** for OHLCV time series. The factory can train any model family (boosting, neural, transformers, classical ML, ensembles) using:
 
-1. **Shared Data Contract** - All models consume identical preprocessed datasets
+1. **Unified Data Pipeline** - One 1-min dataset → model-specific feature/data extraction (⚠️ currently all models receive same indicator features; model-specific strategies in roadmap)
 2. **Plugin-Based Model Registry** - Add new model types without rewriting pipelines
 3. **Unified Evaluation Framework** - Compare models using identical metrics
 4. **Ensemble Support Built-In** - Combine multiple models into meta-learners
@@ -71,13 +71,45 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
                           Trained Models + Performance Reports
 ```
 
+### Data Pipeline Architecture: Current vs. Intended
+
+#### Current Implementation (Phase 1 Complete)
+
+**Universal Indicator Pipeline:**
+- All models receive ~180 **indicator-derived** features (RSI, MACD, wavelets, microstructure, etc.)
+- MTF indicators from 5 timeframes (15min, 30min, 1h, 4h, daily)
+- Data served in model-appropriate **shapes**:
+  - **Tabular models:** 2D arrays `(n_samples, 180)`
+  - **Sequence models:** 3D windows `(n_samples, seq_len, 180)`
+
+**Limitation:** All features are pre-computed indicators. Sequence models receive indicators when they should ideally receive raw multi-resolution OHLCV bars for temporal learning.
+
+#### Intended Architecture (Roadmap)
+
+**Model-Specific MTF Strategies (from `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`):**
+
+| Strategy | Data Type | Model Families | Status |
+|----------|-----------|----------------|--------|
+| **Strategy 1: Single-TF** | One timeframe, no MTF | All models (baselines) | ❌ Not implemented |
+| **Strategy 2: MTF Indicators** | Indicator features from multiple TFs | Tabular (XGBoost, LightGBM, RF) | ⚠️ Partial (all models get this) |
+| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from multiple TFs as multi-resolution tensors | Sequence (LSTM, TCN, Transformer) | ❌ Not implemented |
+
+**When Strategy 3 is implemented:**
+- **Tabular models** → Keep ~180 indicator-derived features (optimal for tree-based/linear models)
+- **Sequence models** → Receive raw MTF OHLCV bars: `{'5min': (T,60,4), '15min': (T,20,4), '1h': (T,5,4)}`
+- **Enables:** Multi-resolution temporal learning for models like TFT, PatchTST, TimesNet
+
+**See:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md` for detailed analysis
+
 ### Core Contracts
 
-**Data Contract (Phase 1 - Complete):**
-- Clean/resample → features → labels → splits → scaling → datasets
-- No lookahead bias (proper purging + embargo)
-- Time-series aware train/val/test splits
+**Data Pipeline (Phase 1 - Complete):**
+- Raw 1-min OHLCV → 5-min base → ~150 indicator features → MTF upscaling (5 timeframes) → ~30 MTF indicators → ~180 total features
+- Triple-barrier labeling with Optuna optimization
+- No lookahead bias (proper purging + embargo, MTF uses shift(1))
+- Time-series aware train/val/test splits (70/15/15)
 - Quality-weighted samples
+- **All features are indicator-derived** (raw multi-resolution bars for Strategy 3 not yet implemented)
 
 **Model Contract (Phase 2 - Complete):**
 ```python
@@ -324,7 +356,7 @@ src/phase1/stages/
 ├── sessions/           → Session filtering and normalization
 ├── features/           → 150+ indicators (momentum, wavelets, microstructure)
 ├── regime/             → Regime detection (volatility, trend, composite)
-├── mtf/                → Multi-timeframe features
+├── mtf/                → Multi-timeframe indicator features (~30 MTF features from 5 timeframes)
 ├── labeling/           → Triple-barrier initial labels
 ├── ga_optimize/        → Optuna parameter optimization
 ├── final_labels/       → Apply optimized parameters
@@ -336,7 +368,7 @@ src/phase1/stages/
 └── reporting/          → Generate completion reports
 ```
 
-**Output:** Standardized datasets consumed by all model trainers
+**Output:** ~180 indicator-derived features consumed by all model trainers (tabular: 2D arrays, sequence: 3D windows)
 
 ---
 
@@ -439,9 +471,9 @@ TRAIN/VAL/TEST = 70/15/15
 - Optuna-based parameter optimization with transaction cost penalties
 - Proper purge (60) and embargo (1440) for leakage prevention
 - Quality-based sample weighting (0.5x-1.5x)
-- 150+ features including wavelets and microstructure
-- Multi-timeframe analysis (5min to daily)
-- TimeSeriesDataContainer for unified model training interface
+- 150+ base features including wavelets and microstructure
+- Multi-timeframe indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily) - Strategy 2 partial implementation
+- TimeSeriesDataContainer for unified model training interface (2D for tabular, 3D for sequence)
 
 **Recent Improvements:**
 - Added a synthetic OHLCV helper for smoke tests (`src/utils/notebook.py`), but real training expects real data in `data/raw/`

@@ -62,7 +62,73 @@ Each run is written under `experiments/runs/<run_id>/` (created by `src/models/t
 
 ---
 
-## Notes / Known Gaps (for “ML factory” usage)
+## Model Data Requirements
+
+### Tabular Models (2D Input)
+
+**Models:** `xgboost`, `lightgbm`, `catboost`, `random_forest`, `logistic`, `svm`
+
+**Input Shape:** `(n_samples, n_features)`
+
+**Data Access:** `container.get_sklearn_arrays("train")` → returns numpy arrays
+
+**Current Features:** All ~180 indicator-derived features (base + MTF indicators)
+
+**Optimal Data (Strategy 2):** MTF indicator features ✅ Currently receiving appropriate data
+
+**Example:**
+```python
+X_train, y_train, w_train = container.get_sklearn_arrays("train")
+# Shape: (50000, 180) - all indicator features
+```
+
+### Sequence Models (3D Input)
+
+**Models:** `lstm`, `gru`, `tcn`, `transformer`
+
+**Input Shape:** `(n_samples, seq_len, n_features)`
+
+**Data Access:** `container.get_pytorch_sequences("train", seq_len=60)` → returns SequenceDataset
+
+**Current Features:** All ~180 indicator-derived features (windowed into sequences)
+
+**Optimal Data (Strategy 3):** Multi-resolution raw OHLCV bars ❌ **Not implemented**
+
+**Current Limitation:** Sequence models receive pre-computed indicators when they should ideally receive raw multi-resolution bars for temporal learning.
+
+**Example of Current Implementation:**
+```python
+train_dataset = container.get_pytorch_sequences("train", seq_len=60)
+# Shape: (49940, 60, 180) - same indicators, windowed
+# (loses 60 samples due to windowing)
+```
+
+**Example of Intended Implementation (Strategy 3):**
+```python
+# This doesn't exist yet:
+train_data = container.get_multi_resolution_bars("train", timeframes=['5min', '15min', '1h'])
+# Returns dict of tensors:
+# {
+#   '5min':  torch.Tensor(50000, 60, 4),  # raw OHLCV
+#   '15min': torch.Tensor(50000, 20, 4),  # raw OHLCV
+#   '1h':    torch.Tensor(50000, 5, 4),   # raw OHLCV
+# }
+```
+
+### Ensemble Models
+
+**Models:** `voting`, `stacking`, `blending`
+
+**Compatibility Rules:**
+- ✅ All-tabular ensembles: `voting(['xgboost', 'lightgbm', 'catboost'])`
+- ✅ All-sequence ensembles: `voting(['lstm', 'gru', 'tcn'])`
+- ❌ Mixed ensembles: `voting(['xgboost', 'lstm'])` raises `EnsembleCompatibilityError`
+
+**Reason:** Shape mismatch (2D vs 3D inputs) causes training failures
+
+---
+
+## Notes / Known Gaps (for "ML factory" usage)
 
 - Phase 2 does **not** currently produce an inference “bundle” automatically. Phase 5 tooling (`scripts/serve_model.py`, `scripts/batch_inference.py`) expects a `ModelBundle` directory (see `src/inference/bundle.py`), so bundling is a separate step today (often done in the notebook).
 - Symbol selection and feature generation are Phase 1 concerns; Phase 2 assumes features/labels already exist in the split parquet files.
