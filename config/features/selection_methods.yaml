@@ -1,0 +1,340 @@
+# Feature Selection Method Configurations
+# ML Model Factory - Walk-Forward Feature Selection
+#
+# Methods: MDI (fast), MDA (reliable), Hybrid (balanced), Clustered MDA (correlated features)
+# Reference: src/cross_validation/feature_selector.py
+
+---
+
+# =============================================================================
+# DEFAULT CONFIGURATION
+# =============================================================================
+
+feature_selection:
+  # Core parameters
+  method: mda  # Options: mdi, mda, hybrid
+  n_features_to_select: 50
+  min_feature_frequency: 0.6  # Feature must appear in ≥60% of CV folds
+
+  # Random Forest parameters for importance calculation
+  n_estimators: 100
+  max_depth: 5
+  random_state: 42
+
+  # MDA-specific parameters
+  n_repeats: 10  # Permutation repeats for MDA
+
+  # Clustered MDA parameters (for correlated features like MTF)
+  use_clustered_importance: false
+  max_clusters: 20
+
+  # Walk-forward validation
+  cv_method: purged_kfold  # Ensures no lookahead
+  n_splits: 5
+
+# =============================================================================
+# PRESETS FOR DIFFERENT USE CASES
+# =============================================================================
+
+presets:
+
+  # ---------------------------------------------------------------------------
+  # FAST: Quick baseline (MDI)
+  # ---------------------------------------------------------------------------
+  fast:
+    description: "Fast feature selection for prototyping (MDI method)"
+    method: mdi
+    n_features_to_select: 30
+    min_feature_frequency: 0.5
+    n_estimators: 50
+    max_depth: 5
+    random_state: 42
+    use_clustered_importance: false
+
+    # Performance
+    time_estimate: "30 sec (5 folds, 150 features)"
+    reliability: "Low (MDI biased)"
+
+    # When to use
+    use_cases:
+      - "Initial prototyping"
+      - "Baseline feature importance"
+      - "Speed is critical"
+
+  # ---------------------------------------------------------------------------
+  # DEFAULT: Balanced reliability (MDA)
+  # ---------------------------------------------------------------------------
+  default:
+    description: "Recommended default (MDA permutation importance)"
+    method: mda
+    n_features_to_select: 50
+    min_feature_frequency: 0.6
+    n_estimators: 100
+    max_depth: 5
+    n_repeats: 10
+    random_state: 42
+    use_clustered_importance: false
+
+    # Performance
+    time_estimate: "5 min (5 folds, 150 features)"
+    reliability: "High"
+
+    # When to use
+    use_cases:
+      - "Standard feature selection"
+      - "Uncorrelated or moderately correlated features"
+      - "Most ML workflows"
+
+  # ---------------------------------------------------------------------------
+  # ROBUST: Maximum reliability (Clustered MDA)
+  # ---------------------------------------------------------------------------
+  robust:
+    description: "Maximum reliability for correlated features (Clustered MDA)"
+    method: mda
+    n_features_to_select: 50
+    min_feature_frequency: 0.7  # Stricter stability
+    n_estimators: 50  # Fewer trees (already slow)
+    max_depth: 5
+    n_repeats: 10
+    random_state: 42
+
+    # Clustered MDA
+    use_clustered_importance: true
+    max_clusters: 20
+
+    # Performance
+    time_estimate: "10 min (5 folds, 150 features)"
+    reliability: "Very High"
+
+    # When to use
+    use_cases:
+      - "Highly correlated features (e.g., MTF features)"
+      - "Multiple volatility estimators"
+      - "Production model feature selection"
+
+  # ---------------------------------------------------------------------------
+  # HYBRID: Balanced approach (MDI + MDA ranking)
+  # ---------------------------------------------------------------------------
+  hybrid:
+    description: "Hybrid MDI + MDA ranking (balanced speed/reliability)"
+    method: hybrid
+    n_features_to_select: 50
+    min_feature_frequency: 0.6
+    n_estimators: 100
+    max_depth: 5
+    n_repeats: 10
+    random_state: 42
+    use_clustered_importance: false
+
+    # Performance
+    time_estimate: "5.5 min (5 folds, 150 features)"
+    reliability: "Medium-High"
+
+    # When to use
+    use_cases:
+      - "Unsure which method is best"
+      - "Want to combine MDI and MDA benefits"
+      - "Moderately correlated features"
+
+  # ---------------------------------------------------------------------------
+  # MTF: For multi-timeframe datasets
+  # ---------------------------------------------------------------------------
+  mtf:
+    description: "Optimized for MTF features (high correlation)"
+    method: mda
+    n_features_to_select: 60  # More features for MTF datasets
+    min_feature_frequency: 0.6
+    n_estimators: 100
+    max_depth: 5
+    n_repeats: 10
+    random_state: 42
+
+    # Clustered MDA (critical for MTF)
+    use_clustered_importance: true
+    max_clusters: 30  # More clusters for ~200+ features
+
+    # Performance
+    time_estimate: "12 min (5 folds, 220 features)"
+    reliability: "Very High"
+
+    # When to use
+    use_cases:
+      - "MTF features enabled (15min, 60min, etc.)"
+      - "200+ total features"
+      - "High correlation between base and MTF timeframes"
+
+  # ---------------------------------------------------------------------------
+  # STABLE: Very strict stability threshold
+  # ---------------------------------------------------------------------------
+  stable:
+    description: "Very strict stability for overfitting-prone models"
+    method: mda
+    n_features_to_select: 40
+    min_feature_frequency: 0.8  # Feature must appear in ≥80% of folds
+    n_estimators: 100
+    max_depth: 5
+    n_repeats: 10
+    random_state: 42
+    use_clustered_importance: false
+
+    # Performance
+    time_estimate: "5 min (5 folds, 150 features)"
+    reliability: "High (very stable features)"
+
+    # When to use
+    use_cases:
+      - "High-frequency trading (overfitting risk)"
+      - "Limited training data"
+      - "Shallow models (logistic regression)"
+
+  # ---------------------------------------------------------------------------
+  # EXPLORATORY: More features, lower stability
+  # ---------------------------------------------------------------------------
+  exploratory:
+    description: "Exploratory selection (more features, lower stability)"
+    method: mda
+    n_features_to_select: 70
+    min_feature_frequency: 0.4  # Only 40% stability
+    n_estimators: 100
+    max_depth: 5
+    n_repeats: 10
+    random_state: 42
+    use_clustered_importance: false
+
+    # Performance
+    time_estimate: "5 min (5 folds, 150 features)"
+    reliability: "Medium (more features, less stable)"
+
+    # When to use
+    use_cases:
+      - "Exploratory analysis"
+      - "Want to try more features"
+      - "Deep models that handle high dimensionality well"
+
+# =============================================================================
+# MODEL-SPECIFIC RECOMMENDATIONS
+# =============================================================================
+
+model_recommendations:
+
+  # Boosting models (XGBoost, LightGBM, CatBoost)
+  boosting:
+    preset: default  # Standard MDA
+    n_features_to_select: 50-70
+    rationale: "Boosting handles moderate dimensionality well, MDA prevents correlated feature bias"
+
+  # Neural networks (LSTM, GRU, TCN, Transformer)
+  neural:
+    preset: default  # Standard MDA
+    n_features_to_select: 40-60
+    rationale: "Neural nets can overfit with too many features, moderate selection"
+    note: "Feature engineering less critical (neural nets learn representations)"
+
+  # Classical ML (Random Forest, Logistic, SVM)
+  classical:
+    preset: stable  # Strict stability
+    n_features_to_select: 30-40
+    rationale: "Shallow models prone to overfitting, need very stable features"
+
+  # Ensemble models
+  ensemble:
+    preset: mtf  # Handle correlation
+    n_features_to_select: 50-70
+    rationale: "Ensembles benefit from diverse features, use clustered MDA"
+
+  # MTF-enabled models
+  with_mtf:
+    preset: mtf  # Clustered MDA for MTF correlation
+    n_features_to_select: 60-80
+    rationale: "MTF features are highly correlated, clustered MDA essential"
+
+# =============================================================================
+# PERFORMANCE BENCHMARKS
+# =============================================================================
+
+benchmarks:
+  # Intel i7, 16GB RAM, 100k samples, 150 features, 5-fold CV
+
+  mdi:
+    time: "30 sec"
+    memory: "Low (~500 MB)"
+    reliability: "Low (biased towards high-cardinality)"
+
+  mda:
+    time: "5 min"
+    memory: "Medium (~1 GB)"
+    reliability: "High"
+
+  hybrid:
+    time: "5.5 min"
+    memory: "Medium (~1 GB)"
+    reliability: "Medium-High"
+
+  clustered_mda:
+    time: "10 min"
+    memory: "High (~1.5 GB)"
+    reliability: "Very High (best for correlated features)"
+
+# =============================================================================
+# STABILITY THRESHOLD GUIDELINES
+# =============================================================================
+
+stability_guidelines:
+  description: "Recommended min_feature_frequency by use case"
+
+  high_frequency_trading:
+    min_feature_frequency: 0.8
+    rationale: "Require very stable features to prevent overfitting"
+
+  standard_classification:
+    min_feature_frequency: 0.6
+    rationale: "Balance stability and feature coverage"
+
+  exploratory_analysis:
+    min_feature_frequency: 0.4
+    rationale: "Allow more features for exploration"
+
+  limited_data:
+    min_feature_frequency: 0.7
+    rationale: "Higher stability when data is scarce"
+
+  abundant_data:
+    min_feature_frequency: 0.5
+    rationale: "Can afford lower stability with more data"
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+usage:
+  python: |
+    # Load config
+    import yaml
+    from pathlib import Path
+    from src.cross_validation import WalkForwardFeatureSelector
+
+    config_path = Path("config/features/selection_methods.yaml")
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    # Use default preset
+    params = config['presets']['default']
+    selector = WalkForwardFeatureSelector(
+        n_features_to_select=params['n_features_to_select'],
+        selection_method=params['method'],
+        min_feature_frequency=params['min_feature_frequency'],
+        n_estimators=params['n_estimators'],
+        max_depth=params['max_depth'],
+        random_state=params['random_state']
+    )
+
+    # Run selection
+    result = selector.select_features_walkforward(X, y, cv_splits)
+    stable_features = result.stable_features
+
+  cli: |
+    # Run feature selection via CLI (future)
+    python scripts/run_feature_selection.py \
+      --preset default \
+      --n-features 50 \
+      --output results/feature_selection.json

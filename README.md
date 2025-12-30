@@ -131,23 +131,23 @@ Note: The notebook includes optional export helpers (e.g. ONNX) but the core tra
 
 ## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [docs/notebook/README.md](docs/notebook/README.md) | Notebook quick start & navigation |
-| [docs/QUICK_REFERENCE.md](docs/QUICK_REFERENCE.md) | Command reference & troubleshooting |
-| [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) | Migration guide for recent improvements |
-| [docs/VALIDATION_CHECKLIST.md](docs/VALIDATION_CHECKLIST.md) | Pre/post-training validation |
-| [PIPELINE_STATUS.md](PIPELINE_STATUS.md) | Pipeline status dashboard |
-| [docs/reference/ARCHITECTURE.md](docs/reference/ARCHITECTURE.md) | System architecture & design patterns |
-| [docs/README.md](docs/README.md) | Documentation index |
-| [CLAUDE.md](CLAUDE.md) | Development guidelines & engineering rules |
+**📚 [Complete Documentation Index](docs/INDEX.md)** - Start here for comprehensive guides
 
-**Detailed Guides:**
-- [Configuration](docs/notebook/CONFIGURATION.md) - All 54 parameters
-- [Cell Reference](docs/notebook/CELL_REFERENCE.md) - Cell-by-cell documentation
-- [Colab Setup](docs/notebook/COLAB_SETUP.md) - Google Colab guide
-- [Troubleshooting](docs/notebook/TROUBLESHOOTING.md) - 40+ error scenarios
-- [Workflow Best Practices](docs/WORKFLOW_BEST_PRACTICES.md) - Best practices & patterns
+### Quick Links
+
+| Category | Document | Purpose |
+|----------|----------|---------|
+| **Getting Started** | [Quickstart Guide](docs/getting-started/QUICKSTART.md) | Step-by-step setup |
+| **Getting Started** | [Quick Reference](docs/QUICK_REFERENCE.md) | Command cheatsheet |
+| **Planning** | [Project Charter](docs/planning/PROJECT_CHARTER.md) | Project status: 13 implemented + 6 planned models |
+| **Roadmaps** | [Advanced Models Roadmap](docs/roadmaps/ADVANCED_MODELS_ROADMAP.md) | 6 new models, 18 days implementation |
+| **Roadmaps** | [MTF Implementation Roadmap](docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md) | Multi-timeframe expansion |
+| **Guides** | [Model Integration Guide](docs/guides/MODEL_INTEGRATION_GUIDE.md) | How to add new models |
+| **Guides** | [Feature Engineering Guide](docs/guides/FEATURE_ENGINEERING_GUIDE.md) | Model-specific feature strategies |
+| **Reference** | [Architecture](docs/reference/ARCHITECTURE.md) | System design patterns |
+| **Notebook** | [Notebook README](docs/notebook/README.md) | Jupyter/Colab guide |
+
+**5,617 lines** of implementation guides covering model integration, feature engineering, hyperparameter optimization, and infrastructure requirements
 
 ---
 

@@ -279,7 +279,7 @@ def process_symbol_ga(
                 DeprecationWarning,
                 stacklevel=2
             )
-            ga_results_dir = project_root / "config" / "ga_results"
+            ga_results_dir = project_root / "config" / "optimization" / "ga_results"
             plots_dir = project_root / "results" / "ga_plots"
 
         ga_results_dir.mkdir(parents=True, exist_ok=True)
@@ -367,7 +367,7 @@ def main():
 
     # Save combined summary
     project_root = Path(__file__).parent.parent.parent.parent.resolve()
-    summary_path = project_root / "config" / "ga_results" / "optimization_summary.json"
+    summary_path = project_root / "config" / "optimization" / "ga_results" / "optimization_summary.json"
     summary = {}
     for symbol, symbol_results in all_symbols_results.items():
         summary[symbol] = {

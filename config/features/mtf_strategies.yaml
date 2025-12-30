@@ -1,0 +1,519 @@
+# Multi-Timeframe (MTF) Feature Generation Strategies
+# ML Model Factory - MTF Configuration
+#
+# Reference: src/phase1/stages/mtf/generator.py
+
+---
+
+# =============================================================================
+# MTF STRATEGY PRESETS
+# =============================================================================
+
+strategies:
+
+  # ---------------------------------------------------------------------------
+  # DEFAULT: Balanced intraday context (5min base)
+  # ---------------------------------------------------------------------------
+  default:
+    description: "Recommended default MTF strategy for intraday trading (5min base)"
+
+    base_timeframe: "5min"
+    enable_mtf: true
+
+    mtf_timeframes:
+      - "15min"  # Intraday patterns (3x base)
+      - "60min"  # Hourly momentum (12x base)
+
+    mtf_include_ohlcv: true       # Include resampled OHLCV bars
+    mtf_include_indicators: true  # Include indicators on MTF
+
+    # Expected output
+    expected_mtf_features: 40-50
+    expected_total_features: 215-225  # ~175 base + ~40-50 MTF
+
+    # Data requirements
+    min_base_bars: 600  # ~50 hours (2 days of 5min data)
+    data_requirement: "Minimum 50k 5min bars (~4 months continuous)"
+
+    # Performance
+    generation_time: "15-20 sec (100k bars)"
+    memory_usage: "Medium (~180 MB for 100k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "mtf"  # From selection_methods.yaml
+      n_features: 60
+      method: "clustered_mda"
+
+    # Use cases
+    use_cases:
+      - "Intraday trading (5min base)"
+      - "Capturing both microstructure and trend"
+      - "Standard production models"
+
+  # ---------------------------------------------------------------------------
+  # MINIMAL: Fastest MTF (15min only)
+  # ---------------------------------------------------------------------------
+  minimal:
+    description: "Minimal MTF for fast training and prototyping"
+
+    base_timeframe: "5min"
+    enable_mtf: true
+
+    mtf_timeframes:
+      - "15min"  # Single higher timeframe
+
+    mtf_include_ohlcv: true
+    mtf_include_indicators: true
+
+    # Expected output
+    expected_mtf_features: 20-25
+    expected_total_features: 195-200
+
+    # Data requirements
+    min_base_bars: 150  # ~12.5 hours
+    data_requirement: "Minimum 10k 5min bars (~2 weeks)"
+
+    # Performance
+    generation_time: "8-10 sec (100k bars)"
+    memory_usage: "Low (~160 MB for 100k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "default"  # Standard MDA (fewer features, less correlation)
+      n_features: 50
+      method: "mda"
+
+    # Use cases
+    use_cases:
+      - "Fast prototyping"
+      - "Limited data (<1 month)"
+      - "Quick baseline models"
+
+  # ---------------------------------------------------------------------------
+  # AGGRESSIVE: Maximum MTF context
+  # ---------------------------------------------------------------------------
+  aggressive:
+    description: "Maximum MTF context for capturing multi-scale patterns"
+
+    base_timeframe: "5min"
+    enable_mtf: true
+
+    mtf_timeframes:
+      - "15min"   # Short-term intraday (3x)
+      - "30min"   # Mid-term intraday (6x)
+      - "60min"   # Hourly (12x)
+      - "4h"      # Multi-hour (48x)
+      - "daily"   # Daily trend/regime (288x)
+
+    mtf_include_ohlcv: true
+    mtf_include_indicators: true
+
+    # Expected output
+    expected_mtf_features: 100-125
+    expected_total_features: 275-300
+
+    # Data requirements
+    min_base_bars: 14400  # ~1200 hours (~50 days)
+    data_requirement: "Minimum 100k 5min bars (~1 year continuous)"
+
+    # Performance
+    generation_time: "30-40 sec (100k bars)"
+    memory_usage: "High (~250 MB for 100k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "mtf"
+      n_features: 70-80  # More features needed
+      method: "clustered_mda"
+      max_clusters: 50  # More clusters for more features
+
+    # Use cases
+    use_cases:
+      - "Maximum information extraction"
+      - "Long-term prediction horizons (20+ bars)"
+      - "Abundant training data (>1 year)"
+
+  # ---------------------------------------------------------------------------
+  # DISABLED: No MTF (base TF only)
+  # ---------------------------------------------------------------------------
+  disabled:
+    description: "No MTF features (base timeframe only)"
+
+    base_timeframe: "5min"
+    enable_mtf: false
+
+    mtf_timeframes: []
+
+    mtf_include_ohlcv: false
+    mtf_include_indicators: false
+
+    # Expected output
+    expected_mtf_features: 0
+    expected_total_features: 175  # Base features only
+
+    # Data requirements
+    min_base_bars: 200  # Minimum for base indicators
+    data_requirement: "Minimum 5k 5min bars (~1 week)"
+
+    # Performance
+    generation_time: "5-8 sec (100k bars)"
+    memory_usage: "Low (~140 MB for 100k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "default"
+      n_features: 50
+      method: "mda"
+
+    # Use cases
+    use_cases:
+      - "Baseline models (no MTF)"
+      - "Very limited data"
+      - "Fastest training/inference"
+
+  # ---------------------------------------------------------------------------
+  # SWING: Swing trading (15min base)
+  # ---------------------------------------------------------------------------
+  swing:
+    description: "Swing trading strategy (15min base with daily context)"
+
+    base_timeframe: "15min"
+    enable_mtf: true
+
+    mtf_timeframes:
+      - "60min"   # Hourly trend
+      - "daily"   # Daily regime
+
+    mtf_include_ohlcv: true
+    mtf_include_indicators: true
+
+    # Expected output
+    expected_mtf_features: 40-50
+    expected_total_features: 215-225
+
+    # Data requirements
+    min_base_bars: 2880  # ~30 days of 15min data (96 bars/day)
+    data_requirement: "Minimum 50k 15min bars (~6 months)"
+
+    # Performance
+    generation_time: "15-20 sec (50k bars)"
+    memory_usage: "Medium (~120 MB for 50k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "mtf"
+      n_features: 60
+      method: "clustered_mda"
+
+    # Use cases
+    use_cases:
+      - "Swing trading (hold hours to days)"
+      - "15min base timeframe"
+      - "Multi-day trend following"
+
+  # ---------------------------------------------------------------------------
+  # POSITION: Position trading (60min base)
+  # ---------------------------------------------------------------------------
+  position:
+    description: "Position trading (60min base with daily regime)"
+
+    base_timeframe: "60min"
+    enable_mtf: true
+
+    mtf_timeframes:
+      - "daily"   # Daily trend and regime
+
+    mtf_include_ohlcv: true
+    mtf_include_indicators: true
+
+    # Expected output
+    expected_mtf_features: 20-25
+    expected_total_features: 195-200
+
+    # Data requirements
+    min_base_bars: 720  # ~30 days of 60min data (24 bars/day)
+    data_requirement: "Minimum 20k 60min bars (~2 years)"
+
+    # Performance
+    generation_time: "10-12 sec (20k bars)"
+    memory_usage: "Low (~80 MB for 20k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "default"
+      n_features: 50
+      method: "mda"
+
+    # Use cases
+    use_cases:
+      - "Position trading (hold days to weeks)"
+      - "60min base timeframe"
+      - "Long-term trend following"
+
+  # ---------------------------------------------------------------------------
+  # OHLCV_ONLY: MTF bars without indicators
+  # ---------------------------------------------------------------------------
+  ohlcv_only:
+    description: "MTF OHLCV bars only (no indicators, faster)"
+
+    base_timeframe: "5min"
+    enable_mtf: true
+
+    mtf_timeframes:
+      - "15min"
+      - "60min"
+
+    mtf_include_ohlcv: true
+    mtf_include_indicators: false  # Skip indicators
+
+    # Expected output
+    expected_mtf_features: 10  # 5 OHLCV × 2 timeframes
+    expected_total_features: 185
+
+    # Data requirements
+    min_base_bars: 600
+    data_requirement: "Minimum 50k 5min bars (~4 months)"
+
+    # Performance
+    generation_time: "5-8 sec (100k bars)"  # Much faster
+    memory_usage: "Low (~150 MB for 100k bars)"
+
+    # Feature selection
+    recommended_selection:
+      preset: "default"
+      n_features: 50
+      method: "mda"
+
+    # Use cases
+    use_cases:
+      - "Faster MTF generation"
+      - "Model learns patterns from raw prices"
+      - "Minimal MTF dimensionality"
+
+# =============================================================================
+# MTF TIMEFRAME DEFINITIONS
+# =============================================================================
+
+timeframe_definitions:
+  description: "Supported MTF timeframes with properties"
+
+  timeframes:
+    "5min":
+      minutes: 5
+      bars_per_day: 78  # 6.5h session
+      description: "Base timeframe (intraday)"
+      min_bars_required: 100
+
+    "10min":
+      minutes: 10
+      bars_per_day: 39
+      description: "Short-term intraday"
+      min_bars_required: 60
+      multiplier_from_5min: 2
+
+    "15min":
+      minutes: 15
+      bars_per_day: 26
+      description: "Intraday patterns and trends"
+      min_bars_required: 30
+      multiplier_from_5min: 3
+
+    "30min":
+      minutes: 30
+      bars_per_day: 13
+      description: "Mid-term intraday"
+      min_bars_required: 30
+      multiplier_from_5min: 6
+
+    "60min":
+      minutes: 60
+      bars_per_day: 6.5
+      description: "Hourly momentum and support/resistance"
+      min_bars_required: 30
+      multiplier_from_5min: 12
+      aliases: ["1h"]
+
+    "4h":
+      minutes: 240
+      bars_per_day: 1.625
+      description: "Multi-hour trends"
+      min_bars_required: 30
+      multiplier_from_5min: 48
+      aliases: ["240min"]
+
+    "daily":
+      minutes: 1440
+      bars_per_day: 1
+      description: "Daily trend and regime"
+      min_bars_required: 30
+      multiplier_from_5min: 288
+      aliases: ["1d", "D"]
+
+# =============================================================================
+# MTF FEATURE NAMING CONVENTION
+# =============================================================================
+
+naming_convention:
+  description: "How MTF features are named"
+
+  pattern: "{indicator_name}_{mtf_suffix}"
+
+  suffixes:
+    "15min": "_15m"
+    "30min": "_30m"
+    "60min": "_1h"
+    "1h": "_1h"
+    "4h": "_4h"
+    "240min": "_4h"
+    "daily": "_1d"
+    "1d": "_1d"
+
+  examples:
+    - base: "rsi_14"
+      mtf_15min: "rsi_14_15m"
+      mtf_60min: "rsi_14_1h"
+      mtf_daily: "rsi_14_1d"
+
+    - base: "sma_50"
+      mtf_15min: "sma_50_15m"
+      mtf_60min: "sma_50_1h"
+
+    - base: "close"
+      mtf_15min: "close_15m"
+      mtf_60min: "close_1h"
+      mtf_daily: "close_1d"
+
+# =============================================================================
+# DEFAULT MTF INDICATORS
+# =============================================================================
+
+default_mtf_indicators:
+  description: "Indicators computed on MTF timeframes (when mtf_include_indicators=true)"
+
+  # Returns (3 features)
+  returns:
+    - "return_1"
+    - "return_5"
+    - "return_10"
+
+  # Moving averages (4 features)
+  moving_averages:
+    - "sma_20"
+    - "sma_50"
+    - "ema_9"
+    - "ema_21"
+
+  # Momentum (3 features)
+  momentum:
+    - "rsi_14"
+    - "macd_line"
+    - "macd_signal"
+
+  # Volatility (3 features)
+  volatility:
+    - "atr_14"
+    - "bb_width"
+    - "hvol_20"
+
+  # Volume (2 features, if available)
+  volume:
+    - "obv"
+    - "volume_ratio"
+
+  # Total per MTF timeframe: ~15-20 features (volume-dependent)
+  # Total for 2 MTF timeframes (15min, 60min): ~30-40 indicators + 10 OHLCV = ~40-50 features
+
+# =============================================================================
+# DATA VALIDATION
+# =============================================================================
+
+validation:
+  description: "Automatic validation checks before MTF generation"
+
+  checks:
+    - name: "Sufficient base bars"
+      condition: "len(df) >= min_base_bars"
+      action: "Skip MTF if insufficient data"
+
+    - name: "MTF timeframe > base timeframe"
+      condition: "mtf_minutes > base_minutes"
+      action: "Filter out invalid MTF timeframes"
+
+    - name: "Integer multiple"
+      condition: "mtf_minutes % base_minutes == 0"
+      action: "Ensure clean resampling (no gaps)"
+
+    - name: "Sufficient MTF bars"
+      condition: "len(resampled_df) >= 30"
+      action: "Skip MTF if <30 bars after resampling"
+
+# =============================================================================
+# PERFORMANCE OPTIMIZATION
+# =============================================================================
+
+optimization:
+  description: "Tips for faster MTF generation"
+
+  strategies:
+    - name: "Selective timeframes"
+      tip: "Use 2-3 MTF timeframes max (not all possible)"
+      speedup: "3-5x"
+
+    - name: "OHLCV only"
+      tip: "Set mtf_include_indicators=false if not needed"
+      speedup: "2x"
+
+    - name: "Cache MTF data"
+      tip: "Save MTF features to disk if reusing"
+      speedup: "10x (on reruns)"
+
+    - name: "Parallelize symbols"
+      tip: "Process symbols in parallel (not MTF timeframes)"
+      speedup: "Nx (N = CPU cores)"
+
+  # Future: Parallel MTF timeframe generation
+  future_enhancements:
+    - "Parallel MTF timeframe computation"
+    - "Lazy MTF evaluation (compute only selected features)"
+    - "Incremental MTF update (append new bars without full recompute)"
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+
+usage:
+  python: |
+    # Load MTF strategy config
+    import yaml
+    from pathlib import Path
+    from src.phase1.stages.features import FeatureEngineer
+
+    config_path = Path("config/features/mtf_strategies.yaml")
+    with open(config_path) as f:
+        mtf_config = yaml.safe_load(f)
+
+    # Use default strategy
+    strategy = mtf_config['strategies']['default']
+
+    engineer = FeatureEngineer(
+        input_dir="data/clean",
+        output_dir="data/features",
+        timeframe=strategy['base_timeframe'],
+        enable_mtf=strategy['enable_mtf'],
+        mtf_timeframes=strategy['mtf_timeframes'],
+        mtf_include_ohlcv=strategy['mtf_include_ohlcv'],
+        mtf_include_indicators=strategy['mtf_include_indicators']
+    )
+
+    df_features, report = engineer.engineer_features(df, symbol="MES")
+
+    print(f"MTF features added: {report['mtf_feature_count']}")
+    print(f"Total features: {report['final_columns']}")
+
+  cli: |
+    # Run feature engineering with MTF strategy (future)
+    ./pipeline run \
+      --symbols MES \
+      --mtf-strategy default \
+      --output data/features
