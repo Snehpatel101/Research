@@ -1,0 +1,157 @@
+# =============================================================================
+# SERENA PROJECT CONFIGURATION - ML FACTORY FOR OHLCV TRADING
+# =============================================================================
+# Optimized for Claude Code integration via SSE bridge
+# Project: TOPSTEPX ML Model Factory for Single-Contract Futures
+# =============================================================================
+
+# Language configuration
+# Using pylsp (full-featured Python language server, auto-installed by Serena)
+languages:
+- python
+
+# File encoding
+encoding: "utf-8"
+
+# Respect .gitignore patterns when indexing
+ignore_all_files_in_gitignore: true
+
+# =============================================================================
+# IGNORED PATHS - Development, Infrastructure, Data, Caches
+# =============================================================================
+# These paths are EXCLUDED from Serena's index to keep focus on production code
+ignored_paths:
+  # -------------------------------------------------------------------------
+  # DEVELOPMENT TOOLS (not production code)
+  # -------------------------------------------------------------------------
+  - "dev/**"                      # MCP proxy, local dev helpers
+  - ".claude/**"                  # Claude Code settings
+  - ".github/**"                  # CI/CD workflows
+
+  # -------------------------------------------------------------------------
+  # INFRASTRUCTURE CONFIGURATION (Docker/Monitoring stack)
+  # -------------------------------------------------------------------------
+  - "config/prometheus/**"        # Prometheus monitoring config
+  - "config/grafana/**"           # Grafana dashboards
+  - "config/alertmanager/**"      # Alert routing config
+  - "config/ga_results/**"        # GA optimization result artifacts
+  - "Dockerfile"                  # Container build
+  - "docker-compose.yml"          # Docker orchestration
+
+  # -------------------------------------------------------------------------
+  # LARGE DATA FILES & MODEL ARTIFACTS
+  # -------------------------------------------------------------------------
+  - "data/**"                     # Raw/processed OHLCV data
+  - "experiments/**"              # Model training outputs
+  - "models/**"                   # Persisted model weights
+  - "runs/**"                     # Pipeline execution outputs
+  - "logs/**"                     # Application logs
+  - "results/**"                  # Analysis results
+
+  # Binary data files
+  - "**/*.parquet"                # Parquet data files
+  - "**/*.pkl"                    # Pickle files
+  - "**/*.h5"                     # HDF5 model weights
+  - "**/*.onnx"                   # ONNX models
+  - "**/*.pt"                     # PyTorch model files
+  - "**/*.pth"                    # PyTorch checkpoints
+  - "**/*.csv"                    # CSV data files (in data/)
+
+  # -------------------------------------------------------------------------
+  # PYTHON BUILD ARTIFACTS & CACHES
+  # -------------------------------------------------------------------------
+  - "**/__pycache__/**"           # Python bytecode
+  - "*.egg-info/**"               # Package metadata
+  - ".eggs/**"                    # Eggs
+  - "build/**"                    # Build directory
+  - "dist/**"                     # Distribution directory
+  - ".venv/**"                    # Virtual environment
+  - "venv/**"                     # Virtual environment (alt)
+  - "env/**"                      # Virtual environment (alt)
+
+  # -------------------------------------------------------------------------
+  # TEST & COVERAGE ARTIFACTS
+  # -------------------------------------------------------------------------
+  - ".pytest_cache/**"            # Pytest cache
+  - ".coverage"                   # Coverage data
+  - "htmlcov/**"                  # HTML coverage reports
+  - ".mypy_cache/**"              # Mypy cache
+  - ".ruff_cache/**"              # Ruff cache
+  - "catboost_info/**"            # CatBoost training cache
+
+  # -------------------------------------------------------------------------
+  # JUPYTER & NOTEBOOKS (analysis, not production)
+  # -------------------------------------------------------------------------
+  - "notebooks/**"                # Jupyter notebooks
+  - ".ipynb_checkpoints/**"       # Notebook checkpoints
+
+  # -------------------------------------------------------------------------
+  # LEGACY CODE (superseded by phase1/)
+  # -------------------------------------------------------------------------
+  - "src/pipeline/**"             # Old pipeline version
+  - "src/stages/**"               # Old stage implementations
+  - "src/config/**"               # Old config structure
+
+  # -------------------------------------------------------------------------
+  # SESSION/TEMPORARY FILES
+  # -------------------------------------------------------------------------
+  - "WHERE WE LEFT OFF.MD"        # Session notes
+  - "DISCREPENCIES/**"            # Discrepancy tracking docs
+  - "*.tmp"                       # Temp files
+  - "*.bak"                       # Backup files
+
+# =============================================================================
+# READ-ONLY MODE (disabled - editing enabled for Claude Code)
+# =============================================================================
+read_only: false
+
+# =============================================================================
+# TOOLS CONFIGURATION
+# =============================================================================
+# Using full toolset for Claude Code integration
+excluded_tools: []
+included_optional_tools: []
+
+# =============================================================================
+# INITIAL PROMPT - Loaded on every project activation
+# =============================================================================
+# This provides essential context for every Serena interaction
+initial_prompt: |
+  ## ML FACTORY FOR SINGLE-CONTRACT OHLCV TRADING
+
+  **North Star**: Production-grade, model-agnostic ML factory for futures trading.
+  **Input**: Single contract OHLCV data (MES/MGC)
+  **Output**: Trained models, inference artifacts, evaluation reports
+
+  ### ARCHITECTURE (3 Phases)
+  - **Phase 1** (`src/phase1/`): Data pipeline - OHLCV → Features → Labels → Splits
+  - **Phase 2** (`src/models/`): Model factory - 13 models across 4 families
+  - **Phase 3** (`src/cross_validation/`): Time-series CV with purge/embargo
+
+  ### KEY COMMANDS
+  ```bash
+  ./pipeline run --symbols MES              # Run data pipeline
+  python scripts/train_model.py --model xgboost --horizon 20  # Train model
+  pytest tests/ -v                          # Run tests
+  ```
+
+  ### NON-NEGOTIABLES
+  - Single-contract isolation (NO cross-symbol features)
+  - Leakage prevention (purge/embargo on ALL splits)
+  - File limit: target 650 lines, max 800 lines
+  - Tests required for all modules
+
+  ### CRITICAL BUGS (See DISCREPENCIES/)
+  1. HMM regime detection has lookahead bias
+  2. GA optimization leaks test data
+  3. Transaction costs missing from labels
+
+  ### MODEL FAMILIES
+  - **Tabular (2D)**: xgboost, lightgbm, catboost, random_forest, logistic, svm
+  - **Sequence (3D)**: lstm, gru, tcn, transformer
+  - **Ensembles**: voting, stacking, blending (same-family only!)
+
+# =============================================================================
+# PROJECT IDENTIFIER
+# =============================================================================
+project_name: "ml-factory"

@@ -1,0 +1,26 @@
+# =============================================================================
+# SERENA .gitignore - Optimized for Claude Code / SSE Bridge
+# =============================================================================
+
+# Cache directory - ALWAYS ignore (auto-generated symbol index)
+/cache
+
+# Memories - OPTIONAL: uncomment if you want fresh onboarding each clone
+# /memories
+
+# Knowledge files - ignore if generated or session-specific
+# /knowledge
+
+# Lock files
+*.lock
+
+# Temporary files
+*.tmp
+*.bak
+
+# =============================================================================
+# NOTES:
+# - project.yml SHOULD be version controlled (shared configuration)
+# - memories/ MAY be version controlled (shared project context)
+# - cache/ MUST be ignored (contains large binary pkl files)
+# =============================================================================
