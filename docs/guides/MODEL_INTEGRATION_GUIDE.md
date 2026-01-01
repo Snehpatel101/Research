@@ -2,7 +2,34 @@
 
 **Purpose:** Step-by-step guide for adding new model types to the ML factory infrastructure
 **Audience:** ML engineers adding models to the pipeline
-**Last Updated:** 2025-12-30
+**Last Updated:** 2026-01-01
+
+---
+
+## IMPORTANT: Current vs Intended Architecture
+
+> **WARNING:** This guide describes model integration for the current universal pipeline.
+> The INTENDED architecture uses model-specific data strategies. See:
+> - `docs/INTENDED_ARCHITECTURE.md` - Target state (not yet implemented)
+> - `docs/CURRENT_LIMITATIONS.md` - What's wrong with current approach
+> - `docs/MIGRATION_ROADMAP.md` - 6-8 week implementation plan
+
+### Current State (Temporary)
+
+All models currently receive the same ~180 indicator-derived features:
+- **Tabular models (2D):** Get indicator features - **appropriate**
+- **Sequence models (3D):** Get indicator features (windowed) - **suboptimal, should get raw OHLCV bars**
+
+### Intended State (Goal)
+
+Three MTF strategies based on model family:
+| Strategy | Models | Data Type | Status |
+|----------|--------|-----------|--------|
+| **Strategy 1: Single-TF** | All (baselines) | One timeframe, no MTF | Not implemented |
+| **Strategy 2: MTF Indicators** | Tabular (6) | Indicators from 9 TFs | Partial (5 TFs) |
+| **Strategy 3: MTF Ingestion** | Sequence (13) | Raw OHLCV from 9 TFs | Not implemented |
+
+When adding a new model, document its **intended data requirements** even if the current pipeline cannot fulfill them.
 
 ---
 
@@ -25,12 +52,15 @@
 
 The ML factory uses a **plugin architecture** where models register themselves and implement a common interface. This allows:
 
-- **Unified training pipeline:** All models train with the same data and evaluation
+- **Unified training pipeline:** All models train with shared infrastructure
+- **Model-specific data selection:** (INTENDED) Different model families receive optimized data
 - **Fair comparisons:** Identical backtest assumptions across models
 - **Easy extensibility:** Add new models without rewriting core infrastructure
 - **Ensemble support:** Mix any models that share input shape requirements
 
 **Current model count:** 13 models across 4 families (boosting, neural, classical, ensemble)
+
+**Note:** Current pipeline serves all models the same data. This is temporary - see `docs/INTENDED_ARCHITECTURE.md` for the goal state where tabular models get MTF indicators and sequence models get raw multi-resolution OHLCV bars.
 
 ---
 
@@ -713,64 +743,98 @@ class VotingEnsemble(BaseModel):
 
 ## Input Shape Requirements
 
-### 2D Input: Tabular Models
+> **Note:** This section describes both CURRENT and INTENDED data access patterns.
+> The intended patterns for Strategy 3 (multi-resolution) are NOT YET IMPLEMENTED.
+
+### 2D Input: Tabular Models (Strategy 2 - Appropriate)
 
 **Shape:** `(n_samples, n_features)`
-**Models:** XGBoost, LightGBM, CatBoost, Random Forest, Logistic, SVM
-**Data source:** `container.get_tabular_data(split='train')`
+**Models:** XGBoost, LightGBM, CatBoost, Random Forest, Logistic, SVM (6 models)
+**Intended Data:** MTF indicator features from 9 timeframes
+**Current Data:** MTF indicator features from 5 timeframes (~180 features)
+**Status:** Appropriate - tabular models work well with indicator features
+
+**Data source:** `container.get_sklearn_arrays(split='train')`
 
 ```python
-# Get 2D data
-X_train, y_train, weights_train = container.get_tabular_data(split='train')
-X_val, y_val, weights_val = container.get_tabular_data(split='val')
+# Get 2D data (CURRENT - WORKS)
+X_train, y_train, weights_train = container.get_sklearn_arrays(split='train')
+X_val, y_val, weights_val = container.get_sklearn_arrays(split='val')
 
 # Shape: (n_samples, n_features)
-# Example: (15000, 150) - 15k samples, 150 features
+# Example: (15000, 180) - 15k samples, 180 indicator features
 ```
 
-### 3D Input: Sequence Models
+### 3D Input: Sequence Models (Strategy 3 - Not Implemented)
 
 **Shape:** `(n_samples, seq_len, n_features)`
-**Models:** LSTM, GRU, TCN, Transformer, InceptionTime, ResNet
-**Data source:** `container.get_sequence_data(split='train', seq_len=60)`
+**Models:** LSTM, GRU, TCN, Transformer (4 implemented) + InceptionTime, ResNet, PatchTST, iTransformer, TFT, N-BEATS (6 planned) = 13 models
+**Intended Data:** Raw multi-resolution OHLCV bars from 9 timeframes
+**Current Data:** Same ~180 indicator features (windowed) - **SUBOPTIMAL**
+**Status:** Current approach works but is suboptimal for temporal learning
+
+**Current data source:** `container.get_pytorch_sequences(split='train', seq_len=60)`
 
 ```python
-# Get 3D data
-X_train, y_train, weights_train = container.get_sequence_data(
+# CURRENT IMPLEMENTATION (suboptimal for sequence models)
+X_train, y_train, weights_train = container.get_pytorch_sequences(
     split='train',
     seq_len=60  # Use last 60 bars for each prediction
 )
 
 # Shape: (n_samples, seq_len, n_features)
-# Example: (14940, 60, 25) - 14940 samples, 60 timesteps, 25 features
+# Example: (14940, 60, 180) - 14940 samples, 60 timesteps, 180 INDICATOR features
+# Problem: Models receive pre-computed indicators, not raw OHLCV bars
 ```
 
-**Important:** `n_samples` is reduced by `seq_len` because we need lookback history.
+```python
+# INTENDED IMPLEMENTATION (Strategy 3 - NOT YET IMPLEMENTED)
+# This is what sequence models SHOULD receive:
+X_multi_train = container.get_multi_resolution_bars(
+    split='train',
+    input_timeframes=['1min', '5min', '15min', '1h']
+)
 
-### 4D Input: Multi-Resolution Models
+# Shape: dict of (n_samples, seq_len, 5) for OHLCV+Volume
+# Example:
+# X_multi_train = {
+#     '1min': (14940, 60, 5),   # Last 60 1min bars (raw OHLCV)
+#     '5min': (14940, 12, 5),   # Last 60 minutes at 5min resolution
+#     '15min': (14940, 4, 5),   # Last 60 minutes at 15min resolution
+#     '1h': (14940, 1, 5),      # Current 1h bar
+# }
+# Models learn temporal patterns from RAW price movements
+```
+
+**Important:** When adding a new sequence model, document that it should ideally receive raw OHLCV bars (Strategy 3) but currently receives indicator features.
+
+### 4D Input: Multi-Resolution Models (Strategy 3 - Not Implemented)
 
 **Shape:** `(n_samples, n_timeframes, seq_len, n_features)`
 **Models:** PatchTST, iTransformer, TFT (Strategy 3: MTF ingestion)
-**Data source:** `container.get_multi_resolution_tensors(split='train', input_timeframes=['1min', '5min', '15min'])`
+**Status:** NOT IMPLEMENTED - these advanced models are planned but Strategy 3 infrastructure doesn't exist yet
 
 ```python
-# Get multi-resolution data
+# INTENDED IMPLEMENTATION (NOT YET AVAILABLE)
+# This interface doesn't exist yet - planned for Strategy 3 implementation
 X_multi_train, y_train, weights_train = container.get_multi_resolution_tensors(
     split='train',
     input_timeframes=['1min', '5min', '15min']
 )
 
-# Returns dict of tensors
+# Would return dict of tensors:
 # X_multi_train = {
 #     '1min': (14940, 15, 5),   # Last 15 minutes at 1min resolution
 #     '5min': (14940, 3, 5),    # Last 15 minutes at 5min resolution
 #     '15min': (14940, 1, 5),   # Current 15min bar
 # }
 
-# Stack into 4D tensor
+# Stack into 4D tensor for models like PatchTST
 X_train = stack_multi_resolution(X_multi_train, ['1min', '5min', '15min'])
 # Shape: (14940, 3, max_seq_len, 5)
 ```
+
+**Note:** When implementing advanced sequence models (PatchTST, TFT, etc.), they will initially use the current 3D indicator approach until Strategy 3 is implemented. Document the intended data requirements in the model's docstring.
 
 ---
 
