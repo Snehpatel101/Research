@@ -8,6 +8,64 @@ This is not a single pipeline — it's a **factory** with a plugin architecture.
 
 ---
 
+## Pipeline Architecture
+
+The ML factory implements a **single unified pipeline** that ingests canonical OHLCV data and deterministically derives model-specific representations:
+
+**Data Flow:**
+```
+Raw 1-min OHLCV (canonical - single source of truth)
+  ↓
+[MTF Upscaling] → Derive ALL 9 timeframes from 1-min canonical data
+  Output: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
+  ↓
+EACH base model independently chooses (configurable per-model):
+  • Primary training TF (e.g., CatBoost→15min, TCN→5min, PatchTST→1min)
+  • MTF strategy (single-TF / MTF indicators / MTF ingestion)
+  • Which other TFs to use for enrichment/multi-stream
+  ↓
+All models derive features from same 1-min canonical OHLCV source
+  ↓
+Feature Engineering (~180 indicators + wavelets + microstructure)
+  ↓
+Triple-Barrier Labeling (Optuna-optimized)
+  ↓
+Model-Family Adapters
+  ├─ Tabular (2D): XGBoost, LightGBM, CatBoost, RF, Logistic, SVM
+  ├─ Sequence (3D): LSTM, GRU, TCN, Transformer
+  └─ Multi-Res (4D): Planned for advanced models
+  ↓
+Training (single models + heterogeneous ensembles via meta-learner stacking)
+  ↓
+Standardized Artifacts (models, predictions, metrics)
+```
+
+**Key Architectural Points:**
+- **ONE Canonical Source:** Single 1-min OHLCV dataset → ALL 9 timeframes derived from this canonical source
+- **Per-Model Timeframe Configuration:** EACH base model independently chooses its primary training timeframe:
+  - CatBoost trains on 15min (derived from 1-min canonical)
+  - TCN trains on 5min (derived from 1-min canonical)
+  - PatchTST trains on 1min (uses 1-min canonical directly)
+  - All configurable per-model, all from same source
+- **SAME Underlying Data:** All models see same timestamps, same target labels, same train/val/test splits
+- **DIFFERENT Feature Sets (Per-Model Feature Selection):** Each base model gets features tailored to its inductive biases:
+  - **Tabular (CatBoost):** 15min primary TF + MTF indicators from 1m/5m/1h → ~200 engineered features (indicators, wavelets, MTF indicators)
+  - **Sequence (TCN):** 5min primary TF, single-TF (no MTF) → ~150 base features in 3D windows (indicators, wavelets, raw price features)
+  - **Transformer (PatchTST):** Multi-stream MTF ingestion (1m+5m+15m raw OHLCV) → 3 streams × 4 OHLC (no engineered features, model learns from raw data)
+- **MTF Mix-and-Match:** Each model chooses its MTF strategy independently (single-TF / MTF indicators / MTF ingestion)
+- **All Derived from 1-min:** Every timeframe (5m, 10m, 15m, 1h) is resampled from the canonical 1-min OHLCV
+- **Heterogeneous Ensembles:** 3-4 base families (different TFs, different features) → 1 meta-learner
+- **Direct Stacking:** Meta-learner trained on OOF predictions from heterogeneous bases
+
+**Implementation Status:**
+- Phases 1-6: Complete (13 base models across 4 families)
+- Phase 7: Complete (meta-learner stacking for heterogeneous ensembles)
+- MTF: Partial (5 of 9 timeframes implemented)
+
+**Documentation:** See `docs/ARCHITECTURE.md` and `docs/phases/` for comprehensive guides.
+
+---
+
 ## Single-Contract Architecture
 
 **This is a single-contract ML factory. Each contract is trained in complete isolation. No cross-symbol correlation or feature engineering.**
@@ -49,7 +107,7 @@ symbol = "MES"  # or "MGC", "ES", "GC", etc.
 
 We are building an **ML Model Factory** for OHLCV time series. The factory can train any model family (boosting, neural, transformers, classical ML, ensembles) using:
 
-1. **Unified Data Pipeline** - One 1-min dataset → model-specific feature/data extraction (⚠️ currently all models receive same indicator features; model-specific strategies in roadmap)
+1. **Unified Data Pipeline** - One 1-min canonical OHLCV → Per-model feature selection (different models get different features tailored to their inductive biases)
 2. **Plugin-Based Model Registry** - Add new model types without rewriting pipelines
 3. **Unified Evaluation Framework** - Compare models using identical metrics
 4. **Ensemble Support Built-In** - Combine multiple models into meta-learners
@@ -71,47 +129,65 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
                           Trained Models + Performance Reports
 ```
 
-### Data Pipeline Architecture: Current vs. Intended
+### Data Pipeline Details
 
-#### Current Implementation (Phase 1 Complete)
+**Configurable Primary Timeframe:**
+- Primary training timeframe is configurable per experiment (5m/10m/15m/1h)
+- Not hardcoded to 5-min; choose based on model and trading strategy needs
 
-**Universal Indicator Pipeline:**
-- All models receive ~180 **indicator-derived** features (RSI, MACD, wavelets, microstructure, etc.)
-- MTF indicators from **5 timeframes** (15min, 30min, 1h, 4h, daily) - **intended: 9 timeframes** (1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h)
-- Data served in model-appropriate **shapes**:
-  - **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, 180)`
-  - **Sequence models** (Neural + CNN + Advanced): 3D windows `(n_samples, seq_len, 180)`
+**MTF Enrichment (Optional):**
+- **Strategy 1: Single-TF** - Train on primary timeframe only, no MTF features
+- **Strategy 2: MTF Indicators** - Add indicator features from multiple timeframes to primary TF
+- **Strategy 3: MTF Ingestion** - Raw OHLCV bars from multiple timeframes for sequence models
 
-**Limitations:**
-1. Only 5 of 9 intended timeframes implemented
-2. All features are pre-computed indicators (sequence/CNN models should receive raw multi-resolution OHLCV bars)
+**Unified Pipeline (7 Phases):**
 
-#### Intended Architecture (Roadmap)
+| Phase | Name | Description | Status |
+|:-----:|------|-------------|:------:|
+| 1 | Ingestion | Load and validate raw OHLCV | Complete |
+| 2 | MTF Upscaling | Multi-timeframe resampling (optional) | Partial (5/9 TFs) |
+| 3 | Features | 180+ indicator features | Complete |
+| 4 | Labeling | Triple-barrier + Optuna | Complete |
+| 5 | Adapters | Model-family data preparation | Complete |
+| 6 | Training | 13 base models, 5 families | Complete |
+| 7 | Stacking | Heterogeneous ensemble via meta-learner | Complete |
 
-**Model-Specific MTF Strategies (from `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`):**
+**Data Shapes by Model Family:**
+- **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, ~180)`
+- **Sequence models** (Neural): 3D windows `(n_samples, seq_len, ~180)`
+- **Advanced models** (Planned): 4D multi-resolution `(n_samples, n_timeframes, seq_len, 4)`
 
-| Strategy | Data Type | Model Families | Status |
-|----------|-----------|----------------|--------|
-| **Strategy 1: Single-TF** | One timeframe, no MTF | All models (baselines) | ❌ Not implemented |
-| **Strategy 2: MTF Indicators** | Indicator features from 9 timeframes | Tabular: Boosting (XGBoost, LightGBM, CatBoost) + Classical (RF, Logistic, SVM) | ⚠️ Partial (5 TFs, all models get this) |
-| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from 9 timeframes as multi-resolution tensors | Sequence: Neural (LSTM, GRU, TCN, Transformer) + CNN (InceptionTime, 1D ResNet) + Advanced (PatchTST, iTransformer, TFT, N-BEATS) | ❌ Not implemented |
-
-**When Strategy 3 is implemented:**
-- **Tabular models** (Boosting + Classical) → Keep indicator-derived features from 9 timeframes
-- **Sequence models** (Neural + CNN + Advanced) → Receive raw MTF OHLCV bars from 9 timeframes: `{'5min': (T,60,4), '15min': (T,20,4), '30min': (T,10,4), '1h': (T,5,4)}`
-- **Enables:** Multi-resolution temporal learning for InceptionTime, PatchTST, iTransformer, TFT, N-BEATS
-
-**See:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md` for detailed analysis
+**See:** `docs/ARCHITECTURE.md` for comprehensive architecture documentation
 
 ### Core Contracts
 
-**Data Pipeline (Phase 1 - Complete):**
-- Raw 1-min OHLCV → 5-min base → ~150 indicator features → MTF upscaling (**5 of 9 timeframes**) → ~30 MTF indicators → ~180 total features
-- Triple-barrier labeling with Optuna optimization
-- No lookahead bias (proper purging + embargo, MTF uses shift(1))
-- Time-series aware train/val/test splits (70/15/15)
-- Quality-weighted samples
-- **Limitations:** Only 5 timeframes (intended: 9), all features are indicator-derived (raw multi-resolution bars for Strategy 3 not yet implemented)
+**Data Pipeline (Phases 1-5):**
+- **Phase 1:** Ingest raw 1-min OHLCV (canonical - single source of truth)
+- **Phase 2:** Derive ALL 9 timeframes from 1-min canonical (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+  - ⚠️ Currently only 5 TFs implemented (15m, 30m, 1h, 4h, daily)
+  - All timeframes resampled from same 1-min source
+- **Phase 3:** Feature engineering (~150 base indicators + wavelets + microstructure)
+- **Phase 4:** Triple-barrier labeling with Optuna optimization (same labels for all models)
+- **Phase 5:** Model-family adapters (2D tabular, 3D sequence, 4D multi-res planned)
+
+**Then EACH base model independently configures:**
+- **Primary training TF:** Which timeframe to train on (configurable per-model)
+  - Example: CatBoost→15min, TCN→5min, PatchTST→1min
+  - All derived from same 1-min canonical OHLCV
+- **MTF strategy:** How to use other timeframes (configurable per-model)
+  - single-TF (no MTF), MTF indicators (add features), or MTF ingestion (multi-stream)
+- **Which TFs for enrichment:** Which other timeframes to include (flexible per-model)
+
+**Example - Heterogeneous Ensemble (same 1-min source, different configurations):**
+- **CatBoost:** Primary=15min (from 1-min) + MTF indicators from 1m/5m/1h → ~200 features
+- **TCN:** Primary=5min (from 1-min), single-TF, no MTF → ~150 features
+- **PatchTST:** Primary=1min (canonical) + multi-stream ingestion 1m+5m+15m (all from 1-min source) → 3 streams × 4 OHLC
+
+**Leakage Prevention:**
+- Proper purging (60) + embargo (1440)
+- MTF features use shift(1)
+- Train-only scaling
+- Time-series aware splits (70/15/15)
 
 **Model Contract (Phase 2 - Complete):**
 ```python
@@ -183,62 +259,95 @@ python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,
 python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru,tcn
 ```
 
-### Model Families (13 Implemented + 6 Planned = 19 Total)
+### Model Families (13 Base + 4 Meta + 6 Planned = 23 Total)
 
 | Family | Models | Data Format | Strengths | Status |
 |--------|--------|-------------|-----------|--------|
 | **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Fast, interpretable, feature interactions | ✅ Complete |
 | **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Temporal dependencies, sequential patterns | ✅ Complete |
 | **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | Robust baselines, interpretable | ✅ Complete |
-| **Ensemble** (3) | Voting, Stacking, Blending | Mixed (all-tabular OR all-sequence) | Combines diverse model strengths | ✅ Complete |
-| **CNN** (2) | InceptionTime, 1D ResNet | 3D sequences | Multi-scale pattern detection, deep residual learning | 📋 Planned |
-| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 3D sequences | SOTA long-term forecasting, interpretable attention | 📋 Planned |
-| **MLP** (1) | N-BEATS | 3D sequences | Interpretable decomposition, M4 winner | 📋 Planned |
+| **Inference/Meta** (4) | Logistic, Ridge, Small MLP, Calibrated Blender | OOF predictions | Meta-learner stacking from heterogeneous bases | ✅ Complete |
+| **CNN** (2) | InceptionTime, 1D ResNet | 3D sequences | Multi-scale pattern detection, deep residual learning | Planned |
+| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 3D sequences | SOTA long-term forecasting, interpretable attention | Planned |
+| **MLP** (1) | N-BEATS | 3D sequences | Interpretable decomposition, M4 winner | Planned |
 
-**Input Format Summary:**
-- **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, n_features)` - 6 models ✅
-- **Sequence models** (Neural + CNN + Advanced + MLP): 3D windows `(n_samples, seq_len, n_features)` - 7 implemented + 6 planned = 13 models
+**Family Classification:**
+- **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, n_features)` - 6 base models
+- **Sequence models** (Neural + CNN + Advanced + MLP): 3D windows `(n_samples, seq_len, n_features)` - 4 implemented + 6 planned
+- **Inference/Meta models**: OOF predictions from heterogeneous bases - 4 meta-learners
+
+**Inference/Meta Family Details:**
+| Meta-Learner | Method | Use Case |
+|--------------|--------|----------|
+| **Logistic Regression** | L2-regularized stacking | Default, calibrated probabilities |
+| **Ridge Regression** | L2-regularized regression | Continuous predictions |
+| **Small MLP** | 1-2 hidden layers | Learned non-linear blending |
+| **Calibrated Blender** | Voting + temperature scaling | Calibrated confidence scores |
 
 **See:** `docs/roadmaps/ADVANCED_MODELS_ROADMAP.md` for 6 planned models (14-18 days implementation)
 
 **Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 
-### Ensemble Model Compatibility
+### Heterogeneous Ensemble Architecture
 
-**CRITICAL:** Ensembles require all base models to have the same input shape:
-- **Tabular models (2D input):** `xgboost`, `lightgbm`, `catboost`, `random_forest`, `logistic`, `svm`
-- **Sequence models (3D input):** `lstm`, `gru`, `tcn`, `transformer`
-- **Mixed ensembles are NOT supported** and will raise `EnsembleCompatibilityError`
+The factory supports **heterogeneous ensembles** where base models from different families train on **different timeframes and features**, all derived from the **same 1-min canonical OHLCV source**, then feed a single meta-learner via OOF stacking.
 
-### Recommended Ensemble Configurations
+**Architecture:**
+```
+1-min OHLCV Canonical Source (single source of truth)
+       ↓
+Derive ALL 9 timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+       ↓
+Base Model Selection (1 per family, EACH chooses its own TF + features)
+  |-- Tabular: CatBoost → 15min + MTF indicators (from 1-min source)
+  |-- CNN/TCN: TCN → 5min, single-TF (from 1-min source)
+  |-- Transformer: PatchTST → 1min + multi-stream 1m+5m+15m (all from 1-min source)
+  |-- Optional: Ridge → 1h, single-TF (from 1-min source)
+       ↓
+OOF Generation (PurgedKFold with purge/embargo, same splits for all)
+       |
+       v
+Meta-Learner Training (Logistic/Ridge/MLP on OOF predictions)
+       |
+       v
+Full Retrain (base models on full train set)
+       |
+       v
+Test Evaluation (meta-learner combines base predictions)
+```
 
-**Tabular-Only Ensembles:**
+**Why Heterogeneous > Homogeneous:**
+- **Diversity of Inductive Biases:** Different model families capture different patterns
+- **Reduced Correlation:** Errors from diverse models are less correlated
+- **Robustness:** No single family's weakness dominates
 
-| Ensemble Type | Models | Method | Use Case |
-|---------------|--------|--------|----------|
-| Boosting Trio | `xgboost` + `lightgbm` + `catboost` | Voting | Fast baseline ensemble |
-| Boosting + Forest | `xgboost` + `lightgbm` + `random_forest` | Voting/Blending | Balanced accuracy/speed |
-| All Tabular | All tabular models | Stacking | Maximum diversity (higher overfit risk) |
+**Recommended Base Model Configurations:**
 
-**Sequence-Only Ensembles:**
+| Configuration | Base Models | Meta-Learner | Use Case |
+|---------------|-------------|--------------|----------|
+| **3 Bases (Standard)** | CatBoost + TCN + PatchTST | Logistic | Balanced diversity |
+| **4 Bases (Maximum)** | LightGBM + TCN + TFT + Ridge | Ridge | Maximum diversity |
+| **2 Bases (Minimal)** | XGBoost + LSTM | Logistic | Fast prototyping |
 
-| Ensemble Type | Models | Method | Use Case |
-|---------------|--------|--------|----------|
-| RNN Variants | `lstm` + `gru` | Voting | Temporal pattern diversity |
-| Temporal Stack | `lstm` + `gru` + `tcn` | Stacking | Sequential pattern learning |
-| All Neural | `lstm` + `gru` + `tcn` + `transformer` | Stacking | Maximum temporal diversity |
+**Training Protocol:**
+1. **Generate OOF predictions:** Run PurgedKFold on each base model
+2. **Stack OOF predictions:** Concatenate OOF probabilities as meta-features
+3. **Train meta-learner:** Fit Logistic/Ridge/MLP on stacked OOF
+4. **Full retrain:** Retrain all base models on complete training set
+5. **Test evaluation:** Base models predict test set, meta-learner combines
 
-**INVALID Configurations (Will Fail):**
-- ❌ `xgboost` + `lstm` (mixing tabular + sequence)
-- ❌ `lightgbm` + `gru` + `tcn` (mixing tabular + sequence)
-- ❌ `random_forest` + `transformer` (mixing tabular + sequence)
+**CLI Usage:**
+```bash
+# Heterogeneous ensemble (3 families)
+python scripts/train_ensemble.py --base-models catboost,tcn,patchtst \
+  --meta-learner logistic --horizon 20
 
-**Implemented Ensemble Methods:**
-- **Voting:** Combine predictions via weighted/unweighted averaging
-- **Stacking:** Train meta-learner on base model out-of-fold predictions
-- **Blending:** Train meta-learner on holdout predictions
+# 4-family ensemble with Ridge meta-learner
+python scripts/train_ensemble.py --base-models lightgbm,tcn,tft,ridge \
+  --meta-learner ridge --horizon 20
+```
 
-See `docs/phases/PHASE_4.md` for detailed ensemble architecture, validation utilities, and compatibility matrix.
+See `docs/guides/META_LEARNER_STACKING.md` for detailed stacking protocol and configuration.
 
 ---
 
@@ -377,7 +486,10 @@ src/phase1/stages/
 └── reporting/          → Generate completion reports
 ```
 
-**Output:** ~180 indicator-derived features consumed by all model trainers (tabular: 2D arrays, sequence: 3D windows)
+**Output:** Model-specific features based on per-model feature selection:
+- Tabular models: ~200 engineered features (base indicators + MTF indicators)
+- Sequence models: ~150 base features (indicators + wavelets, single-TF)
+- Advanced models (planned): Raw multi-stream OHLCV bars (no pre-engineering)
 
 ---
 
@@ -443,10 +555,9 @@ python scripts/train_model.py --model xgboost --horizon 20
 python scripts/train_model.py --model lstm --horizon 20 --seq-len 30
 python scripts/train_model.py --model random_forest --horizon 20
 
-# Train ensemble (Phase 4) - all base models must be same family (tabular or sequence)
-python scripts/train_model.py --model voting --base-models xgboost,lightgbm,catboost --horizon 20
-python scripts/train_model.py --model stacking --base-models xgboost,lightgbm,random_forest --horizon 20
-python scripts/train_model.py --model voting --base-models lstm,gru,tcn --horizon 20
+# Train heterogeneous ensemble (Phase 7) - select 1 model per family
+python scripts/train_ensemble.py --base-models catboost,tcn,patchtst --meta-learner logistic --horizon 20
+python scripts/train_ensemble.py --base-models lightgbm,lstm,tft --meta-learner ridge --horizon 20
 
 # Run cross-validation (Phase 3)
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
@@ -473,23 +584,27 @@ TRAIN/VAL/TEST = 70/15/15
 
 ---
 
-## Phase 1 Analysis Summary (2025-12-24)
+## Implementation Summary
 
-**Strengths:**
-- Triple-barrier labeling with symbol-specific asymmetric barriers (MES: 1.5:1.0)
+**Data Pipeline (Phases 1-5):**
+- Triple-barrier labeling with symbol-specific asymmetric barriers
 - Optuna-based parameter optimization with transaction cost penalties
 - Proper purge (60) and embargo (1440) for leakage prevention
 - Quality-based sample weighting (0.5x-1.5x)
-- 150+ base features including wavelets and microstructure
-- Multi-timeframe indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily) - **intended: 9-timeframe ladder** (1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h)
-- Strategy 2 MTF indicators partially implemented (5 of 9 timeframes)
+- **Per-Model Feature Selection:** Different models get different features based on inductive biases
+  - Tabular models: ~200 engineered features (base indicators + MTF indicators from 5 TFs)
+  - Sequence models: ~150 base features (indicators + wavelets, single primary TF)
+  - Advanced models (planned): Raw multi-stream OHLCV bars from multiple TFs
 - TimeSeriesDataContainer for unified model training interface (2D for tabular, 3D for sequence)
 
-**Recent Improvements:**
-- Added a synthetic OHLCV helper for smoke tests (`src/utils/notebook.py`), but real training expects real data in `data/raw/`
-- Added wavelet decomposition features
-- Added microstructure features (bid-ask spread, order flow)
-- Improved embargo to 1440 bars (5 days) for better serial correlation handling
-- DataIngestor validates OHLCV data at pipeline entry
+**Models (Phases 6-7):**
+- 13 models implemented across 4 families (Boosting, Neural, Classical, Ensemble)
+- Plugin-based model registry with `@register` decorator
+- 3 ensemble methods: Voting, Stacking, Blending
 
-**Performance expectations:** do not treat any Sharpe/win-rate targets as “built-in”. Measure performance empirically via `scripts/run_cv.py`, `scripts/run_walk_forward.py`, and `scripts/run_cpcv_pbo.py` on your own data/cost assumptions.
+**Roadmap:**
+- Phase 2 extension: 9-timeframe ladder (4 additional timeframes planned)
+- Phase 8: Meta-learners (regime-aware, adaptive)
+- 6 advanced models: InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
+
+**Performance expectations:** Do not treat any Sharpe/win-rate targets as "built-in". Measure performance empirically via `scripts/run_cv.py`, `scripts/run_walk_forward.py`, and `scripts/run_cpcv_pbo.py` on your own data/cost assumptions.

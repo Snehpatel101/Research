@@ -684,4 +684,4 @@ def requires_sequences(self) -> bool:
 
 **The pipeline is well-engineered and leakage-free, but currently serves a one-size-fits-all feature set to all models.** The infrastructure exists to enable model-specific pipelines (MTFMode, feature groups, selection), but these capabilities are not yet wired together for differentiated data preparation.
 
-**Recommended Path Forward:** Implement model-aware MTF routing first (quick win), then build multi-resolution sequences for advanced models (larger effort). This aligns with the roadmap in `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`.
+**Recommended Path Forward:** Implement model-aware MTF routing first (quick win), then build multi-resolution sequences for advanced models (larger effort). This aligns with the roadmap in `docs/implementation/MTF_IMPLEMENTATION_ROADMAP.md`.

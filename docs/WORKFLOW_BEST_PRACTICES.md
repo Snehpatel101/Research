@@ -522,8 +522,8 @@ python scripts/run_walk_forward.py \
 
 ### Further Reading
 
-- **Cross-Validation:** See `docs/phases/PHASE_3.md`
-- **Ensemble Methods:** See `docs/phases/PHASE_4.md`
+- **Cross-Validation:** See `docs/implementation/PHASE_3.md`
+- **Ensemble Methods:** See `docs/implementation/PHASE_4.md`
 - **Data Leakage:** See "Advances in Financial Machine Learning" (López de Prado, 2018), Chapter 7
 - **Test Set Discipline:** See "Pattern Recognition and Machine Learning" (Bishop, 2006), Chapter 1.3
 

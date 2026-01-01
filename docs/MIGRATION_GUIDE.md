@@ -514,13 +514,13 @@ python scripts/train_model.py \
 ### Documentation
 
 - **Quick Reference:** `docs/QUICK_REFERENCE.md`
-- **Phase 4 (Ensembles):** `docs/phases/PHASE_4.md`
+- **Phase 4 (Ensembles):** `docs/implementation/PHASE_4.md`
 - **Workflow Best Practices:** `docs/WORKFLOW_BEST_PRACTICES.md`
 - **Validation Checklist:** `docs/VALIDATION_CHECKLIST.md`
 
 ### Common Issues
 
-- **Ensemble errors:** See `docs/phases/PHASE_4.md` Section 4.3
+- **Ensemble errors:** See `docs/implementation/PHASE_4.md` Section 4.3
 - **CV integration:** See `INTEGRATION_FIXES_SUMMARY.md`
 - **Data leakage:** See `docs/reference/PIPELINE_FIXES.md`
 

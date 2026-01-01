@@ -17,7 +17,7 @@ Executed aggressive documentation cleanup and created clean implementation phase
 
 **Index-only READMEs (10 files):**
 - `docs/phases/README.md`
-- `docs/roadmaps/README.md`
+- `docs/implementation/README.md`
 - `docs/guides/README.md`
 - `docs/reference/README.md`
 - `docs/models/README.md`
@@ -55,9 +55,9 @@ Executed aggressive documentation cleanup and created clean implementation phase
 **Moved to `docs/archive/` with organized subdirectories:**
 
 **Roadmaps (3 files):**
-- `MTF_IMPLEMENTATION_ROADMAP.md` → `archive/roadmaps/`
-- `ADVANCED_MODELS_ROADMAP.md` → `archive/roadmaps/`
-- `MIGRATION_ROADMAP.md` → `archive/roadmaps/`
+- `MTF_IMPLEMENTATION_ROADMAP.md` → `archive/implementation/`
+- `ADVANCED_MODELS_ROADMAP.md` → `archive/implementation/`
+- `MIGRATION_ROADMAP.md` → `archive/implementation/`
 
 **Guides (1 file):**
 - `MTF_STRATEGY_GUIDE.md` → `archive/guides/`
@@ -195,25 +195,25 @@ Canonical OHLCV (1-min)
 - `QUANTITATIVE_TRADING_ANALYSIS.md` - Research notes
 
 ### Phases (8 files) ✅ NEW
-- `phases/PHASE_1_INGESTION.md`
-- `phases/PHASE_2_MTF_UPSCALING.md`
-- `phases/PHASE_3_FEATURES.md`
-- `phases/PHASE_4_LABELING.md`
-- `phases/PHASE_5_ADAPTERS.md`
-- `phases/PHASE_6_TRAINING.md`
-- `phases/PHASE_7_ENSEMBLES.md`
-- `phases/PHASE_8_META_LEARNERS.md`
+- `implementation/PHASE_1_INGESTION.md`
+- `implementation/PHASE_2_MTF_UPSCALING.md`
+- `implementation/PHASE_3_FEATURES.md`
+- `implementation/PHASE_4_LABELING.md`
+- `implementation/PHASE_5_ADAPTERS.md`
+- `implementation/PHASE_6_TRAINING.md`
+- `implementation/PHASE_7_ENSEMBLES.md`
+- `implementation/PHASE_8_META_LEARNERS.md`
 
 ### Guides (~5 files)
-- `guides/MODEL_INTEGRATION_GUIDE.md`
-- `guides/FEATURE_ENGINEERING_GUIDE.md`
-- `guides/HYPERPARAMETER_OPTIMIZATION_GUIDE.md`
-- `guides/MODEL_INFRASTRUCTURE_REQUIREMENTS.md`
+- `guides/MODEL_INTEGRATION.md`
+- `guides/FEATURE_ENGINEERING.md`
+- `guides/HYPERPARAMETER_TUNING.md`
+- `guides/reference/INFRASTRUCTURE.md`
 
 ### Reference (~5 files)
 - `reference/ARCHITECTURE.md` (may merge with root ARCHITECTURE.md)
 - `reference/FEATURES.md`
-- `reference/PIPELINE_FLOW.md`
+- `reference/PIPELINE_STAGES.md`
 - `reference/SLIPPAGE.md`
 
 ### Models (~2 files)
@@ -269,7 +269,7 @@ Canonical OHLCV (1-min)
 
 **Key deliverables:**
 1. `docs/ARCHITECTURE.md` - **START HERE** (comprehensive system overview)
-2. `docs/phases/PHASE_*_*.md` - Implementation guides (8 files)
+2. `docs/implementation/PHASE_*_*.md` - Implementation guides (8 files)
 3. `docs/archive/README.md` - Archive navigation
 
 **Git status:** ~30 changed files (deletions, moves, new files)

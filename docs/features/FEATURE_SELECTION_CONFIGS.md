@@ -749,7 +749,6 @@ selector = WalkForwardFeatureSelector(**params)
 
 ## See Also
 
-- [Feature Catalog](./FEATURE_CATALOG.md) - Complete feature documentation
-- [Multi-Timeframe Feature Configs](./MTF_FEATURE_CONFIGS.md) - MTF-specific selection
-- [Model Feature Requirements](./MODEL_FEATURE_REQUIREMENTS.md) - Per-model feature needs
-- [Cross-Validation Guide](/docs/guides/CROSS_VALIDATION_GUIDE.md) - CV best practices
+- [Feature Engineering Guide](../guides/FEATURE_ENGINEERING.md) - Complete feature documentation
+- [Phase 3: Features](../implementation/PHASE_3_FEATURES.md) - Feature pipeline documentation
+- [Hyperparameter Optimization Guide](../guides/HYPERPARAMETER_TUNING.md) - Tuning best practices

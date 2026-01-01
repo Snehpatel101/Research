@@ -2,168 +2,181 @@
 
 ---
 
-## IMPORTANT: Current vs Intended Architecture
+## Overview
 
-**Current State (TEMPORARY):** The codebase implements a universal pipeline where all models receive the same ~180 indicator-derived features. This is a comparison/baseline architecture.
+This is the documentation hub for the **ML Model Factory** - a single-pipeline architecture for training, evaluating, and deploying machine learning models on OHLCV time series data.
 
-**Intended State (THE GOAL):** Model-specific pipelines with 3 MTF strategies:
-- **Strategy 1 (Single-TF):** Train on one timeframe only - NOT IMPLEMENTED
-- **Strategy 2 (MTF Indicators):** Tabular models get indicator features from 9 timeframes - PARTIAL (5/9 TFs)
-- **Strategy 3 (MTF Ingestion):** Sequence models get raw OHLCV bars from 9 timeframes - NOT IMPLEMENTED
+**Key Principle:** One canonical dataset -> Deterministic adapters -> Model-specific training
 
-**Current Limitations:**
-- Only 5 of 9 timeframes implemented (15min, 30min, 1h, 4h, daily)
-- No model-specific data preparation (all models get same features)
-- Sequence models receive indicators when they should get raw bars
-
-**READ FIRST:**
-| Document | Description |
-|----------|-------------|
-| [Intended Architecture](INTENDED_ARCHITECTURE.md) | THE GOAL - Model-specific pipelines |
-| [Current Limitations](CURRENT_LIMITATIONS.md) | What's wrong with current implementation |
-| [Migration Roadmap](MIGRATION_ROADMAP.md) | How to fix (6-8 week plan) |
-| [MTF Strategy Guide](guides/MTF_STRATEGY_GUIDE.md) | Choose your strategy |
+The factory processes one futures contract at a time through a unified 8-phase pipeline, producing trained models with standardized artifacts and performance reports.
 
 ---
 
 ## Quick Start
 
-This `docs/` tree describes the **implemented** pipeline: Phase 1 data prep + labeling, Phase 2 training, Phase 3 evaluation/CV utilities, Phase 4 ensembles, and Phase 5 inference/monitoring utilities.
+**New here?** Start with these:
 
-### Start Here
-
-- **Notebook workflow** (Colab or local Jupyter): `../notebooks/ML_Pipeline.ipynb`
-  - Notebook docs: `notebook/README.md`
-  - Colab helper: `COLAB_GUIDE.md` (uses `../colab_setup.py`)
-- **CLI workflow** (Phase 1 + scripts): `getting-started/QUICKSTART.md`
-  - Phase 1 CLI reference: `getting-started/PIPELINE_CLI.md`
-  - Phase 1 (plain English): `phase1/README.md`
-  - Command quick reference: `QUICK_REFERENCE.md`
+| Resource | Description |
+|----------|-------------|
+| [Quick Reference](QUICK_REFERENCE.md) | Command cheatsheet for common tasks |
+| [Quickstart Guide](getting-started/QUICKSTART.md) | First pipeline run tutorial |
+| [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter/Colab setup |
 
 ---
 
-## Phase Status
+## Architecture
 
-| Phase | Status | Description | Primary entrypoint | Doc |
-|------:|--------|-------------|--------------------|-----|
-| 1 | **COMPLETE** | Data prep -> features -> labels -> splits -> scaling | `./pipeline run ...` | `phases/PHASE_1.md` |
-| 2 | **COMPLETE** | Train any registered model (13 models) | `scripts/train_model.py` / notebook | `phases/PHASE_2.md` |
-| 3 | **COMPLETE** | Purged CV / walk-forward / CPCV-PBO | `scripts/run_cv.py` | `phases/PHASE_3.md` |
-| 4 | **COMPLETE** | Voting/stacking/blending ensembles | `scripts/train_model.py --model ...` | `phases/PHASE_4.md` |
-| 5 | **PARTIAL** | Bundles + serving + drift utilities | `scripts/serve_model.py` | `phases/PHASE_5.md` |
+The factory implements a single-pipeline architecture with 8 implementation phases:
 
-**Note:** All phases marked "COMPLETE" use the universal pipeline (same ~180 features for all models). See [Current Limitations](CURRENT_LIMITATIONS.md) for details.
+```
+Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
+                                                              |
+                                              +---------------+---------------+
+                                              |               |               |
+                                          Tabular(2D)    Sequence(3D)    Multi-Res(4D)
+                                              |               |               |
+                                          Boosting       Neural          Advanced
+                                          Classical      TCN/Trans       (Planned)
+                                              |               |
+                                              +-------+-------+
+                                                      |
+                                              [Ensembles] -> [Meta-Learners]
+```
 
----
-
-## Navigation by Persona
-
-### For New Users
-1. Read [Project Charter](planning/PROJECT_CHARTER.md) - Project goals and status
-2. Read [Quick Reference](QUICK_REFERENCE.md) - Common commands
-3. Follow [Quickstart](getting-started/QUICKSTART.md) - First pipeline run
-4. Review [Pipeline CLI](getting-started/PIPELINE_CLI.md) - CLI options
-
-### For ML Engineers
-1. Read [Intended Architecture](INTENDED_ARCHITECTURE.md) - Understand the goal
-2. Read [Current Limitations](CURRENT_LIMITATIONS.md) - Understand gaps
-3. Review [Model Integration Guide](guides/MODEL_INTEGRATION_GUIDE.md) - BaseModel interface
-4. Check [Implementation Tasks](analysis/IMPLEMENTATION_TASKS.md) - Code changes needed
-
-### For Data Scientists
-1. Read [Feature Engineering Guide](guides/FEATURE_ENGINEERING_GUIDE.md) - Feature strategies
-2. Review [MTF Strategy Guide](guides/MTF_STRATEGY_GUIDE.md) - Choose data strategy
-3. Check [Feature Catalog](reference/FEATURES.md) - Available features
-4. See [Best OHLCV Features](research/BEST_OHLCV_FEATURES.md) - Research findings
-
-### For DevOps/Deployment
-1. Read [Model Infrastructure Requirements](guides/MODEL_INFRASTRUCTURE_REQUIREMENTS.md) - Hardware needs
-2. Review [Architecture](reference/ARCHITECTURE.md) - System design
-3. Check [Validation Checklist](VALIDATION_CHECKLIST.md) - Pre-deployment steps
-4. See [Phase 5](phases/PHASE_5.md) - Serving & monitoring
+**Comprehensive Reference:** [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
-## Pipeline Paths (What lands where)
+## Implementation Phases
 
-| Path | Purpose |
-|------|---------|
-| `data/raw/` | Raw data inputs (e.g., `{SYMBOL}_1m.parquet`) |
-| `runs/<run_id>/` | Phase 1 run metadata/logs |
-| `data/splits/scaled/*.parquet` | Phase 1 dataset outputs (gitignored) |
-| `experiments/runs/<run_id>/` | Training runs/artifacts |
-| `data/stacking/`, `data/walk_forward/`, `data/cpcv_pbo/` | CV outputs |
-| `ModelBundle` directories | Serving/batch inference (see `phases/PHASE_5.md`) |
+| Phase | Name | Description | Status | Doc |
+|:-----:|------|-------------|:------:|-----|
+| 1 | Ingestion | Load and validate raw OHLCV data | Complete | [PHASE_1_INGESTION.md](implementation/PHASE_1_INGESTION.md) |
+| 2 | MTF Upscaling | Multi-timeframe resampling | Partial (5/9 TFs) | [PHASE_2_MTF_UPSCALING.md](implementation/PHASE_2_MTF_UPSCALING.md) |
+| 3 | Features | 180+ indicator features | Complete | [PHASE_3_FEATURES.md](implementation/PHASE_3_FEATURES.md) |
+| 4 | Labeling | Triple-barrier + Optuna optimization | Complete | [PHASE_4_LABELING.md](implementation/PHASE_4_LABELING.md) |
+| 5 | Adapters | Model-family data adapters | Complete | [PHASE_5_ADAPTERS.md](implementation/PHASE_5_ADAPTERS.md) |
+| 6 | Training | 13 models across 4 families | Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
+| 7 | Ensembles | Voting, Stacking, Blending | Complete | [PHASE_7_ENSEMBLES.md](implementation/PHASE_7_ENSEMBLES.md) |
+| 8 | Meta-Learners | Regime-aware, adaptive | Planned | [PHASE_8_META_LEARNERS.md](implementation/PHASE_8_META_LEARNERS.md) |
+
+---
+
+## User Guides
+
+### Getting Started
+
+| Guide | Purpose |
+|-------|---------|
+| [Quickstart](getting-started/QUICKSTART.md) | First pipeline run |
+| [Pipeline CLI](getting-started/PIPELINE_CLI.md) | CLI options reference |
+| [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter and Colab setup |
+
+### Core Guides
+
+| Guide | Purpose |
+|-------|---------|
+| [Model Integration](guides/MODEL_INTEGRATION.md) | Adding new models |
+| [Ensemble Configuration](guides/ENSEMBLE_CONFIGURATION.md) | Ensemble methods and configs |
+| [Feature Engineering](guides/FEATURE_ENGINEERING.md) | Feature strategies |
+| [Hyperparameter Tuning](guides/HYPERPARAMETER_TUNING.md) | Optuna tuning |
+
+### Infrastructure
+
+| Guide | Purpose |
+|-------|---------|
+| [Infrastructure Requirements](reference/INFRASTRUCTURE.md) | Hardware requirements |
+| [Notebook Configuration](notebook/CONFIGURATION.md) | Notebook parameters |
 
 ---
 
 ## Reference Documentation
 
-### Architecture Understanding (Critical)
+### Core Reference
 
 | Doc | Purpose |
 |-----|---------|
-| [Intended Architecture](INTENDED_ARCHITECTURE.md) | Target state - model-specific pipelines |
-| [Current Limitations](CURRENT_LIMITATIONS.md) | What's wrong with universal pipeline |
-| [Current vs Intended](CURRENT_VS_INTENDED_ARCHITECTURE.md) | Detailed gap analysis |
-| [Migration Roadmap](MIGRATION_ROADMAP.md) | 6-phase implementation plan |
-
-### Core Guides
-
-| Doc | Purpose |
-|-----|---------|
-| [MTF Strategy Guide](guides/MTF_STRATEGY_GUIDE.md) | Choosing data strategies |
-| [Model Integration Guide](guides/MODEL_INTEGRATION_GUIDE.md) | Adding new models |
-| [Feature Engineering Guide](guides/FEATURE_ENGINEERING_GUIDE.md) | Feature strategies |
-| [Hyperparameter Guide](guides/HYPERPARAMETER_OPTIMIZATION_GUIDE.md) | GA + Optuna tuning |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Complete system architecture |
+| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Command cheatsheet |
+| [Models Reference](reference/MODELS.md) | All 19 models (13 implemented, 6 planned) |
+| [Features Reference](reference/FEATURES.md) | 180+ feature catalog |
 
 ### Technical Reference
 
 | Doc | Purpose |
 |-----|---------|
-| `reference/ARCHITECTURE.md` | Architecture + design constraints |
-| `reference/FEATURES.md` | Feature catalog (Phase 1) |
-| `reference/PIPELINE_FIXES.md` | Notes on Phase 1 alignment + verification |
-| `VALIDATION_CHECKLIST.md` | Pre/post-training validation checklists |
-| `WORKFLOW_BEST_PRACTICES.md` | Best practices & recommended workflows |
+| [Pipeline Stages](reference/PIPELINE_STAGES.md) | Data flow details |
+| [Slippage](reference/SLIPPAGE.md) | Transaction cost modeling |
 
-### Troubleshooting
+---
+
+## Troubleshooting
 
 | Doc | Purpose |
 |-----|---------|
 | [MTF Troubleshooting](troubleshooting/MTF_TROUBLESHOOTING.md) | MTF-specific issues |
-| `notebook/TROUBLESHOOTING.md` | Notebook/Colab troubleshooting |
-| `MIGRATION_GUIDE.md` | Migration guide for recent improvements |
+| [Notebook Troubleshooting](notebook/TROUBLESHOOTING.md) | Colab/Jupyter issues |
 
 ---
 
-## Status & Monitoring
+## Project Planning
 
 | Doc | Purpose |
 |-----|---------|
-| `../PIPELINE_STATUS.md` | Overall pipeline status dashboard |
-| `../INTEGRATION_FIXES_SUMMARY.md` | Phase 3->4 integration improvements |
-| `../ENSEMBLE_VALIDATION_SUMMARY.md` | Ensemble validation improvements |
+| [Project Charter](planning/PROJECT_CHARTER.md) | Goals, scope, status |
+| [Advanced Models Roadmap](implementation/ADVANCED_MODELS_ROADMAP.md) | 6 planned models |
+| [MTF Implementation Roadmap](implementation/MTF_IMPLEMENTATION_ROADMAP.md) | 9-timeframe ladder |
 
 ---
 
-## Implementation Status Summary
+## Analysis & Research
 
-| Component | Status | Notes |
+| Doc | Purpose |
+|-----|---------|
+| [Feature Engineering Reality](analysis/PHASE1_FEATURE_ENGINEERING_REALITY.md) | Current feature analysis |
+| [Implementation Tasks](analysis/IMPLEMENTATION_TASKS.md) | Development tasks |
+
+---
+
+## Archive
+
+Historical and legacy documentation is preserved in [archive/](archive/). These documents are for reference only and do not reflect the current implementation.
+
+| Archive | Contents |
+|---------|----------|
+| [Phases](archive/phases/) | Legacy phase docs |
+| [Reference](archive/reference/) | Outdated reference docs |
+| [Research](archive/research/) | Historical research notes |
+| [Roadmaps](archive/roadmaps/) | Completed or superseded roadmaps |
+
+---
+
+## Current Implementation Summary
+
+| Component | Status | Count |
 |-----------|--------|-------|
-| **Models Implemented** | 13 of 19 | Boosting (3), Neural (4), Classical (3), Ensemble (3) |
-| **MTF Timeframes** | 5 of 9 | Missing: 1min, 10min, 20min, 25min |
-| **Strategy 1 (Single-TF)** | NOT IMPLEMENTED | Baseline support |
-| **Strategy 2 (MTF Indicators)** | PARTIAL | Works but missing 4 timeframes |
-| **Strategy 3 (MTF Ingestion)** | NOT IMPLEMENTED | Raw bars for sequence models |
+| **Models Implemented** | Complete | 13 of 19 |
+| **MTF Timeframes** | Partial | 5 of 9 |
+| **Ensemble Methods** | Complete | 3 (Voting, Stacking, Blending) |
+| **Features** | Complete | ~180 |
 
-See [Full Documentation Index](INDEX.md) for complete navigation.
+**Models by Family:**
+- Boosting (3): XGBoost, LightGBM, CatBoost
+- Neural (4): LSTM, GRU, TCN, Transformer
+- Classical (3): Random Forest, Logistic, SVM
+- Ensemble (3): Voting, Stacking, Blending
+- Planned (6): InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
 
 ---
 
-## Legacy / Archived Docs
+## Pipeline Paths
 
-Spec-heavy or outdated documents are kept under `archive/` for reference and are not the current runbook.
+| Path | Purpose |
+|------|---------|
+| `data/raw/` | Raw OHLCV data (e.g., `MES_1m.parquet`) |
+| `data/splits/scaled/` | Processed train/val/test splits |
+| `experiments/runs/{run_id}/` | Training artifacts and models |
+| `config/models/` | Model configuration files |
 
 ---
 

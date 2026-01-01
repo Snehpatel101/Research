@@ -25,9 +25,18 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 ┌─────────────────────────────────────────────────────────────────────┐
 │                    MULTI-TIMEFRAME UPSCALING                        │
 │                                                                     │
-│  1-min OHLCV  →  [Resample]  →  5min, 15min, 30min, 1h, 4h, daily │
-│  (Proper alignment with shift(1) to prevent lookahead)            │
-│  Status: ⚠️ 5 of 9 timeframes (intended: 9-TF ladder)             │
+│  1-min OHLCV (canonical)  →  [Upscale to ALL 9 Timeframes]         │
+│                                                                     │
+│  Output: 1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h  │
+│                                                                     │
+│  Then models choose:                                                │
+│  • Primary training TF (e.g., 5min or 15min)                        │
+│  • MTF strategy (single-TF / MTF indicators / MTF ingestion)        │
+│  • Which TFs to use for enrichment/multi-stream                     │
+│                                                                     │
+│  Status: ⚠️ Only 5 TFs implemented (15m, 30m, 1h, 4h, daily)         │
+│          Need: All 9-TF ladder (1m, 5m, 10m, 15m, 20m, 25m, 30m,   │
+│                 45m, 1h) for full flexibility                       │
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -85,31 +94,32 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                   ENSEMBLE MODELS (PHASE 7)                         │
+│         HETEROGENEOUS BASE MODELS (PHASE 7 - REMOVED)               │
 │                                                                     │
-│  ┌──────────────────────────────────────────────────────────┐     │
-│  │  Base Models  →  [Voting/Stacking/Blending]  →  Ensemble │     │
-│  │  (Same family: all tabular OR all sequence)              │     │
-│  └──────────────────────────────────────────────────────────┘     │
-│                                                                     │
-│  Recommended Configurations:                                       │
-│  ├─ Boosting Trio:    XGBoost + LightGBM + CatBoost               │
-│  ├─ Mixed Tabular:    XGBoost + LightGBM + Random Forest          │
-│  └─ All Neural:       LSTM + GRU + TCN + Transformer              │
+│  Phase 7 homogeneous ensembles removed from architecture           │
+│  Same-family constraint no longer applies                          │
+│  Base models train independently                                   │
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                META-LEARNERS (PHASE 8 - Planned)                    │
+│              META-LEARNER STACKING (PHASE 7 - Planned)              │
 │                                                                     │
-│  ┌──────────────────────────────────────────────────────────┐     │
-│  │  Ensembles  →  [Regime-Aware/Adaptive]  →  Final Preds  │     │
-│  │  (Dynamic weighting based on context)                    │     │
-│  └──────────────────────────────────────────────────────────┘     │
-│                                                                     │
-│  Strategies:                                                        │
-│  ├─ Regime-Aware:     Weight by market regime (trend/range/vol)   │
-│  ├─ Confidence-Based: Weight by prediction confidence             │
-│  └─ Adaptive:         Weight by recent performance                │
+│  3-4 Heterogeneous Base Models (1 per family):                     │
+│  ├→ Tabular: CatBoost OR LightGBM (engineered features)           │
+│  ├→ CNN/TCN: TCN (local patterns)                                  │
+│  ├→ Transformer: PatchTST OR TFT (long context)                   │
+│  └→ Optional 4th: N-BEATS OR Ridge (different inductive bias)     │
+│       ↓                                                             │
+│  Generate Out-of-Fold (OOF) Predictions                           │
+│       ↓                                                             │
+│  Meta-Learner (Inference Family):                                  │
+│  ├→ Logistic Regression (stacking)                                 │
+│  ├→ Ridge Regression (stacking)                                    │
+│  ├→ Small MLP (learned blending)                                   │
+│  └→ Calibrated Blender (voting + calibration)                     │
+│       ↓                                                             │
+│  Final Ensemble Predictions                                        │
+│  (Retrain bases on full train, evaluate on test)                  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -138,21 +148,29 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 ./pipeline run --symbols MGC
 ```
 
-### 2. Canonical Dataset with Adapters
+### 2. Canonical Dataset with Per-Model Feature Selection
 
-**One unified pipeline:**
-- Single data processing flow from raw OHLCV to features/labels
-- Canonical dataset stored once in `data/splits/scaled/`
-- Adapters transform canonical data to model-specific formats **on-the-fly**
+**One canonical source, different feature sets:**
+- Single 1-min OHLCV source → ALL 9 timeframes derived deterministically
+- Same timestamps, labels, splits for all models
+- **Different features per model family** based on inductive biases:
+  - Tabular models: ~200 engineered features (indicators + MTF indicators)
+  - Sequence models: ~150 base features (indicators + wavelets, single-TF)
+  - Advanced models: Raw multi-stream OHLCV bars (no pre-engineering)
 
-**Why:**
-- Single source of truth (no duplicate datasets)
-- Reproducibility (same data for all models)
-- Storage efficiency (canonical data stored once, adapters are deterministic)
+**Why per-model feature selection:**
+- **Inductive Bias Alignment:** Tabular models excel with engineered features; transformers learn from raw data
+- **Diversity for Ensembles:** Different feature sets → reduced error correlation → better ensemble performance
+- **Efficiency:** Sequence models have temporal memory (don't need MTF indicators)
 
-**NOT separate pipelines:**
-- There is ONE pipeline, not multiple "model-specific pipelines"
-- Adapters are lightweight transformations, not separate data processing flows
+**Adapters handle both:**
+1. **Feature Selection:** Choose which features each model gets
+2. **Shape Transformation:** Reshape to 2D, 3D, or 4D as needed
+
+**Single source of truth maintained:**
+- All features computed from same 1-min canonical OHLCV
+- Same timestamps and labels across all models
+- Deterministic feature selection (reproducible)
 
 ### 3. Model-Family Adapters
 
@@ -237,14 +255,37 @@ class MyModel(BaseModel):
 
 ### Phase 3: Feature Engineering
 **Input:** Base OHLCV + MTF views
-**Output:** `data/features/{symbol}_features.parquet` (~180 features)
+**Output:** Model-specific features based on per-model feature selection
 
-**Operations:**
-- Base indicators: RSI, MACD, ATR, Bollinger, ADX (~70 features)
-- Wavelets: Db4/Haar decomposition, 3 levels (~30 features)
-- Microstructure: Spread proxies, order flow (~20 features)
-- Statistical: Skewness, kurtosis, autocorr (~15 features)
-- MTF indicators: Indicators from 5 timeframes (~30 features)
+**Per-Model Feature Selection:**
+Different model families get different features tailored to their inductive biases:
+
+**Tabular Models (Boosting + Classical):**
+- Base indicators on primary TF: RSI, MACD, ATR, Bollinger, ADX (~60 features)
+- Wavelets on primary TF: Db4/Haar decomposition (~24 features)
+- Microstructure on primary TF: Spread proxies, order flow (~10 features)
+- MTF indicators from other TFs: RSI_1m, MACD_5m, ATR_1h, etc. (~50 features)
+- Price/volume features: Returns, log volume, OHLC ratios (~8 features)
+- Time features: Hour, day_of_week (~2 features)
+- **Total: ~200 engineered features**
+
+**Sequence Models (Neural + CNN):**
+- Base indicators on primary TF: RSI, MACD, ATR, Bollinger (~60 features)
+- Wavelets on primary TF: Db4 decomposition (~24 features)
+- Microstructure on primary TF: Roll spread, volume imbalance (~10 features)
+- Price/volume raw features: Returns, log volume (~8 features)
+- Time features: Hour, day_of_week (~2 features)
+- **Total: ~150 base features (no MTF indicators - model learns from sequence)**
+
+**Advanced Transformers (Planned):**
+- Raw OHLCV bars from multiple timeframes as multi-stream input
+- No pre-engineered indicators (attention learns from raw data)
+- **Input: Multi-stream 1m+5m+15m raw OHLCV (3 streams × 4 OHLC)**
+
+**Why Different Features:**
+- Tabular models excel with rich engineered features and MTF indicators
+- Sequence models have inherent temporal memory (no need for MTF features)
+- Transformers learn multi-scale patterns from raw data via attention
 
 **Time:** ~16 seconds
 
@@ -263,12 +304,24 @@ class MyModel(BaseModel):
 
 ### Phase 5: Model-Family Adapters
 **Input:** `data/splits/scaled/` (canonical splits)
-**Output:** `TimeSeriesDataContainer` (in-memory, model-specific shape)
+**Output:** `TimeSeriesDataContainer` (in-memory, model-specific shape and features)
 
-**Operations:**
-- **Tabular:** Extract 2D arrays `(N, 180)`
-- **Sequence:** Create 3D windows `(N, seq_len, 180)`
-- **Multi-Res:** Build 4D tensors `(N, 9, T, 4)` (future)
+**Operations (Per-Model Feature Selection + Shape Adaptation):**
+- **Tabular Adapter:**
+  - Select ~200 engineered features (base indicators + MTF indicators)
+  - Output: 2D arrays `(N, ~200)`
+- **Sequence Adapter:**
+  - Select ~150 base features (indicators + wavelets, no MTF)
+  - Create 3D windows from selected features
+  - Output: 3D windows `(N, seq_len, ~150)`
+- **Multi-Res Adapter (Planned):**
+  - Extract raw OHLCV bars from multiple timeframes
+  - Build multi-stream 4D tensors
+  - Output: 4D tensors `(N, 9, T, 4)` (no engineered features)
+
+**Why Adapters Do Both:**
+- **Feature Selection:** Each model gets features tailored to its inductive biases
+- **Shape Transformation:** Features reshaped to model-appropriate format (2D/3D/4D)
 
 **Time:** <2 seconds
 
@@ -359,77 +412,81 @@ class MyModel(BaseModel):
 
 ## Multi-Timeframe Strategies
 
-### Current: Strategy 2 (MTF Indicators)
+### Configurable Primary Timeframe
 
 **Implementation:**
-- ~180 indicator-derived features
-- 150 base indicators (5-minute data)
-- 30 MTF indicators (from 5 timeframes: 15m, 30m, 1h, 4h, 1d)
+- User specifies primary training timeframe per experiment (5m, 10m, 15m, 1h, etc.)
+- All features computed on selected primary timeframe
+- MTF enrichment is optional (not required)
+
+**Current State:**
+- Hardcoded to 5-minute base
+- ~180 indicator-derived features (150 base + 30 MTF from 5 timeframes)
 
 **Data format:**
 - Tabular models: 2D arrays `(N, 180)`
 - Sequence models: 3D windows `(N, seq_len, 180)`
 
-**Status:** ⚠️ Partial (5 of 9 timeframes)
+**Status:** ⚠️ Flexible TF selection not yet configurable
 
-### Planned: Strategy 1 (Single-TF Baselines)
+### Strategy 1: Single-TF (Baseline)
 
-**Purpose:** Ablation study to measure MTF value
-**Data:** One timeframe only (e.g., 5-minute)
+**Purpose:** Train on chosen timeframe without MTF enrichment
+**Data:** Features from one timeframe only (e.g., only 5-minute)
 **Models:** All families
 **Status:** ❌ Not implemented (simple config flag)
 
-### Planned: Strategy 3 (MTF Raw Ingestion)
+### Strategy 2: MTF Indicators (Optional Enrichment)
 
-**Purpose:** Multi-resolution temporal learning
-**Data:** Raw OHLCV bars from 9 timeframes as 4D tensors
-**Shape:** `(N, 9, T, 4)` where:
-- N: samples
-- 9: timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
-- T: lookback window (varies by timeframe)
-- 4: OHLC features
+**Purpose:** Add indicator features from other timeframes
+**Data:** Indicator-derived features from multiple timeframes
+**Models:** Tabular models (Boosting, Classical)
+**Status:** ⚠️ Partial (5 of 9 timeframes)
 
-**Models:** PatchTST, iTransformer, TFT, N-BEATS
-**Status:** ❌ Not implemented (requires Phase 2 extension + Phase 5 multi-res adapter)
+### Strategy 3: MTF Ingestion (Optional for Sequence Models)
 
-**Roadmap:** See `docs/archive/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`
+**Purpose:** Multi-stream raw OHLCV for sequence models
+**Data:** Raw OHLCV bars from multiple timeframes as multi-stream input
+**Shape:** `(N, T_primary, F)` + optional multi-TF streams
+**Models:** Sequence models (Neural, CNN, Transformer, MLP)
+**Status:** ❌ Not implemented
+
+**Note:** Models can mix-and-match strategies in same experiment
 
 ---
 
-## Ensemble Architecture
+## Meta-Learner Stacking Architecture
 
-### Compatibility Rules
+### Heterogeneous Base Models
 
-**CRITICAL:** All base models in an ensemble must have the **same input shape**.
+**NEW APPROACH:** No same-family constraint. Train 3-4 base models from different families.
 
-**Valid Ensembles:**
+**Recommended Configuration:**
 ```python
-# Valid: All tabular (2D)
-["xgboost", "lightgbm", "catboost"]
-["xgboost", "random_forest", "logistic"]
-
-# Valid: All sequence (3D, same seq_len)
-["lstm", "gru", "tcn", "transformer"]  # seq_len=30
+# 3-4 heterogeneous base models (1 per family)
+base_models = {
+    "tabular": "catboost",           # OR "lightgbm"
+    "cnn": "tcn",                     # Local patterns
+    "transformer": "patchtst",        # OR "tft", long context
+    "optional_4th": "nbeats"          # OR "ridge", different bias
+}
 ```
 
-**Invalid Ensembles:**
-```python
-# INVALID: Mixing tabular (2D) and sequence (3D)
-["xgboost", "lstm"]  # ❌ EnsembleCompatibilityError
-```
+**No Input Shape Restriction:** Models can have different input shapes (2D, 3D, 4D)
 
-### Ensemble Methods
+### Meta-Learner Training
 
-| Method | Description | Meta-Learner | Leakage Prevention |
-|--------|-------------|--------------|-------------------|
-| **Voting** | Weighted avg of predictions | None | N/A (no training) |
-| **Stacking** | Train on OOF predictions | Logistic/XGBoost | Out-of-fold CV |
-| **Blending** | Train on holdout predictions | Logistic/XGBoost | Holdout split |
+| Method | Description | Input | Leakage Prevention |
+|--------|-------------|-------|-------------------|
+| **Logistic Stacking** | Linear combination of OOF preds | Base OOF outputs | Out-of-fold CV |
+| **Ridge Stacking** | Regularized linear combination | Base OOF outputs | Out-of-fold CV |
+| **MLP Blending** | Neural network meta-learner | Base OOF outputs | Out-of-fold CV |
+| **Calibrated Blender** | Soft voting + calibration | Base OOF outputs | Holdout split |
 
 **Recommended:**
-- **Voting:** Fast baseline, no overfitting risk
-- **Stacking:** Best performance, prevents leakage via OOF
-- **Blending:** Simpler than stacking, less data for base models
+- **Logistic/Ridge:** Fast, interpretable, prevents overfitting
+- **MLP:** Learns complex base model interactions
+- **Calibrated Blender:** Combines voting with probability calibration
 
 ---
 
@@ -574,7 +631,7 @@ Research/
     ├── README.md                  # Entry point
     ├── ARCHITECTURE.md            # This file
     ├── QUICK_REFERENCE.md         # Command cheatsheet
-    ├── phases/                    # Implementation phases
+    ├── implementation/            # Implementation phases & roadmaps
     │   ├── PHASE_1_INGESTION.md
     │   ├── PHASE_2_MTF_UPSCALING.md
     │   ├── PHASE_3_FEATURES.md
@@ -582,15 +639,22 @@ Research/
     │   ├── PHASE_5_ADAPTERS.md
     │   ├── PHASE_6_TRAINING.md
     │   ├── PHASE_7_ENSEMBLES.md
-    │   └── PHASE_8_META_LEARNERS.md
+    │   ├── PHASE_8_META_LEARNERS.md
+    │   ├── MTF_IMPLEMENTATION_ROADMAP.md
+    │   └── ADVANCED_MODELS_ROADMAP.md
     ├── guides/                    # How-to guides
-    │   ├── MODEL_INTEGRATION_GUIDE.md
-    │   ├── FEATURE_ENGINEERING_GUIDE.md
-    │   └── HYPERPARAMETER_OPTIMIZATION_GUIDE.md
+    │   ├── MODEL_INTEGRATION.md
+    │   ├── FEATURE_ENGINEERING.md
+    │   ├── HYPERPARAMETER_TUNING.md
+    │   ├── ENSEMBLE_CONFIGURATION.md
+    │   └── NOTEBOOK_SETUP.md
+    ├── reference/                 # Technical reference
+    │   ├── MODELS.md
+    │   ├── FEATURES.md
+    │   ├── PIPELINE_STAGES.md
+    │   ├── SLIPPAGE.md
+    │   └── INFRASTRUCTURE.md
     └── archive/                   # Historical docs
-        └── roadmaps/
-            ├── MTF_IMPLEMENTATION_ROADMAP.md
-            └── ADVANCED_MODELS_ROADMAP.md
 ```
 
 ---
@@ -824,9 +888,9 @@ phase2:
 **Documentation:**
 - `docs/README.md` - Entry point
 - `docs/QUICK_REFERENCE.md` - Command cheatsheet
-- `docs/phases/` - Detailed phase implementation guides
+- `docs/implementation/` - Detailed phase implementation guides and roadmaps
 - `docs/guides/` - How-to guides
-- `docs/archive/roadmaps/` - Long-term implementation plans
+- `docs/reference/` - Technical reference documentation
 
 **Key Papers:**
 - "Advances in Financial Machine Learning" (de Prado) - Purge/embargo, triple-barrier labeling

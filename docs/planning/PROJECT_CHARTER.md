@@ -517,21 +517,21 @@ signal = pipeline.predict(new_bar)
 
 - **README.md** - Project overview and quickstart
 - **THIS FILE** - Project charter and vision
-- **PIPELINE_FLOW.md** - Visual pipeline flow
+- **PIPELINE_STAGES.md** - Visual pipeline flow
 - **REPO_ORGANIZATION_ANALYSIS.md** - Discrepancy analysis and reorganization plan
 
 ### Implementation Guides
 
-- **MODEL_INTEGRATION_GUIDE.md** - How to add new models
-- **FEATURE_ENGINEERING_GUIDE.md** - Feature strategies per model family
-- **HYPERPARAMETER_OPTIMIZATION_GUIDE.md** - GA and Optuna tuning
-- **MODEL_INFRASTRUCTURE_REQUIREMENTS.md** - Hardware/GPU requirements
+- **MODEL_INTEGRATION.md** - How to add new models
+- **FEATURE_ENGINEERING.md** - Feature strategies per model family
+- **HYPERPARAMETER_TUNING.md** - GA and Optuna tuning
+- **reference/INFRASTRUCTURE.md** - Hardware/GPU requirements
 
 ### Detailed Docs
 
-- **docs/phases/PHASE_1.md** - Data pipeline details
-- **docs/phases/PHASE_2.md** - Model training details
-- **docs/phases/PHASE_3.md** - Cross-validation details
+- **docs/implementation/PHASE_1.md** - Data pipeline details
+- **docs/implementation/PHASE_2.md** - Model training details
+- **docs/implementation/PHASE_3.md** - Cross-validation details
 - **docs/reference/ARCHITECTURE.md** - System architecture
 - **docs/reference/FEATURES.md** - Feature catalog
 

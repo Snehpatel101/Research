@@ -1016,7 +1016,7 @@ Phase 2 (MTF Mode)    Phase 3 (Feature Groups)
    - Document model-specific data prep
    - Add architecture warnings (current vs intended)
 
-2. **docs/phases/PHASE_1.md:**
+2. **docs/implementation/PHASE_1.md:**
    - Clarify Strategy 1/2/3 implementation status
    - Add feature count breakdown by group
    - Update MTF mode usage
@@ -1040,11 +1040,11 @@ Phase 2 (MTF Mode)    Phase 3 (Feature Groups)
 
 ## References
 
-- **MTF Roadmap:** `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md` (6-8 week plan)
+- **MTF Roadmap:** `docs/implementation/MTF_IMPLEMENTATION_ROADMAP.md` (6-8 week plan)
 - **Current Limitations:** `docs/CURRENT_LIMITATIONS.md`
 - **Architecture Analysis:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md`
 - **Strategy Guide:** `docs/guides/MTF_STRATEGY_GUIDE.md` (user-facing)
-- **Phase 1 Details:** `docs/phases/PHASE_1.md`
+- **Phase 1 Details:** `docs/implementation/PHASE_1.md`
 
 ---
 
