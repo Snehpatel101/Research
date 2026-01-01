@@ -132,8 +132,8 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 ### Data Pipeline Details
 
 **Configurable Primary Timeframe:**
-- Primary training timeframe is configurable per experiment (5m/10m/15m/1h)
-- Not hardcoded to 5-min; choose based on model and trading strategy needs
+- Primary training timeframe is configurable per experiment (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h - all 9 TFs)
+- Not hardcoded; EACH model independently chooses from the 9 derived timeframes
 
 **MTF Enrichment (Optional):**
 - **Strategy 1: Single-TF** - Train on primary timeframe only, no MTF features
