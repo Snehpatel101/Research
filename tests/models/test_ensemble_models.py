@@ -442,6 +442,133 @@ class TestBlendingEnsembleSaveLoad:
 
 
 # =============================================================================
+# HETEROGENEOUS STACKING TESTS
+# =============================================================================
+
+class TestHeterogeneousStackingValidation:
+    """Tests for heterogeneous stacking ensemble validation."""
+
+    def test_validate_ensemble_config_homogeneous_tabular(self):
+        """Homogeneous tabular config should be valid for all ensemble types."""
+        from src.models.ensemble.validator import validate_ensemble_config
+
+        # All tabular - valid for any ensemble type
+        is_valid, error = validate_ensemble_config(
+            ["random_forest", "logistic"],
+            ensemble_type="voting",
+        )
+        assert is_valid
+        assert error == ""
+
+        is_valid, error = validate_ensemble_config(
+            ["random_forest", "logistic"],
+            ensemble_type="stacking",
+        )
+        assert is_valid
+
+    def test_validate_ensemble_config_heterogeneous_voting_fails(self):
+        """Heterogeneous config should fail for voting ensemble."""
+        from src.models.ensemble.validator import validate_ensemble_config
+
+        # Mixed tabular + sequence - should fail for voting
+        is_valid, error = validate_ensemble_config(
+            ["random_forest", "lstm"],
+            ensemble_type="voting",
+        )
+        assert not is_valid
+        assert "Cannot mix tabular and sequence" in error
+        assert "stacking" in error.lower()  # Should suggest stacking
+
+    def test_validate_ensemble_config_heterogeneous_blending_fails(self):
+        """Heterogeneous config should fail for blending ensemble."""
+        from src.models.ensemble.validator import validate_ensemble_config
+
+        is_valid, error = validate_ensemble_config(
+            ["xgboost", "gru"],
+            ensemble_type="blending",
+        )
+        assert not is_valid
+        assert "Cannot mix tabular and sequence" in error
+
+    def test_validate_ensemble_config_heterogeneous_stacking_succeeds(self):
+        """Heterogeneous config should SUCCEED for stacking ensemble."""
+        from src.models.ensemble.validator import validate_ensemble_config
+
+        # Mixed tabular + sequence - should PASS for stacking
+        is_valid, error = validate_ensemble_config(
+            ["random_forest", "lstm"],
+            ensemble_type="stacking",
+        )
+        assert is_valid
+        assert error == ""
+
+    def test_is_heterogeneous_ensemble(self):
+        """is_heterogeneous_ensemble should detect mixed configs."""
+        from src.models.ensemble.validator import is_heterogeneous_ensemble
+
+        # All tabular
+        assert not is_heterogeneous_ensemble(["random_forest", "logistic"])
+
+        # All sequence
+        assert not is_heterogeneous_ensemble(["lstm", "gru"])
+
+        # Mixed - should be heterogeneous
+        assert is_heterogeneous_ensemble(["random_forest", "lstm"])
+        assert is_heterogeneous_ensemble(["xgboost", "gru", "tcn"])
+
+    def test_classify_base_models(self):
+        """classify_base_models should separate tabular and sequence."""
+        from src.models.ensemble.validator import classify_base_models
+
+        tabular, sequence = classify_base_models(["xgboost", "lstm", "logistic", "tcn"])
+        assert set(tabular) == {"xgboost", "logistic"}
+        assert set(sequence) == {"lstm", "tcn"}
+
+    def test_validate_base_model_compatibility_stacking(self):
+        """validate_base_model_compatibility should pass for stacking with mixed."""
+        from src.models.ensemble.validator import (
+            validate_base_model_compatibility,
+            EnsembleCompatibilityError,
+        )
+
+        # Should NOT raise for stacking with heterogeneous
+        validate_base_model_compatibility(
+            ["random_forest", "lstm"],
+            ensemble_type="stacking",
+        )
+
+        # Should raise for voting with heterogeneous
+        with pytest.raises(EnsembleCompatibilityError):
+            validate_base_model_compatibility(
+                ["random_forest", "lstm"],
+                ensemble_type="voting",
+            )
+
+
+class TestStackingEnsembleHeterogeneousMetadata:
+    """Tests for heterogeneous stacking ensemble metadata."""
+
+    def test_stacking_is_heterogeneous_flag(self, fast_stacking_config):
+        """Stacking should have is_heterogeneous flag."""
+        ensemble = StackingEnsemble(config=fast_stacking_config)
+        # Default config is homogeneous
+        assert ensemble._is_heterogeneous is False
+
+    def test_stacking_heterogeneous_detection(self):
+        """Stacking should detect heterogeneous config."""
+        config = {
+            "base_model_names": ["random_forest", "logistic"],  # Homogeneous
+            "meta_learner_name": "logistic",
+            "n_folds": 2,
+            "purge_bars": 5,
+            "embargo_bars": 10,
+        }
+        ensemble = StackingEnsemble(config=config)
+        # Not fitted yet - _is_heterogeneous is False by default
+        assert ensemble._is_heterogeneous is False
+
+
+# =============================================================================
 # CROSS-ENSEMBLE TESTS
 # =============================================================================
 

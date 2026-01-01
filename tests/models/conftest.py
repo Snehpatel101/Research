@@ -226,6 +226,7 @@ def small_sequence_data() -> Dict[str, np.ndarray]:
 def create_mock_container(
     n_train: int = 100,
     n_val: int = 20,
+    n_test: int = 20,
     n_features: int = 10,
     seq_len: int = 10,
     horizon: int = 20,
@@ -234,8 +235,14 @@ def create_mock_container(
     Create a mock TimeSeriesDataContainer for testing.
 
     Can be used as a function or via the fixture.
+    Supports both array and DataFrame return types for feature selection integration.
     """
+    import pandas as pd
+
     np.random.seed(42)
+
+    # Generate feature names
+    feature_names = [f"feature_{i}" for i in range(n_features)]
 
     # Generate tabular data
     X_train = np.random.randn(n_train, n_features).astype(np.float32)
@@ -246,20 +253,44 @@ def create_mock_container(
     y_val = np.random.choice([-1, 0, 1], size=n_val)
     weights_val = np.ones(n_val, dtype=np.float32)
 
+    X_test = np.random.randn(n_test, n_features).astype(np.float32)
+    y_test = np.random.choice([-1, 0, 1], size=n_test)
+    weights_test = np.ones(n_test, dtype=np.float32)
+
+    # Create DataFrames
+    X_train_df = pd.DataFrame(X_train, columns=feature_names)
+    X_val_df = pd.DataFrame(X_val, columns=feature_names)
+    X_test_df = pd.DataFrame(X_test, columns=feature_names)
+
+    y_train_series = pd.Series(y_train)
+    y_val_series = pd.Series(y_val)
+    y_test_series = pd.Series(y_test)
+
+    weights_train_series = pd.Series(weights_train)
+    weights_val_series = pd.Series(weights_val)
+    weights_test_series = pd.Series(weights_test)
+
     # Generate sequence data
     X_train_seq = np.random.randn(n_train, seq_len, n_features).astype(np.float32)
     X_val_seq = np.random.randn(n_val, seq_len, n_features).astype(np.float32)
+    X_test_seq = np.random.randn(n_test, seq_len, n_features).astype(np.float32)
 
     mock = MagicMock()
 
-    # Mock tabular data access
-    def get_sklearn_arrays(split: str):
+    # Mock tabular data access - supports return_df parameter
+    def get_sklearn_arrays(split: str, return_df: bool = False):
         if split == "train":
+            if return_df:
+                return (X_train_df, y_train_series, weights_train_series)
             return (X_train, y_train, weights_train)
         elif split == "val":
+            if return_df:
+                return (X_val_df, y_val_series, weights_val_series)
             return (X_val, y_val, weights_val)
-        else:
-            return (X_val, y_val, weights_val)
+        else:  # test
+            if return_df:
+                return (X_test_df, y_test_series, weights_test_series)
+            return (X_test, y_test, weights_test)
 
     mock.get_sklearn_arrays = get_sklearn_arrays
 
@@ -272,13 +303,20 @@ def create_mock_container(
                 return y_train
             elif array_type == "weights":
                 return weights_train
-        else:
+        elif split == "val":
             if array_type == "features":
                 return X_val
             elif array_type == "labels":
                 return y_val
             elif array_type == "weights":
                 return weights_val
+        else:  # test
+            if array_type == "features":
+                return X_test
+            elif array_type == "labels":
+                return y_test
+            elif array_type == "weights":
+                return weights_test
 
     mock.get_array = get_array
 
@@ -298,16 +336,22 @@ def create_mock_container(
     def get_pytorch_sequences(split: str, seq_len: int = 30, symbol_isolated: bool = True):
         if split == "train":
             return MockSequenceDataset(X_train_seq, y_train)
-        else:
+        elif split == "val":
             return MockSequenceDataset(X_val_seq, y_val)
+        else:
+            return MockSequenceDataset(X_test_seq, y_test)
 
     mock.get_pytorch_sequences = get_pytorch_sequences
+
+    # Mock get_label_end_times (returns None by default)
+    mock.get_label_end_times = MagicMock(return_value=None)
 
     # Add metadata
     mock.horizons = [5, 10, 15, 20]
     mock.symbols = ["MES", "MGC"]
     mock.n_features = n_features
     mock.horizon = horizon
+    mock.feature_columns = feature_names
 
     return mock
 

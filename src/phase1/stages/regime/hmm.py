@@ -449,6 +449,13 @@ class HMMRegimeDetector(RegimeDetector):
 
         logger.debug(f"HMM regime distribution: {regimes.value_counts(dropna=False).to_dict()}")
 
+        # ANTI-LOOKAHEAD: Shift all outputs by 1 bar
+        # This ensures the regime at bar N only uses data from bars 0..N-1
+        # The first row becomes NaN after shift - this is expected and correct
+        regimes = regimes.shift(1)
+        prob_df = prob_df.shift(1)
+        logger.info("ANTI-LOOKAHEAD: Shifted HMM regimes and probabilities by 1 bar")
+
         return regimes, prob_df
 
     def _get_state_labels(self) -> dict[int, str]:

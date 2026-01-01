@@ -20,7 +20,11 @@ from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
-from .validator import validate_base_model_compatibility
+from .validator import (
+    classify_base_models,
+    is_heterogeneous_ensemble,
+    validate_base_model_compatibility,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +65,12 @@ class StackingEnsemble(BaseModel):
         self._meta_learner_name: str = ""
         self._n_folds: int = 5
         self._feature_names: list[str] | None = None
+        # Heterogeneous ensemble support
+        self._is_heterogeneous: bool = False
+        self._tabular_models: set[str] = set()
+        self._sequence_models: set[str] = set()
+        self._X_train_seq: np.ndarray | None = None  # Cached sequence data
+        self._X_val_seq: np.ndarray | None = None
 
     @property
     def model_family(self) -> str:
@@ -126,6 +136,8 @@ class StackingEnsemble(BaseModel):
         sample_weights: np.ndarray | None = None,
         config: dict[str, Any] | None = None,
         label_end_times: pd.Series | None = None,
+        X_train_seq: np.ndarray | None = None,
+        X_val_seq: np.ndarray | None = None,
     ) -> TrainingMetrics:
         """
         Train stacking ensemble with OOF predictions.
@@ -135,13 +147,23 @@ class StackingEnsemble(BaseModel):
         3. Train final base models on full training data
 
         Args:
-            X_train: Training features
+            X_train: Training features (2D for tabular models)
             y_train: Training labels
-            X_val: Validation features
+            X_val: Validation features (2D for tabular models)
             y_val: Validation labels
             sample_weights: Sample weights for training
             config: Optional config overrides
             label_end_times: When each label's outcome is known (for purging overlapping labels)
+            X_train_seq: Training sequences (3D) for sequence models in heterogeneous ensembles.
+                If None in heterogeneous mode, falls back to X_train for all models.
+            X_val_seq: Validation sequences (3D) for sequence models in heterogeneous ensembles.
+                If None in heterogeneous mode, falls back to X_val for all models.
+
+        Note:
+            For heterogeneous stacking (mixed tabular + sequence models):
+            - Tabular models receive X_train/X_val (2D)
+            - Sequence models receive X_train_seq/X_val_seq (3D) if provided
+            - The meta-learner always receives 2D OOF predictions regardless of base model type
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
@@ -155,8 +177,40 @@ class StackingEnsemble(BaseModel):
         if not self._base_model_names:
             raise ValueError("No base_model_names specified in config")
 
-        # Validate base model compatibility (tabular vs sequence)
-        validate_base_model_compatibility(self._base_model_names)
+        # Validate base model compatibility - stacking allows heterogeneous models
+        # because the meta-learner always receives 2D OOF predictions
+        validate_base_model_compatibility(
+            self._base_model_names,
+            ensemble_type="stacking",  # Enables heterogeneous support
+        )
+
+        # Check if this is a heterogeneous ensemble and log appropriately
+        self._is_heterogeneous = is_heterogeneous_ensemble(self._base_model_names)
+        if self._is_heterogeneous:
+            tabular, sequence = classify_base_models(self._base_model_names)
+            self._tabular_models = set(tabular)
+            self._sequence_models = set(sequence)
+            logger.info(
+                f"Heterogeneous stacking ensemble: "
+                f"tabular={tabular}, sequence={sequence}. "
+                f"Each model family will receive appropriately shaped data."
+            )
+
+            # Validate sequence data is provided for heterogeneous ensembles
+            if X_train_seq is None or X_val_seq is None:
+                logger.warning(
+                    "Heterogeneous ensemble requires both 2D (tabular) and 3D (sequence) data. "
+                    "X_train_seq/X_val_seq not provided - sequence models will receive 2D data "
+                    "which may cause errors. Consider providing sequence data or using "
+                    "homogeneous ensembles."
+                )
+        else:
+            self._tabular_models = set()
+            self._sequence_models = set()
+
+        # Store sequence data for heterogeneous ensembles
+        self._X_train_seq = X_train_seq
+        self._X_val_seq = X_val_seq
 
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         self._n_folds = train_config.get("n_folds", 5)
@@ -202,6 +256,7 @@ class StackingEnsemble(BaseModel):
 
         # Step 1: Generate OOF predictions with PurgedKFold (prevents label leakage)
         # IMPORTANT: Uses oof_base_configs (defaults) not base_model_configs (tuned)
+        # For heterogeneous ensembles, pass both 2D and 3D data
         oof_predictions, fold_models = self._generate_oof_predictions(
             X_train=X_train,
             y_train=y_train,
@@ -212,6 +267,7 @@ class StackingEnsemble(BaseModel):
             label_end_times=label_end_times,
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
+            X_train_seq=X_train_seq,  # For sequence models in heterogeneous ensembles
         )
 
         # Step 2: Train meta-learner on OOF predictions
@@ -229,8 +285,9 @@ class StackingEnsemble(BaseModel):
         )
 
         # Use a portion of validation set for meta-learner validation
+        # For heterogeneous ensembles, pass both 2D and 3D data
         val_predictions = self._generate_base_predictions(
-            X_val, fold_models, use_probabilities
+            X_val, fold_models, use_probabilities, X_seq=X_val_seq
         )
         meta_features_val = val_predictions
         if passthrough:
@@ -250,9 +307,9 @@ class StackingEnsemble(BaseModel):
         training_time = time.time() - start_time
         self._is_fitted = True
 
-        # Compute ensemble metrics
-        train_metrics = self._compute_metrics(X_train, y_train)
-        val_metrics = self._compute_metrics(X_val, y_val)
+        # Compute ensemble metrics (use stored sequence data for heterogeneous ensembles)
+        train_metrics = self._compute_metrics(X_train, y_train, X_seq=X_train_seq)
+        val_metrics = self._compute_metrics(X_val, y_val, X_seq=X_val_seq)
 
         logger.info(
             f"StackingEnsemble training complete: "
@@ -281,6 +338,9 @@ class StackingEnsemble(BaseModel):
                 "passthrough": passthrough,
                 "use_default_configs_for_oof": use_default_for_oof,
                 "leakage_prevention": "enabled" if use_default_for_oof else "disabled",
+                "is_heterogeneous": self._is_heterogeneous,
+                "tabular_models": list(self._tabular_models) if self._is_heterogeneous else [],
+                "sequence_models": list(self._sequence_models) if self._is_heterogeneous else [],
             },
         )
 
@@ -295,6 +355,7 @@ class StackingEnsemble(BaseModel):
         label_end_times: pd.Series | None = None,
         purge_bars: int = 60,
         embargo_bars: int = 1440,
+        X_train_seq: np.ndarray | None = None,
     ) -> tuple[np.ndarray, list[list[BaseModel]]]:
         """
         Generate out-of-fold predictions for all base models.
@@ -302,8 +363,12 @@ class StackingEnsemble(BaseModel):
         Uses PurgedKFold to prevent label leakage from overlapping labels
         and serial correlation.
 
+        For heterogeneous ensembles (mixed tabular + sequence models):
+        - Tabular models receive X_train (2D)
+        - Sequence models receive X_train_seq (3D) if provided
+
         Args:
-            X_train: Training features
+            X_train: Training features (2D for tabular models)
             y_train: Training labels
             base_model_names: Names of base models to train
             base_model_configs: Config overrides per model
@@ -312,6 +377,7 @@ class StackingEnsemble(BaseModel):
             label_end_times: When each label is resolved (enables overlapping label purging)
             purge_bars: Number of bars to purge around validation set
             embargo_bars: Number of bars to embargo after validation set
+            X_train_seq: Training sequences (3D) for sequence models in heterogeneous ensembles
 
         Returns:
             Tuple of (oof_predictions, fold_models)
@@ -341,13 +407,23 @@ class StackingEnsemble(BaseModel):
         # Convert to DataFrame for PurgedKFold (requires index for label_end_times)
         X_df = pd.DataFrame(X_train)
 
+        # Pre-slice sequence data for heterogeneous ensembles
+        X_seq_fold_train_cache: np.ndarray | None = None
+        X_seq_fold_val_cache: np.ndarray | None = None
+
         for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(X_df, label_end_times=label_end_times)):
             logger.debug(f"  Fold {fold_idx + 1}/{self._n_folds}")
 
+            # Tabular data slicing (always done)
             X_fold_train = X_train[train_idx]
             y_fold_train = y_train[train_idx]
             X_fold_val = X_train[val_idx]
             y_fold_val = y_train[val_idx]
+
+            # Sequence data slicing (only if heterogeneous and seq data provided)
+            if self._is_heterogeneous and X_train_seq is not None:
+                X_seq_fold_train_cache = X_train_seq[train_idx]
+                X_seq_fold_val_cache = X_train_seq[val_idx]
 
             w_train = None
             if sample_weights is not None:
@@ -358,16 +434,31 @@ class StackingEnsemble(BaseModel):
                 model_config = base_model_configs.get(model_name, {})
                 model = ModelRegistry.create(model_name, config=model_config)
 
+                # Select appropriate data format based on model type
+                # For heterogeneous ensembles: tabular models get 2D, sequence models get 3D
+                if self._is_heterogeneous and model_name in self._sequence_models:
+                    if X_seq_fold_train_cache is not None:
+                        model_X_train = X_seq_fold_train_cache
+                        model_X_val = X_seq_fold_val_cache
+                    else:
+                        # Fallback to tabular data (will likely fail but warn was issued)
+                        model_X_train = X_fold_train
+                        model_X_val = X_fold_val
+                else:
+                    # Tabular model or homogeneous ensemble
+                    model_X_train = X_fold_train
+                    model_X_val = X_fold_val
+
                 model.fit(
-                    X_train=X_fold_train,
+                    X_train=model_X_train,
                     y_train=y_fold_train,
-                    X_val=X_fold_val,
+                    X_val=model_X_val,
                     y_val=y_fold_val,
                     sample_weights=w_train,
                 )
 
                 # Generate predictions for OOF samples
-                output = model.predict(X_fold_val)
+                output = model.predict(model_X_val)
 
                 if use_probabilities:
                     start_col = model_idx * n_classes
@@ -387,8 +478,22 @@ class StackingEnsemble(BaseModel):
         X: np.ndarray,
         fold_models: list[list[BaseModel]],
         use_probabilities: bool,
+        X_seq: np.ndarray | None = None,
     ) -> np.ndarray:
-        """Generate predictions from base models (averaging across folds)."""
+        """
+        Generate predictions from base models (averaging across folds).
+
+        For heterogeneous ensembles, uses appropriate data format for each model.
+
+        Args:
+            X: Tabular features (2D)
+            fold_models: List of fold model lists per base model
+            use_probabilities: Whether to use probabilities or class predictions
+            X_seq: Sequence features (3D) for sequence models in heterogeneous ensembles
+
+        Returns:
+            Predictions array (2D) - always 2D regardless of input model types
+        """
         n_samples = X.shape[0]
         n_classes = 3
         n_models = len(fold_models)
@@ -399,11 +504,20 @@ class StackingEnsemble(BaseModel):
             predictions = np.zeros((n_samples, n_models))
 
         for model_idx, models in enumerate(fold_models):
+            # Get model name from the first fold's model
+            model_name = self._base_model_names[model_idx]
+
+            # Select appropriate data format for this model
+            if self._is_heterogeneous and model_name in self._sequence_models:
+                model_X = X_seq if X_seq is not None else X
+            else:
+                model_X = X
+
             # Average predictions across folds
             if use_probabilities:
                 probs = np.zeros((n_samples, n_classes))
                 for model in models:
-                    output = model.predict(X)
+                    output = model.predict(model_X)
                     probs += output.class_probabilities
                 probs /= len(models)
 
@@ -414,7 +528,7 @@ class StackingEnsemble(BaseModel):
                 # For class predictions, use voting
                 all_preds = []
                 for model in models:
-                    output = model.predict(X)
+                    output = model.predict(model_X)
                     all_preds.append(output.class_predictions)
                 all_preds = np.array(all_preds)
                 # Mode across folds
@@ -424,17 +538,35 @@ class StackingEnsemble(BaseModel):
 
         return predictions
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
-        """Generate stacking ensemble predictions."""
+    def predict(
+        self,
+        X: np.ndarray,
+        X_seq: np.ndarray | None = None,
+    ) -> PredictionOutput:
+        """
+        Generate stacking ensemble predictions.
+
+        Args:
+            X: Tabular features (2D) for tabular models
+            X_seq: Sequence features (3D) for sequence models in heterogeneous ensembles.
+                If None and ensemble is heterogeneous, uses stored X_val_seq or falls back to X.
+
+        Returns:
+            PredictionOutput with class predictions, probabilities, and confidence
+        """
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
         use_probabilities = self._config.get("use_probabilities", True)
         passthrough = self._config.get("passthrough", False)
 
+        # For heterogeneous ensembles, use provided X_seq or fallback
+        predict_X_seq = X_seq if X_seq is not None else self._X_val_seq
+
         # Generate base model predictions
+        # For heterogeneous ensembles, each model gets appropriate data format
         base_predictions = self._generate_base_predictions(
-            X, self._base_models, use_probabilities
+            X, self._base_models, use_probabilities, X_seq=predict_X_seq
         )
 
         # Build meta-learner input
@@ -453,12 +585,26 @@ class StackingEnsemble(BaseModel):
                 "ensemble": "stacking",
                 "base_models": self._base_model_names,
                 "meta_learner": self._meta_learner_name,
+                "is_heterogeneous": self._is_heterogeneous,
             },
         )
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Return class probabilities from meta-learner."""
-        output = self.predict(X)
+    def predict_proba(
+        self,
+        X: np.ndarray,
+        X_seq: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """
+        Return class probabilities from meta-learner.
+
+        Args:
+            X: Tabular features (2D)
+            X_seq: Sequence features (3D) for heterogeneous ensembles
+
+        Returns:
+            Class probabilities array
+        """
+        output = self.predict(X, X_seq=X_seq)
         return output.class_probabilities
 
     def save(self, path: Path) -> None:
@@ -489,6 +635,9 @@ class StackingEnsemble(BaseModel):
             "meta_learner_name": self._meta_learner_name,
             "n_folds": self._n_folds,
             "feature_names": self._feature_names,
+            "is_heterogeneous": self._is_heterogeneous,
+            "tabular_models": list(self._tabular_models),
+            "sequence_models": list(self._sequence_models),
         }
         joblib.dump(metadata, path / "ensemble_metadata.joblib")
 
@@ -507,6 +656,11 @@ class StackingEnsemble(BaseModel):
         self._meta_learner_name = metadata.get("meta_learner_name", "logistic")
         self._n_folds = metadata.get("n_folds", 5)
         self._feature_names = metadata.get("feature_names")
+        self._is_heterogeneous = metadata.get("is_heterogeneous", False)
+        self._tabular_models = set(metadata.get("tabular_models", []))
+        self._sequence_models = set(metadata.get("sequence_models", []))
+        self._X_train_seq = None  # Not stored (data too large)
+        self._X_val_seq = None
 
         # Load base models
         base_models_dir = path / "base_models"
@@ -549,9 +703,21 @@ class StackingEnsemble(BaseModel):
                 if hasattr(model, "set_feature_names"):
                     model.set_feature_names(names)
 
-    def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
-        """Compute accuracy and F1 for a dataset."""
-        output = self.predict(X)
+    def _compute_metrics(
+        self,
+        X: np.ndarray,
+        y_true: np.ndarray,
+        X_seq: np.ndarray | None = None,
+    ) -> dict[str, float]:
+        """
+        Compute accuracy and F1 for a dataset.
+
+        Args:
+            X: Tabular features (2D)
+            y_true: True labels
+            X_seq: Sequence features (3D) for heterogeneous ensembles
+        """
+        output = self.predict(X, X_seq=X_seq)
         y_pred = output.class_predictions
 
         return {

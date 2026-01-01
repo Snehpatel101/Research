@@ -21,9 +21,11 @@ MTF_TIMEFRAMES = {
     # Base timeframe
     '1min': 1,
     '5min': 5,
-    # Short-term MTF
+    # Short-term MTF (9-timeframe ladder)
     '10min': 10,
     '15min': 15,
+    '20min': 20,    # Added for 9-timeframe ladder
+    '25min': 25,    # Added for 9-timeframe ladder
     '30min': 30,
     '45min': 45,
     # Hourly

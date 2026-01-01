@@ -6,7 +6,8 @@ Creates split-ready datasets and feature-set manifests for downstream models.
 This module provides:
 - run_build_datasets: Pipeline stage for creating dataset splits
 - TimeSeriesDataContainer: Unified container for Phase 2 model training
-- SequenceDataset: PyTorch Dataset for sequence models
+- SequenceDataset: PyTorch Dataset for sequence models (3D)
+- MultiResolution4DDataset: PyTorch Dataset for multi-timeframe models (4D)
 - validate_model_ready: Comprehensive validation for model training readiness
 
 Usage:
@@ -23,11 +24,15 @@ Usage:
         horizon=20
     )
 
-    # Get sklearn arrays
+    # Get sklearn arrays (2D)
     X, y, w = container.get_sklearn_arrays("train")
 
-    # Get PyTorch sequences
+    # Get PyTorch sequences (3D)
     dataset = container.get_pytorch_sequences("train", seq_len=60)
+
+    # Get Multi-Resolution 4D sequences
+    dataset_4d = container.get_multi_resolution_4d("train", seq_len=60)
+    # X_4d shape: (batch, n_timeframes, seq_len, n_features)
 
     # Get NeuralForecast format
     nf_df = container.get_neuralforecast_df("train")
@@ -58,6 +63,12 @@ from src.phase1.stages.datasets.validators import (
     ValidationResult,
     validate_model_ready,
 )
+from src.phase1.stages.datasets.adapters import (
+    MultiResolution4DAdapter,
+    MultiResolution4DConfig,
+    MultiResolution4DDataset,
+    create_multi_resolution_dataset,
+)
 
 __all__ = [
     # Pipeline stage
@@ -66,10 +77,15 @@ __all__ = [
     "TimeSeriesDataContainer",
     "DataContainerConfig",
     "SplitData",
-    # Sequence classes
+    # Sequence classes (3D)
     "SequenceDataset",
     "SequenceConfig",
     "create_sequence_dataset",
+    # Multi-Resolution classes (4D)
+    "MultiResolution4DAdapter",
+    "MultiResolution4DConfig",
+    "MultiResolution4DDataset",
+    "create_multi_resolution_dataset",
     # Validation
     "validate_model_ready",
     "ValidationResult",

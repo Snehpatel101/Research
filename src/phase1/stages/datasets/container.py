@@ -531,6 +531,81 @@ class TimeSeriesDataContainer:
         )
 
     # =========================================================================
+    # MULTI-RESOLUTION 4D FORMAT
+    # =========================================================================
+
+    def get_multi_resolution_4d(
+        self,
+        split: str,
+        seq_len: int = 60,
+        stride: int = 1,
+        timeframes: list[str] | None = None,
+        features_per_timeframe: list[str] | None = None,
+        symbol_isolated: bool = True,
+        include_base_features: bool = True,
+    ) -> "Dataset":
+        """
+        Get PyTorch Dataset with multi-resolution 4D sequences.
+
+        Creates 4D tensors of shape (batch, n_timeframes, seq_len, features)
+        suitable for multi-resolution models that process multiple timeframes
+        simultaneously.
+
+        This method is designed for:
+        - Multi-scale CNNs that process timeframes in parallel
+        - Cross-timeframe attention transformers
+        - Hierarchical temporal models
+
+        Args:
+            split: Split name ("train", "val", "test")
+            seq_len: Sequence length per timeframe (default 60)
+            stride: Step size between sequences (default 1)
+            timeframes: List of timeframes to include (default: 9-timeframe ladder)
+            features_per_timeframe: Base feature names to extract per timeframe
+            symbol_isolated: If True, sequences don't cross symbol boundaries
+            include_base_features: Include non-MTF features for base timeframe
+
+        Returns:
+            MultiResolution4DDataset instance (PyTorch Dataset)
+
+        Raises:
+            KeyError: If split not found
+            ValueError: If seq_len <= 0, stride <= 0, or no MTF features found
+
+        Example:
+            >>> container = TimeSeriesDataContainer.from_parquet_dir(
+            ...     "data/splits/scaled", horizon=20
+            ... )
+            >>> dataset = container.get_multi_resolution_4d("train", seq_len=60)
+            >>> X_4d, y, w = dataset[0]
+            >>> X_4d.shape  # (9, 60, n_features)
+        """
+        if seq_len <= 0:
+            raise ValueError(f"seq_len must be positive, got {seq_len}")
+        if stride <= 0:
+            raise ValueError(f"stride must be positive, got {stride}")
+
+        from src.phase1.stages.datasets.adapters import MultiResolution4DAdapter
+
+        split_data = self.get_split(split)
+
+        # Create adapter
+        adapter = MultiResolution4DAdapter(
+            timeframes=timeframes,
+            seq_len=seq_len,
+            stride=stride,
+            features_per_timeframe=features_per_timeframe,
+            include_base_features=include_base_features,
+        )
+
+        return adapter.create_dataset(
+            df=split_data.df,
+            label_column=split_data.label_column,
+            weight_column=split_data.weight_column,
+            symbol_column=split_data.symbol_column if symbol_isolated else None,
+        )
+
+    # =========================================================================
     # NEURALFORECAST FORMAT
     # =========================================================================
 

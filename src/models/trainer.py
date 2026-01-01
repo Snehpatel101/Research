@@ -3,10 +3,11 @@ Trainer - Orchestrates model training workflow.
 
 The Trainer class handles the complete training pipeline:
 1. Load and prepare data from TimeSeriesDataContainer
-2. Apply model-specific preprocessing
-3. Train model with early stopping
-4. Evaluate on validation set
-5. Save artifacts (model, metrics, predictions)
+2. Apply per-model feature selection (for tabular/classical models)
+3. Apply model-specific preprocessing
+4. Train model with early stopping
+5. Evaluate on validation set
+6. Save artifacts (model, metrics, predictions, feature selection)
 
 Example:
     >>> from src.models.trainer import Trainer
@@ -28,16 +29,22 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
 
 from .base import PredictionOutput, TrainingMetrics
 from .calibration import CalibrationConfig, ProbabilityCalibrator
 from .config import TrainerConfig, save_config_json
 from .data_preparation import prepare_test_data, prepare_training_data
+from .feature_selection import FeatureSelectionConfig, FeatureSelectionManager
 from .metrics import compute_classification_metrics, compute_trading_metrics
 from .registry import ModelRegistry
+
+if TYPE_CHECKING:
+    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +85,54 @@ class Trainer:
             config=config.model_config,
         )
 
+        # Initialize feature selection manager based on model family
+        self.feature_selector: FeatureSelectionManager | None = None
+        self._setup_feature_selection()
+
         logger.info(
             f"Initialized Trainer: model={config.model_name}, "
-            f"horizon={config.horizon}, run_id={self.run_id}"
+            f"horizon={config.horizon}, run_id={self.run_id}, "
+            f"feature_selection={self._is_feature_selection_enabled()}"
+        )
+
+    def _setup_feature_selection(self) -> None:
+        """Initialize feature selection manager based on model family and config."""
+        if not self.config.use_feature_selection:
+            self.feature_selector = FeatureSelectionManager.disabled()
+            return
+
+        # Sequence models don't use external feature selection
+        if self.model.requires_sequences:
+            logger.info(
+                f"Feature selection disabled for {self.config.model_name}: "
+                "sequence models handle selection internally"
+            )
+            self.feature_selector = FeatureSelectionManager.disabled()
+            return
+
+        # Create feature selection config based on model family
+        fs_config = FeatureSelectionConfig.from_model_family(
+            model_family=self.model.model_family,
+            override={
+                "n_features": self.config.feature_selection_n_features,
+                "method": self.config.feature_selection_method,
+                "random_state": self.config.random_seed,
+            },
+        )
+
+        # Override n_features if explicitly set to 0 (use family default)
+        if self.config.feature_selection_n_features == 0:
+            from .feature_selection.config import ModelFamilyDefaults
+            defaults = ModelFamilyDefaults.get_defaults(self.model.model_family)
+            fs_config.n_features = defaults.get("n_features", 50)
+
+        self.feature_selector = FeatureSelectionManager(config=fs_config)
+
+    def _is_feature_selection_enabled(self) -> bool:
+        """Check if feature selection is enabled for this trainer."""
+        return (
+            self.feature_selector is not None
+            and self.feature_selector.is_enabled
         )
 
     def _generate_run_id(self) -> str:
@@ -125,10 +177,11 @@ class Trainer:
         Workflow:
         1. Setup output directories
         2. Load and prepare data
-        3. Apply model-specific preprocessing
-        4. Train model
-        5. Evaluate on validation set
-        6. Save artifacts
+        3. Run feature selection (for tabular/classical models)
+        4. Apply model-specific preprocessing
+        5. Train model
+        6. Evaluate on validation set
+        7. Save artifacts (including feature selection)
 
         Args:
             container: TimeSeriesDataContainer with train/val data
@@ -140,6 +193,7 @@ class Trainer:
             - training_metrics: TrainingMetrics from training
             - evaluation_metrics: Validation set metrics
             - output_path: Path to outputs
+            - feature_selection: Feature selection results (if enabled)
         """
         start_time = time.time()
 
@@ -147,15 +201,19 @@ class Trainer:
         self._setup_output_dir()
         self._save_config()
 
-        # Load data
+        # Load data - get DataFrames for feature selection
         logger.info("Loading data from container...")
-        X_train, y_train, w_train, X_val, y_val = prepare_training_data(
-            container,
-            requires_sequences=self.model.requires_sequences,
-            sequence_length=self.config.sequence_length,
-        )
 
-        # Extract label_end_times for overlapping label purging (used by ensemble models)
+        # For feature selection, we need the feature names
+        feature_names = container.feature_columns
+
+        # Get raw training data (as DataFrames for feature selection)
+        X_train_df, y_train_series, w_train_series = container.get_sklearn_arrays(
+            "train", return_df=True
+        )
+        X_val_df, y_val_series, _ = container.get_sklearn_arrays("val", return_df=True)
+
+        # Extract label_end_times for overlapping label purging
         label_end_times = container.get_label_end_times("train")
         if label_end_times is not None:
             logger.info(
@@ -163,12 +221,54 @@ class Trainer:
                 "(prevents leakage in stacking/blending ensembles)"
             )
 
+        # Run feature selection (for tabular/classical models only)
+        feature_selection_result = None
+        if self._is_feature_selection_enabled():
+            feature_selection_result = self._run_feature_selection(
+                X_train_df=X_train_df,
+                y_train=y_train_series,
+                w_train=w_train_series,
+                label_end_times=label_end_times,
+            )
+
+            # Apply feature selection to training data
+            X_train_df = self.feature_selector.apply_selection_df(X_train_df)
+            X_val_df = self.feature_selector.apply_selection_df(X_val_df)
+
+            logger.info(
+                f"Applied feature selection: {feature_selection_result.n_features_selected} features "
+                f"(from {feature_selection_result.n_features_original})"
+            )
+
+        # Convert to numpy arrays and apply model-specific preprocessing
+        if self.model.requires_sequences:
+            # For sequence models, reload with sequences
+            X_train, y_train, w_train, X_val, y_val = prepare_training_data(
+                container,
+                requires_sequences=True,
+                sequence_length=self.config.sequence_length,
+            )
+        else:
+            # Use the (possibly filtered) DataFrames
+            X_train = X_train_df.values
+            y_train = y_train_series.values
+            w_train = w_train_series.values
+            X_val = X_val_df.values
+            y_val = y_val_series.values
+
         # Log data shapes
         logger.info(
             f"Data shapes: "
             f"X_train={X_train.shape}, y_train={y_train.shape}, "
             f"X_val={X_val.shape}, y_val={y_val.shape}"
         )
+
+        # Set feature names on model (for interpretability)
+        if hasattr(self.model, 'set_feature_names') and not self.model.requires_sequences:
+            if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
+                self.model.set_feature_names(self.feature_selector.selected_features)
+            else:
+                self.model.set_feature_names(feature_names)
 
         # Train model (pass label_end_times for ensemble models with internal CV)
         logger.info(f"Training {self.config.model_name}...")
@@ -203,6 +303,15 @@ class Trainer:
             y_pred=val_predictions.class_predictions,
         )
 
+        # Add feature selection info to eval metrics
+        if feature_selection_result is not None:
+            eval_metrics["feature_selection"] = {
+                "n_features_original": feature_selection_result.n_features_original,
+                "n_features_selected": feature_selection_result.n_features_selected,
+                "reduction_ratio": feature_selection_result.reduction_ratio,
+                "method": feature_selection_result.selection_method,
+            }
+
         # Test set evaluation (one-shot generalization estimate)
         test_metrics = None
         test_predictions = None
@@ -228,6 +337,7 @@ class Trainer:
                 test_metrics=test_metrics, test_predictions=test_predictions
             )
             self._save_model()
+            self._save_feature_selection()
             if self.calibrator is not None:
                 self._save_calibrator()
 
@@ -244,6 +354,11 @@ class Trainer:
             "total_time_seconds": total_time,
             "val_predictions": val_predictions.class_predictions,
             "val_true": y_val,
+            "feature_selection": (
+                self.feature_selector.get_feature_report()
+                if self._is_feature_selection_enabled()
+                else None
+            ),
         }
 
         logger.info(
@@ -255,12 +370,46 @@ class Trainer:
 
         return results
 
+    def _run_feature_selection(
+        self,
+        X_train_df: pd.DataFrame,
+        y_train: pd.Series,
+        w_train: pd.Series | None,
+        label_end_times: pd.Series | None,
+    ):
+        """
+        Run feature selection on training data.
+
+        Uses walk-forward selection to prevent lookahead bias.
+        """
+        from .feature_selection import PersistedFeatureSelection
+
+        logger.info(
+            f"Running feature selection: method={self.config.feature_selection_method}, "
+            f"n_features={self.config.feature_selection_n_features}"
+        )
+
+        # Run walk-forward feature selection
+        result = self.feature_selector.select_features(
+            X=X_train_df,
+            y=y_train,
+            sample_weights=w_train,
+            n_splits=self.config.feature_selection_cv_splits,
+            purge_bars=self.config.horizon * 3,  # Purge based on horizon
+            embargo_bars=1440,  # ~5 days at 5-min resolution
+            label_end_times=label_end_times,
+        )
+
+        return result
+
     def _evaluate_test_set(
         self,
         container: TimeSeriesDataContainer,
     ) -> tuple[dict[str, Any] | None, PredictionOutput | None]:
         """
         Evaluate model on test set with warnings about one-shot evaluation.
+
+        Applies the same feature selection used during training to test data.
 
         Args:
             container: TimeSeriesDataContainer with test split
@@ -269,7 +418,7 @@ class Trainer:
             Tuple of (test_metrics, test_predictions)
         """
         logger.warning("=" * 70)
-        logger.warning("⚠️  TEST SET EVALUATION - ONE-SHOT GENERALIZATION ESTIMATE")
+        logger.warning("TEST SET EVALUATION - ONE-SHOT GENERALIZATION ESTIMATE")
         logger.warning("=" * 70)
         logger.warning(
             "You are evaluating on the TEST SET. This is your final, "
@@ -285,11 +434,28 @@ class Trainer:
         logger.warning("=" * 70)
 
         # Load test data
-        X_test, y_test, _ = prepare_test_data(
-            container,
-            requires_sequences=self.model.requires_sequences,
-            sequence_length=self.config.sequence_length,
-        )
+        if self.model.requires_sequences:
+            # Sequence models: load sequences directly
+            X_test, y_test, _ = prepare_test_data(
+                container,
+                requires_sequences=True,
+                sequence_length=self.config.sequence_length,
+            )
+        else:
+            # Tabular models: load DataFrame and apply feature selection
+            X_test_df, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+
+            # Apply feature selection if enabled
+            if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
+                X_test_df = self.feature_selector.apply_selection_df(X_test_df)
+                logger.debug(
+                    f"Applied feature selection to test set: "
+                    f"{X_test_df.shape[1]} features"
+                )
+
+            X_test = X_test_df.values
+            y_test = y_test_series.values
+
         logger.info(f"Test set size: {X_test.shape}")
 
         # Evaluate on test set
@@ -305,7 +471,7 @@ class Trainer:
         )
 
         logger.warning("=" * 70)
-        logger.warning("⚠️  TEST SET RESULTS (DO NOT ITERATE ON THESE)")
+        logger.warning("TEST SET RESULTS (DO NOT ITERATE ON THESE)")
         logger.warning("=" * 70)
         logger.warning(
             f"Test Accuracy: {test_metrics['accuracy']:.4f}, "
@@ -386,6 +552,17 @@ class Trainer:
         model_path = self.output_path / "checkpoints" / "best_model"
         self.model.save(model_path)
         logger.info(f"Saved model to {model_path}")
+
+    def _save_feature_selection(self) -> None:
+        """Save feature selection result with model artifacts."""
+        if not self._is_feature_selection_enabled():
+            return
+        if not self.feature_selector.is_fitted:
+            return
+
+        fs_path = self.output_path / "config" / "feature_selection.json"
+        self.feature_selector.save(fs_path)
+        logger.info(f"Saved feature selection to {fs_path}")
 
     def _save_calibrator(self) -> None:
         """Save probability calibrator."""

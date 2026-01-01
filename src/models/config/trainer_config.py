@@ -29,6 +29,11 @@ class TrainerConfig:
     calibration_method: str = "auto"  # "auto", "isotonic", "sigmoid"
     # Test set evaluation (default True, but marked as one-shot)
     evaluate_test_set: bool = True
+    # Feature selection settings
+    use_feature_selection: bool = True  # Enable per-model feature selection
+    feature_selection_n_features: int = 50  # Number of features to select (0 = auto)
+    feature_selection_method: str = "mda"  # "mda", "mdi", "hybrid"
+    feature_selection_cv_splits: int = 5  # CV splits for stability analysis
 
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""
@@ -67,6 +72,10 @@ class TrainerConfig:
             "use_calibration": self.use_calibration,
             "calibration_method": self.calibration_method,
             "evaluate_test_set": self.evaluate_test_set,
+            "use_feature_selection": self.use_feature_selection,
+            "feature_selection_n_features": self.feature_selection_n_features,
+            "feature_selection_method": self.feature_selection_method,
+            "feature_selection_cv_splits": self.feature_selection_cv_splits,
         }
 
     @classmethod
