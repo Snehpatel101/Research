@@ -23,3 +23,22 @@ pyarrow>=10.0.0
 
 # Online Drift Detection
 river>=0.21.0
+
+# Machine Learning Frameworks
+# Deep Learning - Neural Models (LSTM, GRU, TCN, Transformer, PatchTST, etc.)
+torch>=2.0.0
+torchvision>=0.15.0  # For some CNN architectures
+
+# Gradient Boosting - Boosting Models
+xgboost>=1.7.0
+lightgbm>=3.3.0
+catboost>=1.2.0
+
+# Classical ML and Meta-learners
+scikit-learn>=1.2.0
+
+# Hyperparameter Optimization
+optuna>=3.0.0
+
+# Feature Selection and Validation
+shap>=0.42.0  # For model interpretability

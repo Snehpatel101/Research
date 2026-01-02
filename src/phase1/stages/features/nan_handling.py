@@ -12,10 +12,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def audit_nan_columns(
-    df: pd.DataFrame,
-    nan_threshold: float = 0.9
-) -> dict:
+def audit_nan_columns(df: pd.DataFrame, nan_threshold: float = 0.9) -> dict:
     """
     Audit NaN values per column and categorize by severity.
 
@@ -34,32 +31,28 @@ def audit_nan_columns(
     rows = len(df)
     if rows == 0:
         return {
-            'total_rows': 0,
-            'total_cols': len(df.columns),
-            'all_nan_cols': [],
-            'high_nan_cols': [],
-            'moderate_nan_cols': [],
-            'nan_rates': {}
+            "total_rows": 0,
+            "total_cols": len(df.columns),
+            "all_nan_cols": [],
+            "high_nan_cols": [],
+            "moderate_nan_cols": [],
+            "nan_rates": {},
         }
 
     nan_counts = df.isna().sum()
     nan_rates = nan_counts / rows
 
     all_nan_cols = nan_rates[nan_rates == 1.0].index.tolist()
-    high_nan_cols = nan_rates[
-        (nan_rates > nan_threshold) & (nan_rates < 1.0)
-    ].index.tolist()
-    moderate_nan_cols = nan_rates[
-        (nan_rates > 0.5) & (nan_rates <= nan_threshold)
-    ].index.tolist()
+    high_nan_cols = nan_rates[(nan_rates > nan_threshold) & (nan_rates < 1.0)].index.tolist()
+    moderate_nan_cols = nan_rates[(nan_rates > 0.5) & (nan_rates <= nan_threshold)].index.tolist()
 
     return {
-        'total_rows': rows,
-        'total_cols': len(df.columns),
-        'all_nan_cols': all_nan_cols,
-        'high_nan_cols': high_nan_cols,
-        'moderate_nan_cols': moderate_nan_cols,
-        'nan_rates': nan_rates.to_dict()
+        "total_rows": rows,
+        "total_cols": len(df.columns),
+        "all_nan_cols": all_nan_cols,
+        "high_nan_cols": high_nan_cols,
+        "moderate_nan_cols": moderate_nan_cols,
+        "nan_rates": nan_rates.to_dict(),
     }
 
 
@@ -67,7 +60,7 @@ def clean_nan_columns(
     df: pd.DataFrame,
     symbol: str,
     nan_threshold: float = 0.9,
-    protected_columns: list[str] | None = None
+    protected_columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """
     Audit NaN values and clean problematic columns before row-wise dropna.
@@ -103,7 +96,7 @@ def clean_nan_columns(
         If all rows are dropped after NaN handling
     """
     if protected_columns is None:
-        protected_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+        protected_columns = ["datetime", "open", "high", "low", "close", "volume"]
 
     rows_before = len(df)
     cols_before = len(df.columns)
@@ -114,12 +107,8 @@ def clean_nan_columns(
 
     # Identify problematic columns
     all_nan_cols = nan_rates[nan_rates == 1.0].index.tolist()
-    high_nan_cols = nan_rates[
-        (nan_rates > nan_threshold) & (nan_rates < 1.0)
-    ].index.tolist()
-    moderate_nan_cols = nan_rates[
-        (nan_rates > 0.5) & (nan_rates <= nan_threshold)
-    ].index.tolist()
+    high_nan_cols = nan_rates[(nan_rates > nan_threshold) & (nan_rates < 1.0)].index.tolist()
+    moderate_nan_cols = nan_rates[(nan_rates > 0.5) & (nan_rates <= nan_threshold)].index.tolist()
 
     # Log NaN audit results
     logger.info(f"\n--- NaN Audit for {symbol} ---")
@@ -144,10 +133,7 @@ def clean_nan_columns(
         )
 
     # Columns to drop (above threshold, not protected)
-    cols_to_drop = [
-        col for col in (all_nan_cols + high_nan_cols)
-        if col not in protected_columns
-    ]
+    cols_to_drop = [col for col in (all_nan_cols + high_nan_cols) if col not in protected_columns]
 
     # Check if any protected columns have all NaN (fatal error)
     protected_all_nan = [col for col in all_nan_cols if col in protected_columns]
@@ -199,17 +185,17 @@ def clean_nan_columns(
 
     # Build audit report
     audit_report = {
-        'rows_before': rows_before,
-        'rows_after': len(df),
-        'rows_dropped': rows_dropped,
-        'row_drop_rate': rows_dropped / rows_before if rows_before > 0 else 0,
-        'cols_before': cols_before,
-        'cols_after': len(df.columns),
-        'cols_dropped': len(cols_to_drop),
-        'cols_dropped_names': cols_to_drop,
-        'all_nan_cols': all_nan_cols,
-        'high_nan_cols': high_nan_cols,
-        'nan_threshold': nan_threshold
+        "rows_before": rows_before,
+        "rows_after": len(df),
+        "rows_dropped": rows_dropped,
+        "row_drop_rate": rows_dropped / rows_before if rows_before > 0 else 0,
+        "cols_before": cols_before,
+        "cols_after": len(df.columns),
+        "cols_dropped": len(cols_to_drop),
+        "cols_dropped_names": cols_to_drop,
+        "all_nan_cols": all_nan_cols,
+        "high_nan_cols": high_nan_cols,
+        "nan_threshold": nan_threshold,
     }
 
     return df, audit_report

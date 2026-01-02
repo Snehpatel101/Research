@@ -2,6 +2,7 @@
 Formatting utilities for Phase 1 reports.
 Handles markdown to HTML conversion and other formatting tasks.
 """
+
 import logging
 from pathlib import Path
 
@@ -43,7 +44,7 @@ def save_html_report(md_path: Path, output_path: Path) -> None:
 
     html_content = markdown_to_html(md_content)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         f.write(html_content)
 
     logger.info(f"  HTML report saved to {output_path}")
@@ -135,18 +136,18 @@ def _convert_markdown_body(md_text: str) -> str:
     This is a basic implementation that handles common markdown elements.
     For production use, consider using a proper markdown library.
     """
-    lines = md_text.split('\n')
+    lines = md_text.split("\n")
     result_lines = []
     in_code_block = False
 
     for i, line in enumerate(lines):
         # Code blocks
-        if line.startswith('```'):
+        if line.startswith("```"):
             if in_code_block:
-                result_lines.append('</code></pre>')
+                result_lines.append("</code></pre>")
                 in_code_block = False
             else:
-                result_lines.append('<pre><code>')
+                result_lines.append("<pre><code>")
                 in_code_block = True
             continue
 
@@ -155,25 +156,25 @@ def _convert_markdown_body(md_text: str) -> str:
             continue
 
         # Headers
-        if line.startswith('#### '):
+        if line.startswith("#### "):
             result_lines.append(f"<h4>{line[5:]}</h4>")
-        elif line.startswith('### '):
+        elif line.startswith("### "):
             result_lines.append(f"<h3>{line[4:]}</h3>")
-        elif line.startswith('## '):
+        elif line.startswith("## "):
             result_lines.append(f"<h2>{line[3:]}</h2>")
-        elif line.startswith('# '):
+        elif line.startswith("# "):
             result_lines.append(f"<h1>{line[2:]}</h1>")
         # Horizontal rules
-        elif line.strip() == '---':
-            result_lines.append('<hr>')
+        elif line.strip() == "---":
+            result_lines.append("<hr>")
         # Images
-        elif line.startswith('!['):
+        elif line.startswith("!["):
             result_lines.append(_convert_image(line))
         # Tables
-        elif line.strip().startswith('|'):
+        elif line.strip().startswith("|"):
             result_lines.append(_convert_table_row(line, i, lines))
         # List items (unordered)
-        elif line.strip().startswith('- '):
+        elif line.strip().startswith("- "):
             result_lines.append(_convert_unordered_list_item(line, i, lines))
         # List items (ordered)
         elif _is_ordered_list_item(line):
@@ -181,21 +182,21 @@ def _convert_markdown_body(md_text: str) -> str:
         # Regular paragraphs with inline formatting
         elif line.strip():
             formatted = _apply_inline_formatting(line)
-            result_lines.append(f'<p>{formatted}</p>')
+            result_lines.append(f"<p>{formatted}</p>")
         else:
-            result_lines.append('')
+            result_lines.append("")
 
-    return '\n'.join(result_lines)
+    return "\n".join(result_lines)
 
 
 def _convert_image(line: str) -> str:
     """Convert markdown image syntax to HTML."""
-    alt_end = line.find(']')
-    url_start = line.find('(')
-    url_end = line.find(')')
+    alt_end = line.find("]")
+    url_start = line.find("(")
+    url_end = line.find(")")
     if alt_end > 0 and url_start > 0:
         alt = line[2:alt_end]
-        url = line[url_start + 1:url_end]
+        url = line[url_start + 1 : url_end]
         return f'<img src="{url}" alt="{alt}">'
     return line
 
@@ -203,39 +204,36 @@ def _convert_image(line: str) -> str:
 def _convert_table_row(line: str, index: int, lines: list) -> str:
     """Convert markdown table row to HTML."""
     # Skip separator rows
-    if '---' in line:
-        return ''
+    if "---" in line:
+        return ""
 
-    cells = [c.strip() for c in line.split('|')[1:-1]]
+    cells = [c.strip() for c in line.split("|")[1:-1]]
 
     # Check if this is a header row (next row is separator)
     is_header = False
     if index + 1 < len(lines):
         next_line = lines[index + 1]
-        if '---' in next_line and next_line.strip().startswith('|'):
+        if "---" in next_line and next_line.strip().startswith("|"):
             is_header = True
 
     # Check if we need to start/end table
-    prev_is_table = index > 0 and lines[index - 1].strip().startswith('|')
+    prev_is_table = index > 0 and lines[index - 1].strip().startswith("|")
 
-    result = ''
+    result = ""
     if not prev_is_table:
-        result += '<table>\n'
+        result += "<table>\n"
 
-    tag = 'th' if is_header else 'td'
-    result += '<tr>'
+    tag = "th" if is_header else "td"
+    result += "<tr>"
     for cell in cells:
         formatted_cell = _apply_inline_formatting(cell)
-        result += f'<{tag}>{formatted_cell}</{tag}>'
-    result += '</tr>'
+        result += f"<{tag}>{formatted_cell}</{tag}>"
+    result += "</tr>"
 
     # Check if we need to close table
-    next_is_table = (
-        index + 1 < len(lines) and
-        lines[index + 1].strip().startswith('|')
-    )
+    next_is_table = index + 1 < len(lines) and lines[index + 1].strip().startswith("|")
     if not next_is_table:
-        result += '\n</table>'
+        result += "\n</table>"
 
     return result
 
@@ -246,23 +244,17 @@ def _convert_unordered_list_item(line: str, index: int, lines: list) -> str:
     formatted = _apply_inline_formatting(content)
 
     # Check if previous line is also a list item
-    prev_is_list = (
-        index > 0 and
-        lines[index - 1].strip().startswith('- ')
-    )
+    prev_is_list = index > 0 and lines[index - 1].strip().startswith("- ")
 
     # Check if next line is also a list item
-    next_is_list = (
-        index + 1 < len(lines) and
-        lines[index + 1].strip().startswith('- ')
-    )
+    next_is_list = index + 1 < len(lines) and lines[index + 1].strip().startswith("- ")
 
-    result = ''
+    result = ""
     if not prev_is_list:
-        result += '<ul>\n'
-    result += f'<li>{formatted}</li>'
+        result += "<ul>\n"
+    result += f"<li>{formatted}</li>"
     if not next_is_list:
-        result += '\n</ul>'
+        result += "\n</ul>"
 
     return result
 
@@ -274,12 +266,12 @@ def _is_ordered_list_item(line: str) -> bool:
         return False
     if not stripped[0].isdigit():
         return False
-    return '. ' in stripped
+    return ". " in stripped
 
 
 def _convert_ordered_list_item(line: str, index: int, lines: list) -> str:
     """Convert markdown ordered list item to HTML."""
-    content = line.strip().split('. ', 1)[1]
+    content = line.strip().split(". ", 1)[1]
     formatted = _apply_inline_formatting(content)
 
     # Check if previous line is also an ordered list item
@@ -288,12 +280,12 @@ def _convert_ordered_list_item(line: str, index: int, lines: list) -> str:
     # Check if next line is also an ordered list item
     next_is_list = index + 1 < len(lines) and _is_ordered_list_item(lines[index + 1])
 
-    result = ''
+    result = ""
     if not prev_is_list:
-        result += '<ol>\n'
-    result += f'<li>{formatted}</li>'
+        result += "<ol>\n"
+    result += f"<li>{formatted}</li>"
     if not next_is_list:
-        result += '\n</ol>'
+        result += "\n</ol>"
 
     return result
 
@@ -301,16 +293,16 @@ def _convert_ordered_list_item(line: str, index: int, lines: list) -> str:
 def _apply_inline_formatting(text: str) -> str:
     """Apply inline markdown formatting (bold, code, etc.)."""
     # Bold
-    while '**' in text:
-        text = text.replace('**', '<strong>', 1)
-        if '**' in text:
-            text = text.replace('**', '</strong>', 1)
+    while "**" in text:
+        text = text.replace("**", "<strong>", 1)
+        if "**" in text:
+            text = text.replace("**", "</strong>", 1)
 
     # Inline code
-    while '`' in text:
-        text = text.replace('`', '<code>', 1)
-        if '`' in text:
-            text = text.replace('`', '</code>', 1)
+    while "`" in text:
+        text = text.replace("`", "<code>", 1)
+        if "`" in text:
+            text = text.replace("`", "</code>", 1)
 
     return text
 
@@ -318,16 +310,16 @@ def _apply_inline_formatting(text: str) -> str:
 def _apply_status_styling(html: str) -> str:
     """Apply CSS classes to status indicators."""
     replacements = [
-        ('PASS', '<span class="pass">PASS</span>'),
-        ('FAIL', '<span class="fail">FAIL</span>'),
-        ('WARNING', '<span class="warning">WARNING</span>'),
-        ('PASSED', '<span class="pass">PASSED</span>'),
-        ('FAILED', '<span class="fail">FAILED</span>'),
+        ("PASS", '<span class="pass">PASS</span>'),
+        ("FAIL", '<span class="fail">FAIL</span>'),
+        ("WARNING", '<span class="warning">WARNING</span>'),
+        ("PASSED", '<span class="pass">PASSED</span>'),
+        ("FAILED", '<span class="fail">FAILED</span>'),
     ]
 
     for old, new in replacements:
         # Only replace in table cells to avoid replacing in prose
-        html = html.replace(f'<td>{old}</td>', f'<td>{new}</td>')
-        html = html.replace(f'| {old} |', f'| {new} |')
+        html = html.replace(f"<td>{old}</td>", f"<td>{new}</td>")
+        html = html.replace(f"| {old} |", f"| {new} |")
 
     return html

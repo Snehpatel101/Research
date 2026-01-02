@@ -78,18 +78,13 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         k_up: float | None = None,
         k_down: float | None = None,
         max_bars: int | None = None,
-        atr_column: str = 'atr_14',
-        volatility_regime_col: str = 'volatility_regime',
-        trend_regime_col: str = 'trend_regime',
-        structure_regime_col: str = 'structure_regime',
-        symbol: str | None = None
+        atr_column: str = "atr_14",
+        volatility_regime_col: str = "volatility_regime",
+        trend_regime_col: str = "trend_regime",
+        structure_regime_col: str = "structure_regime",
+        symbol: str | None = None,
     ):
-        super().__init__(
-            k_up=k_up,
-            k_down=k_down,
-            max_bars=max_bars,
-            atr_column=atr_column
-        )
+        super().__init__(k_up=k_up, k_down=k_down, max_bars=max_bars, atr_column=atr_column)
         self._volatility_regime_col = volatility_regime_col
         self._trend_regime_col = trend_regime_col
         self._structure_regime_col = structure_regime_col
@@ -104,11 +99,7 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
     @property
     def regime_columns(self) -> list[str]:
         """Return list of regime column names."""
-        return [
-            self._volatility_regime_col,
-            self._trend_regime_col,
-            self._structure_regime_col
-        ]
+        return [self._volatility_regime_col, self._trend_regime_col, self._structure_regime_col]
 
     def _get_regime_adjusted_params(
         self,
@@ -116,7 +107,7 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         horizon: int,
         volatility_regime: str,
         trend_regime: str,
-        structure_regime: str
+        structure_regime: str,
     ) -> dict[str, Any]:
         """
         Get barrier parameters adjusted for current market regime.
@@ -149,18 +140,17 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
                 horizon=horizon,
                 volatility_regime=volatility_regime,
                 trend_regime=trend_regime,
-                structure_regime=structure_regime
+                structure_regime=structure_regime,
             )
         except ImportError:
             logger.warning(
-                "Could not import get_regime_adjusted_barriers, "
-                "using default parameters"
+                "Could not import get_regime_adjusted_barriers, " "using default parameters"
             )
             defaults = self._get_default_params(horizon)
             return {
-                'k_up': defaults['k_up'],
-                'k_down': defaults['k_down'],
-                'max_bars': defaults['max_bars']
+                "k_up": defaults["k_up"],
+                "k_down": defaults["k_down"],
+                "max_bars": defaults["max_bars"],
             }
 
     def _has_regime_columns(self, df: pd.DataFrame) -> dict[str, bool]:
@@ -172,18 +162,12 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         dict : Mapping of regime type to presence boolean
         """
         return {
-            'volatility': self._volatility_regime_col in df.columns,
-            'trend': self._trend_regime_col in df.columns,
-            'structure': self._structure_regime_col in df.columns
+            "volatility": self._volatility_regime_col in df.columns,
+            "trend": self._trend_regime_col in df.columns,
+            "structure": self._structure_regime_col in df.columns,
         }
 
-    def _get_regime_value(
-        self,
-        df: pd.DataFrame,
-        idx: int,
-        regime_col: str,
-        default: str
-    ) -> str:
+    def _get_regime_value(self, df: pd.DataFrame, idx: int, regime_col: str, default: str) -> str:
         """
         Get regime value at index, handling missing columns and NaN values.
 
@@ -218,7 +202,7 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         k_up: float | None = None,
         k_down: float | None = None,
         max_bars: int | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> LabelingResult:
         """
         Compute triple-barrier labels with regime-adaptive parameters.
@@ -269,26 +253,20 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
                 "No regime columns found in DataFrame, "
                 "falling back to static triple-barrier labeling"
             )
-            return super().compute_labels(
-                df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars
-            )
+            return super().compute_labels(df, horizon, k_up=k_up, k_down=k_down, max_bars=max_bars)
 
         # Log which regimes are available
         available_regimes = [k for k, v in regime_available.items() if v]
         missing_regimes = [k for k, v in regime_available.items() if not v]
-        logger.info(
-            f"Adaptive labeling with regimes: {available_regimes}"
-        )
+        logger.info(f"Adaptive labeling with regimes: {available_regimes}")
         if missing_regimes:
-            logger.info(
-                f"Missing regime columns (using defaults): {missing_regimes}"
-            )
+            logger.info(f"Missing regime columns (using defaults): {missing_regimes}")
 
         # Resolve base parameters
         defaults = self._get_default_params(horizon)
-        base_k_up = k_up or self._k_up or defaults['k_up']
-        base_k_down = k_down or self._k_down or defaults['k_down']
-        base_max_bars = max_bars or self._max_bars or defaults['max_bars']
+        base_k_up = k_up or self._k_up or defaults["k_up"]
+        base_k_down = k_down or self._k_down or defaults["k_down"]
+        base_max_bars = max_bars or self._max_bars or defaults["max_bars"]
 
         # Validate base parameters
         if base_k_up <= 0:
@@ -299,17 +277,19 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
             raise ValueError(f"max_bars must be positive, got {base_max_bars}")
 
         # Determine symbol for param lookup
-        symbol = self._symbol or 'MES'  # Default to MES if not specified
+        symbol = self._symbol or "MES"  # Default to MES if not specified
 
         logger.info(f"Computing adaptive triple-barrier labels for horizon {horizon}")
-        logger.info(f"  Base params: k_up={base_k_up:.3f}, k_down={base_k_down:.3f}, max_bars={base_max_bars}")
+        logger.info(
+            f"  Base params: k_up={base_k_up:.3f}, k_down={base_k_down:.3f}, max_bars={base_max_bars}"
+        )
         logger.info(f"  Symbol: {symbol}")
 
         # Extract arrays
-        close = df['close'].values
-        high = df['high'].values
-        low = df['low'].values
-        open_prices = df['open'].values
+        close = df["close"].values
+        high = df["high"].values
+        low = df["low"].values
+        open_prices = df["open"].values
         atr = df[self._atr_column].values
 
         n = len(df)
@@ -328,15 +308,9 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
             entry_atr = atr[i]
 
             # Get current regime values
-            volatility_regime = self._get_regime_value(
-                df, i, self._volatility_regime_col, 'normal'
-            )
-            trend_regime = self._get_regime_value(
-                df, i, self._trend_regime_col, 'sideways'
-            )
-            structure_regime = self._get_regime_value(
-                df, i, self._structure_regime_col, 'random'
-            )
+            volatility_regime = self._get_regime_value(df, i, self._volatility_regime_col, "normal")
+            trend_regime = self._get_regime_value(df, i, self._trend_regime_col, "sideways")
+            structure_regime = self._get_regime_value(df, i, self._structure_regime_col, "random")
 
             # Track regime combination
             regime_key = f"{volatility_regime}_{trend_regime}_{structure_regime}"
@@ -348,12 +322,12 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
                 horizon=horizon,
                 volatility_regime=volatility_regime,
                 trend_regime=trend_regime,
-                structure_regime=structure_regime
+                structure_regime=structure_regime,
             )
 
-            adj_k_up = adjusted['k_up']
-            adj_k_down = adjusted['k_down']
-            adj_max_bars = adjusted['max_bars']
+            adj_k_up = adjusted["k_up"]
+            adj_k_down = adjusted["k_down"]
+            adj_max_bars = adjusted["max_bars"]
 
             # Skip if ATR is invalid
             if np.isnan(entry_atr) or entry_atr <= 0:
@@ -440,12 +414,7 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         result = LabelingResult(
             labels=labels,
             horizon=horizon,
-            metadata={
-                'bars_to_hit': bars_to_hit,
-                'mae': mae,
-                'mfe': mfe,
-                'touch_type': touch_type
-            }
+            metadata={"bars_to_hit": bars_to_hit, "mae": mae, "mfe": mfe, "touch_type": touch_type},
         )
 
         # Compute quality metrics
@@ -454,12 +423,8 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         # Add regime distribution to quality metrics
         total_counted = sum(regime_counts.values())
         if total_counted > 0:
-            top_regimes = sorted(
-                regime_counts.items(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:5]
-            result.quality_metrics['regime_distribution'] = {
+            top_regimes = sorted(regime_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+            result.quality_metrics["regime_distribution"] = {
                 k: v / total_counted * 100 for k, v in top_regimes
             }
 
@@ -477,11 +442,7 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
 
         logger.info("Regime distribution during labeling:")
         # Sort by count descending and show top 5
-        sorted_regimes = sorted(
-            regime_counts.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:5]
+        sorted_regimes = sorted(regime_counts.items(), key=lambda x: x[1], reverse=True)[:5]
 
         for regime, count in sorted_regimes:
             pct = count / total * 100
@@ -491,4 +452,4 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
             logger.info(f"  ... and {len(regime_counts) - 5} more regime combinations")
 
 
-__all__ = ['AdaptiveTripleBarrierLabeler']
+__all__ = ["AdaptiveTripleBarrierLabeler"]

@@ -1,4 +1,5 @@
 """Validation functions for PipelineConfig."""
+
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -8,6 +9,7 @@ if TYPE_CHECKING:
 def validate_timeframe_config(target_timeframe: str) -> list[str]:
     """Validate target timeframe."""
     from src.phase1.config import SUPPORTED_TIMEFRAMES
+
     issues = []
     if target_timeframe not in SUPPORTED_TIMEFRAMES:
         issues.append(
@@ -37,8 +39,7 @@ def validate_symbols(symbols: list[str], allow_batch: bool) -> list[str]:
     issues = []
     if not symbols:
         issues.append(
-            "At least one symbol must be specified. "
-            "Use --symbols MES or symbols=['MES']."
+            "At least one symbol must be specified. " "Use --symbols MES or symbols=['MES']."
         )
     if len(symbols) > 1 and not allow_batch:
         issues.append(
@@ -111,22 +112,22 @@ def validate_feature_params(
 def validate_mtf_config(mtf_mode: str, mtf_timeframes: list[str]) -> list[str]:
     """Validate MTF configuration."""
     from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
+
     issues = []
-    valid_modes = ['bars', 'indicators', 'both']
+    valid_modes = ["bars", "indicators", "both"]
     if mtf_mode not in valid_modes:
         issues.append(f"mtf_mode must be one of {valid_modes}, got '{mtf_mode}'")
     for tf in mtf_timeframes:
         if tf not in MTF_TIMEFRAMES:
             issues.append(
-                f"Unsupported MTF timeframe: '{tf}'. "
-                f"Supported: {list(MTF_TIMEFRAMES.keys())}"
+                f"Unsupported MTF timeframe: '{tf}'. " f"Supported: {list(MTF_TIMEFRAMES.keys())}"
             )
     return issues
 
 
 def validate_scaler_type(scaler_type: str) -> list[str]:
     """Validate scaler type."""
-    valid = ['robust', 'standard', 'minmax', 'quantile', 'none']
+    valid = ["robust", "standard", "minmax", "quantile", "none"]
     if scaler_type not in valid:
         return [f"scaler_type must be one of {valid}, got '{scaler_type}'"]
     return []
@@ -136,7 +137,7 @@ def validate_feature_toggles(toggles: dict[str, bool] | None) -> list[str]:
     """Validate feature toggle keys."""
     if toggles is None:
         return []
-    valid_keys = {'wavelets', 'microstructure', 'volume', 'volatility'}
+    valid_keys = {"wavelets", "microstructure", "volume", "volatility"}
     issues = []
     for key in toggles.keys():
         if key not in valid_keys:
@@ -148,14 +149,14 @@ def validate_barrier_overrides(overrides: dict[str, float] | None) -> list[str]:
     """Validate barrier override configuration."""
     if overrides is None:
         return []
-    valid_keys = {'k_up', 'k_down', 'max_bars'}
+    valid_keys = {"k_up", "k_down", "max_bars"}
     issues = []
     for key, value in overrides.items():
         if key not in valid_keys:
             issues.append(f"Unknown barrier override key: '{key}'. Valid keys: {valid_keys}")
-        elif key in ('k_up', 'k_down') and value <= 0:
+        elif key in ("k_up", "k_down") and value <= 0:
             issues.append(f"barrier_overrides['{key}'] must be > 0, got {value}")
-        elif key == 'max_bars' and value < 1:
+        elif key == "max_bars" and value < 1:
             issues.append(f"barrier_overrides['max_bars'] must be >= 1, got {value}")
     return issues
 
@@ -164,19 +165,19 @@ def validate_model_config_dict(model_config: dict[str, Any] | None) -> list[str]
     """Validate model configuration dictionary."""
     if model_config is None:
         return []
-    valid_keys = {'model_type', 'base_models', 'meta_learner', 'sequence_length'}
+    valid_keys = {"model_type", "base_models", "meta_learner", "sequence_length"}
     issues = []
     for key in model_config.keys():
         if key not in valid_keys:
             issues.append(f"Unknown model_config key: '{key}'. Valid keys: {valid_keys}")
-    if 'sequence_length' in model_config:
-        seq = model_config['sequence_length']
+    if "sequence_length" in model_config:
+        seq = model_config["sequence_length"]
         if not isinstance(seq, int) or seq < 1:
             issues.append(f"model_config['sequence_length'] must be a positive integer, got {seq}")
     return issues
 
 
-def validate_pipeline_config(config: 'PipelineConfig') -> list[str]:
+def validate_pipeline_config(config: "PipelineConfig") -> list[str]:
     """
     Run all validation checks on a PipelineConfig.
 
@@ -190,13 +191,20 @@ def validate_pipeline_config(config: 'PipelineConfig') -> list[str]:
     issues.extend(validate_symbols(config.symbols, config.allow_batch_symbols))
     issues.extend(validate_horizons(config.label_horizons, config.max_bars_ahead))
     issues.extend(validate_purge_embargo(config.purge_bars, config.embargo_bars))
-    issues.extend(validate_ga_params(
-        config.ga_population_size, config.ga_generations,
-        config.ga_crossover_rate, config.ga_mutation_rate, config.ga_elite_size
-    ))
-    issues.extend(validate_feature_params(
-        config.sma_periods, config.ema_periods, config.atr_periods, config.rsi_period
-    ))
+    issues.extend(
+        validate_ga_params(
+            config.ga_population_size,
+            config.ga_generations,
+            config.ga_crossover_rate,
+            config.ga_mutation_rate,
+            config.ga_elite_size,
+        )
+    )
+    issues.extend(
+        validate_feature_params(
+            config.sma_periods, config.ema_periods, config.atr_periods, config.rsi_period
+        )
+    )
     issues.extend(validate_mtf_config(config.mtf_mode, config.mtf_timeframes))
     issues.extend(validate_scaler_type(config.scaler_type))
     issues.extend(validate_feature_set_config(config.feature_set))

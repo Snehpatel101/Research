@@ -1,11 +1,12 @@
 """Summary generation for PipelineConfig."""
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.phase1.pipeline_config import PipelineConfig
 
 
-def generate_pipeline_summary(config: 'PipelineConfig') -> str:
+def generate_pipeline_summary(config: "PipelineConfig") -> str:
     """Generate a human-readable summary of the configuration."""
     return f"""
 Pipeline Configuration Summary

@@ -3,6 +3,7 @@ Stage 7.5: Feature Scaling.
 
 Pipeline wrapper for train-only feature scaling.
 """
+
 import json
 import logging
 import traceback
@@ -38,14 +39,36 @@ def _identify_feature_columns(df: pd.DataFrame) -> list[str]:
         List of feature column names to scale
     """
     excluded_cols = {
-        'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-        'timestamp', 'date', 'time', 'timeframe',
-        'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+        "datetime",
+        "symbol",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "timestamp",
+        "date",
+        "time",
+        "timeframe",
+        "session_id",
+        "missing_bar",
+        "roll_event",
+        "roll_window",
+        "filled",
     }
     excluded_prefixes = (
-        'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-        'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-        'fwd_return_log_', 'time_to_hit_'
+        "label_",
+        "bars_to_hit_",
+        "mae_",
+        "mfe_",
+        "quality_",
+        "sample_weight_",
+        "touch_type_",
+        "pain_to_gain_",
+        "time_weighted_dd_",
+        "fwd_return_",
+        "fwd_return_log_",
+        "time_to_hit_",
     )
 
     feature_cols = []
@@ -60,10 +83,7 @@ def _identify_feature_columns(df: pd.DataFrame) -> list[str]:
     return feature_cols
 
 
-def run_feature_scaling(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 7.5: Feature Scaling.
 
@@ -97,8 +117,10 @@ def run_feature_scaling(
         val_indices = np.load(config.splits_dir / "val_indices.npy")
         test_indices = np.load(config.splits_dir / "test_indices.npy")
 
-        logger.info(f"Split sizes - Train: {len(train_indices):,}, "
-                    f"Val: {len(val_indices):,}, Test: {len(test_indices):,}")
+        logger.info(
+            f"Split sizes - Train: {len(train_indices):,}, "
+            f"Val: {len(val_indices):,}, Test: {len(test_indices):,}"
+        )
 
         train_df = df.iloc[train_indices].copy()
         val_df = df.iloc[val_indices].copy()
@@ -117,9 +139,7 @@ def run_feature_scaling(
             logger.info(f"  ... and {len(feature_cols) - 10} more")
 
         scaler_config = ScalerConfig(
-            scaler_type='robust',
-            clip_outliers=True,
-            clip_range=(-5.0, 5.0)
+            scaler_type="robust", clip_outliers=True, clip_range=(-5.0, 5.0)
         )
 
         scaler = FeatureScaler(config=scaler_config)
@@ -135,19 +155,17 @@ def run_feature_scaling(
         test_scaled = scaler.transform(test_df)
 
         logger.info("\nValidating scaling integrity...")
-        scaling_validation = validate_scaling(
-            scaler, train_df, val_df, test_df, feature_cols
-        )
+        scaling_validation = validate_scaling(scaler, train_df, val_df, test_df, feature_cols)
 
-        if not scaling_validation['is_valid']:
+        if not scaling_validation["is_valid"]:
             logger.warning("Scaling validation found issues:")
-            for issue in scaling_validation['issues'][:5]:
+            for issue in scaling_validation["issues"][:5]:
                 logger.warning(f"  - {issue}")
 
         logger.info("Checking for data leakage...")
         leakage_check = validate_no_leakage(train_df, val_df, test_df, scaler)
 
-        if leakage_check['leakage_detected']:
+        if leakage_check["leakage_detected"]:
             raise RuntimeError(
                 f"DATA LEAKAGE DETECTED in scaling! Issues: {leakage_check['issues']}"
             )
@@ -175,34 +193,33 @@ def run_feature_scaling(
 
         scaling_report = scaler.get_scaling_report()
         scaling_metadata = {
-            'run_id': config.run_id,
-            'timestamp': datetime.now().isoformat(),
-            'scaler_type': 'robust',
-            'clip_outliers': True,
-            'clip_range': [-5.0, 5.0],
-            'n_features_scaled': len(feature_cols),
-            'train_samples': len(train_indices),
-            'val_samples': len(val_indices),
-            'test_samples': len(test_indices),
-            'feature_columns': feature_cols,
-            'scaling_validation': {
-                'is_valid': scaling_validation['is_valid'],
-                'warnings_count': len(scaling_validation.get('warnings', [])),
-                'issues_count': len(scaling_validation.get('issues', []))
+            "run_id": config.run_id,
+            "timestamp": datetime.now().isoformat(),
+            "scaler_type": "robust",
+            "clip_outliers": True,
+            "clip_range": [-5.0, 5.0],
+            "n_features_scaled": len(feature_cols),
+            "train_samples": len(train_indices),
+            "val_samples": len(val_indices),
+            "test_samples": len(test_indices),
+            "feature_columns": feature_cols,
+            "scaling_validation": {
+                "is_valid": scaling_validation["is_valid"],
+                "warnings_count": len(scaling_validation.get("warnings", [])),
+                "issues_count": len(scaling_validation.get("issues", [])),
             },
-            'leakage_check': {
-                'leakage_detected': leakage_check['leakage_detected'],
-                'checks_passed': len([
-                    c for c in leakage_check.get('checks', [])
-                    if c.get('passed', False)
-                ])
+            "leakage_check": {
+                "leakage_detected": leakage_check["leakage_detected"],
+                "checks_passed": len(
+                    [c for c in leakage_check.get("checks", []) if c.get("passed", False)]
+                ),
             },
-            'features_by_category': scaling_report.get('features_by_category', {}),
-            'features_by_scaler': scaling_report.get('features_by_scaler', {})
+            "features_by_category": scaling_report.get("features_by_category", {}),
+            "features_by_scaler": scaling_report.get("features_by_scaler", {}),
         }
 
         metadata_path = scaled_data_dir / "scaling_metadata.json"
-        with open(metadata_path, 'w') as f:
+        with open(metadata_path, "w") as f:
             json.dump(scaling_metadata, f, indent=2, default=str)
         logger.info(f"  Metadata: {metadata_path}")
 
@@ -212,7 +229,9 @@ def run_feature_scaling(
         logger.info(f"Features scaled: {len(feature_cols)}")
         logger.info("Scaler type: robust")
         logger.info("Outlier clipping: [-5.0, 5.0]")
-        logger.info(f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'WARNINGS'}")
+        logger.info(
+            f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'WARNINGS'}"
+        )
         logger.info("Leakage check: PASSED")
 
         artifacts = [
@@ -220,7 +239,7 @@ def run_feature_scaling(
             val_scaled_path,
             test_scaled_path,
             scaler_path,
-            metadata_path
+            metadata_path,
         ]
 
         for artifact_path in artifacts:
@@ -228,7 +247,7 @@ def run_feature_scaling(
                 name=f"scaling_{artifact_path.name}",
                 file_path=artifact_path,
                 stage="feature_scaling",
-                metadata=scaling_metadata
+                metadata=scaling_metadata,
             )
 
         logger.info("\n" + "=" * 70)
@@ -239,14 +258,12 @@ def run_feature_scaling(
             stage_name="feature_scaling",
             start_time=start_time,
             artifacts=artifacts,
-            metadata=scaling_metadata
+            metadata=scaling_metadata,
         )
 
     except Exception as e:
         logger.error(f"Feature scaling failed: {e}")
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="feature_scaling",
-            start_time=start_time,
-            error=str(e)
+            stage_name="feature_scaling", start_time=start_time, error=str(e)
         )

@@ -39,15 +39,21 @@
 - **Output:** `TimeSeriesDataContainer` (in-memory)
 
 ### Phase 6: Model Training ✅
-- **Implemented:** 13 models across 4 families
+- **Implemented:** 17 models across 5 families
   - Boosting (3): XGBoost, LightGBM, CatBoost
   - Neural (4): LSTM, GRU, TCN, Transformer
   - Classical (3): Random Forest, Logistic, SVM
   - Ensemble (3): Voting, Stacking, Blending
+  - Meta-learners (4): Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
 - Training with early stopping, sample weighting
 - Output: `experiments/runs/{run_id}/models/`
 
-### Phase 7: Cross-Validation ✅
+### Phase 7: Heterogeneous Ensemble Training ⚠️ PLANNED
+- **Status:** Meta-learners implemented, training script not yet created
+- **Missing:** scripts/train_ensemble.py for automated heterogeneous stacking
+- **Workaround:** Manual training of base models + meta-learner
+
+### Cross-Validation (Phase 3) ✅
 - PurgedKFold with purge/embargo
 - OOF prediction generation (tabular + sequence)
 - Stacking dataset builder
@@ -219,11 +225,15 @@ Raw OHLCV → Configurable TF → Features → Labels → Adapters → Training 
 ```
 
 **Key Components:**
-1. **Configurable primary timeframe:** 5m/10m/15m/1h per experiment
+1. **Configurable primary timeframe:** ⚠️ Planned - currently hardcoded to 5min
 2. **Optional MTF enrichment:** Single-TF, MTF indicators, or MTF ingestion
 3. **Model-family adapters:** Transform canonical data to model-specific formats (2D, 3D, 4D)
-4. **Plugin-based models:** 23 total models (13 base + 4 meta + 6 planned)
-5. **Heterogeneous ensembles:** 3-4 base families -> meta-learner stacking
+4. **Plugin-based models:** 23 total models (17 implemented + 6 planned)
+   - 10 base models (boosting, neural, classical)
+   - 3 ensemble models (voting, stacking, blending)
+   - 4 meta-learners (ridge, mlp, calibrated, xgboost)
+   - 6 planned advanced (CNN, transformers, MLP)
+5. **Heterogeneous ensembles:** ⚠️ Planned - meta-learners exist, training script not yet created
 
 **Result:** Reproducible, deterministic, storage-efficient ML factory.
 

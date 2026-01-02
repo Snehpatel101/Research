@@ -74,6 +74,7 @@ DEFAULT_MAX_COMBINATIONS = 15
 # HELPER FUNCTIONS
 # =============================================================================
 
+
 def parse_model_list(model_arg: str) -> List[str]:
     """Parse model argument into list of model names."""
     if model_arg.lower() == "all":
@@ -118,6 +119,7 @@ def compute_sharpe(returns: np.ndarray) -> float:
 # CPCV RUNNER
 # =============================================================================
 
+
 def run_cpcv_evaluation(
     container: TimeSeriesDataContainer,
     model_name: str,
@@ -159,9 +161,7 @@ def run_cpcv_evaluation(
 
         # Fold-aware scaling
         scaler = FoldAwareScaler(method=scaling_method)
-        scaling_result = scaler.fit_transform_fold(
-            X_train_raw.values, X_test_raw.values
-        )
+        scaling_result = scaler.fit_transform_fold(X_train_raw.values, X_test_raw.values)
 
         # Create and train model
         model = ModelRegistry.create(model_name)
@@ -178,9 +178,16 @@ def run_cpcv_evaluation(
 
         # Compute metrics
         from sklearn.metrics import accuracy_score, f1_score
+
         accuracy = float(accuracy_score(y_test.values, prediction_output.class_predictions))
-        f1 = float(f1_score(y_test.values, prediction_output.class_predictions,
-                           average="weighted", zero_division=0))
+        f1 = float(
+            f1_score(
+                y_test.values,
+                prediction_output.class_predictions,
+                average="weighted",
+                zero_division=0,
+            )
+        )
 
         # Compute simulated returns for PBO
         # Assume: correct prediction = +1%, incorrect = -1%
@@ -268,6 +275,7 @@ def compute_model_pbo(
 # CLI
 # =============================================================================
 
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -350,7 +358,8 @@ Examples:
 
     # Verbosity
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose output",
     )
@@ -438,6 +447,7 @@ def main() -> int:
                 logger.error(f"  Failed {model_name}: {e}")
                 if args.verbose:
                     import traceback
+
                     traceback.print_exc()
                 continue
 
@@ -457,15 +467,17 @@ def main() -> int:
             logger.info(f"  Gate Decision: {'PASS' if should_proceed else 'FAIL'}")
             logger.info(f"  Reason: {reason}")
 
-            all_results.append({
-                "horizon": horizon,
-                "n_models": len(cpcv_results),
-                "pbo": pbo_result.pbo,
-                "is_overfit": pbo_result.is_overfit,
-                "should_block": pbo_result.should_block,
-                "risk_level": pbo_result.get_risk_level(),
-                "gate_pass": should_proceed,
-            })
+            all_results.append(
+                {
+                    "horizon": horizon,
+                    "n_models": len(cpcv_results),
+                    "pbo": pbo_result.pbo,
+                    "is_overfit": pbo_result.is_overfit,
+                    "should_block": pbo_result.should_block,
+                    "risk_level": pbo_result.get_risk_level(),
+                    "gate_pass": should_proceed,
+                }
+            )
 
             # Save PBO result
             pbo_path = args.output_dir / f"pbo_h{horizon}.json"

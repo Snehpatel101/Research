@@ -2,6 +2,7 @@
 Report section generators for Phase 1 reports.
 Each function generates a specific markdown section.
 """
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,24 +23,26 @@ def generate_header(data_path: Path) -> str:
 
 
 def generate_executive_summary(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    validation_data: dict[str, Any] | None
+    df: pd.DataFrame, feature_cols: list[str], validation_data: dict[str, Any] | None
 ) -> str:
     """Generate executive summary section."""
     total_samples = len(df)
-    date_start = df['datetime'].min()
-    date_end = df['datetime'].max()
+    date_start = df["datetime"].min()
+    date_end = df["datetime"].max()
     duration_days = (date_end - date_start).days
 
-    symbols = df['symbol'].unique() if 'symbol' in df.columns else []
+    symbols = df["symbol"].unique() if "symbol" in df.columns else []
 
-    status = "PASSED" if validation_data and validation_data.get('status') == 'PASSED' else "NEEDS ATTENTION"
+    status = (
+        "PASSED"
+        if validation_data and validation_data.get("status") == "PASSED"
+        else "NEEDS ATTENTION"
+    )
     status_icon = "checkmark" if status == "PASSED" else "warning"
 
-    quality_status = 'All checks passed'
-    if validation_data and validation_data.get('issues_count', 1) > 0:
-        quality_status = 'Issues detected (see Data Health)'
+    quality_status = "All checks passed"
+    if validation_data and validation_data.get("issues_count", 1) > 0:
+        quality_status = "Issues detected (see Data Health)"
 
     return f"""## Executive Summary
 
@@ -67,8 +70,7 @@ Phase 1 data preparation pipeline has completed successfully with the following 
 
 
 def generate_data_health_section(
-    validation_data: dict[str, Any] | None,
-    charts_dir: Path | None
+    validation_data: dict[str, Any] | None, charts_dir: Path | None
 ) -> str:
     """Generate data health summary section."""
     if not validation_data:
@@ -78,9 +80,9 @@ Validation report not available.
 
 ---"""
 
-    issues_count = validation_data.get('issues_count', 0)
-    warnings_count = validation_data.get('warnings_count', 0)
-    status = validation_data.get('status', 'UNKNOWN')
+    issues_count = validation_data.get("issues_count", 0)
+    warnings_count = validation_data.get("warnings_count", 0)
+    status = validation_data.get("status", "UNKNOWN")
 
     section = f"""## Data Health Summary
 
@@ -92,7 +94,7 @@ Validation report not available.
 """
 
     # Data integrity
-    integrity = validation_data.get('validation_results', {}).get('data_integrity', {})
+    integrity = validation_data.get("validation_results", {}).get("data_integrity", {})
 
     section += """### Data Integrity Checks
 
@@ -101,25 +103,27 @@ Validation report not available.
 """
 
     # Duplicates
-    dup_data = integrity.get('duplicate_timestamps', {})
+    dup_data = integrity.get("duplicate_timestamps", {})
     dup_total = sum(dup_data.values()) if isinstance(dup_data, dict) else 0
     dup_status = "PASS" if dup_total == 0 else "FAIL"
     section += f"| Duplicate Timestamps | {dup_status} | {dup_total} duplicates |\n"
 
     # NaN values
-    nan_data = integrity.get('nan_values', {})
+    nan_data = integrity.get("nan_values", {})
     nan_total = sum(nan_data.values()) if isinstance(nan_data, dict) else 0
     nan_status = "PASS" if nan_total == 0 else "FAIL"
-    section += f"| NaN Values | {nan_status} | {nan_total} NaN values in {len(nan_data)} columns |\n"
+    section += (
+        f"| NaN Values | {nan_status} | {nan_total} NaN values in {len(nan_data)} columns |\n"
+    )
 
     # Infinite values
-    inf_data = integrity.get('infinite_values', {})
+    inf_data = integrity.get("infinite_values", {})
     inf_total = sum(inf_data.values()) if isinstance(inf_data, dict) else 0
     inf_status = "PASS" if inf_total == 0 else "FAIL"
     section += f"| Infinite Values | {inf_status} | {inf_total} infinite values |\n"
 
     # Gaps
-    gaps = integrity.get('gaps', [])
+    gaps = integrity.get("gaps", [])
     gap_status = "PASS" if len(gaps) == 0 else "WARNING"
     section += f"| Time Gaps | {gap_status} | {len(gaps)} large gaps detected |\n"
 
@@ -137,36 +141,33 @@ Validation report not available.
 
 
 def generate_feature_section(
-    feature_cols: list[str],
-    validation_data: dict[str, Any] | None
+    feature_cols: list[str], validation_data: dict[str, Any] | None
 ) -> str:
     """Generate feature overview section."""
     # Categorize features
     categories = {
-        'Price': [c for c in feature_cols if any(
-            x in c.lower() for x in ['return', 'range', 'close_open']
-        )],
-        'Moving Averages': [c for c in feature_cols if any(
-            x in c.lower() for x in ['sma', 'ema']
-        )],
-        'Momentum': [c for c in feature_cols if any(
-            x in c.lower() for x in ['rsi', 'macd', 'roc', 'stoch', 'williams']
-        )],
-        'Volatility': [c for c in feature_cols if any(
-            x in c.lower() for x in ['atr', 'bollinger', 'bb_']
-        )],
-        'Volume': [c for c in feature_cols if any(
-            x in c.lower() for x in ['obv', 'volume', 'vwap']
-        )],
-        'Trend': [c for c in feature_cols if any(
-            x in c.lower() for x in ['adx', 'di_']
-        )],
-        'Regime': [c for c in feature_cols if any(
-            x in c.lower() for x in ['regime']
-        )],
-        'Temporal': [c for c in feature_cols if any(
-            x in c.lower() for x in ['hour', 'dow', 'rth']
-        )]
+        "Price": [
+            c
+            for c in feature_cols
+            if any(x in c.lower() for x in ["return", "range", "close_open"])
+        ],
+        "Moving Averages": [c for c in feature_cols if any(x in c.lower() for x in ["sma", "ema"])],
+        "Momentum": [
+            c
+            for c in feature_cols
+            if any(x in c.lower() for x in ["rsi", "macd", "roc", "stoch", "williams"])
+        ],
+        "Volatility": [
+            c for c in feature_cols if any(x in c.lower() for x in ["atr", "bollinger", "bb_"])
+        ],
+        "Volume": [
+            c for c in feature_cols if any(x in c.lower() for x in ["obv", "volume", "vwap"])
+        ],
+        "Trend": [c for c in feature_cols if any(x in c.lower() for x in ["adx", "di_"])],
+        "Regime": [c for c in feature_cols if any(x in c.lower() for x in ["regime"])],
+        "Temporal": [
+            c for c in feature_cols if any(x in c.lower() for x in ["hour", "dow", "rth"])
+        ],
     }
 
     section = f"""## Feature Overview
@@ -180,15 +181,15 @@ def generate_feature_section(
 """
 
     for cat_name, cat_features in categories.items():
-        examples = ', '.join(cat_features[:3]) if cat_features else 'None'
+        examples = ", ".join(cat_features[:3]) if cat_features else "None"
         if len(cat_features) > 3:
-            examples += f', ... (+{len(cat_features) - 3} more)'
+            examples += f", ... (+{len(cat_features) - 3} more)"
         section += f"| {cat_name} | {len(cat_features)} | {examples} |\n"
 
     # Add feature quality info if available
     if validation_data:
-        feature_quality = validation_data.get('validation_results', {}).get('feature_quality', {})
-        high_corr = feature_quality.get('high_correlations', [])
+        feature_quality = validation_data.get("validation_results", {}).get("feature_quality", {})
+        high_corr = feature_quality.get("high_correlations", [])
 
         section += f"""
 ### Feature Quality
@@ -199,7 +200,7 @@ def generate_feature_section(
             section += "  - Consider removing redundant features in Phase 2\n"
 
         # Top features
-        top_features = feature_quality.get('top_features', [])
+        top_features = feature_quality.get("top_features", [])
         if top_features:
             section += "\n### Top 10 Features (by Random Forest Importance)\n\n"
             section += "| Rank | Feature | Importance |\n"
@@ -211,11 +212,7 @@ def generate_feature_section(
     return section
 
 
-def generate_label_section(
-    df: pd.DataFrame,
-    horizons: list[int],
-    charts_dir: Path | None
-) -> str:
+def generate_label_section(df: pd.DataFrame, horizons: list[int], charts_dir: Path | None) -> str:
     """Generate label distribution section."""
     section = """## Label Analysis
 
@@ -224,7 +221,7 @@ def generate_label_section(
 """
 
     for horizon in horizons:
-        label_col = f'label_h{horizon}'
+        label_col = f"label_h{horizon}"
         if label_col not in df.columns:
             continue
 
@@ -236,13 +233,17 @@ def generate_label_section(
 | Class | Count | Percentage |
 |-------|-------|------------|
 """
-        section += f"| Short (-1) | {counts.get(-1, 0):,} | {counts.get(-1, 0) / total * 100:.2f}% |\n"
-        section += f"| Neutral (0) | {counts.get(0, 0):,} | {counts.get(0, 0) / total * 100:.2f}% |\n"
+        section += (
+            f"| Short (-1) | {counts.get(-1, 0):,} | {counts.get(-1, 0) / total * 100:.2f}% |\n"
+        )
+        section += (
+            f"| Neutral (0) | {counts.get(0, 0):,} | {counts.get(0, 0) / total * 100:.2f}% |\n"
+        )
         section += f"| Long (+1) | {counts.get(1, 0):,} | {counts.get(1, 0) / total * 100:.2f}% |\n"
         section += "\n"
 
         # Quality stats
-        quality_col = f'quality_h{horizon}'
+        quality_col = f"quality_h{horizon}"
         if quality_col in df.columns:
             q_mean = df[quality_col].mean()
             q_median = df[quality_col].median()
@@ -268,7 +269,7 @@ Split configuration not available.
 
 ---"""
 
-    total = split_config['total_samples']
+    total = split_config["total_samples"]
 
     section = """## Data Splits
 
@@ -293,7 +294,7 @@ Split configuration not available.
         f"{split_config['test_date_start'][:10]} to {split_config['test_date_end'][:10]} |\n"
     )
 
-    validation_status = 'PASSED' if split_config.get('validation_passed') else 'FAILED'
+    validation_status = "PASSED" if split_config.get("validation_passed") else "FAILED"
 
     section += f"""
 ### Leakage Prevention
@@ -307,8 +308,7 @@ Split configuration not available.
 
 
 def generate_backtest_section(
-    backtest_results: dict[int, dict[str, Any]],
-    charts_dir: Path | None
+    backtest_results: dict[int, dict[str, Any]], charts_dir: Path | None
 ) -> str:
     """Generate baseline backtest results section."""
     if not backtest_results:
@@ -330,9 +330,9 @@ Backtest results not available.
 
     for horizon in sorted(backtest_results.keys()):
         result = backtest_results[horizon]
-        metrics = result.get('metrics', {})
+        metrics = result.get("metrics", {})
 
-        if metrics.get('total_trades', 0) == 0:
+        if metrics.get("total_trades", 0) == 0:
             section += f"#### Horizon {horizon}\n\nNo trades executed\n\n"
             continue
 
@@ -365,17 +365,17 @@ def generate_quality_gates(
     df: pd.DataFrame,
     validation_data: dict[str, Any] | None,
     split_config: dict[str, Any] | None,
-    backtest_results: dict[int, dict[str, Any]]
+    backtest_results: dict[int, dict[str, Any]],
 ) -> str:
     """Generate quality gates checklist section."""
     gates = []
 
     # Data quality gates
     if validation_data:
-        integrity = validation_data.get('validation_results', {}).get('data_integrity', {})
-        no_duplicates = sum(integrity.get('duplicate_timestamps', {}).values()) == 0
-        no_nans = len(integrity.get('nan_values', {})) == 0
-        no_infs = len(integrity.get('infinite_values', {})) == 0
+        integrity = validation_data.get("validation_results", {}).get("data_integrity", {})
+        no_duplicates = sum(integrity.get("duplicate_timestamps", {}).values()) == 0
+        no_nans = len(integrity.get("nan_values", {})) == 0
+        no_infs = len(integrity.get("infinite_values", {})) == 0
 
         gates.append(("No duplicate timestamps", no_duplicates))
         gates.append(("No NaN values in features", no_nans))
@@ -385,7 +385,7 @@ def generate_quality_gates(
 
     # Label quality gates
     for horizon in [1, 5, 20]:
-        label_col = f'label_h{horizon}'
+        label_col = f"label_h{horizon}"
         if label_col in df.columns:
             counts = df[label_col].value_counts()
             # Check if all classes have at least 15% representation
@@ -395,7 +395,7 @@ def generate_quality_gates(
     # Split gates
     if split_config:
         gates.append(("Train/val/test splits created", True))
-        gates.append(("No overlap between splits", split_config.get('validation_passed', False)))
+        gates.append(("No overlap between splits", split_config.get("validation_passed", False)))
     else:
         gates.append(("Train/val/test splits created", False))
 
@@ -416,7 +416,11 @@ def generate_quality_gates(
         section += f"| {gate_name} | {status} |\n"
 
     all_passed = all(passed for _, passed in gates)
-    overall = 'ALL GATES PASSED - Ready for Phase 2' if all_passed else 'ISSUES DETECTED - Review before proceeding'
+    overall = (
+        "ALL GATES PASSED - Ready for Phase 2"
+        if all_passed
+        else "ISSUES DETECTED - Review before proceeding"
+    )
 
     section += f"""
 ### Overall Assessment
@@ -428,22 +432,21 @@ def generate_quality_gates(
 
 
 def generate_recommendations(
-    validation_data: dict[str, Any] | None,
-    backtest_results: dict[int, dict[str, Any]]
+    validation_data: dict[str, Any] | None, backtest_results: dict[int, dict[str, Any]]
 ) -> str:
     """Generate recommendations for Phase 2 section."""
     recommendations = []
 
     # Based on validation
     if validation_data:
-        feature_quality = validation_data.get('validation_results', {}).get('feature_quality', {})
-        high_corr_count = len(feature_quality.get('high_correlations', []))
+        feature_quality = validation_data.get("validation_results", {}).get("feature_quality", {})
+        high_corr_count = len(feature_quality.get("high_correlations", []))
         if high_corr_count > 0:
             recommendations.append(
                 f"Consider removing {high_corr_count} highly correlated feature pairs to reduce redundancy"
             )
 
-        issues = validation_data.get('issues_count', 0)
+        issues = validation_data.get("issues_count", 0)
         if issues > 0:
             recommendations.append(
                 "Address data quality issues identified in validation before proceeding"
@@ -453,9 +456,9 @@ def generate_recommendations(
     if backtest_results:
         poor_results = []
         for horizon, result in backtest_results.items():
-            metrics = result.get('metrics', {})
-            if metrics.get('total_trades', 0) > 0:
-                if metrics.get('win_rate', 0) < 45:
+            metrics = result.get("metrics", {})
+            if metrics.get("total_trades", 0) > 0:
+                if metrics.get("win_rate", 0) < 45:
                     poor_results.append(horizon)
 
         if poor_results:
@@ -465,13 +468,15 @@ def generate_recommendations(
             )
 
     # General recommendations
-    recommendations.extend([
-        "Use sample weights during model training to emphasize high-quality labels",
-        "Implement walk-forward validation in Phase 2 to prevent overfitting",
-        "Monitor feature importance and remove low-importance features if needed",
-        "Consider ensemble methods to capture different market regimes",
-        "Implement proper risk management in live trading"
-    ])
+    recommendations.extend(
+        [
+            "Use sample weights during model training to emphasize high-quality labels",
+            "Implement walk-forward validation in Phase 2 to prevent overfitting",
+            "Monitor feature importance and remove low-importance features if needed",
+            "Consider ensemble methods to capture different market regimes",
+            "Implement proper risk management in live trading",
+        ]
+    )
 
     section = """## Recommendations for Phase 2
 
@@ -485,13 +490,11 @@ def generate_recommendations(
 
 
 def generate_footer(
-    data_path: Path,
-    validation_report_path: Path | None,
-    split_config_path: Path | None
+    data_path: Path, validation_report_path: Path | None, split_config_path: Path | None
 ) -> str:
     """Generate report footer with output files summary."""
-    validation_name = validation_report_path.name if validation_report_path else 'N/A'
-    split_name = split_config_path.name if split_config_path else 'N/A'
+    validation_name = validation_report_path.name if validation_report_path else "N/A"
+    split_name = split_config_path.name if split_config_path else "N/A"
 
     return f"""## Output Files Summary
 

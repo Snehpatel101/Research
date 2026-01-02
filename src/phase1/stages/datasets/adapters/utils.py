@@ -7,6 +7,7 @@ Provides helper functions for:
 - Feature map building
 - Sequence index generation
 """
+
 from __future__ import annotations
 
 import re
@@ -23,33 +24,44 @@ from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
 # Default features to extract per timeframe (without suffix)
 DEFAULT_MTF_FEATURES = [
-    'open', 'high', 'low', 'close', 'volume',
-    'sma_20', 'sma_50', 'ema_9', 'ema_21',
-    'rsi_14', 'atr_14', 'bb_position', 'macd_hist',
-    'close_sma20_ratio',
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "sma_20",
+    "sma_50",
+    "ema_9",
+    "ema_21",
+    "rsi_14",
+    "atr_14",
+    "bb_position",
+    "macd_hist",
+    "close_sma20_ratio",
 ]
 
 # Timeframe suffix patterns for column matching
 TIMEFRAME_SUFFIX_PATTERNS = {
-    '1min': r'_1m$',
-    '5min': r'_5m$',
-    '10min': r'_10m$',
-    '15min': r'_15m$',
-    '20min': r'_20m$',
-    '25min': r'_25m$',
-    '30min': r'_30m$',
-    '45min': r'_45m$',
-    '60min': r'_1h$',
-    '1h': r'_1h$',
-    '4h': r'_4h$',
-    'daily': r'_1d$',
-    '1d': r'_1d$',
+    "1min": r"_1m$",
+    "5min": r"_5m$",
+    "10min": r"_10m$",
+    "15min": r"_15m$",
+    "20min": r"_20m$",
+    "25min": r"_25m$",
+    "30min": r"_30m$",
+    "45min": r"_45m$",
+    "60min": r"_1h$",
+    "1h": r"_1h$",
+    "4h": r"_4h$",
+    "daily": r"_1d$",
+    "1d": r"_1d$",
 }
 
 
 # =============================================================================
 # TIMEFRAME UTILITIES
 # =============================================================================
+
 
 def get_timeframe_suffix(tf: str) -> str:
     """
@@ -75,9 +87,7 @@ def get_timeframe_suffix(tf: str) -> str:
 
 
 def extract_timeframe_columns(
-    df: pd.DataFrame,
-    timeframe: str,
-    feature_bases: list[str] | None = None
+    df: pd.DataFrame, timeframe: str, feature_bases: list[str] | None = None
 ) -> list[str]:
     """
     Extract columns belonging to a specific timeframe.
@@ -92,7 +102,7 @@ def extract_timeframe_columns(
         List of column names for the timeframe, sorted consistently
     """
     suffix = get_timeframe_suffix(timeframe)
-    pattern = TIMEFRAME_SUFFIX_PATTERNS.get(timeframe, re.escape(suffix) + '$')
+    pattern = TIMEFRAME_SUFFIX_PATTERNS.get(timeframe, re.escape(suffix) + "$")
 
     if feature_bases is not None:
         columns = []
@@ -111,7 +121,7 @@ def build_timeframe_feature_map(
     df: pd.DataFrame,
     timeframes: list[str],
     feature_bases: list[str] | None = None,
-    include_base_features: bool = True
+    include_base_features: bool = True,
 ) -> dict[str, list[str]]:
     """
     Build a mapping of timeframes to their feature columns.
@@ -137,9 +147,9 @@ def build_timeframe_feature_map(
         all_suffixes = [get_timeframe_suffix(tf) for tf in MTF_TIMEFRAMES.keys()]
         base_cols = []
         for col in df.columns:
-            if col in ['datetime', 'symbol', 'date', 'time']:
+            if col in ["datetime", "symbol", "date", "time"]:
                 continue
-            if col.startswith('label_') or col.startswith('sample_weight_'):
+            if col.startswith("label_") or col.startswith("sample_weight_"):
                 continue
             has_suffix = any(col.endswith(suffix) for suffix in all_suffixes)
             if not has_suffix and col not in feature_map.get(base_tf, []):
@@ -155,11 +165,9 @@ def build_timeframe_feature_map(
 # SEQUENCE INDEX UTILITIES
 # =============================================================================
 
+
 def build_4d_sequence_indices(
-    n_samples: int,
-    seq_len: int,
-    stride: int,
-    symbol_boundaries: list[int] | None = None
+    n_samples: int, seq_len: int, stride: int, symbol_boundaries: list[int] | None = None
 ) -> np.ndarray:
     """
     Build valid sequence start indices for 4D tensor generation.

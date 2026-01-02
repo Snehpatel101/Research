@@ -15,32 +15,36 @@ import pandas as pd
 
 class RegimeType(Enum):
     """Types of market regime classification."""
-    VOLATILITY = 'volatility'
-    TREND = 'trend'
-    STRUCTURE = 'structure'
-    SESSION = 'session'
-    COMPOSITE = 'composite'
+
+    VOLATILITY = "volatility"
+    TREND = "trend"
+    STRUCTURE = "structure"
+    SESSION = "session"
+    COMPOSITE = "composite"
 
 
 class VolatilityRegimeLabel(Enum):
     """Volatility regime classification labels."""
-    LOW = 'low'
-    NORMAL = 'normal'
-    HIGH = 'high'
+
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
 
 
 class TrendRegimeLabel(Enum):
     """Trend regime classification labels."""
-    UPTREND = 'uptrend'
-    DOWNTREND = 'downtrend'
-    SIDEWAYS = 'sideways'
+
+    UPTREND = "uptrend"
+    DOWNTREND = "downtrend"
+    SIDEWAYS = "sideways"
 
 
 class StructureRegimeLabel(Enum):
     """Market structure regime labels based on Hurst exponent."""
-    MEAN_REVERTING = 'mean_reverting'
-    RANDOM = 'random'
-    TRENDING = 'trending'
+
+    MEAN_REVERTING = "mean_reverting"
+    RANDOM = "random"
+    TRENDING = "trending"
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,7 @@ class RegimeConfig:
         params: Detector-specific parameters
         column_name: Output column name in DataFrame
     """
+
     detector_type: RegimeType
     params: dict[str, Any]
     column_name: str
@@ -142,7 +147,7 @@ class RegimeDetector(ABC):
             Dict with regime distribution and transition statistics
         """
         if len(regimes) == 0:
-            return {'distribution': {}, 'transitions': 0, 'avg_duration': 0}
+            return {"distribution": {}, "transitions": 0, "avg_duration": 0}
 
         # Distribution
         distribution = regimes.value_counts(normalize=True).to_dict()
@@ -155,17 +160,17 @@ class RegimeDetector(ABC):
         avg_duration = len(regimes) / (transitions + 1) if transitions >= 0 else len(regimes)
 
         return {
-            'distribution': distribution,
-            'transitions': int(transitions),
-            'avg_duration': float(avg_duration)
+            "distribution": distribution,
+            "transitions": int(transitions),
+            "avg_duration": float(avg_duration),
         }
 
 
 __all__ = [
-    'RegimeType',
-    'VolatilityRegimeLabel',
-    'TrendRegimeLabel',
-    'StructureRegimeLabel',
-    'RegimeConfig',
-    'RegimeDetector',
+    "RegimeType",
+    "VolatilityRegimeLabel",
+    "TrendRegimeLabel",
+    "StructureRegimeLabel",
+    "RegimeConfig",
+    "RegimeDetector",
 ]

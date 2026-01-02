@@ -4,6 +4,7 @@ Random Forest Model - Ensemble of decision trees for 3-class prediction.
 CPU-only implementation using scikit-learn. Provides feature importance
 extraction and sample weight support.
 """
+
 from __future__ import annotations
 
 import logging
@@ -235,9 +236,7 @@ class RandomForestModel(BaseModel):
             return None
 
         importance = self._model.feature_importances_
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(importance))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(importance))]
 
         return dict(zip(feature_names, importance.tolist(), strict=False))
 

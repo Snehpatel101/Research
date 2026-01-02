@@ -19,18 +19,20 @@ SCALED_DIR = DATA_DIR / "scaled"
 EXPECTED_HORIZONS = [5, 10, 15, 20]
 
 # ANSI colors for output
-RED = '\033[91m'
-GREEN = '\033[92m'
-YELLOW = '\033[93m'
-BLUE = '\033[94m'
-BOLD = '\033[1m'
-RESET = '\033[0m'
+RED = "\033[91m"
+GREEN = "\033[92m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
 
 def color_status(passed: bool) -> str:
     """Return colored PASS/FAIL."""
     if passed:
         return f"{GREEN}{BOLD}PASS{RESET}"
     return f"{RED}{BOLD}FAIL{RESET}"
+
 
 def load_configs() -> Tuple[dict, dict]:
     """Load split and scaling configs."""
@@ -40,16 +42,18 @@ def load_configs() -> Tuple[dict, dict]:
         scaling_config = json.load(f)
     return split_config, scaling_config
 
+
 def load_splits() -> Dict[str, pd.DataFrame]:
     """Load all splits."""
     print(f"\n{BLUE}{BOLD}Loading data splits...{RESET}")
     splits = {}
-    for split_name in ['train', 'val', 'test']:
+    for split_name in ["train", "val", "test"]:
         path = SCALED_DIR / f"{split_name}_scaled.parquet"
         df = pd.read_parquet(path)
         splits[split_name] = df
         print(f"  {split_name}: {len(df):,} rows, {len(df.columns)} columns")
     return splits
+
 
 def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dict) -> bool:
     """
@@ -62,9 +66,9 @@ def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dic
     all_passed = True
 
     # Get timestamps (column is 'datetime', not 'timestamp')
-    train_ts = pd.to_datetime(splits['train']['datetime'])
-    val_ts = pd.to_datetime(splits['val']['datetime'])
-    test_ts = pd.to_datetime(splits['test']['datetime'])
+    train_ts = pd.to_datetime(splits["train"]["datetime"])
+    val_ts = pd.to_datetime(splits["val"]["datetime"])
+    test_ts = pd.to_datetime(splits["test"]["datetime"])
 
     # Check 1: Zero overlap
     print(f"\n{YELLOW}Check 1.1: Zero timestamp overlap{RESET}")
@@ -78,8 +82,8 @@ def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dic
     print(f"  Val end:    {val_end}")
     print(f"  Test start: {test_start}")
 
-    train_val_overlap = (train_end >= val_start)
-    val_test_overlap = (val_end >= test_start)
+    train_val_overlap = train_end >= val_start
+    val_test_overlap = val_end >= test_start
 
     check_1a = not train_val_overlap
     check_1b = not val_test_overlap
@@ -91,7 +95,7 @@ def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dic
 
     # Check 2: Purge gap (60 bars)
     print(f"\n{YELLOW}Check 1.2: Purge gap (60 bars minimum){RESET}")
-    expected_purge = split_config.get('purge_bars', 60)
+    expected_purge = split_config.get("purge_bars", 60)
 
     # Calculate actual gaps in bars (assuming 5-min bars)
     train_val_gap_minutes = (val_start - train_end).total_seconds() / 60
@@ -114,7 +118,7 @@ def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dic
 
     # Check 3: Embargo gap (1440 bars)
     print(f"\n{YELLOW}Check 1.3: Embargo gap (1440 bars minimum){RESET}")
-    expected_embargo = split_config.get('embargo_bars', 1440)
+    expected_embargo = split_config.get("embargo_bars", 1440)
 
     check_3a = train_val_gap_bars >= expected_embargo
     check_3b = val_test_gap_bars >= expected_embargo
@@ -141,6 +145,7 @@ def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dic
     print(f"\n{BOLD}Overall Temporal Integrity: {color_status(all_passed)}{RESET}")
     return all_passed
 
+
 def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
     """
     CRITICAL: Verify all horizons exist and neutral percentage is reasonable.
@@ -155,7 +160,7 @@ def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
         print(f"\n{YELLOW}{split_name.upper()} Split:{RESET}")
 
         # Find label columns (lowercase label_h)
-        label_cols = [c for c in df.columns if c.startswith('label_h')]
+        label_cols = [c for c in df.columns if c.startswith("label_h")]
 
         # Check 1: All horizons present
         check_1 = len(label_cols) == len(EXPECTED_HORIZONS)
@@ -164,7 +169,7 @@ def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
 
         # Check each horizon
         for horizon in EXPECTED_HORIZONS:
-            col = f'label_h{horizon}'
+            col = f"label_h{horizon}"
             if col not in df.columns:
                 print(f"    H{horizon}: {color_status(False)} - MISSING")
                 all_passed = False
@@ -200,7 +205,10 @@ def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
 
             status_icon = "✓" if (check_2 and check_3) else "✗"
 
-            print(f"    H{horizon}: {status_icon} Long={long_pct:.1f}%, Neutral={neutral_pct:.1f}%, Short={short_pct:.1f}%", end="")
+            print(
+                f"    H{horizon}: {status_icon} Long={long_pct:.1f}%, Neutral={neutral_pct:.1f}%, Short={short_pct:.1f}%",
+                end="",
+            )
             if invalid_count > 0:
                 print(f" (invalid={invalid_count})", end="")
 
@@ -216,6 +224,7 @@ def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
     print(f"\n{BOLD}Overall Label Distribution: {color_status(all_passed)}{RESET}")
     return all_passed
 
+
 def verify_symbol_balance(splits: Dict[str, pd.DataFrame]) -> bool:
     """
     Verify both symbols present and reasonably balanced.
@@ -229,7 +238,7 @@ def verify_symbol_balance(splits: Dict[str, pd.DataFrame]) -> bool:
     for split_name, df in splits.items():
         print(f"\n{YELLOW}{split_name.upper()} Split:{RESET}")
 
-        symbol_counts = df['symbol'].value_counts()
+        symbol_counts = df["symbol"].value_counts()
         total = len(df)
 
         # Check 1: Both symbols present
@@ -252,6 +261,7 @@ def verify_symbol_balance(splits: Dict[str, pd.DataFrame]) -> bool:
     print(f"\n{BOLD}Overall Symbol Balance: {color_status(all_passed)}{RESET}")
     return all_passed
 
+
 def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict) -> bool:
     """
     Verify scaler was fit on train only and features are properly scaled.
@@ -264,17 +274,31 @@ def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict
 
     # Check 1: Scaler fit on train only
     print(f"\n{YELLOW}Check 4.1: Scaler configuration{RESET}")
-    fit_on = scaling_config.get('fit_on', 'unknown')
-    check_1 = fit_on == 'train'
+    fit_on = scaling_config.get("fit_on", "unknown")
+    check_1 = fit_on == "train"
     print(f"  Fit on: {fit_on} {color_status(check_1)}")
     all_passed &= check_1
 
     # Get feature columns (exclude metadata and label-related columns)
-    exclude_patterns = ['datetime', 'symbol', 'label_', 'bars_to_hit_', 'mae_', 'mfe_',
-                       'touch_type_', 'quality_', 'sample_weight_', 'pain_to_gain_',
-                       'time_weighted_dd_', 'fwd_return_']
-    feature_cols = [c for c in splits['train'].columns
-                   if not any(c.startswith(p) or c == p for p in exclude_patterns)]
+    exclude_patterns = [
+        "datetime",
+        "symbol",
+        "label_",
+        "bars_to_hit_",
+        "mae_",
+        "mfe_",
+        "touch_type_",
+        "quality_",
+        "sample_weight_",
+        "pain_to_gain_",
+        "time_weighted_dd_",
+        "fwd_return_",
+    ]
+    feature_cols = [
+        c
+        for c in splits["train"].columns
+        if not any(c.startswith(p) or c == p for p in exclude_patterns)
+    ]
 
     print(f"  Feature count: {len(feature_cols)}")
 
@@ -307,8 +331,10 @@ def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict
 
             status = check_centered and check_outliers
 
-            print(f"    {feat[:30]:<30}: mean={mean:>7.3f}, std={std:>6.3f}, "
-                  f"[{q01:>7.2f}, {q99:>7.2f}] {color_status(status)}")
+            print(
+                f"    {feat[:30]:<30}: mean={mean:>7.3f}, std={std:>6.3f}, "
+                f"[{q01:>7.2f}, {q99:>7.2f}] {color_status(status)}"
+            )
 
             if not status:
                 all_passed = False
@@ -331,8 +357,10 @@ def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict
         check_3a = len(all_nan_features) == 0
         check_3b = len(all_zero_features) == 0
 
-        print(f"  {split_name.upper()}: all-NaN={len(all_nan_features)} {color_status(check_3a)}, "
-              f"all-zero={len(all_zero_features)} {color_status(check_3b)}")
+        print(
+            f"  {split_name.upper()}: all-NaN={len(all_nan_features)} {color_status(check_3a)}, "
+            f"all-zero={len(all_zero_features)} {color_status(check_3b)}"
+        )
 
         all_passed &= check_3a and check_3b
 
@@ -343,6 +371,7 @@ def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict
 
     print(f"\n{BOLD}Overall Feature Scaling: {color_status(all_passed)}{RESET}")
     return all_passed
+
 
 def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict) -> bool:
     """
@@ -358,7 +387,7 @@ def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict
     print(f"\n{YELLOW}Check 5.1: Split ratios{RESET}")
 
     total_rows = sum(len(df) for df in splits.values())
-    expected_ratios = split_config.get('split_ratios', {})
+    expected_ratios = split_config.get("split_ratios", {})
 
     print(f"  Total rows: {total_rows:,}")
 
@@ -369,8 +398,10 @@ def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict
         # Allow ±5% deviation
         check = abs(actual_pct - expected_pct) <= 5
 
-        print(f"  {split_name}: {len(df):,} rows ({actual_pct:.1f}%, "
-              f"expected ~{expected_pct:.0f}%) {color_status(check)}")
+        print(
+            f"  {split_name}: {len(df):,} rows ({actual_pct:.1f}%, "
+            f"expected ~{expected_pct:.0f}%) {color_status(check)}"
+        )
 
         all_passed &= check
 
@@ -379,7 +410,7 @@ def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict
 
     for split_name, df in splits.items():
         # Check duplicates on datetime + symbol
-        dup_count = df.duplicated(subset=['datetime', 'symbol']).sum()
+        dup_count = df.duplicated(subset=["datetime", "symbol"]).sum()
         check = dup_count == 0
 
         print(f"  {split_name}: {dup_count} duplicates {color_status(check)}")
@@ -390,15 +421,27 @@ def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict
 
     for split_name, df in splits.items():
         # Check label NaNs
-        label_cols = [c for c in df.columns if c.startswith('label_h')]
+        label_cols = [c for c in df.columns if c.startswith("label_h")]
         label_nan_pct = df[label_cols].isna().mean().mean() * 100
 
         # Check feature NaNs
-        exclude_patterns = ['datetime', 'symbol', 'label_', 'bars_to_hit_', 'mae_', 'mfe_',
-                           'touch_type_', 'quality_', 'sample_weight_', 'pain_to_gain_',
-                           'time_weighted_dd_', 'fwd_return_']
-        feature_cols = [c for c in df.columns
-                       if not any(c.startswith(p) or c == p for p in exclude_patterns)]
+        exclude_patterns = [
+            "datetime",
+            "symbol",
+            "label_",
+            "bars_to_hit_",
+            "mae_",
+            "mfe_",
+            "touch_type_",
+            "quality_",
+            "sample_weight_",
+            "pain_to_gain_",
+            "time_weighted_dd_",
+            "fwd_return_",
+        ]
+        feature_cols = [
+            c for c in df.columns if not any(c.startswith(p) or c == p for p in exclude_patterns)
+        ]
         feature_nan_pct = df[feature_cols].isna().mean().mean() * 100
 
         # Labels should have very few NaNs (< 5%)
@@ -406,13 +449,16 @@ def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict
         # Features should have reasonable NaN rate (< 10%)
         check_features = feature_nan_pct < 10
 
-        print(f"  {split_name}: labels={label_nan_pct:.2f}% NaN {color_status(check_labels)}, "
-              f"features={feature_nan_pct:.2f}% NaN {color_status(check_features)}")
+        print(
+            f"  {split_name}: labels={label_nan_pct:.2f}% NaN {color_status(check_labels)}, "
+            f"features={feature_nan_pct:.2f}% NaN {color_status(check_features)}"
+        )
 
         all_passed &= check_labels and check_features
 
     print(f"\n{BOLD}Overall Data Completeness: {color_status(all_passed)}{RESET}")
     return all_passed
+
 
 def verify_invalid_labels(splits: Dict[str, pd.DataFrame]) -> bool:
     """
@@ -427,7 +473,7 @@ def verify_invalid_labels(splits: Dict[str, pd.DataFrame]) -> bool:
     for split_name, df in splits.items():
         print(f"\n{YELLOW}{split_name.upper()} Split:{RESET}")
 
-        label_cols = [c for c in df.columns if c.startswith('label_h')]
+        label_cols = [c for c in df.columns if c.startswith("label_h")]
 
         total_invalid = 0
 
@@ -440,7 +486,7 @@ def verify_invalid_labels(splits: Dict[str, pd.DataFrame]) -> bool:
                 # Invalid labels at end of series should be < 1%
                 check = pct < 1.0
 
-                horizon = col.split('_h')[1]
+                horizon = col.split("_h")[1]
                 print(f"  H{horizon}: {invalid_count} invalid ({pct:.2f}%) {color_status(check)}")
 
                 all_passed &= check
@@ -450,6 +496,7 @@ def verify_invalid_labels(splits: Dict[str, pd.DataFrame]) -> bool:
 
     print(f"\n{BOLD}Overall Invalid Label Handling: {color_status(all_passed)}{RESET}")
     return all_passed
+
 
 def main():
     """Run all verification checks."""
@@ -464,12 +511,12 @@ def main():
     # Run all checks
     results = {}
 
-    results['temporal_integrity'] = verify_temporal_integrity(splits, split_config)
-    results['label_distribution'] = verify_label_distribution(splits)
-    results['symbol_balance'] = verify_symbol_balance(splits)
-    results['feature_scaling'] = verify_feature_scaling(splits, scaling_config)
-    results['data_completeness'] = verify_data_completeness(splits, split_config)
-    results['invalid_labels'] = verify_invalid_labels(splits)
+    results["temporal_integrity"] = verify_temporal_integrity(splits, split_config)
+    results["label_distribution"] = verify_label_distribution(splits)
+    results["symbol_balance"] = verify_symbol_balance(splits)
+    results["feature_scaling"] = verify_feature_scaling(splits, scaling_config)
+    results["data_completeness"] = verify_data_completeness(splits, split_config)
+    results["invalid_labels"] = verify_invalid_labels(splits)
 
     # Final summary
     print(f"\n{BOLD}{'='*80}{RESET}")
@@ -477,7 +524,7 @@ def main():
     print(f"{BOLD}{'='*80}{RESET}")
 
     for check_name, passed in results.items():
-        check_display = check_name.replace('_', ' ').title()
+        check_display = check_name.replace("_", " ").title()
         print(f"  {check_display:<30}: {color_status(passed)}")
 
     overall_passed = all(results.values())
@@ -491,5 +538,6 @@ def main():
 
     return 0 if overall_passed else 1
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     exit(main())

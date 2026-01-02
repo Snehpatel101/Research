@@ -1,6 +1,7 @@
 """
 Feature set resolution utilities.
 """
+
 from collections.abc import Sequence
 
 import pandas as pd
@@ -9,15 +10,37 @@ from src.phase1.config.feature_sets import FeatureSetDefinition
 from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
 METADATA_COLUMNS = {
-    "datetime", "symbol", "open", "high", "low", "close", "volume",
-    "timestamp", "date", "time", "timeframe",
-    "session_id", "missing_bar", "roll_event", "roll_window", "filled",
+    "datetime",
+    "symbol",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "timestamp",
+    "date",
+    "time",
+    "timeframe",
+    "session_id",
+    "missing_bar",
+    "roll_event",
+    "roll_window",
+    "filled",
 }
 
 LABEL_PREFIXES = (
-    "label_", "bars_to_hit_", "mae_", "mfe_", "quality_", "sample_weight_",
-    "touch_type_", "pain_to_gain_", "time_weighted_dd_", "fwd_return_",
-    "fwd_return_log_", "time_to_hit_",
+    "label_",
+    "bars_to_hit_",
+    "mae_",
+    "mfe_",
+    "quality_",
+    "sample_weight_",
+    "touch_type_",
+    "pain_to_gain_",
+    "time_weighted_dd_",
+    "fwd_return_",
+    "fwd_return_log_",
+    "time_to_hit_",
 )
 
 
@@ -41,17 +64,10 @@ def _is_mtf_column(name: str) -> bool:
 
 
 def _base_feature_columns(df: pd.DataFrame) -> list[str]:
-    return [
-        col for col in df.columns
-        if col not in METADATA_COLUMNS
-        and not _is_label_column(col)
-    ]
+    return [col for col in df.columns if col not in METADATA_COLUMNS and not _is_label_column(col)]
 
 
-def resolve_feature_set(
-    df: pd.DataFrame,
-    definition: FeatureSetDefinition
-) -> list[str]:
+def resolve_feature_set(df: pd.DataFrame, definition: FeatureSetDefinition) -> list[str]:
     """
     Resolve a feature set definition into a concrete column list.
     """
@@ -64,7 +80,8 @@ def resolve_feature_set(
 
     if definition.include_prefixes:
         prefix_matches = [
-            c for c in candidates
+            c
+            for c in candidates
             if any(c.startswith(prefix) for prefix in definition.include_prefixes)
         ]
         explicit = [c for c in definition.include_columns if c in candidates]
@@ -73,7 +90,8 @@ def resolve_feature_set(
 
     if definition.exclude_prefixes:
         candidates = [
-            c for c in candidates
+            c
+            for c in candidates
             if not any(c.startswith(prefix) for prefix in definition.exclude_prefixes)
         ]
 
@@ -90,8 +108,7 @@ def resolve_feature_set(
 
 
 def build_feature_set_manifest(
-    df: pd.DataFrame,
-    definitions: dict[str, FeatureSetDefinition]
+    df: pd.DataFrame, definitions: dict[str, FeatureSetDefinition]
 ) -> dict[str, dict]:
     """
     Build a manifest of all feature sets against a reference DataFrame.
@@ -111,15 +128,11 @@ def build_feature_set_manifest(
 
 
 def validate_feature_set_columns(
-    df: pd.DataFrame,
-    columns: Sequence[str],
-    feature_set_name: str
+    df: pd.DataFrame, columns: Sequence[str], feature_set_name: str
 ) -> None:
     """
     Validate that all requested feature columns exist.
     """
     missing = [col for col in columns if col not in df.columns]
     if missing:
-        raise ValueError(
-            f"Feature set '{feature_set_name}' missing columns: {missing[:10]}"
-        )
+        raise ValueError(f"Feature set '{feature_set_name}' missing columns: {missing[:10]}")

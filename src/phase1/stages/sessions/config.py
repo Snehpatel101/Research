@@ -26,9 +26,10 @@ logger.addHandler(logging.NullHandler())
 
 class SessionName(Enum):
     """Trading session names."""
-    NEW_YORK = 'new_york'
-    LONDON = 'london'
-    ASIA = 'asia'
+
+    NEW_YORK = "new_york"
+    LONDON = "london"
+    ASIA = "asia"
 
 
 @dataclass(frozen=True)
@@ -45,10 +46,11 @@ class SessionConfig:
         description: Brief description of the session
         crosses_midnight: Whether the session spans midnight UTC
     """
+
     name: str
     session_id: SessionName
     start_utc: tuple[int, int]  # (hour, minute)
-    end_utc: tuple[int, int]    # (hour, minute)
+    end_utc: tuple[int, int]  # (hour, minute)
     timezone: str
     description: str = ""
     crosses_midnight: bool = False
@@ -100,41 +102,39 @@ SESSIONS: dict[SessionName, SessionConfig] = {
     # UTC: 14:30-21:00 (during EST) / 13:30-20:00 (during EDT)
     # Using EST (winter) times as base - DST handling is separate
     SessionName.NEW_YORK: SessionConfig(
-        name='New York',
+        name="New York",
         session_id=SessionName.NEW_YORK,
         start_utc=(14, 30),
         end_utc=(21, 0),
-        timezone='America/New_York',
-        description='NYSE/CME primary trading hours (09:30-16:00 ET)',
-        crosses_midnight=False
+        timezone="America/New_York",
+        description="NYSE/CME primary trading hours (09:30-16:00 ET)",
+        crosses_midnight=False,
     ),
-
     # London Session: LSE primary hours
     # GMT/BST: 08:00-16:30 London time
     # UTC: 08:00-16:30 (during GMT) / 07:00-15:30 (during BST)
     # Using GMT (winter) times as base
     SessionName.LONDON: SessionConfig(
-        name='London',
+        name="London",
         session_id=SessionName.LONDON,
         start_utc=(8, 0),
         end_utc=(16, 30),
-        timezone='Europe/London',
-        description='LSE trading hours (08:00-16:30 London)',
-        crosses_midnight=False
+        timezone="Europe/London",
+        description="LSE trading hours (08:00-16:30 London)",
+        crosses_midnight=False,
     ),
-
     # Asia Session: Tokyo + Hong Kong primary hours
     # Tokyo: 09:00-15:00 JST (lunch break 11:30-12:30 not modeled)
     # UTC: 00:00-06:00 (JST = UTC+9, so 09:00 JST = 00:00 UTC)
     # Extended to 07:00 to bridge to London
     SessionName.ASIA: SessionConfig(
-        name='Asia',
+        name="Asia",
         session_id=SessionName.ASIA,
         start_utc=(23, 0),
         end_utc=(7, 0),
-        timezone='Asia/Tokyo',
-        description='Tokyo/HK trading hours (23:00-07:00 UTC)',
-        crosses_midnight=True
+        timezone="Asia/Tokyo",
+        description="Tokyo/HK trading hours (23:00-07:00 UTC)",
+        crosses_midnight=True,
     ),
 }
 
@@ -146,6 +146,7 @@ class SessionOverlap:
 
     Overlaps often exhibit higher volatility and liquidity.
     """
+
     name: str
     sessions: tuple[SessionName, SessionName]
     start_utc: tuple[int, int]
@@ -155,19 +156,19 @@ class SessionOverlap:
 
 # Session overlaps - periods when multiple major markets are open
 SESSION_OVERLAPS: dict[str, SessionOverlap] = {
-    'london_ny': SessionOverlap(
-        name='London-New York',
+    "london_ny": SessionOverlap(
+        name="London-New York",
         sessions=(SessionName.LONDON, SessionName.NEW_YORK),
         start_utc=(14, 30),  # NY opens
-        end_utc=(16, 30),    # London closes
-        description='Highest liquidity period - both London and NY open'
+        end_utc=(16, 30),  # London closes
+        description="Highest liquidity period - both London and NY open",
     ),
-    'asia_london': SessionOverlap(
-        name='Asia-London',
+    "asia_london": SessionOverlap(
+        name="Asia-London",
         sessions=(SessionName.ASIA, SessionName.LONDON),
-        start_utc=(8, 0),    # London opens
-        end_utc=(7, 0),      # This doesn't actually overlap in current config
-        description='Brief overlap as Asia closes and London opens'
+        start_utc=(8, 0),  # London opens
+        end_utc=(7, 0),  # This doesn't actually overlap in current config
+        description="Brief overlap as Asia closes and London opens",
     ),
 }
 
@@ -179,6 +180,7 @@ class SessionsConfig:
 
     This is the main configuration class used throughout the sessions module.
     """
+
     # Which sessions to include in analysis (None = all)
     include_sessions: list[SessionName] | None = None
 
@@ -212,9 +214,7 @@ class SessionsConfig:
         if self.include_sessions is not None and self.exclude_sessions is not None:
             overlap = set(self.include_sessions) & set(self.exclude_sessions)
             if overlap:
-                raise ValueError(
-                    f"Sessions cannot be both included and excluded: {overlap}"
-                )
+                raise ValueError(f"Sessions cannot be both included and excluded: {overlap}")
 
     def get_active_sessions(self) -> list[SessionName]:
         """Get list of sessions that should be active based on config."""
@@ -233,36 +233,40 @@ class SessionsConfig:
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
-            'include_sessions': [s.value for s in self.include_sessions] if self.include_sessions else None,
-            'exclude_sessions': [s.value for s in self.exclude_sessions] if self.exclude_sessions else None,
-            'add_session_flags': self.add_session_flags,
-            'add_overlap_flags': self.add_overlap_flags,
-            'filter_holidays': self.filter_holidays,
-            'handle_dst': self.handle_dst,
-            'session_volatility_normalization': self.session_volatility_normalization,
-            'volatility_lookback': self.volatility_lookback,
+            "include_sessions": (
+                [s.value for s in self.include_sessions] if self.include_sessions else None
+            ),
+            "exclude_sessions": (
+                [s.value for s in self.exclude_sessions] if self.exclude_sessions else None
+            ),
+            "add_session_flags": self.add_session_flags,
+            "add_overlap_flags": self.add_overlap_flags,
+            "filter_holidays": self.filter_holidays,
+            "handle_dst": self.handle_dst,
+            "session_volatility_normalization": self.session_volatility_normalization,
+            "volatility_lookback": self.volatility_lookback,
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> 'SessionsConfig':
+    def from_dict(cls, d: dict) -> "SessionsConfig":
         """Create from dictionary."""
         include = None
-        if d.get('include_sessions'):
-            include = [SessionName(s) for s in d['include_sessions']]
+        if d.get("include_sessions"):
+            include = [SessionName(s) for s in d["include_sessions"]]
 
         exclude = None
-        if d.get('exclude_sessions'):
-            exclude = [SessionName(s) for s in d['exclude_sessions']]
+        if d.get("exclude_sessions"):
+            exclude = [SessionName(s) for s in d["exclude_sessions"]]
 
         return cls(
             include_sessions=include,
             exclude_sessions=exclude,
-            add_session_flags=d.get('add_session_flags', True),
-            add_overlap_flags=d.get('add_overlap_flags', True),
-            filter_holidays=d.get('filter_holidays', True),
-            handle_dst=d.get('handle_dst', True),
-            session_volatility_normalization=d.get('session_volatility_normalization', False),
-            volatility_lookback=d.get('volatility_lookback', 288),
+            add_session_flags=d.get("add_session_flags", True),
+            add_overlap_flags=d.get("add_overlap_flags", True),
+            filter_holidays=d.get("filter_holidays", True),
+            handle_dst=d.get("handle_dst", True),
+            session_volatility_normalization=d.get("session_volatility_normalization", False),
+            volatility_lookback=d.get("volatility_lookback", 288),
         )
 
 
@@ -295,13 +299,13 @@ def get_all_sessions() -> list[SessionConfig]:
 
 
 __all__ = [
-    'SessionName',
-    'SessionConfig',
-    'SessionOverlap',
-    'SessionsConfig',
-    'SESSIONS',
-    'SESSION_OVERLAPS',
-    'DEFAULT_SESSIONS_CONFIG',
-    'get_session_config',
-    'get_all_sessions',
+    "SessionName",
+    "SessionConfig",
+    "SessionOverlap",
+    "SessionsConfig",
+    "SESSIONS",
+    "SESSION_OVERLAPS",
+    "DEFAULT_SESSIONS_CONFIG",
+    "get_session_config",
+    "get_all_sessions",
 ]

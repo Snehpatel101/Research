@@ -13,6 +13,7 @@ Reference:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -154,7 +155,7 @@ class TrendBasis(nn.Module):
         """Create polynomial basis matrix: (size, degree+1)."""
         t = torch.linspace(0, 1, size).unsqueeze(1)  # (size, 1)
         powers = torch.arange(degree + 1).float()  # (degree+1,)
-        basis = t ** powers  # (size, degree+1)
+        basis = t**powers  # (size, degree+1)
         return basis.T  # (degree+1, size)
 
     def forward(
@@ -624,9 +625,7 @@ class NBEATSModel(BaseRNNModel):
         self._seq_len = X_train.shape[1]
         return super().fit(X_train, y_train, X_val, y_val, sample_weights, config)
 
-    def _on_training_start(
-        self, train_config: dict[str, Any], seq_len: int
-    ) -> dict[str, Any]:
+    def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
         Log N-BEATS-specific information at training start.
 
@@ -721,22 +720,18 @@ class NBEATSModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         if sample_idx >= len(X):
-            logger.warning(
-                f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0"
-            )
+            logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
         self._model.eval()
-        X_tensor = torch.tensor(
-            X[sample_idx : sample_idx + 1], dtype=torch.float32
-        ).to(self._device)
+        X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
+            self._device
+        )
 
         with torch.no_grad():
             _, stack_forecasts = self._model(X_tensor, return_components=True)
 
-        stack_types = self._config.get(
-            "stack_types", ["generic", "trend", "seasonality"]
-        )
+        stack_types = self._config.get("stack_types", ["generic", "trend", "seasonality"])
         n_stacks = self._config.get("n_stacks", 3)
 
         result = {}

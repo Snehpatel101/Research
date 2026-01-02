@@ -40,6 +40,7 @@ Architecture:
 
     config/models/*.yaml: Model-specific configurations
 """
+
 from __future__ import annotations
 
 # Auto-import model implementations to trigger registration

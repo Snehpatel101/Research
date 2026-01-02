@@ -31,7 +31,7 @@ def threshold_labeling_numba(
     open_prices: np.ndarray,
     pct_up: float,
     pct_down: float,
-    max_bars: int
+    max_bars: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Numba-optimized percentage threshold labeling.
@@ -168,12 +168,7 @@ class ThresholdLabeler(LabelingStrategy):
         Maximum bars before timeout (default: 20)
     """
 
-    def __init__(
-        self,
-        pct_up: float = 0.01,
-        pct_down: float = 0.01,
-        max_bars: int = 20
-    ):
+    def __init__(self, pct_up: float = 0.01, pct_down: float = 0.01, max_bars: int = 20):
         if pct_up <= 0:
             raise ValueError(f"pct_up must be positive, got {pct_up}")
         if pct_down <= 0:
@@ -193,7 +188,7 @@ class ThresholdLabeler(LabelingStrategy):
     @property
     def required_columns(self) -> list[str]:
         """Return list of required DataFrame columns."""
-        return ['close', 'high', 'low', 'open']
+        return ["close", "high", "low", "open"]
 
     def compute_labels(
         self,
@@ -202,7 +197,7 @@ class ThresholdLabeler(LabelingStrategy):
         pct_up: float | None = None,
         pct_down: float | None = None,
         max_bars: int | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> LabelingResult:
         """
         Compute threshold labels for the given horizon.
@@ -252,10 +247,10 @@ class ThresholdLabeler(LabelingStrategy):
         )
 
         # Extract arrays
-        close = df['close'].values
-        high = df['high'].values
-        low = df['low'].values
-        open_prices = df['open'].values
+        close = df["close"].values
+        high = df["high"].values
+        low = df["low"].values
+        open_prices = df["open"].values
 
         # Apply numba function
         labels, bars_to_hit, max_gain, max_loss = threshold_labeling_numba(
@@ -266,11 +261,7 @@ class ThresholdLabeler(LabelingStrategy):
         result = LabelingResult(
             labels=labels,
             horizon=horizon,
-            metadata={
-                'bars_to_hit': bars_to_hit,
-                'max_gain': max_gain,
-                'max_loss': max_loss
-            }
+            metadata={"bars_to_hit": bars_to_hit, "max_gain": max_gain, "max_loss": max_loss},
         )
 
         # Compute quality metrics
@@ -282,11 +273,7 @@ class ThresholdLabeler(LabelingStrategy):
         return result
 
     def _log_label_statistics(
-        self,
-        result: LabelingResult,
-        horizon: int,
-        pct_up: float,
-        pct_down: float
+        self, result: LabelingResult, horizon: int, pct_up: float, pct_down: float
     ) -> None:
         """Log label distribution statistics."""
         labels = result.labels
@@ -311,7 +298,7 @@ class ThresholdLabeler(LabelingStrategy):
             logger.info(f"  {label_name:12s}: {count:6d} ({pct:5.1f}%)")
 
         # Log average bars to hit
-        bars_to_hit = result.metadata.get('bars_to_hit', np.array([]))
+        bars_to_hit = result.metadata.get("bars_to_hit", np.array([]))
         if len(bars_to_hit) > 0:
             valid_bars = bars_to_hit[valid_mask & (bars_to_hit > 0)]
             if len(valid_bars) > 0:
@@ -329,27 +316,29 @@ class ThresholdLabeler(LabelingStrategy):
         labels = result.labels
         valid_mask = labels != -99
 
-        max_gain = result.metadata.get('max_gain', np.array([]))
-        max_loss = result.metadata.get('max_loss', np.array([]))
-        bars_to_hit = result.metadata.get('bars_to_hit', np.array([]))
+        max_gain = result.metadata.get("max_gain", np.array([]))
+        max_loss = result.metadata.get("max_loss", np.array([]))
+        bars_to_hit = result.metadata.get("bars_to_hit", np.array([]))
 
         if len(max_gain) > 0 and len(max_loss) > 0:
             valid_gain = max_gain[valid_mask]
             valid_loss = max_loss[valid_mask]
 
             if len(valid_gain) > 0:
-                metrics['avg_max_gain'] = float(np.mean(valid_gain))
-                metrics['avg_max_loss'] = float(np.mean(valid_loss))
+                metrics["avg_max_gain"] = float(np.mean(valid_gain))
+                metrics["avg_max_loss"] = float(np.mean(valid_loss))
 
                 # Risk-reward ratio
-                avg_loss_abs = abs(metrics['avg_max_loss']) if metrics['avg_max_loss'] != 0 else 1e-6
-                metrics['gain_loss_ratio'] = metrics['avg_max_gain'] / avg_loss_abs
+                avg_loss_abs = (
+                    abs(metrics["avg_max_loss"]) if metrics["avg_max_loss"] != 0 else 1e-6
+                )
+                metrics["gain_loss_ratio"] = metrics["avg_max_gain"] / avg_loss_abs
 
         if len(bars_to_hit) > 0:
             valid_bars = bars_to_hit[valid_mask]
             if len(valid_bars) > 0:
                 non_zero_bars = valid_bars[valid_bars > 0]
                 if len(non_zero_bars) > 0:
-                    metrics['avg_bars_to_hit'] = float(np.mean(non_zero_bars))
+                    metrics["avg_bars_to_hit"] = float(np.mean(non_zero_bars))
 
         return metrics

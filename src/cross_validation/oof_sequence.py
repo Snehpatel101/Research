@@ -4,6 +4,7 @@ Sequence model OOF (Out-of-Fold) prediction generation.
 Handles specialized logic for generating out-of-sample predictions
 for sequence models (LSTM, GRU, TCN, Transformer).
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +32,7 @@ COVERAGE_WARNING_THRESHOLD = 0.05  # Warn if coverage is >5% below expected
 # =============================================================================
 # SEQUENCE OOF GENERATOR
 # =============================================================================
+
 
 class SequenceOOFGenerator:
     """
@@ -125,12 +127,8 @@ class SequenceOOFGenerator:
             # Build 3D sequences for this fold
             # allow_lookback_outside=True: sequence lookback can include data outside fold
             # but TARGET must be in fold
-            train_result = seq_builder.build_fold_sequences(
-                train_idx, allow_lookback_outside=True
-            )
-            val_result = seq_builder.build_fold_sequences(
-                val_idx, allow_lookback_outside=True
-            )
+            train_result = seq_builder.build_fold_sequences(train_idx, allow_lookback_outside=True)
+            val_result = seq_builder.build_fold_sequences(val_idx, allow_lookback_outside=True)
 
             if train_result.n_sequences == 0 or val_result.n_sequences == 0:
                 logger.warning(
@@ -181,15 +179,17 @@ class SequenceOOFGenerator:
                 oof_confidence[original_idx] = prediction_output.confidence[seq_idx]
 
             # Track fold info
-            fold_info.append({
-                "fold": fold_idx,
-                "train_size": len(train_idx),
-                "val_size": len(val_idx),
-                "train_sequences": train_result.n_sequences,
-                "val_sequences": val_result.n_sequences,
-                "val_accuracy": training_metrics.val_accuracy,
-                "val_f1": training_metrics.val_f1,
-            })
+            fold_info.append(
+                {
+                    "fold": fold_idx,
+                    "train_size": len(train_idx),
+                    "val_size": len(val_idx),
+                    "train_sequences": train_result.n_sequences,
+                    "val_sequences": val_result.n_sequences,
+                    "val_accuracy": training_metrics.val_accuracy,
+                    "val_f1": training_metrics.val_f1,
+                }
+            )
 
         # Validate coverage (expected to be < 100% for sequence models due to lookback)
         coverage = float((~np.isnan(oof_preds)).mean())
@@ -198,9 +198,7 @@ class SequenceOOFGenerator:
         # Calculate expected coverage based on sequence length and boundaries
         # Each segment (symbol or gap-separated region) loses seq_len samples at start
         n_boundaries = (
-            len(seq_builder._symbol_boundaries)
-            if seq_builder._symbol_boundaries is not None
-            else 0
+            len(seq_builder._symbol_boundaries) if seq_builder._symbol_boundaries is not None else 0
         )
         n_segments = n_boundaries + 1  # boundaries divide data into segments
         expected_missing = n_segments * seq_len
@@ -224,14 +222,16 @@ class SequenceOOFGenerator:
             )
 
         # Build result DataFrame
-        oof_df = pd.DataFrame({
-            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-            f"{model_name}_prob_short": oof_probs[:, 0],
-            f"{model_name}_prob_neutral": oof_probs[:, 1],
-            f"{model_name}_prob_long": oof_probs[:, 2],
-            f"{model_name}_pred": oof_preds,
-            f"{model_name}_confidence": oof_confidence,
-        })
+        oof_df = pd.DataFrame(
+            {
+                "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+                f"{model_name}_prob_short": oof_probs[:, 0],
+                f"{model_name}_prob_neutral": oof_probs[:, 1],
+                f"{model_name}_prob_long": oof_probs[:, 2],
+                f"{model_name}_pred": oof_preds,
+                f"{model_name}_confidence": oof_confidence,
+            }
+        )
 
         return OOFPrediction(
             model_name=model_name,

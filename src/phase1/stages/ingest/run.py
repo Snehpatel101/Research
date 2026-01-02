@@ -4,6 +4,7 @@ Stage 1: Data Ingestion and Validation.
 Orchestration logic for Stage 1 of the pipeline.
 Validates and standardizes raw OHLCV data from the data/raw/ directory.
 """
+
 import logging
 import traceback
 from datetime import datetime
@@ -26,10 +27,7 @@ except ImportError:
     from pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 
-def run_data_generation(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> 'StageResult':
+def run_data_generation(config: "PipelineConfig", manifest: "ArtifactManifest") -> "StageResult":
     """
     Stage 1: Data Ingestion & Validation.
 
@@ -87,8 +85,8 @@ def run_data_generation(
         ingestor = DataIngestor(
             raw_data_dir=config.raw_data_dir,
             output_dir=validated_data_dir,
-            source_timezone='UTC',
-            symbol_col='symbol'
+            source_timezone="UTC",
+            symbol_col="symbol",
         )
 
         # Process each symbol
@@ -96,7 +94,7 @@ def run_data_generation(
         for symbol in config.symbols:
             # Find the raw data file
             raw_file = None
-            for ext in ['.parquet', '.csv']:
+            for ext in [".parquet", ".csv"]:
                 candidate = config.raw_data_dir / f"{symbol}_1m{ext}"
                 if candidate.exists():
                     raw_file = candidate
@@ -111,15 +109,11 @@ def run_data_generation(
             logger.info(f"\nProcessing {symbol} from {raw_file.name}...")
 
             # Ingest and validate the file
-            df, metadata = ingestor.ingest_file(
-                file_path=raw_file,
-                symbol=symbol,
-                validate=True
-            )
+            df, metadata = ingestor.ingest_file(file_path=raw_file, symbol=symbol, validate=True)
 
             # Check for validation issues
-            validation_info = metadata.get('validation', {})
-            violations = validation_info.get('violations', {})
+            validation_info = metadata.get("validation", {})
+            violations = validation_info.get("violations", {})
             if violations:
                 violation_count = sum(violations.values())
                 total_violations += violation_count
@@ -133,13 +127,13 @@ def run_data_generation(
 
             # Store metadata for this symbol
             ingestion_metadata[symbol] = {
-                'source_file': str(raw_file),
-                'validated_file': str(output_path),
-                'raw_rows': metadata.get('raw_rows', 0),
-                'final_rows': metadata.get('final_rows', 0),
-                'date_range': metadata.get('date_range', {}),
-                'violations_fixed': sum(violations.values()) if violations else 0,
-                'validation_details': violations
+                "source_file": str(raw_file),
+                "validated_file": str(output_path),
+                "raw_rows": metadata.get("raw_rows", 0),
+                "final_rows": metadata.get("final_rows", 0),
+                "date_range": metadata.get("date_range", {}),
+                "violations_fixed": sum(violations.values()) if violations else 0,
+                "validation_details": violations,
             }
 
             # Add to manifest
@@ -147,7 +141,7 @@ def run_data_generation(
                 name=f"validated_data_{symbol}",
                 file_path=output_path,
                 stage="data_generation",
-                metadata=ingestion_metadata[symbol]
+                metadata=ingestion_metadata[symbol],
             )
 
             logger.info(
@@ -174,17 +168,15 @@ def run_data_generation(
             start_time=start_time,
             artifacts=artifacts,
             metadata={
-                'symbols': config.symbols,
-                'ingestion_results': ingestion_metadata,
-                'total_violations_fixed': total_violations
-            }
+                "symbols": config.symbols,
+                "ingestion_results": ingestion_metadata,
+                "total_violations_fixed": total_violations,
+            },
         )
 
     except Exception as e:
         logger.error(f"Data generation/ingestion failed: {e}")
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="data_generation",
-            start_time=start_time,
-            error=str(e)
+            stage_name="data_generation", start_time=start_time, error=str(e)
         )

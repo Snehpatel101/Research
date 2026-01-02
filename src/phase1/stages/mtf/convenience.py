@@ -2,7 +2,6 @@
 Convenience functions for Multi-Timeframe (MTF) Feature Integration.
 """
 
-
 import pandas as pd
 
 from .constants import DEFAULT_MTF_MODE, MTFMode
@@ -12,11 +11,11 @@ from .generator import MTFFeatureGenerator
 def add_mtf_features(
     df: pd.DataFrame,
     feature_metadata: dict[str, str] | None = None,
-    base_timeframe: str = '5min',
+    base_timeframe: str = "5min",
     mtf_timeframes: list[str] | None = None,
     mode: MTFMode | str = DEFAULT_MTF_MODE,
     include_ohlcv: bool | None = None,
-    include_indicators: bool | None = None
+    include_indicators: bool | None = None,
 ) -> pd.DataFrame:
     """
     Add MTF features to a DataFrame (convenience function).
@@ -73,7 +72,7 @@ def add_mtf_features(
         mtf_timeframes=mtf_timeframes,
         mode=mode,
         include_ohlcv=include_ohlcv,
-        include_indicators=include_indicators
+        include_indicators=include_indicators,
     )
 
     result = generator.generate_mtf_features(df)
@@ -85,7 +84,10 @@ def add_mtf_features(
             for col in cols:
                 if col in result.columns:
                     # Determine feature type from column name
-                    if any(col.startswith(ohlcv) for ohlcv in ['open', 'high', 'low', 'close', 'volume']):
+                    if any(
+                        col.startswith(ohlcv)
+                        for ohlcv in ["open", "high", "low", "close", "volume"]
+                    ):
                         feature_metadata[col] = f"MTF OHLCV bar from {tf} timeframe"
                     else:
                         feature_metadata[col] = f"MTF indicator from {tf} timeframe"
@@ -94,10 +96,7 @@ def add_mtf_features(
 
 
 def validate_mtf_alignment(
-    df_base: pd.DataFrame,
-    df_mtf: pd.DataFrame,
-    base_tf: str = '5min',
-    mtf_tf: str = '15min'
+    df_base: pd.DataFrame, df_mtf: pd.DataFrame, base_tf: str = "5min", mtf_tf: str = "15min"
 ) -> tuple[bool, list[str]]:
     """
     Validate that MTF alignment is correct.
@@ -125,30 +124,26 @@ def validate_mtf_alignment(
     """
     issues = []
 
-    if 'datetime' not in df_base.columns:
+    if "datetime" not in df_base.columns:
         issues.append("df_base missing 'datetime' column")
 
-    if 'datetime' not in df_mtf.columns:
+    if "datetime" not in df_mtf.columns:
         issues.append("df_mtf missing 'datetime' column")
 
     if issues:
         return False, issues
 
     # Check timestamp coverage
-    base_start = df_base['datetime'].min()
-    base_end = df_base['datetime'].max()
-    mtf_start = df_mtf['datetime'].min()
-    mtf_end = df_mtf['datetime'].max()
+    base_start = df_base["datetime"].min()
+    base_end = df_base["datetime"].max()
+    mtf_start = df_mtf["datetime"].min()
+    mtf_end = df_mtf["datetime"].max()
 
     if mtf_start < base_start:
-        issues.append(
-            f"MTF data starts before base data: {mtf_start} < {base_start}"
-        )
+        issues.append(f"MTF data starts before base data: {mtf_start} < {base_start}")
 
     if mtf_end > base_end:
-        issues.append(
-            f"MTF data ends after base data: {mtf_end} > {base_end}"
-        )
+        issues.append(f"MTF data ends after base data: {mtf_end} > {base_end}")
 
     return len(issues) == 0, issues
 
@@ -156,7 +151,7 @@ def validate_mtf_alignment(
 def add_mtf_bars(
     df: pd.DataFrame,
     feature_metadata: dict[str, str] | None = None,
-    base_timeframe: str = '5min',
+    base_timeframe: str = "5min",
     mtf_timeframes: list[str] | None = None,
 ) -> pd.DataFrame:
     """
@@ -191,14 +186,14 @@ def add_mtf_bars(
         feature_metadata=feature_metadata,
         base_timeframe=base_timeframe,
         mtf_timeframes=mtf_timeframes,
-        mode=MTFMode.BARS
+        mode=MTFMode.BARS,
     )
 
 
 def add_mtf_indicators(
     df: pd.DataFrame,
     feature_metadata: dict[str, str] | None = None,
-    base_timeframe: str = '5min',
+    base_timeframe: str = "5min",
     mtf_timeframes: list[str] | None = None,
 ) -> pd.DataFrame:
     """
@@ -233,5 +228,5 @@ def add_mtf_indicators(
         feature_metadata=feature_metadata,
         base_timeframe=base_timeframe,
         mtf_timeframes=mtf_timeframes,
-        mode=MTFMode.INDICATORS
+        mode=MTFMode.INDICATORS,
     )

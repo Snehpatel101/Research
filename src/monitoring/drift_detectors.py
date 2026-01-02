@@ -3,6 +3,7 @@ Statistical drift detection implementations.
 
 Implements ADWIN (concept drift), PSI (feature drift), and KS (distribution comparison).
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # ADWIN DETECTOR (Concept Drift)
 # =============================================================================
+
 
 class ADWINDetector(BaseDriftDetector):
     """
@@ -70,6 +72,7 @@ class ADWINDetector(BaseDriftDetector):
         """Initialize or reset ADWIN instance."""
         try:
             from river.drift import ADWIN
+
             self._adwin = ADWIN(delta=self.delta)
         except ImportError:
             logger.warning(
@@ -98,9 +101,7 @@ class ADWINDetector(BaseDriftDetector):
             current_mean = self._adwin.estimation
 
             if drift_detected and self._n_updates >= self.min_samples:
-                severity = self._compute_severity(
-                    self._last_mean or current_mean, current_mean
-                )
+                severity = self._compute_severity(self._last_mean or current_mean, current_mean)
                 result = DriftResult(
                     drift_detected=True,
                     drift_type=DriftType.CONCEPT,
@@ -137,10 +138,7 @@ class ADWINDetector(BaseDriftDetector):
         second_half = np.mean(self._fallback_window[mid:])
 
         # Use t-test for drift detection
-        _, p_value = stats.ttest_ind(
-            self._fallback_window[:mid],
-            self._fallback_window[mid:]
-        )
+        _, p_value = stats.ttest_ind(self._fallback_window[:mid], self._fallback_window[mid:])
 
         if p_value < self.delta:
             severity = self._compute_severity(first_half, second_half)
@@ -160,9 +158,7 @@ class ADWINDetector(BaseDriftDetector):
 
         return None
 
-    def _compute_severity(
-        self, old_mean: float, new_mean: float
-    ) -> DriftSeverity:
+    def _compute_severity(self, old_mean: float, new_mean: float) -> DriftSeverity:
         """Compute severity based on mean change."""
         # Use epsilon to prevent division by zero or near-zero
         epsilon = 1e-8
@@ -206,6 +202,7 @@ class ADWINDetector(BaseDriftDetector):
 # =============================================================================
 # PSI DETECTOR (Feature Drift)
 # =============================================================================
+
 
 class PSIDetector(BaseDriftDetector):
     """
@@ -266,13 +263,9 @@ class PSIDetector(BaseDriftDetector):
         reference_data = np.asarray(reference_data).ravel()
 
         # Create bins from reference data
-        self._reference_bins, self._bin_edges = np.histogram(
-            reference_data, bins=self.n_bins
-        )
+        self._reference_bins, self._bin_edges = np.histogram(reference_data, bins=self.n_bins)
         # Convert to proportions and add small epsilon to avoid division by zero
-        self._reference_bins = (
-            self._reference_bins / len(reference_data)
-        ) + 1e-10
+        self._reference_bins = (self._reference_bins / len(reference_data)) + 1e-10
         self._feature_name = feature_name
 
         logger.debug(f"PSI reference set with {len(reference_data)} samples")
@@ -283,9 +276,7 @@ class PSIDetector(BaseDriftDetector):
 
         PSI is a batch comparison method, not online.
         """
-        raise NotImplementedError(
-            "PSI uses batch comparison. Use compare() instead of update()."
-        )
+        raise NotImplementedError("PSI uses batch comparison. Use compare() instead of update().")
 
     def compare(
         self,
@@ -303,9 +294,7 @@ class PSIDetector(BaseDriftDetector):
             DriftResult with PSI value and drift detection
         """
         if self._reference_bins is None or self._bin_edges is None:
-            raise RuntimeError(
-                "Reference not set. Call set_reference() first."
-            )
+            raise RuntimeError("Reference not set. Call set_reference() first.")
 
         current_data = np.asarray(current_data).ravel()
         feature_name = feature_name or self._feature_name
@@ -316,8 +305,7 @@ class PSIDetector(BaseDriftDetector):
 
         # Calculate PSI
         psi = np.sum(
-            (current_bins - self._reference_bins) *
-            np.log(current_bins / self._reference_bins)
+            (current_bins - self._reference_bins) * np.log(current_bins / self._reference_bins)
         )
 
         # Determine severity
@@ -361,6 +349,7 @@ class PSIDetector(BaseDriftDetector):
 # KS DETECTOR (Distribution Comparison)
 # =============================================================================
 
+
 class KSDetector(BaseDriftDetector):
     """
     Kolmogorov-Smirnov test for distribution drift.
@@ -402,9 +391,7 @@ class KSDetector(BaseDriftDetector):
 
     def update(self, value: float) -> DriftResult | None:
         """Not used for KS - use compare() instead."""
-        raise NotImplementedError(
-            "KS uses batch comparison. Use compare() instead of update()."
-        )
+        raise NotImplementedError("KS uses batch comparison. Use compare() instead of update().")
 
     def compare(
         self,
@@ -419,9 +406,7 @@ class KSDetector(BaseDriftDetector):
         feature_name = feature_name or self._feature_name
 
         # Perform KS test
-        statistic, p_value = stats.ks_2samp(
-            self._reference_data, current_data
-        )
+        statistic, p_value = stats.ks_2samp(self._reference_data, current_data)
 
         drift_detected = p_value < self.alpha
 

@@ -69,6 +69,7 @@ def generate_cv_run_id() -> str:
     """
     import secrets
     from datetime import datetime
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     random_suffix = secrets.token_hex(2)  # 2 bytes = 4 hex chars
     return f"{timestamp}_{random_suffix}"
@@ -77,6 +78,7 @@ def generate_cv_run_id() -> str:
 # =============================================================================
 # CLI ARGUMENT PARSING
 # =============================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -180,7 +182,8 @@ Examples:
 
     # Verbosity
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose logging",
     )
@@ -220,6 +223,7 @@ def parse_horizon_list(horizon_arg: str) -> List[int]:
 # =============================================================================
 # MAIN EXECUTION
 # =============================================================================
+
 
 def main() -> int:
     """Main entry point."""
@@ -303,6 +307,7 @@ def main() -> int:
             logger.error(f"CV failed for H{horizon}: {e}")
             if args.verbose:
                 import traceback
+
                 traceback.print_exc()
             continue
 
@@ -311,18 +316,18 @@ def main() -> int:
         return 1
 
     # Analyze stability
-    logger.info("\n" + "="*60)
+    logger.info("\n" + "=" * 60)
     logger.info("STABILITY ANALYSIS")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     stability_df = analyze_cv_stability(all_results)
     print("\n" + stability_df.to_string(index=False))
 
     # Analyze prediction correlation (if multiple models)
     if len(models) > 1:
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("PREDICTION CORRELATION ANALYSIS")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         for horizon, stacking_ds in all_stacking_datasets.items():
             logger.info(f"\nHorizon H{horizon}:")
@@ -333,9 +338,9 @@ def main() -> int:
             print(corr_df.to_string(index=False))
 
     # Save results
-    logger.info("\n" + "="*60)
+    logger.info("\n" + "=" * 60)
     logger.info("SAVING RESULTS")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     # Create fresh CV runner for saving (with all horizons)
     save_runner = CrossValidationRunner(
@@ -348,9 +353,9 @@ def main() -> int:
     save_runner.save_results(all_results, all_stacking_datasets, cv_output_dir)
 
     # Print summary
-    logger.info("\n" + "="*60)
+    logger.info("\n" + "=" * 60)
     logger.info("SUMMARY")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     for (model_name, horizon), result in all_results.items():
         logger.info(
@@ -364,7 +369,9 @@ def main() -> int:
     logger.info(f"Results saved to: {cv_output_dir}")
     logger.info(f"Stacking datasets saved to: {cv_output_dir / 'stacking'}")
     logger.info(f"\nTo use in Phase 4:")
-    logger.info(f"  python scripts/train_model.py --model stacking --horizon <H> --stacking-data {cv_run_id}")
+    logger.info(
+        f"  python scripts/train_model.py --model stacking --horizon <H> --stacking-data {cv_run_id}"
+    )
 
     return 0
 

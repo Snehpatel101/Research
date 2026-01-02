@@ -9,7 +9,6 @@ Used across all model implementations (boosting, neural, classical) to ensure
 consistent label encoding/decoding.
 """
 
-
 import numpy as np
 import pandas as pd
 
@@ -20,9 +19,7 @@ LABEL_TO_CLASS = {-1: 0, 0: 1, 1: 2}
 CLASS_TO_LABEL = {0: -1, 1: 0, 2: 1}
 
 
-def map_labels_to_classes(
-    y: np.ndarray | pd.Series
-) -> np.ndarray:
+def map_labels_to_classes(y: np.ndarray | pd.Series) -> np.ndarray:
     """
     Convert trading labels (-1, 0, 1) to ML class indices (0, 1, 2).
 
@@ -64,9 +61,7 @@ def map_labels_to_classes(
     return (arr + 1).astype(np.int32)
 
 
-def map_classes_to_labels(
-    y: np.ndarray | pd.Series
-) -> np.ndarray:
+def map_classes_to_labels(y: np.ndarray | pd.Series) -> np.ndarray:
     """
     Convert ML class indices (0, 1, 2) to trading labels (-1, 0, 1).
 

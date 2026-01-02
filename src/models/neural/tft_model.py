@@ -13,6 +13,7 @@ Multi-horizon Time Series Forecasting" (2021)
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -159,16 +160,18 @@ class VariableSelectionNetwork(nn.Module):
         self.input_dim = input_dim
 
         # GRN for each feature
-        self.feature_grns = nn.ModuleList([
-            GatedResidualNetwork(
-                input_dim=input_dim,
-                hidden_dim=hidden_dim,
-                output_dim=hidden_dim,
-                dropout=dropout,
-                context_dim=context_dim,
-            )
-            for _ in range(n_features)
-        ])
+        self.feature_grns = nn.ModuleList(
+            [
+                GatedResidualNetwork(
+                    input_dim=input_dim,
+                    hidden_dim=hidden_dim,
+                    output_dim=hidden_dim,
+                    dropout=dropout,
+                    context_dim=context_dim,
+                )
+                for _ in range(n_features)
+            ]
+        )
 
         # Variable weights GRN
         # Takes flattened features as input
@@ -304,7 +307,7 @@ class InterpretableMultiHeadAttention(nn.Module):
         scores = torch.matmul(q, k.transpose(-2, -1)) / self.scale
 
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, float('-inf'))
+            scores = scores.masked_fill(mask == 0, float("-inf"))
 
         # Attention weights (interpretable - averaged across heads)
         attention = torch.softmax(scores, dim=-1)
@@ -567,24 +570,26 @@ class TFTModel(BaseRNNModel):
     def get_default_config(self) -> dict[str, Any]:
         """Return default TFT hyperparameters."""
         defaults = super().get_default_config()
-        defaults.update({
-            # Architecture
-            "d_model": 256,
-            "n_heads": 4,  # Fewer heads for interpretability
-            "lstm_layers": 2,
-            "attention_layers": 1,  # Single attention layer often sufficient
-            "d_ff": 512,
-            "dropout": 0.1,
-            # Training
-            "sequence_length": 60,
-            "batch_size": 128,
-            "max_epochs": 50,
-            "learning_rate": 0.0001,
-            "weight_decay": 0.01,
-            "gradient_clip": 1.0,
-            "early_stopping_patience": 10,
-            "warmup_epochs": 3,
-        })
+        defaults.update(
+            {
+                # Architecture
+                "d_model": 256,
+                "n_heads": 4,  # Fewer heads for interpretability
+                "lstm_layers": 2,
+                "attention_layers": 1,  # Single attention layer often sufficient
+                "d_ff": 512,
+                "dropout": 0.1,
+                # Training
+                "sequence_length": 60,
+                "batch_size": 128,
+                "max_epochs": 50,
+                "learning_rate": 0.0001,
+                "weight_decay": 0.01,
+                "gradient_clip": 1.0,
+                "early_stopping_patience": 10,
+                "warmup_epochs": 3,
+            }
+        )
         return defaults
 
     def _create_network(self, input_size: int) -> nn.Module:
@@ -652,7 +657,7 @@ class TFTModel(BaseRNNModel):
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
-                batch = X_tensor[i:i + batch_size]
+                batch = X_tensor[i : i + batch_size]
 
                 with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                     logits = self._model(batch)
@@ -712,9 +717,7 @@ class TFTModel(BaseRNNModel):
 
         return {f"feature_{i}": float(imp) for i, imp in enumerate(importance)}
 
-    def get_temporal_attention(
-        self, X: np.ndarray, sample_idx: int = 0
-    ) -> list[np.ndarray] | None:
+    def get_temporal_attention(self, X: np.ndarray, sample_idx: int = 0) -> list[np.ndarray] | None:
         """
         Extract temporal attention weights for interpretability.
 
@@ -734,15 +737,13 @@ class TFTModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         if sample_idx >= len(X):
-            logger.warning(
-                f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0"
-            )
+            logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
         self._model.eval()
-        X_tensor = torch.tensor(
-            X[sample_idx:sample_idx + 1], dtype=torch.float32
-        ).to(self._device)
+        X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
+            self._device
+        )
 
         with torch.no_grad():
             # Forward pass to populate attention weights
@@ -752,13 +753,10 @@ class TFTModel(BaseRNNModel):
             attention_weights = self._model.get_attention_weights()
 
             return [
-                attn[0].cpu().numpy() if attn is not None else None
-                for attn in attention_weights
+                attn[0].cpu().numpy() if attn is not None else None for attn in attention_weights
             ]
 
-    def get_variable_selection_weights(
-        self, X: np.ndarray
-    ) -> np.ndarray | None:
+    def get_variable_selection_weights(self, X: np.ndarray) -> np.ndarray | None:
         """
         Get variable selection weights for a batch of inputs.
 

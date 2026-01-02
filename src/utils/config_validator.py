@@ -4,6 +4,7 @@ Unified Configuration Validator - Central validation for all pipeline configs.
 Provides a single entry point for validating Phase 1-4 configurations,
 with clear error messages and actionable suggestions.
 """
+
 from __future__ import annotations
 
 import logging
@@ -107,9 +108,7 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
 
     # Convert to dict if needed
     if hasattr(config, "__dict__"):
-        config_dict = {
-            k: v for k, v in config.__dict__.items() if not k.startswith("_")
-        }
+        config_dict = {k: v for k, v in config.__dict__.items() if not k.startswith("_")}
     else:
         config_dict = config
 
@@ -132,15 +131,12 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
     elif len(symbols) > 1:
         allow_batch = config_dict.get("allow_batch_symbols", False)
         if not allow_batch:
-            result.add_error(
-                f"Multiple symbols specified but allow_batch_symbols=False: {symbols}"
-            )
-            result.add_suggestion(
-                "Single-contract architecture: process one symbol per run"
-            )
+            result.add_error(f"Multiple symbols specified but allow_batch_symbols=False: {symbols}")
+            result.add_suggestion("Single-contract architecture: process one symbol per run")
 
     # Check horizons
     from src.common.horizon_config import ACTIVE_HORIZONS
+
     horizons = config_dict.get("horizons") or config_dict.get("label_horizons")
     if not horizons:
         result.add_warning(f"No label horizons specified (will use default {ACTIVE_HORIZONS})")
@@ -161,9 +157,7 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
         )
 
     if train_ratio < 0.5:
-        result.add_warning(
-            f"Train ratio is small ({train_ratio}). Recommended: >= 0.6"
-        )
+        result.add_warning(f"Train ratio is small ({train_ratio}). Recommended: >= 0.6")
 
     # Check purge/embargo
     purge_bars = config_dict.get("purge_bars")
@@ -177,12 +171,8 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
 
     if purge_bars is not None and embargo_bars is not None:
         if purge_bars == 0 and embargo_bars == 0:
-            result.add_warning(
-                "Both purge and embargo are 0. High risk of data leakage!"
-            )
-            result.add_suggestion(
-                "Use auto-scaling: purge = max_horizon * 3, embargo = 1440"
-            )
+            result.add_warning("Both purge and embargo are 0. High risk of data leakage!")
+            result.add_suggestion("Use auto-scaling: purge = max_horizon * 3, embargo = 1440")
 
     # Check paths
     data_dir = config_dict.get("data_dir")
@@ -238,9 +228,7 @@ def validate_trainer_config(config: dict[str, Any]) -> ValidationResult:
 
             if not ModelRegistry.is_registered(model_name):
                 available = ModelRegistry.list_all()
-                result.add_error(
-                    f"Model '{model_name}' not registered. Available: {available}"
-                )
+                result.add_error(f"Model '{model_name}' not registered. Available: {available}")
         except ImportError:
             result.add_warning("Could not import ModelRegistry for validation")
 
@@ -325,9 +313,7 @@ def validate_cv_config(config: dict[str, Any]) -> ValidationResult:
             for model in models:
                 if not ModelRegistry.is_registered(model):
                     available = ModelRegistry.list_all()
-                    result.add_error(
-                        f"Model '{model}' not registered. Available: {available}"
-                    )
+                    result.add_error(f"Model '{model}' not registered. Available: {available}")
         except ImportError:
             result.add_warning("Could not import ModelRegistry for validation")
 
@@ -351,9 +337,7 @@ def validate_cv_config(config: dict[str, Any]) -> ValidationResult:
     embargo_bars = config.get("embargo_bars")
 
     if purge_bars == 0 and embargo_bars == 0:
-        result.add_warning(
-            "Both purge and embargo are 0. High risk of data leakage in CV!"
-        )
+        result.add_warning("Both purge and embargo are 0. High risk of data leakage in CV!")
         result.add_suggestion(
             "Use auto-scaling from src.common.horizon_config.auto_scale_purge_embargo"
         )
@@ -362,13 +346,9 @@ def validate_cv_config(config: dict[str, Any]) -> ValidationResult:
     if config.get("tune", False):
         n_trials = config.get("n_trials", 50)
         if n_trials < 10:
-            result.add_warning(
-                f"n_trials={n_trials} is small for tuning. Recommended: >= 50"
-            )
+            result.add_warning(f"n_trials={n_trials} is small for tuning. Recommended: >= 50")
         elif n_trials > 500:
-            result.add_warning(
-                f"n_trials={n_trials} is large. May take very long time"
-            )
+            result.add_warning(f"n_trials={n_trials} is large. May take very long time")
 
     return result
 
@@ -407,8 +387,7 @@ def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
     model_name = config.get("model_name")
     if model_name not in ["voting", "stacking", "blending"]:
         result.add_error(
-            f"Invalid ensemble type: {model_name}. "
-            "Must be voting, stacking, or blending"
+            f"Invalid ensemble type: {model_name}. " "Must be voting, stacking, or blending"
         )
         return result
 
@@ -420,9 +399,7 @@ def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
         return result
 
     if len(base_models) < 2:
-        result.add_error(
-            f"Need at least 2 base models for ensemble, got {len(base_models)}"
-        )
+        result.add_error(f"Need at least 2 base models for ensemble, got {len(base_models)}")
         return result
 
     # Use ensemble validator from Phase 4
@@ -475,9 +452,7 @@ def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
     if model_name == "stacking":
         n_folds = config.get("config", {}).get("n_folds", 5)
         if not stacking_data and n_folds < 3:
-            result.add_warning(
-                f"n_folds={n_folds} is small for stacking. Recommended: >= 5"
-            )
+            result.add_warning(f"n_folds={n_folds} is small for stacking. Recommended: >= 5")
 
     return result
 
@@ -549,9 +524,7 @@ def run_all_validations(
     return result
 
 
-def generate_validation_report(
-    config_dict: dict[str, Any], phases: list[str] | None = None
-) -> str:
+def generate_validation_report(config_dict: dict[str, Any], phases: list[str] | None = None) -> str:
     """
     Generate human-readable validation report.
 
@@ -594,9 +567,7 @@ def generate_validation_report(
 # =============================================================================
 
 
-def quick_validate(
-    phase: str, **kwargs: Any
-) -> tuple[bool, str | None]:
+def quick_validate(phase: str, **kwargs: Any) -> tuple[bool, str | None]:
     """
     Quick validation helper for command-line scripts.
 

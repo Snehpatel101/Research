@@ -8,6 +8,7 @@ Boosting models (XGBoost, LightGBM, CatBoost) are notoriously miscalibrated.
 This module applies post-hoc calibration to correct probabilities for
 downstream position sizing and ensemble stacking.
 """
+
 from __future__ import annotations
 
 import logging
@@ -230,9 +231,7 @@ class ProbabilityCalibrator:
         n_samples, n_classes = probabilities.shape
 
         if n_classes != self._n_classes:
-            raise ValueError(
-                f"Expected {self._n_classes} classes, got {n_classes}"
-            )
+            raise ValueError(f"Expected {self._n_classes} classes, got {n_classes}")
 
         calibrated = np.zeros_like(probabilities)
 
@@ -244,9 +243,7 @@ class ProbabilityCalibrator:
                 calibrated[:, cls] = calibrator.predict(probs_cls)
             else:
                 # Logistic returns probability of class 1
-                calibrated[:, cls] = calibrator.predict_proba(
-                    probs_cls.reshape(-1, 1)
-                )[:, 1]
+                calibrated[:, cls] = calibrator.predict_proba(probs_cls.reshape(-1, 1))[:, 1]
 
         # Normalize to sum to 1
         row_sums = calibrated.sum(axis=1, keepdims=True)

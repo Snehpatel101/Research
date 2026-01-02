@@ -3,6 +3,7 @@ Device utilities for GPU detection and memory management.
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100/H100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +24,7 @@ def is_colab() -> bool:
     """Detect if running in Google Colab."""
     try:
         import google.colab  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -37,6 +39,7 @@ def is_notebook() -> bool:
     """Detect if running in a Jupyter notebook."""
     try:
         from IPython import get_ipython
+
         shell = get_ipython()
         if shell is None:
             return False
@@ -58,7 +61,12 @@ def get_environment_info() -> dict[str, Any]:
 
 def setup_colab(mount_drive: bool = False, install_packages: list | None = None) -> dict[str, Any]:
     """Setup Google Colab environment for ML training."""
-    results = {"is_colab": is_colab(), "drive_mounted": False, "packages_installed": [], "gpu_info": None}
+    results = {
+        "is_colab": is_colab(),
+        "drive_mounted": False,
+        "packages_installed": [],
+        "gpu_info": None,
+    }
 
     if not is_colab():
         logger.warning("setup_colab called but not running in Colab")
@@ -67,6 +75,7 @@ def setup_colab(mount_drive: bool = False, install_packages: list | None = None)
     if mount_drive:
         try:
             from google.colab import drive
+
             drive.mount("/content/drive")
             results["drive_mounted"] = True
         except Exception as e:
@@ -74,6 +83,7 @@ def setup_colab(mount_drive: bool = False, install_packages: list | None = None)
 
     if install_packages:
         import subprocess
+
         for package in install_packages:
             try:
                 subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", package])
@@ -84,8 +94,10 @@ def setup_colab(mount_drive: bool = False, install_packages: list | None = None)
     gpu_info = get_best_gpu()
     if gpu_info:
         results["gpu_info"] = {
-            "name": gpu_info.name, "memory_gb": gpu_info.total_memory_gb,
-            "compute_capability": gpu_info.compute_capability, "supports_bf16": gpu_info.supports_bf16,
+            "name": gpu_info.name,
+            "memory_gb": gpu_info.total_memory_gb,
+            "compute_capability": gpu_info.compute_capability,
+            "supports_bf16": gpu_info.supports_bf16,
         }
     return results
 
@@ -98,6 +110,7 @@ def setup_colab(mount_drive: bool = False, install_packages: list | None = None)
 @dataclass
 class GPUInfo:
     """Information about a GPU device."""
+
     index: int
     name: str
     total_memory_gb: float
@@ -121,9 +134,16 @@ class GPUInfo:
         """Get GPU generation name."""
         major, minor = self.compute_capability
         gens = {
-            (6, 0): "Pascal", (6, 1): "Pascal", (6, 2): "Pascal",
-            (7, 0): "Volta", (7, 2): "Volta", (7, 5): "Turing",
-            (8, 0): "Ampere", (8, 6): "Ampere", (8, 7): "Ampere", (8, 9): "Ada Lovelace",
+            (6, 0): "Pascal",
+            (6, 1): "Pascal",
+            (6, 2): "Pascal",
+            (7, 0): "Volta",
+            (7, 2): "Volta",
+            (7, 5): "Turing",
+            (8, 0): "Ampere",
+            (8, 6): "Ampere",
+            (8, 7): "Ampere",
+            (8, 9): "Ada Lovelace",
             (9, 0): "Hopper",
         }
         return gens.get((major, minor), f"Unknown (SM {major}.{minor})")
@@ -147,6 +167,7 @@ def detect_cuda_available() -> bool:
     """Check if CUDA is available."""
     try:
         import torch
+
         return torch.cuda.is_available()
     except ImportError:
         return False
@@ -158,6 +179,7 @@ def get_gpu_count() -> int:
         return 0
     try:
         import torch
+
         return torch.cuda.device_count()
     except ImportError:
         return 0
@@ -169,17 +191,22 @@ def get_gpu_info(device_index: int = 0) -> GPUInfo | None:
         return None
     try:
         import torch
+
         if device_index >= torch.cuda.device_count():
             return None
         props = torch.cuda.get_device_properties(device_index)
-        total_memory = props.total_memory / (1024 ** 3)
+        total_memory = props.total_memory / (1024**3)
         torch.cuda.set_device(device_index)
-        free_memory = torch.cuda.mem_get_info(device_index)[0] / (1024 ** 3)
+        free_memory = torch.cuda.mem_get_info(device_index)[0] / (1024**3)
         cc = (props.major, props.minor)
         return GPUInfo(
-            index=device_index, name=props.name,
-            total_memory_gb=total_memory, free_memory_gb=free_memory,
-            compute_capability=cc, supports_fp16=cc >= (7, 0), supports_bf16=cc >= (8, 0),
+            index=device_index,
+            name=props.name,
+            total_memory_gb=total_memory,
+            free_memory_gb=free_memory,
+            compute_capability=cc,
+            supports_fp16=cc >= (7, 0),
+            supports_bf16=cc >= (8, 0),
         )
     except Exception as e:
         logger.warning(f"Failed to get GPU info: {e}")
@@ -216,6 +243,7 @@ def get_device(prefer_gpu: bool = True) -> str:
 def get_amp_dtype(gpu_info: GPUInfo | None = None):
     """Get appropriate AMP dtype: bfloat16 for Ampere+, float16 for Volta/Turing, float32 otherwise."""
     import torch
+
     if gpu_info is None:
         gpu_info = get_best_gpu()
     if gpu_info is None:
@@ -232,20 +260,35 @@ def get_mixed_precision_config(gpu_info: GPUInfo | None = None) -> dict[str, Any
     if gpu_info is None:
         gpu_info = get_best_gpu()
     if gpu_info is None:
-        return {"enabled": False, "dtype": "float32", "use_amp": False, "grad_scaler": False, "reason": "No GPU"}
+        return {
+            "enabled": False,
+            "dtype": "float32",
+            "use_amp": False,
+            "grad_scaler": False,
+            "reason": "No GPU",
+        }
 
     if gpu_info.supports_bf16:
         return {
-            "enabled": True, "dtype": "bfloat16", "use_amp": True, "grad_scaler": False,
+            "enabled": True,
+            "dtype": "bfloat16",
+            "use_amp": True,
+            "grad_scaler": False,
             "reason": f"{gpu_info.generation} GPU supports native BF16",
         }
     if gpu_info.supports_fp16:
         return {
-            "enabled": True, "dtype": "float16", "use_amp": True, "grad_scaler": True,
+            "enabled": True,
+            "dtype": "float16",
+            "use_amp": True,
+            "grad_scaler": True,
             "reason": f"{gpu_info.generation} GPU supports FP16 with gradient scaling",
         }
     return {
-        "enabled": False, "dtype": "float32", "use_amp": False, "grad_scaler": False,
+        "enabled": False,
+        "dtype": "float32",
+        "use_amp": False,
+        "grad_scaler": False,
         "reason": f"{gpu_info.generation} GPU does not efficiently support mixed precision",
     }
 
@@ -269,40 +312,64 @@ def get_optimal_gpu_settings(model_family: str, gpu_info: GPUInfo | None = None)
     vram_scale = vram / 12.0  # Reference: 12GB = 256 batch for LSTM
 
     if family == "boosting":
-        return {"batch_size": "N/A", "mixed_precision": False, "num_workers": min(8, os.cpu_count() or 4)}
+        return {
+            "batch_size": "N/A",
+            "mixed_precision": False,
+            "num_workers": min(8, os.cpu_count() or 4),
+        }
     elif family in ("lstm", "gru"):
         return {
             "batch_size": max(32, min(1024, int(256 * vram_scale))),
-            "sequence_length": 60, "hidden_size": 256 if vram >= 10 else 128, "num_layers": 2,
-            "mixed_precision": mp_config["enabled"], "amp_dtype": mp_config["dtype"],
-            "grad_scaler": mp_config["grad_scaler"], "num_workers": 4, "pin_memory": True,
+            "sequence_length": 60,
+            "hidden_size": 256 if vram >= 10 else 128,
+            "num_layers": 2,
+            "mixed_precision": mp_config["enabled"],
+            "amp_dtype": mp_config["dtype"],
+            "grad_scaler": mp_config["grad_scaler"],
+            "num_workers": 4,
+            "pin_memory": True,
         }
     elif family == "tcn":
         return {
             "batch_size": max(16, min(512, int(128 * vram_scale))),
             "sequence_length": 120,
             "num_channels": [64, 64, 64, 64] if vram >= 10 else [32, 32, 32, 32],
-            "mixed_precision": mp_config["enabled"], "amp_dtype": mp_config["dtype"],
-            "grad_scaler": mp_config["grad_scaler"], "num_workers": 4, "pin_memory": True,
+            "mixed_precision": mp_config["enabled"],
+            "amp_dtype": mp_config["dtype"],
+            "grad_scaler": mp_config["grad_scaler"],
+            "num_workers": 4,
+            "pin_memory": True,
         }
     elif family in ("transformer", "patchtst", "informer"):
         return {
             "batch_size": max(8, min(256, int(64 * vram_scale))),
-            "sequence_length": 128, "d_model": 256 if vram >= 16 else 128,
-            "n_layers": 3 if vram >= 16 else 2, "n_heads": 8 if vram >= 16 else 4,
-            "mixed_precision": mp_config["enabled"], "amp_dtype": mp_config["dtype"],
-            "grad_scaler": mp_config["grad_scaler"], "num_workers": 4, "pin_memory": True,
+            "sequence_length": 128,
+            "d_model": 256 if vram >= 16 else 128,
+            "n_layers": 3 if vram >= 16 else 2,
+            "n_heads": 8 if vram >= 16 else 4,
+            "mixed_precision": mp_config["enabled"],
+            "amp_dtype": mp_config["dtype"],
+            "grad_scaler": mp_config["grad_scaler"],
+            "num_workers": 4,
+            "pin_memory": True,
         }
     return {
         "batch_size": max(16, min(128, int(64 * vram_scale))),
-        "mixed_precision": mp_config["enabled"], "amp_dtype": mp_config["dtype"],
-        "grad_scaler": mp_config["grad_scaler"], "num_workers": 4, "pin_memory": True,
+        "mixed_precision": mp_config["enabled"],
+        "amp_dtype": mp_config["dtype"],
+        "grad_scaler": mp_config["grad_scaler"],
+        "num_workers": 4,
+        "pin_memory": True,
     }
 
 
 def estimate_memory_requirements(
-    model_family: str, batch_size: int, sequence_length: int, n_features: int,
-    hidden_size: int = 128, num_layers: int = 2,
+    model_family: str,
+    batch_size: int,
+    sequence_length: int,
+    n_features: int,
+    hidden_size: int = 128,
+    num_layers: int = 2,
 ) -> dict[str, float]:
     """Estimate GPU memory requirements for training."""
     family = model_family.lower()
@@ -312,28 +379,47 @@ def estimate_memory_requirements(
     # Estimate parameters
     if family in ("lstm", "gru"):
         gate_mult = 4 if family == "lstm" else 3
-        params = gate_mult * hidden_size * (n_features + hidden_size + 1) * num_layers + hidden_size * 3
+        params = (
+            gate_mult * hidden_size * (n_features + hidden_size + 1) * num_layers + hidden_size * 3
+        )
     elif family == "tcn":
-        params = sum(n_features * hidden_size * 3 * 2 if i == 0 else hidden_size * hidden_size * 3 * 2
-                     for i in range(num_layers)) + hidden_size * 3
+        params = (
+            sum(
+                n_features * hidden_size * 3 * 2 if i == 0 else hidden_size * hidden_size * 3 * 2
+                for i in range(num_layers)
+            )
+            + hidden_size * 3
+        )
     else:
-        params = 12 * hidden_size * hidden_size * num_layers + sequence_length * hidden_size + hidden_size * 3
+        params = (
+            12 * hidden_size * hidden_size * num_layers
+            + sequence_length * hidden_size
+            + hidden_size * 3
+        )
 
     activation_mult = {"lstm": 4.0, "gru": 3.0, "tcn": 2.5, "transformer": 6.0}.get(family, 4.0)
-    model_mem = (params * 4) / (1024 ** 3)
-    activation_mem = (batch_size * sequence_length * hidden_size * activation_mult * 4) / (1024 ** 3)
+    model_mem = (params * 4) / (1024**3)
+    activation_mem = (batch_size * sequence_length * hidden_size * activation_mult * 4) / (1024**3)
     total = 1.2 * (model_mem * 4 + activation_mem)  # model + grad + optimizer (2x)
 
     gpu_info = get_best_gpu()
     target = (gpu_info.total_memory_gb * 0.8) if gpu_info else 8.0
     rec_batch = max(1, int(batch_size * target / total)) if total > target else batch_size
 
-    return {"total_memory_gb": round(total, 3), "recommended_batch_size": rec_batch, "estimated_params": params}
+    return {
+        "total_memory_gb": round(total, 3),
+        "recommended_batch_size": rec_batch,
+        "estimated_params": params,
+    }
 
 
 def get_optimal_batch_size(
-    model_family: str, gpu_memory_gb: float | None = None, sequence_length: int = 60,
-    n_features: int = 80, hidden_size: int = 128, target_utilization: float = 0.8,
+    model_family: str,
+    gpu_memory_gb: float | None = None,
+    sequence_length: int = 60,
+    n_features: int = 80,
+    hidden_size: int = 128,
+    target_utilization: float = 0.8,
 ) -> int:
     """Calculate optimal batch size for available GPU memory."""
     if gpu_memory_gb is None:
@@ -343,7 +429,9 @@ def get_optimal_batch_size(
     low, high, best = 1, 4096, 32
     while low <= high:
         mid = (low + high) // 2
-        est = estimate_memory_requirements(model_family, mid, sequence_length, n_features, hidden_size)
+        est = estimate_memory_requirements(
+            model_family, mid, sequence_length, n_features, hidden_size
+        )
         if est["total_memory_gb"] <= target:
             best = mid
             low = mid + 1
@@ -383,16 +471,26 @@ def get_training_device_config(model_family: str, prefer_gpu: bool = True) -> di
         settings = get_optimal_gpu_settings(model_family, gpu_info)
         mp = get_mixed_precision_config(gpu_info)
         return {
-            "device": device, "gpu_name": gpu_info.name, "gpu_generation": gpu_info.generation,
-            "gpu_memory_gb": gpu_info.total_memory_gb, "compute_capability": gpu_info.compute_capability,
-            "batch_size": settings.get("batch_size", 64), "mixed_precision": mp,
-            "num_workers": settings.get("num_workers", 4), "pin_memory": settings.get("pin_memory", True),
+            "device": device,
+            "gpu_name": gpu_info.name,
+            "gpu_generation": gpu_info.generation,
+            "gpu_memory_gb": gpu_info.total_memory_gb,
+            "compute_capability": gpu_info.compute_capability,
+            "batch_size": settings.get("batch_size", 64),
+            "mixed_precision": mp,
+            "num_workers": settings.get("num_workers", 4),
+            "pin_memory": settings.get("pin_memory", True),
         }
     return {
-        "device": "cpu", "gpu_name": None, "gpu_generation": None, "gpu_memory_gb": 0,
-        "compute_capability": None, "batch_size": 64,
+        "device": "cpu",
+        "gpu_name": None,
+        "gpu_generation": None,
+        "gpu_memory_gb": 0,
+        "compute_capability": None,
+        "batch_size": 64,
         "mixed_precision": {"enabled": False, "dtype": "float32"},
-        "num_workers": 4, "pin_memory": False,
+        "num_workers": 4,
+        "pin_memory": False,
     }
 
 
@@ -404,6 +502,7 @@ class DeviceManager:
         self._device_str = get_device(prefer_gpu)
         self._mp_config = get_mixed_precision_config(self._gpu_info)
         import torch
+
         self._device = torch.device(self._device_str)
         self._amp_dtype = get_amp_dtype(self._gpu_info)
         self._scaler = (
@@ -443,6 +542,7 @@ class DeviceManager:
     def autocast(self):
         """Get autocast context manager for mixed precision."""
         import torch
+
         if self._device.type == "cuda" and self._mp_config["enabled"]:
             return torch.amp.autocast("cuda", dtype=self._amp_dtype)
         return torch.amp.autocast("cpu", enabled=False)
@@ -455,13 +555,30 @@ class DeviceManager:
 
     def __repr__(self) -> str:
         gpu_str = f"{self._gpu_info.name}" if self._gpu_info else "None"
-        return f"DeviceManager(device={self._device_str}, gpu={gpu_str}, amp_dtype={self._amp_dtype})"
+        return (
+            f"DeviceManager(device={self._device_str}, gpu={gpu_str}, amp_dtype={self._amp_dtype})"
+        )
 
 
 __all__ = [
-    "is_colab", "is_kaggle", "is_notebook", "get_environment_info", "setup_colab",
-    "GPUInfo", "GPU_PROFILES", "detect_cuda_available", "get_gpu_count", "get_gpu_info",
-    "get_best_gpu", "get_device", "estimate_memory_requirements", "get_optimal_batch_size",
-    "get_amp_dtype", "get_mixed_precision_config", "get_optimal_gpu_settings",
-    "print_gpu_info", "get_training_device_config", "DeviceManager",
+    "is_colab",
+    "is_kaggle",
+    "is_notebook",
+    "get_environment_info",
+    "setup_colab",
+    "GPUInfo",
+    "GPU_PROFILES",
+    "detect_cuda_available",
+    "get_gpu_count",
+    "get_gpu_info",
+    "get_best_gpu",
+    "get_device",
+    "estimate_memory_requirements",
+    "get_optimal_batch_size",
+    "get_amp_dtype",
+    "get_mixed_precision_config",
+    "get_optimal_gpu_settings",
+    "print_gpu_info",
+    "get_training_device_config",
+    "DeviceManager",
 ]

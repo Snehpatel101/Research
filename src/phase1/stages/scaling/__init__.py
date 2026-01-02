@@ -79,28 +79,28 @@ from .validators import (
 
 __all__ = [
     # Core
-    'ScalerType',
-    'ScalerConfig',
-    'FeatureCategory',
-    'FeatureScalingConfig',
-    'ScalingStatistics',
-    'ScalingReport',
-    'FEATURE_PATTERNS',
-    'DEFAULT_SCALING_STRATEGY',
+    "ScalerType",
+    "ScalerConfig",
+    "FeatureCategory",
+    "FeatureScalingConfig",
+    "ScalingStatistics",
+    "ScalingReport",
+    "FEATURE_PATTERNS",
+    "DEFAULT_SCALING_STRATEGY",
     # Utilities
-    'categorize_feature',
-    'get_default_scaler_type',
-    'should_log_transform',
-    'create_scaler',
-    'compute_statistics',
+    "categorize_feature",
+    "get_default_scaler_type",
+    "should_log_transform",
+    "create_scaler",
+    "compute_statistics",
     # Main class
-    'FeatureScaler',
+    "FeatureScaler",
     # Validation
-    'validate_scaling',
-    'validate_no_leakage',
-    'validate_scaling_for_splits',
-    'add_scaling_validation_to_stage8',
+    "validate_scaling",
+    "validate_no_leakage",
+    "validate_scaling_for_splits",
+    "add_scaling_validation_to_stage8",
     # Convenience
-    'scale_splits',
-    'scale_train_val_test',
+    "scale_splits",
+    "scale_train_val_test",
 ]

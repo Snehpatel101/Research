@@ -3,6 +3,7 @@ Stage 7.7: Post-Scale Validation with Drift Checks.
 
 Pipeline wrapper for scaled data validation.
 """
+
 import json
 import logging
 import traceback
@@ -24,10 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_scaled_validation(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_scaled_validation(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 7.7: Validate scaled splits and compute drift metrics.
 
@@ -109,7 +107,9 @@ def run_scaled_validation(
             if not feature_cols:
                 raise ValueError(f"No features resolved for feature set '{set_name}'")
 
-            logger.info(f"\nChecking drift for feature set: {set_name} ({len(feature_cols)} features)")
+            logger.info(
+                f"\nChecking drift for feature set: {set_name} ({len(feature_cols)} features)"
+            )
 
             val_drift = check_feature_drift(
                 train_df,
@@ -134,10 +134,10 @@ def run_scaled_validation(
                 "test_drift": test_drift,
             }
 
-            val_drifted = val_drift.get('drifted_feature_count', 0)
-            val_total = val_drift.get('feature_count', 0)
-            test_drifted = test_drift.get('drifted_feature_count', 0)
-            test_total = test_drift.get('feature_count', 0)
+            val_drifted = val_drift.get("drifted_feature_count", 0)
+            val_total = val_drift.get("feature_count", 0)
+            test_drifted = test_drift.get("drifted_feature_count", 0)
+            test_total = test_drift.get("feature_count", 0)
             logger.info(f"  Val drift - drifted: {val_drifted}/{val_total} features")
             logger.info(f"  Test drift - drifted: {test_drifted}/{test_total} features")
 
@@ -171,7 +171,5 @@ def run_scaled_validation(
         logger.error(f"Scaled validation failed: {e}")
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="validate_scaled",
-            start_time=start_time,
-            error=str(e)
+            stage_name="validate_scaled", start_time=start_time, error=str(e)
         )

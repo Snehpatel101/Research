@@ -9,6 +9,7 @@ Implements corruption testing to detect lookahead bias:
 Also validates MTF resampling configuration to ensure
 proper `closed` and `label` settings.
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 # RESAMPLE CONFIG VALIDATION
 # =============================================================================
 
+
 @dataclass
 class ResampleConfig:
     """
@@ -38,6 +40,7 @@ class ResampleConfig:
     A bar at 09:30 represents [09:30:00, 09:34:59] for 5-min data.
     The first tick in the period is 'open', last is 'close'.
     """
+
     closed: Literal["left", "right"] = "left"
     label: Literal["left", "right"] = "left"
 
@@ -87,8 +90,7 @@ def validate_resample_config(
     # Check label parameter
     if label is None:
         issues.append(
-            f"'label' is implicit (pandas default). "
-            f"Recommend explicit label='{expected.label}'"
+            f"'label' is implicit (pandas default). " f"Recommend explicit label='{expected.label}'"
         )
     elif label != expected.label:
         issues.append(
@@ -104,9 +106,11 @@ def validate_resample_config(
 # CORRUPTION TESTING FOR LOOKAHEAD DETECTION
 # =============================================================================
 
+
 @dataclass
 class LookaheadAuditResult:
     """Result of lookahead audit for a feature function."""
+
     feature_name: str
     has_lookahead: bool
     affected_columns: list[str] = field(default_factory=list)
@@ -229,9 +233,7 @@ class LookaheadAuditor:
         corruption_idx = int(n * self.corruption_point)
 
         # Corrupt future data
-        df_corrupted = self._corrupt_data(
-            df_clean.copy(), corruption_idx, price_cols
-        )
+        df_corrupted = self._corrupt_data(df_clean.copy(), corruption_idx, price_cols)
 
         # Compute features on corrupted data
         try:
@@ -262,8 +264,16 @@ class LookaheadAuditor:
             corrupted_vals = df_features_corrupted[col].iloc[:corruption_idx].values
 
             # Handle NaN comparison properly
-            clean_nan = np.isnan(clean_vals) if np.issubdtype(clean_vals.dtype, np.floating) else np.zeros_like(clean_vals, dtype=bool)
-            corrupt_nan = np.isnan(corrupted_vals) if np.issubdtype(corrupted_vals.dtype, np.floating) else np.zeros_like(corrupted_vals, dtype=bool)
+            clean_nan = (
+                np.isnan(clean_vals)
+                if np.issubdtype(clean_vals.dtype, np.floating)
+                else np.zeros_like(clean_vals, dtype=bool)
+            )
+            corrupt_nan = (
+                np.isnan(corrupted_vals)
+                if np.issubdtype(corrupted_vals.dtype, np.floating)
+                else np.zeros_like(corrupted_vals, dtype=bool)
+            )
 
             # Check if NaN patterns match
             if not np.array_equal(clean_nan, corrupt_nan):
@@ -275,8 +285,7 @@ class LookaheadAuditor:
             valid_mask = ~clean_nan
             if valid_mask.sum() > 0:
                 diff = np.abs(
-                    clean_vals[valid_mask].astype(float) -
-                    corrupted_vals[valid_mask].astype(float)
+                    clean_vals[valid_mask].astype(float) - corrupted_vals[valid_mask].astype(float)
                 )
                 n_affected = np.sum(diff > self.tolerance)
                 if n_affected > 0:
@@ -338,6 +347,7 @@ class LookaheadAuditor:
 # MTF ALIGNMENT AUDIT
 # =============================================================================
 
+
 def audit_mtf_alignment(
     df_base: pd.DataFrame,
     df_mtf: pd.DataFrame,
@@ -394,7 +404,7 @@ def audit_mtf_alignment(
         if col in ("datetime", "date", "time"):
             continue
 
-        early_vals = df_mtf[col].iloc[:expected_nan_rows * 2].dropna()
+        early_vals = df_mtf[col].iloc[: expected_nan_rows * 2].dropna()
         if len(early_vals) > 1:
             if early_vals.nunique() == 1 and len(early_vals) > 3:
                 issues.append(

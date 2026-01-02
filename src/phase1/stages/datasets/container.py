@@ -26,6 +26,7 @@ Usage:
     # Get NeuralForecast DataFrame
     nf_df = container.get_neuralforecast_df("train")
 """
+
 from __future__ import annotations
 
 import json
@@ -65,9 +66,11 @@ INVALID_LABEL = -99
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class DataContainerConfig:
     """Configuration for TimeSeriesDataContainer."""
+
     horizon: int
     feature_columns: list[str] = field(default_factory=list)
     label_column: str = ""
@@ -88,6 +91,7 @@ class DataContainerConfig:
 @dataclass
 class SplitData:
     """Data for a single split (train/val/test)."""
+
     df: pd.DataFrame
     feature_columns: list[str]
     label_column: str
@@ -118,9 +122,7 @@ class SplitData:
 
 
 def _extract_feature_columns(
-    df: pd.DataFrame,
-    horizon: int,
-    explicit_features: list[str] | None = None
+    df: pd.DataFrame, horizon: int, explicit_features: list[str] | None = None
 ) -> list[str]:
     """
     Extract feature columns from DataFrame.
@@ -136,8 +138,7 @@ def _extract_feature_columns(
 
     # Auto-detect features: everything that's not metadata or labels
     features = [
-        col for col in df.columns
-        if col not in METADATA_COLUMNS and not _is_label_column(col)
+        col for col in df.columns if col not in METADATA_COLUMNS and not _is_label_column(col)
     ]
     return features
 
@@ -145,9 +146,7 @@ def _extract_feature_columns(
 def _validate_split_name(split: str) -> None:
     """Validate split name."""
     if split not in VALID_SPLITS:
-        raise ValueError(
-            f"Invalid split '{split}'. Must be one of: {VALID_SPLITS}"
-        )
+        raise ValueError(f"Invalid split '{split}'. Must be one of: {VALID_SPLITS}")
 
 
 def _load_parquet_with_validation(path: Path, split_name: str) -> pd.DataFrame:
@@ -164,6 +163,7 @@ def _load_parquet_with_validation(path: Path, split_name: str) -> pd.DataFrame:
 # =============================================================================
 # TIMESERIES DATA CONTAINER
 # =============================================================================
+
 
 class TimeSeriesDataContainer:
     """
@@ -190,7 +190,7 @@ class TimeSeriesDataContainer:
         self,
         config: DataContainerConfig,
         splits: dict[str, SplitData],
-        metadata: dict | None = None
+        metadata: dict | None = None,
     ) -> None:
         """
         Initialize TimeSeriesDataContainer.
@@ -212,7 +212,7 @@ class TimeSeriesDataContainer:
         path: str | Path,
         horizon: int,
         feature_columns: list[str] | None = None,
-        exclude_invalid_labels: bool = True
+        exclude_invalid_labels: bool = True,
     ) -> TimeSeriesDataContainer:
         """
         Load container from Phase 1 scaled parquet directory.
@@ -252,7 +252,7 @@ class TimeSeriesDataContainer:
         config = DataContainerConfig(
             horizon=horizon,
             feature_columns=feature_columns or [],
-            exclude_invalid_labels=exclude_invalid_labels
+            exclude_invalid_labels=exclude_invalid_labels,
         )
 
         # Load splits
@@ -281,9 +281,7 @@ class TimeSeriesDataContainer:
             # Validate weight column exists
             weight_col = config.weight_column
             if weight_col not in df.columns:
-                logger.warning(
-                    f"Weight column '{weight_col}' not found, using uniform weights"
-                )
+                logger.warning(f"Weight column '{weight_col}' not found, using uniform weights")
 
             # Filter invalid labels if requested
             if exclude_invalid_labels:
@@ -297,9 +295,7 @@ class TimeSeriesDataContainer:
                     df = df[~invalid_mask].reset_index(drop=True)
 
             # Extract feature columns (auto-detect if not provided)
-            features = _extract_feature_columns(
-                df, horizon, config.feature_columns or None
-            )
+            features = _extract_feature_columns(df, horizon, config.feature_columns or None)
 
             # Update config with detected features (on first split)
             if not config.feature_columns:
@@ -332,7 +328,7 @@ class TimeSeriesDataContainer:
         test_df: pd.DataFrame | None = None,
         horizon: int = 20,
         feature_columns: list[str] | None = None,
-        exclude_invalid_labels: bool = True
+        exclude_invalid_labels: bool = True,
     ) -> TimeSeriesDataContainer:
         """
         Create container directly from DataFrames.
@@ -342,7 +338,7 @@ class TimeSeriesDataContainer:
         config = DataContainerConfig(
             horizon=horizon,
             feature_columns=feature_columns or [],
-            exclude_invalid_labels=exclude_invalid_labels
+            exclude_invalid_labels=exclude_invalid_labels,
         )
 
         splits: dict[str, SplitData] = {}
@@ -444,9 +440,7 @@ class TimeSeriesDataContainer:
     # =========================================================================
 
     def get_sklearn_arrays(
-        self,
-        split: str,
-        return_df: bool = False
+        self, split: str, return_df: bool = False
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[pd.DataFrame, pd.Series, pd.Series]:
         """
         Get data in sklearn format: (X, y, weights).
@@ -485,11 +479,7 @@ class TimeSeriesDataContainer:
     # =========================================================================
 
     def get_pytorch_sequences(
-        self,
-        split: str,
-        seq_len: int,
-        stride: int = 1,
-        symbol_isolated: bool = True
+        self, split: str, seq_len: int, stride: int = 1, symbol_isolated: bool = True
     ) -> Dataset:
         """
         Get PyTorch Dataset with sliding window sequences.
@@ -609,11 +599,7 @@ class TimeSeriesDataContainer:
     # NEURALFORECAST FORMAT
     # =========================================================================
 
-    def get_neuralforecast_df(
-        self,
-        split: str,
-        include_features: bool = True
-    ) -> pd.DataFrame:
+    def get_neuralforecast_df(self, split: str, include_features: bool = True) -> pd.DataFrame:
         """
         Get DataFrame in NeuralForecast format.
 
@@ -650,11 +636,7 @@ class TimeSeriesDataContainer:
             df["ds"] = pd.to_datetime(df[split_data.datetime_column])
         else:
             # Create synthetic datetime index
-            df["ds"] = pd.date_range(
-                start="2020-01-01",
-                periods=len(df),
-                freq="5min"
-            )
+            df["ds"] = pd.date_range(start="2020-01-01", periods=len(df), freq="5min")
         output_cols.append("ds")
 
         # y from label column
@@ -697,9 +679,7 @@ class TimeSeriesDataContainer:
         return summary
 
     def __repr__(self) -> str:
-        splits_info = ", ".join(
-            f"{k}={v.n_samples}" for k, v in self.splits.items()
-        )
+        splits_info = ", ".join(f"{k}={v.n_samples}" for k, v in self.splits.items())
         return (
             f"TimeSeriesDataContainer(horizon={self.horizon}, "
             f"features={self.n_features}, splits=[{splits_info}])"

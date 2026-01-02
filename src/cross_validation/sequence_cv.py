@@ -27,6 +27,7 @@ Usage:
         X_val_3d, y_val, val_targets = builder.build_fold_sequences(val_idx)
         # train_targets contains original indices for OOF storage
 """
+
 from __future__ import annotations
 
 import logging
@@ -55,6 +56,7 @@ class SequenceFoldResult:
             Used to map OOF predictions back to original sample positions.
         n_dropped: Number of samples dropped (not enough lookback history)
     """
+
     X_sequences: np.ndarray
     y: np.ndarray
     weights: np.ndarray
@@ -196,9 +198,7 @@ class SequenceCVBuilder:
                 boundaries.append(i)
 
         self._symbol_boundaries = np.array(boundaries, dtype=np.int64)
-        logger.debug(
-            f"Found {len(unique_symbols)} symbols, {len(boundaries)} boundaries"
-        )
+        logger.debug(f"Found {len(unique_symbols)} symbols, {len(boundaries)} boundaries")
 
     def _build_gap_boundaries(self, X: pd.DataFrame) -> None:
         """
@@ -239,9 +239,7 @@ class SequenceCVBuilder:
                 f"Bar resolution: {median_diff}, gap threshold: {gap_threshold}"
             )
         else:
-            logger.debug(
-                f"No significant time gaps detected (resolution: {median_diff})"
-            )
+            logger.debug(f"No significant time gaps detected (resolution: {median_diff})")
 
     def _get_symbol_at(self, idx: int) -> int:
         """Get symbol ID at given index (-1 if no symbol info)."""
@@ -320,9 +318,7 @@ class SequenceCVBuilder:
 
             # Check 2: If not allowing lookback outside, verify all lookback in fold
             if not allow_lookback_outside:
-                lookback_in_fold = all(
-                    idx in fold_set for idx in range(start_idx, target_idx)
-                )
+                lookback_in_fold = all(idx in fold_set for idx in range(start_idx, target_idx))
                 if not lookback_in_fold:
                     n_dropped += 1
                     continue

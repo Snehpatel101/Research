@@ -32,16 +32,16 @@ from .validation.run import run_validation
 
 __all__ = [
     # Core stages
-    'DataIngestor',
-    'DataCleaner',
-    'FeatureEngineer',
+    "DataIngestor",
+    "DataCleaner",
+    "FeatureEngineer",
     # Extended stages
-    'create_chronological_splits',
-    'run_validation',
+    "create_chronological_splits",
+    "run_validation",
     # Scaling
-    'FeatureScalingConfig',
-    'FeatureScaler',
-    'scale_splits',
+    "FeatureScalingConfig",
+    "FeatureScaler",
+    "scale_splits",
 ]
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"

@@ -1,4 +1,5 @@
 """Notebook utilities for Jupyter/Google Colab environments."""
+
 from __future__ import annotations
 
 import logging
@@ -45,6 +46,7 @@ def setup_notebook(
     np.random.seed(seed)
     try:
         import torch
+
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
@@ -60,6 +62,7 @@ def setup_notebook(
     # Configure matplotlib
     try:
         import matplotlib.pyplot as plt
+
         plt.style.use("seaborn-v0_8-whitegrid")
         plt.rcParams["figure.figsize"] = (10, 6)
         plt.rcParams["figure.dpi"] = 100
@@ -152,6 +155,7 @@ def mount_drive(mount_path: str = "/content/drive") -> bool:
 
     try:
         from google.colab import drive
+
         drive.mount(mount_path)
         print(f"Google Drive mounted at {mount_path}")
         return True
@@ -205,15 +209,17 @@ def download_sample_data(
         dates = pd.date_range(start=start_date, periods=n_bars, freq="5min")
 
         # Create DataFrame
-        df = pd.DataFrame({
-            "datetime": dates,
-            "open": open_prices,
-            "high": high,
-            "low": low,
-            "close": prices,
-            "volume": volume.astype(int),
-            "symbol": symbol,
-        })
+        df = pd.DataFrame(
+            {
+                "datetime": dates,
+                "open": open_prices,
+                "high": high,
+                "low": low,
+                "close": prices,
+                "volume": volume.astype(int),
+                "symbol": symbol,
+            }
+        )
 
         # Save
         file_path = output_path / f"{symbol}_5m.parquet"
@@ -339,8 +345,11 @@ def plot_confusion_matrix(
     for i in range(len(labels)):
         for j in range(len(labels)):
             ax.text(
-                j, i, format(cm[i, j], "d"),
-                ha="center", va="center",
+                j,
+                i,
+                format(cm[i, j], "d"),
+                ha="center",
+                va="center",
                 color="white" if cm[i, j] > thresh else "black",
             )
 
@@ -474,8 +483,11 @@ def plot_model_comparison(
     # Add value labels
     for bar, value in zip(bars, values, strict=False):
         ax.text(
-            value + 0.005, bar.get_y() + bar.get_height() / 2,
-            f"{value:.4f}", va="center", fontsize=10,
+            value + 0.005,
+            bar.get_y() + bar.get_height() / 2,
+            f"{value:.4f}",
+            va="center",
+            fontsize=10,
         )
 
     plt.tight_layout()

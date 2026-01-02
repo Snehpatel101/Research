@@ -4,6 +4,7 @@ Stacking Ensemble Model - Two-layer model with out-of-fold predictions.
 Uses base models to generate OOF predictions, then trains a meta-learner
 on those predictions to produce final output.
 """
+
 from __future__ import annotations
 
 import logging
@@ -86,9 +87,7 @@ class StackingEnsemble(BaseModel):
         # Check if any base model requires sequences
         if self._base_models:
             return any(
-                m.requires_sequences
-                for fold_models in self._base_models
-                for m in fold_models
+                m.requires_sequences for fold_models in self._base_models for m in fold_models
             )
         # If base models not yet instantiated, check config for base_model_names
         # This is critical for Trainer to prepare correct data shape (2D vs 3D)
@@ -97,9 +96,7 @@ class StackingEnsemble(BaseModel):
             return self._check_configured_models_require_sequences(base_model_names)
         return False
 
-    def _check_configured_models_require_sequences(
-        self, model_names: list[str]
-    ) -> bool:
+    def _check_configured_models_require_sequences(self, model_names: list[str]) -> bool:
         """
         Check if any configured base model requires sequences.
 
@@ -238,9 +235,7 @@ class StackingEnsemble(BaseModel):
         if use_default_for_oof:
             # Use empty configs (defaults) for OOF to prevent leakage
             oof_base_configs: dict[str, dict] = {}
-            logger.info(
-                "Using DEFAULT configs for OOF generation (leakage prevention enabled)"
-            )
+            logger.info("Using DEFAULT configs for OOF generation (leakage prevention enabled)")
         else:
             # Legacy behavior: use provided configs (NOT RECOMMENDED)
             oof_base_configs = base_model_configs
@@ -275,9 +270,7 @@ class StackingEnsemble(BaseModel):
         if passthrough:
             meta_features_train = np.hstack([X_train, oof_predictions])
 
-        logger.info(
-            f"Training meta-learner on {meta_features_train.shape[1]} features"
-        )
+        logger.info(f"Training meta-learner on {meta_features_train.shape[1]} features")
 
         self._meta_learner = ModelRegistry.create(
             self._meta_learner_name,
@@ -411,7 +404,9 @@ class StackingEnsemble(BaseModel):
         X_seq_fold_train_cache: np.ndarray | None = None
         X_seq_fold_val_cache: np.ndarray | None = None
 
-        for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(X_df, label_end_times=label_end_times)):
+        for fold_idx, (train_idx, val_idx) in enumerate(
+            kfold.split(X_df, label_end_times=label_end_times)
+        ):
             logger.debug(f"  Fold {fold_idx + 1}/{self._n_folds}")
 
             # Tabular data slicing (always done)
@@ -463,9 +458,7 @@ class StackingEnsemble(BaseModel):
                 if use_probabilities:
                     start_col = model_idx * n_classes
                     end_col = start_col + n_classes
-                    oof_predictions[val_idx, start_col:end_col] = (
-                        output.class_probabilities
-                    )
+                    oof_predictions[val_idx, start_col:end_col] = output.class_probabilities
                 else:
                     oof_predictions[val_idx, model_idx] = output.class_predictions
 
@@ -533,6 +526,7 @@ class StackingEnsemble(BaseModel):
                 all_preds = np.array(all_preds)
                 # Mode across folds
                 from scipy import stats
+
                 mode_result = stats.mode(all_preds, axis=0, keepdims=False)
                 predictions[:, model_idx] = mode_result.mode
 

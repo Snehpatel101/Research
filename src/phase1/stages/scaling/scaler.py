@@ -54,13 +54,13 @@ class FeatureScaler:
 
     def __init__(
         self,
-        scaler_type: str = 'robust',
+        scaler_type: str = "robust",
         feature_config: dict[str, dict] | None = None,
         apply_log_to_price_volume: bool = True,
         robust_quantile_range: tuple[float, float] = (25.0, 75.0),
         clip_outliers: bool = True,
         clip_range: tuple[float, float] = (-5.0, 5.0),
-        config: ScalerConfig | None = None
+        config: ScalerConfig | None = None,
     ):
         """
         Initialize the FeatureScaler.
@@ -117,9 +117,9 @@ class FeatureScaler:
             return FeatureScalingConfig(
                 feature_name=feature_name,
                 category=category,
-                scaler_type=ScalerType(custom.get('scaler_type', self.default_scaler_type.value)),
-                apply_log_transform=custom.get('apply_log_transform', False),
-                log_shift=custom.get('log_shift', 0.0)
+                scaler_type=ScalerType(custom.get("scaler_type", self.default_scaler_type.value)),
+                apply_log_transform=custom.get("apply_log_transform", False),
+                log_shift=custom.get("log_shift", 0.0),
             )
 
         # Infer from feature name
@@ -130,24 +130,17 @@ class FeatureScaler:
         if scaler_type != ScalerType.NONE and self.default_scaler_type != ScalerType.ROBUST:
             scaler_type = self.default_scaler_type
 
-        apply_log = (
-            self.apply_log_to_price_volume and
-            should_log_transform(feature_name, category)
-        )
+        apply_log = self.apply_log_to_price_volume and should_log_transform(feature_name, category)
 
         return FeatureScalingConfig(
             feature_name=feature_name,
             category=category,
             scaler_type=scaler_type,
             apply_log_transform=apply_log,
-            log_shift=0.0
+            log_shift=0.0,
         )
 
-    def fit(
-        self,
-        train_df: pd.DataFrame,
-        feature_cols: list[str]
-    ) -> 'FeatureScaler':
+    def fit(self, train_df: pd.DataFrame, feature_cols: list[str]) -> "FeatureScaler":
         """
         Fit scalers on training data only.
 
@@ -239,7 +232,9 @@ class FeatureScaler:
 
             # Check for issues
             if self.statistics[fname].train_std < 1e-10:
-                self.warnings.append(f"{fname}: Near-zero variance (std={self.statistics[fname].train_std:.2e})")
+                self.warnings.append(
+                    f"{fname}: Near-zero variance (std={self.statistics[fname].train_std:.2e})"
+                )
 
         self.is_fitted = True
 
@@ -319,11 +314,7 @@ class FeatureScaler:
 
         return result
 
-    def fit_transform(
-        self,
-        train_df: pd.DataFrame,
-        feature_cols: list[str]
-    ) -> pd.DataFrame:
+    def fit_transform(self, train_df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
         """
         Fit on training data and transform it.
 
@@ -340,9 +331,7 @@ class FeatureScaler:
         return self.transform(train_df)
 
     def inverse_transform(
-        self,
-        df: pd.DataFrame,
-        features: list[str] | None = None
+        self, df: pd.DataFrame, features: list[str] | None = None
     ) -> pd.DataFrame:
         """
         Reverse the scaling transformation.
@@ -402,69 +391,69 @@ class FeatureScaler:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         state = {
-            'version': '2.1',
-            'default_scaler_type': self.default_scaler_type.value,
-            'robust_quantile_range': self.robust_quantile_range,
-            'apply_log_to_price_volume': self.apply_log_to_price_volume,
-            'clip_outliers': self.clip_outliers,
-            'clip_range': self.clip_range,
-            'is_fitted': self.is_fitted,
-            'feature_names': self.feature_names,
-            'scalers': self.scalers,
-            'configs': {k: v.to_dict() for k, v in self.configs.items()},
-            'statistics': {k: v.to_dict() for k, v in self.statistics.items()},
-            'log_shifts': self.log_shifts,
-            'fit_timestamp': self.fit_timestamp,
-            'n_samples_train': self.n_samples_train,
-            'warnings': self.warnings,
-            'errors': self.errors
+            "version": "2.1",
+            "default_scaler_type": self.default_scaler_type.value,
+            "robust_quantile_range": self.robust_quantile_range,
+            "apply_log_to_price_volume": self.apply_log_to_price_volume,
+            "clip_outliers": self.clip_outliers,
+            "clip_range": self.clip_range,
+            "is_fitted": self.is_fitted,
+            "feature_names": self.feature_names,
+            "scalers": self.scalers,
+            "configs": {k: v.to_dict() for k, v in self.configs.items()},
+            "statistics": {k: v.to_dict() for k, v in self.statistics.items()},
+            "log_shifts": self.log_shifts,
+            "fit_timestamp": self.fit_timestamp,
+            "n_samples_train": self.n_samples_train,
+            "warnings": self.warnings,
+            "errors": self.errors,
         }
 
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             pickle.dump(state, f)
 
         logger.info(f"Scaler saved to: {path}")
 
         # Also save human-readable JSON report
-        json_path = path.with_suffix('.json')
+        json_path = path.with_suffix(".json")
         self._save_json_report(json_path)
 
     def _save_json_report(self, path: Path) -> None:
         """Save a human-readable JSON report of the scaler configuration."""
         report = {
-            'version': '2.0',
-            'fit_timestamp': self.fit_timestamp,
-            'n_samples_train': self.n_samples_train,
-            'n_features': len(self.feature_names),
-            'default_scaler_type': self.default_scaler_type.value,
-            'features': {
+            "version": "2.0",
+            "fit_timestamp": self.fit_timestamp,
+            "n_samples_train": self.n_samples_train,
+            "n_features": len(self.feature_names),
+            "default_scaler_type": self.default_scaler_type.value,
+            "features": {
                 fname: {
-                    'category': self.configs[fname].category.value,
-                    'scaler_type': self.configs[fname].scaler_type.value,
-                    'apply_log_transform': self.configs[fname].apply_log_transform,
-                    'train_stats': {
-                        'mean': self.statistics[fname].train_mean,
-                        'std': self.statistics[fname].train_std,
-                        'min': self.statistics[fname].train_min,
-                        'max': self.statistics[fname].train_max
+                    "category": self.configs[fname].category.value,
+                    "scaler_type": self.configs[fname].scaler_type.value,
+                    "apply_log_transform": self.configs[fname].apply_log_transform,
+                    "train_stats": {
+                        "mean": self.statistics[fname].train_mean,
+                        "std": self.statistics[fname].train_std,
+                        "min": self.statistics[fname].train_min,
+                        "max": self.statistics[fname].train_max,
                     },
-                    'scaled_stats': {
-                        'mean': self.statistics[fname].scaled_mean,
-                        'std': self.statistics[fname].scaled_std,
-                        'min': self.statistics[fname].scaled_min,
-                        'max': self.statistics[fname].scaled_max
-                    }
+                    "scaled_stats": {
+                        "mean": self.statistics[fname].scaled_mean,
+                        "std": self.statistics[fname].scaled_std,
+                        "min": self.statistics[fname].scaled_min,
+                        "max": self.statistics[fname].scaled_max,
+                    },
                 }
                 for fname in self.feature_names
             },
-            'warnings': self.warnings
+            "warnings": self.warnings,
         }
 
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             json.dump(report, f, indent=2, default=str)
 
     @classmethod
-    def load(cls, path: Path) -> 'FeatureScaler':
+    def load(cls, path: Path) -> "FeatureScaler":
         """
         Load a persisted scaler from disk.
 
@@ -476,33 +465,29 @@ class FeatureScaler:
         """
         path = Path(path)
 
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             state = pickle.load(f)
 
         scaler = cls(
-            scaler_type=state['default_scaler_type'],
-            apply_log_to_price_volume=state.get('apply_log_to_price_volume', True),
-            robust_quantile_range=state.get('robust_quantile_range', (25.0, 75.0)),
-            clip_outliers=state.get('clip_outliers', True),
-            clip_range=tuple(state.get('clip_range', (-5.0, 5.0)))
+            scaler_type=state["default_scaler_type"],
+            apply_log_to_price_volume=state.get("apply_log_to_price_volume", True),
+            robust_quantile_range=state.get("robust_quantile_range", (25.0, 75.0)),
+            clip_outliers=state.get("clip_outliers", True),
+            clip_range=tuple(state.get("clip_range", (-5.0, 5.0))),
         )
 
-        scaler.is_fitted = state['is_fitted']
-        scaler.feature_names = state['feature_names']
-        scaler.scalers = state['scalers']
-        scaler.configs = {
-            k: FeatureScalingConfig.from_dict(v)
-            for k, v in state['configs'].items()
-        }
+        scaler.is_fitted = state["is_fitted"]
+        scaler.feature_names = state["feature_names"]
+        scaler.scalers = state["scalers"]
+        scaler.configs = {k: FeatureScalingConfig.from_dict(v) for k, v in state["configs"].items()}
         scaler.statistics = {
-            k: ScalingStatistics.from_dict(v)
-            for k, v in state['statistics'].items()
+            k: ScalingStatistics.from_dict(v) for k, v in state["statistics"].items()
         }
-        scaler.log_shifts = state.get('log_shifts', {})
-        scaler.fit_timestamp = state.get('fit_timestamp')
-        scaler.n_samples_train = state.get('n_samples_train', 0)
-        scaler.warnings = state.get('warnings', [])
-        scaler.errors = state.get('errors', [])
+        scaler.log_shifts = state.get("log_shifts", {})
+        scaler.fit_timestamp = state.get("fit_timestamp")
+        scaler.n_samples_train = state.get("n_samples_train", 0)
+        scaler.warnings = state.get("warnings", [])
+        scaler.errors = state.get("errors", [])
 
         logger.info(f"Scaler loaded from: {path}")
         logger.info(f"  Features: {len(scaler.feature_names)}")
@@ -518,7 +503,7 @@ class FeatureScaler:
             Dictionary with detailed scaling information
         """
         if not self.is_fitted:
-            return {'is_fitted': False}
+            return {"is_fitted": False}
 
         # Group features by category
         features_by_category: dict[str, list[str]] = {}
@@ -537,14 +522,14 @@ class FeatureScaler:
             features_by_scaler[stype].append(fname)
 
         return {
-            'is_fitted': True,
-            'fit_timestamp': self.fit_timestamp,
-            'n_samples_train': self.n_samples_train,
-            'n_features': len(self.feature_names),
-            'default_scaler_type': self.default_scaler_type.value,
-            'features_by_category': features_by_category,
-            'features_by_scaler': features_by_scaler,
-            'statistics': {k: v.to_dict() for k, v in self.statistics.items()},
-            'warnings': self.warnings,
-            'errors': self.errors
+            "is_fitted": True,
+            "fit_timestamp": self.fit_timestamp,
+            "n_samples_train": self.n_samples_train,
+            "n_features": len(self.feature_names),
+            "default_scaler_type": self.default_scaler_type.value,
+            "features_by_category": features_by_category,
+            "features_by_scaler": features_by_scaler,
+            "statistics": {k: v.to_dict() for k, v in self.statistics.items()},
+            "warnings": self.warnings,
+            "errors": self.errors,
         }

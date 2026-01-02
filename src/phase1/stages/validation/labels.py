@@ -1,6 +1,7 @@
 """
 Label sanity validation checks.
 """
+
 import logging
 
 import pandas as pd
@@ -8,9 +9,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def check_label_distribution(
-    df: pd.DataFrame, label_col: str
-) -> dict:
+def check_label_distribution(df: pd.DataFrame, label_col: str) -> dict:
     """
     Calculate label distribution for a horizon.
 
@@ -25,17 +24,15 @@ def check_label_distribution(
     label_dist = {}
 
     for label, count in label_counts.items():
-        label_name = {-1: 'short', 0: 'neutral', 1: 'long'}.get(label, str(label))
+        label_name = {-1: "short", 0: "neutral", 1: "long"}.get(label, str(label))
         pct = count / len(df) * 100
-        label_dist[label_name] = {'count': int(count), 'percentage': float(pct)}
+        label_dist[label_name] = {"count": int(count), "percentage": float(pct)}
         logger.info(f"  {label_name:8s}: {count:,} ({pct:.2f}%)")
 
     return label_dist
 
 
-def check_label_balance(
-    label_dist: dict, horizon: int, warnings_found: list[str]
-) -> None:
+def check_label_balance(label_dist: dict, horizon: int, warnings_found: list[str]) -> None:
     """
     Check if labels are balanced, add warnings if not.
 
@@ -44,19 +41,15 @@ def check_label_balance(
         horizon: The horizon number
         warnings_found: List to append warnings to (mutated)
     """
-    valid_labels = {'short', 'neutral', 'long'}
+    valid_labels = {"short", "neutral", "long"}
     for label_name, stats in label_dist.items():
         if label_name not in valid_labels:
             continue
-        pct = stats['percentage']
+        pct = stats["percentage"]
         if pct < 20.0:
-            warnings_found.append(
-                f"h{horizon} {label_name}: low representation ({pct:.1f}%)"
-            )
+            warnings_found.append(f"h{horizon} {label_name}: low representation ({pct:.1f}%)")
         if pct > 60.0:
-            warnings_found.append(
-                f"h{horizon} {label_name}: high representation ({pct:.1f}%)"
-            )
+            warnings_found.append(f"h{horizon} {label_name}: high representation ({pct:.1f}%)")
 
 
 def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
@@ -72,8 +65,8 @@ def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
     """
     symbol_stats = {}
 
-    for symbol in df['symbol'].unique():
-        symbol_df = df[df['symbol'] == symbol]
+    for symbol in df["symbol"].unique():
+        symbol_df = df[df["symbol"] == symbol]
         labels = symbol_df[label_col]
         total = len(labels)
         longs = (labels == 1).sum()
@@ -81,13 +74,13 @@ def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
         neutrals = (labels == 0).sum()
 
         symbol_stats[symbol] = {
-            'total': int(total),
-            'long_count': int(longs),
-            'short_count': int(shorts),
-            'neutral_count': int(neutrals),
-            'long_pct': float(longs / total * 100),
-            'short_pct': float(shorts / total * 100),
-            'neutral_pct': float(neutrals / total * 100)
+            "total": int(total),
+            "long_count": int(longs),
+            "short_count": int(shorts),
+            "neutral_count": int(neutrals),
+            "long_pct": float(longs / total * 100),
+            "short_pct": float(shorts / total * 100),
+            "neutral_pct": float(neutrals / total * 100),
         }
 
     logger.info("\n  Per-symbol distribution:")
@@ -125,10 +118,10 @@ def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> dict:
         median_bars_hit = median_bars
 
     bars_stats = {
-        'mean_all': float(avg_bars),
-        'median_all': float(median_bars),
-        'mean_hit': float(avg_bars_hit),
-        'median_hit': float(median_bars_hit)
+        "mean_all": float(avg_bars),
+        "median_all": float(median_bars),
+        "mean_hit": float(avg_bars_hit),
+        "median_hit": float(median_bars_hit),
     }
 
     logger.info("\n  Bars to hit statistics:")
@@ -151,11 +144,11 @@ def check_quality_scores(df: pd.DataFrame, quality_col: str) -> dict:
         Dictionary with quality score statistics
     """
     quality_stats = {
-        'mean': float(df[quality_col].mean()),
-        'median': float(df[quality_col].median()),
-        'std': float(df[quality_col].std()),
-        'min': float(df[quality_col].min()),
-        'max': float(df[quality_col].max())
+        "mean": float(df[quality_col].mean()),
+        "median": float(df[quality_col].median()),
+        "std": float(df[quality_col].std()),
+        "min": float(df[quality_col].min()),
+        "max": float(df[quality_col].max()),
     }
 
     logger.info("\n  Quality score statistics:")
@@ -167,11 +160,7 @@ def check_quality_scores(df: pd.DataFrame, quality_col: str) -> dict:
     return quality_stats
 
 
-def check_label_sanity(
-    df: pd.DataFrame,
-    horizons: list[int],
-    warnings_found: list[str]
-) -> dict:
+def check_label_sanity(df: pd.DataFrame, horizons: list[int], warnings_found: list[str]) -> dict:
     """
     Run all label sanity checks.
 
@@ -190,9 +179,9 @@ def check_label_sanity(
     results = {}
 
     for horizon in horizons:
-        label_col = f'label_h{horizon}'
-        quality_col = f'quality_h{horizon}'
-        bars_col = f'bars_to_hit_h{horizon}'
+        label_col = f"label_h{horizon}"
+        quality_col = f"quality_h{horizon}"
+        bars_col = f"bars_to_hit_h{horizon}"
 
         if label_col not in df.columns:
             logger.warning(f"  Label column {label_col} not found, skipping")
@@ -204,27 +193,23 @@ def check_label_sanity(
 
         # Label distribution
         label_dist = check_label_distribution(df, label_col)
-        horizon_results['distribution'] = label_dist
+        horizon_results["distribution"] = label_dist
 
         # Check balance
         check_label_balance(label_dist, horizon, warnings_found)
 
         # Per-symbol distribution
-        if 'symbol' in df.columns:
-            horizon_results['per_symbol'] = check_per_symbol_distribution(
-                df, label_col
-            )
+        if "symbol" in df.columns:
+            horizon_results["per_symbol"] = check_per_symbol_distribution(df, label_col)
 
         # Bars to hit statistics
         if bars_col in df.columns:
-            horizon_results['bars_to_hit'] = check_bars_to_hit(
-                df, label_col, bars_col
-            )
+            horizon_results["bars_to_hit"] = check_bars_to_hit(df, label_col, bars_col)
 
         # Quality score statistics
         if quality_col in df.columns:
-            horizon_results['quality'] = check_quality_scores(df, quality_col)
+            horizon_results["quality"] = check_quality_scores(df, quality_col)
 
-        results[f'horizon_{horizon}'] = horizon_results
+        results[f"horizon_{horizon}"] = horizon_results
 
     return results

@@ -59,13 +59,13 @@ Raw OHLCV → Clean → Configurable TF → Features → Labels → Splits → S
 **Output:** `data/processed/{symbol}_{timeframe}.parquet` (variable based on config)
 
 **Configurable Primary Timeframe:**
-- Primary TF is configurable per experiment: 5m/10m/15m/1h
-- Not hardcoded to 5-min
+- ⚠️ PLANNED: Primary TF configurable per experiment (5m/10m/15m/1h)
+- Current: Hardcoded to 5-min base timeframe
 
 **MTF Strategies:**
-- **Strategy 1: Single-TF** - No MTF, train on primary timeframe only
-- **Strategy 2: MTF Indicators** - Add indicator features from multiple TFs
-- **Strategy 3: MTF Ingestion** - Raw OHLCV bars from multiple TFs (for sequence models)
+- **Strategy 1: Single-TF** - ⚠️ PLANNED: No MTF, train on primary timeframe only
+- **Strategy 2: MTF Indicators** - ✅ PARTIAL: Add indicator features from multiple TFs (5 of 9 TFs)
+- **Strategy 3: MTF Ingestion** - ⚠️ PLANNED: Raw OHLCV bars from multiple TFs (for sequence models)
 
 **Operations (when MTF enabled):**
 - Resample to higher timeframes (OHLCV aggregation)
@@ -74,7 +74,8 @@ Raw OHLCV → Clean → Configurable TF → Features → Labels → Splits → S
 
 **Leakage protection:** shift(1) on all MTF features (prevents lookahead)
 
-**Status:** ⚠️ 5 of 9 timeframes implemented for Strategy 2
+**Status:** ⚠️ 5 of 9 timeframes implemented (15m, 30m, 1h, 4h, daily)
+**Missing:** 1m, 5m, 10m, 20m, 25m, 45m (4 additional timeframes needed for full 9-TF ladder)
 
 ---
 

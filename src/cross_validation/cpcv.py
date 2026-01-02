@@ -18,6 +18,7 @@ Example:
     ...     model.fit(X.iloc[train_idx], y.iloc[train_idx])
     ...     predictions = model.predict(X.iloc[test_idx])
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class CPCVConfig:
     """
@@ -52,6 +54,7 @@ class CPCVConfig:
         n_groups=6, n_test_groups=2 → C(6,2) = 15 combinations
         n_groups=10, n_test_groups=2 → C(10,2) = 45 combinations
     """
+
     n_groups: int = 6
     n_test_groups: int = 2
     max_combinations: int = 20
@@ -89,6 +92,7 @@ class CPCVConfig:
     def total_combinations(self) -> int:
         """Total possible combinations C(n_groups, n_test_groups)."""
         from math import comb
+
         return comb(self.n_groups, self.n_test_groups)
 
 
@@ -96,9 +100,11 @@ class CPCVConfig:
 # CPCV RESULT
 # =============================================================================
 
+
 @dataclass
 class CPCVPathResult:
     """Results from a single CPCV path (combination)."""
+
     path_id: int
     test_groups: tuple[int, ...]
     train_size: int
@@ -121,6 +127,7 @@ class CPCVResult:
         model_name: Name of evaluated model
         horizon: Label horizon
     """
+
     config: CPCVConfig
     path_results: list[CPCVPathResult]
     model_name: str = ""
@@ -207,6 +214,7 @@ class CPCVResult:
 # =============================================================================
 # COMBINATORIAL PURGED CV
 # =============================================================================
+
 
 class CombinatorialPurgedCV:
     """
@@ -399,12 +407,14 @@ class CombinatorialPurgedCV:
             }
 
             if has_datetime and len(train_idx) > 0:
-                path_info.update({
-                    "train_start_time": X.index[train_idx[0]],
-                    "train_end_time": X.index[train_idx[-1]],
-                    "test_start_time": X.index[test_idx[0]],
-                    "test_end_time": X.index[test_idx[-1]],
-                })
+                path_info.update(
+                    {
+                        "train_start_time": X.index[train_idx[0]],
+                        "train_end_time": X.index[train_idx[-1]],
+                        "test_start_time": X.index[test_idx[0]],
+                        "test_end_time": X.index[test_idx[-1]],
+                    }
+                )
 
             info.append(path_info)
 
@@ -453,6 +463,7 @@ class CombinatorialPurgedCV:
 # =============================================================================
 # FACTORY FUNCTION
 # =============================================================================
+
 
 def create_cpcv(
     n_groups: int = 6,

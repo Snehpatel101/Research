@@ -1,6 +1,7 @@
 """
 Feature quality validation checks.
 """
+
 import logging
 
 import numpy as np
@@ -23,18 +24,38 @@ def get_feature_columns(df: pd.DataFrame) -> list[str]:
         List of feature column names
     """
     excluded_cols = [
-        'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-        'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+        "datetime",
+        "symbol",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "timeframe",
+        "session_id",
+        "missing_bar",
+        "roll_event",
+        "roll_window",
+        "filled",
     ]
     excluded_prefixes = (
-        'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-        'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-        'fwd_return_log_', 'time_to_hit_'
+        "label_",
+        "bars_to_hit_",
+        "mae_",
+        "mfe_",
+        "quality_",
+        "sample_weight_",
+        "touch_type_",
+        "pain_to_gain_",
+        "time_weighted_dd_",
+        "fwd_return_",
+        "fwd_return_log_",
+        "time_to_hit_",
     )
     feature_cols = [
-        c for c in df.columns
-        if c not in excluded_cols
-        and not any(c.startswith(prefix) for prefix in excluded_prefixes)
+        c
+        for c in df.columns
+        if c not in excluded_cols and not any(c.startswith(prefix) for prefix in excluded_prefixes)
     ]
 
     return feature_cols
@@ -44,7 +65,7 @@ def check_feature_correlations(
     feature_df: pd.DataFrame,
     feature_cols: list[str],
     warnings_found: list[str],
-    threshold: float = 0.85
+    threshold: float = 0.85,
 ) -> list[dict]:
     """
     Check for highly correlated feature pairs.
@@ -68,9 +89,9 @@ def check_feature_correlations(
             corr_val = abs(corr_matrix.iloc[i, j])
             if corr_val > threshold:
                 pair = {
-                    'feature1': corr_matrix.columns[i],
-                    'feature2': corr_matrix.columns[j],
-                    'correlation': float(corr_val)
+                    "feature1": corr_matrix.columns[i],
+                    "feature2": corr_matrix.columns[j],
+                    "correlation": float(corr_val),
                 }
                 high_corr_pairs.append(pair)
 
@@ -97,7 +118,7 @@ def compute_feature_importance(
     feature_cols: list[str],
     label_col: str,
     seed: int = 42,
-    sample_size: int = 10000
+    sample_size: int = 10000,
 ) -> tuple[list[dict], bool]:
     """
     Compute feature importance using Random Forest.
@@ -137,9 +158,7 @@ def compute_feature_importance(
 
     try:
         # Quick RF with few trees
-        rf = RandomForestClassifier(
-            n_estimators=50, max_depth=10, random_state=42, n_jobs=-1
-        )
+        rf = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42, n_jobs=-1)
         rf.fit(X_sample, y_sample)
 
         # Get top features
@@ -149,10 +168,7 @@ def compute_feature_importance(
         top_features = []
         logger.info("  Top 20 most important features:")
         for idx in top_indices:
-            feat_info = {
-                'feature': feature_cols[idx],
-                'importance': float(importances[idx])
-            }
+            feat_info = {"feature": feature_cols[idx], "importance": float(importances[idx])}
             top_features.append(feat_info)
             logger.info(f"    {feature_cols[idx]:30s}: {importances[idx]:.4f}")
 
@@ -163,9 +179,7 @@ def compute_feature_importance(
         return [], False
 
 
-def run_stationarity_tests(
-    df: pd.DataFrame, feature_cols: list[str]
-) -> list[dict]:
+def run_stationarity_tests(df: pd.DataFrame, feature_cols: list[str]) -> list[dict]:
     """
     Run Augmented Dickey-Fuller tests on selected features.
 
@@ -180,37 +194,37 @@ def run_stationarity_tests(
 
     from src.phase1.config.features import STATIONARITY_TESTS
 
-    if not STATIONARITY_TESTS.get('enabled', False):
+    if not STATIONARITY_TESTS.get("enabled", False):
         logger.info("  Stationarity tests disabled by config")
         return []
 
     from importlib.util import find_spec
+
     if find_spec("statsmodels") is None:
-        raise ModuleNotFoundError(
-            "statsmodels is required for stationarity tests when enabled"
-        )
+        raise ModuleNotFoundError("statsmodels is required for stationarity tests when enabled")
 
     from statsmodels.tsa.stattools import adfuller
+
     stationarity_results = []
 
-    max_features = STATIONARITY_TESTS.get('max_features', 5)
+    max_features = STATIONARITY_TESTS.get("max_features", 5)
     # Select features likely to be tested for stationarity
-    test_features = [
-        c for c in feature_cols if 'return' in c.lower() or 'rsi' in c.lower()
-    ][:max_features]
+    test_features = [c for c in feature_cols if "return" in c.lower() or "rsi" in c.lower()][
+        :max_features
+    ]
 
     for feat in test_features:
         series = df[feat].dropna()
         if len(series) > 50:
-            result = adfuller(series, autolag='AIC')
+            result = adfuller(series, autolag="AIC")
             p_value = result[1]
             is_stationary = p_value < 0.05
 
             stat_info = {
-                'feature': feat,
-                'adf_statistic': float(result[0]),
-                'p_value': float(p_value),
-                'is_stationary': bool(is_stationary)
+                "feature": feat,
+                "adf_statistic": float(result[0]),
+                "p_value": float(p_value),
+                "is_stationary": bool(is_stationary),
             }
             stationarity_results.append(stat_info)
 
@@ -225,7 +239,7 @@ def check_feature_quality(
     horizons: list[int],
     warnings_found: list[str],
     seed: int = 42,
-    max_features: int = 50
+    max_features: int = 50,
 ) -> dict:
     """
     Run all feature quality checks.
@@ -249,7 +263,7 @@ def check_feature_quality(
     # Identify feature columns
     feature_cols = get_feature_columns(df)
     logger.info(f"\nFound {len(feature_cols)} feature columns")
-    results['total_features'] = len(feature_cols)
+    results["total_features"] = len(feature_cols)
 
     # Limit features for computational efficiency
     if len(feature_cols) > max_features:
@@ -260,19 +274,19 @@ def check_feature_quality(
     feature_df = df[feature_cols].fillna(0)
 
     # Correlation analysis
-    results['high_correlations'] = check_feature_correlations(
+    results["high_correlations"] = check_feature_correlations(
         feature_df, feature_cols, warnings_found
     )
 
     # Feature importance
-    label_col = f'label_h{horizons[0]}'
+    label_col = f"label_h{horizons[0]}"
     top_features, computed = compute_feature_importance(
         df, feature_df, feature_cols, label_col, seed
     )
-    results['top_features'] = top_features
-    results['feature_importance_computed'] = computed
+    results["top_features"] = top_features
+    results["feature_importance_computed"] = computed
 
     # Stationarity tests
-    results['stationarity_tests'] = run_stationarity_tests(df, feature_cols)
+    results["stationarity_tests"] = run_stationarity_tests(df, feature_cols)
 
     return results

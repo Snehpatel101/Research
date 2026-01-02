@@ -3,6 +3,7 @@ OOF prediction validation and quality checks.
 
 Validates coverage, correlation, and ensemble diversity.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # VALIDATION
 # =============================================================================
+
 
 class OOFValidator:
     """Validate OOF prediction quality and coverage."""
@@ -48,11 +50,13 @@ class OOFValidator:
 
             if nan_count > 0:
                 validation["passed"] = False
-                validation["issues"].append({
-                    "model": model_name,
-                    "missing_samples": int(nan_count),
-                    "coverage": coverage,
-                })
+                validation["issues"].append(
+                    {
+                        "model": model_name,
+                        "missing_samples": int(nan_count),
+                        "coverage": coverage,
+                    }
+                )
 
         return validation
 
@@ -85,12 +89,14 @@ class OOFValidator:
             for j, model_j in enumerate(model_names):
                 if i < j:
                     corr = corr_matrix.loc[f"{model_i}_pred", f"{model_j}_pred"]
-                    summary.append({
-                        "model_1": model_i,
-                        "model_2": model_j,
-                        "correlation": corr,
-                        "diversity_grade": _grade_diversity(corr),
-                    })
+                    summary.append(
+                        {
+                            "model_1": model_i,
+                            "model_2": model_j,
+                            "correlation": corr,
+                            "diversity_grade": _grade_diversity(corr),
+                        }
+                    )
 
         return pd.DataFrame(summary)
 

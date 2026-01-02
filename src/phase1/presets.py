@@ -43,9 +43,9 @@ class TradingPreset(Enum):
     - SWING: Multi-day position holding with wider barriers
     """
 
-    SCALPING = 'scalping'
-    DAY_TRADING = 'day_trading'
-    SWING = 'swing'
+    SCALPING = "scalping"
+    DAY_TRADING = "day_trading"
+    SWING = "swing"
 
 
 # =============================================================================
@@ -66,40 +66,33 @@ PRESET_CONFIGS: dict[TradingPreset, dict[str, Any]] = {
     # - Threshold labeling for fast execution signals
     # - Tighter barriers (0.7x) to capture small moves
     TradingPreset.SCALPING: {
-        'name': 'Scalping',
-        'description': 'Ultra-short-term trading with tight barriers and fast execution',
-
+        "name": "Scalping",
+        "description": "Ultra-short-term trading with tight barriers and fast execution",
         # Timeframe and horizons
-        'target_timeframe': '1min',
-        'horizons': [1, 5],
-
+        "target_timeframe": "1min",
+        "horizons": [1, 5],
         # Sessions - only most liquid
-        'sessions': ['new_york'],
-
+        "sessions": ["new_york"],
         # Labeling configuration
-        'labeling_strategy': 'threshold',
-        'barrier_multiplier': 0.7,
-
+        "labeling_strategy": "threshold",
+        "barrier_multiplier": 0.7,
         # Additional parameters
-        'max_bars_ahead': 10,
-        'min_trade_duration_bars': 1,
-
+        "max_bars_ahead": 10,
+        "min_trade_duration_bars": 1,
         # Feature adjustments for scalping
-        'feature_config': {
-            'sma_periods': [5, 10, 20],
-            'ema_periods': [5, 9, 12],
-            'atr_periods': [5, 10],
-            'rsi_period': 7,
+        "feature_config": {
+            "sma_periods": [5, 10, 20],
+            "ema_periods": [5, 9, 12],
+            "atr_periods": [5, 10],
+            "rsi_period": 7,
         },
-
         # Risk parameters
-        'risk_config': {
-            'max_positions': 1,
-            'stop_loss_atr_mult': 0.5,
-            'take_profit_atr_mult': 0.7,
+        "risk_config": {
+            "max_positions": 1,
+            "stop_loss_atr_mult": 0.5,
+            "take_profit_atr_mult": 0.7,
         },
     },
-
     # =========================================================================
     # DAY TRADING PRESET
     # =========================================================================
@@ -111,40 +104,33 @@ PRESET_CONFIGS: dict[TradingPreset, dict[str, Any]] = {
     # - Triple barrier labeling for directional signals
     # - Default barriers (1.0x)
     TradingPreset.DAY_TRADING: {
-        'name': 'Day Trading',
-        'description': 'Intraday trading with triple barrier labeling',
-
+        "name": "Day Trading",
+        "description": "Intraday trading with triple barrier labeling",
         # Timeframe and horizons
-        'target_timeframe': '5min',
-        'horizons': [5, 20],
-
+        "target_timeframe": "5min",
+        "horizons": [5, 20],
         # Sessions - primary trading hours
-        'sessions': ['new_york', 'london'],
-
+        "sessions": ["new_york", "london"],
         # Labeling configuration
-        'labeling_strategy': 'triple_barrier',
-        'barrier_multiplier': 1.0,
-
+        "labeling_strategy": "triple_barrier",
+        "barrier_multiplier": 1.0,
         # Additional parameters
-        'max_bars_ahead': 50,
-        'min_trade_duration_bars': 3,
-
+        "max_bars_ahead": 50,
+        "min_trade_duration_bars": 3,
         # Feature adjustments for day trading
-        'feature_config': {
-            'sma_periods': [10, 20, 50, 100],
-            'ema_periods': [9, 21, 50],
-            'atr_periods': [7, 14, 21],
-            'rsi_period': 14,
+        "feature_config": {
+            "sma_periods": [10, 20, 50, 100],
+            "ema_periods": [9, 21, 50],
+            "atr_periods": [7, 14, 21],
+            "rsi_period": 14,
         },
-
         # Risk parameters
-        'risk_config': {
-            'max_positions': 2,
-            'stop_loss_atr_mult': 1.0,
-            'take_profit_atr_mult': 1.5,
+        "risk_config": {
+            "max_positions": 2,
+            "stop_loss_atr_mult": 1.0,
+            "take_profit_atr_mult": 1.5,
         },
     },
-
     # =========================================================================
     # SWING PRESET
     # =========================================================================
@@ -156,37 +142,31 @@ PRESET_CONFIGS: dict[TradingPreset, dict[str, Any]] = {
     # - Triple barrier labeling for trend following
     # - Wider barriers (1.3x) to avoid noise
     TradingPreset.SWING: {
-        'name': 'Swing Trading',
-        'description': 'Multi-day position trading with wider barriers',
-
+        "name": "Swing Trading",
+        "description": "Multi-day position trading with wider barriers",
         # Timeframe and horizons
-        'target_timeframe': '15min',
-        'horizons': [20, 60, 120],
-
+        "target_timeframe": "15min",
+        "horizons": [20, 60, 120],
         # Sessions - all major sessions for global coverage
-        'sessions': ['new_york', 'london', 'asia'],
-
+        "sessions": ["new_york", "london", "asia"],
         # Labeling configuration
-        'labeling_strategy': 'triple_barrier',
-        'barrier_multiplier': 1.3,
-
+        "labeling_strategy": "triple_barrier",
+        "barrier_multiplier": 1.3,
         # Additional parameters
-        'max_bars_ahead': 150,
-        'min_trade_duration_bars': 10,
-
+        "max_bars_ahead": 150,
+        "min_trade_duration_bars": 10,
         # Feature adjustments for swing trading
-        'feature_config': {
-            'sma_periods': [20, 50, 100, 200],
-            'ema_periods': [21, 50, 100],
-            'atr_periods': [14, 21, 50],
-            'rsi_period': 14,
+        "feature_config": {
+            "sma_periods": [20, 50, 100, 200],
+            "ema_periods": [21, 50, 100],
+            "atr_periods": [14, 21, 50],
+            "rsi_period": 14,
         },
-
         # Risk parameters
-        'risk_config': {
-            'max_positions': 3,
-            'stop_loss_atr_mult': 1.5,
-            'take_profit_atr_mult': 2.0,
+        "risk_config": {
+            "max_positions": 3,
+            "stop_loss_atr_mult": 1.5,
+            "take_profit_atr_mult": 2.0,
         },
     },
 }
@@ -226,10 +206,7 @@ def validate_preset(preset_name: str) -> bool:
     valid_names = [p.value for p in TradingPreset]
 
     if preset_name not in valid_names:
-        raise ValueError(
-            f"Unknown preset: '{preset_name}'. "
-            f"Valid presets are: {valid_names}"
-        )
+        raise ValueError(f"Unknown preset: '{preset_name}'. " f"Valid presets are: {valid_names}")
 
     return True
 
@@ -314,15 +291,11 @@ def _get_preset_enum(preset: TradingPreset | str) -> TradingPreset:
         validate_preset(preset)
         return TradingPreset(preset.lower().strip())
 
-    raise ValueError(
-        f"preset must be TradingPreset or str, got {type(preset).__name__}"
-    )
+    raise ValueError(f"preset must be TradingPreset or str, got {type(preset).__name__}")
 
 
 def apply_preset_to_config(
-    preset: TradingPreset | str,
-    base_config: dict[str, Any],
-    override_conflicts: bool = True
+    preset: TradingPreset | str, base_config: dict[str, Any], override_conflicts: bool = True
 ) -> dict[str, Any]:
     """
     Apply a trading preset to an existing configuration dictionary.
@@ -380,9 +353,9 @@ def apply_preset_to_config(
 
     # Map preset keys to PipelineConfig keys
     key_mapping = {
-        'target_timeframe': 'target_timeframe',
-        'horizons': 'label_horizons',
-        'max_bars_ahead': 'max_bars_ahead',
+        "target_timeframe": "target_timeframe",
+        "horizons": "label_horizons",
+        "max_bars_ahead": "max_bars_ahead",
     }
 
     # Apply mapped keys
@@ -392,24 +365,24 @@ def apply_preset_to_config(
                 result[config_key] = preset_config[preset_key]
 
     # Sync bar_resolution with target_timeframe (backward compatibility)
-    if 'target_timeframe' in result:
-        result['bar_resolution'] = result['target_timeframe']
+    if "target_timeframe" in result:
+        result["bar_resolution"] = result["target_timeframe"]
 
     # Apply feature config if present
-    if 'feature_config' in preset_config:
-        feature_config = preset_config['feature_config']
+    if "feature_config" in preset_config:
+        feature_config = preset_config["feature_config"]
         for key, value in feature_config.items():
             if override_conflicts or key not in result:
                 result[key] = value
 
     # Add preset-specific metadata
-    result['preset_name'] = preset_config.get('name', preset_enum.value)
-    result['preset_description'] = preset_config.get('description', '')
-    result['preset_sessions'] = preset_config.get('sessions', [])
-    result['preset_labeling_strategy'] = preset_config.get('labeling_strategy', 'triple_barrier')
-    result['preset_barrier_multiplier'] = preset_config.get('barrier_multiplier', 1.0)
-    result['preset_risk_config'] = preset_config.get('risk_config', {})
-    result['preset_min_trade_duration_bars'] = preset_config.get('min_trade_duration_bars', 1)
+    result["preset_name"] = preset_config.get("name", preset_enum.value)
+    result["preset_description"] = preset_config.get("description", "")
+    result["preset_sessions"] = preset_config.get("sessions", [])
+    result["preset_labeling_strategy"] = preset_config.get("labeling_strategy", "triple_barrier")
+    result["preset_barrier_multiplier"] = preset_config.get("barrier_multiplier", 1.0)
+    result["preset_risk_config"] = preset_config.get("risk_config", {})
+    result["preset_min_trade_duration_bars"] = preset_config.get("min_trade_duration_bars", 1)
 
     logger.debug(
         f"Applied preset '{preset_enum.value}' to config: "
@@ -474,9 +447,7 @@ Risk Config:
 
 
 def get_adjusted_barrier_params(
-    preset: TradingPreset | str,
-    symbol: str,
-    horizon: int
+    preset: TradingPreset | str, symbol: str, horizon: int
 ) -> dict[str, Any]:
     """
     Get barrier parameters adjusted by the preset's barrier multiplier.
@@ -512,23 +483,23 @@ def get_adjusted_barrier_params(
 
     preset_enum = _get_preset_enum(preset)
     preset_config = PRESET_CONFIGS[preset_enum]
-    multiplier = preset_config.get('barrier_multiplier', 1.0)
+    multiplier = preset_config.get("barrier_multiplier", 1.0)
 
     # Get base barrier params
     base_params = get_barrier_params(symbol, horizon)
 
     # Apply multiplier
     adjusted_params = {
-        'k_up': round(base_params['k_up'] * multiplier, 2),
-        'k_down': round(base_params['k_down'] * multiplier, 2),
-        'max_bars': base_params['max_bars'],
-        'description': (
+        "k_up": round(base_params["k_up"] * multiplier, 2),
+        "k_down": round(base_params["k_down"] * multiplier, 2),
+        "max_bars": base_params["max_bars"],
+        "description": (
             f"{preset_enum.value.title()} adjusted: "
             f"{base_params.get('description', '')} "
             f"(barrier_mult={multiplier})"
         ),
-        'barrier_multiplier': multiplier,
-        'base_params': base_params,
+        "barrier_multiplier": multiplier,
+        "base_params": base_params,
     }
 
     return adjusted_params
@@ -539,12 +510,12 @@ def get_adjusted_barrier_params(
 # =============================================================================
 
 __all__ = [
-    'TradingPreset',
-    'PRESET_CONFIGS',
-    'validate_preset',
-    'list_available_presets',
-    'get_preset',
-    'apply_preset_to_config',
-    'get_preset_summary',
-    'get_adjusted_barrier_params',
+    "TradingPreset",
+    "PRESET_CONFIGS",
+    "validate_preset",
+    "list_available_presets",
+    "get_preset",
+    "apply_preset_to_config",
+    "get_preset_summary",
+    "get_adjusted_barrier_params",
 ]

@@ -7,6 +7,7 @@ using Optuna TPE (Tree-structured Parzen Estimator).
 Note: Function names retain "ga" prefix for backward compatibility,
 but internally use Optuna TPE which is 27% more sample-efficient.
 """
+
 import json
 import logging
 from datetime import datetime
@@ -25,11 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 def run_ga_optimization_stage(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest',
+    config: "PipelineConfig",
+    manifest: "ArtifactManifest",
     create_stage_result,
-    create_failed_result
-) -> 'StageResult':
+    create_failed_result,
+) -> "StageResult":
     """
     Stage 5: Barrier Optimization using Optuna TPE.
 
@@ -52,11 +53,11 @@ def run_ga_optimization_stage(
 
     try:
         # GA results directory (run-scoped for reproducibility)
-        ga_results_dir = config.run_artifacts_dir / 'ga_results'
+        ga_results_dir = config.run_artifacts_dir / "ga_results"
         ga_results_dir.mkdir(parents=True, exist_ok=True)
 
         # Plots directory (run-scoped)
-        plots_dir = config.run_artifacts_dir / 'ga_plots'
+        plots_dir = config.run_artifacts_dir / "ga_plots"
         plots_dir.mkdir(parents=True, exist_ok=True)
 
         artifacts = []
@@ -66,7 +67,9 @@ def run_ga_optimization_stage(
         population_size = config.ga_population_size
         generations = config.ga_generations
 
-        logger.info(f"Optuna Config: n_trials~{min(population_size * 2, 150)} (mapped from pop={population_size})")
+        logger.info(
+            f"Optuna Config: n_trials~{min(population_size * 2, 150)} (mapped from pop={population_size})"
+        )
         logger.info(f"Horizons: {config.label_horizons}")
 
         for symbol in config.symbols:
@@ -75,7 +78,7 @@ def run_ga_optimization_stage(
             logger.info(f"{'='*50}")
 
             # Load labels data (run-scoped)
-            labels_dir = config.run_data_dir / 'labels'
+            labels_dir = config.run_data_dir / "labels"
             labels_path = labels_dir / f"{symbol}_labels_init.parquet"
 
             if not labels_path.exists():
@@ -99,7 +102,7 @@ def run_ga_optimization_stage(
                     with open(results_path) as f:
                         cached_results = json.load(f)
 
-                    cached_fitness = cached_results.get('best_fitness', float('-inf'))
+                    cached_fitness = cached_results.get("best_fitness", float("-inf"))
 
                     # CRITICAL: Reject cached results with negative fitness
                     # Negative fitness indicates constraint violations (e.g., <10% neutral)
@@ -125,45 +128,53 @@ def run_ga_optimization_stage(
                         logger.warning(
                             "    Negative fitness indicates constraint violation (e.g., <10% neutral)"
                         )
-                        logger.warning(
-                            "    Re-running optimization with stricter constraints..."
-                        )
+                        logger.warning("    Re-running optimization with stricter constraints...")
                         # Remove invalid cached file
                         results_path.unlink()
 
                 # Run Optuna TPE optimization
                 # Check if safe mode is enabled (prevents test data leakage)
-                safe_mode = getattr(config, 'ga_safe_mode', True)  # Default to safe
+                safe_mode = getattr(config, "ga_safe_mode", True)  # Default to safe
 
                 if safe_mode:
                     logger.info(f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization...")
-                    logger.info("    (Safe mode: using only training portion to prevent test data leakage)")
+                    logger.info(
+                        "    (Safe mode: using only training portion to prevent test data leakage)"
+                    )
                     results, logbook = run_ga_optimization_safe(
-                        df, horizon,
+                        df,
+                        horizon,
                         symbol=symbol,
                         train_ratio=config.train_ratio,  # Use config's train ratio
                         population_size=population_size,
                         generations=min(generations, 30),  # Cap at 30 for performance
                         subset_fraction=0.3,
-                        atr_column='atr_14',
+                        atr_column="atr_14",
                         seed=config.random_seed,
                     )
                 else:
-                    logger.warning(f"\n  Horizon {horizon}: Running UNSAFE Optuna TPE optimization...")
-                    logger.warning("    WARNING: Safe mode disabled - test data may influence optimization!")
-                    logger.warning("    Only use this for research when you understand the implications.")
+                    logger.warning(
+                        f"\n  Horizon {horizon}: Running UNSAFE Optuna TPE optimization..."
+                    )
+                    logger.warning(
+                        "    WARNING: Safe mode disabled - test data may influence optimization!"
+                    )
+                    logger.warning(
+                        "    Only use this for research when you understand the implications."
+                    )
                     results, logbook = run_ga_optimization(
-                        df, horizon,
+                        df,
+                        horizon,
                         symbol=symbol,
                         population_size=population_size,
                         generations=min(generations, 30),  # Cap at 30 for performance
                         subset_fraction=0.3,
-                        atr_column='atr_14',
+                        atr_column="atr_14",
                         seed=config.random_seed,
                     )
 
                 # CRITICAL: Validate new results before saving
-                new_fitness = results.get('best_fitness', float('-inf'))
+                new_fitness = results.get("best_fitness", float("-inf"))
                 if new_fitness < MIN_VALID_FITNESS:
                     # Optimization FAILED to find valid parameters
                     # Fall back to symbol-specific defaults from barriers_config.py
@@ -173,24 +184,23 @@ def run_ga_optimization_stage(
                     logger.error(
                         "    Could not find parameters satisfying constraints (neutral >= 10%, etc.)"
                     )
-                    logger.warning(
-                        "    Falling back to default barrier parameters..."
-                    )
+                    logger.warning("    Falling back to default barrier parameters...")
 
                     # Import defaults
                     from src.phase1.config import get_barrier_params
+
                     default_params = get_barrier_params(symbol, horizon)
 
                     results = {
-                        'horizon': horizon,
-                        'best_k_up': default_params['k_up'],
-                        'best_k_down': default_params['k_down'],
-                        'best_max_bars': default_params['max_bars'],
-                        'best_fitness': 0.0,  # Indicate not optimized
-                        'optimizer': 'default_fallback',
-                        'n_trials': 0,
-                        'warning': 'Optimization failed - using default parameters',
-                        'original_fitness': new_fitness,
+                        "horizon": horizon,
+                        "best_k_up": default_params["k_up"],
+                        "best_k_down": default_params["k_down"],
+                        "best_max_bars": default_params["max_bars"],
+                        "best_fitness": 0.0,  # Indicate not optimized
+                        "optimizer": "default_fallback",
+                        "n_trials": 0,
+                        "warning": "Optimization failed - using default parameters",
+                        "original_fitness": new_fitness,
                     }
                     logger.warning(
                         f"    Using defaults: k_up={results['best_k_up']:.3f}, "
@@ -201,7 +211,7 @@ def run_ga_optimization_stage(
                 symbol_results[horizon] = results
 
                 # Save results
-                with open(results_path, 'w') as f:
+                with open(results_path, "w") as f:
                     json.dump(results, f, indent=2)
                 artifacts.append(results_path)
 
@@ -213,8 +223,8 @@ def run_ga_optimization_stage(
                 )
 
                 # Check signal rate
-                val = results.get('validation', {})
-                signal_rate = val.get('signal_rate', 0)
+                val = results.get("validation", {})
+                signal_rate = val.get("signal_rate", 0)
                 if signal_rate < 0.40:
                     logger.warning(
                         f"    WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!"
@@ -233,11 +243,11 @@ def run_ga_optimization_stage(
                     file_path=results_path,
                     stage="ga_optimize",
                     metadata={
-                        'symbol': symbol,
-                        'horizon': horizon,
-                        'best_fitness': results['best_fitness'],
-                        'signal_rate': signal_rate
-                    }
+                        "symbol": symbol,
+                        "horizon": horizon,
+                        "best_fitness": results["best_fitness"],
+                        "signal_rate": signal_rate,
+                    },
                 )
 
             all_results[symbol] = symbol_results
@@ -247,17 +257,17 @@ def run_ga_optimization_stage(
         for symbol, symbol_results in all_results.items():
             summary[symbol] = {
                 str(h): {
-                    'k_up': res['best_k_up'],
-                    'k_down': res['best_k_down'],
-                    'max_bars': res['best_max_bars'],
-                    'fitness': res['best_fitness'],
-                    'signal_rate': res.get('validation', {}).get('signal_rate', None)
+                    "k_up": res["best_k_up"],
+                    "k_down": res["best_k_down"],
+                    "max_bars": res["best_max_bars"],
+                    "fitness": res["best_fitness"],
+                    "signal_rate": res.get("validation", {}).get("signal_rate", None),
                 }
                 for h, res in symbol_results.items()
             }
 
-        summary_path = ga_results_dir / 'optimization_summary.json'
-        with open(summary_path, 'w') as f:
+        summary_path = ga_results_dir / "optimization_summary.json"
+        with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
         artifacts.append(summary_path)
 
@@ -267,15 +277,12 @@ def run_ga_optimization_stage(
             stage_name="ga_optimize",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={'all_results': summary}
+            metadata={"all_results": summary},
         )
 
     except Exception as e:
         logger.error(f"Barrier optimization failed: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
-        return create_failed_result(
-            stage_name="ga_optimize",
-            start_time=start_time,
-            error=str(e)
-        )
+        return create_failed_result(stage_name="ga_optimize", start_time=start_time, error=str(e))

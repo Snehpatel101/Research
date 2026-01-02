@@ -24,12 +24,12 @@ import pandas as pd
 class LabelingType(Enum):
     """Enumeration of available labeling strategies."""
 
-    TRIPLE_BARRIER = 'triple_barrier'
-    ADAPTIVE_TRIPLE_BARRIER = 'adaptive_triple_barrier'
-    DIRECTIONAL = 'directional'
-    THRESHOLD = 'threshold'
-    REGRESSION = 'regression'
-    META = 'meta'
+    TRIPLE_BARRIER = "triple_barrier"
+    ADAPTIVE_TRIPLE_BARRIER = "adaptive_triple_barrier"
+    DIRECTIONAL = "directional"
+    THRESHOLD = "threshold"
+    REGRESSION = "regression"
+    META = "meta"
 
 
 @dataclass
@@ -43,6 +43,7 @@ class LabelingResult:
         metadata: Dictionary containing additional metrics (e.g., bars_to_hit, mae, mfe)
         quality_metrics: Dictionary containing quality assessment metrics
     """
+
     labels: np.ndarray
     horizon: int
     metadata: dict[str, np.ndarray] = field(default_factory=dict)
@@ -81,12 +82,7 @@ class LabelingStrategy(ABC):
         pass
 
     @abstractmethod
-    def compute_labels(
-        self,
-        df: pd.DataFrame,
-        horizon: int,
-        **kwargs: Any
-    ) -> LabelingResult:
+    def compute_labels(self, df: pd.DataFrame, horizon: int, **kwargs: Any) -> LabelingResult:
         """
         Compute labels for the given horizon.
 
@@ -161,15 +157,15 @@ class LabelingStrategy(ABC):
 
         if len(valid_labels) == 0:
             return {
-                'total_samples': 0,
-                'valid_samples': 0,
-                'invalid_samples': len(labels),
+                "total_samples": 0,
+                "valid_samples": 0,
+                "invalid_samples": len(labels),
             }
 
         metrics: dict[str, float] = {
-            'total_samples': float(len(labels)),
-            'valid_samples': float(len(valid_labels)),
-            'invalid_samples': float((~valid_mask).sum()),
+            "total_samples": float(len(labels)),
+            "valid_samples": float(len(valid_labels)),
+            "invalid_samples": float((~valid_mask).sum()),
         }
 
         # Classification-specific metrics (for labels in {-1, 0, 1})
@@ -178,31 +174,28 @@ class LabelingStrategy(ABC):
             for label_val in [-1, 0, 1]:
                 count = (valid_labels == label_val).sum()
                 pct = count / len(valid_labels) * 100
-                label_name = {-1: 'short', 0: 'neutral', 1: 'long'}[label_val]
-                metrics[f'{label_name}_count'] = float(count)
-                metrics[f'{label_name}_pct'] = pct
+                label_name = {-1: "short", 0: "neutral", 1: "long"}[label_val]
+                metrics[f"{label_name}_count"] = float(count)
+                metrics[f"{label_name}_pct"] = pct
 
             # Label imbalance ratio
-            long_count = metrics.get('long_count', 0)
-            short_count = metrics.get('short_count', 0)
+            long_count = metrics.get("long_count", 0)
+            short_count = metrics.get("short_count", 0)
             if short_count > 0:
-                metrics['long_short_ratio'] = long_count / short_count
+                metrics["long_short_ratio"] = long_count / short_count
             else:
-                metrics['long_short_ratio'] = float('inf') if long_count > 0 else 0.0
+                metrics["long_short_ratio"] = float("inf") if long_count > 0 else 0.0
         else:
             # Regression targets - compute basic statistics
-            metrics['mean'] = float(np.mean(valid_labels))
-            metrics['std'] = float(np.std(valid_labels))
-            metrics['min'] = float(np.min(valid_labels))
-            metrics['max'] = float(np.max(valid_labels))
+            metrics["mean"] = float(np.mean(valid_labels))
+            metrics["std"] = float(np.std(valid_labels))
+            metrics["min"] = float(np.min(valid_labels))
+            metrics["max"] = float(np.max(valid_labels))
 
         return metrics
 
     def add_labels_to_dataframe(
-        self,
-        df: pd.DataFrame,
-        result: LabelingResult,
-        prefix: str = 'label'
+        self, df: pd.DataFrame, result: LabelingResult, prefix: str = "label"
     ) -> pd.DataFrame:
         """
         Add labeling results to the DataFrame as new columns.
@@ -225,10 +218,10 @@ class LabelingStrategy(ABC):
         df = df.copy()
 
         # Add main label column
-        df[f'{prefix}_h{horizon}'] = result.labels
+        df[f"{prefix}_h{horizon}"] = result.labels
 
         # Add metadata columns
         for key, values in result.metadata.items():
-            df[f'{key}_h{horizon}'] = values
+            df[f"{key}_h{horizon}"] = values
 
         return df

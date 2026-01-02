@@ -40,9 +40,7 @@ def plot_convergence(results: dict, output_path: Path) -> None:
 
     ax1.set_xlabel("Generation", fontsize=12)
     ax1.set_ylabel("Fitness", fontsize=12)
-    ax1.set_title(
-        f'GA Convergence - Horizon {results["horizon"]}', fontsize=14, fontweight="bold"
-    )
+    ax1.set_title(f'GA Convergence - Horizon {results["horizon"]}', fontsize=14, fontweight="bold")
     ax1.legend(fontsize=10)
     ax1.grid(True, alpha=0.3)
 

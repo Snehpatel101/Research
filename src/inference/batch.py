@@ -14,6 +14,7 @@ Usage:
         output_path="predictions.parquet",
     )
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,9 +35,11 @@ logger = logging.getLogger(__name__)
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class BatchProgress:
     """Progress tracking for batch inference."""
+
     total_samples: int
     processed_samples: int
     current_batch: int
@@ -69,6 +72,7 @@ class BatchResult:
         samples_per_second: Processing throughput
         errors: Any errors encountered
     """
+
     predictions_df: pd.DataFrame
     n_samples: int
     n_batches: int
@@ -87,6 +91,7 @@ class BatchResult:
 # =============================================================================
 # BATCH PREDICTOR
 # =============================================================================
+
 
 class BatchPredictor:
     """
@@ -190,9 +195,7 @@ class BatchPredictor:
 
             try:
                 result = self.pipeline.predict(batch_df, calibrate=calibrate)
-                batch_preds = self._format_predictions(
-                    result, batch_df, batch_idx
-                )
+                batch_preds = self._format_predictions(result, batch_df, batch_idx)
                 all_predictions.append(batch_preds)
 
             except Exception as e:
@@ -299,13 +302,15 @@ class BatchPredictor:
         """Format predictions as DataFrame."""
         preds = result.predictions
 
-        pred_df = pd.DataFrame({
-            "prediction": preds.class_predictions,
-            "prob_short": preds.class_probabilities[:, 0],
-            "prob_neutral": preds.class_probabilities[:, 1],
-            "prob_long": preds.class_probabilities[:, 2],
-            "confidence": preds.confidence,
-        })
+        pred_df = pd.DataFrame(
+            {
+                "prediction": preds.class_predictions,
+                "prob_short": preds.class_probabilities[:, 0],
+                "prob_neutral": preds.class_probabilities[:, 1],
+                "prob_long": preds.class_probabilities[:, 2],
+                "confidence": preds.confidence,
+            }
+        )
 
         # Preserve datetime if present
         if "datetime" in source_df.columns:
@@ -319,6 +324,7 @@ class BatchPredictor:
 # =============================================================================
 # CONVENIENCE FUNCTIONS
 # =============================================================================
+
 
 def run_batch_inference(
     bundle_path: str | Path,

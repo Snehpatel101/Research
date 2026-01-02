@@ -4,6 +4,7 @@ Information commands - list models and their requirements.
 Provides CLI commands for displaying available model types,
 their data requirements, and ensemble configurations.
 """
+
 from rich.table import Table
 
 from .run_commands_core import _get_model_config
@@ -38,7 +39,7 @@ def models_command() -> None:
             req.feature_set,
             req.scaler_type.value if req.requires_scaling else "none",
             str(req.sequence_length) if req.requires_sequences else "N/A",
-            req.description[:50] + "..." if len(req.description) > 50 else req.description
+            req.description[:50] + "..." if len(req.description) > 50 else req.description,
         )
 
     console.print(table)
@@ -54,14 +55,13 @@ def models_command() -> None:
 
     for name in model_config.get_all_ensemble_names():
         ens = model_config.get_ensemble_config(name)
-        ensemble_table.add_row(
-            name,
-            ", ".join(ens.base_models),
-            ens.meta_learner,
-            ens.description
-        )
+        ensemble_table.add_row(name, ", ".join(ens.base_models), ens.meta_learner, ens.description)
 
     console.print(ensemble_table)
 
-    console.print("\n[dim]Use --model-type with 'pipeline run' to prepare data for specific models.[/dim]")
-    console.print("[dim]Example: pipeline run --model-type lstm --feature-set neural_optimal[/dim]\n")
+    console.print(
+        "\n[dim]Use --model-type with 'pipeline run' to prepare data for specific models.[/dim]"
+    )
+    console.print(
+        "[dim]Example: pipeline run --model-type lstm --feature-set neural_optimal[/dim]\n"
+    )

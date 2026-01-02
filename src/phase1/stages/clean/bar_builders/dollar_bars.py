@@ -13,6 +13,7 @@ Usage:
     builder = DollarBarBuilder(dollar_threshold=10_000_000)
     bars = builder.build(df)
 """
+
 from __future__ import annotations
 
 import logging
@@ -153,9 +154,7 @@ class DollarBarBuilder(BaseBarBuilder):
             result["symbol"] = symbol
 
         # Log statistics
-        metadata = self._compute_metadata(
-            df, result, bars_per_output, self.dollar_threshold
-        )
+        metadata = self._compute_metadata(df, result, bars_per_output, self.dollar_threshold)
         logger.debug(
             f"DollarBarBuilder: {metadata.n_input_bars} -> {metadata.n_output_bars} bars "
             f"(compression: {metadata.compression_ratio:.1f}x)"

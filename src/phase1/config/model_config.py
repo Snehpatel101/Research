@@ -7,12 +7,14 @@ enabling Phase 1 to prepare appropriate datasets for Phase 2 training.
 The model factory architecture requires Phase 1 to produce standardized
 datasets that satisfy the requirements of all target model types.
 """
+
 from dataclasses import dataclass
 from enum import Enum
 
 
 class ModelFamily(str, Enum):
     """Model family classification."""
+
     BOOSTING = "boosting"
     NEURAL = "neural"
     TRANSFORMER = "transformer"
@@ -22,6 +24,7 @@ class ModelFamily(str, Enum):
 
 class ScalerType(str, Enum):
     """Supported scaler types for data normalization."""
+
     NONE = "none"
     STANDARD = "standard"
     ROBUST = "robust"
@@ -50,6 +53,7 @@ class ModelDataRequirements:
         supports_missing: Whether model handles missing values natively
         description: Human-readable description
     """
+
     model_name: str
     family: ModelFamily
     feature_set: str
@@ -109,7 +113,6 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_missing=True,
         description="CatBoost gradient boosting. Excellent categorical feature handling.",
     ),
-
     # -------------------------------------------------------------------------
     # NEURAL NETWORK MODELS (sequential/recurrent)
     # -------------------------------------------------------------------------
@@ -164,7 +167,6 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_missing=False,
         description="Multi-Layer Perceptron. Simple feedforward network for tabular data.",
     ),
-
     # -------------------------------------------------------------------------
     # TRANSFORMER MODELS (attention-based)
     # -------------------------------------------------------------------------
@@ -207,7 +209,6 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_missing=False,
         description="Informer model. ProbSparse attention for long sequences.",
     ),
-
     # -------------------------------------------------------------------------
     # CLASSICAL ML MODELS
     # -------------------------------------------------------------------------
@@ -255,9 +256,11 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
 # =============================================================================
 # Pre-defined ensemble combinations for common use cases.
 
+
 @dataclass(frozen=True)
 class EnsembleConfig:
     """Configuration for an ensemble of models."""
+
     name: str
     description: str
     base_models: list[str]
@@ -307,6 +310,7 @@ ENSEMBLE_CONFIGS: dict[str, EnsembleConfig] = {
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
+
 
 def get_model_requirements(model_name: str) -> ModelDataRequirements:
     """
@@ -374,10 +378,7 @@ def get_models_by_family(family: ModelFamily) -> list[str]:
     List[str]
         List of model names in the specified family
     """
-    return [
-        name for name, req in MODEL_DATA_REQUIREMENTS.items()
-        if req.family == family
-    ]
+    return [name for name, req in MODEL_DATA_REQUIREMENTS.items() if req.family == family]
 
 
 def get_combined_requirements(model_names: list[str]) -> dict:
@@ -414,12 +415,10 @@ def get_combined_requirements(model_names: list[str]) -> dict:
         "scaler_types": set(r.scaler_type for r in requirements if r.requires_scaling),
         "requires_sequences": any(r.requires_sequences for r in requirements),
         "max_sequence_length": max(
-            (r.sequence_length for r in requirements if r.requires_sequences),
-            default=0
+            (r.sequence_length for r in requirements if r.requires_sequences), default=0
         ),
         "min_max_features": min(
-            (r.max_features for r in requirements if r.max_features),
-            default=None
+            (r.max_features for r in requirements if r.max_features), default=None
         ),
     }
 

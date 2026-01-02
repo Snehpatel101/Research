@@ -21,10 +21,7 @@ logger.addHandler(logging.NullHandler())
 
 
 def calculate_adx(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    period: int = 14
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate ADX, +DI, -DI.
@@ -70,14 +67,18 @@ def calculate_adx(
     minus_dm_smooth = np.zeros(n)
 
     if period < n:
-        tr_smooth[period] = np.sum(tr[1:period + 1])
-        plus_dm_smooth[period] = np.sum(plus_dm[1:period + 1])
-        minus_dm_smooth[period] = np.sum(minus_dm[1:period + 1])
+        tr_smooth[period] = np.sum(tr[1 : period + 1])
+        plus_dm_smooth[period] = np.sum(plus_dm[1 : period + 1])
+        minus_dm_smooth[period] = np.sum(minus_dm[1 : period + 1])
 
         for i in range(period + 1, n):
             tr_smooth[i] = tr_smooth[i - 1] - (tr_smooth[i - 1] / period) + tr[i]
-            plus_dm_smooth[i] = plus_dm_smooth[i - 1] - (plus_dm_smooth[i - 1] / period) + plus_dm[i]
-            minus_dm_smooth[i] = minus_dm_smooth[i - 1] - (minus_dm_smooth[i - 1] / period) + minus_dm[i]
+            plus_dm_smooth[i] = (
+                plus_dm_smooth[i - 1] - (plus_dm_smooth[i - 1] / period) + plus_dm[i]
+            )
+            minus_dm_smooth[i] = (
+                minus_dm_smooth[i - 1] - (minus_dm_smooth[i - 1] / period) + minus_dm[i]
+            )
 
     # Calculate DI
     for i in range(period, n):
@@ -94,7 +95,7 @@ def calculate_adx(
 
     # ADX is smoothed DX
     if 2 * period - 1 < n:
-        adx[2 * period - 1] = np.nanmean(dx[period:2 * period])
+        adx[2 * period - 1] = np.nanmean(dx[period : 2 * period])
         for i in range(2 * period, n):
             if not np.isnan(dx[i]):
                 adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
@@ -117,7 +118,7 @@ def calculate_sma(arr: np.ndarray, period: int) -> np.ndarray:
     result = np.full(n, np.nan)
 
     for i in range(period - 1, n):
-        result[i] = np.mean(arr[i - period + 1:i + 1])
+        result[i] = np.mean(arr[i - period + 1 : i + 1])
 
     return result
 
@@ -154,7 +155,7 @@ class TrendRegimeDetector(RegimeDetector):
         sma_period: int = 50,
         adx_threshold: float = 25.0,
         adx_column: str | None = None,
-        sma_column: str | None = None
+        sma_column: str | None = None,
     ):
         """
         Initialize trend regime detector.
@@ -186,11 +187,11 @@ class TrendRegimeDetector(RegimeDetector):
 
     def get_required_columns(self) -> list[str]:
         """Get required columns for detection."""
-        required = ['close']
+        required = ["close"]
 
         # Only require OHLC if no pre-computed ADX
         if not self.adx_column:
-            required.extend(['high', 'low'])
+            required.extend(["high", "low"])
 
         return required
 
@@ -214,26 +215,19 @@ class TrendRegimeDetector(RegimeDetector):
             adx = df[self.adx_column].values
         else:
             adx, _, _ = calculate_adx(
-                df['high'].values,
-                df['low'].values,
-                df['close'].values,
-                self.adx_period
+                df["high"].values, df["low"].values, df["close"].values, self.adx_period
             )
 
         # Get SMA values
         if self.sma_column and self.sma_column in df.columns:
             sma = df[self.sma_column].values
         else:
-            sma = calculate_sma(df['close'].values, self.sma_period)
+            sma = calculate_sma(df["close"].values, self.sma_period)
 
-        close = df['close'].values
+        close = df["close"].values
 
         # Classify regime
-        regimes = pd.Series(
-            TrendRegimeLabel.SIDEWAYS.value,
-            index=df.index,
-            dtype='object'
-        )
+        regimes = pd.Series(TrendRegimeLabel.SIDEWAYS.value, index=df.index, dtype="object")
 
         adx_series = pd.Series(adx, index=df.index)
         sma_series = pd.Series(sma, index=df.index)
@@ -251,16 +245,11 @@ class TrendRegimeDetector(RegimeDetector):
         warmup_mask = adx_series.isna() | sma_series.isna()
         regimes[warmup_mask] = np.nan
 
-        logger.debug(
-            f"Trend regime distribution: {regimes.value_counts(dropna=False).to_dict()}"
-        )
+        logger.debug(f"Trend regime distribution: {regimes.value_counts(dropna=False).to_dict()}")
 
         return regimes
 
-    def detect_with_components(
-        self,
-        df: pd.DataFrame
-    ) -> tuple[pd.Series, pd.Series, pd.Series]:
+    def detect_with_components(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
         """
         Detect regime and return component values for debugging.
 
@@ -277,17 +266,14 @@ class TrendRegimeDetector(RegimeDetector):
             adx = df[self.adx_column].values
         else:
             adx, _, _ = calculate_adx(
-                df['high'].values,
-                df['low'].values,
-                df['close'].values,
-                self.adx_period
+                df["high"].values, df["low"].values, df["close"].values, self.adx_period
             )
 
         # Get SMA values
         if self.sma_column and self.sma_column in df.columns:
             sma = df[self.sma_column].values
         else:
-            sma = calculate_sma(df['close'].values, self.sma_period)
+            sma = calculate_sma(df["close"].values, self.sma_period)
 
         regimes = self.detect(df)
         adx_series = pd.Series(adx, index=df.index)
@@ -297,7 +283,7 @@ class TrendRegimeDetector(RegimeDetector):
 
 
 __all__ = [
-    'TrendRegimeDetector',
-    'calculate_adx',
-    'calculate_sma',
+    "TrendRegimeDetector",
+    "calculate_adx",
+    "calculate_sma",
 ]

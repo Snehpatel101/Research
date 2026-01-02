@@ -5,6 +5,7 @@ Orchestrates cross-validation for all models and horizons,
 optionally including hyperparameter tuning with Optuna.
 Generates OOF predictions and stacking datasets for Phase 4.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,9 +35,11 @@ logger = logging.getLogger(__name__)
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class FoldMetrics:
     """Metrics from a single CV fold."""
+
     fold: int
     train_size: int
     val_size: int
@@ -76,6 +79,7 @@ class CVResult:
         selected_features: Features selected by walk-forward selection
         total_time: Total CV time in seconds
     """
+
     model_name: str
     horizon: int
     fold_metrics: list[FoldMetrics]
@@ -126,6 +130,7 @@ class CVResult:
 # =============================================================================
 # HYPERPARAMETER TUNER
 # =============================================================================
+
 
 class TimeSeriesOptunaTuner:
     """
@@ -260,8 +265,7 @@ class TimeSeriesOptunaTuner:
                 params[name] = trial.suggest_int(name, spec["low"], spec["high"])
             elif spec["type"] == "float":
                 params[name] = trial.suggest_float(
-                    name, spec["low"], spec["high"],
-                    log=spec.get("log", False)
+                    name, spec["low"], spec["high"], log=spec.get("log", False)
                 )
             elif spec["type"] == "categorical":
                 params[name] = trial.suggest_categorical(name, spec["choices"])
@@ -276,6 +280,7 @@ class TimeSeriesOptunaTuner:
 # =============================================================================
 # CROSS-VALIDATION RUNNER
 # =============================================================================
+
 
 class CrossValidationRunner:
     """
@@ -523,16 +528,18 @@ class CrossValidationRunner:
             # Extract fold metrics from OOF generation
             fold_metrics = []
             for fi in oof_pred.fold_info:
-                fold_metrics.append(FoldMetrics(
-                    fold=fi["fold"],
-                    train_size=fi["train_size"],
-                    val_size=fi["val_size"],
-                    accuracy=fi.get("val_accuracy", 0.0),
-                    f1=fi.get("val_f1", 0.0),
-                    precision=0.0,  # Not tracked in basic OOF
-                    recall=0.0,
-                    training_time=0.0,
-                ))
+                fold_metrics.append(
+                    FoldMetrics(
+                        fold=fi["fold"],
+                        train_size=fi["train_size"],
+                        val_size=fi["val_size"],
+                        accuracy=fi.get("val_accuracy", 0.0),
+                        f1=fi.get("val_f1", 0.0),
+                        precision=0.0,  # Not tracked in basic OOF
+                        recall=0.0,
+                        training_time=0.0,
+                    )
+                )
 
         total_time = time.time() - start_time
 
@@ -624,7 +631,7 @@ class CrossValidationRunner:
             # Select top N features based on MI scores from training data only
             feature_scores = list(zip(all_features, mi_scores, strict=False))
             feature_scores.sort(key=lambda x: x[1], reverse=True)
-            fold_features = [f[0] for f in feature_scores[:self.n_features_to_select]]
+            fold_features = [f[0] for f in feature_scores[: self.n_features_to_select]]
             fold_selected_features.append(fold_features)
 
             # Subset data to selected features
@@ -640,9 +647,12 @@ class CrossValidationRunner:
             # ==============================================================
             fold_config = config.copy()
             if tune_per_fold:
-                logger.debug(f"  Fold {fold_idx + 1}: Tuning HPs on {len(fold_features)} selected features...")
+                logger.debug(
+                    f"  Fold {fold_idx + 1}: Tuning HPs on {len(fold_features)} selected features..."
+                )
                 # Create a mini CV for tuning within the training fold
                 from src.cross_validation.purged_kfold import PurgedKFoldConfig
+
                 inner_cv_config = PurgedKFoldConfig(
                     n_splits=min(3, len(train_idx) // 100),  # Fewer splits for inner CV
                     purge_bars=self.cv.config.purge_bars,
@@ -681,20 +691,25 @@ class CrossValidationRunner:
 
             # Compute fold metrics
             from sklearn.metrics import accuracy_score, f1_score
+
             fold_accuracy = accuracy_score(y_val_fold.values, output.class_predictions)
-            fold_f1 = f1_score(y_val_fold.values, output.class_predictions, average="macro", zero_division=0)
+            fold_f1 = f1_score(
+                y_val_fold.values, output.class_predictions, average="macro", zero_division=0
+            )
             fold_time = time.time() - fold_start
 
-            fold_metrics_list.append(FoldMetrics(
-                fold=fold_idx,
-                train_size=len(train_idx),
-                val_size=len(val_idx),
-                accuracy=fold_accuracy,
-                f1=fold_f1,
-                precision=0.0,
-                recall=0.0,
-                training_time=fold_time,
-            ))
+            fold_metrics_list.append(
+                FoldMetrics(
+                    fold=fold_idx,
+                    train_size=len(train_idx),
+                    val_size=len(val_idx),
+                    accuracy=fold_accuracy,
+                    f1=fold_f1,
+                    precision=0.0,
+                    recall=0.0,
+                    training_time=fold_time,
+                )
+            )
 
             logger.debug(
                 f"  Fold {fold_idx + 1}: selected {len(fold_features)} features, "
@@ -708,11 +723,8 @@ class CrossValidationRunner:
 
         min_frequency = 0.6
         min_count = int(min_frequency * len(cv_splits))
-        stable_features = [
-            f for f, count in feature_counts.items()
-            if count >= min_count
-        ]
-        stable_features = stable_features[:self.n_features_to_select]  # Cap at max
+        stable_features = [f for f, count in feature_counts.items() if count >= min_count]
+        stable_features = stable_features[: self.n_features_to_select]  # Cap at max
 
         logger.debug(
             f"  Feature selection: {len(stable_features)} stable features "
@@ -720,10 +732,13 @@ class CrossValidationRunner:
         )
 
         # Build OOF prediction object
-        oof_df = pd.DataFrame({
-            "prediction": oof_predictions,
-            "true_label": y.values,
-        }, index=y.index)
+        oof_df = pd.DataFrame(
+            {
+                "prediction": oof_predictions,
+                "true_label": y.values,
+            },
+            index=y.index,
+        )
 
         # Add probability columns
         for c in range(n_classes):
@@ -769,7 +784,11 @@ class CrossValidationRunner:
         ref_n_samples = len(reference.predictions)
 
         # Check for NaN patterns to detect sequence model gaps
-        ref_pred_col = "prediction" if "prediction" in reference.predictions.columns else reference.predictions.columns[0]
+        ref_pred_col = (
+            "prediction"
+            if "prediction" in reference.predictions.columns
+            else reference.predictions.columns[0]
+        )
         ref_valid_mask = ~reference.predictions[ref_pred_col].isna()
 
         for model_name, result in oof_predictions.items():
@@ -783,7 +802,11 @@ class CrossValidationRunner:
                 )
 
             # Check valid samples align (important for sequence models with different seq_len)
-            pred_col = "prediction" if "prediction" in result.predictions.columns else result.predictions.columns[0]
+            pred_col = (
+                "prediction"
+                if "prediction" in result.predictions.columns
+                else result.predictions.columns[0]
+            )
             valid_mask = ~result.predictions[pred_col].isna()
 
             if not np.array_equal(ref_valid_mask.values, valid_mask.values):
@@ -912,6 +935,7 @@ class CrossValidationRunner:
 # STABILITY ANALYSIS
 # =============================================================================
 
+
 def analyze_cv_stability(
     cv_results: dict[tuple[str, int], CVResult],
 ) -> pd.DataFrame:
@@ -933,17 +957,19 @@ def analyze_cv_stability(
             std_val = np.std(values)
             cv = std_val / mean_val if mean_val > 0 else float("inf")
 
-            stability_data.append({
-                "model": model_name,
-                "horizon": horizon,
-                "metric": metric_name,
-                "mean": mean_val,
-                "std": std_val,
-                "cv": cv,
-                "min": np.min(values),
-                "max": np.max(values),
-                "stability_grade": _grade_stability(cv),
-            })
+            stability_data.append(
+                {
+                    "model": model_name,
+                    "horizon": horizon,
+                    "metric": metric_name,
+                    "mean": mean_val,
+                    "std": std_val,
+                    "cv": cv,
+                    "min": np.min(values),
+                    "max": np.max(values),
+                    "stability_grade": _grade_stability(cv),
+                }
+            )
 
     return pd.DataFrame(stability_data)
 

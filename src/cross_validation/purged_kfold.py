@@ -10,6 +10,7 @@ Key concepts:
 - Purge: Remove samples whose labels overlap with test set start time
 - Embargo: Buffer period after test set to break serial correlation
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
+
 
 @dataclass
 class PurgedKFoldConfig:
@@ -49,6 +51,7 @@ class PurgedKFoldConfig:
         >>> config = PurgedKFoldConfig.from_timeframe(n_splits=5, purge_bars=60, timeframe='15min')
         >>> config.embargo_bars  # 480 bars (5 days at 15min)
     """
+
     n_splits: int = 5
     purge_bars: int = 60
     embargo_bars: int = 1440
@@ -177,6 +180,7 @@ def get_cv_config_for_family(family: str, base_config: PurgedKFoldConfig) -> Pur
 # =============================================================================
 # PURGED K-FOLD IMPLEMENTATION
 # =============================================================================
+
 
 class PurgedKFold:
     """
@@ -330,19 +334,23 @@ class PurgedKFold:
             }
 
             if has_datetime_index:
-                fold_info.update({
-                    "train_start": X.index[train_idx[0]],
-                    "train_end": X.index[train_idx[-1]],
-                    "test_start": X.index[test_idx[0]],
-                    "test_end": X.index[test_idx[-1]],
-                })
+                fold_info.update(
+                    {
+                        "train_start": X.index[train_idx[0]],
+                        "train_end": X.index[train_idx[-1]],
+                        "test_start": X.index[test_idx[0]],
+                        "test_end": X.index[test_idx[-1]],
+                    }
+                )
             else:
-                fold_info.update({
-                    "train_start_idx": int(train_idx[0]),
-                    "train_end_idx": int(train_idx[-1]),
-                    "test_start_idx": int(test_idx[0]),
-                    "test_end_idx": int(test_idx[-1]),
-                })
+                fold_info.update(
+                    {
+                        "train_start_idx": int(train_idx[0]),
+                        "train_end_idx": int(train_idx[-1]),
+                        "test_start_idx": int(test_idx[0]),
+                        "test_end_idx": int(test_idx[-1]),
+                    }
+                )
 
             info.append(fold_info)
 
@@ -382,6 +390,7 @@ class PurgedKFold:
 # =============================================================================
 # MODEL-AWARE CV WRAPPER
 # =============================================================================
+
 
 class ModelAwareCV:
     """

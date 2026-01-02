@@ -4,6 +4,7 @@ Core utilities for CLI run commands.
 Provides configuration creation, lazy imports, and shared utilities
 for pipeline execution commands.
 """
+
 from pathlib import Path
 
 from .utils import show_info
@@ -20,6 +21,7 @@ def _get_pipeline_config():
     global _pipeline_config
     if _pipeline_config is None:
         from ..phase1 import pipeline_config
+
         _pipeline_config = pipeline_config
     return _pipeline_config
 
@@ -29,6 +31,7 @@ def _get_pipeline_runner():
     global _pipeline_runner
     if _pipeline_runner is None:
         from .. import pipeline
+
         _pipeline_runner = pipeline
     return _pipeline_runner
 
@@ -38,6 +41,7 @@ def _get_presets_module():
     global _presets_module
     if _presets_module is None:
         from ..phase1 import presets
+
         _presets_module = presets
     return _presets_module
 
@@ -47,6 +51,7 @@ def _get_model_config():
     global _model_config
     if _model_config is None:
         from ..phase1.config import model_config
+
         _model_config = model_config
     return _model_config
 
@@ -89,7 +94,7 @@ def _create_config_from_args(
     # Common
     project_root_path: Path,
     pipeline_config,
-    presets_mod
+    presets_mod,
 ):
     """
     Create pipeline config from CLI arguments, applying preset if specified.
@@ -150,7 +155,7 @@ def _create_config_from_args(
     """
     # Start with base config kwargs
     config_kwargs = {
-        'project_root': project_root_path,
+        "project_root": project_root_path,
     }
 
     # Apply preset if specified
@@ -162,23 +167,24 @@ def _create_config_from_args(
             show_info(f"Applying '{preset}' preset")
 
             # Map preset values to config kwargs
-            config_kwargs['target_timeframe'] = preset_config.get('target_timeframe', '5min')
+            config_kwargs["target_timeframe"] = preset_config.get("target_timeframe", "5min")
             # Import canonical horizons as fallback
             from src.common.horizon_config import ACTIVE_HORIZONS
-            config_kwargs['label_horizons'] = preset_config.get('horizons', list(ACTIVE_HORIZONS))
-            config_kwargs['max_bars_ahead'] = preset_config.get('max_bars_ahead', 50)
+
+            config_kwargs["label_horizons"] = preset_config.get("horizons", list(ACTIVE_HORIZONS))
+            config_kwargs["max_bars_ahead"] = preset_config.get("max_bars_ahead", 50)
 
             # Apply feature config from preset
-            if 'feature_config' in preset_config:
-                feat_config = preset_config['feature_config']
-                if 'sma_periods' in feat_config:
-                    config_kwargs['sma_periods'] = feat_config['sma_periods']
-                if 'ema_periods' in feat_config:
-                    config_kwargs['ema_periods'] = feat_config['ema_periods']
-                if 'atr_periods' in feat_config:
-                    config_kwargs['atr_periods'] = feat_config['atr_periods']
-                if 'rsi_period' in feat_config:
-                    config_kwargs['rsi_period'] = feat_config['rsi_period']
+            if "feature_config" in preset_config:
+                feat_config = preset_config["feature_config"]
+                if "sma_periods" in feat_config:
+                    config_kwargs["sma_periods"] = feat_config["sma_periods"]
+                if "ema_periods" in feat_config:
+                    config_kwargs["ema_periods"] = feat_config["ema_periods"]
+                if "atr_periods" in feat_config:
+                    config_kwargs["atr_periods"] = feat_config["atr_periods"]
+                if "rsi_period" in feat_config:
+                    config_kwargs["rsi_period"] = feat_config["rsi_period"]
 
             # Set description based on preset if not provided
             if description is None:
@@ -190,12 +196,13 @@ def _create_config_from_args(
     # Apply CLI overrides (these take precedence over preset)
     # Symbols - auto-detect from available data if not specified
     if symbols is not None:
-        config_kwargs['symbols'] = [s.strip().upper() for s in symbols.split(",")]
-    elif 'symbols' not in config_kwargs:
+        config_kwargs["symbols"] = [s.strip().upper() for s in symbols.split(",")]
+    elif "symbols" not in config_kwargs:
         from src.phase1.config.runtime import detect_available_symbols
+
         detected = detect_available_symbols()
         if detected:
-            config_kwargs['symbols'] = detected
+            config_kwargs["symbols"] = detected
             show_info(f"Auto-detected symbols from data: {', '.join(detected)}")
         else:
             raise ValueError(
@@ -205,94 +212,94 @@ def _create_config_from_args(
 
     # Timeframe override
     if timeframe is not None:
-        config_kwargs['target_timeframe'] = timeframe
+        config_kwargs["target_timeframe"] = timeframe
 
     # Horizons override
     if horizons is not None:
-        config_kwargs['label_horizons'] = [int(h.strip()) for h in horizons.split(",")]
+        config_kwargs["label_horizons"] = [int(h.strip()) for h in horizons.split(",")]
 
     if feature_set is not None:
-        config_kwargs['feature_set'] = feature_set
+        config_kwargs["feature_set"] = feature_set
 
     # Date range
     if start is not None:
-        config_kwargs['start_date'] = start
+        config_kwargs["start_date"] = start
     if end is not None:
-        config_kwargs['end_date'] = end
+        config_kwargs["end_date"] = end
 
     # Run metadata
     if run_id is not None:
-        config_kwargs['run_id'] = run_id
+        config_kwargs["run_id"] = run_id
     if description is not None:
-        config_kwargs['description'] = description
+        config_kwargs["description"] = description
 
     # Split ratios (only override if explicitly provided)
     if train_ratio is not None:
-        config_kwargs['train_ratio'] = train_ratio
+        config_kwargs["train_ratio"] = train_ratio
     if val_ratio is not None:
-        config_kwargs['val_ratio'] = val_ratio
+        config_kwargs["val_ratio"] = val_ratio
     if test_ratio is not None:
-        config_kwargs['test_ratio'] = test_ratio
+        config_kwargs["test_ratio"] = test_ratio
 
     # Purge/embargo (only override if explicitly provided)
     if purge_bars is not None:
-        config_kwargs['purge_bars'] = purge_bars
-        config_kwargs['auto_scale_purge_embargo'] = False  # Disable auto-scaling
+        config_kwargs["purge_bars"] = purge_bars
+        config_kwargs["auto_scale_purge_embargo"] = False  # Disable auto-scaling
     if embargo_bars is not None:
-        config_kwargs['embargo_bars'] = embargo_bars
-        config_kwargs['auto_scale_purge_embargo'] = False  # Disable auto-scaling
+        config_kwargs["embargo_bars"] = embargo_bars
+        config_kwargs["auto_scale_purge_embargo"] = False  # Disable auto-scaling
 
     # MTF settings
     if mtf_mode is not None:
-        config_kwargs['mtf_mode'] = mtf_mode
+        config_kwargs["mtf_mode"] = mtf_mode
     if mtf_timeframes is not None:
-        config_kwargs['mtf_timeframes'] = [tf.strip() for tf in mtf_timeframes.split(",")]
+        config_kwargs["mtf_timeframes"] = [tf.strip() for tf in mtf_timeframes.split(",")]
     if mtf_enable is not None:
         # If explicitly disabled, clear mtf_timeframes
         if not mtf_enable:
-            config_kwargs['mtf_timeframes'] = []
-            config_kwargs['mtf_mode'] = 'bars'  # Minimal mode when disabled
+            config_kwargs["mtf_timeframes"] = []
+            config_kwargs["mtf_mode"] = "bars"  # Minimal mode when disabled
 
     # Feature toggles - stored for use by feature engineering stage
     feature_toggles = {}
     if enable_wavelets is not None:
-        feature_toggles['wavelets'] = enable_wavelets
+        feature_toggles["wavelets"] = enable_wavelets
     if enable_microstructure is not None:
-        feature_toggles['microstructure'] = enable_microstructure
+        feature_toggles["microstructure"] = enable_microstructure
     if enable_volume_features is not None:
-        feature_toggles['volume'] = enable_volume_features
+        feature_toggles["volume"] = enable_volume_features
     if enable_volatility_features is not None:
-        feature_toggles['volatility'] = enable_volatility_features
+        feature_toggles["volatility"] = enable_volatility_features
     if feature_toggles:
-        config_kwargs['feature_toggles'] = feature_toggles
+        config_kwargs["feature_toggles"] = feature_toggles
 
     # Labeling parameters - custom barrier overrides
     barrier_overrides = {}
     if k_up is not None:
-        barrier_overrides['k_up'] = k_up
+        barrier_overrides["k_up"] = k_up
     if k_down is not None:
-        barrier_overrides['k_down'] = k_down
+        barrier_overrides["k_down"] = k_down
     if max_bars is not None:
-        barrier_overrides['max_bars'] = max_bars
+        barrier_overrides["max_bars"] = max_bars
     if barrier_overrides:
-        config_kwargs['barrier_overrides'] = barrier_overrides
+        config_kwargs["barrier_overrides"] = barrier_overrides
 
     # Scaling options
     if scaler_type is not None:
-        config_kwargs['scaler_type'] = scaler_type
+        config_kwargs["scaler_type"] = scaler_type
 
     # Model selection (Phase 2+ - stored for downstream use)
     model_config_data = {}
     if model_type is not None:
-        model_config_data['model_type'] = model_type
+        model_config_data["model_type"] = model_type
     if base_models is not None:
-        model_config_data['base_models'] = [m.strip() for m in base_models.split(",")]
+        model_config_data["base_models"] = [m.strip() for m in base_models.split(",")]
     if meta_learner is not None:
-        model_config_data['meta_learner'] = meta_learner
+        model_config_data["meta_learner"] = meta_learner
     if sequence_length is not None:
-        model_config_data['sequence_length'] = sequence_length
+        model_config_data["sequence_length"] = sequence_length
     if model_config_data:
-        config_kwargs['model_config'] = model_config_data
+        config_kwargs["model_config"] = model_config_data
 
     # Create and return config
     return pipeline_config.create_default_config(**config_kwargs)

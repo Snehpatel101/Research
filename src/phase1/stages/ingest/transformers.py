@@ -16,40 +16,38 @@ logger.addHandler(logging.NullHandler())
 
 
 # Standard column names
-STANDARD_COLS = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+STANDARD_COLS = ["datetime", "open", "high", "low", "close", "volume"]
 
 # Common column name mappings (case-insensitive)
 COLUMN_MAPPINGS: dict[str, str] = {
-    'timestamp': 'datetime',
-    'time': 'datetime',
-    'date': 'datetime',
-    'dt': 'datetime',
-    'o': 'open',
-    'h': 'high',
-    'l': 'low',
-    'c': 'close',
-    'v': 'volume',
-    'vol': 'volume',
-    'trade_volume': 'volume',
+    "timestamp": "datetime",
+    "time": "datetime",
+    "date": "datetime",
+    "dt": "datetime",
+    "o": "open",
+    "h": "high",
+    "l": "low",
+    "c": "close",
+    "v": "volume",
+    "vol": "volume",
+    "trade_volume": "volume",
 }
 
 # Timezone mappings
 TIMEZONE_MAP: dict[str, str] = {
-    'EST': 'America/New_York',
-    'EDT': 'America/New_York',
-    'CST': 'America/Chicago',
-    'CDT': 'America/Chicago',
-    'PST': 'America/Los_Angeles',
-    'PDT': 'America/Los_Angeles',
-    'GMT': 'GMT',
-    'UTC': 'UTC',
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+    "GMT": "GMT",
+    "UTC": "UTC",
 }
 
 
 def standardize_columns(
-    df: pd.DataFrame,
-    column_mappings: dict[str, str] = None,
-    copy: bool = True
+    df: pd.DataFrame, column_mappings: dict[str, str] = None, copy: bool = True
 ) -> pd.DataFrame:
     """
     Standardize column names to expected format.
@@ -98,9 +96,9 @@ def standardize_columns(
 
 def handle_timezone(
     df: pd.DataFrame,
-    source_timezone: str = 'UTC',
+    source_timezone: str = "UTC",
     timezone_map: dict[str, str] = None,
-    copy: bool = True
+    copy: bool = True,
 ) -> pd.DataFrame:
     """
     Convert datetime to UTC timezone.
@@ -125,31 +123,31 @@ def handle_timezone(
         df = df.copy()
 
     # Ensure datetime column exists and is datetime type
-    if 'datetime' not in df.columns:
+    if "datetime" not in df.columns:
         raise ValueError("No 'datetime' column found in data")
 
     # Convert to datetime if not already
-    if not pd.api.types.is_datetime64_any_dtype(df['datetime']):
-        df['datetime'] = pd.to_datetime(df['datetime'])
+    if not pd.api.types.is_datetime64_any_dtype(df["datetime"]):
+        df["datetime"] = pd.to_datetime(df["datetime"])
 
     # Handle timezone conversion
-    if df['datetime'].dt.tz is None:
+    if df["datetime"].dt.tz is None:
         # Naive datetime - localize to source timezone first
         source_tz = timezone_map.get(source_timezone, source_timezone)
         try:
             tz = pytz.timezone(source_tz)
-            df['datetime'] = df['datetime'].dt.tz_localize(tz)
+            df["datetime"] = df["datetime"].dt.tz_localize(tz)
             logger.info(f"Localized to {source_tz}")
         except Exception as e:
             logger.warning(f"Could not localize to {source_tz}: {e}. Assuming UTC.")
-            df['datetime'] = df['datetime'].dt.tz_localize('UTC')
+            df["datetime"] = df["datetime"].dt.tz_localize("UTC")
 
     # Convert to UTC
-    if df['datetime'].dt.tz.zone != 'UTC':
-        df['datetime'] = df['datetime'].dt.tz_convert('UTC')
+    if df["datetime"].dt.tz.zone != "UTC":
+        df["datetime"] = df["datetime"].dt.tz_convert("UTC")
         logger.info("Converted to UTC")
 
     # Remove timezone info (store as naive UTC)
-    df['datetime'] = df['datetime'].dt.tz_localize(None)
+    df["datetime"] = df["datetime"].dt.tz_localize(None)
 
     return df

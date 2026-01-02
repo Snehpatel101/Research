@@ -3,6 +3,7 @@ OOF prediction I/O operations.
 
 Save and load stacking datasets and metadata.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # I/O OPERATIONS
 # =============================================================================
+
 
 class OOFDatasetIO:
     """Handle saving and loading of stacking datasets."""

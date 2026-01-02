@@ -23,6 +23,7 @@ Usage:
         EMBARGO_TIME_MINUTES,  # NEW: embargo specified in calendar time
     )
 """
+
 from __future__ import annotations
 
 import math
@@ -54,15 +55,15 @@ LABEL_HORIZONS = ACTIVE_HORIZONS  # Alias for trainer validation
 # Example: 5 bars at 5min (25 minutes) = ~2 bars at 15min (~30 minutes)
 # The formula is: new_horizon = old_horizon * (source_minutes / target_minutes)
 HORIZON_TIMEFRAME_MINUTES = {
-    '1min': 1,
-    '5min': 5,
-    '10min': 10,
-    '15min': 15,
-    '20min': 20,
-    '30min': 30,
-    '45min': 45,
-    '60min': 60,
-    '1h': 60,  # Alias for 60min
+    "1min": 1,
+    "5min": 5,
+    "10min": 10,
+    "15min": 15,
+    "20min": 20,
+    "30min": 30,
+    "45min": 45,
+    "60min": 60,
+    "1h": 60,  # Alias for 60min
 }
 
 # Legacy alias for backward compatibility
@@ -74,7 +75,7 @@ HORIZON_TIMEFRAME_SCALING = HORIZON_TIMEFRAME_MINUTES
 # =============================================================================
 # Purge/embargo auto-scaling configuration.
 # These multipliers determine purge and embargo bars based on max horizon.
-PURGE_MULTIPLIER = 3.0     # purge_bars = max_horizon * PURGE_MULTIPLIER
+PURGE_MULTIPLIER = 3.0  # purge_bars = max_horizon * PURGE_MULTIPLIER
 EMBARGO_MULTIPLIER = 72.0  # embargo_bars = max_horizon * EMBARGO_MULTIPLIER (~5 days for H20)
 
 # TIMEFRAME-AWARE EMBARGO CONFIGURATION
@@ -151,11 +152,7 @@ def validate_horizons(horizons: list[int], data_length: int = None) -> None:
 # =============================================================================
 # TIMEFRAME-AWARE HORIZON SCALING
 # =============================================================================
-def get_scaled_horizons(
-    horizons: list[int],
-    source_tf: str,
-    target_tf: str
-) -> list[int]:
+def get_scaled_horizons(horizons: list[int], source_tf: str, target_tf: str) -> list[int]:
     """
     Scale horizons when changing timeframe.
 
@@ -273,12 +270,12 @@ def compute_embargo_bars(
     else:
         # Try to parse common formats
         tf_lower = timeframe.lower()
-        if tf_lower.endswith('min'):
+        if tf_lower.endswith("min"):
             try:
                 tf_minutes = int(tf_lower[:-3])
             except ValueError:
                 raise ValueError(f"Cannot parse timeframe '{timeframe}'")
-        elif tf_lower.endswith('h'):
+        elif tf_lower.endswith("h"):
             try:
                 tf_minutes = int(tf_lower[:-1]) * 60
             except ValueError:
@@ -438,10 +435,10 @@ def get_default_barrier_params_for_horizon(horizon: int) -> dict:
     max_bars = max(5, min(max_bars, 300))  # Clamp to reasonable range
 
     return {
-        'k_up': round(k_base, 2),
-        'k_down': round(k_base, 2),
-        'max_bars': max_bars,
-        'description': f'H{horizon}: Auto-generated defaults (symmetric)'
+        "k_up": round(k_base, 2),
+        "k_down": round(k_base, 2),
+        "max_bars": max_bars,
+        "description": f"H{horizon}: Auto-generated defaults (symmetric)",
     }
 
 
@@ -481,7 +478,7 @@ class HorizonConfig:
     horizons: list[int] = field(default_factory=lambda: list(ACTIVE_HORIZONS))
 
     # Source timeframe (for horizon scaling when resampling)
-    source_timeframe: str = '5min'
+    source_timeframe: str = "5min"
 
     # Auto-scale purge/embargo based on max horizon
     auto_scale_purge_embargo: bool = True
@@ -591,8 +588,12 @@ class HorizonConfig:
 
         if not self.auto_scale_purge_embargo:
             if self.manual_purge_bars is not None and self.manual_purge_bars < 0:
-                issues.append(f"manual_purge_bars must be non-negative, got {self.manual_purge_bars}")
+                issues.append(
+                    f"manual_purge_bars must be non-negative, got {self.manual_purge_bars}"
+                )
             if self.manual_embargo_bars is not None and self.manual_embargo_bars < 0:
-                issues.append(f"manual_embargo_bars must be non-negative, got {self.manual_embargo_bars}")
+                issues.append(
+                    f"manual_embargo_bars must be non-negative, got {self.manual_embargo_bars}"
+                )
 
         return issues

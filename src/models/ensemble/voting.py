@@ -12,6 +12,7 @@ Low-Latency Mode:
     - Sequential: ~15ms (sum of individual model latencies)
     - Parallel: ~6ms (max of individual model latencies + overhead)
 """
+
 from __future__ import annotations
 
 import logging
@@ -97,9 +98,7 @@ class VotingEnsemble(BaseModel):
             return self._check_configured_models_require_sequences(base_model_names)
         return False
 
-    def _check_configured_models_require_sequences(
-        self, model_names: list[str]
-    ) -> bool:
+    def _check_configured_models_require_sequences(self, model_names: list[str]) -> bool:
         """
         Check if any configured base model requires sequences.
 
@@ -147,12 +146,8 @@ class VotingEnsemble(BaseModel):
         # Validate base model compatibility (check sequence requirements)
         sequence_requirements = [m.requires_sequences for m in models]
         if not all(sequence_requirements) and any(sequence_requirements):
-            tabular_models = [
-                type(m).__name__ for m in models if not m.requires_sequences
-            ]
-            sequence_models = [
-                type(m).__name__ for m in models if m.requires_sequences
-            ]
+            tabular_models = [type(m).__name__ for m in models if not m.requires_sequences]
+            sequence_models = [type(m).__name__ for m in models if m.requires_sequences]
             raise ValueError(
                 f"Cannot mix tabular and sequence models in ensemble.\n"
                 f"Tabular models (2D input): {tabular_models}\n"
@@ -161,9 +156,7 @@ class VotingEnsemble(BaseModel):
             )
 
         self._base_models = list(models)
-        self._base_model_names = [
-            type(m).__name__ for m in models
-        ]
+        self._base_model_names = [type(m).__name__ for m in models]
 
         if weights is not None:
             if len(weights) != len(models):
@@ -304,9 +297,7 @@ class VotingEnsemble(BaseModel):
         else:
             return self._hard_vote(X)
 
-    def _collect_predictions_parallel(
-        self, X: np.ndarray
-    ) -> tuple[list[PredictionOutput], float]:
+    def _collect_predictions_parallel(self, X: np.ndarray) -> tuple[list[PredictionOutput], float]:
         """
         Collect predictions from all base models in parallel.
 
@@ -326,10 +317,7 @@ class VotingEnsemble(BaseModel):
             return idx, self._base_models[idx].predict(X)
 
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            futures = {
-                executor.submit(predict_model, i): i
-                for i in range(len(self._base_models))
-            }
+            futures = {executor.submit(predict_model, i): i for i in range(len(self._base_models))}
             for future in as_completed(futures):
                 idx, output = future.result()
                 outputs[idx] = output

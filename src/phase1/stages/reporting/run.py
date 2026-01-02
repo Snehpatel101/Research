@@ -3,6 +3,7 @@ Stage 9: Report Generation.
 
 Pipeline wrapper for completion report generation.
 """
+
 import json
 import logging
 import traceback
@@ -21,12 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 def generate_report_content(
-    config: 'PipelineConfig',
+    config: "PipelineConfig",
     combined_df: pd.DataFrame,
     split_config: dict[str, Any],
     feature_cols: list[str],
     label_stats: dict[int, dict[str, int]],
-    stage_results: dict[str, StageResult]
+    stage_results: dict[str, StageResult],
 ) -> str:
     """
     Generate the report markdown content.
@@ -44,7 +45,7 @@ def generate_report_content(
     """
     from src.pipeline.utils import StageStatus
 
-    report = f'''# Phase 1 Completion Report
+    report = f"""# Phase 1 Completion Report
 ## Ensemble Price Prediction System
 
 **Run ID:** {config.run_id}
@@ -76,22 +77,22 @@ Phase 1 successfully processed raw OHLCV data through the complete pipeline:
 
 ## Label Distribution
 
-'''
+"""
     for horizon in config.label_horizons:
         stats = label_stats.get(horizon, {})
         total = sum(stats.values()) if stats else len(combined_df)
         if total == 0:
             total = 1
-        report += f'''### Horizon {horizon} ({horizon}-bar ahead)
+        report += f"""### Horizon {horizon} ({horizon}-bar ahead)
 | Class | Count | Percentage |
 |-------|-------|------------|
 | Short (-1) | {stats.get('short', 0):,} | {stats.get('short', 0)/total*100:.1f}% |
 | Neutral (0) | {stats.get('neutral', 0):,} | {stats.get('neutral', 0)/total*100:.1f}% |
 | Long (+1) | {stats.get('long', 0):,} | {stats.get('long', 0)/total*100:.1f}% |
 
-'''
+"""
 
-    report += f'''---
+    report += f"""---
 
 ## Data Splits
 
@@ -109,19 +110,19 @@ Phase 1 successfully processed raw OHLCV data through the complete pipeline:
 
 ## Pipeline Execution Summary
 
-'''
+"""
     for stage_name, result in stage_results.items():
         status_icon = "PASS" if result.status == StageStatus.COMPLETED else "FAIL"
-        report += f'''### [{status_icon}] {stage_name.replace('_', ' ').title()}
+        report += f"""### [{status_icon}] {stage_name.replace('_', ' ').title()}
 - **Status:** {result.status.value}
 - **Duration:** {result.duration_seconds:.2f} seconds
 - **Artifacts:** {len(result.artifacts)}
 
-'''
+"""
 
     sample_features = feature_cols[:5] if len(feature_cols) >= 5 else feature_cols
 
-    report += f'''---
+    report += f"""---
 
 ## Next Steps: Phase 2
 
@@ -148,14 +149,12 @@ sample_weights = train_df['sample_weight_h5'].values
 ---
 
 *Phase 1 Complete - Ready for Phase 2*
-'''
+"""
     return report
 
 
 def run_generate_report(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest',
-    stage_results: dict[str, StageResult]
+    config: "PipelineConfig", manifest: "ArtifactManifest", stage_results: dict[str, StageResult]
 ) -> StageResult:
     """
     Stage 9: Generate Completion Report.
@@ -188,28 +187,50 @@ def run_generate_report(
             split_config = json.load(f)
 
         excluded_prefixes = (
-            'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-            'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-            'fwd_return_log_', 'time_to_hit_'
+            "label_",
+            "bars_to_hit_",
+            "mae_",
+            "mfe_",
+            "quality_",
+            "sample_weight_",
+            "touch_type_",
+            "pain_to_gain_",
+            "time_weighted_dd_",
+            "fwd_return_",
+            "fwd_return_log_",
+            "time_to_hit_",
         )
         feature_cols = [
-            c for c in combined_df.columns
-            if c not in [
-                'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-                'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+            c
+            for c in combined_df.columns
+            if c
+            not in [
+                "datetime",
+                "symbol",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "timeframe",
+                "session_id",
+                "missing_bar",
+                "roll_event",
+                "roll_window",
+                "filled",
             ]
             and not any(c.startswith(prefix) for prefix in excluded_prefixes)
         ]
 
         label_stats = {}
         for horizon in config.label_horizons:
-            col = f'label_h{horizon}'
+            col = f"label_h{horizon}"
             if col in combined_df.columns:
                 counts = combined_df[col].value_counts().sort_index()
                 label_stats[horizon] = {
-                    'short': int(counts.get(-1, 0)),
-                    'neutral': int(counts.get(0, 0)),
-                    'long': int(counts.get(1, 0))
+                    "short": int(counts.get(-1, 0)),
+                    "neutral": int(counts.get(0, 0)),
+                    "long": int(counts.get(1, 0)),
                 }
 
         report = generate_report_content(
@@ -218,14 +239,12 @@ def run_generate_report(
             split_config=split_config,
             feature_cols=feature_cols,
             label_stats=label_stats,
-            stage_results=stage_results
+            stage_results=stage_results,
         )
 
         # Run-scoped output for reproducibility
-        report_path = (
-            config.run_artifacts_dir / f"PHASE1_COMPLETION_REPORT_{config.run_id}.md"
-        )
-        with open(report_path, 'w') as f:
+        report_path = config.run_artifacts_dir / f"PHASE1_COMPLETION_REPORT_{config.run_id}.md"
+        with open(report_path, "w") as f:
             f.write(report)
 
         logger.info(f"Report saved to: {report_path}")
@@ -234,27 +253,19 @@ def run_generate_report(
             name="completion_report",
             file_path=report_path,
             stage="generate_report",
-            metadata={
-                'total_samples': len(combined_df),
-                'num_features': len(feature_cols)
-            }
+            metadata={"total_samples": len(combined_df), "num_features": len(feature_cols)},
         )
 
         return create_stage_result(
             stage_name="generate_report",
             start_time=start_time,
             artifacts=[report_path],
-            metadata={
-                'total_samples': len(combined_df),
-                'num_features': len(feature_cols)
-            }
+            metadata={"total_samples": len(combined_df), "num_features": len(feature_cols)},
         )
 
     except Exception as e:
         logger.error(f"Report generation failed: {e}")
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="generate_report",
-            start_time=start_time,
-            error=str(e)
+            stage_name="generate_report", start_time=start_time, error=str(e)
         )

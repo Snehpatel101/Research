@@ -13,6 +13,7 @@ Usage:
     builder = VolumeBarBuilder(volume_threshold=100_000)
     bars = builder.build(df)
 """
+
 from __future__ import annotations
 
 import logging
@@ -131,9 +132,7 @@ class VolumeBarBuilder(BaseBarBuilder):
             result["symbol"] = symbol
 
         # Log statistics
-        metadata = self._compute_metadata(
-            df, result, bars_per_output, self.volume_threshold
-        )
+        metadata = self._compute_metadata(df, result, bars_per_output, self.volume_threshold)
         logger.debug(
             f"VolumeBarBuilder: {metadata.n_input_bars} -> {metadata.n_output_bars} bars "
             f"(compression: {metadata.compression_ratio:.1f}x)"

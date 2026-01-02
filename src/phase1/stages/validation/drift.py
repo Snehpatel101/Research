@@ -40,7 +40,7 @@ def check_feature_drift(
     feature_cols: list[str],
     bins: int = 10,
     psi_threshold: float = 0.2,
-    max_features: int = 200
+    max_features: int = 200,
 ) -> dict:
     """
     Compute drift metrics between train and a comparison split.
@@ -65,8 +65,7 @@ def check_feature_drift(
         "feature_count": len(feature_cols[:max_features]),
         "drifted_feature_count": len(drifted_sorted),
         "drifted_features": [
-            {"feature": name, "psi": value}
-            for name, value in drifted_sorted[:20]
+            {"feature": name, "psi": value} for name, value in drifted_sorted[:20]
         ],
         "psi_by_feature": metrics,
     }

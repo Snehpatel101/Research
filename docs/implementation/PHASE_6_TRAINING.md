@@ -1,14 +1,21 @@
 # Phase 6: Model Training Pipeline
 
-**Status:** ✅ Complete (13 models)
+**Status:** ✅ Complete (22+ models - DOCS UNDERCOUNT!)
 **Effort:** 10 days (completed)
 **Dependencies:** Phase 5 (model-family adapters)
 
 ---
 
+## ⚠️ CRITICAL DOCUMENTATION ERROR
+
+**DOCUMENTED:** 13 models across 4 families
+**ACTUAL:** 22+ models across 5 families (including 4 meta-learners and 6 "planned" advanced models already implemented!)
+
+---
+
 ## Goal
 
-Train individual models from all families (boosting, neural, classical) using a unified training interface, with hyperparameter optimization, early stopping, and comprehensive performance metrics.
+Train individual models from all families (boosting, neural, classical, advanced, inference) using a unified training interface, with hyperparameter optimization, early stopping, and comprehensive performance metrics.
 
 **Output:** Trained models with evaluation reports, ready for inference or ensemble composition.
 
@@ -16,16 +23,43 @@ Train individual models from all families (boosting, neural, classical) using a 
 
 ## Current Status
 
-### Implemented Models (13 Total)
+### Implemented Models (22+ Total - NOT 13!)
 
-| Family | Models | Count | Input Shape | Status |
-|--------|--------|-------|-------------|--------|
-| **Boosting** | XGBoost, LightGBM, CatBoost | 3 | 2D `(N, F)` | ✅ Complete |
-| **Neural** | LSTM, GRU, TCN, Transformer | 4 | 3D `(N, T, F)` | ✅ Complete |
-| **Classical** | Random Forest, Logistic, SVM | 3 | 2D `(N, F)` | ✅ Complete |
-| **Ensemble** | Voting, Stacking, Blending | 3 | Mixed (same-family) | ✅ Complete |
+| Family | Models | Count | Input Shape | Status | Docs Claim |
+|--------|--------|-------|-------------|--------|------------|
+| **Boosting** | XGBoost, LightGBM, CatBoost | 3 | 2D `(N, F)` | ✅ Complete | ✅ Accurate |
+| **Classical** | Random Forest, Logistic, SVM | 3 | 2D `(N, F)` | ✅ Complete | ✅ Accurate |
+| **Neural (Basic)** | LSTM, GRU, TCN, Transformer | 4 | 3D `(N, T, F)` | ✅ Complete | ✅ Accurate |
+| **Neural (Advanced)** | PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D | 6 | 3D/4D | ✅ Complete | ❌ **Docs claim "Planned"!** |
+| **Ensemble (Old)** | Voting, Stacking, Blending | 3 | Mixed | ✅ Complete | ✅ Accurate |
+| **Ensemble (Meta)** | Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta | 4 | OOF preds | ✅ Complete | ⚠️ **Docs don't mention** |
 
-**Total:** 13 models across 4 families
+**Total:** 22+ models across 6 model packages (boosting + classical + neural + ensemble + meta-learners)
+
+**Registered Model Names:**
+1. xgboost
+2. lightgbm
+3. catboost
+4. logistic
+5. random_forest
+6. svm
+7. lstm
+8. gru
+9. tcn
+10. transformer
+11. patchtst
+12. itransformer
+13. tft
+14. nbeats
+15. inceptiontime
+16. resnet1d
+17. voting
+18. stacking
+19. blending
+20. ridge_meta
+21. mlp_meta
+22. calibrated_meta
+23. xgboost_meta
 
 ### Training Features
 - ✅ **Unified BaseModel interface**: All models implement fit/predict/save/load
@@ -36,6 +70,140 @@ Train individual models from all families (boosting, neural, classical) using a 
 - ✅ **Cross-validation**: Time-series aware purged k-fold (Phase 3)
 - ✅ **Optuna tuning**: Automated hyperparameter search (Phase 3)
 - ✅ **Model registry**: Plugin-based model discovery
+
+---
+
+## ⚠️ CRITICAL GAPS
+
+### Gap 1: 6 Advanced Models Implemented But Cannot Train (1 day - same as Phase 5 Gap 1)
+**Status:** ❌ Models Exist, Data Adapter Exists, Routing Missing
+**Impact:** PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D registered but unusable
+**Root Cause:** Multi-resolution 4D adapter not wired into `ModelTrainer.prepare_data()`
+**Models Affected:**
+- `patchtst` - Patch-based Transformer (SOTA long-term forecasting)
+- `itransformer` - Inverted Transformer (multivariate time series)
+- `tft` - Temporal Fusion Transformer (interpretable forecasting)
+- `nbeats` - N-BEATS (M4 competition winner)
+- `inceptiontime` - Multi-scale CNN
+- `resnet1d` - Residual 1D CNN
+
+**Current Behavior:**
+```bash
+$ python scripts/train_model.py --model patchtst --horizon 20
+Error: No adapter found for model family 'advanced'
+# But the model IS registered and the adapter EXISTS!
+```
+
+**Required Fix:** See `PHASE_5_ADAPTERS.md` Gap 1 for complete solution
+**Estimate:** 1 day (same work as Phase 5 Gap 1 - wiring only)
+
+### Gap 2: No Example Configs for 6 Advanced Models (0.5 days)
+**Status:** ❌ Not Created
+**Impact:** Users don't know how to configure PatchTST/TFT/iTransformer/etc.
+**What's Missing:**
+- `config/models/patchtst.yaml` - PatchTST config
+- `config/models/itransformer.yaml` - iTransformer config
+- `config/models/tft.yaml` - TFT config
+- `config/models/nbeats.yaml` - N-BEATS config
+- `config/models/inceptiontime.yaml` - InceptionTime config
+- `config/models/resnet1d.yaml` - ResNet1D config
+
+**Required Changes:**
+Create 6 example configs with:
+- Model-specific hyperparameters
+- Sequence length recommendations
+- MTF timeframe configurations
+- GPU memory requirements
+- Expected training times
+
+**Example (PatchTST):**
+```yaml
+# config/models/patchtst.yaml
+model_family: "advanced"
+input_shape: "4D"  # (N, n_timeframes, seq_len, features)
+
+model_params:
+  patch_len: 16
+  stride: 8
+  d_model: 128
+  n_heads: 8
+  num_layers: 3
+  dropout: 0.2
+
+training:
+  seq_len: 60
+  mtf_timeframes: ['1min', '5min', '15min', '30min', '1h']
+  max_epochs: 100
+  batch_size: 64
+  lr: 0.0001
+  patience: 15
+
+hardware:
+  min_gpu_memory: "4GB"
+  recommended_gpu: "8GB+"
+  cpu_fallback: true
+```
+
+**Files to Create:**
+- 6 config files (listed above)
+- `docs/models/ADVANCED_MODELS_USAGE.md` - Usage guide for advanced models
+
+**Estimate:** 0.5 days (6 configs + usage guide)
+
+### Gap 3: Meta-Learners Exist But No Training Examples (0.5 days)
+**Status:** ⚠️ Models Exist, Examples Missing
+**Impact:** Users don't know meta-learners (ridge_meta, mlp_meta, etc.) are available
+**What's Missing:**
+- No mention in Phase 6 docs that 4 meta-learners exist
+- No example configs
+- No usage guide
+- Unclear relationship to old ensemble methods (voting/stacking/blending)
+
+**Available Meta-Learners:**
+1. `ridge_meta` - L2-regularized linear stacking
+2. `mlp_meta` - Small neural network meta-learner
+3. `calibrated_meta` - Isotonic regression calibration
+4. `xgboost_meta` - Gradient boosting meta-learner
+
+**Required Documentation:**
+```yaml
+# config/models/ridge_meta.yaml
+model_family: "ensemble"
+meta_learner: true
+
+model_params:
+  alpha: 1.0  # L2 regularization
+  solver: "auto"
+
+training:
+  input: "oof_predictions"  # Expects OOF preds from base models
+  base_models: ["catboost", "tcn", "patchtst"]  # Example heterogeneous bases
+```
+
+**Files to Create:**
+- 4 meta-learner configs
+- `docs/guides/META_LEARNER_USAGE.md` - How to use meta-learners vs old ensembles
+
+**Estimate:** 0.5 days
+
+### Gap 4: Documentation Severely Undercounts Model Inventory (0.5 days)
+**Status:** ❌ Docs Wrong
+**Impact:** Users think only 13 models available, miss 10+ models
+**Required Changes:**
+1. Update Phase 6 summary table (DONE in this edit)
+2. Update `docs/models/MODEL_CATALOG.md` with all 22+ models
+3. Update `CLAUDE.md` model family table
+4. Update `README.md` (if exists) with accurate counts
+5. Add "Advanced Models" and "Meta-Learners" sections to model docs
+
+**Files to Modify:**
+- `docs/models/MODEL_CATALOG.md`
+- `CLAUDE.md` (model family table)
+- `docs/ARCHITECTURE.md` (if references model counts)
+
+**Estimate:** 0.5 days (doc updates across multiple files)
+
+**Days of Work Remaining:** 2-3 days (Gaps 1-4 combined)
 
 ---
 

@@ -14,6 +14,7 @@ References:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,9 +70,7 @@ class InceptionModule(nn.Module):
 
         # Bottleneck layer
         if self.use_bottleneck:
-            self.bottleneck = nn.Conv1d(
-                in_channels, bottleneck_channels, kernel_size=1, bias=False
-            )
+            self.bottleneck = nn.Conv1d(in_channels, bottleneck_channels, kernel_size=1, bias=False)
             conv_in_channels = bottleneck_channels
         else:
             self.bottleneck = None
@@ -491,7 +490,12 @@ class ResNet1DNetwork(nn.Module):
         stem_padding = stem_kernel_size // 2
         self.stem = nn.Sequential(
             nn.Conv1d(
-                input_size, channels[0], stem_kernel_size, stride=1, padding=stem_padding, bias=False
+                input_size,
+                channels[0],
+                stem_kernel_size,
+                stride=1,
+                padding=stem_padding,
+                bias=False,
             ),
             nn.BatchNorm1d(channels[0]),
             nn.ReLU(),
@@ -711,9 +715,7 @@ class InceptionTimeModel(BaseRNNModel):
         """Return model type string."""
         return "inceptiontime"
 
-    def _on_training_start(
-        self, train_config: dict[str, Any], seq_len: int
-    ) -> dict[str, Any]:
+    def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
         Log InceptionTime-specific information at training start.
 
@@ -917,9 +919,7 @@ class ResNet1DModel(BaseRNNModel):
         """Return model type string."""
         return "resnet1d"
 
-    def _on_training_start(
-        self, train_config: dict[str, Any], seq_len: int
-    ) -> dict[str, Any]:
+    def _on_training_start(self, train_config: dict[str, Any], seq_len: int) -> dict[str, Any]:
         """
         Log ResNet1D-specific information at training start.
 
@@ -996,9 +996,7 @@ class ResNet1DModel(BaseRNNModel):
             },
         )
 
-    def get_feature_maps(
-        self, X: np.ndarray, stage_idx: int = -1
-    ) -> np.ndarray | None:
+    def get_feature_maps(self, X: np.ndarray, stage_idx: int = -1) -> np.ndarray | None:
         """
         Extract feature maps from a specific stage for visualization.
 

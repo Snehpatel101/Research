@@ -21,8 +21,8 @@ from .run_commands_info import models_command
 from .run_commands_pipeline import rerun_command, run_command
 
 __all__ = [
-    'run_command',
-    'rerun_command',
-    'models_command',
-    '_create_config_from_args',
+    "run_command",
+    "rerun_command",
+    "models_command",
+    "_create_config_from_args",
 ]

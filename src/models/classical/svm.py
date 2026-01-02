@@ -4,6 +4,7 @@ SVM Model - Support Vector Machine for 3-class prediction.
 CPU-only implementation using scikit-learn. Provides probability
 estimates via Platt scaling and sample weight support.
 """
+
 from __future__ import annotations
 
 import logging
@@ -272,16 +273,12 @@ class SVMModel(BaseModel):
 
         # Only linear kernel has interpretable coefficients
         if self._model.kernel != "linear":
-            logger.debug(
-                f"Feature importance not available for {self._model.kernel} kernel"
-            )
+            logger.debug(f"Feature importance not available for {self._model.kernel} kernel")
             return None
 
         # For linear kernel, average absolute coefficients across classes
         coefs = np.abs(self._model.coef_).mean(axis=0)
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(coefs))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(coefs))]
 
         return dict(zip(feature_names, coefs.tolist(), strict=False))
 

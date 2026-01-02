@@ -23,6 +23,7 @@ Example:
     >>> results = trainer.run(container)
     >>> print(results["evaluation_metrics"]["val_f1"])
 """
+
 from __future__ import annotations
 
 import json
@@ -123,6 +124,7 @@ class Trainer:
         # Override n_features if explicitly set to 0 (use family default)
         if self.config.feature_selection_n_features == 0:
             from .feature_selection.config import ModelFamilyDefaults
+
             defaults = ModelFamilyDefaults.get_defaults(self.model.model_family)
             fs_config.n_features = defaults.get("n_features", 50)
 
@@ -130,10 +132,7 @@ class Trainer:
 
     def _is_feature_selection_enabled(self) -> bool:
         """Check if feature selection is enabled for this trainer."""
-        return (
-            self.feature_selector is not None
-            and self.feature_selector.is_enabled
-        )
+        return self.feature_selector is not None and self.feature_selector.is_enabled
 
     def _generate_run_id(self) -> str:
         """
@@ -145,6 +144,7 @@ class Trainer:
         Milliseconds + random suffix ensure uniqueness even for parallel runs.
         """
         import secrets
+
         # Include milliseconds (%f) for sub-second precision
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         # Add 4-character random suffix for collision prevention
@@ -264,7 +264,7 @@ class Trainer:
         )
 
         # Set feature names on model (for interpretability)
-        if hasattr(self.model, 'set_feature_names') and not self.model.requires_sequences:
+        if hasattr(self.model, "set_feature_names") and not self.model.requires_sequences:
             if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
                 self.model.set_feature_names(self.feature_selector.selected_features)
             else:
@@ -333,8 +333,11 @@ class Trainer:
         # Save artifacts
         if not skip_save:
             self._save_artifacts(
-                training_metrics, eval_metrics, val_predictions,
-                test_metrics=test_metrics, test_predictions=test_predictions
+                training_metrics,
+                eval_metrics,
+                val_predictions,
+                test_metrics=test_metrics,
+                test_predictions=test_predictions,
             )
             self._save_model()
             self._save_feature_selection()
@@ -424,9 +427,7 @@ class Trainer:
             "You are evaluating on the TEST SET. This is your final, "
             "one-shot generalization estimate."
         )
-        logger.warning(
-            "DO NOT iterate on these results. If you do, you're overfitting to test."
-        )
+        logger.warning("DO NOT iterate on these results. If you do, you're overfitting to test.")
         logger.warning(
             "Iterate on VALIDATION metrics during development, "
             "then evaluate test ONCE when ready."
@@ -449,8 +450,7 @@ class Trainer:
             if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
                 X_test_df = self.feature_selector.apply_selection_df(X_test_df)
                 logger.debug(
-                    f"Applied feature selection to test set: "
-                    f"{X_test_df.shape[1]} features"
+                    f"Applied feature selection to test set: " f"{X_test_df.shape[1]} features"
                 )
 
             X_test = X_test_df.values

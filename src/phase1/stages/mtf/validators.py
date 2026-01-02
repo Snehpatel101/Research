@@ -21,7 +21,7 @@ def validate_ohlcv_dataframe(df: pd.DataFrame) -> None:
     ValueError
         If required columns are missing or datetime is not present
     """
-    if 'datetime' not in df.columns:
+    if "datetime" not in df.columns:
         raise ValueError("DataFrame must have 'datetime' column")
 
     missing_cols = [col for col in REQUIRED_OHLCV_COLS if col not in df.columns]
@@ -45,10 +45,7 @@ def validate_timeframe_format(tf: str) -> None:
     """
     if tf not in MTF_TIMEFRAMES:
         valid_formats = list(MTF_TIMEFRAMES.keys())
-        raise ValueError(
-            f"Unknown timeframe format: {tf}. "
-            f"Supported formats: {valid_formats}"
-        )
+        raise ValueError(f"Unknown timeframe format: {tf}. " f"Supported formats: {valid_formats}")
 
 
 def validate_mtf_timeframes(base_tf: str, mtf_timeframes: list) -> None:

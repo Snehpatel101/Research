@@ -325,7 +325,8 @@ Examples:
         help="Show detailed info about a specific model",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose logging",
     )
@@ -587,8 +588,10 @@ def main() -> int:
 
         # Split into train/val (80/20 on the stacking data)
         from sklearn.model_selection import train_test_split
+
         X_train, X_val, y_train, y_val = train_test_split(
-            X_stacking, y_stacking,
+            X_stacking,
+            y_stacking,
             test_size=0.2,
             random_state=42,
             stratify=y_stacking,
@@ -621,6 +624,7 @@ def main() -> int:
             # Evaluate
             val_predictions = trainer.model.predict(X_val)
             from src.models.trainer import compute_classification_metrics
+
             eval_metrics = compute_classification_metrics(
                 y_true=y_val,
                 y_pred=val_predictions.class_predictions,

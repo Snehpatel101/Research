@@ -36,6 +36,7 @@ Example:
     model = ModelRegistry.create("inceptiontime", config={"n_blocks": 6})
     model = ModelRegistry.create("resnet1d", config={"channels": (64, 128, 256, 512)})
 """
+
 from .base_rnn import BaseRNNModel, RNNNetwork
 from .cnn import (
     InceptionBlock,

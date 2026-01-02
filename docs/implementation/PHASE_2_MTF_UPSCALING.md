@@ -32,6 +32,124 @@ Enable flexible primary timeframe selection (5min, 10min, 15min, 1h, etc.) for t
 
 ---
 
+## ⚠️ CRITICAL GAPS
+
+### Gap 1: 9-Timeframe Infrastructure Exists But Only 5 TFs Used by Default (1-2 days)
+**Status:** ⏳ Partial Implementation
+**Impact:** Users cannot easily access all 9 timeframes without manual config changes
+**What's Actually There:**
+- ✅ All 9 TFs defined in `src/phase1/stages/mtf/constants.py` (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- ✅ Infrastructure supports all 9 timeframes
+- ❌ `DEFAULT_MTF_TIMEFRAMES` hardcoded to only 5: `["15min", "30min", "1h", "4h", "daily"]`
+- ❌ No config option to easily enable all 9 TFs
+
+**Required Changes:**
+1. Update `config/pipeline.yaml` to include toggle for 9-TF mode
+2. Add validation that warns users about default vs full ladder
+3. Update `MTFFeatureGenerator` to use config-driven timeframe selection
+4. Document performance implications (5 TFs vs 9 TFs)
+
+**Files to Modify:**
+- `src/phase1/stages/mtf/constants.py` - Add `FULL_MTF_LADDER` constant
+- `src/phase1/stages/mtf/generator.py` - Support config-driven TF selection
+- `config/pipeline.yaml` - Add `use_full_mtf_ladder: bool` option
+- `docs/guides/MTF_CONFIGURATION.md` - Document 5-TF vs 9-TF tradeoffs
+
+**Blockers:** None (infrastructure exists)
+**Estimate:** 1-2 days (config wiring + validation + docs)
+
+### Gap 2: No Per-Model MTF Strategy Selection (2-3 days)
+**Status:** ❌ Not Implemented
+**Impact:** Cannot train CatBoost with MTF indicators while TCN uses single-TF in same experiment
+**What's Missing:**
+- No per-model MTF strategy configuration
+- Cannot mix Strategy 1 (single-TF) + Strategy 2 (MTF indicators) + Strategy 3 (MTF ingestion) in one experiment
+- Each model must use same MTF strategy globally
+
+**Required Changes:**
+1. Extend `TrainerConfig` to include `mtf_strategy` per model
+2. Modify model router to load different feature sets based on strategy
+3. Add validation that model family supports chosen strategy
+4. Update training scripts to accept per-model MTF config
+
+**Example Config (Target):**
+```yaml
+models:
+  catboost:
+    mtf_strategy: "mtf_indicators"  # Use MTF features
+    primary_tf: "15min"
+  tcn:
+    mtf_strategy: "single_tf"  # No MTF, just 5min
+    primary_tf: "5min"
+  patchtst:
+    mtf_strategy: "mtf_ingestion"  # Multi-stream OHLCV
+    primary_tf: "1min"
+```
+
+**Files to Create:**
+- `src/models/config/mtf_strategy.py` - MTF strategy enum and validator
+- `src/phase1/stages/datasets/loaders.py` - Strategy-specific data loaders
+
+**Files to Modify:**
+- `src/models/trainer.py` - Route to strategy-specific adapters
+- `src/models/config/trainer_config.py` - Add `mtf_strategy` field
+
+**Blockers:** None
+**Estimate:** 2-3 days (config system + routing + validation + tests)
+
+### Gap 3: MTF Ingestion (Strategy 3) Not Wired to Multi-Res Adapter (1 day)
+**Status:** ⚠️ Adapter Exists, Not Connected
+**Impact:** Advanced models (PatchTST, iTransformer, TFT) cannot train on multi-stream OHLCV
+**Surprise Finding:** Multi-resolution 4D adapter IS implemented (`src/phase1/stages/datasets/adapters/multi_resolution.py`, 619 lines)
+**What's Missing:**
+- Adapter not registered in model trainer routing logic
+- No integration tests for 4D adapter
+- Not documented in Phase 5 or Phase 6 docs
+- No example configs showing how to use it
+
+**Required Changes:**
+1. Wire `MultiResolution4DAdapter` into `ModelTrainer.prepare_data()`
+2. Add family="advanced" routing logic
+3. Create example config for PatchTST using 4D adapter
+4. Add integration tests
+
+**Files to Modify:**
+- `src/models/trainer.py` - Add routing for family="advanced"
+- `docs/implementation/PHASE_5_ADAPTERS.md` - Update status to ✅ Complete
+- `config/models/patchtst.yaml` - Example config using 4D adapter
+
+**Files to Create:**
+- `tests/phase1/test_multi_resolution_adapter.py` - Integration tests
+
+**Blockers:** None (adapter fully implemented, just needs wiring)
+**Estimate:** 1 day (routing + tests + docs)
+
+### Gap 4: Configurable Primary Timeframe Per Model (1-2 days)
+**Status:** ❌ Hardcoded to 5min
+**Impact:** Cannot train CatBoost on 15min while TCN trains on 5min
+**What's Missing:**
+- Primary timeframe selection hardcoded in pipeline
+- No per-model timeframe configuration
+- All models must train on same primary TF
+
+**Required Changes:**
+1. Add `primary_timeframe` to per-model config
+2. Modify data pipeline to resample canonical 1-min to requested primary TF
+3. Ensure proper alignment and feature derivation per TF
+4. Update feature engineering to work on any primary TF
+
+**Files to Modify:**
+- `src/phase1/stages/clean/data_cleaner.py` - Parameterize resampling TF
+- `src/phase1/stages/features/feature_engineer.py` - TF-agnostic features
+- `src/models/config/trainer_config.py` - Add `primary_timeframe` field
+
+**Blockers:** Requires Gap 2 (per-model config) to be useful
+**Estimate:** 1-2 days (pipeline changes + validation)
+
+**Days of Work Remaining:** 5-8 days (Gaps 1-4 combined)
+
+---
+
 ## Configurable Primary Timeframe
 
 ### Primary Timeframe Selection (Not Yet Configurable)

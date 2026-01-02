@@ -9,6 +9,7 @@ Example:
     RSI-14 on 5-min bars = 70 min lookback
     When using 15-min bars, we scale to RSI-5 to maintain ~70 min lookback
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,18 +20,18 @@ BASE_TIMEFRAME_MINUTES = 5
 
 # Timeframe string to minutes mapping
 TIMEFRAME_MINUTES: dict[str, int] = {
-    '1min': 1,
-    '5min': 5,
-    '10min': 10,
-    '15min': 15,
-    '20min': 20,
-    '30min': 30,
-    '45min': 45,
-    '60min': 60,
-    '1h': 60,
-    '2h': 120,
-    '4h': 240,
-    '1d': 1440,
+    "1min": 1,
+    "5min": 5,
+    "10min": 10,
+    "15min": 15,
+    "20min": 20,
+    "30min": 30,
+    "45min": 45,
+    "60min": 60,
+    "1h": 60,
+    "2h": 120,
+    "4h": 240,
+    "1d": 1440,
 }
 
 
@@ -55,11 +56,8 @@ def get_timeframe_minutes(timeframe: str) -> int:
     """
     minutes = TIMEFRAME_MINUTES.get(timeframe)
     if minutes is None:
-        valid_tfs = ', '.join(sorted(TIMEFRAME_MINUTES.keys()))
-        raise ValueError(
-            f"Unknown timeframe: '{timeframe}'. "
-            f"Valid timeframes: {valid_tfs}"
-        )
+        valid_tfs = ", ".join(sorted(TIMEFRAME_MINUTES.keys()))
+        raise ValueError(f"Unknown timeframe: '{timeframe}'. " f"Valid timeframes: {valid_tfs}")
     return minutes
 
 
@@ -117,11 +115,7 @@ def scale_period(period: int, source_tf: str, target_tf: str) -> int:
     return result
 
 
-def get_scaled_periods(
-    periods: list[int],
-    target_tf: str,
-    base_tf: str = '5min'
-) -> list[int]:
+def get_scaled_periods(periods: list[int], target_tf: str, base_tf: str = "5min") -> list[int]:
     """
     Scale a list of periods to target timeframe.
 
@@ -143,9 +137,7 @@ def get_scaled_periods(
 
 
 def get_unique_scaled_periods(
-    periods: list[int],
-    target_tf: str,
-    base_tf: str = '5min'
+    periods: list[int], target_tf: str, base_tf: str = "5min"
 ) -> list[int]:
     """
     Scale periods and remove duplicates, preserving order.
@@ -179,43 +171,37 @@ def get_unique_scaled_periods(
 # These represent the "standard" indicator periods used in technical analysis
 DEFAULT_BASE_PERIODS: dict[str, list[int]] = {
     # Moving averages
-    'sma': [10, 20, 50, 100, 200],
-    'ema': [9, 12, 21, 26, 50],
-
+    "sma": [10, 20, 50, 100, 200],
+    "ema": [9, 12, 21, 26, 50],
     # Momentum
-    'rsi': [14],
-    'stochastic_k': [14],
-    'stochastic_d': [3],
-    'macd_fast': [12],
-    'macd_slow': [26],
-    'macd_signal': [9],
-    'williams_r': [14],
-    'roc': [5, 10, 20],
-    'cci': [20],
-    'mfi': [14],
-
+    "rsi": [14],
+    "stochastic_k": [14],
+    "stochastic_d": [3],
+    "macd_fast": [12],
+    "macd_slow": [26],
+    "macd_signal": [9],
+    "williams_r": [14],
+    "roc": [5, 10, 20],
+    "cci": [20],
+    "mfi": [14],
     # Volatility
-    'atr': [7, 14, 21],
-    'bollinger': [20],
-    'keltner': [20],
-    'hvol': [10, 20, 60],
-    'parkinson': [20],
-    'garman_klass': [20],
-
+    "atr": [7, 14, 21],
+    "bollinger": [20],
+    "keltner": [20],
+    "hvol": [10, 20, 60],
+    "parkinson": [20],
+    "garman_klass": [20],
     # Trend
-    'adx': [14],
-    'supertrend_period': [10],
-
+    "adx": [14],
+    "supertrend_period": [10],
     # Volume
-    'volume_sma': [20],
-    'obv_sma': [20],
+    "volume_sma": [20],
+    "obv_sma": [20],
 }
 
 
 def create_period_config(
-    target_tf: str,
-    base_tf: str = '5min',
-    base_periods: dict[str, list[int]] | None = None
+    target_tf: str, base_tf: str = "5min", base_periods: dict[str, list[int]] | None = None
 ) -> dict[str, list[int]]:
     """
     Create scaled period configuration for all indicators.
@@ -299,7 +285,7 @@ class PeriodScaler:
     [3, 7, 17, 33, 67]
     """
 
-    def __init__(self, target_tf: str, base_tf: str = '5min'):
+    def __init__(self, target_tf: str, base_tf: str = "5min"):
         self.target_tf = target_tf
         self.base_tf = base_tf
         self._config = create_period_config(target_tf, base_tf)
@@ -308,8 +294,7 @@ class PeriodScaler:
         """Get scaled periods for an indicator."""
         if indicator not in self._config:
             raise KeyError(
-                f"Unknown indicator: '{indicator}'. "
-                f"Available: {list(self._config.keys())}"
+                f"Unknown indicator: '{indicator}'. " f"Available: {list(self._config.keys())}"
             )
         return self._config[indicator]
 
@@ -337,13 +322,13 @@ class PeriodScaler:
 
 
 __all__ = [
-    'scale_period',
-    'get_scaled_periods',
-    'get_unique_scaled_periods',
-    'create_period_config',
-    'get_timeframe_minutes',
-    'PeriodScaler',
-    'DEFAULT_BASE_PERIODS',
-    'TIMEFRAME_MINUTES',
-    'BASE_TIMEFRAME_MINUTES',
+    "scale_period",
+    "get_scaled_periods",
+    "get_unique_scaled_periods",
+    "create_period_config",
+    "get_timeframe_minutes",
+    "PeriodScaler",
+    "DEFAULT_BASE_PERIODS",
+    "TIMEFRAME_MINUTES",
+    "BASE_TIMEFRAME_MINUTES",
 ]

@@ -40,11 +40,11 @@ logger.addHandler(logging.NullHandler())
 
 # Re-export for backward compatibility
 __all__ = [
-    'DataIngestor',
-    'SecurityError',
-    'STANDARD_COLS',
-    'COLUMN_MAPPINGS',
-    'TIMEZONE_MAP',
+    "DataIngestor",
+    "SecurityError",
+    "STANDARD_COLS",
+    "COLUMN_MAPPINGS",
+    "TIMEZONE_MAP",
 ]
 
 
@@ -80,8 +80,8 @@ class DataIngestor:
         self,
         raw_data_dir: str | Path,
         output_dir: str | Path,
-        source_timezone: str = 'UTC',
-        symbol_col: str | None = 'symbol'
+        source_timezone: str = "UTC",
+        symbol_col: str | None = "symbol",
     ):
         """
         Initialize data ingestor.
@@ -118,11 +118,7 @@ class DataIngestor:
             allowed_dirs = [self.raw_data_dir, self.output_dir]
         return validate_path(file_path, allowed_dirs)
 
-    def load_data(
-        self,
-        file_path: str | Path,
-        file_format: str | None = None
-    ) -> pd.DataFrame:
+    def load_data(self, file_path: str | Path, file_format: str | None = None) -> pd.DataFrame:
         """
         Load data from CSV or Parquet file.
 
@@ -143,11 +139,7 @@ class DataIngestor:
         return standardize_columns(df, self.COLUMN_MAPPINGS, copy)
 
     def validate_ohlcv_relationships(
-        self,
-        df: pd.DataFrame,
-        auto_fix: bool = True,
-        dry_run: bool = False,
-        copy: bool = True
+        self, df: pd.DataFrame, auto_fix: bool = True, dry_run: bool = False, copy: bool = True
     ) -> tuple[pd.DataFrame, dict]:
         """Validate OHLC relationships (high >= low, etc.)."""
         return validate_ohlcv_relationships(df, auto_fix, dry_run, copy)
@@ -161,10 +153,7 @@ class DataIngestor:
         return validate_data_types(df, copy)
 
     def ingest_file(
-        self,
-        file_path: str | Path,
-        symbol: str | None = None,
-        validate: bool = True
+        self, file_path: str | Path, symbol: str | None = None, validate: bool = True
     ) -> tuple[pd.DataFrame, dict]:
         """
         Complete ingestion pipeline for a single file.
@@ -190,15 +179,15 @@ class DataIngestor:
         logger.info(f"{'='*60}\n")
 
         metadata = {
-            'symbol': symbol,
-            'source_file': str(file_path),
-            'ingestion_timestamp': datetime.now().isoformat(),
-            'source_timezone': self.source_timezone
+            "symbol": symbol,
+            "source_file": str(file_path),
+            "ingestion_timestamp": datetime.now().isoformat(),
+            "source_timezone": self.source_timezone,
         }
 
         # Load data
         df = self.load_data(file_path)
-        metadata['raw_rows'] = len(df)
+        metadata["raw_rows"] = len(df)
 
         # Create a single copy at the start to avoid 4x memory overhead
         # All subsequent operations use copy=False for in-place modifications
@@ -209,39 +198,41 @@ class DataIngestor:
 
         # Validate data types (in-place)
         df = self.validate_data_types(df, copy=False)
-        metadata['rows_after_type_validation'] = len(df)
+        metadata["rows_after_type_validation"] = len(df)
 
         # Handle timezone (in-place)
         df = self.handle_timezone(df, copy=False)
 
         # Sort by datetime
-        df = df.sort_values('datetime').reset_index(drop=True)
+        df = df.sort_values("datetime").reset_index(drop=True)
 
         # Validate OHLCV relationships (in-place)
         if validate:
             df, validation_report = self.validate_ohlcv_relationships(df, copy=False)
-            metadata['validation'] = validation_report
+            metadata["validation"] = validation_report
 
         # Add symbol column if not present
         if self.symbol_col and self.symbol_col not in df.columns:
             df[self.symbol_col] = symbol
 
         # Select and order columns
-        output_cols = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+        output_cols = ["datetime", "open", "high", "low", "close", "volume"]
         if self.symbol_col and self.symbol_col in df.columns:
             output_cols.append(self.symbol_col)
         df = df[output_cols]
 
-        metadata['final_rows'] = len(df)
-        metadata['date_range'] = {
-            'start': df['datetime'].min().isoformat(),
-            'end': df['datetime'].max().isoformat()
+        metadata["final_rows"] = len(df)
+        metadata["date_range"] = {
+            "start": df["datetime"].min().isoformat(),
+            "end": df["datetime"].max().isoformat(),
         }
-        metadata['columns'] = df.columns.tolist()
+        metadata["columns"] = df.columns.tolist()
 
         logger.info(f"\nIngestion complete for {symbol}")
         logger.info(f"Final shape: {df.shape}")
-        logger.info(f"Date range: {metadata['date_range']['start']} to {metadata['date_range']['end']}")
+        logger.info(
+            f"Date range: {metadata['date_range']['start']} to {metadata['date_range']['end']}"
+        )
 
         return df, metadata
 
@@ -261,23 +252,16 @@ class DataIngestor:
 
         if symbol is None:
             # Extract from filename (e.g., "MES_1m.parquet" -> "MES")
-            symbol = file_path.stem.split('_')[0].upper()
+            symbol = file_path.stem.split("_")[0].upper()
 
         return symbol
 
-    def save_parquet(
-        self,
-        df: pd.DataFrame,
-        symbol: str,
-        metadata: dict | None = None
-    ) -> Path:
+    def save_parquet(self, df: pd.DataFrame, symbol: str, metadata: dict | None = None) -> Path:
         """Save DataFrame to Parquet format."""
         return save_parquet(df, symbol, self.output_dir, metadata)
 
     def ingest_directory(
-        self,
-        pattern: str = "*.parquet",
-        validate: bool = True
+        self, pattern: str = "*.parquet", validate: bool = True
     ) -> dict[str, dict]:
         """
         Ingest all files matching pattern in raw data directory.
@@ -305,16 +289,14 @@ class DataIngestor:
         for file_path in files:
             try:
                 df, metadata = self.ingest_file(file_path, validate=validate)
-                symbol = metadata['symbol']
+                symbol = metadata["symbol"]
                 self.save_parquet(df, symbol, metadata)
                 results[symbol] = metadata
 
             except Exception as e:
-                errors.append({
-                    'file': str(file_path.name),
-                    'error': str(e),
-                    'type': type(e).__name__
-                })
+                errors.append(
+                    {"file": str(file_path.name), "error": str(e), "type": type(e).__name__}
+                )
                 logger.error(f"Error processing {file_path.name}: {e}", exc_info=True)
 
         if errors:

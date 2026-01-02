@@ -20,12 +20,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-def calculate_atr(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    period: int
-) -> np.ndarray:
+def calculate_atr(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int) -> np.ndarray:
     """
     Calculate Average True Range.
 
@@ -53,7 +48,7 @@ def calculate_atr(
 
     # Calculate ATR using EMA-style smoothing
     if period < n:
-        atr[period] = np.mean(tr[1:period + 1])
+        atr[period] = np.mean(tr[1 : period + 1])
 
         for i in range(period + 1, n):
             atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
@@ -93,7 +88,7 @@ class VolatilityRegimeDetector(RegimeDetector):
         lookback: int = 100,
         low_percentile: float = 25.0,
         high_percentile: float = 75.0,
-        atr_column: str | None = None
+        atr_column: str | None = None,
     ):
         """
         Initialize volatility regime detector.
@@ -137,7 +132,7 @@ class VolatilityRegimeDetector(RegimeDetector):
         If atr_column is specified and present, we'll use it; otherwise compute.
         """
         # Always require OHLC for fallback calculation
-        return ['high', 'low', 'close']
+        return ["high", "low", "close"]
 
     def detect(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -160,14 +155,9 @@ class VolatilityRegimeDetector(RegimeDetector):
             logger.debug(f"Using pre-computed ATR from column '{self.atr_column}'")
         else:
             if self.atr_column:
-                logger.debug(
-                    f"ATR column '{self.atr_column}' not found, computing from OHLC"
-                )
+                logger.debug(f"ATR column '{self.atr_column}' not found, computing from OHLC")
             atr = calculate_atr(
-                df['high'].values,
-                df['low'].values,
-                df['close'].values,
-                self.atr_period
+                df["high"].values, df["low"].values, df["close"].values, self.atr_period
             )
 
         # Calculate rolling percentiles
@@ -180,11 +170,7 @@ class VolatilityRegimeDetector(RegimeDetector):
         )
 
         # Classify regime
-        regimes = pd.Series(
-            VolatilityRegimeLabel.NORMAL.value,
-            index=df.index,
-            dtype='object'
-        )
+        regimes = pd.Series(VolatilityRegimeLabel.NORMAL.value, index=df.index, dtype="object")
 
         regimes[atr_series < low_threshold] = VolatilityRegimeLabel.LOW.value
         regimes[atr_series > high_threshold] = VolatilityRegimeLabel.HIGH.value
@@ -198,10 +184,7 @@ class VolatilityRegimeDetector(RegimeDetector):
 
         return regimes
 
-    def detect_with_thresholds(
-        self,
-        df: pd.DataFrame
-    ) -> tuple[pd.Series, pd.Series, pd.Series]:
+    def detect_with_thresholds(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
         """
         Detect regime and return threshold values for debugging.
 
@@ -218,10 +201,7 @@ class VolatilityRegimeDetector(RegimeDetector):
             atr = df[self.atr_column].values
         else:
             atr = calculate_atr(
-                df['high'].values,
-                df['low'].values,
-                df['close'].values,
-                self.atr_period
+                df["high"].values, df["low"].values, df["close"].values, self.atr_period
             )
 
         atr_series = pd.Series(atr, index=df.index)
@@ -238,6 +218,6 @@ class VolatilityRegimeDetector(RegimeDetector):
 
 
 __all__ = [
-    'VolatilityRegimeDetector',
-    'calculate_atr',
+    "VolatilityRegimeDetector",
+    "calculate_atr",
 ]

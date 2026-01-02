@@ -1,6 +1,7 @@
 """
 CLI Status Commands - status, list, validate, compare, and clean commands.
 """
+
 import json
 import shutil
 from datetime import datetime
@@ -21,6 +22,7 @@ def _get_pipeline_config():
     global _pipeline_config
     if _pipeline_config is None:
         from .. import pipeline_config
+
         _pipeline_config = pipeline_config
     return _pipeline_config
 
@@ -30,26 +32,15 @@ def _get_manifest():
     global _manifest
     if _manifest is None:
         from .. import manifest
+
         _manifest = manifest
     return _manifest
 
 
 def status_command(
-    run_id: str = typer.Argument(
-        ...,
-        help="Run ID to check"
-    ),
-    project_root: str | None = typer.Option(
-        None,
-        "--project-root",
-        help="Project root directory"
-    ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show detailed information"
-    )
+    run_id: str = typer.Argument(..., help="Run ID to check"),
+    project_root: str | None = typer.Option(None, "--project-root", help="Project root directory"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed information"),
 ) -> None:
     """
     Check the status of a pipeline run.
@@ -116,8 +107,8 @@ def _display_pipeline_state(run_dir: Path) -> None:
     with open(state_path) as f:
         state = json.load(f)
 
-    completed_stages = set(state.get('completed_stages', []))
-    stage_results = state.get('stage_results', {})
+    completed_stages = set(state.get("completed_stages", []))
+    stage_results = state.get("stage_results", {})
 
     # Create stages table
     stages_table = Table(title="Pipeline Stages", show_header=True)
@@ -128,6 +119,7 @@ def _display_pipeline_state(run_dir: Path) -> None:
 
     try:
         from src.pipeline.stage_registry import get_stage_definitions
+
         stage_defs = get_stage_definitions()
         all_stages = [stage["name"] for stage in stage_defs]
     except Exception:
@@ -137,34 +129,24 @@ def _display_pipeline_state(run_dir: Path) -> None:
     for stage in all_stages:
         if stage in stage_results:
             result = stage_results[stage]
-            status = result['status']
+            status = result["status"]
 
             # Status with emoji
-            if status == 'completed':
+            if status == "completed":
                 status_str = "[green]✓ Completed[/green]"
-            elif status == 'failed':
+            elif status == "failed":
                 status_str = "[red]✗ Failed[/red]"
-            elif status == 'in_progress':
+            elif status == "in_progress":
                 status_str = "[yellow]⋯ In Progress[/yellow]"
             else:
                 status_str = f"[dim]{status}[/dim]"
 
             duration = f"{result.get('duration_seconds', 0):.2f}s"
-            artifacts = str(len(result.get('artifacts', [])))
+            artifacts = str(len(result.get("artifacts", [])))
 
-            stages_table.add_row(
-                stage.replace('_', ' ').title(),
-                status_str,
-                duration,
-                artifacts
-            )
+            stages_table.add_row(stage.replace("_", " ").title(), status_str, duration, artifacts)
         else:
-            stages_table.add_row(
-                stage.replace('_', ' ').title(),
-                "[dim]Pending[/dim]",
-                "-",
-                "-"
-            )
+            stages_table.add_row(stage.replace("_", " ").title(), "[dim]Pending[/dim]", "-", "-")
 
     console.print(stages_table)
     console.print()
@@ -202,14 +184,11 @@ def _display_manifest_info(run_id: str, project_path: Path, manifest_mod, verbos
             artifacts_table.add_column("Exists", style="white")
 
             for name, artifact in manifest.artifacts.items():
-                size_mb = artifact.get('size_bytes', 0) / (1024 * 1024)
-                exists = "✓" if artifact.get('exists', False) else "✗"
+                size_mb = artifact.get("size_bytes", 0) / (1024 * 1024)
+                exists = "✓" if artifact.get("exists", False) else "✗"
 
                 artifacts_table.add_row(
-                    name,
-                    artifact.get('stage', 'unknown'),
-                    f"{size_mb:.2f} MB",
-                    exists
+                    name, artifact.get("stage", "unknown"), f"{size_mb:.2f} MB", exists
                 )
 
             console.print(artifacts_table)
@@ -221,20 +200,10 @@ def _display_manifest_info(run_id: str, project_path: Path, manifest_mod, verbos
 
 def validate_command(
     run_id: str | None = typer.Option(
-        None,
-        "--run-id",
-        help="Run ID to validate (validates new config if not provided)"
+        None, "--run-id", help="Run ID to validate (validates new config if not provided)"
     ),
-    symbols: str = typer.Option(
-        "MES,MGC",
-        "--symbols",
-        help="Comma-separated list of symbols"
-    ),
-    project_root: str | None = typer.Option(
-        None,
-        "--project-root",
-        help="Project root directory"
-    )
+    symbols: str = typer.Option("MES,MGC", "--symbols", help="Comma-separated list of symbols"),
+    project_root: str | None = typer.Option(None, "--project-root", help="Project root directory"),
 ) -> None:
     """
     Validate pipeline configuration and data integrity.
@@ -261,8 +230,7 @@ def validate_command(
     else:
         symbol_list = [s.strip().upper() for s in symbols.split(",")]
         config = pipeline_config.create_default_config(
-            symbols=symbol_list,
-            project_root=project_root_path
+            symbols=symbol_list, project_root=project_root_path
         )
         show_info("Validating new configuration")
 
@@ -311,17 +279,8 @@ def validate_command(
 
 
 def list_runs_command(
-    project_root: str | None = typer.Option(
-        None,
-        "--project-root",
-        help="Project root directory"
-    ),
-    limit: int = typer.Option(
-        10,
-        "--limit",
-        "-n",
-        help="Number of runs to show"
-    )
+    project_root: str | None = typer.Option(None, "--project-root", help="Project root directory"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Number of runs to show"),
 ) -> None:
     """
     List all pipeline runs.
@@ -343,9 +302,7 @@ def list_runs_command(
 
     # Get all run directories
     run_dirs = sorted(
-        [d for d in runs_dir.iterdir() if d.is_dir()],
-        key=lambda x: x.stat().st_mtime,
-        reverse=True
+        [d for d in runs_dir.iterdir() if d.is_dir()], key=lambda x: x.stat().st_mtime, reverse=True
     )[:limit]
 
     if not run_dirs:
@@ -381,10 +338,11 @@ def list_runs_command(
         if state_path.exists():
             with open(state_path) as f:
                 state = json.load(f)
-            completed = len(state.get('completed_stages', []))
+            completed = len(state.get("completed_stages", []))
             # Get total from stage registry
             try:
                 from src.pipeline.stage_registry import get_stage_definitions
+
                 total = len(get_stage_definitions())
             except Exception:
                 total = 12  # Fallback to known count
@@ -405,11 +363,7 @@ def list_runs_command(
 def compare_command(
     run1: str = typer.Argument(..., help="First run ID"),
     run2: str = typer.Argument(..., help="Second run ID"),
-    project_root: str | None = typer.Option(
-        None,
-        "--project-root",
-        help="Project root directory"
-    )
+    project_root: str | None = typer.Option(None, "--project-root", help="Project root directory"),
 ) -> None:
     """
     Compare artifacts between two runs.
@@ -428,26 +382,26 @@ def compare_command(
 
         # Display results
         console.print(f"[bold]Added Artifacts:[/bold] {len(comparison['added'])}")
-        if comparison['added']:
-            for artifact in comparison['added'][:10]:
+        if comparison["added"]:
+            for artifact in comparison["added"][:10]:
                 console.print(f"  + [green]{artifact}[/green]")
-            if len(comparison['added']) > 10:
+            if len(comparison["added"]) > 10:
                 console.print(f"  [dim]... and {len(comparison['added']) - 10} more[/dim]")
         console.print()
 
         console.print(f"[bold]Removed Artifacts:[/bold] {len(comparison['removed'])}")
-        if comparison['removed']:
-            for artifact in comparison['removed'][:10]:
+        if comparison["removed"]:
+            for artifact in comparison["removed"][:10]:
                 console.print(f"  - [red]{artifact}[/red]")
-            if len(comparison['removed']) > 10:
+            if len(comparison["removed"]) > 10:
                 console.print(f"  [dim]... and {len(comparison['removed']) - 10} more[/dim]")
         console.print()
 
         console.print(f"[bold]Modified Artifacts:[/bold] {len(comparison['modified'])}")
-        if comparison['modified']:
-            for artifact in comparison['modified'][:10]:
+        if comparison["modified"]:
+            for artifact in comparison["modified"][:10]:
                 console.print(f"  ~ [yellow]{artifact}[/yellow]")
-            if len(comparison['modified']) > 10:
+            if len(comparison["modified"]) > 10:
                 console.print(f"  [dim]... and {len(comparison['modified']) - 10} more[/dim]")
         console.print()
 
@@ -460,17 +414,8 @@ def compare_command(
 
 def clean_command(
     run_id: str = typer.Argument(..., help="Run ID to clean"),
-    project_root: str | None = typer.Option(
-        None,
-        "--project-root",
-        help="Project root directory"
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-f",
-        help="Skip confirmation"
-    )
+    project_root: str | None = typer.Option(None, "--project-root", help="Project root directory"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ) -> None:
     """
     Delete a pipeline run and all its artifacts.

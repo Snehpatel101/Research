@@ -3,6 +3,7 @@ Stage 4 & 6: Labeling Stages.
 
 Contains both initial triple-barrier labeling and final optimized labeling.
 """
+
 import logging
 from typing import TYPE_CHECKING
 
@@ -15,10 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_initial_labeling(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_initial_labeling(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 4: Initial Triple-Barrier Labeling.
 
@@ -33,15 +31,10 @@ def run_initial_labeling(
     """
     from src.phase1.stages.labeling.run import run_initial_labeling as _run_initial_labeling
 
-    return _run_initial_labeling(
-        config, manifest, create_stage_result, create_failed_result
-    )
+    return _run_initial_labeling(config, manifest, create_stage_result, create_failed_result)
 
 
-def run_final_labels(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_final_labels(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 6: Apply optimized labels with quality scores and sample weights.
 
@@ -56,6 +49,4 @@ def run_final_labels(
     """
     from src.phase1.stages.final_labels.run import run_final_labels as _run_final_labels
 
-    return _run_final_labels(
-        config, manifest, create_stage_result, create_failed_result
-    )
+    return _run_final_labels(config, manifest, create_stage_result, create_failed_result)

@@ -26,7 +26,7 @@ def add_regime_features(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
     use_advanced: bool = False,
-    regime_config: dict | None = None
+    regime_config: dict | None = None,
 ) -> pd.DataFrame:
     """
     Add regime indicators to DataFrame.
@@ -69,10 +69,7 @@ def add_regime_features(
         return _add_basic_regime_features(df, feature_metadata)
 
 
-def _add_basic_regime_features(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str]
-) -> pd.DataFrame:
+def _add_basic_regime_features(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add basic regime features using pre-computed indicators.
 
@@ -93,28 +90,28 @@ def _add_basic_regime_features(
     # we compare them directly but ensure any use of close is also lagged
 
     # Volatility regime (high/low based on historical volatility)
-    if 'hvol_20' in df.columns:
+    if "hvol_20" in df.columns:
         # hvol_20 is already lagged, so median calculation is safe
-        hvol_median = df['hvol_20'].rolling(window=100, min_periods=1).median()
-        df['volatility_regime'] = (df['hvol_20'] > hvol_median).astype(int)
-        feature_metadata['volatility_regime'] = "Volatility regime (1=high, 0=low, lagged)"
+        hvol_median = df["hvol_20"].rolling(window=100, min_periods=1).median()
+        df["volatility_regime"] = (df["hvol_20"] > hvol_median).astype(int)
+        feature_metadata["volatility_regime"] = "Volatility regime (1=high, 0=low, lagged)"
     else:
         logger.debug("hvol_20 not found, skipping basic volatility regime")
 
     # Trend regime based on price vs moving averages
-    if 'sma_50' in df.columns and 'sma_200' in df.columns:
+    if "sma_50" in df.columns and "sma_200" in df.columns:
         # sma_50 and sma_200 are already lagged, use lagged close for comparison
-        close_lagged = df['close'].shift(1)
+        close_lagged = df["close"].shift(1)
 
         # Uptrend: price > SMA50 > SMA200 (all using t-1 data)
-        uptrend = (close_lagged > df['sma_50']) & (df['sma_50'] > df['sma_200'])
+        uptrend = (close_lagged > df["sma_50"]) & (df["sma_50"] > df["sma_200"])
 
         # Downtrend: price < SMA50 < SMA200
-        downtrend = (close_lagged < df['sma_50']) & (df['sma_50'] < df['sma_200'])
+        downtrend = (close_lagged < df["sma_50"]) & (df["sma_50"] < df["sma_200"])
 
         # Trend regime: 1=up, -1=down, 0=sideways
-        df['trend_regime'] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
-        feature_metadata['trend_regime'] = "Trend regime (1=up, -1=down, 0=sideways, lagged)"
+        df["trend_regime"] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
+        feature_metadata["trend_regime"] = "Trend regime (1=up, -1=down, 0=sideways, lagged)"
     else:
         logger.debug("SMA features not found, skipping basic trend regime")
 
@@ -122,9 +119,7 @@ def _add_basic_regime_features(
 
 
 def _add_advanced_regime_features(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    regime_config: dict | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], regime_config: dict | None = None
 ) -> pd.DataFrame:
     """
     Add advanced regime features using the regime detection package.
@@ -163,18 +158,13 @@ def _add_advanced_regime_features(
 
     # Use the convenience function which handles everything
     df = add_regime_features_to_dataframe(
-        df,
-        config=regime_config,
-        feature_metadata=feature_metadata
+        df, config=regime_config, feature_metadata=feature_metadata
     )
 
     return df
 
 
-def add_volatility_regime(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str]
-) -> pd.DataFrame:
+def add_volatility_regime(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add volatility regime indicator only.
 
@@ -195,22 +185,19 @@ def add_volatility_regime(
     """
     logger.info("Adding volatility regime...")
 
-    if 'hvol_20' not in df.columns:
+    if "hvol_20" not in df.columns:
         logger.warning("hvol_20 not found, skipping volatility regime")
         return df
 
     # ANTI-LOOKAHEAD: hvol_20 is already lagged, so median is safe
-    hvol_median = df['hvol_20'].rolling(window=100, min_periods=1).median()
-    df['volatility_regime'] = (df['hvol_20'] > hvol_median).astype(int)
-    feature_metadata['volatility_regime'] = "Volatility regime (1=high, 0=low, lagged)"
+    hvol_median = df["hvol_20"].rolling(window=100, min_periods=1).median()
+    df["volatility_regime"] = (df["hvol_20"] > hvol_median).astype(int)
+    feature_metadata["volatility_regime"] = "Volatility regime (1=high, 0=low, lagged)"
 
     return df
 
 
-def add_trend_regime(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str]
-) -> pd.DataFrame:
+def add_trend_regime(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add trend regime indicator only.
 
@@ -231,30 +218,28 @@ def add_trend_regime(
     """
     logger.info("Adding trend regime...")
 
-    if 'sma_50' not in df.columns or 'sma_200' not in df.columns:
+    if "sma_50" not in df.columns or "sma_200" not in df.columns:
         logger.warning("SMA features not found, skipping trend regime")
         return df
 
     # ANTI-LOOKAHEAD: sma_50 and sma_200 are already lagged, use lagged close
-    close_lagged = df['close'].shift(1)
+    close_lagged = df["close"].shift(1)
 
     # Uptrend: price > SMA50 > SMA200 (all using t-1 data)
-    uptrend = (close_lagged > df['sma_50']) & (df['sma_50'] > df['sma_200'])
+    uptrend = (close_lagged > df["sma_50"]) & (df["sma_50"] > df["sma_200"])
 
     # Downtrend: price < SMA50 < SMA200
-    downtrend = (close_lagged < df['sma_50']) & (df['sma_50'] < df['sma_200'])
+    downtrend = (close_lagged < df["sma_50"]) & (df["sma_50"] < df["sma_200"])
 
     # Trend regime: 1=up, -1=down, 0=sideways
-    df['trend_regime'] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
-    feature_metadata['trend_regime'] = "Trend regime (1=up, -1=down, 0=sideways, lagged)"
+    df["trend_regime"] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
+    feature_metadata["trend_regime"] = "Trend regime (1=up, -1=down, 0=sideways, lagged)"
 
     return df
 
 
 def add_structure_regime(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    lookback: int = 100
+    df: pd.DataFrame, feature_metadata: dict[str, str], lookback: int = 100
 ) -> pd.DataFrame:
     """
     Add market structure regime based on Hurst exponent.
@@ -294,17 +279,16 @@ def add_structure_regime(
     regimes = detector.detect(df)
 
     # ANTI-LOOKAHEAD: Shift by 1 bar to prevent using current bar data
-    df['structure_regime'] = regimes.shift(1)
-    feature_metadata['structure_regime'] = \
+    df["structure_regime"] = regimes.shift(1)
+    feature_metadata["structure_regime"] = (
         "Market structure (mean_reverting/random/trending) based on Hurst (shifted by 1 bar)"
+    )
 
     return df
 
 
 def add_all_regime_features(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    config: dict | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], config: dict | None = None
 ) -> pd.DataFrame:
     """
     Add all available regime features using advanced detection.
@@ -326,18 +310,13 @@ def add_all_regime_features(
     pd.DataFrame
         DataFrame with all regime features added
     """
-    return add_regime_features(
-        df,
-        feature_metadata,
-        use_advanced=True,
-        regime_config=config
-    )
+    return add_regime_features(df, feature_metadata, use_advanced=True, regime_config=config)
 
 
 __all__ = [
-    'add_regime_features',
-    'add_volatility_regime',
-    'add_trend_regime',
-    'add_structure_regime',
-    'add_all_regime_features',
+    "add_regime_features",
+    "add_volatility_regime",
+    "add_trend_regime",
+    "add_structure_regime",
+    "add_all_regime_features",
 ]

@@ -7,6 +7,7 @@ Different model families have different optimal feature selection strategies:
 - Classical models: May benefit from more aggressive feature reduction
 - Sequence models: Typically use all features (handle selection internally)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -89,8 +90,7 @@ class ModelFamilyDefaults:
 
         if family_lower not in mapping:
             raise ValueError(
-                f"Unknown model family '{model_family}'. "
-                f"Valid families: {list(mapping.keys())}"
+                f"Unknown model family '{model_family}'. " f"Valid families: {list(mapping.keys())}"
             )
 
         return mapping[family_lower].copy()
@@ -144,21 +144,15 @@ class FeatureSelectionConfig:
         # Validation
         if self.enabled:
             if self.n_features < 0:
-                raise ValueError(
-                    f"n_features must be >= 0, got {self.n_features}"
-                )
+                raise ValueError(f"n_features must be >= 0, got {self.n_features}")
             if self.method not in ("mda", "mdi", "hybrid"):
-                raise ValueError(
-                    f"method must be 'mda', 'mdi', or 'hybrid', got '{self.method}'"
-                )
+                raise ValueError(f"method must be 'mda', 'mdi', or 'hybrid', got '{self.method}'")
             if not 0 < self.min_feature_frequency <= 1:
                 raise ValueError(
                     f"min_feature_frequency must be in (0, 1], got {self.min_feature_frequency}"
                 )
             if self.n_estimators <= 0:
-                raise ValueError(
-                    f"n_estimators must be > 0, got {self.n_estimators}"
-                )
+                raise ValueError(f"n_estimators must be > 0, got {self.n_estimators}")
 
     def _apply_family_defaults(self) -> None:
         """Apply model family defaults where not explicitly set."""

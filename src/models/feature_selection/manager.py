@@ -5,6 +5,7 @@ Provides a unified interface for running feature selection and applying
 the results to training and inference data. Integrates with the existing
 WalkForwardFeatureSelector while adding persistence and model-family awareness.
 """
+
 from __future__ import annotations
 
 import logging
@@ -217,8 +218,7 @@ class FeatureSelectionManager:
         # Convert y to Series if needed
         y_series = pd.Series(y) if isinstance(y, np.ndarray) else y
         w_series = (
-            pd.Series(sample_weights) if isinstance(sample_weights, np.ndarray)
-            else sample_weights
+            pd.Series(sample_weights) if isinstance(sample_weights, np.ndarray) else sample_weights
         )
 
         # Generate CV splits
@@ -269,10 +269,7 @@ class FeatureSelectionManager:
         importance_scores: dict[str, float] = {}
         if selection_result.importance_history:
             last_importance = selection_result.importance_history[-1].get("importance", {})
-            importance_scores = {
-                f: last_importance.get(f, 0.0)
-                for f in stable_features
-            }
+            importance_scores = {f: last_importance.get(f, 0.0) for f in stable_features}
 
         # Create persisted result
         self._result = PersistedFeatureSelection(
@@ -324,9 +321,7 @@ class FeatureSelectionManager:
             return self._result
 
         if not isinstance(X_train, pd.DataFrame):
-            raise ValueError(
-                "X_train must be a pandas DataFrame with named columns"
-            )
+            raise ValueError("X_train must be a pandas DataFrame with named columns")
 
         self._all_features = list(X_train.columns)
         n_features_original = len(self._all_features)
@@ -355,8 +350,7 @@ class FeatureSelectionManager:
         # Convert y to Series if needed
         y_series = pd.Series(y_train) if isinstance(y_train, np.ndarray) else y_train
         w_series = (
-            pd.Series(sample_weights) if isinstance(sample_weights, np.ndarray)
-            else sample_weights
+            pd.Series(sample_weights) if isinstance(sample_weights, np.ndarray) else sample_weights
         )
 
         # Compute importance
@@ -409,9 +403,7 @@ class FeatureSelectionManager:
             ValueError: If feature names don't match
         """
         if self._result is None:
-            raise RuntimeError(
-                "Feature selection has not been run. Call select_features() first."
-            )
+            raise RuntimeError("Feature selection has not been run. Call select_features() first.")
 
         # Get feature names
         if isinstance(X, pd.DataFrame):
@@ -419,9 +411,7 @@ class FeatureSelectionManager:
             X_values = X.values
         else:
             if feature_names is None:
-                raise ValueError(
-                    "feature_names must be provided when X is a numpy array"
-                )
+                raise ValueError("feature_names must be provided when X is a numpy array")
             all_features = feature_names
             X_values = X
 
@@ -448,9 +438,7 @@ class FeatureSelectionManager:
             DataFrame with selected features only
         """
         if self._result is None:
-            raise RuntimeError(
-                "Feature selection has not been run. Call select_features() first."
-            )
+            raise RuntimeError("Feature selection has not been run. Call select_features() first.")
 
         return X[self._result.selected_features]
 
@@ -462,9 +450,7 @@ class FeatureSelectionManager:
             path: Path to save JSON file
         """
         if self._result is None:
-            raise RuntimeError(
-                "No feature selection result to save. Call select_features() first."
-            )
+            raise RuntimeError("No feature selection result to save. Call select_features() first.")
         self._result.save(path)
         logger.info(f"Saved feature selection to {path}")
 
@@ -480,8 +466,7 @@ class FeatureSelectionManager:
         """
         self._result = PersistedFeatureSelection.load(path)
         logger.info(
-            f"Loaded feature selection from {path}: "
-            f"{self._result.n_features_selected} features"
+            f"Loaded feature selection from {path}: " f"{self._result.n_features_selected} features"
         )
         return self._result
 
@@ -523,10 +508,7 @@ class FeatureSelectionManager:
             "n_features_selected": self._result.n_features_selected,
             "reduction_ratio": self._result.reduction_ratio,
             "selection_method": self._result.selection_method,
-            "top_10_features": [
-                {"name": f, "stability": s}
-                for f, s in sorted_features[:10]
-            ],
+            "top_10_features": [{"name": f, "stability": s} for f, s in sorted_features[:10]],
             "metadata": self._result.metadata,
         }
 

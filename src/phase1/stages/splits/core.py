@@ -1,6 +1,7 @@
 """
 Core splitting logic with purging and embargo.
 """
+
 import logging
 from datetime import datetime
 
@@ -13,11 +14,7 @@ logger.addHandler(logging.NullHandler())
 INVALID_LABEL_SENTINEL = -99
 
 
-def validate_no_overlap(
-    train_idx: np.ndarray,
-    val_idx: np.ndarray,
-    test_idx: np.ndarray
-) -> bool:
+def validate_no_overlap(train_idx: np.ndarray, val_idx: np.ndarray, test_idx: np.ndarray) -> bool:
     """Validate that there is no overlap between splits."""
     train_set = set(train_idx)
     val_set = set(val_idx)
@@ -46,7 +43,7 @@ def validate_per_symbol_distribution(
     train_indices: np.ndarray,
     val_indices: np.ndarray,
     test_indices: np.ndarray,
-    min_symbol_pct: float = 20.0
+    min_symbol_pct: float = 20.0,
 ) -> None:
     """
     Validate that each split has adequate representation from each symbol.
@@ -61,13 +58,9 @@ def validate_per_symbol_distribution(
     Raises:
         ValueError: If any symbol is underrepresented in any split
     """
-    splits = {
-        'train': train_indices,
-        'val': val_indices,
-        'test': test_indices
-    }
+    splits = {"train": train_indices, "val": val_indices, "test": test_indices}
 
-    symbols = df['symbol'].unique()
+    symbols = df["symbol"].unique()
 
     for split_name, indices in splits.items():
         split_df = df.iloc[indices]
@@ -76,7 +69,7 @@ def validate_per_symbol_distribution(
         logger.info(f"\n{split_name.upper()} split symbol distribution:")
 
         for symbol in symbols:
-            symbol_count = (split_df['symbol'] == symbol).sum()
+            symbol_count = (split_df["symbol"] == symbol).sum()
             symbol_pct = symbol_count / split_size * 100
 
             logger.info(f"  {symbol}: {symbol_count:,} ({symbol_pct:.1f}%)")
@@ -93,7 +86,7 @@ def validate_label_distribution(
     train_indices: np.ndarray,
     val_indices: np.ndarray,
     test_indices: np.ndarray,
-    horizons: list[int] = None
+    horizons: list[int] = None,
 ) -> dict:
     """
     Validate label distribution across splits, excluding invalid labels.
@@ -110,18 +103,15 @@ def validate_label_distribution(
     """
     if horizons is None:
         from src.common.horizon_config import ACTIVE_HORIZONS
+
         horizons = ACTIVE_HORIZONS
 
-    splits = {
-        'train': train_indices,
-        'val': val_indices,
-        'test': test_indices
-    }
+    splits = {"train": train_indices, "val": val_indices, "test": test_indices}
 
     distribution = {}
 
     for horizon in horizons:
-        label_col = f'label_h{horizon}'
+        label_col = f"label_h{horizon}"
         if label_col not in df.columns:
             continue
 
@@ -144,17 +134,16 @@ def validate_label_distribution(
             total_valid = len(valid_labels)
 
             distribution[label_col][split_name] = {
-                'counts': counts.to_dict(),
-                'total_valid': int(total_valid),
-                'n_invalid': int(n_invalid),
-                'invalid_pct': float(invalid_pct)
+                "counts": counts.to_dict(),
+                "total_valid": int(total_valid),
+                "n_invalid": int(n_invalid),
+                "invalid_pct": float(invalid_pct),
             }
 
             if total_valid > 0:
-                dist_str = ", ".join([
-                    f"{label}: {count/total_valid*100:.1f}%"
-                    for label, count in counts.items()
-                ])
+                dist_str = ", ".join(
+                    [f"{label}: {count/total_valid*100:.1f}%" for label, count in counts.items()]
+                )
                 invalid_info = f" (excluded {n_invalid} invalid)" if n_invalid > 0 else ""
                 logger.info(f"  {split_name}: {dist_str}{invalid_info}")
             else:
@@ -170,7 +159,7 @@ def create_chronological_splits(
     test_ratio: float = 0.15,
     purge_bars: int = 60,
     embargo_bars: int = 1440,
-    datetime_col: str = 'datetime'
+    datetime_col: str = "datetime",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
     Create chronological train/val/test splits with purging and embargo.
@@ -235,7 +224,9 @@ def create_chronological_splits(
 
     n = len(df)
     logger.info(f"Total samples: {n:,}")
-    logger.info(f"Split ratios - Train: {train_ratio:.1%}, Val: {val_ratio:.1%}, Test: {test_ratio:.1%}")
+    logger.info(
+        f"Split ratios - Train: {train_ratio:.1%}, Val: {val_ratio:.1%}, Test: {test_ratio:.1%}"
+    )
     logger.info(f"Purge bars: {purge_bars}, Embargo bars: {embargo_bars}")
 
     train_end_raw = int(n * train_ratio)
@@ -288,7 +279,9 @@ def create_chronological_splits(
     logger.info(f"  Train: {len(train_indices):,} samples ({len(train_indices)/n:.1%})")
     logger.info(f"  Val:   {len(val_indices):,} samples ({len(val_indices)/n:.1%})")
     logger.info(f"  Test:  {len(test_indices):,} samples ({len(test_indices)/n:.1%})")
-    logger.info(f"  Lost to purge/embargo: {n - len(train_indices) - len(val_indices) - len(test_indices):,} samples")
+    logger.info(
+        f"  Lost to purge/embargo: {n - len(train_indices) - len(val_indices) - len(test_indices):,} samples"
+    )
 
     logger.info("\nDate ranges:")
     logger.info(f"  Train: {train_dates.min()} to {train_dates.max()}")
@@ -299,23 +292,23 @@ def create_chronological_splits(
         raise RuntimeError("Split validation failed: overlapping indices detected")
 
     metadata = {
-        'total_samples': n,
-        'train_samples': int(len(train_indices)),
-        'val_samples': int(len(val_indices)),
-        'test_samples': int(len(test_indices)),
-        'train_ratio': float(train_ratio),
-        'val_ratio': float(val_ratio),
-        'test_ratio': float(test_ratio),
-        'purge_bars': int(purge_bars),
-        'embargo_bars': int(embargo_bars),
-        'train_date_start': str(train_dates.min()),
-        'train_date_end': str(train_dates.max()),
-        'val_date_start': str(val_dates.min()),
-        'val_date_end': str(val_dates.max()),
-        'test_date_start': str(test_dates.min()),
-        'test_date_end': str(test_dates.max()),
-        'created_at': datetime.now().isoformat(),
-        'validation_passed': True
+        "total_samples": n,
+        "train_samples": int(len(train_indices)),
+        "val_samples": int(len(val_indices)),
+        "test_samples": int(len(test_indices)),
+        "train_ratio": float(train_ratio),
+        "val_ratio": float(val_ratio),
+        "test_ratio": float(test_ratio),
+        "purge_bars": int(purge_bars),
+        "embargo_bars": int(embargo_bars),
+        "train_date_start": str(train_dates.min()),
+        "train_date_end": str(train_dates.max()),
+        "val_date_start": str(val_dates.min()),
+        "val_date_end": str(val_dates.max()),
+        "test_date_start": str(test_dates.min()),
+        "test_date_end": str(test_dates.max()),
+        "created_at": datetime.now().isoformat(),
+        "validation_passed": True,
     }
 
     return train_indices, val_indices, test_indices, metadata

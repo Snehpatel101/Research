@@ -4,6 +4,7 @@ Blending Ensemble Model - Two-layer model with holdout set predictions.
 Similar to stacking but uses a holdout validation set instead of
 out-of-fold predictions. Simpler and faster than full stacking.
 """
+
 from __future__ import annotations
 
 import logging
@@ -85,9 +86,7 @@ class BlendingEnsemble(BaseModel):
             return self._check_configured_models_require_sequences(base_model_names)
         return False
 
-    def _check_configured_models_require_sequences(
-        self, model_names: list[str]
-    ) -> bool:
+    def _check_configured_models_require_sequences(self, model_names: list[str]) -> bool:
         """
         Check if any configured base model requires sequences.
 
@@ -225,9 +224,7 @@ class BlendingEnsemble(BaseModel):
         if passthrough:
             meta_features_holdout = np.hstack([X_holdout, holdout_predictions])
 
-        logger.info(
-            f"Training meta-learner on {meta_features_holdout.shape[1]} features"
-        )
+        logger.info(f"Training meta-learner on {meta_features_holdout.shape[1]} features")
 
         self._meta_learner = ModelRegistry.create(
             self._meta_learner_name,
@@ -235,9 +232,7 @@ class BlendingEnsemble(BaseModel):
         )
 
         # Use validation set for meta-learner validation
-        val_predictions = self._generate_predictions(
-            X_val, base_models_initial, use_probabilities
-        )
+        val_predictions = self._generate_predictions(X_val, base_models_initial, use_probabilities)
         meta_features_val = val_predictions
         if passthrough:
             meta_features_val = np.hstack([X_val, val_predictions])
@@ -339,9 +334,7 @@ class BlendingEnsemble(BaseModel):
         passthrough = self._config.get("passthrough", False)
 
         # Generate base model predictions
-        base_predictions = self._generate_predictions(
-            X, self._base_models, use_probabilities
-        )
+        base_predictions = self._generate_predictions(X, self._base_models, use_probabilities)
 
         # Build meta-learner input
         meta_features = base_predictions

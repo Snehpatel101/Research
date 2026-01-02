@@ -6,6 +6,7 @@ Generates technical indicators and derived features from cleaned OHLCV data.
 
 Uses the modular feature engineering implementation from stages.features.
 """
+
 import logging
 import traceback
 from datetime import datetime
@@ -31,9 +32,8 @@ except ImportError:
 
 
 def run_feature_engineering(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> 'StageResult':
+    config: "PipelineConfig", manifest: "ArtifactManifest"
+) -> "StageResult":
     """
     Stage 3: Feature Engineering.
 
@@ -63,12 +63,12 @@ def run_feature_engineering(
 
         # Determine MTF include flags based on config.mtf_mode
         # mtf_mode: 'bars' -> only OHLCV, 'indicators' -> only indicators, 'both' -> both
-        mtf_mode = getattr(config, 'mtf_mode', 'both')
-        mtf_include_ohlcv = mtf_mode in ('bars', 'both')
-        mtf_include_indicators = mtf_mode in ('indicators', 'both')
+        mtf_mode = getattr(config, "mtf_mode", "both")
+        mtf_include_ohlcv = mtf_mode in ("bars", "both")
+        mtf_include_indicators = mtf_mode in ("indicators", "both")
 
         # Use MTF timeframes from PipelineConfig (respects CLI overrides)
-        mtf_timeframes = getattr(config, 'mtf_timeframes', ['15min', '60min'])
+        mtf_timeframes = getattr(config, "mtf_timeframes", ["15min", "60min"])
 
         # Initialize FeatureEngineer from modular implementation
         # MTF settings come from PipelineConfig, not global MTF_CONFIG
@@ -110,15 +110,26 @@ def run_feature_engineering(
 
             # Count feature columns
             ohlcv_cols = {
-                'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-                'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+                "datetime",
+                "symbol",
+                "open",
+                "high",
+                "low",
+                "close",
+                "volume",
+                "timeframe",
+                "session_id",
+                "missing_bar",
+                "roll_event",
+                "roll_window",
+                "filled",
             }
             feature_cols = [c for c in df_features.columns if c not in ohlcv_cols]
 
             feature_metadata[symbol] = {
-                'total_rows': len(df_features),
-                'feature_count': len(feature_cols),
-                'feature_columns': feature_cols[:20]  # First 20 for reference
+                "total_rows": len(df_features),
+                "feature_count": len(feature_cols),
+                "feature_columns": feature_cols[:20],  # First 20 for reference
             }
 
             manifest.add_artifact(
@@ -126,28 +137,24 @@ def run_feature_engineering(
                 file_path=output_file,
                 stage="feature_engineering",
                 metadata={
-                    'symbol': symbol,
-                    'feature_count': len(feature_cols),
-                    'row_count': len(df_features)
-                }
+                    "symbol": symbol,
+                    "feature_count": len(feature_cols),
+                    "row_count": len(df_features),
+                },
             )
 
-            logger.info(
-                f"  {symbol}: {len(df_features):,} rows, {len(feature_cols)} features"
-            )
+            logger.info(f"  {symbol}: {len(df_features):,} rows, {len(feature_cols)} features")
 
         return create_stage_result(
             stage_name="feature_engineering",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={'feature_results': feature_metadata}
+            metadata={"feature_results": feature_metadata},
         )
 
     except Exception as e:
         logger.error(f"Feature engineering failed: {e}")
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="feature_engineering",
-            start_time=start_time,
-            error=str(e)
+            stage_name="feature_engineering", start_time=start_time, error=str(e)
         )

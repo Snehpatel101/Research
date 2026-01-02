@@ -23,7 +23,86 @@ Transform the canonical labeled dataset into model-family-specific formats (2D t
 - ✅ **Automatic adapter selection**: Based on model family registration
 
 ### Not Yet Implemented
-- ❌ **Multi-resolution adapter** (4D): For PatchTST, iTransformer, TFT, N-BEATS (requires Phase 2 Strategy 3)
+- ⚠️ **Multi-resolution adapter wiring**: Adapter exists but not connected to model trainer
+
+---
+
+## ⚠️ CRITICAL GAPS
+
+### Gap 1: Multi-Resolution 4D Adapter Exists But Not Wired (1 day)
+**Status:** ⚠️ SURPRISE - Adapter Implemented, Just Not Connected
+**Impact:** 6 advanced models (PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D) cannot train
+**Shocking Discovery:**
+- ❌ **Documentation claims:** "Multi-resolution adapter NOT implemented"
+- ✅ **Actual reality:** Fully implemented at `src/phase1/stages/datasets/adapters/multi_resolution.py` (619 lines!)
+- ❌ **What's missing:** Not wired into `ModelTrainer.prepare_data()` routing logic
+
+**What Exists:**
+```python
+# Fully implemented 4D adapter
+from src.phase1.stages.datasets.adapters import MultiResolution4DAdapter
+
+adapter = MultiResolution4DAdapter(
+    timeframes=['1min', '5min', '10min', '15min', '20min',
+                '25min', '30min', '45min', '1h'],
+    seq_len=60,
+    stride=1
+)
+
+dataset = adapter.create_dataset(
+    df=train_df,
+    label_column='label_h20',
+    weight_column='sample_weight_h20'
+)
+# Output: X_4d shape (N, 9, 60, n_features_per_tf)
+```
+
+**What's Missing:**
+1. No routing in `src/models/trainer.py` for `model_family="advanced"`
+2. No integration tests for 4D adapter
+3. Phase 5/6 docs incorrectly claim adapter doesn't exist
+4. No example configs for PatchTST/iTransformer/TFT using 4D adapter
+5. No CLI support in `scripts/train_model.py` for 4D models
+
+**Required Changes:**
+```python
+# src/models/trainer.py - Add this routing logic
+def prepare_data(self, model_family, ...):
+    if model_family == "advanced":  # NEW
+        from src.phase1.stages.datasets.adapters import MultiResolution4DAdapter
+        adapter = MultiResolution4DAdapter(
+            timeframes=config.get('mtf_timeframes', DEFAULT_MTF_TIMEFRAMES),
+            seq_len=config.get('seq_len', 60)
+        )
+        return adapter.create_container(train_df, val_df, test_df)
+    elif model_family in ["boosting", "classical"]:
+        # Existing tabular logic
+        ...
+```
+
+**Files to Modify:**
+- `src/models/trainer.py` - Add routing for family="advanced" (15 lines)
+- `src/models/registry.py` - Ensure PatchTST/iTransformer/TFT registered with family="advanced"
+- `scripts/train_model.py` - Add CLI support for --seq-len and --mtf-timeframes
+- `docs/implementation/PHASE_5_ADAPTERS.md` - Correct status to ✅ (THIS FILE!)
+- `docs/implementation/PHASE_6_TRAINING.md` - Document 6 advanced models
+
+**Files to Create:**
+- `tests/phase1/test_multi_resolution_adapter.py` - Integration tests for 4D adapter
+- `config/models/patchtst.yaml` - Example config using 4D adapter
+- `config/models/itransformer.yaml` - Example config
+- `config/models/tft.yaml` - Example config
+
+**Blockers:** None (adapter fully functional, just needs 15-line routing change)
+**Estimate:** 1 day (wiring + tests + example configs + doc corrections)
+
+### Gap 2: Per-Model Feature Selection Not Implemented (See Phase 2 Gap 2)
+**Status:** ❌ Not Implemented
+**Impact:** All models get same features; cannot do per-model feature engineering
+**Details:** See `PHASE_2_MTF_UPSCALING.md` Gap 2 for full spec
+**Estimate:** 2-3 days (part of Phase 2 work)
+
+**Days of Work Remaining:** 1 day (Gap 1 only - Gap 2 is Phase 2 work)
 
 ---
 

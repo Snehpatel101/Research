@@ -1,6 +1,7 @@
 """
 Runtime defaults and helper utilities for Phase 1 configuration.
 """
+
 from __future__ import annotations
 
 import random

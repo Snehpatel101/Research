@@ -33,21 +33,22 @@ TRADING_DAYS_PER_YEAR = 252
 
 # Timeframe to minutes mapping
 TIMEFRAME_MINUTES: dict[str, int] = {
-    '1min': 1,
-    '5min': 5,
-    '10min': 10,
-    '15min': 15,
-    '20min': 20,
-    '30min': 30,
-    '45min': 45,
-    '60min': 60,
-    '1h': 60,
+    "1min": 1,
+    "5min": 5,
+    "10min": 10,
+    "15min": 15,
+    "20min": 20,
+    "30min": 30,
+    "45min": 45,
+    "60min": 60,
+    "1h": 60,
 }
 
 
 # =============================================================================
 # DYNAMIC CALCULATION FUNCTIONS
 # =============================================================================
+
 
 def get_bars_per_day(timeframe: str, extended_hours: bool = False) -> float:
     """
@@ -138,14 +139,12 @@ def get_annualization_factor(timeframe: str, extended_hours: bool = False) -> fl
 
 # Bars per day for common timeframes (regular 6.5-hour session)
 BARS_PER_DAY_MAP: dict[str, float] = {
-    tf: get_bars_per_day(tf, extended_hours=False)
-    for tf in TIMEFRAME_MINUTES.keys()
+    tf: get_bars_per_day(tf, extended_hours=False) for tf in TIMEFRAME_MINUTES.keys()
 }
 
 # Annualization factors for common timeframes (regular session)
 ANNUALIZATION_FACTOR_MAP: dict[str, float] = {
-    tf: get_annualization_factor(tf, extended_hours=False)
-    for tf in TIMEFRAME_MINUTES.keys()
+    tf: get_annualization_factor(tf, extended_hours=False) for tf in TIMEFRAME_MINUTES.keys()
 }
 
 
@@ -161,17 +160,17 @@ ANNUALIZATION_FACTOR = np.sqrt(TRADING_DAYS_PER_YEAR * BARS_PER_DAY)  # ~140.07
 
 __all__ = [
     # Trading time constants
-    'TRADING_HOURS_REGULAR',
-    'TRADING_HOURS_EXTENDED',
-    'TRADING_DAYS_PER_YEAR',
-    'TIMEFRAME_MINUTES',
+    "TRADING_HOURS_REGULAR",
+    "TRADING_HOURS_EXTENDED",
+    "TRADING_DAYS_PER_YEAR",
+    "TIMEFRAME_MINUTES",
     # Dynamic functions
-    'get_bars_per_day',
-    'get_annualization_factor',
+    "get_bars_per_day",
+    "get_annualization_factor",
     # Lookup tables
-    'BARS_PER_DAY_MAP',
-    'ANNUALIZATION_FACTOR_MAP',
+    "BARS_PER_DAY_MAP",
+    "ANNUALIZATION_FACTOR_MAP",
     # Backward compatibility (5min defaults)
-    'BARS_PER_DAY',
-    'ANNUALIZATION_FACTOR',
+    "BARS_PER_DAY",
+    "ANNUALIZATION_FACTOR",
 ]

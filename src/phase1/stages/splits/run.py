@@ -3,6 +3,7 @@ Stage 7: Create Train/Val/Test Splits.
 
 Pipeline wrapper for splits creation.
 """
+
 import json
 import logging
 import traceback
@@ -27,10 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_create_splits(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_create_splits(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 7: Create Train/Val/Test Splits.
 
@@ -63,7 +61,7 @@ def run_create_splits(
             raise RuntimeError("No labeled data found!")
 
         combined_df = pd.concat(dfs, ignore_index=True)
-        combined_df = combined_df.sort_values('datetime').reset_index(drop=True)
+        combined_df = combined_df.sort_values("datetime").reset_index(drop=True)
         logger.info(f"Combined dataset: {len(combined_df):,} rows")
 
         combined_path = config.final_data_dir / "combined_final_labeled.parquet"
@@ -76,15 +74,12 @@ def run_create_splits(
             val_ratio=config.val_ratio,
             test_ratio=config.test_ratio,
             purge_bars=config.purge_bars,
-            embargo_bars=config.embargo_bars
+            embargo_bars=config.embargo_bars,
         )
 
-        validate_per_symbol_distribution(
-            combined_df, train_indices, val_indices, test_indices
-        )
+        validate_per_symbol_distribution(combined_df, train_indices, val_indices, test_indices)
         validate_label_distribution(
-            combined_df, train_indices, val_indices, test_indices,
-            horizons=config.label_horizons
+            combined_df, train_indices, val_indices, test_indices, horizons=config.label_horizons
         )
 
         config.splits_dir.mkdir(parents=True, exist_ok=True)
@@ -92,8 +87,8 @@ def run_create_splits(
         np.save(config.splits_dir / "val_indices.npy", val_indices)
         np.save(config.splits_dir / "test_indices.npy", test_indices)
 
-        metadata['run_id'] = config.run_id
-        with open(config.splits_dir / "split_config.json", 'w') as f:
+        metadata["run_id"] = config.run_id
+        with open(config.splits_dir / "split_config.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
         logger.info(f"Saved splits to {config.splits_dir}")
@@ -103,7 +98,7 @@ def run_create_splits(
             config.splits_dir / "train_indices.npy",
             config.splits_dir / "val_indices.npy",
             config.splits_dir / "test_indices.npy",
-            config.splits_dir / "split_config.json"
+            config.splits_dir / "split_config.json",
         ]
 
         for artifact_path in artifacts:
@@ -111,21 +106,17 @@ def run_create_splits(
                 name=f"splits_{artifact_path.name}",
                 file_path=artifact_path,
                 stage="create_splits",
-                metadata=metadata
+                metadata=metadata,
             )
 
         return create_stage_result(
             stage_name="create_splits",
             start_time=start_time,
             artifacts=artifacts,
-            metadata=metadata
+            metadata=metadata,
         )
 
     except Exception as e:
         logger.error(f"Create splits failed: {e}")
         logger.error(traceback.format_exc())
-        return create_failed_result(
-            stage_name="create_splits",
-            start_time=start_time,
-            error=str(e)
-        )
+        return create_failed_result(stage_name="create_splits", start_time=start_time, error=str(e))

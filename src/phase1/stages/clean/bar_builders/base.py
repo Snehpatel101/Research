@@ -3,6 +3,7 @@ Base classes for alternative bar construction.
 
 Provides the abstract interface that all bar builders must implement.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # BAR BUILDER REGISTRY
 # =============================================================================
+
 
 class BarBuilderRegistry:
     """
@@ -46,10 +48,12 @@ class BarBuilderRegistry:
         Returns:
             Decorator function
         """
+
         def decorator(builder_cls: type[BaseBarBuilder]):
             cls._builders[name.lower()] = builder_cls
             logger.debug(f"Registered bar builder: {name}")
             return builder_cls
+
         return decorator
 
     @classmethod
@@ -69,9 +73,7 @@ class BarBuilderRegistry:
         name_lower = name.lower()
         if name_lower not in cls._builders:
             available = sorted(cls._builders.keys())
-            raise ValueError(
-                f"Unknown bar type: '{name}'. Available: {available}"
-            )
+            raise ValueError(f"Unknown bar type: '{name}'. Available: {available}")
         return cls._builders[name_lower]
 
     @classmethod
@@ -89,9 +91,11 @@ class BarBuilderRegistry:
 # BASE BAR BUILDER
 # =============================================================================
 
+
 @dataclass
 class BarMetadata:
     """Metadata about constructed bars."""
+
     bar_type: str
     threshold: float | None
     n_input_bars: int

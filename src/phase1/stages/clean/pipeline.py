@@ -35,12 +35,12 @@ def clean_symbol_data(
     input_path: Path,
     output_path: Path,
     symbol: str,
-    target_timeframe: str = '5min',
+    target_timeframe: str = "5min",
     include_timeframe_metadata: bool = True,
     max_gap_minutes: int = 30,
     include_session_metadata: bool = True,
     roll_gap_threshold: float = DEFAULT_ROLL_GAP_THRESHOLD,
-    roll_window_bars: int = DEFAULT_ROLL_WINDOW_BARS
+    roll_window_bars: int = DEFAULT_ROLL_WINDOW_BARS,
 ) -> pd.DataFrame:
     """
     Complete cleaning pipeline for a single symbol.
@@ -108,6 +108,7 @@ def clean_symbol_data(
     """
     # Validate target timeframe at the boundary
     from src.phase1.config import validate_timeframe
+
     validate_timeframe(target_timeframe)
 
     logger.info("=" * 60)
@@ -117,7 +118,7 @@ def clean_symbol_data(
 
     # Load data
     logger.info(f"Loading {input_path}")
-    if str(input_path).endswith('.csv'):
+    if str(input_path).endswith(".csv"):
         df = pd.read_csv(input_path)
     else:
         df = pd.read_parquet(input_path)
@@ -125,21 +126,21 @@ def clean_symbol_data(
     logger.info(f"Loaded {len(df):,} rows")
 
     # Ensure datetime column
-    if 'datetime' not in df.columns:
+    if "datetime" not in df.columns:
         # Try common datetime column names
-        for col in ['timestamp', 'date', 'time', 'DateTime', 'Timestamp']:
+        for col in ["timestamp", "date", "time", "DateTime", "Timestamp"]:
             if col in df.columns:
-                df = df.rename(columns={col: 'datetime'})
+                df = df.rename(columns={col: "datetime"})
                 break
 
-    if 'datetime' not in df.columns:
+    if "datetime" not in df.columns:
         raise ValueError(
             "No datetime column found. Expected one of: "
             "'datetime', 'timestamp', 'date', 'time', 'DateTime', 'Timestamp'"
         )
 
-    df['datetime'] = pd.to_datetime(df['datetime'])
-    df = df.sort_values('datetime').reset_index(drop=True)
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    df = df.sort_values("datetime").reset_index(drop=True)
 
     # Step 1: Validate OHLC
     df = validate_ohlc(df)
@@ -160,10 +161,7 @@ def clean_symbol_data(
 
     # Step 6: Add futures/session metadata flags
     df = add_roll_flags(
-        df,
-        price_column='close',
-        pct_threshold=roll_gap_threshold,
-        window_bars=roll_window_bars
+        df, price_column="close", pct_threshold=roll_gap_threshold, window_bars=roll_window_bars
     )
     if include_session_metadata:
         df = add_session_id(df)
@@ -172,7 +170,7 @@ def clean_symbol_data(
     df = validate_ohlc(df)
 
     # Add symbol column
-    df['symbol'] = symbol
+    df["symbol"] = symbol
 
     # Save cleaned data
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -192,7 +190,7 @@ def clean_symbol_data_multi_timeframe(
     max_gap_minutes: int = 30,
     include_session_metadata: bool = True,
     roll_gap_threshold: float = DEFAULT_ROLL_GAP_THRESHOLD,
-    roll_window_bars: int = DEFAULT_ROLL_WINDOW_BARS
+    roll_window_bars: int = DEFAULT_ROLL_WINDOW_BARS,
 ) -> dict[str, pd.DataFrame]:
     """
     Clean and resample data to multiple timeframes at once.
@@ -238,7 +236,7 @@ def clean_symbol_data_multi_timeframe(
     from src.phase1.config import validate_timeframe
 
     if timeframes is None:
-        timeframes = ['5min', '15min', '30min']
+        timeframes = ["5min", "15min", "30min"]
 
     # Validate all timeframes at the boundary
     for tf in timeframes:
@@ -251,7 +249,7 @@ def clean_symbol_data_multi_timeframe(
 
     # Load and clean data once (before resampling)
     logger.info(f"Loading {input_path}")
-    if str(input_path).endswith('.csv'):
+    if str(input_path).endswith(".csv"):
         df = pd.read_csv(input_path)
     else:
         df = pd.read_parquet(input_path)
@@ -259,17 +257,17 @@ def clean_symbol_data_multi_timeframe(
     logger.info(f"Loaded {len(df):,} rows")
 
     # Ensure datetime column
-    if 'datetime' not in df.columns:
-        for col in ['timestamp', 'date', 'time', 'DateTime', 'Timestamp']:
+    if "datetime" not in df.columns:
+        for col in ["timestamp", "date", "time", "DateTime", "Timestamp"]:
             if col in df.columns:
-                df = df.rename(columns={col: 'datetime'})
+                df = df.rename(columns={col: "datetime"})
                 break
 
-    if 'datetime' not in df.columns:
+    if "datetime" not in df.columns:
         raise ValueError("No datetime column found")
 
-    df['datetime'] = pd.to_datetime(df['datetime'])
-    df = df.sort_values('datetime').reset_index(drop=True)
+    df["datetime"] = pd.to_datetime(df["datetime"])
+    df = df.sort_values("datetime").reset_index(drop=True)
 
     # Clean once
     df = validate_ohlc(df)
@@ -280,7 +278,7 @@ def clean_symbol_data_multi_timeframe(
     df = validate_ohlc(df)
 
     # Add symbol
-    df['symbol'] = symbol
+    df["symbol"] = symbol
 
     # Resample to each timeframe
     results = {}
@@ -292,9 +290,9 @@ def clean_symbol_data_multi_timeframe(
         df_resampled = resample_ohlcv(df, tf, include_metadata=include_timeframe_metadata)
         df_resampled = add_roll_flags(
             df_resampled,
-            price_column='close',
+            price_column="close",
             pct_threshold=roll_gap_threshold,
-            window_bars=roll_window_bars
+            window_bars=roll_window_bars,
         )
         if include_session_metadata:
             df_resampled = add_session_id(df_resampled)

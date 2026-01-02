@@ -24,6 +24,7 @@ logger.addHandler(logging.NullHandler())
 # HELPER FUNCTIONS
 # =============================================================================
 
+
 def categorize_feature(feature_name: str) -> FeatureCategory:
     """
     Determine the category of a feature based on its name.
@@ -63,17 +64,19 @@ def should_log_transform(feature_name: str, category: FeatureCategory) -> bool:
     - Features with high positive skewness
     """
     # OBV can be negative (cumulative buying - selling volume), so never log-transform it
-    if 'obv' in feature_name.lower():
+    if "obv" in feature_name.lower():
         return False
 
     if category in [FeatureCategory.PRICE_LEVEL, FeatureCategory.VOLUME]:
         # Check if it's a raw price/volume feature (not a ratio)
-        if not any(x in feature_name.lower() for x in ['ratio', 'pct', 'zscore', 'to_']):
+        if not any(x in feature_name.lower() for x in ["ratio", "pct", "zscore", "to_"]):
             return True
     return False
 
 
-def create_scaler(scaler_type: ScalerType, robust_quantile_range: tuple[float, float] = (25.0, 75.0)) -> RobustScaler | StandardScaler | MinMaxScaler | None:
+def create_scaler(
+    scaler_type: ScalerType, robust_quantile_range: tuple[float, float] = (25.0, 75.0)
+) -> RobustScaler | StandardScaler | MinMaxScaler | None:
     """Create a sklearn scaler instance based on type."""
     if scaler_type == ScalerType.ROBUST:
         return RobustScaler(quantile_range=robust_quantile_range)
@@ -86,10 +89,8 @@ def create_scaler(scaler_type: ScalerType, robust_quantile_range: tuple[float, f
 
 
 def compute_statistics(
-    data: np.ndarray,
-    scaled_data: np.ndarray,
-    feature_name: str
-) -> 'ScalingStatistics':
+    data: np.ndarray, scaled_data: np.ndarray, feature_name: str
+) -> "ScalingStatistics":
     """Compute statistics for a feature before and after scaling."""
     from .core import ScalingStatistics
 
@@ -103,12 +104,19 @@ def compute_statistics(
     if len(clean_data) == 0:
         return ScalingStatistics(
             feature_name=feature_name,
-            train_mean=np.nan, train_std=np.nan,
-            train_min=np.nan, train_max=np.nan,
-            train_median=np.nan, train_q25=np.nan, train_q75=np.nan,
-            scaled_mean=np.nan, scaled_std=np.nan,
-            scaled_min=np.nan, scaled_max=np.nan,
-            nan_count=nan_count, inf_count=inf_count
+            train_mean=np.nan,
+            train_std=np.nan,
+            train_min=np.nan,
+            train_max=np.nan,
+            train_median=np.nan,
+            train_q25=np.nan,
+            train_q75=np.nan,
+            scaled_mean=np.nan,
+            scaled_std=np.nan,
+            scaled_min=np.nan,
+            scaled_max=np.nan,
+            nan_count=nan_count,
+            inf_count=inf_count,
         )
 
     return ScalingStatistics(
@@ -125,5 +133,5 @@ def compute_statistics(
         scaled_min=float(np.min(clean_scaled)) if len(clean_scaled) > 0 else np.nan,
         scaled_max=float(np.max(clean_scaled)) if len(clean_scaled) > 0 else np.nan,
         nan_count=nan_count,
-        inf_count=inf_count
+        inf_count=inf_count,
     )

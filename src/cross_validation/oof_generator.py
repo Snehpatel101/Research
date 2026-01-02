@@ -14,6 +14,7 @@ Why OOF predictions matter:
 This module provides a unified interface that delegates to specialized
 sub-modules for different aspects of OOF generation.
 """
+
 from __future__ import annotations
 
 import logging
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # UNIFIED OOF GENERATOR
 # =============================================================================
+
 
 class OOFGenerator:
     """
@@ -262,6 +264,7 @@ class OOFGenerator:
 # =============================================================================
 # UTILITIES
 # =============================================================================
+
 
 def analyze_prediction_correlation(
     stacking_df: pd.DataFrame,

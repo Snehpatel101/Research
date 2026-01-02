@@ -4,6 +4,7 @@ XGBoost Model - GPU-accelerated gradient boosting for 3-class prediction.
 Supports GPU training (tree_method='hist', device='cuda'), early stopping,
 sample weights, and feature importance extraction.
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,6 +40,7 @@ def _check_cuda_available() -> bool:
         # Check PyTorch CUDA first (fast check)
         try:
             import torch
+
             if not torch.cuda.is_available():
                 logger.debug("PyTorch CUDA not available, skipping XGBoost GPU check")
                 _CUDA_AVAILABLE = False

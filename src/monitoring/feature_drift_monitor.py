@@ -3,6 +3,7 @@ Multi-feature drift monitoring.
 
 Monitors multiple features simultaneously using PSI or KS tests.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # MULTI-FEATURE DRIFT MONITOR
 # =============================================================================
+
 
 class FeatureDriftMonitor:
     """
@@ -74,9 +76,7 @@ class FeatureDriftMonitor:
             X_reference = X_reference.reshape(-1, 1)
 
         n_features = X_reference.shape[1]
-        self._feature_names = feature_names or [
-            f"feature_{i}" for i in range(n_features)
-        ]
+        self._feature_names = feature_names or [f"feature_{i}" for i in range(n_features)]
 
         if len(self._feature_names) != n_features:
             raise ValueError(
@@ -131,9 +131,7 @@ class FeatureDriftMonitor:
 
         n_drifted = sum(1 for r in results if r.drift_detected)
         if n_drifted > 0:
-            logger.warning(
-                f"Drift detected in {n_drifted}/{len(results)} features"
-            )
+            logger.warning(f"Drift detected in {n_drifted}/{len(results)} features")
 
         return results
 

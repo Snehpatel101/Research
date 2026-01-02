@@ -9,6 +9,7 @@ Provides shared training infrastructure:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -618,7 +619,7 @@ class BaseRNNModel(BaseModel):
                 logits = self._model(X_batch)
                 if weights is not None:
                     # Use reduction='none' to get per-sample losses for weighting
-                    criterion_unreduced = nn.CrossEntropyLoss(reduction='none')
+                    criterion_unreduced = nn.CrossEntropyLoss(reduction="none")
                     per_sample_loss = criterion_unreduced(logits, y_batch)
                     loss = (per_sample_loss * weights).mean()
                 else:
@@ -679,9 +680,12 @@ class BaseRNNModel(BaseModel):
             return 0.0, 0.0
         return total_loss / total, correct / total
 
-    def _compute_final_metrics(self, loader: DataLoader, amp_dtype: torch.dtype, y_true: np.ndarray) -> dict[str, float]:
+    def _compute_final_metrics(
+        self, loader: DataLoader, amp_dtype: torch.dtype, y_true: np.ndarray
+    ) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
+
         self._model.eval()
         all_preds = []
         with torch.no_grad():
@@ -691,8 +695,10 @@ class BaseRNNModel(BaseModel):
                     preds = torch.argmax(self._model(X_batch), dim=1)
                 all_preds.append(preds.cpu().numpy())
         y_pred = self._convert_labels_from_class(np.concatenate(all_preds))
-        return {"accuracy": float(accuracy_score(y_true, y_pred)),
-                "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0))}
+        return {
+            "accuracy": float(accuracy_score(y_true, y_pred)),
+            "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        }
 
     def _convert_labels_to_class(self, labels: np.ndarray) -> np.ndarray:
         return map_labels_to_classes(labels)

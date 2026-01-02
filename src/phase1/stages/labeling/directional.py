@@ -38,11 +38,7 @@ class DirectionalLabeler(LabelingStrategy):
         Whether to use log returns instead of simple returns (default: False)
     """
 
-    def __init__(
-        self,
-        threshold: float = 0.0,
-        use_log_returns: bool = False
-    ):
+    def __init__(self, threshold: float = 0.0, use_log_returns: bool = False):
         if threshold < 0:
             raise ValueError(f"threshold must be non-negative, got {threshold}")
 
@@ -57,14 +53,10 @@ class DirectionalLabeler(LabelingStrategy):
     @property
     def required_columns(self) -> list[str]:
         """Return list of required DataFrame columns."""
-        return ['close']
+        return ["close"]
 
     def compute_labels(
-        self,
-        df: pd.DataFrame,
-        horizon: int,
-        threshold: float | None = None,
-        **kwargs: Any
+        self, df: pd.DataFrame, horizon: int, threshold: float | None = None, **kwargs: Any
     ) -> LabelingResult:
         """
         Compute directional labels for the given horizon.
@@ -99,7 +91,7 @@ class DirectionalLabeler(LabelingStrategy):
         logger.info(f"Computing directional labels for horizon {horizon}")
         logger.info(f"  threshold={threshold:.6f}, log_returns={self._use_log_returns}")
 
-        close = df['close'].values
+        close = df["close"].values
         n = len(close)
 
         # Compute forward returns
@@ -123,11 +115,7 @@ class DirectionalLabeler(LabelingStrategy):
 
         # Store returns as metadata
         result = LabelingResult(
-            labels=labels,
-            horizon=horizon,
-            metadata={
-                'forward_return': returns.astype(np.float32)
-            }
+            labels=labels, horizon=horizon, metadata={"forward_return": returns.astype(np.float32)}
         )
 
         # Compute quality metrics
@@ -138,12 +126,7 @@ class DirectionalLabeler(LabelingStrategy):
 
         return result
 
-    def _log_label_statistics(
-        self,
-        result: LabelingResult,
-        horizon: int,
-        threshold: float
-    ) -> None:
+    def _log_label_statistics(self, result: LabelingResult, horizon: int, threshold: float) -> None:
         """Log label distribution statistics."""
         labels = result.labels
         valid_mask = labels != -99
@@ -164,7 +147,7 @@ class DirectionalLabeler(LabelingStrategy):
             logger.info(f"  {label_name:10s}: {count:6d} ({pct:5.1f}%)")
 
         # Log return statistics
-        returns = result.metadata.get('forward_return', np.array([]))
+        returns = result.metadata.get("forward_return", np.array([]))
         if len(returns) > 0:
             valid_returns = returns[valid_mask]
             if len(valid_returns) > 0:
@@ -181,18 +164,18 @@ class DirectionalLabeler(LabelingStrategy):
         metrics = super().get_quality_metrics(result)
 
         # Add return-based metrics
-        returns = result.metadata.get('forward_return', np.array([]))
+        returns = result.metadata.get("forward_return", np.array([]))
         labels = result.labels
         valid_mask = labels != -99
 
         if len(returns) > 0:
             valid_returns = returns[valid_mask]
             if len(valid_returns) > 0:
-                metrics['avg_return'] = float(np.mean(valid_returns))
-                metrics['std_return'] = float(np.std(valid_returns))
-                metrics['skew_return'] = float(
-                    ((valid_returns - np.mean(valid_returns)) ** 3).mean() /
-                    (np.std(valid_returns) ** 3 + 1e-10)
+                metrics["avg_return"] = float(np.mean(valid_returns))
+                metrics["std_return"] = float(np.std(valid_returns))
+                metrics["skew_return"] = float(
+                    ((valid_returns - np.mean(valid_returns)) ** 3).mean()
+                    / (np.std(valid_returns) ** 3 + 1e-10)
                 )
 
                 # Return by label
@@ -200,7 +183,7 @@ class DirectionalLabeler(LabelingStrategy):
                     label_mask = (labels == label_val) & valid_mask
                     label_returns = returns[label_mask]
                     if len(label_returns) > 0:
-                        label_name = {-1: 'down', 0: 'neutral', 1: 'up'}[label_val]
-                        metrics[f'avg_return_{label_name}'] = float(np.mean(label_returns))
+                        label_name = {-1: "down", 0: "neutral", 1: "up"}[label_val]
+                        metrics[f"avg_return_{label_name}"] = float(np.mean(label_returns))
 
         return metrics

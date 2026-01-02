@@ -3,6 +3,7 @@ Drift detection core types and base classes.
 
 Defines common enums, result types, and abstract base detector.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -14,8 +15,10 @@ from typing import Any
 # DRIFT TYPES AND RESULTS
 # =============================================================================
 
+
 class DriftType(Enum):
     """Types of drift that can be detected."""
+
     CONCEPT = "concept"  # Model performance degradation
     COVARIATE = "covariate"  # Input feature distribution shift
     PREDICTION = "prediction"  # Prediction distribution shift
@@ -23,6 +26,7 @@ class DriftType(Enum):
 
 class DriftSeverity(Enum):
     """Severity levels for drift alerts."""
+
     NONE = "none"
     LOW = "low"
     MEDIUM = "medium"
@@ -33,6 +37,7 @@ class DriftSeverity(Enum):
 @dataclass
 class DriftResult:
     """Result from drift detection."""
+
     drift_detected: bool
     drift_type: DriftType
     severity: DriftSeverity
@@ -59,6 +64,7 @@ class DriftResult:
 # =============================================================================
 # BASE DETECTOR
 # =============================================================================
+
 
 class BaseDriftDetector(ABC):
     """Abstract base class for drift detectors."""

@@ -8,6 +8,7 @@ Usage:
     builder = TimeBarBuilder(target_timeframe='5min')
     bars = builder.build(df)
 """
+
 from __future__ import annotations
 
 import logging
@@ -134,8 +135,7 @@ class TimeBarBuilder(BaseBarBuilder):
         n_input = len(df)
         n_output = len(result)
         logger.debug(
-            f"TimeBarBuilder: {n_input} -> {n_output} bars "
-            f"(timeframe: {self.target_timeframe})"
+            f"TimeBarBuilder: {n_input} -> {n_output} bars " f"(timeframe: {self.target_timeframe})"
         )
 
         return result

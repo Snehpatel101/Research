@@ -4,6 +4,7 @@ Convenience utilities for model training and evaluation.
 This module provides high-level functions for training and evaluating models
 without directly instantiating the Trainer class.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -87,9 +88,7 @@ def evaluate_model(
         >>> metrics = evaluate_model(model, container, split="test")
     """
     if model.requires_sequences:
-        dataset = container.get_pytorch_sequences(
-            split, seq_len=60, symbol_isolated=True
-        )
+        dataset = container.get_pytorch_sequences(split, seq_len=60, symbol_isolated=True)
         # Convert to arrays (simplified - in practice use DataLoader)
         X_list, y_list = [], []
         for i in range(len(dataset)):

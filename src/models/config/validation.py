@@ -1,4 +1,5 @@
 """Configuration validation functions."""
+
 from typing import Any
 
 from .exceptions import ConfigValidationError
@@ -72,17 +73,13 @@ def validate_config(config: dict[str, Any], model_name: str) -> list[str]:
             if not isinstance(value, (int, float)):
                 errors.append(f"{field_name} must be numeric, got {type(value).__name__}")
             elif value < min_val or value > max_val:
-                errors.append(
-                    f"{field_name}={value} out of range [{min_val}, {max_val}]"
-                )
+                errors.append(f"{field_name}={value} out of range [{min_val}, {max_val}]")
 
     # Validate device
     if "device" in config:
         valid_devices = {"auto", "cuda", "cpu"}
         if config["device"] not in valid_devices:
-            errors.append(
-                f"Invalid device: {config['device']}. Must be one of: {valid_devices}"
-            )
+            errors.append(f"Invalid device: {config['device']}. Must be one of: {valid_devices}")
 
     return errors
 

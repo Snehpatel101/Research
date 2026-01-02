@@ -74,11 +74,11 @@ class MTFFeatureGenerator:
 
     def __init__(
         self,
-        base_timeframe: str = '5min',
+        base_timeframe: str = "5min",
         mtf_timeframes: list[str] | None = None,
         mode: MTFMode | str = DEFAULT_MTF_MODE,
         include_ohlcv: bool | None = None,
-        include_indicators: bool | None = None
+        include_indicators: bool | None = None,
     ):
         """Initialize MTF feature generator with validation."""
         self.base_timeframe = base_timeframe
@@ -170,28 +170,18 @@ class MTFFeatureGenerator:
         validate_ohlcv_dataframe(df)
 
         df_copy = df.copy()
-        df_copy = df_copy.set_index('datetime')
+        df_copy = df_copy.set_index("datetime")
 
         freq = self._get_pandas_freq(target_tf)
 
-        agg_dict = {
-            'open': 'first',
-            'high': 'max',
-            'low': 'min',
-            'close': 'last',
-            'volume': 'sum'
-        }
+        agg_dict = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
 
         # ANTI-LOOKAHEAD: Use closed='left', label='left' explicitly
         # A bar at 09:30 represents [09:30:00, 09:34:59], timestamp = period start
-        resampled = df_copy.resample(freq, closed='left', label='left').agg(agg_dict).dropna()
+        resampled = df_copy.resample(freq, closed="left", label="left").agg(agg_dict).dropna()
         return resampled.reset_index()
 
-    def generate_mtf_bars(
-        self,
-        df_tf: pd.DataFrame,
-        timeframe: str
-    ) -> pd.DataFrame:
+    def generate_mtf_bars(self, df_tf: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
         Generate MTF OHLCV bar columns for a specific timeframe.
 
@@ -212,15 +202,11 @@ class MTFFeatureGenerator:
 
         # Add OHLCV columns with timeframe suffix
         for col in REQUIRED_OHLCV_COLS:
-            result[f'{col}{tf_suffix}'] = result[col]
+            result[f"{col}{tf_suffix}"] = result[col]
 
         return result
 
-    def compute_mtf_indicators(
-        self,
-        df_tf: pd.DataFrame,
-        timeframe: str
-    ) -> pd.DataFrame:
+    def compute_mtf_indicators(self, df_tf: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
         Compute technical indicators for a specific timeframe.
 
@@ -241,61 +227,56 @@ class MTFFeatureGenerator:
 
         # Moving Averages
         for period in [20, 50]:
-            result[f'sma_{period}{tf_suffix}'] = (
-                result['close'].rolling(period, min_periods=period).mean()
+            result[f"sma_{period}{tf_suffix}"] = (
+                result["close"].rolling(period, min_periods=period).mean()
             )
         for period in [9, 21]:
-            result[f'ema_{period}{tf_suffix}'] = (
-                result['close'].ewm(span=period, min_periods=period, adjust=False).mean()
+            result[f"ema_{period}{tf_suffix}"] = (
+                result["close"].ewm(span=period, min_periods=period, adjust=False).mean()
             )
 
         # RSI
-        delta = result['close'].diff()
+        delta = result["close"].diff()
         gain = delta.where(delta > 0, 0.0)
-        loss = (-delta.where(delta < 0, 0.0))
+        loss = -delta.where(delta < 0, 0.0)
         avg_gain = gain.rolling(14, min_periods=14).mean()
         avg_loss = loss.rolling(14, min_periods=14).mean()
         rs = avg_gain / avg_loss.replace(0, np.inf)
-        result[f'rsi_14{tf_suffix}'] = 100 - (100 / (1 + rs))
+        result[f"rsi_14{tf_suffix}"] = 100 - (100 / (1 + rs))
 
         # ATR
-        high_low = result['high'] - result['low']
-        high_close = (result['high'] - result['close'].shift(1)).abs()
-        low_close = (result['low'] - result['close'].shift(1)).abs()
+        high_low = result["high"] - result["low"]
+        high_close = (result["high"] - result["close"].shift(1)).abs()
+        low_close = (result["low"] - result["close"].shift(1)).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        result[f'atr_14{tf_suffix}'] = tr.rolling(14, min_periods=14).mean()
+        result[f"atr_14{tf_suffix}"] = tr.rolling(14, min_periods=14).mean()
 
         # Bollinger Band Position
         bb_period = 20
-        bb_middle = result['close'].rolling(bb_period, min_periods=bb_period).mean()
-        bb_std = result['close'].rolling(bb_period, min_periods=bb_period).std()
+        bb_middle = result["close"].rolling(bb_period, min_periods=bb_period).mean()
+        bb_std = result["close"].rolling(bb_period, min_periods=bb_period).std()
         bb_upper = bb_middle + 2 * bb_std
         bb_lower = bb_middle - 2 * bb_std
         band_range = bb_upper - bb_lower
         band_range_safe = band_range.replace(0, np.nan)
-        result[f'bb_position{tf_suffix}'] = (
-            (result['close'] - bb_lower) / band_range_safe
-        )
+        result[f"bb_position{tf_suffix}"] = (result["close"] - bb_lower) / band_range_safe
 
         # MACD Histogram
-        ema_12 = result['close'].ewm(span=12, min_periods=12, adjust=False).mean()
-        ema_26 = result['close'].ewm(span=26, min_periods=26, adjust=False).mean()
+        ema_12 = result["close"].ewm(span=12, min_periods=12, adjust=False).mean()
+        ema_26 = result["close"].ewm(span=26, min_periods=26, adjust=False).mean()
         macd_line = ema_12 - ema_26
         signal_line = macd_line.ewm(span=9, min_periods=9, adjust=False).mean()
-        result[f'macd_hist{tf_suffix}'] = macd_line - signal_line
+        result[f"macd_hist{tf_suffix}"] = macd_line - signal_line
 
         # Price to SMA Ratio
-        sma_20 = result[f'sma_20{tf_suffix}']
+        sma_20 = result[f"sma_20{tf_suffix}"]
         sma_20_safe = sma_20.replace(0, np.nan)
-        result[f'close_sma20_ratio{tf_suffix}'] = result['close'] / sma_20_safe
+        result[f"close_sma20_ratio{tf_suffix}"] = result["close"] / sma_20_safe
 
         return result
 
     def align_to_base_tf(
-        self,
-        df_base: pd.DataFrame,
-        df_mtf: pd.DataFrame,
-        mtf_columns: list[str]
+        self, df_base: pd.DataFrame, df_mtf: pd.DataFrame, mtf_columns: list[str]
     ) -> pd.DataFrame:
         """
         Align MTF features to base timeframe using forward-fill.
@@ -319,20 +300,20 @@ class MTFFeatureGenerator:
         pd.DataFrame
             Base timeframe data with MTF features aligned
         """
-        if 'datetime' not in df_base.columns:
+        if "datetime" not in df_base.columns:
             raise ValueError("df_base must have 'datetime' column")
-        if 'datetime' not in df_mtf.columns:
+        if "datetime" not in df_mtf.columns:
             raise ValueError("df_mtf must have 'datetime' column")
 
-        df_base_idx = df_base.set_index('datetime').copy()
-        df_mtf_idx = df_mtf.set_index('datetime')[mtf_columns].copy()
+        df_base_idx = df_base.set_index("datetime").copy()
+        df_mtf_idx = df_mtf.set_index("datetime")[mtf_columns].copy()
 
         # ANTI-LOOKAHEAD: Shift MTF data by 1 period
         # This ensures we use COMPLETED higher TF bars only
         df_mtf_shifted = df_mtf_idx.shift(1)
 
         # Forward-fill to base timeframe
-        aligned = df_mtf_shifted.reindex(df_base_idx.index, method='ffill')
+        aligned = df_mtf_shifted.reindex(df_base_idx.index, method="ffill")
 
         result = df_base_idx.join(aligned)
         return result.reset_index()
@@ -360,10 +341,7 @@ class MTFFeatureGenerator:
             )
 
         result = df.copy()
-        logger.info(
-            f"Generating MTF features for {len(df)} rows "
-            f"(mode={self.mode.value})"
-        )
+        logger.info(f"Generating MTF features for {len(df)} rows " f"(mode={self.mode.value})")
 
         for tf in self.mtf_timeframes:
             logger.info(f"Processing timeframe: {tf}")
@@ -372,9 +350,7 @@ class MTFFeatureGenerator:
             logger.info(f"  Resampled to {len(df_tf)} {tf} bars")
 
             if len(df_tf) < MIN_MTF_BARS:
-                logger.warning(
-                    f"  Insufficient {tf} bars ({len(df_tf)}). Skipping this timeframe."
-                )
+                logger.warning(f"  Insufficient {tf} bars ({len(df_tf)}). Skipping this timeframe.")
                 continue
 
             mtf_columns = []
@@ -383,7 +359,7 @@ class MTFFeatureGenerator:
             # Generate MTF bars if requested
             if self.mode in (MTFMode.BARS, MTFMode.BOTH):
                 df_tf = self.generate_mtf_bars(df_tf, tf)
-                bar_cols = [f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS]
+                bar_cols = [f"{col}{tf_suffix}" for col in REQUIRED_OHLCV_COLS]
                 mtf_columns.extend(bar_cols)
                 logger.info(f"  Added {len(bar_cols)} bar columns")
 
@@ -391,8 +367,7 @@ class MTFFeatureGenerator:
             if self.mode in (MTFMode.INDICATORS, MTFMode.BOTH):
                 df_tf = self.compute_mtf_indicators(df_tf, tf)
                 indicator_cols = [
-                    c for c in df_tf.columns
-                    if c.endswith(tf_suffix) and c not in mtf_columns
+                    c for c in df_tf.columns if c.endswith(tf_suffix) and c not in mtf_columns
                 ]
                 mtf_columns.extend(indicator_cols)
                 logger.info(f"  Added {len(indicator_cols)} indicator columns")
@@ -468,16 +443,22 @@ class MTFFeatureGenerator:
 
             # Add bar columns if mode includes bars
             if self.mode in (MTFMode.BARS, MTFMode.BOTH):
-                cols.extend([f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS])
+                cols.extend([f"{col}{tf_suffix}" for col in REQUIRED_OHLCV_COLS])
 
             # Add indicator columns if mode includes indicators
             if self.mode in (MTFMode.INDICATORS, MTFMode.BOTH):
                 indicator_names = [
-                    'sma_20', 'sma_50', 'ema_9', 'ema_21',
-                    'rsi_14', 'atr_14', 'bb_position', 'macd_hist',
-                    'close_sma20_ratio'
+                    "sma_20",
+                    "sma_50",
+                    "ema_9",
+                    "ema_21",
+                    "rsi_14",
+                    "atr_14",
+                    "bb_position",
+                    "macd_hist",
+                    "close_sma20_ratio",
                 ]
-                cols.extend([f'{name}{tf_suffix}' for name in indicator_names])
+                cols.extend([f"{name}{tf_suffix}" for name in indicator_names])
 
             result[tf] = cols
 
@@ -495,7 +476,7 @@ class MTFFeatureGenerator:
         result = {}
         for tf in self.mtf_timeframes:
             tf_suffix = self._get_tf_suffix(tf)
-            result[tf] = [f'{col}{tf_suffix}' for col in REQUIRED_OHLCV_COLS]
+            result[tf] = [f"{col}{tf_suffix}" for col in REQUIRED_OHLCV_COLS]
         return result
 
     def get_indicator_column_names(self) -> dict[str, list[str]]:
@@ -508,12 +489,18 @@ class MTFFeatureGenerator:
             Mapping from timeframe to list of indicator column names
         """
         indicator_names = [
-            'sma_20', 'sma_50', 'ema_9', 'ema_21',
-            'rsi_14', 'atr_14', 'bb_position', 'macd_hist',
-            'close_sma20_ratio'
+            "sma_20",
+            "sma_50",
+            "ema_9",
+            "ema_21",
+            "rsi_14",
+            "atr_14",
+            "bb_position",
+            "macd_hist",
+            "close_sma20_ratio",
         ]
         result = {}
         for tf in self.mtf_timeframes:
             tf_suffix = self._get_tf_suffix(tf)
-            result[tf] = [f'{name}{tf_suffix}' for name in indicator_names]
+            result[tf] = [f"{name}{tf_suffix}" for name in indicator_names]
         return result

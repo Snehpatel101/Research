@@ -26,7 +26,7 @@ def scale_splits(
     test_df: pd.DataFrame,
     feature_cols: list[str],
     scaler_path: Path | None = None,
-    config: ScalerConfig | None = None
+    config: ScalerConfig | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
     """
     Scale train/val/test splits with train-only fitting.
@@ -75,10 +75,10 @@ def scale_train_val_test(
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
     feature_cols: list[str],
-    scaler_type: str = 'robust',
+    scaler_type: str = "robust",
     save_path: Path | None = None,
     clip_outliers: bool = True,
-    clip_range: tuple[float, float] = (-5.0, 5.0)
+    clip_range: tuple[float, float] = (-5.0, 5.0),
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, FeatureScaler]:
     """
     Scale train/val/test data with a scaler fitted on training data only.
@@ -99,9 +99,7 @@ def scale_train_val_test(
         Tuple of (train_scaled, val_scaled, test_scaled, scaler)
     """
     scaler = FeatureScaler(
-        scaler_type=scaler_type,
-        clip_outliers=clip_outliers,
-        clip_range=clip_range
+        scaler_type=scaler_type, clip_outliers=clip_outliers, clip_range=clip_range
     )
 
     # Fit ONLY on training data

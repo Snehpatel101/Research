@@ -58,23 +58,23 @@ from .triple_barrier import (
 
 __all__ = [
     # Types and base classes
-    'LabelingType',
-    'LabelingStrategy',
-    'LabelingResult',
+    "LabelingType",
+    "LabelingStrategy",
+    "LabelingResult",
     # Strategy implementations
-    'TripleBarrierLabeler',
-    'AdaptiveTripleBarrierLabeler',
-    'DirectionalLabeler',
-    'ThresholdLabeler',
-    'RegressionLabeler',
-    'MetaLabeler',
-    'BetSizeMethod',
+    "TripleBarrierLabeler",
+    "AdaptiveTripleBarrierLabeler",
+    "DirectionalLabeler",
+    "ThresholdLabeler",
+    "RegressionLabeler",
+    "MetaLabeler",
+    "BetSizeMethod",
     # Numba functions (for backward compatibility and direct usage)
-    'triple_barrier_numba',
-    'triple_barrier_numba_with_costs',
+    "triple_barrier_numba",
+    "triple_barrier_numba_with_costs",
     # Factory functions
-    'get_labeler',
-    'get_available_strategies',
-    'register_strategy',
-    'create_multi_labeler',
+    "get_labeler",
+    "get_available_strategies",
+    "register_strategy",
+    "create_multi_labeler",
 ]

@@ -3,6 +3,7 @@ CLI Module - Typer-based command-line interface for pipeline management.
 
 This module provides the main CLI application and aggregates commands from submodules.
 """
+
 import typer
 
 from .preset_commands import presets_command
@@ -18,9 +19,7 @@ from .utils import console, show_error, show_info, show_success, show_warning
 
 # Create main app
 app = typer.Typer(
-    name="pipeline",
-    help="Phase 1 Data Preparation Pipeline CLI",
-    add_completion=False
+    name="pipeline", help="Phase 1 Data Preparation Pipeline CLI", add_completion=False
 )
 
 # Register commands

@@ -22,6 +22,7 @@ Example:
     from src.models import ModelRegistry
     model = ModelRegistry.create("random_forest")
 """
+
 from .logistic import LogisticModel
 from .random_forest import RandomForestModel
 from .svm import SVMModel

@@ -12,6 +12,7 @@ Usage:
     python scripts/fix_label_distribution.py --backup-only  # Just create backup
     python scripts/fix_label_distribution.py --fix          # Run the full fix
 """
+
 import argparse
 import shutil
 import sys
@@ -46,9 +47,7 @@ def backup_current_state(backup_dir: Path) -> None:
         "original_splits_dir": str(splits_dir),
         "backup_location": str(splits_backup),
         "files_backed_up": [
-            str(p.relative_to(backup_dir))
-            for p in backup_dir.rglob("*")
-            if p.is_file()
+            str(p.relative_to(backup_dir)) for p in backup_dir.rglob("*") if p.is_file()
         ],
     }
 
@@ -106,9 +105,7 @@ def validate_fix() -> bool:
 
     try:
         # Load combined data
-        combined_path = Path(
-            "/Users/sneh/research/data/final/combined_final_labeled.parquet"
-        )
+        combined_path = Path("/Users/sneh/research/data/final/combined_final_labeled.parquet")
         df = pd.read_parquet(combined_path)
         print(f"✓ Loaded combined data: {len(df):,} rows")
 
@@ -192,9 +189,7 @@ def validate_fix() -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Fix label distribution mismatch in pipeline data"
-    )
+    parser = argparse.ArgumentParser(description="Fix label distribution mismatch in pipeline data")
     parser.add_argument(
         "--backup-only",
         action="store_true",
@@ -220,8 +215,7 @@ def main():
 
     # Create backup directory
     backup_dir = Path(
-        f"/Users/sneh/research/data/backups/"
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_pre_fix"
+        f"/Users/sneh/research/data/backups/" f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_pre_fix"
     )
 
     if args.validate_only:

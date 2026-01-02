@@ -11,6 +11,7 @@ The key insight for stacking: Meta-learners always receive (n_samples, n_base_mo
 shaped OOF predictions, regardless of whether base models were tabular (2D input) or
 sequence (3D input). This means heterogeneous stacking is mathematically valid.
 """
+
 from __future__ import annotations
 
 import logging
@@ -29,6 +30,7 @@ HOMOGENEOUS_ENSEMBLE_TYPES: set[str] = {"voting", "blending"}
 
 class EnsembleCompatibilityError(ValueError):
     """Raised when incompatible models are combined in an ensemble."""
+
     pass
 
 
@@ -87,8 +89,7 @@ def validate_ensemble_config(
             if model_name.lower() in ("catboost", "cat"):
                 hint = " (CatBoost is optional - install with: pip install catboost)"
             return False, (
-                f"Model '{model_name}' is not registered{hint}. "
-                f"Available models: {available}"
+                f"Model '{model_name}' is not registered{hint}. " f"Available models: {available}"
             )
 
     # Get model info for all base models
@@ -107,14 +108,8 @@ def validate_ensemble_config(
     is_heterogeneous = not all(requires_sequences) and any(requires_sequences)
 
     if is_heterogeneous:
-        tabular_models = [
-            name for name, info in model_infos
-            if not info["requires_sequences"]
-        ]
-        sequence_models = [
-            name for name, info in model_infos
-            if info["requires_sequences"]
-        ]
+        tabular_models = [name for name, info in model_infos if not info["requires_sequences"]]
+        sequence_models = [name for name, info in model_infos if info["requires_sequences"]]
 
         # Stacking allows heterogeneous models
         if ensemble_type in HETEROGENEOUS_ENSEMBLE_TYPES:
@@ -197,10 +192,7 @@ def _build_compatibility_error_message(
         msg.append(f"  - For {ensemble_name}: Use only sequence models: {sequence_models}")
     msg.append(f"  - For mixed models: Use stacking ensemble instead")
 
-    msg.extend([
-        "",
-        "For more information, see docs/phases/PHASE_4.md"
-    ])
+    msg.extend(["", "For more information, see docs/phases/PHASE_4.md"])
 
     return "\n".join(msg)
 
@@ -261,8 +253,7 @@ def get_compatible_models(reference_model: str) -> list[str]:
     if not ModelRegistry.is_registered(reference_model):
         available = ModelRegistry.list_all()
         raise ValueError(
-            f"Reference model '{reference_model}' is not registered. "
-            f"Available: {available}"
+            f"Reference model '{reference_model}' is not registered. " f"Available: {available}"
         )
 
     ref_info = ModelRegistry.get_model_info(reference_model)

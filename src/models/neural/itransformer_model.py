@@ -12,6 +12,7 @@ for Time Series Forecasting" (ICLR 2024)
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -107,7 +108,7 @@ class FeaturePositionalEncoding(nn.Module):
         Returns:
             Position-encoded tokens, shape (batch, n_features, d_model)
         """
-        x = x + self.pe[:, :x.size(1), :]
+        x = x + self.pe[:, : x.size(1), :]
         return self.dropout(x)
 
 
@@ -155,7 +156,9 @@ class iTransformerNetwork(nn.Module):
         self.temporal_embed = TemporalEmbedding(seq_len, d_model, dropout)
 
         # Feature positional encoding
-        self.feature_pos = FeaturePositionalEncoding(d_model, max_features=input_size, dropout=dropout)
+        self.feature_pos = FeaturePositionalEncoding(
+            d_model, max_features=input_size, dropout=dropout
+        )
 
         # Transformer encoder (attention over features)
         encoder_layer = nn.TransformerEncoderLayer(
@@ -323,24 +326,26 @@ class iTransformerModel(BaseRNNModel):
     def get_default_config(self) -> dict[str, Any]:
         """Return default iTransformer hyperparameters."""
         defaults = super().get_default_config()
-        defaults.update({
-            # Architecture
-            "d_model": 256,
-            "n_heads": 8,
-            "n_layers": 2,  # Fewer layers often sufficient
-            "d_ff": 512,
-            "dropout": 0.1,
-            "activation": "gelu",
-            # Training
-            "sequence_length": 60,  # Must be fixed at training
-            "batch_size": 256,
-            "max_epochs": 50,
-            "learning_rate": 0.0001,
-            "weight_decay": 0.01,
-            "gradient_clip": 1.0,
-            "early_stopping_patience": 10,
-            "warmup_epochs": 3,
-        })
+        defaults.update(
+            {
+                # Architecture
+                "d_model": 256,
+                "n_heads": 8,
+                "n_layers": 2,  # Fewer layers often sufficient
+                "d_ff": 512,
+                "dropout": 0.1,
+                "activation": "gelu",
+                # Training
+                "sequence_length": 60,  # Must be fixed at training
+                "batch_size": 256,
+                "max_epochs": 50,
+                "learning_rate": 0.0001,
+                "weight_decay": 0.01,
+                "gradient_clip": 1.0,
+                "early_stopping_patience": 10,
+                "warmup_epochs": 3,
+            }
+        )
         return defaults
 
     def _create_network(self, input_size: int) -> nn.Module:
@@ -455,7 +460,7 @@ class iTransformerModel(BaseRNNModel):
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
-                batch = X_tensor[i:i + batch_size]
+                batch = X_tensor[i : i + batch_size]
 
                 with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                     logits = self._model(batch)
@@ -485,6 +490,7 @@ class iTransformerModel(BaseRNNModel):
         """Save model with sequence length metadata."""
         self._validate_fitted()
         from pathlib import Path
+
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
@@ -504,6 +510,7 @@ class iTransformerModel(BaseRNNModel):
     def load(self, path) -> None:
         """Load model with sequence length metadata."""
         from pathlib import Path
+
         path = Path(path)
         model_path = path / "model.pt"
 
@@ -552,7 +559,7 @@ class iTransformerModel(BaseRNNModel):
         pos_embed = self._model.feature_pos.pe.detach().cpu().numpy()[0]
 
         # Only use embeddings for actual features
-        pos_embed = pos_embed[:self._n_features]
+        pos_embed = pos_embed[: self._n_features]
 
         # L2 norm of each feature's position embedding
         feature_importance = np.linalg.norm(pos_embed, axis=1)
@@ -562,9 +569,7 @@ class iTransformerModel(BaseRNNModel):
 
         return {f"feature_{i}": float(imp) for i, imp in enumerate(feature_importance)}
 
-    def get_feature_attention_matrix(
-        self, X: np.ndarray, sample_idx: int = 0
-    ) -> np.ndarray | None:
+    def get_feature_attention_matrix(self, X: np.ndarray, sample_idx: int = 0) -> np.ndarray | None:
         """
         Extract feature-to-feature attention weights.
 
@@ -585,15 +590,13 @@ class iTransformerModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         if sample_idx >= len(X):
-            logger.warning(
-                f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0"
-            )
+            logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
         self._model.eval()
-        X_tensor = torch.tensor(
-            X[sample_idx:sample_idx + 1], dtype=torch.float32
-        ).to(self._device)
+        X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
+            self._device
+        )
 
         with torch.no_grad():
             attention = self._model.get_feature_attention(X_tensor)

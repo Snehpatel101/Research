@@ -4,6 +4,7 @@ Stage 4: Initial Triple-Barrier Labeling - Pipeline Wrapper.
 This module provides the pipeline integration for initial labeling,
 extracting the orchestration logic from pipeline/stages/labeling.py.
 """
+
 import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -20,11 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def run_initial_labeling(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest',
+    config: "PipelineConfig",
+    manifest: "ArtifactManifest",
     create_stage_result,
-    create_failed_result
-) -> 'StageResult':
+    create_failed_result,
+) -> "StageResult":
     """
     Stage 4: Initial Triple-Barrier Labeling.
 
@@ -47,7 +48,7 @@ def run_initial_labeling(
 
     try:
         # Create labels directory for GA input (run-scoped)
-        labels_dir = config.run_data_dir / 'labels'
+        labels_dir = config.run_data_dir / "labels"
         labels_dir.mkdir(parents=True, exist_ok=True)
 
         artifacts = []
@@ -66,7 +67,7 @@ def run_initial_labeling(
             logger.info(f"  Loaded {len(df):,} rows")
 
             # Check for ATR column
-            atr_col = 'atr_14'
+            atr_col = "atr_14"
             if atr_col not in df.columns:
                 raise ValueError(f"ATR column '{atr_col}' not found in features")
 
@@ -84,19 +85,21 @@ def run_initial_labeling(
                 )
 
                 labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
-                    df['close'].values,
-                    df['high'].values,
-                    df['low'].values,
-                    df['open'].values,
+                    df["close"].values,
+                    df["high"].values,
+                    df["low"].values,
+                    df["open"].values,
                     df[atr_col].values,
-                    k_up, k_down, max_bars
+                    k_up,
+                    k_down,
+                    max_bars,
                 )
 
                 # Add columns
-                df[f'label_h{horizon}'] = labels
-                df[f'bars_to_hit_h{horizon}'] = bars_to_hit
-                df[f'mae_h{horizon}'] = mae
-                df[f'mfe_h{horizon}'] = mfe
+                df[f"label_h{horizon}"] = labels
+                df[f"bars_to_hit_h{horizon}"] = bars_to_hit
+                df[f"mae_h{horizon}"] = mae
+                df[f"mfe_h{horizon}"] = mfe
 
                 # Calculate distribution
                 n_long = (labels == 1).sum()
@@ -105,12 +108,12 @@ def run_initial_labeling(
                 total = len(labels)
 
                 symbol_stats[horizon] = {
-                    'long': int(n_long),
-                    'short': int(n_short),
-                    'neutral': int(n_neutral),
-                    'long_pct': n_long / total * 100,
-                    'short_pct': n_short / total * 100,
-                    'neutral_pct': n_neutral / total * 100
+                    "long": int(n_long),
+                    "short": int(n_short),
+                    "neutral": int(n_neutral),
+                    "long_pct": n_long / total * 100,
+                    "short_pct": n_short / total * 100,
+                    "neutral_pct": n_neutral / total * 100,
                 }
 
                 logger.info(
@@ -129,7 +132,7 @@ def run_initial_labeling(
                 name=f"initial_labels_{symbol}",
                 file_path=output_path,
                 stage="initial_labeling",
-                metadata={'symbol': symbol, 'horizons': config.label_horizons}
+                metadata={"symbol": symbol, "horizons": config.label_horizons},
             )
 
             logger.info(f"  Saved initial labels to {output_path}")
@@ -138,18 +141,14 @@ def run_initial_labeling(
             stage_name="initial_labeling",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={
-                'horizons': config.label_horizons,
-                'label_stats': label_stats
-            }
+            metadata={"horizons": config.label_horizons, "label_stats": label_stats},
         )
 
     except Exception as e:
         logger.error(f"Initial labeling failed: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="initial_labeling",
-            start_time=start_time,
-            error=str(e)
+            stage_name="initial_labeling", start_time=start_time, error=str(e)
         )

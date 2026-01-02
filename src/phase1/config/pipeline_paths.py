@@ -1,4 +1,5 @@
 """Path properties mixin for PipelineConfig."""
+
 import logging
 from pathlib import Path
 

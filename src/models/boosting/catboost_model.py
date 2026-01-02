@@ -8,6 +8,7 @@ handling of categorical features and reduced overfitting.
 Note: This model is only registered if CatBoost is installed.
 Install with: pip install catboost
 """
+
 from __future__ import annotations
 
 import logging
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 # Check if CatBoost is available
 try:
     from catboost import CatBoostClassifier, Pool
+
     CATBOOST_AVAILABLE = True
 except ImportError:
     CATBOOST_AVAILABLE = False
@@ -44,6 +46,7 @@ def _check_cuda_available() -> bool:
     try:
         # Check if CUDA is available via torch (more reliable)
         import torch
+
         if not torch.cuda.is_available():
             return False
         # CatBoost has excellent GPU support when CUDA is available
@@ -60,9 +63,7 @@ class CatBoostModel(BaseModel):
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         if not CATBOOST_AVAILABLE:
-            raise ImportError(
-                "CatBoost is not installed. Install with: pip install catboost"
-            )
+            raise ImportError("CatBoost is not installed. Install with: pip install catboost")
         super().__init__(config)
         self._model: CatBoostClassifier | None = None
         self._feature_names: list[str] | None = None
@@ -285,9 +286,7 @@ class CatBoostModel(BaseModel):
             return None
 
         importance = self._model.get_feature_importance()
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(importance))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(importance))]
 
         return dict(zip(feature_names, importance.tolist(), strict=False))
 

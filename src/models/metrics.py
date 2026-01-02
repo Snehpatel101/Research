@@ -4,6 +4,7 @@ Training and evaluation metrics for model training.
 This module provides classification and trading-specific metrics
 for evaluating model performance.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -44,9 +45,7 @@ def compute_classification_metrics(
 
     # Per-class F1
     classes = sorted(np.unique(np.concatenate([y_true, y_pred])))
-    per_class_f1 = f1_score(
-        y_true, y_pred, average=None, labels=classes, zero_division=0
-    )
+    per_class_f1 = f1_score(y_true, y_pred, average=None, labels=classes, zero_division=0)
 
     # Confusion matrix
     cm = confusion_matrix(y_true, y_pred, labels=classes)
@@ -140,12 +139,9 @@ def compute_trading_metrics(
     # This is a proxy - real Sharpe requires actual returns
     if position_mask.sum() > 0:
         # Assume correct prediction = +1 return, incorrect = -1 return
-        position_returns = np.where(
-            y_pred[position_mask] == y_true[position_mask], 1.0, -1.0
-        )
+        position_returns = np.where(y_pred[position_mask] == y_true[position_mask], 1.0, -1.0)
         position_sharpe = (
-            position_returns.mean() / position_returns.std()
-            if position_returns.std() > 0 else 0.0
+            position_returns.mean() / position_returns.std() if position_returns.std() > 0 else 0.0
         )
     else:
         position_sharpe = 0.0
@@ -157,20 +153,16 @@ def compute_trading_metrics(
         "neutral_signals": int(neutral_signals),
         "total_positions": int(total_positions),
         "position_rate": float(total_positions / len(y_pred)) if len(y_pred) > 0 else 0.0,
-
         # Accuracy metrics
         "position_win_rate": float(position_win_rate),
         "long_accuracy": float(long_accuracy),
         "short_accuracy": float(short_accuracy),
         "directional_edge": float(abs(long_accuracy - short_accuracy)),  # Measures directional bias
-
         # Streak metrics
         "max_consecutive_wins": int(max_consecutive_wins),
         "max_consecutive_losses": int(max_consecutive_losses),
-
         # Risk metrics (simplified)
         "position_sharpe": float(position_sharpe),
-
         # Metadata
         "note": "Simplified metrics for quick comparison. Use Phase 3+ for full backtest.",
     }

@@ -27,6 +27,7 @@ logger.addHandler(logging.NullHandler())
 @dataclass
 class FeatureSelectionResult:
     """Container for feature selection results."""
+
     selected_features: list[str]
     removed_features: dict[str, str]  # feature -> reason
     original_count: int
@@ -37,13 +38,17 @@ class FeatureSelectionResult:
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
-            'selected_features': self.selected_features,
-            'removed_features': self.removed_features,
-            'original_count': self.original_count,
-            'final_count': self.final_count,
-            'reduction_pct': round((1 - self.final_count / self.original_count) * 100, 1) if self.original_count > 0 else 0,
-            'correlation_groups': self.correlation_groups,
-            'low_variance_features': self.low_variance_features
+            "selected_features": self.selected_features,
+            "removed_features": self.removed_features,
+            "original_count": self.original_count,
+            "final_count": self.final_count,
+            "reduction_pct": (
+                round((1 - self.final_count / self.original_count) * 100, 1)
+                if self.original_count > 0
+                else 0
+            ),
+            "correlation_groups": self.correlation_groups,
+            "low_variance_features": self.low_variance_features,
         }
 
 
@@ -51,90 +56,78 @@ class FeatureSelectionResult:
 # This guides which feature to keep from correlated pairs
 FEATURE_PRIORITY = {
     # Price-based returns (most fundamental)
-    'log_return': 100,
-    'simple_return': 95,
-    'high_low_range': 90,
-    'close_open_range': 85,
-
+    "log_return": 100,
+    "simple_return": 95,
+    "high_low_range": 90,
+    "close_open_range": 85,
     # RSI and momentum (classic indicators)
-    'rsi': 90,
-    'rsi_oversold': 85,
-    'rsi_overbought': 85,
-    'stoch_k': 80,
-    'stoch_d': 75,
-    'williams_r': 70,  # Essentially same as stoch_k
-
+    "rsi": 90,
+    "rsi_oversold": 85,
+    "rsi_overbought": 85,
+    "stoch_k": 80,
+    "stoch_d": 75,
+    "williams_r": 70,  # Essentially same as stoch_k
     # Moving averages - prefer simpler/shorter
-    'sma_10': 80,
-    'sma_20': 78,
-    'sma_50': 75,
-    'sma_100': 72,
-    'sma_200': 70,
-    'ema_9': 75,
-    'ema_21': 73,
-    'ema_50': 70,
-
+    "sma_10": 80,
+    "sma_20": 78,
+    "sma_50": 75,
+    "sma_100": 72,
+    "sma_200": 70,
+    "ema_9": 75,
+    "ema_21": 73,
+    "ema_50": 70,
     # Price relative to moving averages (more useful than raw MA values)
-    'close_to_sma_10': 85,
-    'close_to_sma_20': 83,
-    'close_to_sma_50': 80,
-    'close_to_sma_100': 78,
-    'close_to_sma_200': 76,
-    'close_to_ema_9': 82,
-    'close_to_ema_21': 80,
-    'close_to_ema_50': 78,
-
+    "close_to_sma_10": 85,
+    "close_to_sma_20": 83,
+    "close_to_sma_50": 80,
+    "close_to_sma_100": 78,
+    "close_to_sma_200": 76,
+    "close_to_ema_9": 82,
+    "close_to_ema_21": 80,
+    "close_to_ema_50": 78,
     # MACD components
-    'macd': 85,
-    'macd_signal': 80,
-    'macd_hist': 90,  # Most useful - the difference
-    'macd_crossover': 75,
-
+    "macd": 85,
+    "macd_signal": 80,
+    "macd_hist": 90,  # Most useful - the difference
+    "macd_crossover": 75,
     # Bollinger Bands - prefer derived metrics
-    'bb_position': 90,  # Most useful - normalized position
-    'bb_width': 85,
-    'bb_upper': 60,  # Raw values less useful
-    'bb_lower': 60,
-
+    "bb_position": 90,  # Most useful - normalized position
+    "bb_width": 85,
+    "bb_upper": 60,  # Raw values less useful
+    "bb_lower": 60,
     # ATR - prefer percentage versions
-    'atr_7_pct': 85,
-    'atr_14_pct': 83,
-    'atr_21_pct': 80,
-    'atr_7': 70,
-    'atr_14': 68,
-    'atr_21': 65,
-
+    "atr_7_pct": 85,
+    "atr_14_pct": 83,
+    "atr_21_pct": 80,
+    "atr_7": 70,
+    "atr_14": 68,
+    "atr_21": 65,
     # ADX and directional indicators
-    'adx': 85,
-    'plus_di': 75,
-    'minus_di': 75,
-
+    "adx": 85,
+    "plus_di": 75,
+    "minus_di": 75,
     # Volume indicators
-    'volume_ratio': 85,
-    'volume_zscore': 80,
-    'volume_sma_20': 70,
-    'obv': 65,
-    'obv_sma_20': 60,
-
+    "volume_ratio": 85,
+    "volume_zscore": 80,
+    "volume_sma_20": 70,
+    "obv": 65,
+    "obv_sma_20": 60,
     # VWAP
-    'close_to_vwap': 85,
-    'vwap': 60,  # Raw VWAP less useful
-
+    "close_to_vwap": 85,
+    "vwap": 60,  # Raw VWAP less useful
     # Rate of change - prefer shorter periods
-    'roc_5': 80,
-    'roc_10': 78,
-    'roc_20': 75,
-
+    "roc_5": 80,
+    "roc_10": 78,
+    "roc_20": 75,
     # Time features
-    'hour_sin': 70,
-    'hour_cos': 70,
-    'dow_sin': 70,
-    'dow_cos': 70,
-    'is_rth': 80,
-
+    "hour_sin": 70,
+    "hour_cos": 70,
+    "dow_sin": 70,
+    "dow_cos": 70,
+    "is_rth": 80,
     # Regime features
-    'vol_regime': 85,
-    'trend_regime': 85,
+    "vol_regime": 85,
+    "trend_regime": 85,
 }
 
 # Default priority for unknown features
@@ -171,18 +164,16 @@ def identify_feature_columns(df: pd.DataFrame) -> list[str]:
         List of feature column names
     """
     feature_cols = [
-        c for c in df.columns
-        if c not in METADATA_COLUMNS
-        and not any(c.startswith(p) for p in LABEL_PREFIXES)
+        c
+        for c in df.columns
+        if c not in METADATA_COLUMNS and not any(c.startswith(p) for p in LABEL_PREFIXES)
     ]
 
     return feature_cols
 
 
 def filter_low_variance(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    variance_threshold: float = 0.01
+    df: pd.DataFrame, feature_cols: list[str], variance_threshold: float = 0.01
 ) -> tuple[list[str], list[str]]:
     """
     Remove features with variance below threshold.
@@ -214,7 +205,7 @@ def filter_low_variance(
         # Use coefficient of variation for features with non-zero mean
         mean_val = abs(series.mean())
         if mean_val > 1e-10:
-            normalized_variance = variance / (mean_val ** 2)
+            normalized_variance = variance / (mean_val**2)
         else:
             normalized_variance = variance
 
@@ -228,9 +219,7 @@ def filter_low_variance(
 
 
 def build_correlation_groups(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    correlation_threshold: float = 0.85
+    df: pd.DataFrame, feature_cols: list[str], correlation_threshold: float = 0.85
 ) -> list[set[str]]:
     """
     Build groups of highly correlated features using union-find.
@@ -308,10 +297,7 @@ def select_from_correlated_group(group: set[str]) -> tuple[str, list[str]]:
         return list(group)[0], []
 
     # Sort by priority (descending) then by name (for consistency)
-    sorted_features = sorted(
-        group,
-        key=lambda f: (-get_feature_priority(f), f)
-    )
+    sorted_features = sorted(group, key=lambda f: (-get_feature_priority(f), f))
 
     selected = sorted_features[0]
     removed = sorted_features[1:]
@@ -320,9 +306,7 @@ def select_from_correlated_group(group: set[str]) -> tuple[str, list[str]]:
 
 
 def filter_correlated_features(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    correlation_threshold: float = 0.85
+    df: pd.DataFrame, feature_cols: list[str], correlation_threshold: float = 0.85
 ) -> tuple[list[str], dict[str, str], list[list[str]]]:
     """
     Remove highly correlated features, keeping the most interpretable from each group.
@@ -351,7 +335,9 @@ def filter_correlated_features(
 
         for feat in removed:
             features_to_remove.add(feat)
-            removed_features[feat] = f"correlated with {selected} (priority: {get_feature_priority(selected)} > {get_feature_priority(feat)})"
+            removed_features[feat] = (
+                f"correlated with {selected} (priority: {get_feature_priority(selected)} > {get_feature_priority(feat)})"
+            )
 
     # Keep features not in any removed set
     features_to_keep = [f for f in feature_cols if f not in features_to_remove]
@@ -363,7 +349,7 @@ def select_features(
     df: pd.DataFrame,
     correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
-    feature_cols: list[str] | None = None
+    feature_cols: list[str] | None = None,
 ) -> FeatureSelectionResult:
     """
     Main feature selection function.
@@ -380,9 +366,9 @@ def select_features(
     Returns:
         FeatureSelectionResult with selected and removed features
     """
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info("FEATURE SELECTION")
-    logger.info("="*60)
+    logger.info("=" * 60)
 
     # Identify feature columns if not provided
     if feature_cols is None:
@@ -422,7 +408,11 @@ def select_features(
 
     # Log correlation groups
     for i, group in enumerate(correlation_groups[:5]):
-        kept = [f for f in group if f in selected_features][0] if any(f in selected_features for f in group) else "none"
+        kept = (
+            [f for f in group if f in selected_features][0]
+            if any(f in selected_features for f in group)
+            else "none"
+        )
         logger.info(f"   Group {i+1}: {group}")
         logger.info(f"           Kept: {kept}")
     if len(correlation_groups) > 5:
@@ -435,13 +425,13 @@ def select_features(
         original_count=original_count,
         final_count=len(selected_features),
         correlation_groups=correlation_groups,
-        low_variance_features=low_variance_features
+        low_variance_features=low_variance_features,
     )
 
     # Summary
-    logger.info("\n" + "="*60)
+    logger.info("\n" + "=" * 60)
     logger.info("FEATURE SELECTION SUMMARY")
-    logger.info("="*60)
+    logger.info("=" * 60)
     logger.info(f"Original features:  {result.original_count}")
     logger.info(f"Features removed:   {len(result.removed_features)}")
     logger.info(f"  - Low variance:   {len(low_variance_features)}")
@@ -457,9 +447,7 @@ def select_features(
 
 
 def save_feature_selection_report(
-    result: FeatureSelectionResult,
-    output_path: Path,
-    include_phase2_recommendations: bool = True
+    result: FeatureSelectionResult, output_path: Path, include_phase2_recommendations: bool = True
 ) -> None:
     """
     Save feature selection report to JSON file.
@@ -472,28 +460,26 @@ def save_feature_selection_report(
     report = result.to_dict()
 
     if include_phase2_recommendations:
-        report['phase2_recommendations'] = {
-            'use_features': result.selected_features,
-            'feature_count': result.final_count,
-            'notes': [
+        report["phase2_recommendations"] = {
+            "use_features": result.selected_features,
+            "feature_count": result.final_count,
+            "notes": [
                 "These features have been filtered for low correlation (<0.85)",
                 "Low variance features have been removed",
                 "Features are ranked by interpretability/importance",
-                "Use this feature list for model training in Phase 2"
-            ]
+                "Use this feature list for model training in Phase 2",
+            ],
         }
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(report, f, indent=2)
 
     logger.info(f"\nFeature selection report saved to: {output_path}")
 
 
 def apply_feature_selection(
-    df: pd.DataFrame,
-    selected_features: list[str],
-    keep_metadata: bool = True
+    df: pd.DataFrame, selected_features: list[str], keep_metadata: bool = True
 ) -> pd.DataFrame:
     """
     Apply feature selection to a DataFrame.
@@ -509,21 +495,41 @@ def apply_feature_selection(
     if keep_metadata:
         # Keep metadata and target columns
         metadata_cols = [
-            'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-            'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+            "datetime",
+            "symbol",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "timeframe",
+            "session_id",
+            "missing_bar",
+            "roll_event",
+            "roll_window",
+            "filled",
         ]
         target_prefixes = (
-            'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-            'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-            'fwd_return_log_', 'time_to_hit_'
+            "label_",
+            "bars_to_hit_",
+            "mae_",
+            "mfe_",
+            "quality_",
+            "sample_weight_",
+            "touch_type_",
+            "pain_to_gain_",
+            "time_weighted_dd_",
+            "fwd_return_",
+            "fwd_return_log_",
+            "time_to_hit_",
         )
 
         target_cols = [c for c in df.columns if any(c.startswith(p) for p in target_prefixes)]
 
         cols_to_keep = (
-            [c for c in metadata_cols if c in df.columns] +
-            [c for c in selected_features if c in df.columns] +
-            target_cols
+            [c for c in metadata_cols if c in df.columns]
+            + [c for c in selected_features if c in df.columns]
+            + target_cols
         )
     else:
         cols_to_keep = [c for c in selected_features if c in df.columns]
@@ -548,11 +554,7 @@ def main():
     logger.info(f"Loaded {len(df):,} rows, {len(df.columns)} columns")
 
     # Run feature selection
-    result = select_features(
-        df,
-        correlation_threshold=0.85,
-        variance_threshold=0.01
-    )
+    result = select_features(df, correlation_threshold=0.85, variance_threshold=0.01)
 
     # Save report
     save_feature_selection_report(result, output_path)
