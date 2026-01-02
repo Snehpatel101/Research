@@ -6,6 +6,47 @@
 
 ---
 
+## ⚠️ CRITICAL GAPS
+
+### Gap 1: MTF Features Limited to 5 Timeframes, Not 9 (See Phase 2 Gap 1)
+**Status:** ⏳ Infrastructure exists for 9 TFs, only 5 used
+**Impact:** Missing ~24 MTF features (4 additional TFs × 6 indicators per TF)
+**Current:** ~30 MTF features from 5 timeframes
+**Potential:** ~54 MTF features from 9 timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+**Blocker:** Phase 2 Gap 1 must be resolved first
+**Estimate:** 0 days (no code change needed, just config once Phase 2 Gap 1 done)
+
+### Gap 2: No Per-Model Feature Selection (See Phase 2 Gap 2)
+**Status:** ❌ All models get same ~180 features
+**Impact:** Cannot optimize features per model family (tabular vs sequence vs advanced)
+**Current Behavior:**
+- CatBoost gets ~180 features (good - uses all engineered features)
+- TCN gets ~180 features (suboptimal - sequences don't need all indicators)
+- PatchTST gets ~180 features (wrong - should get raw OHLCV multi-stream, not indicators)
+
+**Blocker:** Phase 2 Gap 2 (per-model MTF strategy selection)
+**Estimate:** 0 days (this is a Phase 2/5 concern, not Phase 3)
+
+### Gap 3: Feature Importance Analysis Not Automated (1 day)
+**Status:** ❌ Manual analysis only
+**Impact:** Users don't know which features are most predictive
+**What's Missing:**
+- No automated feature importance calculation after Phase 4 labeling
+- No visualization of top features
+- No correlation heatmap generation
+- No feature selection recommendations
+
+**Required Files:**
+- `src/phase1/stages/features/importance.py` - MDA/MDI importance calculation
+- `src/phase1/stages/reporting/feature_analysis.py` - Visualization + reports
+- `reports/features/{symbol}_importance.html` - Interactive feature report
+
+**Estimate:** 1 day
+
+**Days of Work Remaining:** 1 day (Gap 3 only - Gaps 1-2 are Phase 2 dependencies)
+
+---
+
 ## Goal
 
 Engineer comprehensive technical indicators, microstructure features, and wavelet decompositions from canonical OHLCV and MTF data to create a rich feature set for model training.

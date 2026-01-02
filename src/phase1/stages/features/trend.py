@@ -15,11 +15,7 @@ from .numba_functions import calculate_adx_numba, calculate_atr_numba
 logger = logging.getLogger(__name__)
 
 
-def add_adx(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    period: int = 14
-) -> pd.DataFrame:
+def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14) -> pd.DataFrame:
     """
     Add ADX and Directional Indicators.
 
@@ -42,37 +38,31 @@ def add_adx(
     logger.info(f"Adding ADX features with period: {period}")
 
     adx, plus_di, minus_di = calculate_adx_numba(
-        df['high'].values,
-        df['low'].values,
-        df['close'].values,
-        period
+        df["high"].values, df["low"].values, df["close"].values, period
     )
 
     # ANTI-LOOKAHEAD: shift(1) ensures ADX at bar[t] uses data up to bar[t-1]
-    adx_col = f'adx_{period}'
-    plus_di_col = f'plus_di_{period}'
-    minus_di_col = f'minus_di_{period}'
+    adx_col = f"adx_{period}"
+    plus_di_col = f"plus_di_{period}"
+    minus_di_col = f"minus_di_{period}"
 
     df[adx_col] = pd.Series(adx).shift(1).values
     df[plus_di_col] = pd.Series(plus_di).shift(1).values
     df[minus_di_col] = pd.Series(minus_di).shift(1).values
 
     # Trend strength - already shifted via adx column
-    df['adx_strong_trend'] = (df[adx_col] > 25).astype(int)
+    df["adx_strong_trend"] = (df[adx_col] > 25).astype(int)
 
     feature_metadata[adx_col] = f"Average Directional Index ({period}, lagged)"
     feature_metadata[plus_di_col] = f"+DI ({period}, lagged)"
     feature_metadata[minus_di_col] = f"-DI ({period}, lagged)"
-    feature_metadata['adx_strong_trend'] = "ADX strong trend flag (>25, lagged)"
+    feature_metadata["adx_strong_trend"] = "ADX strong trend flag (>25, lagged)"
 
     return df
 
 
 def add_supertrend(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    period: int = 10,
-    multiplier: float = 3.0
+    df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 10, multiplier: float = 3.0
 ) -> pd.DataFrame:
     """
     Add Supertrend indicator.
@@ -109,9 +99,9 @@ def add_supertrend(
     n = len(df)
 
     # Extract numpy arrays for performance
-    close = df['close'].values
-    high = df['high'].values
-    low = df['low'].values
+    close = df["close"].values
+    high = df["high"].values
+    low = df["low"].values
 
     # Calculate ATR
     atr = calculate_atr_numba(high, low, close, period)
@@ -174,16 +164,16 @@ def add_supertrend(
     direction[:period] = np.nan
 
     # ANTI-LOOKAHEAD: shift(1) ensures Supertrend at bar[t] uses data up to bar[t-1]
-    df['supertrend'] = pd.Series(supertrend).shift(1).values
-    df['supertrend_direction'] = pd.Series(direction).shift(1).values
+    df["supertrend"] = pd.Series(supertrend).shift(1).values
+    df["supertrend_direction"] = pd.Series(direction).shift(1).values
 
-    feature_metadata['supertrend'] = f"Supertrend ({period},{multiplier}, lagged)"
-    feature_metadata['supertrend_direction'] = "Supertrend direction (1=up, -1=down, lagged)"
+    feature_metadata["supertrend"] = f"Supertrend ({period},{multiplier}, lagged)"
+    feature_metadata["supertrend_direction"] = "Supertrend direction (1=up, -1=down, lagged)"
 
     return df
 
 
 __all__ = [
-    'add_adx',
-    'add_supertrend',
+    "add_adx",
+    "add_supertrend",
 ]

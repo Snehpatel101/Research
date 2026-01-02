@@ -141,7 +141,9 @@ def main():
     parquet_files = list(raw_dir.glob("*_1m.parquet"))
 
     # Exclude already-split files
-    parquet_files = [f for f in parquet_files if "_train" not in f.stem and "_holdout" not in f.stem]
+    parquet_files = [
+        f for f in parquet_files if "_train" not in f.stem and "_holdout" not in f.stem
+    ]
 
     if not parquet_files:
         print("\nNo raw parquet files found!")
@@ -168,10 +170,14 @@ def main():
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
-    print(f"\n{'Symbol':<10} {'Total':>12} {'Train':>12} {'Holdout':>12} {'Train %':>10} {'Holdout %':>10}")
+    print(
+        f"\n{'Symbol':<10} {'Total':>12} {'Train':>12} {'Holdout':>12} {'Train %':>10} {'Holdout %':>10}"
+    )
     print("-" * 70)
     for r in results:
-        print(f"{r['symbol']:<10} {r['total_rows']:>12,} {r['train_rows']:>12,} {r['holdout_rows']:>12,} {r['train_pct']:>9.1f}% {r['holdout_pct']:>9.1f}%")
+        print(
+            f"{r['symbol']:<10} {r['total_rows']:>12,} {r['train_rows']:>12,} {r['holdout_rows']:>12,} {r['train_pct']:>9.1f}% {r['holdout_pct']:>9.1f}%"
+        )
 
     print("\n" + "=" * 60)
     print("IMPORTANT: Holdout data should NEVER be used during training!")

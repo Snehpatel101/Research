@@ -1,6 +1,7 @@
 """
 Data integrity validation checks.
 """
+
 import logging
 import re
 
@@ -10,9 +11,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def check_duplicate_timestamps(
-    df: pd.DataFrame, issues_found: list[str]
-) -> dict:
+def check_duplicate_timestamps(df: pd.DataFrame, issues_found: list[str]) -> dict:
     """
     Check for duplicate timestamps per symbol.
 
@@ -25,11 +24,11 @@ def check_duplicate_timestamps(
     """
     logger.info("\n1. Checking for duplicate timestamps...")
 
-    if 'symbol' in df.columns:
+    if "symbol" in df.columns:
         dup_counts = {}
-        for symbol in df['symbol'].unique():
-            symbol_df = df[df['symbol'] == symbol]
-            dups = symbol_df['datetime'].duplicated().sum()
+        for symbol in df["symbol"].unique():
+            symbol_df = df[df["symbol"] == symbol]
+            dups = symbol_df["datetime"].duplicated().sum()
             dup_counts[symbol] = dups
             if dups > 0:
                 issues_found.append(f"{symbol}: {dups} duplicate timestamps")
@@ -38,13 +37,13 @@ def check_duplicate_timestamps(
                 logger.info(f"  {symbol}: No duplicates")
         return dup_counts
     else:
-        dups = df['datetime'].duplicated().sum()
+        dups = df["datetime"].duplicated().sum()
         if dups > 0:
             issues_found.append(f"Found {dups} duplicate timestamps")
             logger.warning(f"  Found {dups:,} duplicate timestamps")
         else:
             logger.info("  No duplicate timestamps")
-        return {'total': dups}
+        return {"total": dups}
 
 
 def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
@@ -67,6 +66,7 @@ def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
     nan_cols = nan_counts[nan_counts > 0]
 
     if len(nan_cols) > 0:
+
         def _forward_return_horizon(name: str) -> int | None:
             match = re.match(r"^fwd_return(?:_log)?_h(\d+)$", name)
             if not match:
@@ -74,7 +74,7 @@ def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
             return int(match.group(1))
 
         # Determine number of symbols (for forward return NaN calculations)
-        n_symbols = df['symbol'].nunique() if 'symbol' in df.columns else 1
+        n_symbols = df["symbol"].nunique() if "symbol" in df.columns else 1
 
         # Separate expected forward return NaNs from unexpected NaNs
         expected_forward_return_nans = {}
@@ -90,8 +90,7 @@ def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
 
         if expected_forward_return_nans:
             logger.info(
-                "  Found NaN values in forward return columns "
-                "(expected in last horizon bars):"
+                "  Found NaN values in forward return columns " "(expected in last horizon bars):"
             )
             for col, count in expected_forward_return_nans.items():
                 pct = count / len(df) * 100
@@ -161,32 +160,32 @@ def analyze_time_gaps(df: pd.DataFrame) -> list[dict]:
 
     gaps = []
 
-    if 'symbol' in df.columns:
-        for symbol in df['symbol'].unique():
-            symbol_df = df[df['symbol'] == symbol].sort_values('datetime')
-            time_diffs = symbol_df['datetime'].diff()
+    if "symbol" in df.columns:
+        for symbol in df["symbol"].unique():
+            symbol_df = df[df["symbol"] == symbol].sort_values("datetime")
+            time_diffs = symbol_df["datetime"].diff()
             median_gap = time_diffs.median()
             large_gaps = time_diffs[time_diffs > median_gap * 3]
 
             if len(large_gaps) > 0:
                 gap_info = {
-                    'symbol': symbol,
-                    'count': int(len(large_gaps)),
-                    'median_gap': str(median_gap),
-                    'max_gap': str(time_diffs.max())
+                    "symbol": symbol,
+                    "count": int(len(large_gaps)),
+                    "median_gap": str(median_gap),
+                    "max_gap": str(time_diffs.max()),
                 }
                 gaps.append(gap_info)
                 logger.info(f"  {symbol}: {len(large_gaps)} large gaps (>{median_gap*3})")
     else:
-        time_diffs = df.sort_values('datetime')['datetime'].diff()
+        time_diffs = df.sort_values("datetime")["datetime"].diff()
         median_gap = time_diffs.median()
         large_gaps = time_diffs[time_diffs > median_gap * 3]
 
         if len(large_gaps) > 0:
             gap_info = {
-                'count': int(len(large_gaps)),
-                'median_gap': str(median_gap),
-                'max_gap': str(time_diffs.max())
+                "count": int(len(large_gaps)),
+                "median_gap": str(median_gap),
+                "max_gap": str(time_diffs.max()),
             }
             gaps.append(gap_info)
             logger.info(f"  Found {len(large_gaps)} large gaps")
@@ -207,10 +206,10 @@ def verify_date_range(df: pd.DataFrame) -> dict:
     logger.info("\n5. Date range verification...")
 
     date_range = {
-        'start': str(df['datetime'].min()),
-        'end': str(df['datetime'].max()),
-        'duration_days': float((df['datetime'].max() - df['datetime'].min()).days),
-        'total_bars': int(len(df))
+        "start": str(df["datetime"].min()),
+        "end": str(df["datetime"].max()),
+        "duration_days": float((df["datetime"].max() - df["datetime"].min()).days),
+        "total_bars": int(len(df)),
     }
 
     logger.info(f"  Start: {date_range['start']}")
@@ -237,11 +236,11 @@ def check_data_integrity(df: pd.DataFrame, issues_found: list[str]) -> dict:
     logger.info("=" * 60)
 
     results = {
-        'duplicate_timestamps': check_duplicate_timestamps(df, issues_found),
-        'nan_values': check_nan_values(df, issues_found),
-        'infinite_values': check_infinite_values(df, issues_found),
-        'gaps': analyze_time_gaps(df),
-        'date_range': verify_date_range(df)
+        "duplicate_timestamps": check_duplicate_timestamps(df, issues_found),
+        "nan_values": check_nan_values(df, issues_found),
+        "infinite_values": check_infinite_values(df, issues_found),
+        "gaps": analyze_time_gaps(df),
+        "date_range": verify_date_range(df),
     }
 
     return results

@@ -5,6 +5,7 @@ Supports GPU training (device='cuda'), early stopping, sample weights,
 and feature importance extraction. Uses leaf-wise tree growth for
 faster training on large datasets.
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,6 +18,7 @@ import numpy as np
 
 try:
     import lightgbm as lgb
+
     LIGHTGBM_AVAILABLE = True
 except ImportError:
     LIGHTGBM_AVAILABLE = False
@@ -50,6 +52,7 @@ def _check_cuda_available() -> bool:
         # Check PyTorch CUDA first (fast check)
         try:
             import torch
+
             if not torch.cuda.is_available():
                 logger.debug("PyTorch CUDA not available, skipping LightGBM GPU check")
                 _LIGHTGBM_CUDA_AVAILABLE = False
@@ -103,9 +106,7 @@ class LightGBMModel(BaseModel):
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         if not LIGHTGBM_AVAILABLE:
-            raise ImportError(
-                "LightGBM is not installed. Install with: pip install lightgbm"
-            )
+            raise ImportError("LightGBM is not installed. Install with: pip install lightgbm")
         super().__init__(config)
         self._model: lgb.Booster | None = None
         self._feature_names: list[str] | None = None
@@ -350,9 +351,7 @@ class LightGBMModel(BaseModel):
             return None
 
         importance = self._model.feature_importance(importance_type="gain")
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(importance))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(importance))]
 
         return dict(zip(feature_names, importance.tolist(), strict=False))
 
@@ -371,7 +370,7 @@ class LightGBMModel(BaseModel):
 
         # Enforce LightGBM constraint: num_leaves <= 2^max_depth
         if max_depth > 0:
-            max_valid_leaves = 2 ** max_depth
+            max_valid_leaves = 2**max_depth
             if num_leaves > max_valid_leaves:
                 logger.warning(
                     f"num_leaves ({num_leaves}) exceeds max for max_depth={max_depth} "

@@ -28,6 +28,7 @@ Usage:
     manager.save(path)
     manager.load(path)
 """
+
 from .config import FeatureSelectionConfig, ModelFamilyDefaults
 from .manager import FeatureSelectionManager
 from .result import PersistedFeatureSelection

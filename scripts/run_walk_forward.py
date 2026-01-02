@@ -69,6 +69,7 @@ DEFAULT_TEST_PCT = 0.1
 # HELPER FUNCTIONS
 # =============================================================================
 
+
 def parse_model_list(model_arg: str) -> List[str]:
     """Parse model argument into list of model names."""
     if model_arg.lower() == "all":
@@ -113,6 +114,7 @@ def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
 # =============================================================================
 # WALK-FORWARD RUNNER
 # =============================================================================
+
 
 def run_walk_forward_evaluation(
     container: TimeSeriesDataContainer,
@@ -164,9 +166,7 @@ def run_walk_forward_evaluation(
     ):
         window_start = time.time()
 
-        logger.debug(
-            f"  Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}"
-        )
+        logger.debug(f"  Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}")
 
         # Extract window data
         X_train_raw = X.iloc[train_idx]
@@ -176,9 +176,7 @@ def run_walk_forward_evaluation(
 
         # Fold-aware scaling
         scaler = FoldAwareScaler(method=scaling_method)
-        scaling_result = scaler.fit_transform_fold(
-            X_train_raw.values, X_test_raw.values
-        )
+        scaling_result = scaler.fit_transform_fold(X_train_raw.values, X_test_raw.values)
         X_train_scaled = scaling_result.X_train_scaled
         X_test_scaled = scaling_result.X_val_scaled
 
@@ -237,15 +235,17 @@ def run_walk_forward_evaluation(
         )
 
     # Build predictions DataFrame
-    predictions_df = pd.DataFrame({
-        "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-        f"{model_name}_pred": all_preds,
-        f"{model_name}_prob_short": all_probs[:, 0],
-        f"{model_name}_prob_neutral": all_probs[:, 1],
-        f"{model_name}_prob_long": all_probs[:, 2],
-        f"{model_name}_confidence": all_confidence,
-        "y_true": y.values,
-    })
+    predictions_df = pd.DataFrame(
+        {
+            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+            f"{model_name}_pred": all_preds,
+            f"{model_name}_prob_short": all_probs[:, 0],
+            f"{model_name}_prob_neutral": all_probs[:, 1],
+            f"{model_name}_prob_long": all_probs[:, 2],
+            f"{model_name}_confidence": all_confidence,
+            "y_true": y.values,
+        }
+    )
 
     total_time = time.time() - start_time
 
@@ -262,6 +262,7 @@ def run_walk_forward_evaluation(
 # =============================================================================
 # CLI
 # =============================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -349,7 +350,8 @@ Examples:
 
     # Verbosity
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable verbose output",
     )
@@ -447,6 +449,7 @@ def main() -> int:
                 logger.error(f"  Failed {model_name} H{horizon}: {e}")
                 if args.verbose:
                     import traceback
+
                     traceback.print_exc()
                 continue
 
@@ -458,15 +461,17 @@ def main() -> int:
     if all_results:
         summary_data = []
         for r in all_results:
-            summary_data.append({
-                "model": r.model_name,
-                "horizon": r.horizon,
-                "mean_acc": f"{r.mean_accuracy:.3f}",
-                "std_acc": f"{r.std_accuracy:.3f}",
-                "mean_f1": f"{r.mean_f1:.3f}",
-                "n_windows": r.n_windows,
-                "time_s": f"{r.total_time:.1f}",
-            })
+            summary_data.append(
+                {
+                    "model": r.model_name,
+                    "horizon": r.horizon,
+                    "mean_acc": f"{r.mean_accuracy:.3f}",
+                    "std_acc": f"{r.std_accuracy:.3f}",
+                    "mean_f1": f"{r.mean_f1:.3f}",
+                    "n_windows": r.n_windows,
+                    "time_s": f"{r.total_time:.1f}",
+                }
+            )
 
         summary_df = pd.DataFrame(summary_data)
         print(summary_df.to_string(index=False))

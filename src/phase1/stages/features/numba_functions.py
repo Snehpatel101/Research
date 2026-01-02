@@ -6,7 +6,6 @@ for maximum performance. These are the core computational routines
 used by the feature engineering modules.
 """
 
-
 import numpy as np
 from numba import jit
 
@@ -32,7 +31,7 @@ def calculate_sma_numba(arr: np.ndarray, period: int) -> np.ndarray:
     result = np.full(n, np.nan)
 
     for i in range(period - 1, n):
-        result[i] = np.mean(arr[i - period + 1:i + 1])
+        result[i] = np.mean(arr[i - period + 1 : i + 1])
 
     return result
 
@@ -147,10 +146,7 @@ def calculate_rsi_numba(close: np.ndarray, period: int = 14) -> np.ndarray:
 
 @jit(nopython=True)
 def calculate_atr_numba(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    period: int = 14
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
 ) -> np.ndarray:
     """
     Calculate Average True Range using Numba.
@@ -183,7 +179,7 @@ def calculate_atr_numba(
         tr[i] = max(hl, hc, lc)
 
     # Calculate ATR
-    atr[period] = np.mean(tr[1:period + 1])
+    atr[period] = np.mean(tr[1 : period + 1])
 
     for i in range(period + 1, n):
         atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
@@ -193,11 +189,7 @@ def calculate_atr_numba(
 
 @jit(nopython=True)
 def calculate_stochastic_numba(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    k_period: int = 14,
-    d_period: int = 3
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, k_period: int = 14, d_period: int = 3
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate Stochastic Oscillator using Numba.
@@ -225,8 +217,8 @@ def calculate_stochastic_numba(
     d = np.full(n, np.nan)
 
     for i in range(k_period - 1, n):
-        high_max = np.max(high[i - k_period + 1:i + 1])
-        low_min = np.min(low[i - k_period + 1:i + 1])
+        high_max = np.max(high[i - k_period + 1 : i + 1])
+        low_min = np.min(low[i - k_period + 1 : i + 1])
 
         if high_max - low_min != 0:
             k[i] = 100.0 * (close[i] - low_min) / (high_max - low_min)
@@ -235,17 +227,14 @@ def calculate_stochastic_numba(
 
     # Calculate %D (SMA of %K)
     for i in range(k_period + d_period - 2, n):
-        d[i] = np.mean(k[i - d_period + 1:i + 1])
+        d[i] = np.mean(k[i - d_period + 1 : i + 1])
 
     return k, d
 
 
 @jit(nopython=True)
 def calculate_adx_numba(
-    high: np.ndarray,
-    low: np.ndarray,
-    close: np.ndarray,
-    period: int = 14
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate ADX, +DI, -DI using Numba.
@@ -295,14 +284,16 @@ def calculate_adx_numba(
     plus_dm_smooth = np.zeros(n)
     minus_dm_smooth = np.zeros(n)
 
-    tr_smooth[period] = np.sum(tr[1:period + 1])
-    plus_dm_smooth[period] = np.sum(plus_dm[1:period + 1])
-    minus_dm_smooth[period] = np.sum(minus_dm[1:period + 1])
+    tr_smooth[period] = np.sum(tr[1 : period + 1])
+    plus_dm_smooth[period] = np.sum(plus_dm[1 : period + 1])
+    minus_dm_smooth[period] = np.sum(minus_dm[1 : period + 1])
 
     for i in range(period + 1, n):
         tr_smooth[i] = tr_smooth[i - 1] - (tr_smooth[i - 1] / period) + tr[i]
         plus_dm_smooth[i] = plus_dm_smooth[i - 1] - (plus_dm_smooth[i - 1] / period) + plus_dm[i]
-        minus_dm_smooth[i] = minus_dm_smooth[i - 1] - (minus_dm_smooth[i - 1] / period) + minus_dm[i]
+        minus_dm_smooth[i] = (
+            minus_dm_smooth[i - 1] - (minus_dm_smooth[i - 1] / period) + minus_dm[i]
+        )
 
     # Calculate DI
     for i in range(period, n):
@@ -318,7 +309,7 @@ def calculate_adx_numba(
             dx[i] = 100 * abs(plus_di[i] - minus_di[i]) / di_sum
 
     # ADX is EMA of DX
-    adx[2 * period - 1] = np.mean(dx[period:2 * period])
+    adx[2 * period - 1] = np.mean(dx[period : 2 * period])
     for i in range(2 * period, n):
         adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
 
@@ -326,12 +317,12 @@ def calculate_adx_numba(
 
 
 __all__ = [
-    'calculate_sma_numba',
-    'calculate_ema_numba',
-    'calculate_rsi_numba',
-    'calculate_atr_numba',
-    'calculate_stochastic_numba',
-    'calculate_rolling_correlation_numba',
-    'calculate_rolling_beta_numba',
-    'calculate_adx_numba',
+    "calculate_sma_numba",
+    "calculate_ema_numba",
+    "calculate_rsi_numba",
+    "calculate_atr_numba",
+    "calculate_stochastic_numba",
+    "calculate_rolling_correlation_numba",
+    "calculate_rolling_beta_numba",
+    "calculate_adx_numba",
 ]

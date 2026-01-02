@@ -10,6 +10,7 @@ Regularization (sklearn 1.8+):
 - 0 < l1_ratio < 1: Elastic net (L1+L2 mix)
 Note: Uses 'saga' solver for l1_ratio support.
 """
+
 from __future__ import annotations
 
 import logging
@@ -248,9 +249,7 @@ class LogisticModel(BaseModel):
 
         # For multi-class, average absolute coefficients across classes
         coefs = np.abs(self._model.coef_).mean(axis=0)
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(coefs))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(coefs))]
 
         return dict(zip(feature_names, coefs.tolist(), strict=False))
 

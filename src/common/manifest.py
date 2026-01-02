@@ -2,6 +2,7 @@
 Data Versioning and Manifest Management
 Tracks artifacts, checksums, and changes between pipeline runs
 """
+
 import hashlib
 import json
 import logging
@@ -32,12 +33,12 @@ class ArtifactManifest:
         self.manifest_path = self.run_dir / "artifacts" / "manifest.json"
         self.artifacts: dict[str, dict[str, Any]] = {}
         self.metadata: dict[str, Any] = {
-            'run_id': run_id,
-            'created_at': datetime.now().isoformat(),
-            'manifest_version': '1.0'
+            "run_id": run_id,
+            "created_at": datetime.now().isoformat(),
+            "manifest_version": "1.0",
         }
 
-    def compute_file_checksum(self, file_path: Path, algorithm: str = 'sha256') -> str:
+    def compute_file_checksum(self, file_path: Path, algorithm: str = "sha256") -> str:
         """
         Compute checksum for a file.
 
@@ -56,21 +57,21 @@ class ArtifactManifest:
         hash_func = hashlib.new(algorithm)
 
         # Handle different file types
-        if file_path.suffix == '.parquet':
+        if file_path.suffix == ".parquet":
             # For parquet files, hash the content data
             df = pd.read_parquet(file_path)
             # Create a stable representation
-            data_str = df.to_json(orient='records', date_format='iso')
+            data_str = df.to_json(orient="records", date_format="iso")
             hash_func.update(data_str.encode())
         else:
             # For regular files, hash the bytes
-            with open(file_path, 'rb') as f:
-                for chunk in iter(lambda: f.read(8192), b''):
+            with open(file_path, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
                     hash_func.update(chunk)
 
         return hash_func.hexdigest()
 
-    def compute_dataframe_checksum(self, df: pd.DataFrame, algorithm: str = 'sha256') -> str:
+    def compute_dataframe_checksum(self, df: pd.DataFrame, algorithm: str = "sha256") -> str:
         """
         Compute checksum for a pandas DataFrame.
 
@@ -84,7 +85,7 @@ class ArtifactManifest:
         hash_func = hashlib.new(algorithm)
 
         # Create stable JSON representation
-        data_str = df.to_json(orient='records', date_format='iso')
+        data_str = df.to_json(orient="records", date_format="iso")
         hash_func.update(data_str.encode())
 
         return hash_func.hexdigest()
@@ -93,10 +94,10 @@ class ArtifactManifest:
         self,
         name: str,
         file_path: Path | None = None,
-        artifact_type: str = 'file',
-        stage: str = 'unknown',
+        artifact_type: str = "file",
+        stage: str = "unknown",
         metadata: dict[str, Any] | None = None,
-        compute_checksum: bool = True
+        compute_checksum: bool = True,
     ):
         """
         Add an artifact to the manifest.
@@ -110,38 +111,35 @@ class ArtifactManifest:
             compute_checksum: Whether to compute file checksum
         """
         artifact_info: dict[str, Any] = {
-            'name': name,
-            'type': artifact_type,
-            'stage': stage,
-            'created_at': datetime.now().isoformat(),
+            "name": name,
+            "type": artifact_type,
+            "stage": stage,
+            "created_at": datetime.now().isoformat(),
         }
 
         if file_path:
             file_path = Path(file_path)
-            artifact_info['path'] = str(file_path)
-            artifact_info['exists'] = file_path.exists()
+            artifact_info["path"] = str(file_path)
+            artifact_info["exists"] = file_path.exists()
 
             if file_path.exists():
-                artifact_info['size_bytes'] = file_path.stat().st_size
+                artifact_info["size_bytes"] = file_path.stat().st_size
 
-                if compute_checksum and artifact_type == 'file':
+                if compute_checksum and artifact_type == "file":
                     try:
-                        artifact_info['checksum'] = self.compute_file_checksum(file_path)
-                        artifact_info['checksum_algorithm'] = 'sha256'
+                        artifact_info["checksum"] = self.compute_file_checksum(file_path)
+                        artifact_info["checksum_algorithm"] = "sha256"
                     except Exception as e:
                         logger.warning(f"Failed to compute checksum for {file_path}: {e}")
 
         if metadata:
-            artifact_info['metadata'] = metadata
+            artifact_info["metadata"] = metadata
 
         self.artifacts[name] = artifact_info
         logger.debug(f"Added artifact: {name}")
 
     def add_stage_artifacts(
-        self,
-        stage: str,
-        files: list[Path],
-        metadata: dict[str, Any] | None = None
+        self, stage: str, files: list[Path], metadata: dict[str, Any] | None = None
     ):
         """
         Add multiple artifacts from a pipeline stage.
@@ -157,9 +155,9 @@ class ArtifactManifest:
             self.add_artifact(
                 name=artifact_name,
                 file_path=file_path,
-                artifact_type='file',
+                artifact_type="file",
                 stage=stage,
-                metadata=metadata
+                metadata=metadata,
             )
 
         logger.info(f"Added {len(files)} artifacts from stage: {stage}")
@@ -170,11 +168,7 @@ class ArtifactManifest:
 
     def get_stage_artifacts(self, stage: str) -> dict[str, dict[str, Any]]:
         """Get all artifacts for a specific stage."""
-        return {
-            name: info
-            for name, info in self.artifacts.items()
-            if info['stage'] == stage
-        }
+        return {name: info for name, info in self.artifacts.items() if info["stage"] == stage}
 
     def verify_artifact(self, name: str) -> bool:
         """
@@ -191,15 +185,15 @@ class ArtifactManifest:
             logger.warning(f"Artifact not found in manifest: {name}")
             return False
 
-        file_path = Path(artifact.get('path', ''))
+        file_path = Path(artifact.get("path", ""))
         if not file_path.exists():
             logger.warning(f"Artifact file missing: {file_path}")
             return False
 
-        if 'checksum' in artifact:
+        if "checksum" in artifact:
             try:
                 current_checksum = self.compute_file_checksum(file_path)
-                expected_checksum = artifact['checksum']
+                expected_checksum = artifact["checksum"]
 
                 if current_checksum != expected_checksum:
                     logger.warning(
@@ -244,18 +238,18 @@ class ArtifactManifest:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         manifest_data = {
-            'metadata': self.metadata,
-            'artifacts': self.artifacts,
-            'saved_at': datetime.now().isoformat()
+            "metadata": self.metadata,
+            "artifacts": self.artifacts,
+            "saved_at": datetime.now().isoformat(),
         }
 
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             json.dump(manifest_data, f, indent=2)
 
         logger.info(f"Manifest saved to {path}")
 
     @classmethod
-    def load(cls, run_id: str, project_root: Path) -> 'ArtifactManifest':
+    def load(cls, run_id: str, project_root: Path) -> "ArtifactManifest":
         """
         Load manifest from disk.
 
@@ -274,13 +268,13 @@ class ArtifactManifest:
         with open(manifest.manifest_path) as f:
             data = json.load(f)
 
-        manifest.metadata = data.get('metadata', manifest.metadata)
-        manifest.artifacts = data.get('artifacts', {})
+        manifest.metadata = data.get("metadata", manifest.metadata)
+        manifest.artifacts = data.get("artifacts", {})
 
         logger.info(f"Loaded manifest with {len(manifest.artifacts)} artifacts")
         return manifest
 
-    def compare_with(self, other: 'ArtifactManifest') -> dict[str, Any]:
+    def compare_with(self, other: "ArtifactManifest") -> dict[str, Any]:
         """
         Compare this manifest with another to find changes.
 
@@ -303,34 +297,31 @@ class ArtifactManifest:
             other_artifact = other.artifacts[name]
 
             # Compare checksums if available
-            self_checksum = self_artifact.get('checksum')
-            other_checksum = other_artifact.get('checksum')
+            self_checksum = self_artifact.get("checksum")
+            other_checksum = other_artifact.get("checksum")
 
             if self_checksum and other_checksum and self_checksum != other_checksum:
                 modified.append(name)
 
         return {
-            'added': sorted(added),
-            'removed': sorted(removed),
-            'modified': sorted(modified),
-            'unchanged': sorted(common - set(modified))
+            "added": sorted(added),
+            "removed": sorted(removed),
+            "modified": sorted(modified),
+            "unchanged": sorted(common - set(modified)),
         }
 
     def get_summary(self) -> dict[str, Any]:
         """Get summary statistics about the manifest."""
-        stages = set(artifact['stage'] for artifact in self.artifacts.values())
-        total_size = sum(
-            artifact.get('size_bytes', 0)
-            for artifact in self.artifacts.values()
-        )
+        stages = set(artifact["stage"] for artifact in self.artifacts.values())
+        total_size = sum(artifact.get("size_bytes", 0) for artifact in self.artifacts.values())
 
         return {
-            'run_id': self.run_id,
-            'total_artifacts': len(self.artifacts),
-            'stages': sorted(stages),
-            'total_size_bytes': total_size,
-            'total_size_mb': total_size / (1024 * 1024),
-            'created_at': self.metadata.get('created_at'),
+            "run_id": self.run_id,
+            "total_artifacts": len(self.artifacts),
+            "stages": sorted(stages),
+            "total_size_bytes": total_size,
+            "total_size_mb": total_size / (1024 * 1024),
+            "created_at": self.metadata.get("created_at"),
         }
 
     def print_summary(self):
@@ -345,16 +336,12 @@ class ArtifactManifest:
         print(f"\nStages: {', '.join(summary['stages'])}")
         print("\nArtifacts by Stage:")
 
-        for stage in summary['stages']:
+        for stage in summary["stages"]:
             stage_artifacts = self.get_stage_artifacts(stage)
             print(f"  {stage}: {len(stage_artifacts)} artifacts")
 
 
-def compare_runs(
-    run_id_1: str,
-    run_id_2: str,
-    project_root: Path | None = None
-) -> dict[str, Any]:
+def compare_runs(run_id_1: str, run_id_2: str, project_root: Path | None = None) -> dict[str, Any]:
     """
     Compare manifests between two runs.
 
@@ -394,26 +381,23 @@ if __name__ == "__main__":
     logging.getLogger().addHandler(logging.StreamHandler())
 
     # Create a test manifest
-    manifest = ArtifactManifest(
-        run_id='20241218_120000',
-        project_root=Path('/home/user/Research')
-    )
+    manifest = ArtifactManifest(run_id="20241218_120000", project_root=Path("/home/user/Research"))
 
     # Add some test artifacts
     manifest.add_artifact(
-        name='clean_data_MES',
-        file_path=Path('/home/user/Research/data/clean/MES_5m_clean.parquet'),
-        artifact_type='file',
-        stage='cleaning',
-        metadata={'symbol': 'MES', 'rows': 100000}
+        name="clean_data_MES",
+        file_path=Path("/home/user/Research/data/clean/MES_5m_clean.parquet"),
+        artifact_type="file",
+        stage="cleaning",
+        metadata={"symbol": "MES", "rows": 100000},
     )
 
     manifest.add_artifact(
-        name='features_MES',
-        file_path=Path('/home/user/Research/data/features/MES_5m_features.parquet'),
-        artifact_type='file',
-        stage='features',
-        metadata={'symbol': 'MES', 'num_features': 50}
+        name="features_MES",
+        file_path=Path("/home/user/Research/data/features/MES_5m_features.parquet"),
+        artifact_type="file",
+        stage="features",
+        metadata={"symbol": "MES", "num_features": 50},
     )
 
     # Print summary

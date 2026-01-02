@@ -16,6 +16,7 @@ Usage:
 Note:
     Flask is optional. Install with: pip install flask
 """
+
 from __future__ import annotations
 
 import logging
@@ -35,9 +36,11 @@ logger = logging.getLogger(__name__)
 # SERVER CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class ServerConfig:
     """Configuration for model server."""
+
     host: str = "0.0.0.0"
     port: int = 8080
     debug: bool = False
@@ -50,9 +53,11 @@ class ServerConfig:
 # REQUEST/RESPONSE MODELS
 # =============================================================================
 
+
 @dataclass
 class PredictionRequest:
     """Request format for predictions."""
+
     features: list[list[float]]  # 2D array of features
     calibrate: bool = True
     return_probabilities: bool = True
@@ -69,6 +74,7 @@ class PredictionRequest:
 @dataclass
 class PredictionResponse:
     """Response format for predictions."""
+
     predictions: list[int]
     probabilities: list[list[float]] | None = None
     confidence: list[float] | None = None
@@ -93,6 +99,7 @@ class PredictionResponse:
 # =============================================================================
 # MODEL SERVER
 # =============================================================================
+
 
 class ModelServer:
     """
@@ -165,8 +172,7 @@ class ModelServer:
             from flask import Flask, jsonify, request
         except ImportError:
             raise ImportError(
-                "Flask is required for model serving. "
-                "Install with: pip install flask"
+                "Flask is required for model serving. " "Install with: pip install flask"
             )
 
         app = Flask(__name__)
@@ -179,12 +185,14 @@ class ModelServer:
         @app.route("/info", methods=["GET"])
         def info():
             """Model information endpoint."""
-            return jsonify({
-                "models": self.pipeline.get_model_info(),
-                "horizon": self.pipeline.horizon,
-                "n_features": len(self.pipeline.feature_columns),
-                "feature_columns": self.pipeline.feature_columns,
-            })
+            return jsonify(
+                {
+                    "models": self.pipeline.get_model_info(),
+                    "horizon": self.pipeline.horizon,
+                    "n_features": len(self.pipeline.feature_columns),
+                    "feature_columns": self.pipeline.feature_columns,
+                }
+            )
 
         @app.route("/predict", methods=["POST"])
         def predict():
@@ -197,9 +205,12 @@ class ModelServer:
 
                 # Validate batch size
                 if len(req.features) > self.config.max_batch_size:
-                    return jsonify({
-                        "error": f"Batch size exceeds maximum ({self.config.max_batch_size})"
-                    }), 400
+                    return (
+                        jsonify(
+                            {"error": f"Batch size exceeds maximum ({self.config.max_batch_size})"}
+                        ),
+                        400,
+                    )
 
                 # Make predictions
                 X = np.array(req.features, dtype=np.float32)
@@ -234,9 +245,7 @@ class ModelServer:
         def predict_ensemble():
             """Ensemble prediction endpoint."""
             if self.pipeline.n_models < 2:
-                return jsonify({
-                    "error": "Ensemble requires multiple models"
-                }), 400
+                return jsonify({"error": "Ensemble requires multiple models"}), 400
 
             start_time = time.perf_counter()
 
@@ -247,18 +256,26 @@ class ModelServer:
                 X = np.array(req.features, dtype=np.float32)
                 method = data.get("voting_method", "soft_vote")
 
-                result = self.pipeline.predict_ensemble(
-                    X, method=method, calibrate=req.calibrate
-                )
+                result = self.pipeline.predict_ensemble(X, method=method, calibrate=req.calibrate)
 
-                return jsonify({
-                    "predictions": result.predictions.class_predictions.tolist(),
-                    "probabilities": result.predictions.class_probabilities.tolist() if req.return_probabilities else None,
-                    "confidence": result.predictions.confidence.tolist() if req.return_probabilities else None,
-                    "voting_method": result.voting_method,
-                    "inference_time_ms": result.inference_time_ms,
-                    "models_used": [r.model_name for r in result.individual_results],
-                })
+                return jsonify(
+                    {
+                        "predictions": result.predictions.class_predictions.tolist(),
+                        "probabilities": (
+                            result.predictions.class_probabilities.tolist()
+                            if req.return_probabilities
+                            else None
+                        ),
+                        "confidence": (
+                            result.predictions.confidence.tolist()
+                            if req.return_probabilities
+                            else None
+                        ),
+                        "voting_method": result.voting_method,
+                        "inference_time_ms": result.inference_time_ms,
+                        "models_used": [r.model_name for r in result.individual_results],
+                    }
+                )
 
             except Exception as e:
                 logger.error(f"Ensemble prediction error: {e}")
@@ -271,16 +288,17 @@ class ModelServer:
                 return jsonify({"error": "Metrics disabled"}), 404
 
             avg_latency = (
-                self._total_latency_ms / self._request_count
-                if self._request_count > 0 else 0
+                self._total_latency_ms / self._request_count if self._request_count > 0 else 0
             )
 
-            return jsonify({
-                "request_count": self._request_count,
-                "error_count": self._error_count,
-                "error_rate": self._error_count / max(self._request_count, 1),
-                "average_latency_ms": avg_latency,
-            })
+            return jsonify(
+                {
+                    "request_count": self._request_count,
+                    "error_count": self._error_count,
+                    "error_rate": self._error_count / max(self._request_count, 1),
+                    "average_latency_ms": avg_latency,
+                }
+            )
 
         self._app = app
         return app
@@ -315,6 +333,7 @@ class ModelServer:
 # =============================================================================
 # CONVENIENCE FUNCTIONS
 # =============================================================================
+
 
 def start_server(
     bundle_path: str | Path,

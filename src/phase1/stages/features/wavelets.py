@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 try:
     import pywt
+
     PYWT_AVAILABLE = True
 except ImportError:
     PYWT_AVAILABLE = False
@@ -26,14 +27,14 @@ except ImportError:
 
 # Supported wavelet families for financial time series
 SUPPORTED_WAVELETS = {
-    'db4': 'Daubechies 4 - good general-purpose choice',
-    'db8': 'Daubechies 8 - smoother approximation',
-    'sym5': 'Symlet 5 - nearly symmetric, less phase distortion',
-    'coif3': 'Coiflet 3 - symmetric with vanishing moments',
-    'haar': 'Haar - simplest wavelet, good for abrupt changes',
+    "db4": "Daubechies 4 - good general-purpose choice",
+    "db8": "Daubechies 8 - smoother approximation",
+    "sym5": "Symlet 5 - nearly symmetric, less phase distortion",
+    "coif3": "Coiflet 3 - symmetric with vanishing moments",
+    "haar": "Haar - simplest wavelet, good for abrupt changes",
 }
 
-DEFAULT_WAVELET = 'db4'
+DEFAULT_WAVELET = "db4"
 DEFAULT_LEVEL = 3
 DEFAULT_WINDOW = 64
 
@@ -46,12 +47,12 @@ def _compute_dwt_rolling(
     approx = np.full(n, np.nan)
     details = [np.full(n, np.nan) for _ in range(level)]
 
-    min_window = 2 ** level
+    min_window = 2**level
     if window_size < min_window:
         window_size = min_window
 
     for i in range(window_size - 1, n):
-        window_data = signal[i - window_size + 1:i + 1]
+        window_data = signal[i - window_size + 1 : i + 1]
         if np.any(np.isnan(window_data)):
             continue
         try:
@@ -75,10 +76,10 @@ def _compute_energy_rolling(
     approx_energy = np.full(n, np.nan)
     detail_energies = [np.full(n, np.nan) for _ in range(level)]
 
-    window_size = max(window_size, 2 ** level)
+    window_size = max(window_size, 2**level)
 
     for i in range(window_size - 1, n):
-        window_data = signal[i - window_size + 1:i + 1]
+        window_data = signal[i - window_size + 1 : i + 1]
         if np.any(np.isnan(window_data)):
             continue
         try:
@@ -99,7 +100,7 @@ def _compute_energy_ratio(
     total_energy = approx_energy.copy()
     for de in detail_energies:
         total_energy = total_energy + de
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         return np.where(total_energy > 0, approx_energy / total_energy, np.nan)
 
 
@@ -107,7 +108,7 @@ def _normalize_coefficients(coeffs: np.ndarray) -> np.ndarray:
     """Normalize wavelet coefficients to z-scores using expanding window."""
     result = np.full_like(coeffs, np.nan)
     for i in range(1, len(coeffs)):
-        valid_data = coeffs[:i+1]
+        valid_data = coeffs[: i + 1]
         valid_data = valid_data[~np.isnan(valid_data)]
         if len(valid_data) < 20:
             continue
@@ -118,18 +119,18 @@ def _normalize_coefficients(coeffs: np.ndarray) -> np.ndarray:
 
 def _get_freq_label(lev: int) -> str:
     """Get frequency label for detail level."""
-    return 'high' if lev == 0 else 'mid' if lev == 1 else 'low'
+    return "high" if lev == 0 else "mid" if lev == 1 else "low"
 
 
 def add_wavelet_coefficients(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
-    price_col: str = 'close',
+    price_col: str = "close",
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
     window: int = DEFAULT_WINDOW,
-    feature_prefix: str = 'wavelet',
-    normalize: bool = True
+    feature_prefix: str = "wavelet",
+    normalize: bool = True,
 ) -> pd.DataFrame:
     """
     Add wavelet decomposition coefficient features.
@@ -148,7 +149,7 @@ def add_wavelet_coefficients(
     approx, details = _compute_dwt_rolling(signal, wavelet, level, window)
 
     # ANTI-LOOKAHEAD: shift(1) ensures features at bar[t] use data up to bar[t-1]
-    approx_col = f'{feature_prefix}_{price_col}_approx'
+    approx_col = f"{feature_prefix}_{price_col}_approx"
     if normalize:
         df[approx_col] = pd.Series(_normalize_coefficients(approx)).shift(1).values
         feature_metadata[approx_col] = f"Wavelet approx {wavelet} L{level} normalized (lagged)"
@@ -157,25 +158,29 @@ def add_wavelet_coefficients(
         feature_metadata[approx_col] = f"Wavelet approx {wavelet} L{level} (lagged)"
 
     for lev in range(level):
-        detail_col = f'{feature_prefix}_{price_col}_d{lev + 1}'
+        detail_col = f"{feature_prefix}_{price_col}_d{lev + 1}"
         freq = _get_freq_label(lev)
         if normalize:
             df[detail_col] = pd.Series(_normalize_coefficients(details[lev])).shift(1).values
-            feature_metadata[detail_col] = f"Wavelet detail {wavelet} L{lev+1} norm ({freq} freq, lagged)"
+            feature_metadata[detail_col] = (
+                f"Wavelet detail {wavelet} L{lev+1} norm ({freq} freq, lagged)"
+            )
         else:
             df[detail_col] = pd.Series(details[lev]).shift(1).values
-            feature_metadata[detail_col] = f"Wavelet detail {wavelet} L{lev+1} ({freq} freq, lagged)"
+            feature_metadata[detail_col] = (
+                f"Wavelet detail {wavelet} L{lev+1} ({freq} freq, lagged)"
+            )
     return df
 
 
 def add_wavelet_energy(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
-    price_col: str = 'close',
+    price_col: str = "close",
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
     window: int = DEFAULT_WINDOW,
-    feature_prefix: str = 'wavelet'
+    feature_prefix: str = "wavelet",
 ) -> pd.DataFrame:
     """
     Add wavelet energy features at each decomposition level.
@@ -190,19 +195,19 @@ def add_wavelet_energy(
     approx_energy, detail_energies = _compute_energy_rolling(signal, wavelet, level, window)
 
     # ANTI-LOOKAHEAD: shift(1)
-    approx_energy_col = f'{feature_prefix}_{price_col}_energy_approx'
-    with np.errstate(divide='ignore', invalid='ignore'):
+    approx_energy_col = f"{feature_prefix}_{price_col}_energy_approx"
+    with np.errstate(divide="ignore", invalid="ignore"):
         df[approx_energy_col] = pd.Series(np.log1p(approx_energy)).shift(1).values
     feature_metadata[approx_energy_col] = f"Wavelet approx energy log1p {wavelet} L{level} (lagged)"
 
     for lev in range(level):
-        energy_col = f'{feature_prefix}_{price_col}_energy_d{lev + 1}'
+        energy_col = f"{feature_prefix}_{price_col}_energy_d{lev + 1}"
         freq = _get_freq_label(lev)
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             df[energy_col] = pd.Series(np.log1p(detail_energies[lev])).shift(1).values
         feature_metadata[energy_col] = f"Wavelet energy {wavelet} L{lev+1} ({freq} freq, lagged)"
 
-    ratio_col = f'{feature_prefix}_{price_col}_energy_ratio'
+    ratio_col = f"{feature_prefix}_{price_col}_energy_ratio"
     energy_ratio = _compute_energy_ratio(approx_energy, detail_energies)
     df[ratio_col] = pd.Series(energy_ratio).shift(1).values
     feature_metadata[ratio_col] = f"Wavelet energy ratio {wavelet} L{level} (lagged)"
@@ -212,10 +217,10 @@ def add_wavelet_energy(
 def add_wavelet_volatility(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
-    price_col: str = 'close',
+    price_col: str = "close",
     wavelet: str = DEFAULT_WAVELET,
     window: int = DEFAULT_WINDOW,
-    feature_prefix: str = 'wavelet'
+    feature_prefix: str = "wavelet",
 ) -> pd.DataFrame:
     """
     Add wavelet-based volatility estimate using MAD of detail coefficients.
@@ -232,7 +237,7 @@ def add_wavelet_volatility(
     actual_window = max(window, 8)
 
     for i in range(actual_window - 1, n):
-        window_data = signal[i - actual_window + 1:i + 1]
+        window_data = signal[i - actual_window + 1 : i + 1]
         if np.any(np.isnan(window_data)):
             continue
         try:
@@ -244,7 +249,7 @@ def add_wavelet_volatility(
             continue
 
     # ANTI-LOOKAHEAD: shift(1)
-    vol_col = f'{feature_prefix}_{price_col}_volatility'
+    vol_col = f"{feature_prefix}_{price_col}_volatility"
     df[vol_col] = pd.Series(wavelet_vol).shift(1).values
     feature_metadata[vol_col] = f"Wavelet volatility MAD {wavelet} (lagged)"
     return df
@@ -253,11 +258,11 @@ def add_wavelet_volatility(
 def add_wavelet_trend_strength(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
-    price_col: str = 'close',
+    price_col: str = "close",
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
     window: int = DEFAULT_WINDOW,
-    feature_prefix: str = 'wavelet'
+    feature_prefix: str = "wavelet",
 ) -> pd.DataFrame:
     """
     Add wavelet-based trend strength using slope of approximation coefficients.
@@ -270,10 +275,10 @@ def add_wavelet_trend_strength(
     n = len(signal)
     trend_strength = np.full(n, np.nan)
     trend_direction = np.full(n, np.nan)
-    actual_window = max(window, 2 ** level)
+    actual_window = max(window, 2**level)
 
     for i in range(actual_window - 1, n):
-        window_data = signal[i - actual_window + 1:i + 1]
+        window_data = signal[i - actual_window + 1 : i + 1]
         if np.any(np.isnan(window_data)):
             continue
         try:
@@ -290,8 +295,8 @@ def add_wavelet_trend_strength(
             continue
 
     # ANTI-LOOKAHEAD: shift(1)
-    strength_col = f'{feature_prefix}_{price_col}_trend_strength'
-    direction_col = f'{feature_prefix}_{price_col}_trend_direction'
+    strength_col = f"{feature_prefix}_{price_col}_trend_strength"
+    direction_col = f"{feature_prefix}_{price_col}_trend_direction"
     df[strength_col] = pd.Series(trend_strength).shift(1).values
     df[direction_col] = pd.Series(trend_direction).shift(1).values
     feature_metadata[strength_col] = f"Wavelet trend strength {wavelet} L{level} (lagged)"
@@ -302,16 +307,16 @@ def add_wavelet_trend_strength(
 def add_wavelet_features(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
-    price_col: str = 'close',
-    volume_col: str = 'volume',
+    price_col: str = "close",
+    volume_col: str = "volume",
     wavelet: str = DEFAULT_WAVELET,
     level: int = DEFAULT_LEVEL,
     window: int = DEFAULT_WINDOW,
-    feature_prefix: str = 'wavelet',
+    feature_prefix: str = "wavelet",
     include_volume: bool = True,
     include_energy: bool = True,
     include_volatility: bool = True,
-    include_trend: bool = True
+    include_trend: bool = True,
 ) -> pd.DataFrame:
     """
     Add all wavelet decomposition features for multi-scale signal analysis.
@@ -339,41 +344,72 @@ def add_wavelet_features(
 
     # Price coefficients
     df = add_wavelet_coefficients(
-        df, feature_metadata, price_col=price_col, wavelet=wavelet,
-        level=level, window=window, feature_prefix=feature_prefix, normalize=True
+        df,
+        feature_metadata,
+        price_col=price_col,
+        wavelet=wavelet,
+        level=level,
+        window=window,
+        feature_prefix=feature_prefix,
+        normalize=True,
     )
 
     # Volume coefficients
     if include_volume and volume_col in df.columns and df[volume_col].sum() > 0:
         df = add_wavelet_coefficients(
-            df, feature_metadata, price_col=volume_col, wavelet=wavelet,
-            level=level, window=window, feature_prefix=feature_prefix, normalize=True
+            df,
+            feature_metadata,
+            price_col=volume_col,
+            wavelet=wavelet,
+            level=level,
+            window=window,
+            feature_prefix=feature_prefix,
+            normalize=True,
         )
 
     # Energy features
     if include_energy:
         df = add_wavelet_energy(
-            df, feature_metadata, price_col=price_col, wavelet=wavelet,
-            level=level, window=window, feature_prefix=feature_prefix
+            df,
+            feature_metadata,
+            price_col=price_col,
+            wavelet=wavelet,
+            level=level,
+            window=window,
+            feature_prefix=feature_prefix,
         )
         if include_volume and volume_col in df.columns and df[volume_col].sum() > 0:
             df = add_wavelet_energy(
-                df, feature_metadata, price_col=volume_col, wavelet=wavelet,
-                level=level, window=window, feature_prefix=feature_prefix
+                df,
+                feature_metadata,
+                price_col=volume_col,
+                wavelet=wavelet,
+                level=level,
+                window=window,
+                feature_prefix=feature_prefix,
             )
 
     # Volatility
     if include_volatility:
         df = add_wavelet_volatility(
-            df, feature_metadata, price_col=price_col, wavelet=wavelet,
-            window=window, feature_prefix=feature_prefix
+            df,
+            feature_metadata,
+            price_col=price_col,
+            wavelet=wavelet,
+            window=window,
+            feature_prefix=feature_prefix,
         )
 
     # Trend strength
     if include_trend:
         df = add_wavelet_trend_strength(
-            df, feature_metadata, price_col=price_col, wavelet=wavelet,
-            level=level, window=window, feature_prefix=feature_prefix
+            df,
+            feature_metadata,
+            price_col=price_col,
+            wavelet=wavelet,
+            level=level,
+            window=window,
+            feature_prefix=feature_prefix,
         )
 
     logger.info(f"Added {len(df.columns) - initial_cols} wavelet features")
@@ -381,14 +417,14 @@ def add_wavelet_features(
 
 
 __all__ = [
-    'add_wavelet_features',
-    'add_wavelet_coefficients',
-    'add_wavelet_energy',
-    'add_wavelet_volatility',
-    'add_wavelet_trend_strength',
-    'SUPPORTED_WAVELETS',
-    'DEFAULT_WAVELET',
-    'DEFAULT_LEVEL',
-    'DEFAULT_WINDOW',
-    'PYWT_AVAILABLE',
+    "add_wavelet_features",
+    "add_wavelet_coefficients",
+    "add_wavelet_energy",
+    "add_wavelet_volatility",
+    "add_wavelet_trend_strength",
+    "SUPPORTED_WAVELETS",
+    "DEFAULT_WAVELET",
+    "DEFAULT_LEVEL",
+    "DEFAULT_WINDOW",
+    "PYWT_AVAILABLE",
 ]

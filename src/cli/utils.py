@@ -1,6 +1,7 @@
 """
 CLI Utilities - Shared functions for CLI commands.
 """
+
 from pathlib import Path
 
 from rich.console import Console

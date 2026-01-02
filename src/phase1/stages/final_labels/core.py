@@ -3,6 +3,7 @@ Stage 6: Final Labels - Core Logic.
 
 Applies optimized triple-barrier labels with quality scoring and sample weights.
 """
+
 import logging
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def compute_quality_scores(
     mfe: np.ndarray,
     labels: np.ndarray,
     horizon: int,
-    symbol: str = 'MES'
+    symbol: str = "MES",
 ) -> tuple:
     """
     Compute quality scores for each sample with risk-adjusted metrics.
@@ -72,7 +73,7 @@ def compute_quality_scores(
             speed_scores[i] = 0.0
         else:
             deviation = abs(bars - ideal_speed) / ideal_speed
-            speed_scores[i] = np.exp(-deviation ** 2)
+            speed_scores[i] = np.exp(-(deviation**2))
 
     # 2. & 3. DIRECTION-AWARE MAE/MFE scores
     # MAE/MFE from triple_barrier_numba are computed from a LONG perspective:
@@ -101,7 +102,11 @@ def compute_quality_scores(
             adverse_excursion[i] = min(abs(mfe[i]), abs(mae[i]))
 
     # MAE score: lower adverse excursion = higher quality
-    ae_max = np.percentile(adverse_excursion[adverse_excursion > 0], 95) if np.any(adverse_excursion > 0) else 1.0
+    ae_max = (
+        np.percentile(adverse_excursion[adverse_excursion > 0], 95)
+        if np.any(adverse_excursion > 0)
+        else 1.0
+    )
     if ae_max > 0:
         ae_normalized = adverse_excursion / ae_max
         mae_scores = 1.0 - np.clip(ae_normalized, 0, 1)
@@ -109,7 +114,11 @@ def compute_quality_scores(
         mae_scores = np.ones(n, dtype=np.float32)
 
     # MFE score: higher favorable excursion = higher quality
-    fe_max = np.percentile(favorable_excursion[favorable_excursion > 0], 95) if np.any(favorable_excursion > 0) else 1.0
+    fe_max = (
+        np.percentile(favorable_excursion[favorable_excursion > 0], 95)
+        if np.any(favorable_excursion > 0)
+        else 1.0
+    )
     if fe_max > 0:
         mfe_scores = np.clip(favorable_excursion / fe_max, 0, 1)
     else:
@@ -181,11 +190,11 @@ def compute_quality_scores(
 
     # COMBINED QUALITY SCORE
     quality_scores = (
-        0.20 * speed_scores +
-        0.25 * mae_scores +
-        0.20 * mfe_scores +
-        0.20 * ptg_scores +
-        0.15 * twdd_scores
+        0.20 * speed_scores
+        + 0.25 * mae_scores
+        + 0.20 * mfe_scores
+        + 0.20 * ptg_scores
+        + 0.15 * twdd_scores
     )
 
     return quality_scores, pain_to_gain, time_weighted_dd
@@ -222,17 +231,15 @@ def assign_sample_weights(quality_scores: np.ndarray) -> np.ndarray:
 
 
 def add_forward_return_columns(
-    df: pd.DataFrame,
-    horizon: int,
-    close_column: str = 'close'
+    df: pd.DataFrame, horizon: int, close_column: str = "close"
 ) -> pd.DataFrame:
     """Add forward return columns for the given horizon."""
     forward_close = df[close_column].shift(-horizon)
     denom = df[close_column].replace(0, np.nan)
     ratio = (forward_close / denom).where(lambda x: x > 0)
 
-    df[f'fwd_return_h{horizon}'] = (ratio - 1.0).astype(np.float32)
-    df[f'fwd_return_log_h{horizon}'] = np.log(ratio).astype(np.float32)
+    df[f"fwd_return_h{horizon}"] = (ratio - 1.0).astype(np.float32)
+    df[f"fwd_return_log_h{horizon}"] = np.log(ratio).astype(np.float32)
     return df
 
 
@@ -240,8 +247,8 @@ def apply_optimized_labels(
     df: pd.DataFrame,
     horizon: int,
     best_params: dict,
-    symbol: str = 'MES',
-    atr_column: str = 'atr_14'
+    symbol: str = "MES",
+    atr_column: str = "atr_14",
 ) -> pd.DataFrame:
     """
     Apply optimized triple barrier labeling and compute quality scores.
@@ -259,12 +266,14 @@ def apply_optimized_labels(
     df : DataFrame with optimized labels, quality scores, and sample weights
     """
     logger.info(f"Applying optimized labels for {symbol} horizon {horizon}")
-    logger.info(f"  Parameters: k_up={best_params['k_up']:.3f}, "
-                f"k_down={best_params['k_down']:.3f}, "
-                f"max_bars={best_params['max_bars']}")
+    logger.info(
+        f"  Parameters: k_up={best_params['k_up']:.3f}, "
+        f"k_down={best_params['k_down']:.3f}, "
+        f"max_bars={best_params['max_bars']}"
+    )
 
     # Log barrier type
-    k_ratio = best_params['k_up'] / best_params['k_down'] if best_params['k_down'] > 0 else 1.0
+    k_ratio = best_params["k_up"] / best_params["k_down"] if best_params["k_down"] > 0 else 1.0
     if abs(k_ratio - 1.0) < 0.15:
         barrier_type = "SYMMETRIC"
     elif k_ratio > 1.0:
@@ -274,18 +283,22 @@ def apply_optimized_labels(
     logger.info(f"  Barrier type: {barrier_type}")
 
     # Extract arrays
-    close = df['close'].values
-    high = df['high'].values
-    low = df['low'].values
-    open_prices = df['open'].values
+    close = df["close"].values
+    high = df["high"].values
+    low = df["low"].values
+    open_prices = df["open"].values
     atr = df[atr_column].values
 
     # Apply labeling
     labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
-        close, high, low, open_prices, atr,
-        best_params['k_up'],
-        best_params['k_down'],
-        best_params['max_bars']
+        close,
+        high,
+        low,
+        open_prices,
+        atr,
+        best_params["k_up"],
+        best_params["k_down"],
+        best_params["max_bars"],
     )
 
     # Compute quality scores
@@ -297,15 +310,15 @@ def apply_optimized_labels(
     sample_weights = assign_sample_weights(quality_scores)
 
     # Add to dataframe
-    df[f'label_h{horizon}'] = labels
-    df[f'bars_to_hit_h{horizon}'] = bars_to_hit
-    df[f'mae_h{horizon}'] = mae
-    df[f'mfe_h{horizon}'] = mfe
-    df[f'touch_type_h{horizon}'] = touch_type
-    df[f'quality_h{horizon}'] = quality_scores
-    df[f'sample_weight_h{horizon}'] = sample_weights
-    df[f'pain_to_gain_h{horizon}'] = pain_to_gain
-    df[f'time_weighted_dd_h{horizon}'] = time_weighted_dd
+    df[f"label_h{horizon}"] = labels
+    df[f"bars_to_hit_h{horizon}"] = bars_to_hit
+    df[f"mae_h{horizon}"] = mae
+    df[f"mfe_h{horizon}"] = mfe
+    df[f"touch_type_h{horizon}"] = touch_type
+    df[f"quality_h{horizon}"] = quality_scores
+    df[f"sample_weight_h{horizon}"] = sample_weights
+    df[f"pain_to_gain_h{horizon}"] = pain_to_gain
+    df[f"time_weighted_dd_h{horizon}"] = time_weighted_dd
     df = add_forward_return_columns(df, horizon)
 
     # Compute label_end_time: datetime when label outcome is known
@@ -313,8 +326,8 @@ def apply_optimized_labels(
     # NOT compute entry_time + bars_to_hit * bar_duration. The latter is WRONG when there
     # are gaps (overnight, weekends, session breaks) because it under-estimates the true
     # end time, leading to insufficient purging and label leakage.
-    if 'datetime' in df.columns:
-        datetime_col = pd.to_datetime(df['datetime'])
+    if "datetime" in df.columns:
+        datetime_col = pd.to_datetime(df["datetime"])
         datetime_arr = datetime_col.values
         n = len(datetime_col)
 
@@ -327,7 +340,7 @@ def apply_optimized_labels(
         # Look up the actual datetime at those forward indices
         label_end_times = pd.Series(datetime_arr[forward_indices], index=datetime_col.index)
 
-        df[f'label_end_time_h{horizon}'] = label_end_times
+        df[f"label_end_time_h{horizon}"] = label_end_times
         logger.info("  Added label_end_time column for purging (gap-aware lookup)")
 
     # Log statistics
@@ -398,11 +411,11 @@ def generate_labeling_report(
         report_lines.append("")
 
         for horizon in horizons:
-            label_col = f'label_h{horizon}'
-            quality_col = f'quality_h{horizon}'
-            bars_col = f'bars_to_hit_h{horizon}'
-            ptg_col = f'pain_to_gain_h{horizon}'
-            twdd_col = f'time_weighted_dd_h{horizon}'
+            label_col = f"label_h{horizon}"
+            quality_col = f"quality_h{horizon}"
+            bars_col = f"bars_to_hit_h{horizon}"
+            ptg_col = f"pain_to_gain_h{horizon}"
+            twdd_col = f"time_weighted_dd_h{horizon}"
 
             if label_col not in df.columns:
                 continue
@@ -450,7 +463,9 @@ def generate_labeling_report(
     report_lines.append("## Quality Metrics Explanation")
     report_lines.append("")
     report_lines.append("- **Pain-to-Gain Ratio**: Risk per unit of profit. Lower is better.")
-    report_lines.append("- **Time-Weighted DD**: Penalizes trades that spend time in drawdown. Lower is better.")
+    report_lines.append(
+        "- **Time-Weighted DD**: Penalizes trades that spend time in drawdown. Lower is better."
+    )
     report_lines.append("- **Neutral Rate Target**: 20-30% for selective trading signals.")
     report_lines.append("")
     report_lines.append("---")
@@ -458,10 +473,10 @@ def generate_labeling_report(
 
     # Save report
     output_dir.mkdir(parents=True, exist_ok=True)
-    report_path = output_dir / 'labeling_report.md'
+    report_path = output_dir / "labeling_report.md"
 
-    with open(report_path, 'w') as f:
-        f.write('\n'.join(report_lines))
+    with open(report_path, "w") as f:
+        f.write("\n".join(report_lines))
 
     logger.info(f"Labeling report saved to {report_path}")
     return report_path

@@ -3,6 +3,7 @@ Pipeline Stage Modules.
 
 Each module contains the execution logic for a specific pipeline stage.
 """
+
 from .data_cleaning import run_data_cleaning
 from .data_generation import run_data_generation
 from .datasets import run_build_datasets
@@ -16,17 +17,17 @@ from .splits import run_create_splits
 from .validation import run_validation
 
 __all__ = [
-    'run_data_generation',
-    'run_data_cleaning',
-    'run_feature_engineering',
-    'run_initial_labeling',
-    'run_final_labels',
-    'run_ga_optimization',
-    'run_create_splits',
-    'run_feature_scaling',
-    'run_build_datasets',
-    'run_scaled_validation',
-    'run_validation',
-    'run_generate_report',
-    'generate_report_content',
+    "run_data_generation",
+    "run_data_cleaning",
+    "run_feature_engineering",
+    "run_initial_labeling",
+    "run_final_labels",
+    "run_ga_optimization",
+    "run_create_splits",
+    "run_feature_scaling",
+    "run_build_datasets",
+    "run_scaled_validation",
+    "run_validation",
+    "run_generate_report",
+    "generate_report_content",
 ]

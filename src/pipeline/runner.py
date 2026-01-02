@@ -4,6 +4,7 @@ Pipeline Runner - Main Orchestrator.
 Manages stage execution, dependency tracking, and artifact management for
 the Phase 1 data preparation pipeline.
 """
+
 import json
 import logging
 import sys
@@ -15,6 +16,7 @@ import numpy as np
 
 class NumpyEncoder(json.JSONEncoder):
     """Custom JSON encoder to handle numpy types."""
+
     def default(self, obj):
         if isinstance(obj, (np.integer,)):
             return int(obj)
@@ -25,6 +27,7 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, Path):
             return str(obj)
         return super().default(obj)
+
 
 from .stage_registry import PipelineStage, get_stage_definitions
 
@@ -49,7 +52,7 @@ from .utils import StageResult, StageStatus
 class PipelineRunner:
     """Orchestrates the Phase 1 pipeline execution."""
 
-    def __init__(self, config: 'PipelineConfig', resume: bool = False):
+    def __init__(self, config: "PipelineConfig", resume: bool = False):
         """
         Initialize pipeline runner.
 
@@ -87,17 +90,13 @@ class PipelineRunner:
         # File handler
         file_handler = logging.FileHandler(self.log_file)
         file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        file_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(file_formatter)
 
         # Console handler
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s'
-        )
+        console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         console_handler.setFormatter(console_formatter)
 
         # Configure root logger
@@ -133,14 +132,16 @@ class PipelineRunner:
             if func is None:
                 raise ValueError(f"No function defined for stage: {stage_def['name']}")
 
-            self.stages.append(PipelineStage(
-                name=stage_def["name"],
-                function=func,
-                dependencies=stage_def["dependencies"],
-                description=stage_def["description"],
-                required=stage_def["required"],
-                stage_number=stage_def["stage_number"]
-            ))
+            self.stages.append(
+                PipelineStage(
+                    name=stage_def["name"],
+                    function=func,
+                    dependencies=stage_def["dependencies"],
+                    description=stage_def["description"],
+                    required=stage_def["required"],
+                    stage_number=stage_def["stage_number"],
+                )
+            )
 
     def run(self, from_stage: str | None = None) -> bool:
         """
@@ -161,9 +162,7 @@ class PipelineRunner:
 
         # Save configuration
         self.config.save_config()
-        self.logger.info(
-            f"Configuration saved to {self.config.run_config_dir / 'config.json'}"
-        )
+        self.logger.info(f"Configuration saved to {self.config.run_config_dir / 'config.json'}")
 
         # Determine which stages to run
         stages_to_run = self._get_stages_to_run(from_stage)
@@ -249,17 +248,16 @@ class PipelineRunner:
     def _save_state(self) -> None:
         """Save current pipeline state."""
         state = {
-            'run_id': self.config.run_id,
-            'completed_stages': list(self.completed_stages),
-            'stage_results': {
-                name: result.to_dict()
-                for name, result in self.stage_results.items()
+            "run_id": self.config.run_id,
+            "completed_stages": list(self.completed_stages),
+            "stage_results": {
+                name: result.to_dict() for name, result in self.stage_results.items()
             },
-            'saved_at': datetime.now().isoformat()
+            "saved_at": datetime.now().isoformat(),
         }
 
         state_path = self.config.run_artifacts_dir / "pipeline_state.json"
-        with open(state_path, 'w') as f:
+        with open(state_path, "w") as f:
             json.dump(state, f, indent=2, cls=NumpyEncoder)
 
     def _load_state(self) -> None:
@@ -275,17 +273,12 @@ class PipelineRunner:
         with open(state_path) as f:
             state = json.load(f)
 
-        self.completed_stages = set(state.get('completed_stages', []))
-        self.logger.info(
-            f"Loaded state with {len(self.completed_stages)} completed stages"
-        )
+        self.completed_stages = set(state.get("completed_stages", []))
+        self.logger.info(f"Loaded state with {len(self.completed_stages)} completed stages")
 
         # Load manifest if exists
         try:
-            self.manifest = ArtifactManifest.load(
-                self.config.run_id,
-                self.config.project_root
-            )
+            self.manifest = ArtifactManifest.load(self.config.run_id, self.config.project_root)
         except FileNotFoundError:
             self.logger.warning("No previous manifest found.")
 

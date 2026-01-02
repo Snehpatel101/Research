@@ -33,6 +33,7 @@ Usage:
         # X_4d: (batch, n_timeframes, seq_len, features)
         pass
 """
+
 from src.phase1.stages.datasets.adapters.multi_resolution import (
     MultiResolution4DAdapter,
     MultiResolution4DConfig,

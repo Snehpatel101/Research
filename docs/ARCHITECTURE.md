@@ -23,20 +23,18 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    MULTI-TIMEFRAME UPSCALING                        │
+│                    MULTI-TIMEFRAME UPSCALING (PARTIAL)              │
 │                                                                     │
-│  1-min OHLCV (canonical)  →  [Upscale to ALL 9 Timeframes]         │
+│  1-min OHLCV (canonical)  →  [Upscale to 5 of 9 Timeframes]        │
 │                                                                     │
-│  Output: 1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h  │
+│  ⚠️ Currently: 15min, 30min, 1h, 4h, daily (5 timeframes)           │
+│  ⚠️ Planned: 1min, 5min, 10min, 15min, 20min, 25min, 30min,         │
+│              45min, 1h (9 timeframes for full flexibility)          │
 │                                                                     │
 │  Then models choose:                                                │
-│  • Primary training TF (e.g., 5min or 15min)                        │
+│  • Primary training TF (currently hardcoded to 5min)               │
 │  • MTF strategy (single-TF / MTF indicators / MTF ingestion)        │
 │  • Which TFs to use for enrichment/multi-stream                     │
-│                                                                     │
-│  Status: ⚠️ Only 5 TFs implemented (15m, 30m, 1h, 4h, daily)         │
-│          Need: All 9-TF ladder (1m, 5m, 10m, 15m, 20m, 25m, 30m,   │
-│                 45m, 1h) for full flexibility                       │
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -81,11 +79,16 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      MODEL TRAINING (PHASE 6)                       │
 │                                                                     │
-│  Single Models (13 implemented):                                   │
+│  Base Models (10 implemented):                                     │
 │  ├─ Boosting (3):     XGBoost, LightGBM, CatBoost                 │
 │  ├─ Neural (4):       LSTM, GRU, TCN, Transformer                 │
-│  ├─ Classical (3):    Random Forest, Logistic, SVM                │
-│  └─ Ensemble (3):     Voting, Stacking, Blending                  │
+│  └─ Classical (3):    Random Forest, Logistic, SVM                │
+│                                                                     │
+│  Ensemble Models (3 implemented):                                  │
+│  └─ Same-family:      Voting, Stacking, Blending                  │
+│                                                                     │
+│  Meta-Learners (4 implemented):                                    │
+│  └─ Inference:        Ridge Meta, MLP Meta, Calibrated, XGBoost   │
 │                                                                     │
 │  Advanced Models (6 planned):                                      │
 │  ├─ CNN (2):          InceptionTime, 1D ResNet                     │
@@ -94,15 +97,15 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│         HETEROGENEOUS BASE MODELS (PHASE 7 - REMOVED)               │
+│       HETEROGENEOUS ENSEMBLE STACKING (PHASE 7 - PLANNED)          │
 │                                                                     │
-│  Phase 7 homogeneous ensembles removed from architecture           │
-│  Same-family constraint no longer applies                          │
-│  Base models train independently                                   │
+│  ⚠️ Status: Meta-learners implemented, training script planned     │
+│  Goal: Automated heterogeneous ensemble training workflow          │
+│  Missing: scripts/train_ensemble.py for coordinated training       │
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│              META-LEARNER STACKING (PHASE 7 - Planned)              │
+│          META-LEARNER STACKING (Planned Workflow)                   │
 │                                                                     │
 │  3-4 Heterogeneous Base Models (1 per family):                     │
 │  ├→ Tabular: CatBoost OR LightGBM (engineered features)           │
@@ -151,7 +154,7 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 ### 2. Canonical Dataset with Per-Model Feature Selection
 
 **One canonical source, different feature sets:**
-- Single 1-min OHLCV source → ALL 9 timeframes derived deterministically
+- Single 1-min OHLCV source → ⚠️ 5 of 9 timeframes derived (partial implementation)
 - Same timestamps, labels, splits for all models
 - **Different features per model family** based on inductive biases:
   - Tabular models: ~200 engineered features (indicators + MTF indicators)
@@ -710,7 +713,7 @@ python scripts/run_cv.py --models xgboost --horizons 20 --tune --n-trials 50
 ### List Available Models
 ```bash
 python scripts/train_model.py --list-models
-# Output: 13 models
+# Output: 17 models (10 base + 3 ensemble + 4 meta-learners)
 ```
 
 ---

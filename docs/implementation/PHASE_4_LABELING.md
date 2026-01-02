@@ -6,6 +6,88 @@
 
 ---
 
+## ⚠️ CRITICAL GAPS
+
+### Gap 1: No Multi-Horizon Batch Processing (1 day)
+**Status:** ❌ Must run pipeline separately for each horizon
+**Impact:** Cannot generate labels for all horizons (5, 10, 15, 20) in one run
+**Current Behavior:**
+```bash
+# Must run 4 separate times
+./pipeline run --symbols MGC --horizon 5
+./pipeline run --symbols MGC --horizon 10
+./pipeline run --symbols MGC --horizon 15
+./pipeline run --symbols MGC --horizon 20
+```
+
+**Desired Behavior:**
+```bash
+# Single run generates all horizons
+./pipeline run --symbols MGC --horizons 5,10,15,20
+```
+
+**Required Changes:**
+- Modify labeling stage to loop over horizons
+- Save separate label columns: `label_h5`, `label_h10`, `label_h15`, `label_h20`
+- Generate separate sample weights per horizon
+- Optuna optimization per horizon (or shared parameters)
+
+**Files to Modify:**
+- `src/phase1/stages/labeling/labeler.py` - Multi-horizon loop
+- `src/phase1/stages/ga_optimize/barrier_optimizer.py` - Per-horizon optimization
+- `scripts/pipeline.py` - CLI support for `--horizons` flag
+
+**Estimate:** 1 day
+
+### Gap 2: Barrier Optimization Not Saved/Reusable (0.5 days)
+**Status:** ⚠️ Optimization runs every pipeline execution
+**Impact:** Wastes 2+ minutes re-optimizing barriers on every run
+**What's Missing:**
+- No cache of optimized barriers per symbol/horizon
+- No way to skip optimization and use previous parameters
+- No comparison of old vs new optimized parameters
+
+**Required Features:**
+```python
+# Save optimized barriers
+{
+  "MGC": {
+    "horizon_5": {"profit": 0.012, "loss": 0.008, "sharpe": 1.45},
+    "horizon_10": {"profit": 0.015, "loss": 0.010, "sharpe": 1.38},
+    "horizon_20": {"profit": 0.018, "loss": 0.012, "sharpe": 1.32}
+  }
+}
+```
+
+**Files to Create:**
+- `data/optimization/barrier_cache.json` - Cached parameters
+- `src/phase1/stages/ga_optimize/cache.py` - Cache manager
+
+**Files to Modify:**
+- `src/phase1/stages/ga_optimize/barrier_optimizer.py` - Check cache before optimizing
+
+**Estimate:** 0.5 days
+
+### Gap 3: No Label Quality Reports (0.5 days)
+**Status:** ❌ No visibility into label quality
+**Impact:** Users don't know if labels are good enough for training
+**What's Missing:**
+- No report on label distribution (long/short/neutral percentages)
+- No analysis of label stability across different barrier params
+- No visualization of barrier touches
+- No comparison across horizons
+
+**Required Artifacts:**
+- `reports/labeling/{symbol}_h{horizon}_label_quality.html` - Interactive report
+- Charts: label distribution, barrier touch histogram, quality weight distribution
+- Table: Optuna trials ranked by Sharpe
+
+**Estimate:** 0.5 days
+
+**Days of Work Remaining:** 2 days (Gaps 1-3 combined)
+
+---
+
 ## Goal
 
 Generate high-quality directional labels using triple-barrier method with Optuna-optimized thresholds, incorporating transaction costs, quality weighting, and proper time-series splits to prevent leakage.

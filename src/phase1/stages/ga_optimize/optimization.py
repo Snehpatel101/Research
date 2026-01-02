@@ -223,10 +223,11 @@ def process_symbol_ga(
     # Use provided labels_dir or fall back to global (deprecated)
     if labels_dir is None:
         import warnings
+
         warnings.warn(
             "Using global labels_dir is deprecated. Pass explicit labels_dir for reproducibility.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         labels_dir = project_root / "data" / "labels"
 
@@ -263,9 +264,7 @@ def process_symbol_ga(
         val = results.get("validation", {})
         signal_rate = val.get("signal_rate", 0)
         if signal_rate < 0.40:
-            logger.warning(
-                f"  WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!"
-            )
+            logger.warning(f"  WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!")
             logger.warning("  Consider adjusting search bounds or running more trials.")
 
         # Determine output directories
@@ -274,10 +273,11 @@ def process_symbol_ga(
             plots_dir = output_dir / "ga_plots"
         else:
             import warnings
+
             warnings.warn(
                 "Using global output paths is deprecated. Pass explicit output_dir for reproducibility.",
                 DeprecationWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             ga_results_dir = project_root / "config" / "optimization" / "ga_results"
             plots_dir = project_root / "results" / "ga_plots"
@@ -367,7 +367,9 @@ def main():
 
     # Save combined summary
     project_root = Path(__file__).parent.parent.parent.parent.resolve()
-    summary_path = project_root / "config" / "optimization" / "ga_results" / "optimization_summary.json"
+    summary_path = (
+        project_root / "config" / "optimization" / "ga_results" / "optimization_summary.json"
+    )
     summary = {}
     for symbol, symbol_results in all_symbols_results.items():
         summary[symbol] = {

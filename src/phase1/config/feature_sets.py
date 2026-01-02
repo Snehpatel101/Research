@@ -3,6 +3,7 @@ Feature set definitions for modular model training.
 
 Provides named feature sets that can be selected without code edits.
 """
+
 from dataclasses import dataclass, field
 
 
@@ -26,6 +27,7 @@ class FeatureSetDefinition:
         default_sequence_length: Default sequence length for sequential models
         recommended_scaler: Recommended scaler type for this feature set
     """
+
     name: str
     description: str
     include_prefixes: list[str] = field(default_factory=list)
@@ -33,9 +35,9 @@ class FeatureSetDefinition:
     include_columns: list[str] = field(default_factory=list)
     exclude_columns: list[str] = field(default_factory=list)
     include_mtf: bool = False
-    supported_model_types: list[str] = field(default_factory=lambda: [
-        "tabular", "sequential", "tree"
-    ])
+    supported_model_types: list[str] = field(
+        default_factory=lambda: ["tabular", "sequential", "tree"]
+    )
     default_sequence_length: int | None = None
     recommended_scaler: str = "robust"
 
@@ -72,10 +74,35 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         name="core_min",
         description="Minimal base-timeframe feature set (no MTF). Single symbol only.",
         include_prefixes=[
-            "return_", "log_return_", "roc_", "rsi_", "macd_", "stoch_", "williams_",
-            "cci_", "mfi_", "atr_", "bb_", "kc_", "hvol_", "parkinson_", "garman_",
-            "volume_", "vwap", "obv", "adx_", "supertrend", "range_", "hl_", "co_",
-            "hour_", "minute_", "dayofweek_", "session_", "is_rth", "trend_regime",
+            "return_",
+            "log_return_",
+            "roc_",
+            "rsi_",
+            "macd_",
+            "stoch_",
+            "williams_",
+            "cci_",
+            "mfi_",
+            "atr_",
+            "bb_",
+            "kc_",
+            "hvol_",
+            "parkinson_",
+            "garman_",
+            "volume_",
+            "vwap",
+            "obv",
+            "adx_",
+            "supertrend",
+            "range_",
+            "hl_",
+            "co_",
+            "hour_",
+            "minute_",
+            "dayofweek_",
+            "session_",
+            "is_rth",
+            "trend_regime",
             "volatility_regime",
         ],
         include_columns=["price_to_vwap"],
@@ -123,19 +150,36 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # Price action (most important for boosting)
-            "return_", "log_return_", "roc_",
+            "return_",
+            "log_return_",
+            "roc_",
             # Momentum oscillators
-            "rsi_", "macd_", "stoch_", "williams_", "cci_", "mfi_",
+            "rsi_",
+            "macd_",
+            "stoch_",
+            "williams_",
+            "cci_",
+            "mfi_",
             # Trend indicators
-            "adx_", "supertrend",
+            "adx_",
+            "supertrend",
             # Volatility (critical for risk-adjusted predictions)
-            "atr_", "hvol_", "parkinson_", "garman_", "bb_width",
+            "atr_",
+            "hvol_",
+            "parkinson_",
+            "garman_",
+            "bb_width",
             # Volume features
-            "volume_", "obv",
+            "volume_",
+            "obv",
             # Price position features
-            "bb_position", "kc_position", "price_to_",
+            "bb_position",
+            "kc_position",
+            "price_to_",
             # Temporal features (important for regime detection)
-            "hour_", "dayofweek_", "session_",
+            "hour_",
+            "dayofweek_",
+            "session_",
         ],
         include_columns=["is_rth", "trend_regime", "volatility_regime"],
         include_mtf=False,
@@ -152,24 +196,45 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # Returns (already normalized, excellent for sequences)
-            "return_", "log_return_",
+            "return_",
+            "log_return_",
             # Bounded oscillators (0-100 or -100 to 100)
-            "rsi_", "stoch_", "williams_", "cci_", "mfi_",
+            "rsi_",
+            "stoch_",
+            "williams_",
+            "cci_",
+            "mfi_",
             # Normalized volatility ratios
-            "hvol_", "atr_ratio", "bb_position", "kc_position",
+            "hvol_",
+            "atr_ratio",
+            "bb_position",
+            "kc_position",
             # Volume ratios (normalized)
-            "volume_ratio", "volume_zscore",
+            "volume_ratio",
+            "volume_zscore",
             # Cyclical time features (sin/cos encoded)
-            "hour_sin", "hour_cos", "dayofweek_sin", "dayofweek_cos",
+            "hour_sin",
+            "hour_cos",
+            "dayofweek_sin",
+            "dayofweek_cos",
         ],
         include_columns=[
-            "price_to_vwap", "close_bb_zscore",
-            "trend_regime", "volatility_regime",
+            "price_to_vwap",
+            "close_bb_zscore",
+            "trend_regime",
+            "volatility_regime",
         ],
         exclude_prefixes=[
             # Exclude raw prices and unbounded features
-            "sma_", "ema_", "bb_upper", "bb_lower", "vwap",
-            "open_", "high_", "low_", "close_",
+            "sma_",
+            "ema_",
+            "bb_upper",
+            "bb_lower",
+            "vwap",
+            "open_",
+            "high_",
+            "low_",
+            "close_",
         ],
         include_mtf=False,
         supported_model_types=["sequential"],
@@ -185,14 +250,17 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # Core returns (let transformer learn patterns)
-            "return_", "log_return_",
+            "return_",
+            "log_return_",
             # Basic volume information
             "volume_ratio",
         ],
         include_columns=[
             # Minimal temporal context
-            "hour_sin", "hour_cos",
-            "dayofweek_sin", "dayofweek_cos",
+            "hour_sin",
+            "hour_cos",
+            "dayofweek_sin",
+            "dayofweek_cos",
             "is_rth",
         ],
         include_mtf=False,
@@ -210,20 +278,29 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # Group 1: Price momentum
-            "return_", "roc_",
+            "return_",
+            "roc_",
             # Group 2: Mean reversion signals
-            "rsi_", "bb_position", "kc_position",
+            "rsi_",
+            "bb_position",
+            "kc_position",
             # Group 3: Trend following
-            "adx_", "macd_", "supertrend",
+            "adx_",
+            "macd_",
+            "supertrend",
             # Group 4: Volatility regime
-            "atr_", "hvol_",
+            "atr_",
+            "hvol_",
             # Group 5: Volume analysis
-            "volume_", "obv",
+            "volume_",
+            "obv",
             # Group 6: Temporal patterns
-            "hour_", "dayofweek_",
+            "hour_",
+            "dayofweek_",
         ],
         include_columns=[
-            "trend_regime", "volatility_regime",
+            "trend_regime",
+            "volatility_regime",
             "is_rth",
         ],
         include_mtf=True,  # MTF adds diversity
@@ -240,28 +317,52 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # Returns and momentum (core for local pattern recognition)
-            "return_", "log_return_", "roc_",
+            "return_",
+            "log_return_",
+            "roc_",
             # Bounded oscillators (normalized, good for conv layers)
-            "rsi_", "stoch_", "williams_", "cci_", "mfi_",
+            "rsi_",
+            "stoch_",
+            "williams_",
+            "cci_",
+            "mfi_",
             # Volatility features (important for risk-adjusted learning)
-            "hvol_", "atr_pct", "bb_position", "kc_position",
+            "hvol_",
+            "atr_pct",
+            "bb_position",
+            "kc_position",
             # Higher moments (skew/kurtosis capture distribution changes)
-            "return_skew_", "return_kurt_",
+            "return_skew_",
+            "return_kurt_",
             # Autocorrelation (captures serial dependence patterns)
             "return_autocorr_",
             # Volume patterns (normalized)
-            "volume_ratio", "volume_zscore",
+            "volume_ratio",
+            "volume_zscore",
             # Cyclical time features
-            "hour_sin", "hour_cos", "dayofweek_sin", "dayofweek_cos",
+            "hour_sin",
+            "hour_cos",
+            "dayofweek_sin",
+            "dayofweek_cos",
         ],
         include_columns=[
-            "price_to_vwap", "close_bb_zscore", "clv",
-            "trend_regime", "volatility_regime",
+            "price_to_vwap",
+            "close_bb_zscore",
+            "clv",
+            "trend_regime",
+            "volatility_regime",
         ],
         exclude_prefixes=[
             # Exclude raw prices
-            "sma_", "ema_", "bb_upper", "bb_lower", "vwap",
-            "open_", "high_", "low_", "close_",
+            "sma_",
+            "ema_",
+            "bb_upper",
+            "bb_lower",
+            "vwap",
+            "open_",
+            "high_",
+            "low_",
+            "close_",
         ],
         include_mtf=False,
         supported_model_types=["sequential"],
@@ -277,13 +378,16 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # Minimal features - transformers learn patterns from raw data
-            "return_", "log_return_",
+            "return_",
+            "log_return_",
             "volume_ratio",
         ],
         include_columns=[
             # Temporal context
-            "hour_sin", "hour_cos",
-            "dayofweek_sin", "dayofweek_cos",
+            "hour_sin",
+            "hour_cos",
+            "dayofweek_sin",
+            "dayofweek_cos",
             "is_rth",
         ],
         include_mtf=False,
@@ -299,14 +403,23 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ),
         include_prefixes=[
             # All volatility estimators
-            "hvol_", "atr_", "parkinson_", "gk_vol", "rs_vol", "yz_vol",
-            "bb_width", "kc_",
+            "hvol_",
+            "atr_",
+            "parkinson_",
+            "gk_vol",
+            "rs_vol",
+            "yz_vol",
+            "bb_width",
+            "kc_",
             # Higher moments (related to vol clustering)
-            "return_skew_", "return_kurt_",
+            "return_skew_",
+            "return_kurt_",
             # Returns for realized vol context
-            "return_", "log_return_",
+            "return_",
+            "log_return_",
             # Volume (often correlated with volatility)
-            "volume_", "dollar_volume",
+            "volume_",
+            "dollar_volume",
         ],
         include_columns=[
             "volatility_regime",

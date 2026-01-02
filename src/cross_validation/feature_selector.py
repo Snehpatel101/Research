@@ -12,6 +12,7 @@ Methods:
 
 Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning", Chapter 8
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class FeatureSelectorConfig:
     """
@@ -45,6 +47,7 @@ class FeatureSelectorConfig:
         use_clustered_importance: Whether to use clustered MDA for correlated features
         max_clusters: Maximum number of feature clusters (if using clustered)
     """
+
     n_features_to_select: int = 50
     selection_method: str = "mda"  # mda, mdi, or hybrid
     n_estimators: int = 100
@@ -56,9 +59,13 @@ class FeatureSelectorConfig:
         if self.n_features_to_select <= 0:
             raise ValueError(f"n_features_to_select must be > 0, got {self.n_features_to_select}")
         if self.selection_method not in ("mda", "mdi", "hybrid"):
-            raise ValueError(f"selection_method must be mda/mdi/hybrid, got {self.selection_method}")
+            raise ValueError(
+                f"selection_method must be mda/mdi/hybrid, got {self.selection_method}"
+            )
         if not 0 < self.min_feature_frequency <= 1:
-            raise ValueError(f"min_feature_frequency must be in (0, 1], got {self.min_feature_frequency}")
+            raise ValueError(
+                f"min_feature_frequency must be in (0, 1], got {self.min_feature_frequency}"
+            )
 
 
 @dataclass
@@ -73,6 +80,7 @@ class FeatureSelectionResult:
         importance_history: Per-fold importance scores
         n_folds: Total number of folds
     """
+
     stable_features: list[str]
     feature_counts: dict[str, int]
     per_fold_selections: list[set[str]]
@@ -93,6 +101,7 @@ class FeatureSelectionResult:
 # =============================================================================
 # WALK-FORWARD FEATURE SELECTOR
 # =============================================================================
+
 
 class WalkForwardFeatureSelector:
     """
@@ -186,13 +195,15 @@ class WalkForwardFeatureSelector:
             feature_selections.append(set(top_features))
 
             # Store importance history
-            importance_history.append({
-                "fold": fold_idx,
-                "n_features_evaluated": len(importance),
-                "top_feature": top_features[0] if top_features else None,
-                "top_importance": float(importance.max()) if len(importance) > 0 else 0.0,
-                "importance": importance.to_dict(),
-            })
+            importance_history.append(
+                {
+                    "fold": fold_idx,
+                    "n_features_evaluated": len(importance),
+                    "top_feature": top_features[0] if top_features else None,
+                    "top_importance": float(importance.max()) if len(importance) > 0 else 0.0,
+                    "importance": importance.to_dict(),
+                }
+            )
 
             logger.debug(f"Fold {fold_idx}: selected {len(top_features)} features")
 
@@ -201,10 +212,7 @@ class WalkForwardFeatureSelector:
         feature_counts = {f: sum(f in s for s in feature_selections) for f in all_features}
 
         min_count = int(n_folds * self.config.min_feature_frequency)
-        stable_features = [
-            f for f, count in feature_counts.items()
-            if count >= min_count
-        ]
+        stable_features = [f for f, count in feature_counts.items() if count >= min_count]
 
         # Sort stable features by selection count (most stable first)
         stable_features.sort(key=lambda f: feature_counts[f], reverse=True)
@@ -285,7 +293,9 @@ class WalkForwardFeatureSelector:
 
         # Use permutation importance
         result = permutation_importance(
-            rf, X, y,
+            rf,
+            X,
+            y,
             n_repeats=10,
             random_state=self.random_state,
             n_jobs=-1,
@@ -320,12 +330,8 @@ class WalkForwardFeatureSelector:
 
         # Condense distance matrix and cluster
         dist_condensed = squareform(dist.values)
-        linkage_matrix = linkage(dist_condensed, method='ward')
-        clusters = fcluster(
-            linkage_matrix,
-            t=self.config.max_clusters,
-            criterion='maxclust'
-        )
+        linkage_matrix = linkage(dist_condensed, method="ward")
+        clusters = fcluster(linkage_matrix, t=self.config.max_clusters, criterion="maxclust")
 
         # Map features to clusters
         feature_clusters = pd.Series(clusters, index=X.columns)
@@ -336,7 +342,7 @@ class WalkForwardFeatureSelector:
             cluster_features = feature_clusters[feature_clusters == cluster_id].index.tolist()
 
             # Use mean of cluster features as representative
-            X_cluster = X[cluster_features].mean(axis=1).to_frame('cluster_mean')
+            X_cluster = X[cluster_features].mean(axis=1).to_frame("cluster_mean")
 
             rf = RandomForestClassifier(
                 n_estimators=50,
@@ -359,6 +365,7 @@ class WalkForwardFeatureSelector:
 # =============================================================================
 # CV-INTEGRATED FEATURE SELECTOR
 # =============================================================================
+
 
 class CVIntegratedFeatureSelector:
     """

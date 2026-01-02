@@ -1,6 +1,7 @@
 """
 Regime detection and adaptive barrier configuration.
 """
+
 from __future__ import annotations
 
 from typing import Any

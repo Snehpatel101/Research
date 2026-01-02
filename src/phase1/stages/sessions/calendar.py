@@ -33,12 +33,14 @@ import pandas as pd
 
 try:
     import pytz
+
     PYTZ_AVAILABLE = True
 except ImportError:
     PYTZ_AVAILABLE = False
 
 try:
     from zoneinfo import ZoneInfo
+
     ZONEINFO_AVAILABLE = True
 except ImportError:
     ZONEINFO_AVAILABLE = False
@@ -49,15 +51,17 @@ logger.addHandler(logging.NullHandler())
 
 class TradingDayType(Enum):
     """Type of trading day."""
-    REGULAR = 'regular'
-    EARLY_CLOSE = 'early_close'
-    HOLIDAY = 'holiday'
-    WEEKEND = 'weekend'
+
+    REGULAR = "regular"
+    EARLY_CLOSE = "early_close"
+    HOLIDAY = "holiday"
+    WEEKEND = "weekend"
 
 
 @dataclass(frozen=True)
 class TradingDay:
     """Information about a specific trading day."""
+
     date: date
     day_type: TradingDayType
     description: str = ""
@@ -72,62 +76,62 @@ class TradingDay:
 
 CME_HOLIDAYS: dict[int, list[date]] = {
     2024: [
-        date(2024, 1, 1),   # New Year's Day
+        date(2024, 1, 1),  # New Year's Day
         date(2024, 1, 15),  # Martin Luther King Jr. Day
         date(2024, 2, 19),  # Presidents Day
         date(2024, 3, 29),  # Good Friday
         date(2024, 5, 27),  # Memorial Day
         date(2024, 6, 19),  # Juneteenth
-        date(2024, 7, 4),   # Independence Day
-        date(2024, 9, 2),   # Labor Day
-        date(2024, 11, 28), # Thanksgiving Day
-        date(2024, 12, 25), # Christmas Day
+        date(2024, 7, 4),  # Independence Day
+        date(2024, 9, 2),  # Labor Day
+        date(2024, 11, 28),  # Thanksgiving Day
+        date(2024, 12, 25),  # Christmas Day
     ],
     2025: [
-        date(2025, 1, 1),   # New Year's Day
+        date(2025, 1, 1),  # New Year's Day
         date(2025, 1, 20),  # Martin Luther King Jr. Day
         date(2025, 2, 17),  # Presidents Day
         date(2025, 4, 18),  # Good Friday
         date(2025, 5, 26),  # Memorial Day
         date(2025, 6, 19),  # Juneteenth
-        date(2025, 7, 4),   # Independence Day
-        date(2025, 9, 1),   # Labor Day
-        date(2025, 11, 27), # Thanksgiving Day
-        date(2025, 12, 25), # Christmas Day
+        date(2025, 7, 4),  # Independence Day
+        date(2025, 9, 1),  # Labor Day
+        date(2025, 11, 27),  # Thanksgiving Day
+        date(2025, 12, 25),  # Christmas Day
     ],
     2026: [
-        date(2026, 1, 1),   # New Year's Day
+        date(2026, 1, 1),  # New Year's Day
         date(2026, 1, 19),  # Martin Luther King Jr. Day
         date(2026, 2, 16),  # Presidents Day
-        date(2026, 4, 3),   # Good Friday
+        date(2026, 4, 3),  # Good Friday
         date(2026, 5, 25),  # Memorial Day
         date(2026, 6, 19),  # Juneteenth
-        date(2026, 7, 3),   # Independence Day (observed, 7/4 is Saturday)
-        date(2026, 9, 7),   # Labor Day
-        date(2026, 11, 26), # Thanksgiving Day
-        date(2026, 12, 25), # Christmas Day
+        date(2026, 7, 3),  # Independence Day (observed, 7/4 is Saturday)
+        date(2026, 9, 7),  # Labor Day
+        date(2026, 11, 26),  # Thanksgiving Day
+        date(2026, 12, 25),  # Christmas Day
     ],
 }
 
 # Early close days (trading ends early, typically 12:00 ET / 17:00 UTC)
 CME_EARLY_CLOSE: dict[int, list[date]] = {
     2024: [
-        date(2024, 7, 3),   # Day before Independence Day
-        date(2024, 11, 29), # Day after Thanksgiving
-        date(2024, 12, 24), # Christmas Eve
-        date(2024, 12, 31), # New Year's Eve
+        date(2024, 7, 3),  # Day before Independence Day
+        date(2024, 11, 29),  # Day after Thanksgiving
+        date(2024, 12, 24),  # Christmas Eve
+        date(2024, 12, 31),  # New Year's Eve
     ],
     2025: [
-        date(2025, 7, 3),   # Day before Independence Day
-        date(2025, 11, 28), # Day after Thanksgiving
-        date(2025, 12, 24), # Christmas Eve
-        date(2025, 12, 31), # New Year's Eve
+        date(2025, 7, 3),  # Day before Independence Day
+        date(2025, 11, 28),  # Day after Thanksgiving
+        date(2025, 12, 24),  # Christmas Eve
+        date(2025, 12, 31),  # New Year's Eve
     ],
     2026: [
-        date(2026, 7, 2),   # Day before observed Independence Day
-        date(2026, 11, 27), # Day after Thanksgiving
-        date(2026, 12, 24), # Christmas Eve
-        date(2026, 12, 31), # New Year's Eve
+        date(2026, 7, 2),  # Day before observed Independence Day
+        date(2026, 11, 27),  # Day after Thanksgiving
+        date(2026, 12, 24),  # Christmas Eve
+        date(2026, 12, 31),  # New Year's Eve
     ],
 }
 
@@ -231,11 +235,7 @@ class CMECalendar:
         day_type = self.get_trading_day_type(dt)
         return day_type in (TradingDayType.REGULAR, TradingDayType.EARLY_CLOSE)
 
-    def get_holidays_in_range(
-        self,
-        start: date,
-        end: date
-    ) -> list[date]:
+    def get_holidays_in_range(self, start: date, end: date) -> list[date]:
         """
         Get all CME holidays in a date range.
 
@@ -246,16 +246,9 @@ class CMECalendar:
         Returns:
             List of holiday dates in the range
         """
-        return sorted([
-            h for h in self._holiday_set
-            if start <= h <= end
-        ])
+        return sorted([h for h in self._holiday_set if start <= h <= end])
 
-    def get_trading_days_in_range(
-        self,
-        start: date,
-        end: date
-    ) -> list[date]:
+    def get_trading_days_in_range(self, start: date, end: date) -> list[date]:
         """
         Get all trading days in a date range.
 
@@ -276,11 +269,7 @@ class CMECalendar:
 
         return trading_days
 
-    def filter_holidays(
-        self,
-        df: pd.DataFrame,
-        datetime_column: str = 'datetime'
-    ) -> pd.DataFrame:
+    def filter_holidays(self, df: pd.DataFrame, datetime_column: str = "datetime") -> pd.DataFrame:
         """
         Filter out rows that fall on CME holidays.
 
@@ -310,8 +299,8 @@ class CMECalendar:
     def add_trading_day_features(
         self,
         df: pd.DataFrame,
-        datetime_column: str = 'datetime',
-        feature_metadata: dict[str, str] | None = None
+        datetime_column: str = "datetime",
+        feature_metadata: dict[str, str] | None = None,
     ) -> pd.DataFrame:
         """
         Add trading day type features to DataFrame.
@@ -331,10 +320,10 @@ class CMECalendar:
         dates = df[datetime_column].dt.date
 
         # Add is_early_close flag
-        df['is_early_close'] = dates.isin(self._early_close_set).astype(int)
+        df["is_early_close"] = dates.isin(self._early_close_set).astype(int)
 
         if feature_metadata is not None:
-            feature_metadata['is_early_close'] = "CME early close trading day flag"
+            feature_metadata["is_early_close"] = "CME early close trading day flag"
 
         return df
 
@@ -351,7 +340,7 @@ class DSTHandler:
     This class detects DST transitions and adjusts session boundaries accordingly.
     """
 
-    def __init__(self, timezone: str = 'America/New_York'):
+    def __init__(self, timezone: str = "America/New_York"):
         """
         Initialize DST handler.
 
@@ -372,8 +361,7 @@ class DSTHandler:
             return pytz.timezone(timezone)
         else:
             raise RuntimeError(
-                "Neither zoneinfo nor pytz is available. "
-                "Install pytz or upgrade to Python 3.9+."
+                "Neither zoneinfo nor pytz is available. " "Install pytz or upgrade to Python 3.9+."
             )
 
     def is_dst(self, dt: datetime) -> bool:
@@ -400,14 +388,14 @@ class DSTHandler:
             dt_local = dt.astimezone(self._tz)
 
         # Check if DST is active
-        if PYTZ_AVAILABLE and hasattr(dt_local, 'dst'):
+        if PYTZ_AVAILABLE and hasattr(dt_local, "dst"):
             dst_offset = dt_local.dst()
             return dst_offset is not None and dst_offset.total_seconds() > 0
 
         # For zoneinfo, check the tzname
-        tzname = dt_local.strftime('%Z')
+        tzname = dt_local.strftime("%Z")
         # EDT, BST, etc. indicate DST
-        return tzname in ('EDT', 'BST', 'CEST', 'CDT', 'PDT', 'MDT')
+        return tzname in ("EDT", "BST", "CEST", "CDT", "PDT", "MDT")
 
     def get_utc_offset_hours(self, dt: datetime) -> float:
         """
@@ -436,10 +424,7 @@ class DSTHandler:
             return 0.0
         return offset.total_seconds() / 3600
 
-    def get_dst_transition_dates(
-        self,
-        year: int
-    ) -> tuple[date | None, date | None]:
+    def get_dst_transition_dates(self, year: int) -> tuple[date | None, date | None]:
         """
         Get DST transition dates for a given year.
 
@@ -453,7 +438,7 @@ class DSTHandler:
         Returns:
             Tuple of (spring_forward_date, fall_back_date)
         """
-        if self.timezone_str != 'America/New_York':
+        if self.timezone_str != "America/New_York":
             # Only US Eastern implemented for now
             return (None, None)
 
@@ -488,10 +473,7 @@ class DSTHandler:
         return dt == spring or dt == fall
 
     def adjust_session_times_for_dst(
-        self,
-        base_start_utc: tuple[int, int],
-        base_end_utc: tuple[int, int],
-        dt: datetime
+        self, base_start_utc: tuple[int, int], base_end_utc: tuple[int, int], dt: datetime
     ) -> tuple[tuple[int, int], tuple[int, int]]:
         """
         Adjust session times for DST.
@@ -518,8 +500,8 @@ class DSTHandler:
     def add_dst_features(
         self,
         df: pd.DataFrame,
-        datetime_column: str = 'datetime',
-        feature_metadata: dict[str, str] | None = None
+        datetime_column: str = "datetime",
+        feature_metadata: dict[str, str] | None = None,
     ) -> pd.DataFrame:
         """
         Add DST-related features to DataFrame.
@@ -539,16 +521,16 @@ class DSTHandler:
 
         # Vectorized DST detection
         is_dst_list = [self.is_dst(dt) for dt in df[datetime_column]]
-        df['is_dst'] = np.array(is_dst_list, dtype=int)
+        df["is_dst"] = np.array(is_dst_list, dtype=int)
 
         # DST transition detection
         dates = df[datetime_column].dt.date
         is_transition = [self.is_dst_transition_date(d) for d in dates]
-        df['is_dst_transition'] = np.array(is_transition, dtype=int)
+        df["is_dst_transition"] = np.array(is_transition, dtype=int)
 
         if feature_metadata is not None:
-            feature_metadata['is_dst'] = f"Daylight Saving Time active ({self.timezone_str})"
-            feature_metadata['is_dst_transition'] = "DST transition date flag"
+            feature_metadata["is_dst"] = f"Daylight Saving Time active ({self.timezone_str})"
+            feature_metadata["is_dst_transition"] = "DST transition date flag"
 
         return df
 
@@ -566,11 +548,11 @@ def get_calendar() -> CMECalendar:
 
 
 __all__ = [
-    'TradingDayType',
-    'TradingDay',
-    'CME_HOLIDAYS',
-    'CME_EARLY_CLOSE',
-    'CMECalendar',
-    'DSTHandler',
-    'get_calendar',
+    "TradingDayType",
+    "TradingDay",
+    "CME_HOLIDAYS",
+    "CME_EARLY_CLOSE",
+    "CMECalendar",
+    "DSTHandler",
+    "get_calendar",
 ]

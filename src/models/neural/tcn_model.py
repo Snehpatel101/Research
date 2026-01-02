@@ -9,6 +9,7 @@ GPU-accelerated TCN with:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,7 +55,7 @@ class CausalConv1d(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv(x)
         if self.padding > 0:
-            out = out[:, :, :-self.padding]
+            out = out[:, :, : -self.padding]
         return out
 
 
@@ -122,11 +123,9 @@ class TCNNetwork(nn.Module):
 
         layers = []
         for i, out_channels in enumerate(num_channels):
-            dilation = dilation_base ** i
+            dilation = dilation_base**i
             in_channels = input_size if i == 0 else num_channels[i - 1]
-            layers.append(
-                TemporalBlock(in_channels, out_channels, kernel_size, dilation, dropout)
-            )
+            layers.append(TemporalBlock(in_channels, out_channels, kernel_size, dilation, dropout))
         self.network = nn.Sequential(*layers)
         self.fc = nn.Linear(num_channels[-1], n_classes)
 
@@ -141,7 +140,7 @@ class TCNNetwork(nn.Module):
         """Calculate effective receptive field."""
         rf = 1
         for i in range(len(self.num_channels)):
-            dilation = self._dilation_base ** i
+            dilation = self._dilation_base**i
             rf += 2 * (self._kernel_size - 1) * dilation
         return rf
 
@@ -200,13 +199,15 @@ class TCNModel(BaseRNNModel):
     def get_default_config(self) -> dict[str, Any]:
         """Return default TCN hyperparameters."""
         defaults = super().get_default_config()
-        defaults.update({
-            "num_channels": [64, 64, 64, 64],
-            "kernel_size": 3,
-            "dropout": 0.2,
-            "dilation_base": 2,
-            "sequence_length": 120,  # Longer than LSTM
-        })
+        defaults.update(
+            {
+                "num_channels": [64, 64, 64, 64],
+                "kernel_size": 3,
+                "dropout": 0.2,
+                "dilation_base": 2,
+                "sequence_length": 120,  # Longer than LSTM
+            }
+        )
         return defaults
 
     def _create_network(self, input_size: int) -> nn.Module:

@@ -13,6 +13,7 @@ walk-forward feature selection with:
 
 Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 """
+
 from __future__ import annotations
 
 import logging
@@ -37,41 +38,114 @@ logger = logging.getLogger(__name__)
 # Feature category patterns (prefix matching)
 FEATURE_CATEGORIES: dict[str, list[str]] = {
     "momentum": [
-        "rsi", "macd", "stochastic", "williams_r", "roc", "cci", "mfi",
-        "momentum", "ppo", "tsi",
+        "rsi",
+        "macd",
+        "stochastic",
+        "williams_r",
+        "roc",
+        "cci",
+        "mfi",
+        "momentum",
+        "ppo",
+        "tsi",
     ],
     "volatility": [
-        "atr", "bollinger", "keltner", "volatility", "vol_", "parkinson",
-        "garman_klass", "yang_zhang", "std_", "range_",
+        "atr",
+        "bollinger",
+        "keltner",
+        "volatility",
+        "vol_",
+        "parkinson",
+        "garman_klass",
+        "yang_zhang",
+        "std_",
+        "range_",
     ],
     "volume": [
-        "obv", "vwap", "volume", "vol_ratio", "money_flow", "chaikin",
-        "ad_line", "force_index", "ease_of_movement",
+        "obv",
+        "vwap",
+        "volume",
+        "vol_ratio",
+        "money_flow",
+        "chaikin",
+        "ad_line",
+        "force_index",
+        "ease_of_movement",
     ],
     "trend": [
-        "sma", "ema", "adx", "supertrend", "trend_", "ma_", "dema", "tema",
-        "kama", "linear_reg", "parabolic_sar",
+        "sma",
+        "ema",
+        "adx",
+        "supertrend",
+        "trend_",
+        "ma_",
+        "dema",
+        "tema",
+        "kama",
+        "linear_reg",
+        "parabolic_sar",
     ],
     "microstructure": [
-        "spread", "amihud", "roll", "kyle", "corwin", "imbalance",
-        "trade_intensity", "efficiency", "realized_vol",
+        "spread",
+        "amihud",
+        "roll",
+        "kyle",
+        "corwin",
+        "imbalance",
+        "trade_intensity",
+        "efficiency",
+        "realized_vol",
     ],
     "wavelet": [
-        "wavelet", "dwt_", "cA_", "cD_", "energy_", "wave_",
+        "wavelet",
+        "dwt_",
+        "cA_",
+        "cD_",
+        "energy_",
+        "wave_",
     ],
     "mtf": [
-        "_5min", "_15min", "_30min", "_1h", "_4h", "_daily", "_1d",
-        "htf_", "ltf_", "mtf_",
+        "_5min",
+        "_15min",
+        "_30min",
+        "_1h",
+        "_4h",
+        "_daily",
+        "_1d",
+        "htf_",
+        "ltf_",
+        "mtf_",
     ],
     "regime": [
-        "regime", "state_", "hidden_", "cluster_", "vol_regime", "trend_regime",
+        "regime",
+        "state_",
+        "hidden_",
+        "cluster_",
+        "vol_regime",
+        "trend_regime",
     ],
     "price": [
-        "return", "log_return", "price_ratio", "close_", "open_", "high_", "low_",
-        "hlc_", "ohlc_", "typical_price", "median_price",
+        "return",
+        "log_return",
+        "price_ratio",
+        "close_",
+        "open_",
+        "high_",
+        "low_",
+        "hlc_",
+        "ohlc_",
+        "typical_price",
+        "median_price",
     ],
     "temporal": [
-        "hour", "day", "week", "month", "session", "time_", "dow_", "is_",
+        "hour",
+        "day",
+        "week",
+        "month",
+        "session",
+        "time_",
+        "dow_",
+        "is_",
     ],
 }
 
@@ -162,6 +236,7 @@ def get_feature_categories(feature_names: list[str]) -> dict[str, list[str]]:
 # RESULT DATACLASSES
 # =============================================================================
 
+
 @dataclass
 class FeatureSelectionResult:
     """
@@ -177,6 +252,7 @@ class FeatureSelectionResult:
         n_selected: Number of selected features
         selection_metadata: Additional metadata about selection process
     """
+
     selected_features: list[str]
     feature_importances: dict[str, float]
     stability_scores: dict[str, float]
@@ -189,8 +265,7 @@ class FeatureSelectionResult:
     def get_category_breakdown(self) -> dict[str, int]:
         """Get count of selected features per category."""
         return {
-            cat: len(feats)
-            for cat, feats in get_feature_categories(self.selected_features).items()
+            cat: len(feats) for cat, feats in get_feature_categories(self.selected_features).items()
         }
 
     def get_top_features(self, n: int = 10) -> list[tuple[str, float]]:
@@ -206,6 +281,7 @@ class FeatureSelectionResult:
 @dataclass
 class StabilityMetrics:
     """Metrics for feature stability analysis."""
+
     rank_correlation: float  # Correlation of rankings across folds
     selection_frequency: float  # Fraction of folds feature was selected
     importance_std: float  # Standard deviation of importance across folds
@@ -215,6 +291,7 @@ class StabilityMetrics:
 # =============================================================================
 # OHLCV FEATURE SELECTOR
 # =============================================================================
+
 
 class OHLCVFeatureSelector:
     """
@@ -274,7 +351,9 @@ class OHLCVFeatureSelector:
         if not 0 <= min_stability_score <= 1:
             raise ValueError(f"min_stability_score must be in [0, 1], got {min_stability_score}")
         if not 0 < correlation_threshold <= 1:
-            raise ValueError(f"correlation_threshold must be in (0, 1], got {correlation_threshold}")
+            raise ValueError(
+                f"correlation_threshold must be in (0, 1], got {correlation_threshold}"
+            )
 
         self.n_splits = n_splits
         self.min_stability_score = min_stability_score
@@ -318,9 +397,7 @@ class OHLCVFeatureSelector:
                 f"feature_names length ({len(feature_names)}) != n_features ({n_features})"
             )
 
-        logger.info(
-            f"Starting OHLCV feature selection: {n_features} features, {n_samples} samples"
-        )
+        logger.info(f"Starting OHLCV feature selection: {n_features} features, {n_samples} samples")
 
         # Convert to DataFrame for easier handling
         X_df = pd.DataFrame(X, columns=feature_names)
@@ -340,8 +417,7 @@ class OHLCVFeatureSelector:
 
         # Step 3: Filter by stability
         stable_features = [
-            f for f in feature_names
-            if stability_scores.get(f, 0) >= self.min_stability_score
+            f for f in feature_names if stability_scores.get(f, 0) >= self.min_stability_score
         ]
         logger.info(
             f"After stability filtering: {len(stable_features)} features "
@@ -369,7 +445,9 @@ class OHLCVFeatureSelector:
                 regimes,
                 weights_series,
             )
-            logger.info(f"Computed regime-conditional importance for {len(regime_importances)} regimes")
+            logger.info(
+                f"Computed regime-conditional importance for {len(regime_importances)} regimes"
+            )
 
         # Build final result
         result = FeatureSelectionResult(
@@ -390,9 +468,7 @@ class OHLCVFeatureSelector:
             },
         )
 
-        logger.info(
-            f"Feature selection complete: {result.n_selected}/{result.n_original} selected"
-        )
+        logger.info(f"Feature selection complete: {result.n_selected}/{result.n_original} selected")
         return result
 
     def _compute_walk_forward_mda(
@@ -462,7 +538,9 @@ class OHLCVFeatureSelector:
 
             # Permutation importance on test set (more reliable than MDI)
             result = permutation_importance(
-                rf, X_test, y_test,
+                rf,
+                X_test,
+                y_test,
                 n_repeats=10,
                 random_state=self.random_state + fold_idx,
                 n_jobs=-1,
@@ -471,9 +549,7 @@ class OHLCVFeatureSelector:
             importance = dict(zip(feature_names, result.importances_mean, strict=False))
             fold_importances.append(importance)
 
-            logger.debug(
-                f"Fold {fold_idx}: top feature = {max(importance, key=importance.get)}"
-            )
+            logger.debug(f"Fold {fold_idx}: top feature = {max(importance, key=importance.get)}")
 
         return fold_importances
 
@@ -659,9 +735,7 @@ class OHLCVFeatureSelector:
             n_regime_samples = regime_mask.sum()
 
             if n_regime_samples < 100:
-                logger.warning(
-                    f"Regime {regime_id}: only {n_regime_samples} samples, skipping"
-                )
+                logger.warning(f"Regime {regime_id}: only {n_regime_samples} samples, skipping")
                 continue
 
             X_regime = X.loc[regime_mask]
@@ -693,6 +767,7 @@ class OHLCVFeatureSelector:
 # =============================================================================
 # CONVENIENCE FUNCTIONS
 # =============================================================================
+
 
 def create_ohlcv_selector(
     n_splits: int = 5,

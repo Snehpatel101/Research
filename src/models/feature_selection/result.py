@@ -4,6 +4,7 @@ Feature selection result and persistence.
 Provides data structures for storing and persisting feature selection results
 alongside model artifacts.
 """
+
 from __future__ import annotations
 
 import json

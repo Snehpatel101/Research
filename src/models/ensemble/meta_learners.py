@@ -17,6 +17,7 @@ All meta-learners implement the BaseModel interface and support:
 - Training on stacking datasets from OOF predictions
 - Returning PredictionOutput with probabilities and confidence
 """
+
 from __future__ import annotations
 
 import logging
@@ -175,8 +176,7 @@ class RidgeMetaLearner(BaseModel):
         self._is_fitted = True
 
         logger.info(
-            f"Training complete: val_f1={val_metrics['f1']:.4f}, "
-            f"time={training_time:.1f}s"
+            f"Training complete: val_f1={val_metrics['f1']:.4f}, " f"time={training_time:.1f}s"
         )
 
         return TrainingMetrics(
@@ -280,9 +280,7 @@ class RidgeMetaLearner(BaseModel):
 
         # Average absolute coefficients across classes
         coefs = np.abs(self._model.coef_).mean(axis=0)
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(coefs))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(coefs))]
 
         return dict(zip(feature_names, coefs.tolist(), strict=False))
 
@@ -499,7 +497,11 @@ class MLPMetaLearner(BaseModel):
             training_time_seconds=training_time,
             early_stopped=n_iter < train_config.get("max_iter", 200),
             best_epoch=None,
-            history={"loss_curve": list(self._model.loss_curve_) if hasattr(self._model, "loss_curve_") else []},
+            history={
+                "loss_curve": (
+                    list(self._model.loss_curve_) if hasattr(self._model, "loss_curve_") else []
+                )
+            },
             metadata={
                 "meta_learner": "mlp",
                 "n_features": X_train.shape[1],
@@ -589,9 +591,7 @@ class MLPMetaLearner(BaseModel):
         # Sum absolute weights for each input feature
         importance = np.abs(first_layer_weights).sum(axis=1)
 
-        feature_names = self._feature_names or [
-            f"f{i}" for i in range(len(importance))
-        ]
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(importance))]
 
         return dict(zip(feature_names, importance.tolist(), strict=False))
 
@@ -1242,6 +1242,7 @@ class XGBoostMeta(BaseModel):
         """Check if CUDA is available for XGBoost."""
         try:
             import torch
+
             return torch.cuda.is_available()
         except ImportError:
             return False

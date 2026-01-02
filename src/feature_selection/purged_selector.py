@@ -10,6 +10,7 @@ Key difference from standard OHLCVFeatureSelector:
 - Respects purge and embargo constraints
 - Integrates with existing CV infrastructure
 """
+
 from __future__ import annotations
 
 import logging
@@ -128,9 +129,7 @@ class PurgedFeatureSelector:
         weights_series = pd.Series(sample_weights) if sample_weights is not None else None
 
         # Step 1: Compute importance using PurgedKFold splits
-        fold_importances = self._compute_purged_mda(
-            X_df, y_series, feature_names, weights_series
-        )
+        fold_importances = self._compute_purged_mda(X_df, y_series, feature_names, weights_series)
 
         # Step 2: Calculate stability scores
         stability_scores = self._base_selector._compute_stability_scores(
@@ -144,8 +143,7 @@ class PurgedFeatureSelector:
 
         # Step 3: Filter by stability
         stable_features = [
-            f for f in feature_names
-            if stability_scores.get(f, 0) >= self.min_stability_score
+            f for f in feature_names if stability_scores.get(f, 0) >= self.min_stability_score
         ]
         logger.info(
             f"After stability filtering: {len(stable_features)} features "
@@ -195,9 +193,7 @@ class PurgedFeatureSelector:
             },
         )
 
-        logger.info(
-            f"Feature selection complete: {result.n_selected}/{result.n_original} selected"
-        )
+        logger.info(f"Feature selection complete: {result.n_selected}/{result.n_original} selected")
         return result
 
     def _compute_purged_mda(
@@ -245,7 +241,9 @@ class PurgedFeatureSelector:
 
             # Permutation importance on test set
             result = permutation_importance(
-                rf, X_test, y_test,
+                rf,
+                X_test,
+                y_test,
                 n_repeats=10,
                 random_state=self.random_state + fold_idx,
                 n_jobs=-1,
@@ -254,9 +252,7 @@ class PurgedFeatureSelector:
             importance = dict(zip(feature_names, result.importances_mean, strict=False))
             fold_importances.append(importance)
 
-            logger.debug(
-                f"Fold {fold_idx}: top feature = {max(importance, key=importance.get)}"
-            )
+            logger.debug(f"Fold {fold_idx}: top feature = {max(importance, key=importance.get)}")
 
         return fold_importances
 

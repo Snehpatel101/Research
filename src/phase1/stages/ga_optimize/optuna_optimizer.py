@@ -46,12 +46,14 @@ class ConvergenceRecord:
         params: dict[str, float],
     ) -> None:
         """Add a trial record."""
-        self.trials.append({
-            "trial": trial_number,
-            "value": value,
-            "best_value": best_value,
-            "params": params,
-        })
+        self.trials.append(
+            {
+                "trial": trial_number,
+                "value": value,
+                "best_value": best_value,
+                "params": params,
+            }
+        )
 
     def to_convergence_list(self) -> list[dict[str, Any]]:
         """
@@ -71,13 +73,15 @@ class ConvergenceRecord:
             values = [t["value"] for t in batch if t["value"] > -500]  # Filter failures
 
             if values:
-                convergence.append({
-                    "gen": gen_idx // batch_size,
-                    "avg": float(np.mean(values)),
-                    "max": float(np.max(values)),
-                    "min": float(np.min(values)),
-                    "std": float(np.std(values)) if len(values) > 1 else 0.0,
-                })
+                convergence.append(
+                    {
+                        "gen": gen_idx // batch_size,
+                        "avg": float(np.mean(values)),
+                        "max": float(np.max(values)),
+                        "min": float(np.min(values)),
+                        "std": float(np.std(values)) if len(values) > 1 else 0.0,
+                    }
+                )
 
         return convergence
 
@@ -103,8 +107,16 @@ class OptunaConvergenceCallback:
 
             self.record.add_trial(
                 trial_number=trial.number,
-                value=-trial.value if study.direction == optuna.study.StudyDirection.MINIMIZE else trial.value,
-                best_value=-self.best_value if study.direction == optuna.study.StudyDirection.MINIMIZE else self.best_value,
+                value=(
+                    -trial.value
+                    if study.direction == optuna.study.StudyDirection.MINIMIZE
+                    else trial.value
+                ),
+                best_value=(
+                    -self.best_value
+                    if study.direction == optuna.study.StudyDirection.MINIMIZE
+                    else self.best_value
+                ),
                 params=trial.params.copy(),
             )
 
@@ -367,8 +379,7 @@ def run_optuna_optimization(
     max_bars = int(horizon * best_max_bars_mult)
 
     val_labels, val_bars, val_mae, val_mfe, _ = triple_barrier_numba(
-        full_close, full_high, full_low, full_open, full_atr,
-        best_k_up, best_k_down, max_bars
+        full_close, full_high, full_low, full_open, full_atr, best_k_up, best_k_down, max_bars
     )
 
     n_total = len(val_labels)
@@ -424,7 +435,9 @@ def run_optuna_optimization(
 
     # Log both fitnesses for debugging
     logger.info(f"  Subset fitness: {best_fitness:.4f}")
-    logger.info(f"  Full-data fitness: {validation_fitness:.4f} (with asymmetry_bonus={asymmetry_bonus:.2f})")
+    logger.info(
+        f"  Full-data fitness: {validation_fitness:.4f} (with asymmetry_bonus={asymmetry_bonus:.2f})"
+    )
 
     # Use validation fitness (full data) for stored results
     # This is more representative of actual model performance
@@ -531,10 +544,14 @@ def run_optuna_optimization_safe(
     logger.info("=" * 60)
     logger.info(f"  Total dataset size: {n_total:,} samples")
     logger.info(f"  Training portion: {train_end:,} samples ({train_ratio*100:.0f}%)")
-    logger.info(f"  Reserved for test: {n_total - train_end:,} samples ({(1-train_ratio)*100:.0f}%)")
+    logger.info(
+        f"  Reserved for test: {n_total - train_end:,} samples ({(1-train_ratio)*100:.0f}%)"
+    )
     logger.info("")
     logger.info("  Optimization will ONLY use training portion.")
-    logger.info(f"  Test data (last {(1 - train_ratio) * 100:.0f}%) is NEVER seen during parameter tuning.")
+    logger.info(
+        f"  Test data (last {(1 - train_ratio) * 100:.0f}%) is NEVER seen during parameter tuning."
+    )
     logger.info("=" * 60)
 
     # Run optimization on training data only

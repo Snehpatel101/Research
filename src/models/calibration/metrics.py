@@ -7,6 +7,7 @@ match actual frequencies:
 - ECE: Expected Calibration Error (gap between confidence and accuracy)
 - Reliability Bins: Data for reliability diagrams
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ import numpy as np
 @dataclass
 class ReliabilityBins:
     """Data for reliability diagram visualization."""
+
     bin_centers: np.ndarray
     bin_accuracies: np.ndarray
     bin_confidences: np.ndarray

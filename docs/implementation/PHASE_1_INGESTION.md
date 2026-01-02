@@ -6,6 +6,50 @@
 
 ---
 
+## ⚠️ CRITICAL GAPS
+
+### Gap 1: No End-to-End Integration Tests (0.5 days)
+**Status:** ❌ Unit tests exist, integration tests missing
+**Impact:** Cannot verify full Phase 1 pipeline works end-to-end
+**What's Missing:**
+- No test that runs full ingestion pipeline on synthetic data
+- No test that validates output schema matches Phase 2 expectations
+- No test for error handling when raw data is corrupted
+
+**Required Test:**
+```python
+# tests/phase1/integration/test_ingestion_e2e.py
+def test_full_ingestion_pipeline():
+    """Test complete ingestion pipeline from raw file to clean output."""
+    # 1. Create synthetic raw OHLCV file
+    # 2. Run full ingestion pipeline
+    # 3. Validate output file created
+    # 4. Validate schema correct
+    # 5. Validate quality metrics generated
+    # 6. Cleanup
+```
+
+**Estimate:** 0.5 days
+
+### Gap 2: No Example Data for New Users (0.5 days)
+**Status:** ❌ Only MGC_1m.parquet exists
+**Impact:** New users cannot run pipeline without obtaining data
+**What's Missing:**
+- Small synthetic dataset for testing (100-1000 bars)
+- README explaining data format requirements
+- Script to generate synthetic OHLCV data
+
+**Required Files:**
+- `data/examples/SYNTHETIC_1m.parquet` - Small test dataset
+- `data/examples/README.md` - Data format documentation
+- `scripts/generate_synthetic_data.py` - Data generation tool
+
+**Estimate:** 0.5 days
+
+**Days of Work Remaining:** 1 day (minor polish)
+
+---
+
 ## Goal
 
 Ingest, validate, and prepare canonical 1-minute OHLCV data from raw files, ensuring data quality and establishing the foundation for all downstream processing.

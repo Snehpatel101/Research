@@ -16,19 +16,21 @@ def main():
     """
     from src.phase1.config.runtime import detect_available_symbols
 
-    parser = argparse.ArgumentParser(description='Stage 3: Feature Engineering')
-    parser.add_argument('--input-dir', type=str, default='data/clean',
-                        help='Input data directory')
-    parser.add_argument('--output-dir', type=str, default='data/features',
-                        help='Output directory')
-    parser.add_argument('--timeframe', type=str, default='1min',
-                        help='Data timeframe')
-    parser.add_argument('--pattern', type=str, default='*.parquet',
-                        help='File pattern to match')
-    parser.add_argument('--multi-symbol', action='store_true',
-                        help='Process multiple symbols together')
-    parser.add_argument('--symbols', type=str, nargs='+', default=None,
-                        help='Symbols to process (auto-detected if not specified)')
+    parser = argparse.ArgumentParser(description="Stage 3: Feature Engineering")
+    parser.add_argument("--input-dir", type=str, default="data/clean", help="Input data directory")
+    parser.add_argument("--output-dir", type=str, default="data/features", help="Output directory")
+    parser.add_argument("--timeframe", type=str, default="1min", help="Data timeframe")
+    parser.add_argument("--pattern", type=str, default="*.parquet", help="File pattern to match")
+    parser.add_argument(
+        "--multi-symbol", action="store_true", help="Process multiple symbols together"
+    )
+    parser.add_argument(
+        "--symbols",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Symbols to process (auto-detected if not specified)",
+    )
 
     args = parser.parse_args()
 
@@ -44,9 +46,7 @@ def main():
 
     # Initialize feature engineer
     engineer = FeatureEngineer(
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
-        timeframe=args.timeframe
+        input_dir=args.input_dir, output_dir=args.output_dir, timeframe=args.timeframe
     )
 
     if args.multi_symbol:
@@ -55,8 +55,9 @@ def main():
         symbol_files = {}
         for symbol in symbols:
             # Look for files matching the symbol
-            matches = list(input_dir.glob(f"{symbol.lower()}*.parquet")) + \
-                      list(input_dir.glob(f"{symbol.upper()}*.parquet"))
+            matches = list(input_dir.glob(f"{symbol.lower()}*.parquet")) + list(
+                input_dir.glob(f"{symbol.upper()}*.parquet")
+            )
             if matches:
                 symbol_files[symbol.upper()] = matches[0]
                 print(f"Found {symbol.upper()}: {matches[0]}")
@@ -73,9 +74,9 @@ def main():
         # Process all files independently
         results = engineer.process_directory(pattern=args.pattern)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("FEATURE ENGINEERING SUMMARY")
-    print("="*60)
+    print("=" * 60)
     for symbol, report in results.items():
         print(f"\n{symbol}:")
         print(f"  Features added: {report['features_added']}")
@@ -84,5 +85,5 @@ def main():
         print(f"  Date range: {report['date_range']['start']} to {report['date_range']['end']}")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

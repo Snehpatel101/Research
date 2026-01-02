@@ -5,6 +5,7 @@ Public API:
     - Phase1ReportGenerator: Main class for generating reports
     - generate_phase1_report: Convenience function for full report generation
 """
+
 import json
 import logging
 from datetime import datetime
@@ -41,7 +42,7 @@ class Phase1ReportGenerator:
         data_path: Path,
         validation_report_path: Path | None = None,
         split_config_path: Path | None = None,
-        backtest_results_dir: Path | None = None
+        backtest_results_dir: Path | None = None,
     ):
         self.data_path = data_path
         self.validation_report_path = validation_report_path
@@ -72,15 +73,12 @@ class Phase1ReportGenerator:
                 return json.load(f)
         return None
 
-    def _load_backtest_results(
-        self,
-        results_dir: Path | None
-    ) -> dict[int, dict[str, Any]]:
+    def _load_backtest_results(self, results_dir: Path | None) -> dict[int, dict[str, Any]]:
         """Load backtest results from directory."""
         results = {}
         if results_dir and results_dir.exists():
             for result_file in results_dir.glob("baseline_backtest_h*.json"):
-                horizon = int(result_file.stem.split('_h')[1])
+                horizon = int(result_file.stem.split("_h")[1])
                 logger.info(f"Loading backtest results from {result_file}")
                 with open(result_file) as f:
                     results[horizon] = json.load(f)
@@ -89,18 +87,38 @@ class Phase1ReportGenerator:
     def identify_feature_columns(self) -> list[str]:
         """Identify feature columns by excluding known non-feature columns."""
         excluded = [
-            'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-            'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+            "datetime",
+            "symbol",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "timeframe",
+            "session_id",
+            "missing_bar",
+            "roll_event",
+            "roll_window",
+            "filled",
         ]
         excluded_prefixes = (
-            'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-            'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-            'fwd_return_log_', 'time_to_hit_'
+            "label_",
+            "bars_to_hit_",
+            "mae_",
+            "mfe_",
+            "quality_",
+            "sample_weight_",
+            "touch_type_",
+            "pain_to_gain_",
+            "time_weighted_dd_",
+            "fwd_return_",
+            "fwd_return_log_",
+            "time_to_hit_",
         )
         feature_cols = [
-            c for c in self.df.columns
-            if c not in excluded
-            and not any(c.startswith(prefix) for prefix in excluded_prefixes)
+            c
+            for c in self.df.columns
+            if c not in excluded and not any(c.startswith(prefix) for prefix in excluded_prefixes)
         ]
         return feature_cols
 
@@ -130,16 +148,14 @@ class Phase1ReportGenerator:
                 self.df, self.validation_data, self.split_config, self.backtest_results
             ),
             generate_recommendations(self.validation_data, self.backtest_results),
-            generate_footer(
-                self.data_path, self.validation_report_path, self.split_config_path
-            ),
+            generate_footer(self.data_path, self.validation_report_path, self.split_config_path),
         ]
 
-        report = '\n\n'.join(sections)
+        report = "\n\n".join(sections)
 
         # Save report
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(report)
 
         logger.info(f"  Markdown report saved to {output_path}")
@@ -154,22 +170,22 @@ class Phase1ReportGenerator:
         logger.info(f"Generating JSON export: {output_path}")
 
         export_data = {
-            'metadata': {
-                'generated_at': datetime.now().isoformat(),
-                'data_file': str(self.data_path),
-                'total_rows': int(len(self.df)),
-                'total_columns': int(len(self.df.columns))
+            "metadata": {
+                "generated_at": datetime.now().isoformat(),
+                "data_file": str(self.data_path),
+                "total_rows": int(len(self.df)),
+                "total_columns": int(len(self.df.columns)),
             },
-            'features': {
-                'total': len(self.identify_feature_columns()),
-                'columns': self.identify_feature_columns()
+            "features": {
+                "total": len(self.identify_feature_columns()),
+                "columns": self.identify_feature_columns(),
             },
-            'validation': self.validation_data,
-            'splits': self.split_config,
-            'backtest': self.backtest_results
+            "validation": self.validation_data,
+            "splits": self.split_config,
+            "backtest": self.backtest_results,
         }
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(export_data, f, indent=2)
 
         logger.info(f"  JSON export saved to {output_path}")
@@ -180,7 +196,7 @@ def generate_phase1_report(
     output_dir: Path,
     validation_report_path: Path | None = None,
     split_config_path: Path | None = None,
-    backtest_results_dir: Path | None = None
+    backtest_results_dir: Path | None = None,
 ) -> dict[str, Path]:
     """
     Generate comprehensive Phase 1 summary report.
@@ -203,7 +219,7 @@ def generate_phase1_report(
         data_path=data_path,
         validation_report_path=validation_report_path,
         split_config_path=split_config_path,
-        backtest_results_dir=backtest_results_dir
+        backtest_results_dir=backtest_results_dir,
     )
 
     # Generate charts
@@ -222,10 +238,10 @@ def generate_phase1_report(
     generator.generate_json_export(json_path)
 
     output_files = {
-        'markdown': md_path,
-        'html': html_path,
-        'json': json_path,
-        'charts_dir': generator.charts_dir
+        "markdown": md_path,
+        "html": html_path,
+        "json": json_path,
+        "charts_dir": generator.charts_dir,
     }
 
     logger.info("\n" + "=" * 70)
@@ -241,6 +257,6 @@ def generate_phase1_report(
 
 
 __all__ = [
-    'Phase1ReportGenerator',
-    'generate_phase1_report',
+    "Phase1ReportGenerator",
+    "generate_phase1_report",
 ]

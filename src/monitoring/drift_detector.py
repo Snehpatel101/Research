@@ -14,6 +14,7 @@ Use Cases:
 This module maintains backward compatibility by re-exporting all components
 from the refactored submodules.
 """
+
 from __future__ import annotations
 
 # Import all detector implementations

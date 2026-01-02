@@ -11,6 +11,7 @@ Walk-forward is more realistic than k-fold for trading:
 
 Reference: Pardo (2008) "The Evaluation and Optimization of Trading Strategies"
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
+
 
 @dataclass
 class WalkForwardConfig:
@@ -45,12 +47,13 @@ class WalkForwardConfig:
         >>> config = WalkForwardConfig(n_windows=5, window_type="expanding")
         >>> wf = WalkForwardEvaluator(config)
     """
+
     n_windows: int = 5
     window_type: str = "expanding"  # "expanding" or "rolling"
-    min_train_pct: float = 0.4      # First window uses at least 40% for training
-    test_pct: float = 0.1           # Each test window is ~10% of data
-    embargo_bars: int = 0           # Post-test embargo (for serial correlation)
-    gap_bars: int = 0               # Gap between train and test (for label leakage)
+    min_train_pct: float = 0.4  # First window uses at least 40% for training
+    test_pct: float = 0.1  # Each test window is ~10% of data
+    embargo_bars: int = 0  # Post-test embargo (for serial correlation)
+    gap_bars: int = 0  # Gap between train and test (for label leakage)
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -63,9 +66,7 @@ class WalkForwardConfig:
             )
 
         if not 0 < self.min_train_pct < 1:
-            raise ValueError(
-                f"min_train_pct must be in (0, 1), got {self.min_train_pct}"
-            )
+            raise ValueError(f"min_train_pct must be in (0, 1), got {self.min_train_pct}")
 
         if not 0 < self.test_pct < 1:
             raise ValueError(f"test_pct must be in (0, 1), got {self.test_pct}")
@@ -88,9 +89,11 @@ class WalkForwardConfig:
 # WALK-FORWARD RESULT
 # =============================================================================
 
+
 @dataclass
 class WindowMetrics:
     """Metrics for a single walk-forward window."""
+
     window: int
     train_size: int
     test_size: int
@@ -122,6 +125,7 @@ class WalkForwardResult:
         config: WalkForwardConfig used
         total_time: Total evaluation time in seconds
     """
+
     model_name: str
     horizon: int
     window_metrics: list[WindowMetrics]
@@ -183,6 +187,7 @@ class WalkForwardResult:
 # =============================================================================
 # WALK-FORWARD EVALUATOR
 # =============================================================================
+
 
 class WalkForwardEvaluator:
     """
@@ -363,12 +368,14 @@ class WalkForwardEvaluator:
             }
 
             if has_datetime_index:
-                window_info.update({
-                    "train_start_time": X.index[train_idx[0]],
-                    "train_end_time": X.index[train_idx[-1]],
-                    "test_start_time": X.index[test_idx[0]],
-                    "test_end_time": X.index[test_idx[-1]],
-                })
+                window_info.update(
+                    {
+                        "train_start_time": X.index[train_idx[0]],
+                        "train_end_time": X.index[train_idx[-1]],
+                        "test_start_time": X.index[test_idx[0]],
+                        "test_end_time": X.index[test_idx[-1]],
+                    }
+                )
 
             info.append(window_info)
 
@@ -432,6 +439,7 @@ class WalkForwardEvaluator:
 # =============================================================================
 # FACTORY FUNCTIONS
 # =============================================================================
+
 
 def create_walk_forward_evaluator(
     n_windows: int = 5,

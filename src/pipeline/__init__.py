@@ -29,24 +29,26 @@ Usage:
     runner = PipelineRunner(config)
     success = runner.run()
 """
+
 from .stage_registry import PipelineStage, get_stage_definitions, get_stage_order
 from .utils import StageResult, StageStatus
 
 __all__ = [
-    'PipelineRunner',
-    'StageStatus',
-    'StageResult',
-    'PipelineStage',
-    'get_stage_definitions',
-    'get_stage_order',
+    "PipelineRunner",
+    "StageStatus",
+    "StageResult",
+    "PipelineStage",
+    "get_stage_definitions",
+    "get_stage_order",
 ]
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"
 
 
 def __getattr__(name: str):
     """Lazy import PipelineRunner to avoid circular dependencies."""
-    if name == 'PipelineRunner':
+    if name == "PipelineRunner":
         from .runner import PipelineRunner
+
         return PipelineRunner
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

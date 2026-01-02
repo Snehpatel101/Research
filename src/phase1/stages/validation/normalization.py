@@ -1,6 +1,7 @@
 """
 Feature normalization validation checks.
 """
+
 import logging
 
 import numpy as np
@@ -21,26 +22,44 @@ def get_feature_columns(df: pd.DataFrame) -> list[str]:
         List of feature column names
     """
     excluded_cols = [
-        'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-        'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+        "datetime",
+        "symbol",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "timeframe",
+        "session_id",
+        "missing_bar",
+        "roll_event",
+        "roll_window",
+        "filled",
     ]
     excluded_prefixes = (
-        'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-        'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-        'fwd_return_log_', 'time_to_hit_'
+        "label_",
+        "bars_to_hit_",
+        "mae_",
+        "mfe_",
+        "quality_",
+        "sample_weight_",
+        "touch_type_",
+        "pain_to_gain_",
+        "time_weighted_dd_",
+        "fwd_return_",
+        "fwd_return_log_",
+        "time_to_hit_",
     )
     feature_cols = [
-        c for c in df.columns
-        if c not in excluded_cols
-        and not any(c.startswith(prefix) for prefix in excluded_prefixes)
+        c
+        for c in df.columns
+        if c not in excluded_cols and not any(c.startswith(prefix) for prefix in excluded_prefixes)
     ]
     return feature_cols
 
 
 def compute_feature_statistics(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    warnings_found: list[str]
+    df: pd.DataFrame, feature_cols: list[str], warnings_found: list[str]
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Compute distribution statistics for all features.
@@ -90,37 +109,30 @@ def compute_feature_statistics(
             kurtosis = np.nan
 
         stat_info = {
-            'feature': col,
-            'mean': mean_val,
-            'std': std_val,
-            'min': min_val,
-            'max': max_val,
-            'p1': p1,
-            'p5': p5,
-            'p50': p50,
-            'p95': p95,
-            'p99': p99,
-            'skewness': skewness,
-            'kurtosis': kurtosis
+            "feature": col,
+            "mean": mean_val,
+            "std": std_val,
+            "min": min_val,
+            "max": max_val,
+            "p1": p1,
+            "p5": p5,
+            "p50": p50,
+            "p95": p95,
+            "p99": p99,
+            "skewness": skewness,
+            "kurtosis": kurtosis,
         }
         feature_stats.append(stat_info)
 
         # Flag unnormalized features (std far from 1, mean far from 0)
         if std_val > 100 or abs(mean_val) > 100:
-            unnormalized_features.append({
-                'feature': col,
-                'mean': mean_val,
-                'std': std_val,
-                'issue': 'large_scale'
-            })
+            unnormalized_features.append(
+                {"feature": col, "mean": mean_val, "std": std_val, "issue": "large_scale"}
+            )
 
         # Flag highly skewed features (only if skewness was computed successfully)
         if not np.isnan(skewness) and abs(skewness) > 2.0:
-            high_skew_features.append({
-                'feature': col,
-                'skewness': skewness,
-                'kurtosis': kurtosis
-            })
+            high_skew_features.append({"feature": col, "skewness": skewness, "kurtosis": kurtosis})
 
     # Log unnormalized features
     if unnormalized_features:
@@ -142,9 +154,7 @@ def compute_feature_statistics(
 
     # Log high skew features
     if high_skew_features:
-        logger.warning(
-            f"  Found {len(high_skew_features)} highly skewed features (|skew| > 2):"
-        )
+        logger.warning(f"  Found {len(high_skew_features)} highly skewed features (|skew| > 2):")
         for feat in high_skew_features[:5]:
             logger.warning(f"    {feat['feature']:30s}: skew={feat['skewness']:.2f}")
         if len(high_skew_features) > 5:
@@ -157,10 +167,7 @@ def compute_feature_statistics(
 
 
 def detect_outliers(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    warnings_found: list[str],
-    z_threshold: float = 3.0
+    df: pd.DataFrame, feature_cols: list[str], warnings_found: list[str], z_threshold: float = 3.0
 ) -> tuple[list[dict], list[dict]]:
     """
     Detect outliers using z-score analysis.
@@ -201,13 +208,13 @@ def detect_outliers(
         pct_5std = outliers_5std / len(series) * 100
 
         outlier_info = {
-            'feature': col,
-            'outliers_3std': int(outliers_3std),
-            'outliers_5std': int(outliers_5std),
-            'outliers_10std': int(outliers_10std),
-            'pct_beyond_3std': float(pct_3std),
-            'pct_beyond_5std': float(pct_5std),
-            'max_z_score': float(z_scores.max())
+            "feature": col,
+            "outliers_3std": int(outliers_3std),
+            "outliers_5std": int(outliers_5std),
+            "outliers_10std": int(outliers_10std),
+            "pct_beyond_3std": float(pct_3std),
+            "pct_beyond_5std": float(pct_5std),
+            "max_z_score": float(z_scores.max()),
         }
         outlier_summary.append(outlier_info)
 
@@ -227,9 +234,7 @@ def detect_outliers(
             )
         if len(extreme_outlier_features) > 5:
             logger.warning(f"    ... and {len(extreme_outlier_features) - 5} more")
-        warnings_found.append(
-            f"{len(extreme_outlier_features)} features have extreme outliers"
-        )
+        warnings_found.append(f"{len(extreme_outlier_features)} features have extreme outliers")
     else:
         logger.info("  No features with excessive extreme outliers")
 
@@ -237,10 +242,7 @@ def detect_outliers(
 
 
 def analyze_feature_ranges(
-    df: pd.DataFrame,
-    feature_cols: list[str],
-    issues_found: list[str],
-    warnings_found: list[str]
+    df: pd.DataFrame, feature_cols: list[str], issues_found: list[str], warnings_found: list[str]
 ) -> list[dict]:
     """
     Analyze feature value ranges for issues.
@@ -269,35 +271,38 @@ def analyze_feature_ranges(
 
         # Check for potential issues
         if range_val == 0:
-            range_issues.append({
-                'feature': col,
-                'issue': 'constant_value',
-                'value': float(min_val)
-            })
+            range_issues.append(
+                {"feature": col, "issue": "constant_value", "value": float(min_val)}
+            )
             # Binary indicator features may legitimately be constant
             binary_indicator_patterns = [
-                'cross_up', 'cross_down', 'overbought', 'oversold',
-                '_direction', 'regime_', '_flag'
+                "cross_up",
+                "cross_down",
+                "overbought",
+                "oversold",
+                "_direction",
+                "regime_",
+                "_flag",
             ]
             is_binary_indicator = any(p in col.lower() for p in binary_indicator_patterns)
             if is_binary_indicator:
-                warnings_found.append(
-                    f"{col}: constant value ({min_val}) - binary indicator"
-                )
+                warnings_found.append(f"{col}: constant value ({min_val}) - binary indicator")
             else:
                 issues_found.append(f"{col}: constant value ({min_val})")
         elif range_val > 1e6:
-            range_issues.append({
-                'feature': col,
-                'issue': 'extreme_range',
-                'min': float(min_val),
-                'max': float(max_val),
-                'range': float(range_val)
-            })
+            range_issues.append(
+                {
+                    "feature": col,
+                    "issue": "extreme_range",
+                    "min": float(min_val),
+                    "max": float(max_val),
+                    "range": float(range_val),
+                }
+            )
 
     if range_issues:
-        constant_count = sum(1 for r in range_issues if r['issue'] == 'constant_value')
-        extreme_count = sum(1 for r in range_issues if r['issue'] == 'extreme_range')
+        constant_count = sum(1 for r in range_issues if r["issue"] == "constant_value")
+        extreme_count = sum(1 for r in range_issues if r["issue"] == "extreme_range")
         if constant_count > 0:
             logger.warning(f"  Found {constant_count} constant features (zero variance)")
         if extreme_count > 0:
@@ -311,7 +316,7 @@ def analyze_feature_ranges(
 def generate_recommendations(
     unnormalized_features: list[dict],
     high_skew_features: list[dict],
-    extreme_outlier_features: list[dict]
+    extreme_outlier_features: list[dict],
 ) -> list[dict]:
     """
     Generate normalization recommendations.
@@ -329,36 +334,40 @@ def generate_recommendations(
     recommendations = []
 
     # Features that need StandardScaler
-    needs_scaling = [f for f in unnormalized_features if f['std'] > 10]
+    needs_scaling = [f for f in unnormalized_features if f["std"] > 10]
     if needs_scaling:
-        recommendations.append({
-            'type': 'StandardScaler',
-            'features': [f['feature'] for f in needs_scaling],
-            'reason': 'Features with std > 10 should be standardized'
-        })
+        recommendations.append(
+            {
+                "type": "StandardScaler",
+                "features": [f["feature"] for f in needs_scaling],
+                "reason": "Features with std > 10 should be standardized",
+            }
+        )
         logger.info(f"  StandardScaler recommended for {len(needs_scaling)} features")
 
     # Features that need log transform (high positive skew)
-    needs_log = [f for f in high_skew_features if f['skewness'] > 2.0]
+    needs_log = [f for f in high_skew_features if f["skewness"] > 2.0]
     if needs_log:
-        recommendations.append({
-            'type': 'LogTransform',
-            'features': [f['feature'] for f in needs_log],
-            'reason': 'Features with skew > 2 may benefit from log transform'
-        })
+        recommendations.append(
+            {
+                "type": "LogTransform",
+                "features": [f["feature"] for f in needs_log],
+                "reason": "Features with skew > 2 may benefit from log transform",
+            }
+        )
         logger.info(f"  Log transform may help {len(needs_log)} skewed features")
 
     # Features that need RobustScaler (many outliers)
-    needs_robust = [f for f in extreme_outlier_features if f['pct_beyond_5std'] > 0.5]
+    needs_robust = [f for f in extreme_outlier_features if f["pct_beyond_5std"] > 0.5]
     if needs_robust:
-        recommendations.append({
-            'type': 'RobustScaler',
-            'features': [f['feature'] for f in needs_robust],
-            'reason': 'Features with many outliers should use RobustScaler'
-        })
-        logger.info(
-            f"  RobustScaler recommended for {len(needs_robust)} features with outliers"
+        recommendations.append(
+            {
+                "type": "RobustScaler",
+                "features": [f["feature"] for f in needs_robust],
+                "reason": "Features with many outliers should use RobustScaler",
+            }
         )
+        logger.info(f"  RobustScaler recommended for {len(needs_robust)} features with outliers")
 
     if not recommendations:
         logger.info("  No specific normalization needed")
@@ -371,7 +380,7 @@ def check_feature_normalization(
     issues_found: list[str],
     warnings_found: list[str],
     z_threshold: float = 3.0,
-    extreme_threshold: float = 5.0
+    extreme_threshold: float = 5.0,
 ) -> dict:
     """
     Run all feature normalization checks.
@@ -395,30 +404,28 @@ def check_feature_normalization(
     # Identify feature columns
     feature_cols = get_feature_columns(df)
     logger.info(f"\nAnalyzing normalization for {len(feature_cols)} features")
-    results['total_features'] = len(feature_cols)
+    results["total_features"] = len(feature_cols)
 
     # 1. Feature Distribution Statistics
     feature_stats, unnormalized_features, high_skew_features = compute_feature_statistics(
         df, feature_cols, warnings_found
     )
-    results['feature_statistics'] = feature_stats
-    results['unnormalized_features'] = unnormalized_features
-    results['high_skew_features'] = high_skew_features
+    results["feature_statistics"] = feature_stats
+    results["unnormalized_features"] = unnormalized_features
+    results["high_skew_features"] = high_skew_features
 
     # 2. Z-Score Outlier Detection
     outlier_summary, extreme_outlier_features = detect_outliers(
         df, feature_cols, warnings_found, z_threshold
     )
-    results['outlier_analysis'] = outlier_summary
-    results['extreme_outlier_features'] = extreme_outlier_features
+    results["outlier_analysis"] = outlier_summary
+    results["extreme_outlier_features"] = extreme_outlier_features
 
     # 3. Feature Range Analysis
-    results['range_issues'] = analyze_feature_ranges(
-        df, feature_cols, issues_found, warnings_found
-    )
+    results["range_issues"] = analyze_feature_ranges(df, feature_cols, issues_found, warnings_found)
 
     # 4. Normalization Recommendations
-    results['recommendations'] = generate_recommendations(
+    results["recommendations"] = generate_recommendations(
         unnormalized_features, high_skew_features, extreme_outlier_features
     )
 
@@ -426,17 +433,15 @@ def check_feature_normalization(
     total_warnings = (
         len(unnormalized_features) + len(high_skew_features) + len(extreme_outlier_features)
     )
-    total_issues = sum(
-        1 for r in results['range_issues'] if r['issue'] == 'constant_value'
-    )
+    total_issues = sum(1 for r in results["range_issues"] if r["issue"] == "constant_value")
 
-    results['summary'] = {
-        'features_analyzed': len(feature_cols),
-        'unnormalized_count': len(unnormalized_features),
-        'high_skew_count': len(high_skew_features),
-        'extreme_outlier_count': len(extreme_outlier_features),
-        'constant_features': total_issues,
-        'needs_attention': total_warnings > 0 or total_issues > 0
+    results["summary"] = {
+        "features_analyzed": len(feature_cols),
+        "unnormalized_count": len(unnormalized_features),
+        "high_skew_count": len(high_skew_features),
+        "extreme_outlier_count": len(extreme_outlier_features),
+        "constant_features": total_issues,
+        "needs_attention": total_warnings > 0 or total_issues > 0,
     }
 
     logger.info(f"\n  Summary: {len(feature_cols)} features analyzed")

@@ -17,6 +17,7 @@ Example:
     >>> metrics = calibrator.fit(y_val, probas_val)
     >>> calibrated = calibrator.calibrate(probas_test)
 """
+
 from src.models.calibration.calibrator import (
     CalibrationConfig,
     CalibrationMetrics,

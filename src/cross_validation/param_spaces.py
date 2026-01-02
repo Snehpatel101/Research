@@ -13,6 +13,7 @@ IMPORTANT - LightGBM Constraint:
     enforcement is applied during Optuna tuning via validate_lightgbm_params()
     and constrained sampling in _sample_params_with_constraints().
 """
+
 import logging
 from typing import Any
 
@@ -43,7 +44,7 @@ def validate_lightgbm_params(params: dict[str, Any]) -> dict[str, Any]:
 
     # max_depth=-1 means unlimited in LightGBM
     if max_depth > 0:
-        max_valid_leaves = 2 ** max_depth
+        max_valid_leaves = 2**max_depth
         if num_leaves > max_valid_leaves:
             logger.warning(
                 f"LightGBM num_leaves ({num_leaves}) exceeds max for max_depth={max_depth} "
@@ -66,7 +67,7 @@ def get_max_leaves_for_depth(max_depth: int) -> int:
     """
     if max_depth <= 0:
         return 1024  # Reasonable default for unlimited depth
-    return 2 ** max_depth
+    return 2**max_depth
 
 
 # =============================================================================

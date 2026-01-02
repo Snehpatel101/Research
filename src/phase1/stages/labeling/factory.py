@@ -32,10 +32,7 @@ _STRATEGY_REGISTRY: dict[LabelingType, type[LabelingStrategy]] = {
 }
 
 
-def get_labeler(
-    strategy: LabelingType | str,
-    **config: Any
-) -> LabelingStrategy:
+def get_labeler(strategy: LabelingType | str, **config: Any) -> LabelingStrategy:
     """
     Create a labeling strategy instance.
 
@@ -71,8 +68,7 @@ def get_labeler(
         except ValueError:
             valid_values = [t.value for t in LabelingType]
             raise ValueError(
-                f"Unknown labeling strategy: '{strategy}'. "
-                f"Valid values are: {valid_values}"
+                f"Unknown labeling strategy: '{strategy}'. " f"Valid values are: {valid_values}"
             )
 
     if strategy not in _STRATEGY_REGISTRY:
@@ -99,10 +95,7 @@ def get_available_strategies() -> list[LabelingType]:
     return list(_STRATEGY_REGISTRY.keys())
 
 
-def register_strategy(
-    labeling_type: LabelingType,
-    strategy_class: type[LabelingStrategy]
-) -> None:
+def register_strategy(labeling_type: LabelingType, strategy_class: type[LabelingStrategy]) -> None:
     """
     Register a new labeling strategy.
 
@@ -131,9 +124,7 @@ def register_strategy(
     _STRATEGY_REGISTRY[labeling_type] = strategy_class
 
 
-def create_multi_labeler(
-    strategies: list[dict[str, Any]]
-) -> list[LabelingStrategy]:
+def create_multi_labeler(strategies: list[dict[str, Any]]) -> list[LabelingStrategy]:
     """
     Create multiple labeling strategies from configuration.
 
@@ -164,14 +155,14 @@ def create_multi_labeler(
     labelers = []
 
     for config in strategies:
-        if 'type' not in config:
+        if "type" not in config:
             raise ValueError("Each strategy config must have a 'type' key")
 
-        strategy_type = config.pop('type')
+        strategy_type = config.pop("type")
         labeler = get_labeler(strategy_type, **config)
         labelers.append(labeler)
 
         # Restore config dict
-        config['type'] = strategy_type
+        config["type"] = strategy_type
 
     return labelers

@@ -1,8 +1,30 @@
 # Phase 7: Meta-Learner Stacking with Heterogeneous Base Models
 
-**Status:** 📋 Planned (not yet implemented)
-**Effort:** 5-7 days (estimated)
-**Dependencies:** Phase 6 (trained base models)
+**Status:** ⚠️ PARTIALLY IMPLEMENTED (meta-learners exist, training script missing)
+**Effort:** 2-3 days remaining (estimated)
+**Dependencies:** Phase 6 (trained base models) ✅ Complete
+
+---
+
+## ⚠️ CRITICAL GAPS
+
+**What's Implemented:**
+- ✅ 4 meta-learner models: Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
+- ✅ Base model implementations (10 base + 3 ensemble)
+- ✅ OOF generation for single model families
+- ✅ PurgedKFold cross-validation
+
+**What's Missing:**
+- ❌ **scripts/train_ensemble.py** - Automated heterogeneous ensemble training script
+- ❌ **Heterogeneous OOF generator** - OOF generation across different model families
+- ❌ **End-to-end training workflow** - Coordinated training of heterogeneous bases + meta-learner
+- ❌ **Tests for meta-learners** - No test coverage for heterogeneous stacking
+
+**Workaround:**
+- Train base models individually using `scripts/train_model.py`
+- Manually generate OOF predictions for each model
+- Manually stack predictions and train meta-learner
+- Not automated, requires manual coordination
 
 ---
 
@@ -16,10 +38,11 @@ Train a meta-learner on out-of-fold predictions from 3-4 heterogeneous base mode
 
 ## Key Architectural Changes
 
-### Old Approach (Removed)
-- **Same-family constraint:** All base models required same input shape (all tabular OR all sequence)
+### Old Approach (Still Available)
+- **Same-family constraint:** All base models must have same input shape (all tabular OR all sequence)
 - **Homogeneous ensembles:** XGBoost + LightGBM + CatBoost (all boosting)
-- **Voting/Stacking/Blending:** Three separate ensemble methods
+- **Voting/Stacking/Blending:** Three ensemble methods for same-family models
+- **Status:** ✅ Still implemented in `src/models/ensemble/`
 
 ### New Approach (Phase 7)
 - **Heterogeneous bases:** 3-4 models from different families (Tabular + CNN + Transformer + Optional 4th)
@@ -623,24 +646,63 @@ python scripts/train_meta_learner.py \
 
 ---
 
+## What Still Needs to Be Done
+
+### Priority 1: Heterogeneous OOF Generator (1 day)
+**Task:** Implement `src/cross_validation/oof_heterogeneous.py`
+- Generate OOF predictions from models with different input shapes
+- Handle 2D tabular, 3D sequence, and 4D multi-res inputs
+- Coordinate data loading for each model family
+- Stack predictions into meta-features
+
+### Priority 2: Training Script (1 day)
+**Task:** Implement `scripts/train_ensemble.py`
+- Parse CLI arguments for base model selection
+- Coordinate heterogeneous base model training
+- Generate OOF predictions
+- Train meta-learner on stacked OOF
+- Full retrain and test evaluation
+- Save ensemble artifacts
+
+### Priority 3: Tests (1 day)
+**Task:** Implement `tests/models/test_meta_learner_stacking.py`
+- Test heterogeneous OOF generation
+- Test meta-learner training on diverse bases
+- Test that different input shapes work together
+- Test no same-family restriction
+
+### Priority 4: Documentation
+**Task:** Update guides and examples
+- Add heterogeneous ensemble training guide
+- Update CLI reference with train_ensemble.py
+- Add end-to-end example notebook
+
+---
+
 ## Migration from Old Approach
 
-**Removed Files:**
-- `src/models/ensemble/voting.py` - ❌ Removed (homogeneous voting)
-- `src/models/ensemble/stacking.py` - ❌ Removed (same-family stacking)
-- `src/models/ensemble/blending.py` - ❌ Removed (same-family blending)
-- `src/models/ensemble/compatibility.py` - ❌ Removed (EnsembleCompatibilityValidator)
+**Existing Files (NOT Removed):**
+- `src/models/ensemble/voting.py` - ✅ Still available (same-family voting)
+- `src/models/ensemble/stacking.py` - ✅ Still available (same-family stacking)
+- `src/models/ensemble/blending.py` - ✅ Still available (same-family blending)
+- `src/models/ensemble/meta_learners.py` - ✅ Implemented (4 meta-learners)
 
-**Retained Files:**
-- `src/cross_validation/oof_generator.py` - ✅ Extend for heterogeneous bases
-- `src/models/trainer.py` - ✅ Extend for meta-learner training
+**Files to Create:**
+- `src/cross_validation/oof_heterogeneous.py` - ❌ Not yet created
+- `scripts/train_ensemble.py` - ❌ Not yet created
+- `tests/models/test_meta_learner_stacking.py` - ❌ Not yet created
 
-**Migration Path:**
-1. Train base models from different families independently (Phase 6)
-2. Generate OOF predictions using `HeterogeneousOOFGenerator`
-3. Train meta-learner on OOF predictions
-4. Retrain bases on full train set
-5. Evaluate final ensemble on test set
+**Current Workflow (Manual):**
+1. Train base models from different families independently using `scripts/train_model.py`
+2. Manually generate and save OOF predictions for each model
+3. Manually stack predictions and train meta-learner
+4. Manually retrain bases on full train set
+5. Manually evaluate final ensemble on test set
+
+**Target Workflow (Automated - Not Yet Implemented):**
+1. Run `scripts/train_ensemble.py --base-models catboost,tcn,patchtst --meta-learner ridge_meta`
+2. Script automatically coordinates all steps
+3. Final ensemble saved with performance reports
 
 ---
 

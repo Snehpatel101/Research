@@ -21,9 +21,7 @@ def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
 
 
 def add_sma(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    periods: list[int] | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Simple Moving Averages.
@@ -51,25 +49,21 @@ def add_sma(
 
     for period in periods:
         # ANTI-LOOKAHEAD: shift(1) ensures SMA at bar[t] uses data up to bar[t-1]
-        sma_raw = pd.Series(calculate_sma_numba(df['close'].values, period))
-        df[f'sma_{period}'] = sma_raw.shift(1).values
+        sma_raw = pd.Series(calculate_sma_numba(df["close"].values, period))
+        df[f"sma_{period}"] = sma_raw.shift(1).values
 
         # Price position relative to SMA uses previous close vs shifted SMA
         # This compares close[t-1] to SMA[t-1], available at bar[t]
-        df[f'price_to_sma_{period}'] = _safe_divide(
-            df['close'].shift(1), df[f'sma_{period}']
-        ) - 1
+        df[f"price_to_sma_{period}"] = _safe_divide(df["close"].shift(1), df[f"sma_{period}"]) - 1
 
-        feature_metadata[f'sma_{period}'] = f"{period}-period Simple Moving Average (lagged)"
-        feature_metadata[f'price_to_sma_{period}'] = f"Price deviation from SMA-{period} (lagged)"
+        feature_metadata[f"sma_{period}"] = f"{period}-period Simple Moving Average (lagged)"
+        feature_metadata[f"price_to_sma_{period}"] = f"Price deviation from SMA-{period} (lagged)"
 
     return df
 
 
 def add_ema(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    periods: list[int] | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Exponential Moving Averages.
@@ -97,22 +91,20 @@ def add_ema(
 
     for period in periods:
         # ANTI-LOOKAHEAD: shift(1) ensures EMA at bar[t] uses data up to bar[t-1]
-        ema_raw = pd.Series(calculate_ema_numba(df['close'].values, period))
-        df[f'ema_{period}'] = ema_raw.shift(1).values
+        ema_raw = pd.Series(calculate_ema_numba(df["close"].values, period))
+        df[f"ema_{period}"] = ema_raw.shift(1).values
 
         # Price position relative to EMA uses previous close vs shifted EMA
         # This compares close[t-1] to EMA[t-1], available at bar[t]
-        df[f'price_to_ema_{period}'] = _safe_divide(
-            df['close'].shift(1), df[f'ema_{period}']
-        ) - 1
+        df[f"price_to_ema_{period}"] = _safe_divide(df["close"].shift(1), df[f"ema_{period}"]) - 1
 
-        feature_metadata[f'ema_{period}'] = f"{period}-period Exponential Moving Average (lagged)"
-        feature_metadata[f'price_to_ema_{period}'] = f"Price deviation from EMA-{period} (lagged)"
+        feature_metadata[f"ema_{period}"] = f"{period}-period Exponential Moving Average (lagged)"
+        feature_metadata[f"price_to_ema_{period}"] = f"Price deviation from EMA-{period} (lagged)"
 
     return df
 
 
 __all__ = [
-    'add_sma',
-    'add_ema',
+    "add_sma",
+    "add_ema",
 ]

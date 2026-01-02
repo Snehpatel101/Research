@@ -24,12 +24,12 @@ logger.addHandler(logging.NullHandler())
 
 
 def validate_scaling(
-    scaler: 'FeatureScaler',
+    scaler: "FeatureScaler",
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
     feature_cols: list[str],
-    z_threshold: float = 5.0
+    z_threshold: float = 5.0,
 ) -> dict:
     """
     Validate that scaling was done correctly.
@@ -52,16 +52,16 @@ def validate_scaling(
         Validation report dictionary
     """
     report = {
-        'is_valid': True,
-        'timestamp': datetime.now().isoformat(),
-        'issues': [],
-        'warnings': [],
-        'statistics': {}
+        "is_valid": True,
+        "timestamp": datetime.now().isoformat(),
+        "issues": [],
+        "warnings": [],
+        "statistics": {},
     }
 
     if not scaler.is_fitted:
-        report['is_valid'] = False
-        report['issues'].append("Scaler is not fitted")
+        report["is_valid"] = False
+        report["issues"].append("Scaler is not fitted")
         return report
 
     # Transform all splits
@@ -75,15 +75,15 @@ def validate_scaling(
         test_col = test_scaled[fname].values
 
         # Check for NaN/Inf
-        for name, col in [('train', train_col), ('val', val_col), ('test', test_col)]:
+        for name, col in [("train", train_col), ("val", val_col), ("test", test_col)]:
             nan_count = int(np.isnan(col).sum())
             inf_count = int(np.isinf(col).sum())
             if nan_count > 0:
-                report['issues'].append(f"{fname} {name}: {nan_count} NaN values")
-                report['is_valid'] = False
+                report["issues"].append(f"{fname} {name}: {nan_count} NaN values")
+                report["is_valid"] = False
             if inf_count > 0:
-                report['issues'].append(f"{fname} {name}: {inf_count} Inf values")
-                report['is_valid'] = False
+                report["issues"].append(f"{fname} {name}: {inf_count} Inf values")
+                report["is_valid"] = False
 
         # Check val/test statistics relative to train
         train_clean = train_col[~np.isnan(train_col) & ~np.isinf(train_col)]
@@ -93,37 +93,36 @@ def validate_scaling(
         if len(train_clean) > 0 and len(val_clean) > 0:
             train_mean, train_std = np.mean(train_clean), np.std(train_clean)
             val_mean, val_std = np.mean(val_clean), np.std(val_clean)
-            test_mean, test_std = np.mean(test_clean), np.std(test_clean) if len(test_clean) > 0 else (0, 0)
+            test_mean, test_std = np.mean(test_clean), (
+                np.std(test_clean) if len(test_clean) > 0 else (0, 0)
+            )
 
             # Check if val/test means are within z_threshold of train
             if train_std > 0:
                 val_z = abs(val_mean - train_mean) / train_std
                 if val_z > z_threshold:
-                    report['warnings'].append(
+                    report["warnings"].append(
                         f"{fname}: val mean differs significantly from train (z={val_z:.2f})"
                     )
 
                 if len(test_clean) > 0:
                     test_z = abs(test_mean - train_mean) / train_std
                     if test_z > z_threshold:
-                        report['warnings'].append(
+                        report["warnings"].append(
                             f"{fname}: test mean differs significantly from train (z={test_z:.2f})"
                         )
 
-            report['statistics'][fname] = {
-                'train': {'mean': float(train_mean), 'std': float(train_std)},
-                'val': {'mean': float(val_mean), 'std': float(val_std)},
-                'test': {'mean': float(test_mean), 'std': float(test_std)}
+            report["statistics"][fname] = {
+                "train": {"mean": float(train_mean), "std": float(train_std)},
+                "val": {"mean": float(val_mean), "std": float(val_std)},
+                "test": {"mean": float(test_mean), "std": float(test_std)},
             }
 
     return report
 
 
 def validate_no_leakage(
-    train_df: pd.DataFrame,
-    val_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    scaler: 'FeatureScaler'
+    train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame, scaler: "FeatureScaler"
 ) -> dict:
     """
     Validate that no data leakage occurred during scaling.
@@ -140,11 +139,7 @@ def validate_no_leakage(
     Returns:
         Leakage validation report
     """
-    report = {
-        'leakage_detected': False,
-        'checks': [],
-        'issues': []
-    }
+    report = {"leakage_detected": False, "checks": [], "issues": []}
 
     for fname in scaler.feature_names:
         train_data = train_df[fname].values.astype(np.float64)
@@ -170,20 +165,20 @@ def validate_no_leakage(
         std_tol = max(1e-5, 1e-5 * abs(stored_std))
 
         check = {
-            'feature': fname,
-            'stored_mean': stored_mean,
-            'computed_mean': computed_mean,
-            'mean_diff': mean_diff,
-            'stored_std': stored_std,
-            'computed_std': computed_std,
-            'std_diff': std_diff,
-            'passed': mean_diff < mean_tol and std_diff < std_tol
+            "feature": fname,
+            "stored_mean": stored_mean,
+            "computed_mean": computed_mean,
+            "mean_diff": mean_diff,
+            "stored_std": stored_std,
+            "computed_std": computed_std,
+            "std_diff": std_diff,
+            "passed": mean_diff < mean_tol and std_diff < std_tol,
         }
-        report['checks'].append(check)
+        report["checks"].append(check)
 
-        if not check['passed']:
-            report['leakage_detected'] = True
-            report['issues'].append(
+        if not check["passed"]:
+            report["leakage_detected"] = True
+            report["issues"].append(
                 f"{fname}: Statistics don't match training data "
                 f"(mean_diff={mean_diff:.2e}, std_diff={std_diff:.2e})"
             )
@@ -196,8 +191,8 @@ def validate_scaling_for_splits(
     val_path: Path,
     test_path: Path,
     feature_cols: list[str] | None = None,
-    scaler_type: str = 'robust',
-    output_path: Path | None = None
+    scaler_type: str = "robust",
+    output_path: Path | None = None,
 ) -> dict:
     """
     Validate that scaling works correctly for train/val/test splits.
@@ -234,18 +229,38 @@ def validate_scaling_for_splits(
     # Identify feature columns if not provided
     if feature_cols is None:
         excluded_cols = {
-            'datetime', 'symbol', 'open', 'high', 'low', 'close', 'volume',
-            'timeframe', 'session_id', 'missing_bar', 'roll_event', 'roll_window', 'filled'
+            "datetime",
+            "symbol",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "timeframe",
+            "session_id",
+            "missing_bar",
+            "roll_event",
+            "roll_window",
+            "filled",
         }
         excluded_prefixes = (
-            'label_', 'bars_to_hit_', 'mae_', 'mfe_', 'quality_', 'sample_weight_',
-            'touch_type_', 'pain_to_gain_', 'time_weighted_dd_', 'fwd_return_',
-            'fwd_return_log_', 'time_to_hit_'
+            "label_",
+            "bars_to_hit_",
+            "mae_",
+            "mfe_",
+            "quality_",
+            "sample_weight_",
+            "touch_type_",
+            "pain_to_gain_",
+            "time_weighted_dd_",
+            "fwd_return_",
+            "fwd_return_log_",
+            "time_to_hit_",
         )
         feature_cols = [
-            c for c in train_df.columns
-            if c not in excluded_cols
-            and not any(c.startswith(p) for p in excluded_prefixes)
+            c
+            for c in train_df.columns
+            if c not in excluded_cols and not any(c.startswith(p) for p in excluded_prefixes)
         ]
     logger.info(f"Features: {len(feature_cols)}")
 
@@ -256,34 +271,31 @@ def validate_scaling_for_splits(
     test_scaled = scaler.transform(test_df)
 
     # Run validation
-    scaling_validation = validate_scaling(
-        scaler, train_df, val_df, test_df, feature_cols
-    )
+    scaling_validation = validate_scaling(scaler, train_df, val_df, test_df, feature_cols)
 
-    leakage_validation = validate_no_leakage(
-        train_df, val_df, test_df, scaler
-    )
+    leakage_validation = validate_no_leakage(train_df, val_df, test_df, scaler)
 
     # Combine reports
     report = {
-        'timestamp': datetime.now().isoformat(),
-        'train_samples': len(train_df),
-        'val_samples': len(val_df),
-        'test_samples': len(test_df),
-        'n_features': len(feature_cols),
-        'scaler_type': scaler_type,
-        'scaling_validation': scaling_validation,
-        'leakage_validation': leakage_validation,
-        'scaler_report': scaler.get_scaling_report(),
-        'overall_status': 'PASSED' if (
-            scaling_validation['is_valid'] and
-            not leakage_validation['leakage_detected']
-        ) else 'FAILED'
+        "timestamp": datetime.now().isoformat(),
+        "train_samples": len(train_df),
+        "val_samples": len(val_df),
+        "test_samples": len(test_df),
+        "n_features": len(feature_cols),
+        "scaler_type": scaler_type,
+        "scaling_validation": scaling_validation,
+        "leakage_validation": leakage_validation,
+        "scaler_report": scaler.get_scaling_report(),
+        "overall_status": (
+            "PASSED"
+            if (scaling_validation["is_valid"] and not leakage_validation["leakage_detected"])
+            else "FAILED"
+        ),
     }
 
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(report, f, indent=2, default=str)
         logger.info(f"Validation report saved to: {output_path}")
 
@@ -295,26 +307,26 @@ def validate_scaling_for_splits(
     logger.info(f"Leakage detected: {leakage_validation['leakage_detected']}")
     logger.info(f"Overall status: {report['overall_status']}")
 
-    if scaling_validation['warnings']:
+    if scaling_validation["warnings"]:
         logger.warning(f"Warnings ({len(scaling_validation['warnings'])}):")
-        for w in scaling_validation['warnings'][:5]:
+        for w in scaling_validation["warnings"][:5]:
             logger.warning(f"  - {w}")
 
-    if scaling_validation['issues']:
+    if scaling_validation["issues"]:
         logger.error(f"Issues ({len(scaling_validation['issues'])}):")
-        for i in scaling_validation['issues']:
+        for i in scaling_validation["issues"]:
             logger.error(f"  - {i}")
 
     return report
 
 
 def add_scaling_validation_to_stage8(
-    validator: 'DataValidator',
+    validator: "DataValidator",
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
     test_df: pd.DataFrame,
     feature_cols: list[str],
-    scaler_type: str = 'robust'
+    scaler_type: str = "robust",
 ) -> dict:
     """
     Add scaling validation results to a Stage 8 DataValidator.
@@ -344,36 +356,34 @@ def add_scaling_validation_to_stage8(
     scaler.fit(train_df, feature_cols)
 
     # Validate
-    scaling_validation = validate_scaling(
-        scaler, train_df, val_df, test_df, feature_cols
-    )
+    scaling_validation = validate_scaling(scaler, train_df, val_df, test_df, feature_cols)
 
-    leakage_validation = validate_no_leakage(
-        train_df, val_df, test_df, scaler
-    )
+    leakage_validation = validate_no_leakage(train_df, val_df, test_df, scaler)
 
     results = {
-        'scaling_validation': scaling_validation,
-        'leakage_validation': leakage_validation,
-        'scaler_summary': scaler.get_scaling_report()
+        "scaling_validation": scaling_validation,
+        "leakage_validation": leakage_validation,
+        "scaler_summary": scaler.get_scaling_report(),
     }
 
     # Add to validator's results
-    validator.validation_results['scaling'] = results
+    validator.validation_results["scaling"] = results
 
     # Update warnings/issues
-    if scaling_validation['warnings']:
-        for w in scaling_validation['warnings']:
+    if scaling_validation["warnings"]:
+        for w in scaling_validation["warnings"]:
             validator.warnings_found.append(f"Scaling: {w}")
 
-    if scaling_validation['issues']:
-        for i in scaling_validation['issues']:
+    if scaling_validation["issues"]:
+        for i in scaling_validation["issues"]:
             validator.issues_found.append(f"Scaling: {i}")
 
-    if leakage_validation['leakage_detected']:
+    if leakage_validation["leakage_detected"]:
         validator.issues_found.append("Scaling: Data leakage detected!")
 
     logger.info(f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'FAILED'}")
-    logger.info(f"Leakage check: {'CLEAN' if not leakage_validation['leakage_detected'] else 'LEAKAGE DETECTED'}")
+    logger.info(
+        f"Leakage check: {'CLEAN' if not leakage_validation['leakage_detected'] else 'LEAKAGE DETECTED'}"
+    )
 
     return results

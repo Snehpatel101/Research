@@ -12,6 +12,7 @@ with Transformers" (ICLR 2023)
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -116,7 +117,7 @@ class LearnablePositionalEncoding(nn.Module):
         Returns:
             Position-encoded embeddings, shape (batch, n_patches, d_model)
         """
-        x = x + self.pe[:, :x.size(1), :]
+        x = x + self.pe[:, : x.size(1), :]
         return self.dropout(x)
 
 
@@ -315,27 +316,29 @@ class PatchTSTModel(BaseRNNModel):
     def get_default_config(self) -> dict[str, Any]:
         """Return default PatchTST hyperparameters."""
         defaults = super().get_default_config()
-        defaults.update({
-            # Architecture
-            "d_model": 256,
-            "n_heads": 8,
-            "n_layers": 3,
-            "d_ff": 512,
-            "patch_len": 16,  # Patch length in timesteps
-            "stride": 8,      # Stride (8 = 50% overlap with patch_len=16)
-            "dropout": 0.1,
-            "activation": "gelu",
-            "max_patches": 512,
-            # Training
-            "sequence_length": 128,  # Longer sequences benefit from patching
-            "batch_size": 128,
-            "max_epochs": 50,
-            "learning_rate": 0.0001,
-            "weight_decay": 0.01,
-            "gradient_clip": 1.0,
-            "early_stopping_patience": 10,
-            "warmup_epochs": 3,
-        })
+        defaults.update(
+            {
+                # Architecture
+                "d_model": 256,
+                "n_heads": 8,
+                "n_layers": 3,
+                "d_ff": 512,
+                "patch_len": 16,  # Patch length in timesteps
+                "stride": 8,  # Stride (8 = 50% overlap with patch_len=16)
+                "dropout": 0.1,
+                "activation": "gelu",
+                "max_patches": 512,
+                # Training
+                "sequence_length": 128,  # Longer sequences benefit from patching
+                "batch_size": 128,
+                "max_epochs": 50,
+                "learning_rate": 0.0001,
+                "weight_decay": 0.01,
+                "gradient_clip": 1.0,
+                "early_stopping_patience": 10,
+                "warmup_epochs": 3,
+            }
+        )
         return defaults
 
     def _create_network(self, input_size: int) -> nn.Module:
@@ -413,7 +416,7 @@ class PatchTSTModel(BaseRNNModel):
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
-                batch = X_tensor[i:i + batch_size]
+                batch = X_tensor[i : i + batch_size]
 
                 with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                     logits = self._model(batch)
@@ -464,7 +467,7 @@ class PatchTSTModel(BaseRNNModel):
 
         # Compute importance per feature across all timesteps and d_model dims
         # Sum L2 norms across d_model and patch_len dimensions
-        importance = np.sqrt((weights ** 2).sum(axis=(0, 1)))
+        importance = np.sqrt((weights**2).sum(axis=(0, 1)))
 
         # Normalize to sum to 1
         importance = importance / importance.sum()

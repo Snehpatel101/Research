@@ -7,6 +7,7 @@ from multiple base models with derived features.
 Handles NaN values from sequence models that cannot predict samples
 at the beginning of segments due to lookback requirements.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 # STACKING DATASET
 # =============================================================================
 
+
 @dataclass
 class StackingDataset:
     """
@@ -38,6 +40,7 @@ class StackingDataset:
         horizon: Label horizon
         metadata: Additional metadata
     """
+
     data: pd.DataFrame
     model_names: list[str]
     horizon: int
@@ -75,6 +78,7 @@ class StackingDataset:
 # =============================================================================
 # NAN HANDLING UTILITIES
 # =============================================================================
+
 
 def find_valid_samples_mask(
     oof_predictions: dict[str, OOFPrediction],
@@ -123,6 +127,7 @@ def find_valid_samples_mask(
 # =============================================================================
 # STACKING BUILDER
 # =============================================================================
+
 
 class StackingDatasetBuilder:
     """
@@ -187,8 +192,7 @@ class StackingDatasetBuilder:
             for model_name, count in nan_counts.items():
                 if count > 0:
                     logger.info(
-                        f"  {model_name}: {count} NaN samples "
-                        f"({100 * count / n_original:.1f}%)"
+                        f"  {model_name}: {count} NaN samples " f"({100 * count / n_original:.1f}%)"
                     )
 
         # Handle NaN samples
@@ -263,11 +267,7 @@ class StackingDatasetBuilder:
         # Model predictions (argmax)
         pred_cols = []
         for model in model_names:
-            prob_cols = [
-                f"{model}_prob_short",
-                f"{model}_prob_neutral",
-                f"{model}_prob_long"
-            ]
+            prob_cols = [f"{model}_prob_short", f"{model}_prob_neutral", f"{model}_prob_long"]
             # Prediction already exists, but ensure it's -1, 0, 1 format
             pred_col = f"{model}_pred"
             pred_cols.append(pred_col)
@@ -275,8 +275,7 @@ class StackingDatasetBuilder:
         # Agreement features
         df["models_agree"] = (df[pred_cols].nunique(axis=1) == 1).astype(int)
         df["agreement_count"] = df[pred_cols].apply(
-            lambda x: x.value_counts().max() if len(x.dropna()) > 0 else 0,
-            axis=1
+            lambda x: x.value_counts().max() if len(x.dropna()) > 0 else 0, axis=1
         )
 
         # Average confidence
@@ -287,11 +286,7 @@ class StackingDatasetBuilder:
 
         # Prediction entropy (uncertainty) per model
         for model in model_names:
-            prob_cols = [
-                f"{model}_prob_short",
-                f"{model}_prob_neutral",
-                f"{model}_prob_long"
-            ]
+            prob_cols = [f"{model}_prob_short", f"{model}_prob_neutral", f"{model}_prob_long"]
             probs = df[prob_cols].values
             # Entropy: -sum(p * log(p))
             entropy = -np.sum(probs * np.log(probs + 1e-10), axis=1)

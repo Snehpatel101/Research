@@ -23,11 +23,13 @@ logger.addHandler(logging.NullHandler())
 
 DEFAULT_ROLL_GAP_THRESHOLD = 0.10
 DEFAULT_ROLL_WINDOW_BARS = 5
-SESSION_ID_OUTSIDE = 'outside'
+SESSION_ID_OUTSIDE = "outside"
 
 
 @jit(nopython=True)
-def calculate_atr_numba(high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14) -> np.ndarray:
+def calculate_atr_numba(
+    high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
+) -> np.ndarray:
     """
     Calculate Average True Range using Numba for performance.
 
@@ -49,15 +51,15 @@ def calculate_atr_numba(high: np.ndarray, low: np.ndarray, close: np.ndarray, pe
     # Calculate True Range
     for i in range(1, n):
         hl = high[i] - low[i]
-        hc = abs(high[i] - close[i-1])
-        lc = abs(low[i] - close[i-1])
+        hc = abs(high[i] - close[i - 1])
+        lc = abs(low[i] - close[i - 1])
         tr[i] = max(hl, hc, lc)
 
     # Calculate ATR
-    atr[period] = np.mean(tr[1:period+1])
+    atr[period] = np.mean(tr[1 : period + 1])
 
     for i in range(period + 1, n):
-        atr[i] = (atr[i-1] * (period - 1) + tr[i]) / period
+        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
 
     return atr
 
@@ -82,21 +84,21 @@ def validate_ohlc(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     # Fix high
-    df['high'] = df[['high', 'open', 'close']].max(axis=1)
+    df["high"] = df[["high", "open", "close"]].max(axis=1)
 
     # Fix low
-    df['low'] = df[['low', 'open', 'close']].min(axis=1)
+    df["low"] = df[["low", "open", "close"]].min(axis=1)
 
     # Ensure high >= low
-    mask = df['high'] < df['low']
+    mask = df["high"] < df["low"]
     if mask.any():
-        df.loc[mask, ['high', 'low']] = df.loc[mask, ['low', 'high']].values
+        df.loc[mask, ["high", "low"]] = df.loc[mask, ["low", "high"]].values
         logger.warning(f"Fixed {mask.sum()} bars where high < low")
 
     return df
 
 
-def detect_gaps_simple(df: pd.DataFrame, freq: str = '1min') -> pd.DataFrame:
+def detect_gaps_simple(df: pd.DataFrame, freq: str = "1min") -> pd.DataFrame:
     """
     Detect and report data gaps (simple version).
 
@@ -109,23 +111,25 @@ def detect_gaps_simple(df: pd.DataFrame, freq: str = '1min') -> pd.DataFrame:
     --------
     pd.DataFrame : DataFrame with gap information
     """
-    dt = df['datetime']
+    dt = df["datetime"]
 
     # Use numpy for safe operations
-    dt_values = dt.values if hasattr(dt, 'values') else dt
-    time_diff = np.diff(dt_values.astype('datetime64[ns]').astype(np.int64)) / 1e9 / 60
+    dt_values = dt.values if hasattr(dt, "values") else dt
+    time_diff = np.diff(dt_values.astype("datetime64[ns]").astype(np.int64)) / 1e9 / 60
 
-    expected_gap = 1 if freq == '1min' else 5
+    expected_gap = 1 if freq == "1min" else 5
     gap_mask = time_diff > expected_gap * 2
 
     gap_positions = np.where(gap_mask)[0]
 
     if len(gap_positions) > 0:
-        gaps_df = pd.DataFrame({
-            'gap_start': dt.iloc[gap_positions].values,
-            'gap_end': dt.iloc[gap_positions + 1].values,
-            'gap_minutes': time_diff[gap_positions]
-        })
+        gaps_df = pd.DataFrame(
+            {
+                "gap_start": dt.iloc[gap_positions].values,
+                "gap_end": dt.iloc[gap_positions + 1].values,
+                "gap_minutes": time_diff[gap_positions],
+            }
+        )
         logger.info(f"Found {len(gap_positions)} gaps in data")
         return gaps_df
 
@@ -148,19 +152,15 @@ def fill_gaps_simple(df: pd.DataFrame, max_gap_minutes: int = 60) -> pd.DataFram
     logger.info(f"Filling gaps up to {max_gap_minutes} minutes...")
 
     df = df.copy()
-    df = df.set_index('datetime')
+    df = df.set_index("datetime")
     original_index = df.index
 
     # Create complete datetime index
-    full_index = pd.date_range(
-        start=df.index.min(),
-        end=df.index.max(),
-        freq='1min'
-    )
+    full_index = pd.date_range(start=df.index.min(), end=df.index.max(), freq="1min")
 
     # Reindex and forward fill
     df = df.reindex(full_index)
-    df['missing_bar'] = (~df.index.isin(original_index)).astype(int)
+    df["missing_bar"] = (~df.index.isin(original_index)).astype(int)
 
     # Only fill small gaps
     df = df.ffill(limit=max_gap_minutes)
@@ -168,7 +168,7 @@ def fill_gaps_simple(df: pd.DataFrame, max_gap_minutes: int = 60) -> pd.DataFram
     # Drop remaining NaNs
     df = df.dropna()
 
-    df = df.reset_index().rename(columns={'index': 'datetime'})
+    df = df.reset_index().rename(columns={"index": "datetime"})
 
     logger.info(f"After gap filling: {len(df):,} rows")
     return df
@@ -176,9 +176,9 @@ def fill_gaps_simple(df: pd.DataFrame, max_gap_minutes: int = 60) -> pd.DataFram
 
 def add_roll_flags(
     df: pd.DataFrame,
-    price_column: str = 'close',
+    price_column: str = "close",
     pct_threshold: float = DEFAULT_ROLL_GAP_THRESHOLD,
-    window_bars: int = DEFAULT_ROLL_WINDOW_BARS
+    window_bars: int = DEFAULT_ROLL_WINDOW_BARS,
 ) -> pd.DataFrame:
     """
     Add contract roll event/window flags based on large price gaps.
@@ -200,17 +200,15 @@ def add_roll_flags(
         for idx in indices:
             start = max(0, idx - window_bars)
             end = min(len(df) - 1, idx + window_bars)
-            roll_window[start:end + 1] = True
+            roll_window[start : end + 1] = True
 
-    df['roll_event'] = roll_event.fillna(False).astype(int)
-    df['roll_window'] = roll_window.astype(int)
+    df["roll_event"] = roll_event.fillna(False).astype(int)
+    df["roll_window"] = roll_window.astype(int)
     return df
 
 
 def add_session_id(
-    df: pd.DataFrame,
-    datetime_column: str = 'datetime',
-    outside_label: str = SESSION_ID_OUTSIDE
+    df: pd.DataFrame, datetime_column: str = "datetime", outside_label: str = SESSION_ID_OUTSIDE
 ) -> pd.DataFrame:
     """
     Add a session_id column using CME session definitions (UTC).
@@ -225,6 +223,7 @@ def add_session_id(
     df = df.copy()
     session_filter = SessionFilter(datetime_column=datetime_column)
     sessions = session_filter.classify_sessions_vectorized(df[datetime_column])
+
     def _resolve_session(value: object) -> str:
         if value is None or pd.isna(value):
             return outside_label
@@ -232,14 +231,12 @@ def add_session_id(
             return value.value
         return str(value)
 
-    df['session_id'] = sessions.apply(_resolve_session)
+    df["session_id"] = sessions.apply(_resolve_session)
     return df
 
 
 def resample_ohlcv(
-    df: pd.DataFrame,
-    target_timeframe: str = '5min',
-    include_metadata: bool = True
+    df: pd.DataFrame, target_timeframe: str = "5min", include_metadata: bool = True
 ) -> pd.DataFrame:
     """
     Resample OHLCV data to a target timeframe.
@@ -284,12 +281,11 @@ def resample_ohlcv(
     validate_timeframe(target_timeframe)
 
     # Validate required columns
-    required_columns = ['datetime', 'open', 'high', 'low', 'close', 'volume']
+    required_columns = ["datetime", "open", "high", "low", "close", "volume"]
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(
-            f"Missing required columns: {missing_columns}. "
-            f"Expected columns: {required_columns}"
+            f"Missing required columns: {missing_columns}. " f"Expected columns: {required_columns}"
         )
 
     if len(df) == 0:
@@ -299,35 +295,29 @@ def resample_ohlcv(
     target_minutes = parse_timeframe_to_minutes(target_timeframe)
 
     # Build pandas frequency string
-    freq = f'{target_minutes}min' if target_minutes < 60 else f'{target_minutes // 60}h'
+    freq = f"{target_minutes}min" if target_minutes < 60 else f"{target_minutes // 60}h"
 
     logger.info(f"Resampling to {target_timeframe} ({target_minutes}-minute bars)...")
 
     df = df.copy()
 
     # Handle symbol column if present - preserve it
-    has_symbol = 'symbol' in df.columns
-    symbol_value = df['symbol'].iloc[0] if has_symbol else None
+    has_symbol = "symbol" in df.columns
+    symbol_value = df["symbol"].iloc[0] if has_symbol else None
 
-    df = df.set_index('datetime')
+    df = df.set_index("datetime")
 
     # Define OHLCV aggregation rules
-    agg_rules = {
-        'open': 'first',
-        'high': 'max',
-        'low': 'min',
-        'close': 'last',
-        'volume': 'sum'
-    }
-    optional_flag_cols = ['missing_bar', 'filled', 'roll_event', 'roll_window']
+    agg_rules = {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    optional_flag_cols = ["missing_bar", "filled", "roll_event", "roll_window"]
     for col in optional_flag_cols:
         if col in df.columns:
-            agg_rules[col] = 'max'
+            agg_rules[col] = "max"
 
     # Perform resampling
     # ANTI-LOOKAHEAD: Use closed='left', label='left' explicitly
     # A bar at 09:30 represents [09:30:00, 09:34:59], timestamp = period start
-    resampled = df.resample(freq, closed='left', label='left').agg(agg_rules)
+    resampled = df.resample(freq, closed="left", label="left").agg(agg_rules)
 
     # Drop rows where we couldn't compute all values (e.g., no data in period)
     resampled = resampled.dropna()
@@ -337,11 +327,11 @@ def resample_ohlcv(
 
     # Add metadata if requested
     if include_metadata:
-        resampled['timeframe'] = target_timeframe
+        resampled["timeframe"] = target_timeframe
 
     # Restore symbol column if it was present
     if has_symbol and symbol_value is not None:
-        resampled['symbol'] = symbol_value
+        resampled["symbol"] = symbol_value
 
     logger.info(f"Resampled to {len(resampled):,} {target_timeframe} bars")
 
@@ -368,7 +358,7 @@ def resample_to_5min(df: pd.DataFrame) -> pd.DataFrame:
     resample_ohlcv : Generic resampling function with configurable timeframe
     """
     # Use the generic function, but exclude metadata for backward compatibility
-    result = resample_ohlcv(df, target_timeframe='5min', include_metadata=False)
+    result = resample_ohlcv(df, target_timeframe="5min", include_metadata=False)
     return result
 
 
@@ -408,11 +398,11 @@ def get_resampling_info(source_timeframe: str, target_timeframe: str) -> dict:
     bars_per_target = target_minutes // source_minutes
 
     return {
-        'source_timeframe': source_timeframe,
-        'target_timeframe': target_timeframe,
-        'source_minutes': source_minutes,
-        'target_minutes': target_minutes,
-        'bars_per_target': bars_per_target,
-        'scale_factor': target_minutes / source_minutes,
-        'description': f'{bars_per_target} {source_timeframe} bars = 1 {target_timeframe} bar'
+        "source_timeframe": source_timeframe,
+        "target_timeframe": target_timeframe,
+        "source_minutes": source_minutes,
+        "target_minutes": target_minutes,
+        "bars_per_target": bars_per_target,
+        "scale_factor": target_minutes / source_minutes,
+        "description": f"{bars_per_target} {source_timeframe} bars = 1 {target_timeframe} bar",
     }

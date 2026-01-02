@@ -4,6 +4,7 @@ Validators submodule for Stage 8 data validation.
 Provides modular validation checks for data integrity, labels, features,
 and normalization.
 """
+
 import json
 import logging
 from datetime import datetime
@@ -39,29 +40,29 @@ from .normalization import check_feature_normalization
 # Re-export for convenience
 __all__ = [
     # Main validation function
-    'validate_data',
+    "validate_data",
     # DataValidator class
-    'DataValidator',
+    "DataValidator",
     # Existing validators
-    'check_data_integrity',
-    'check_label_sanity',
-    'check_feature_quality',
-    'check_feature_normalization',
+    "check_data_integrity",
+    "check_label_sanity",
+    "check_feature_quality",
+    "check_feature_normalization",
     # Data contract validation
-    'DataContract',
-    'validate_ohlcv_schema',
-    'validate_labels',
-    'filter_invalid_labels',
-    'get_dataset_fingerprint',
-    'validate_feature_lookahead',
-    'summarize_label_distribution',
+    "DataContract",
+    "validate_ohlcv_schema",
+    "validate_labels",
+    "filter_invalid_labels",
+    "get_dataset_fingerprint",
+    "validate_feature_lookahead",
+    "summarize_label_distribution",
     # Feature selection
-    'FeatureSelectionResult',
+    "FeatureSelectionResult",
     # Constants
-    'REQUIRED_OHLCV',
-    'VALID_LABELS',
-    'INVALID_LABEL_SENTINEL',
-    'POSITIVE_COLUMNS',
+    "REQUIRED_OHLCV",
+    "VALID_LABELS",
+    "INVALID_LABEL_SENTINEL",
+    "POSITIVE_COLUMNS",
 ]
 
 logger = logging.getLogger(__name__)
@@ -84,12 +85,7 @@ class DataValidator:
         >>> summary = validator.generate_summary()
     """
 
-    def __init__(
-        self,
-        df: pd.DataFrame,
-        horizons: list[int] | None = None,
-        seed: int = 42
-    ):
+    def __init__(self, df: pd.DataFrame, horizons: list[int] | None = None, seed: int = 42):
         """
         Initialize the validator.
 
@@ -120,7 +116,7 @@ class DataValidator:
             Dictionary with integrity check results
         """
         results = check_data_integrity(self.df, self.issues_found)
-        self.validation_results['data_integrity'] = results
+        self.validation_results["data_integrity"] = results
         return results
 
     def check_label_sanity(self) -> dict:
@@ -138,7 +134,7 @@ class DataValidator:
             Dictionary with label sanity results
         """
         results = check_label_sanity(self.df, self.horizons, self.warnings_found)
-        self.validation_results['label_sanity'] = results
+        self.validation_results["label_sanity"] = results
         return results
 
     def check_feature_quality(self, max_features: int = 50) -> dict:
@@ -159,13 +155,11 @@ class DataValidator:
         results = check_feature_quality(
             self.df, self.horizons, self.warnings_found, self.seed, max_features
         )
-        self.validation_results['feature_quality'] = results
+        self.validation_results["feature_quality"] = results
         return results
 
     def check_feature_normalization(
-        self,
-        z_threshold: float = 3.0,
-        extreme_threshold: float = 5.0
+        self, z_threshold: float = 3.0, extreme_threshold: float = 5.0
     ) -> dict:
         """
         Check feature normalization, distributions, and outliers.
@@ -186,16 +180,13 @@ class DataValidator:
             Dictionary with normalization validation results
         """
         results = check_feature_normalization(
-            self.df, self.issues_found, self.warnings_found,
-            z_threshold, extreme_threshold
+            self.df, self.issues_found, self.warnings_found, z_threshold, extreme_threshold
         )
-        self.validation_results['feature_normalization'] = results
+        self.validation_results["feature_normalization"] = results
         return results
 
     def run_feature_selection(
-        self,
-        correlation_threshold: float = 0.85,
-        variance_threshold: float = 0.01
+        self, correlation_threshold: float = 0.85, variance_threshold: float = 0.01
     ) -> FeatureSelectionResult:
         """
         Run feature selection to identify and remove redundant features.
@@ -210,25 +201,24 @@ class DataValidator:
         Returns:
             FeatureSelectionResult with selected and removed features
         """
-        logger.info("\n" + "="*60)
+        logger.info("\n" + "=" * 60)
         logger.info("FEATURE SELECTION")
-        logger.info("="*60)
+        logger.info("=" * 60)
 
         result = select_features(
             self.df,
             correlation_threshold=correlation_threshold,
-            variance_threshold=variance_threshold
+            variance_threshold=variance_threshold,
         )
 
         # Store results in validation_results
-        self.validation_results['feature_selection'] = result.to_dict()
+        self.validation_results["feature_selection"] = result.to_dict()
 
         # Update warnings if features were removed
         if len(result.removed_features) > 0:
             # Replace the old correlation warning with a more informative one
             self.warnings_found = [
-                w for w in self.warnings_found
-                if 'correlated feature pairs' not in w
+                w for w in self.warnings_found if "correlated feature pairs" not in w
             ]
             self.warnings_found.append(
                 f"Feature selection removed {len(result.removed_features)} redundant features "
@@ -254,22 +244,22 @@ class DataValidator:
         logger.info("=" * 60)
 
         summary = {
-            'timestamp': datetime.now().isoformat(),
-            'total_rows': int(len(self.df)),
-            'total_columns': int(len(self.df.columns)),
-            'issues_count': len(self.issues_found),
-            'warnings_count': len(self.warnings_found),
-            'issues': self.issues_found,
-            'warnings': self.warnings_found,
-            'validation_results': self.validation_results
+            "timestamp": datetime.now().isoformat(),
+            "total_rows": int(len(self.df)),
+            "total_columns": int(len(self.df.columns)),
+            "issues_count": len(self.issues_found),
+            "warnings_count": len(self.warnings_found),
+            "issues": self.issues_found,
+            "warnings": self.warnings_found,
+            "validation_results": self.validation_results,
         }
 
         # Determine overall status
         if len(self.issues_found) == 0:
-            summary['status'] = 'PASSED'
+            summary["status"] = "PASSED"
             logger.info("\nAll validation checks PASSED")
         else:
-            summary['status'] = 'FAILED'
+            summary["status"] = "FAILED"
             logger.error(f"\nValidation FAILED with {len(self.issues_found)} issues")
 
         if len(self.warnings_found) > 0:
@@ -293,7 +283,7 @@ def validate_data(
     correlation_threshold: float = 0.85,
     variance_threshold: float = 0.01,
     feature_selection_output_path: Path | None = None,
-    seed: int = 42
+    seed: int = 42,
 ) -> tuple[dict, FeatureSelectionResult | None]:
     """
     Main validation function.
@@ -311,9 +301,9 @@ def validate_data(
     Returns:
         Tuple of (validation summary dict, FeatureSelectionResult or None)
     """
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("STAGE 8: DATA VALIDATION")
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info(f"Random seed: {seed}")
 
     # Load data
@@ -334,16 +324,12 @@ def validate_data(
     feature_selection_result = None
     if run_feature_selection:
         feature_selection_result = validator.run_feature_selection(
-            correlation_threshold=correlation_threshold,
-            variance_threshold=variance_threshold
+            correlation_threshold=correlation_threshold, variance_threshold=variance_threshold
         )
 
         # Save feature selection report if path provided
         if feature_selection_output_path:
-            save_feature_selection_report(
-                feature_selection_result,
-                feature_selection_output_path
-            )
+            save_feature_selection_report(feature_selection_result, feature_selection_output_path)
 
     # Generate summary
     summary = validator.generate_summary()
@@ -362,14 +348,14 @@ def validate_data(
                 return obj.tolist()
             elif isinstance(obj, np.bool_):
                 return bool(obj)
-            raise TypeError(f'Object of type {type(obj)} is not JSON serializable')
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(summary, f, indent=2, default=numpy_encoder)
         logger.info(f"\nValidation report saved to: {output_path}")
 
-    logger.info("\n" + "="*70)
+    logger.info("\n" + "=" * 70)
     logger.info("STAGE 8 COMPLETE")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     return summary, feature_selection_result

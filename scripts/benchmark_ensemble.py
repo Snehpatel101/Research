@@ -176,28 +176,21 @@ def print_results(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Benchmark boosting ensemble inference latency"
+    parser = argparse.ArgumentParser(description="Benchmark boosting ensemble inference latency")
+    parser.add_argument(
+        "--n-samples", type=int, default=100, help="Number of samples for inference (default: 100)"
     )
     parser.add_argument(
-        "--n-samples", type=int, default=100,
-        help="Number of samples for inference (default: 100)"
+        "--n-features", type=int, default=150, help="Number of features (default: 150)"
     )
     parser.add_argument(
-        "--n-features", type=int, default=150,
-        help="Number of features (default: 150)"
+        "--warmup", type=int, default=5, help="Number of warmup iterations (default: 5)"
     )
     parser.add_argument(
-        "--warmup", type=int, default=5,
-        help="Number of warmup iterations (default: 5)"
+        "--iterations", type=int, default=50, help="Number of benchmark iterations (default: 50)"
     )
     parser.add_argument(
-        "--iterations", type=int, default=50,
-        help="Number of benchmark iterations (default: 50)"
-    )
-    parser.add_argument(
-        "--single-sample", action="store_true",
-        help="Also benchmark single-sample latency"
+        "--single-sample", action="store_true", help="Also benchmark single-sample latency"
     )
     args = parser.parse_args()
 
@@ -223,7 +216,8 @@ def main():
     individual_results = {}
     for i, (name, model) in enumerate(zip(trained_names, models)):
         results = benchmark_single_model(
-            model, X_test,
+            model,
+            X_test,
             warmup=args.warmup,
             iterations=args.iterations,
         )
@@ -236,7 +230,8 @@ def main():
     # Sequential mode
     print("\n  Sequential mode (parallel=False):")
     seq_results = benchmark_ensemble(
-        models, X_test,
+        models,
+        X_test,
         parallel=False,
         warmup=args.warmup,
         iterations=args.iterations,
@@ -246,7 +241,8 @@ def main():
     # Parallel mode
     print("\n  Parallel mode (parallel=True):")
     par_results = benchmark_ensemble(
-        models, X_test,
+        models,
+        X_test,
         parallel=True,
         warmup=args.warmup,
         iterations=args.iterations,
@@ -259,13 +255,15 @@ def main():
         X_single = X_test[:1]
 
         seq_single = benchmark_ensemble(
-            models, X_single,
+            models,
+            X_single,
             parallel=False,
             warmup=args.warmup,
             iterations=args.iterations,
         )
         par_single = benchmark_ensemble(
-            models, X_single,
+            models,
+            X_single,
             parallel=True,
             warmup=args.warmup,
             iterations=args.iterations,

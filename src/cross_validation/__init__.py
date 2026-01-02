@@ -29,6 +29,7 @@ Usage:
     oof_gen = OOFGenerator(cv)
     oof_predictions = oof_gen.generate_oof_predictions(X, y, model_configs)
 """
+
 from src.cross_validation.cpcv import (
     CombinatorialPurgedCV,
     CPCVConfig,

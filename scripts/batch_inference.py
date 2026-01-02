@@ -81,13 +81,15 @@ Examples:
 
     # Data paths
     parser.add_argument(
-        "--input", "-i",
+        "--input",
+        "-i",
         type=Path,
         required=True,
         help="Path to input parquet file",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         type=Path,
         required=True,
         help="Path for output predictions parquet",
@@ -120,12 +122,14 @@ Examples:
 
     # Output options
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress progress output",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Enable verbose output",
     )
@@ -180,13 +184,9 @@ def main() -> int:
 
     # Create predictor
     if len(bundle_paths) == 1:
-        predictor = BatchPredictor.from_bundle(
-            bundle_paths[0], batch_size=args.batch_size
-        )
+        predictor = BatchPredictor.from_bundle(bundle_paths[0], batch_size=args.batch_size)
     else:
-        predictor = BatchPredictor.from_bundles(
-            bundle_paths, batch_size=args.batch_size
-        )
+        predictor = BatchPredictor.from_bundles(bundle_paths, batch_size=args.batch_size)
 
     # Log model info
     for info in predictor.pipeline.get_model_info():

@@ -19,9 +19,7 @@ logger.addHandler(logging.NullHandler())
 
 
 def load_data(
-    file_path: str | Path,
-    allowed_dirs: list[Path],
-    file_format: str | None = None
+    file_path: str | Path, allowed_dirs: list[Path], file_format: str | None = None
 ) -> pd.DataFrame:
     """
     Load data from CSV or Parquet file.
@@ -52,14 +50,14 @@ def load_data(
 
     # Auto-detect format
     if file_format is None:
-        file_format = validated_path.suffix.lower().replace('.', '')
+        file_format = validated_path.suffix.lower().replace(".", "")
 
     logger.info(f"Loading {file_format.upper()} file: {validated_path.name}")
 
     try:
-        if file_format == 'csv':
+        if file_format == "csv":
             df = pd.read_csv(validated_path)
-        elif file_format == 'parquet':
+        elif file_format == "parquet":
             df = pd.read_parquet(validated_path)
         else:
             raise ValueError(f"Unsupported file format: {file_format}")
@@ -86,10 +84,7 @@ def load_data(
 
 
 def save_parquet(
-    df: pd.DataFrame,
-    symbol: str,
-    output_dir: Path,
-    metadata: dict | None = None
+    df: pd.DataFrame, symbol: str, output_dir: Path, metadata: dict | None = None
 ) -> Path:
     """
     Save DataFrame to Parquet format.
@@ -110,17 +105,12 @@ def save_parquet(
     logger.info(f"Saving to: {output_path}")
 
     # Save with compression
-    df.to_parquet(
-        output_path,
-        engine='pyarrow',
-        compression='snappy',
-        index=False
-    )
+    df.to_parquet(output_path, engine="pyarrow", compression="snappy", index=False)
 
     # Save metadata separately if provided
     if metadata:
         metadata_path = output_dir / f"{symbol}_metadata.json"
-        with open(metadata_path, 'w') as f:
+        with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
         logger.info(f"Metadata saved to: {metadata_path}")
 

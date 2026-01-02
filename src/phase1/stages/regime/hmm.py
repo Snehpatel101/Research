@@ -13,6 +13,7 @@ Usage:
     # Get state probabilities for routing
     regimes, probs = detector.detect_with_probabilities(df)
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ import pandas as pd
 
 try:
     from hmmlearn import hmm
+
     HMM_AVAILABLE = True
 except ImportError:
     HMM_AVAILABLE = False
@@ -39,8 +41,10 @@ logger.addHandler(logging.NullHandler())
 # HMM REGIME LABELS
 # =============================================================================
 
+
 class HMMRegimeLabel(Enum):
     """HMM regime classification labels based on volatility ordering."""
+
     LOW_VOLATILITY = "low_vol"
     NORMAL = "normal"
     HIGH_VOLATILITY = "high_vol"
@@ -51,9 +55,11 @@ class HMMRegimeLabel(Enum):
 # HMM CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class HMMConfig:
     """Configuration for HMM regime detector."""
+
     n_states: int = 3
     lookback: int = 252  # ~1 trading year
     input_type: str = "returns"  # 'returns' or 'volatility'
@@ -80,6 +86,7 @@ class HMMConfig:
 # =============================================================================
 # PURE FUNCTIONS
 # =============================================================================
+
 
 def fit_gaussian_hmm(
     observations: np.ndarray,
@@ -109,8 +116,7 @@ def fit_gaussian_hmm(
     """
     if not HMM_AVAILABLE:
         raise ImportError(
-            "hmmlearn is required for HMM regime detection. "
-            "Install with: pip install hmmlearn"
+            "hmmlearn is required for HMM regime detection. " "Install with: pip install hmmlearn"
         )
 
     # Reshape to 2D if needed
@@ -122,9 +128,7 @@ def fit_gaussian_hmm(
     clean_obs = observations[valid_mask]
 
     if len(clean_obs) < n_states * 10:
-        raise ValueError(
-            f"Insufficient observations: {len(clean_obs)} for {n_states} states"
-        )
+        raise ValueError(f"Insufficient observations: {len(clean_obs)} for {n_states} states")
 
     # Fit HMM with multiple initializations
     best_model = None
@@ -190,10 +194,7 @@ def order_states_by_volatility(
     mapping = {old: new for new, old in enumerate(order)}
 
     # Apply mapping
-    new_states = np.array([
-        mapping.get(s, s) if s >= 0 else s
-        for s in current_states
-    ])
+    new_states = np.array([mapping.get(s, s) if s >= 0 else s for s in current_states])
 
     return new_states, mapping
 
@@ -201,6 +202,7 @@ def order_states_by_volatility(
 # =============================================================================
 # HMM REGIME DETECTOR
 # =============================================================================
+
 
 class HMMRegimeDetector(RegimeDetector):
     """
@@ -348,14 +350,13 @@ class HMMRegimeDetector(RegimeDetector):
             for i in range(min_samples, n_samples):
                 # Retrain model at intervals or when we don't have a model yet
                 needs_retrain = (
-                    current_model is None
-                    or (i - min_samples) % self.retrain_interval == 0
+                    current_model is None or (i - min_samples) % self.retrain_interval == 0
                 )
 
                 if needs_retrain:
                     try:
                         # Train on data from start up to current bar (no future data)
-                        window_obs = observations[:i + 1]
+                        window_obs = observations[: i + 1]
 
                         current_model, raw_s, raw_p = fit_gaussian_hmm(
                             window_obs,
@@ -387,8 +388,12 @@ class HMMRegimeDetector(RegimeDetector):
                     # Use existing model to predict current bar (no retraining)
                     try:
                         # Predict using lookback window ending at current bar
-                        predict_window = observations[max(0, i - self.config.lookback):i + 1]
-                        predict_window = predict_window.reshape(-1, 1) if predict_window.ndim == 1 else predict_window
+                        predict_window = observations[max(0, i - self.config.lookback) : i + 1]
+                        predict_window = (
+                            predict_window.reshape(-1, 1)
+                            if predict_window.ndim == 1
+                            else predict_window
+                        )
 
                         # Remove NaN for prediction
                         valid_mask = ~np.isnan(predict_window).any(axis=1)
@@ -413,7 +418,7 @@ class HMMRegimeDetector(RegimeDetector):
         else:
             # Rolling window fitting
             for i in range(start_idx, n_samples):
-                window = observations[i - self.config.lookback:i + 1]
+                window = observations[i - self.config.lookback : i + 1]
 
                 try:
                     model, s, p = fit_gaussian_hmm(
@@ -516,6 +521,7 @@ class HMMRegimeDetector(RegimeDetector):
 # =============================================================================
 # REGIME ROUTER
 # =============================================================================
+
 
 class RegimeRouter:
     """

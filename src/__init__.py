@@ -28,17 +28,20 @@ def __getattr__(name: str):
     """Lazy import to avoid circular dependencies."""
     import importlib
 
-    if name == 'PipelineConfig':
+    if name == "PipelineConfig":
         from src.phase1.pipeline_config import PipelineConfig
+
         return PipelineConfig
-    elif name == 'create_default_config':
+    elif name == "create_default_config":
         from src.phase1.pipeline_config import create_default_config
+
         return create_default_config
-    elif name == 'PipelineRunner':
+    elif name == "PipelineRunner":
         from src.pipeline.runner import PipelineRunner
+
         return PipelineRunner
-    elif name == 'phase1':
-        return importlib.import_module('src.phase1')
-    elif name == 'common':
-        return importlib.import_module('src.common')
+    elif name == "phase1":
+        return importlib.import_module("src.phase1")
+    elif name == "common":
+        return importlib.import_module("src.common")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

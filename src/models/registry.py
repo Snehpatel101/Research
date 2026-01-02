@@ -16,6 +16,7 @@ Example:
     >>> ModelRegistry.list_models()
     {'boosting': ['xgboost', 'lightgbm'], 'neural': ['lstm', 'gru']}
 """
+
 from __future__ import annotations
 
 import logging
@@ -96,15 +97,13 @@ class ModelRegistry:
             # Validate model class
             if not issubclass(model_class, BaseModel):
                 raise TypeError(
-                    f"Model class must be a subclass of BaseModel, "
-                    f"got {model_class.__name__}"
+                    f"Model class must be a subclass of BaseModel, " f"got {model_class.__name__}"
                 )
 
             # Check for duplicate registration
             if name in cls._models:
                 raise ValueError(
-                    f"Model '{name}' is already registered to "
-                    f"{cls._models[name].__name__}"
+                    f"Model '{name}' is already registered to " f"{cls._models[name].__name__}"
                 )
 
             # Register the model
@@ -113,9 +112,7 @@ class ModelRegistry:
             # Register aliases
             for alias in aliases:
                 if alias in cls._models:
-                    logger.warning(
-                        f"Alias '{alias}' already registered, skipping"
-                    )
+                    logger.warning(f"Alias '{alias}' already registered, skipping")
                 else:
                     cls._models[alias] = model_class
 
@@ -134,8 +131,7 @@ class ModelRegistry:
             }
 
             logger.debug(
-                f"Registered model '{name}' ({model_class.__name__}) "
-                f"in family '{family}'"
+                f"Registered model '{name}' ({model_class.__name__}) " f"in family '{family}'"
             )
 
             return model_class
@@ -173,9 +169,7 @@ class ModelRegistry:
 
         if name_lower not in cls._models:
             available = sorted(cls._models.keys())
-            raise ValueError(
-                f"Unknown model '{name}'. Available models: {available}"
-            )
+            raise ValueError(f"Unknown model '{name}'. Available models: {available}")
 
         model_class = cls._models[name_lower]
         return model_class(config=config, **kwargs)
@@ -198,9 +192,7 @@ class ModelRegistry:
 
         if name_lower not in cls._models:
             available = sorted(cls._models.keys())
-            raise ValueError(
-                f"Unknown model '{name}'. Available models: {available}"
-            )
+            raise ValueError(f"Unknown model '{name}'. Available models: {available}")
 
         return cls._models[name_lower]
 
@@ -232,8 +224,7 @@ class ModelRegistry:
             Sorted list of all model names (excluding aliases)
         """
         return sorted(
-            name for name, meta in cls._metadata.items()
-            if name == meta["name"]  # Exclude aliases
+            name for name, meta in cls._metadata.items() if name == meta["name"]  # Exclude aliases
         )
 
     @classmethod
@@ -254,9 +245,7 @@ class ModelRegistry:
 
         if family_lower not in cls._families:
             available = sorted(cls._families.keys())
-            raise ValueError(
-                f"Unknown family '{family}'. Available families: {available}"
-            )
+            raise ValueError(f"Unknown family '{family}'. Available families: {available}")
 
         return list(cls._families[family_lower])
 
@@ -283,9 +272,7 @@ class ModelRegistry:
 
         if name_lower not in cls._models:
             available = sorted(cls._models.keys())
-            raise ValueError(
-                f"Unknown model '{name}'. Available models: {available}"
-            )
+            raise ValueError(f"Unknown model '{name}'. Available models: {available}")
 
         # Find the canonical name (in case alias was passed)
         model_class = cls._models[name_lower]
@@ -325,9 +312,7 @@ class ModelRegistry:
 
         if name_lower not in cls._models:
             available = sorted(cls._models.keys())
-            raise ValueError(
-                f"Unknown model '{name}'. Available models: {available}"
-            )
+            raise ValueError(f"Unknown model '{name}'. Available models: {available}")
 
         # Create a temporary instance to access properties
         model_class = cls._models[name_lower]

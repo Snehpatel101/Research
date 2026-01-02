@@ -25,9 +25,7 @@ logger.addHandler(logging.NullHandler())
 
 
 def _safe_divide(
-    numerator: pd.Series,
-    denominator: pd.Series,
-    fill_value: float = np.nan
+    numerator: pd.Series, denominator: pd.Series, fill_value: float = np.nan
 ) -> pd.Series:
     """Safely divide, returning fill_value when denominator is zero or NaN."""
     result = numerator / denominator.replace(0, np.nan)
@@ -35,9 +33,7 @@ def _safe_divide(
 
 
 def add_amihud_illiquidity(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    periods: list[int] | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add Amihud illiquidity ratio.
@@ -61,7 +57,7 @@ def add_amihud_illiquidity(
     pd.DataFrame
         DataFrame with Amihud illiquidity features added
     """
-    if 'volume' not in df.columns or df['volume'].sum() == 0:
+    if "volume" not in df.columns or df["volume"].sum() == 0:
         logger.info("Skipping Amihud illiquidity (no volume data)")
         return df
 
@@ -72,18 +68,18 @@ def add_amihud_illiquidity(
 
     # Raw Amihud: |return| / volume
     # Use epsilon to avoid division by zero
-    returns_abs = df['close'].pct_change().abs()
-    volume_safe = df['volume'].replace(0, np.nan)
+    returns_abs = df["close"].pct_change().abs()
+    volume_safe = df["volume"].replace(0, np.nan)
     amihud_raw = returns_abs / volume_safe
 
     # ANTI-LOOKAHEAD: shift(1) ensures we use data up to bar[t-1]
-    df['micro_amihud'] = amihud_raw.shift(1)
+    df["micro_amihud"] = amihud_raw.shift(1)
 
-    feature_metadata['micro_amihud'] = "Amihud illiquidity ratio (|ret|/vol, lagged)"
+    feature_metadata["micro_amihud"] = "Amihud illiquidity ratio (|ret|/vol, lagged)"
 
     # Rolling averages for smoothed signals
     for period in periods:
-        col_name = f'micro_amihud_{period}'
+        col_name = f"micro_amihud_{period}"
         df[col_name] = amihud_raw.rolling(window=period).mean().shift(1)
         feature_metadata[col_name] = f"Amihud illiquidity {period}-period avg (lagged)"
 
@@ -91,9 +87,7 @@ def add_amihud_illiquidity(
 
 
 def add_roll_spread(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    period: int = 20
+    df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 20
 ) -> pd.DataFrame:
     """
     Add Roll spread estimator.
@@ -121,7 +115,7 @@ def add_roll_spread(
     logger.info(f"Adding Roll spread with period: {period}")
 
     # Price changes
-    delta_p = df['close'].diff()
+    delta_p = df["close"].diff()
     delta_p_lag = delta_p.shift(1)
 
     # Rolling covariance between price change and lagged price change
@@ -133,23 +127,21 @@ def add_roll_spread(
     roll_spread_raw = 2 * np.sqrt(np.maximum(-roll_cov, 0))
 
     # ANTI-LOOKAHEAD: shift(1)
-    df['micro_roll_spread'] = roll_spread_raw.shift(1)
+    df["micro_roll_spread"] = roll_spread_raw.shift(1)
 
     # Normalize by close price for comparability
-    close_safe = df['close'].replace(0, np.nan)
+    close_safe = df["close"].replace(0, np.nan)
     roll_spread_pct = (roll_spread_raw / close_safe) * 100
-    df['micro_roll_spread_pct'] = roll_spread_pct.shift(1)
+    df["micro_roll_spread_pct"] = roll_spread_pct.shift(1)
 
-    feature_metadata['micro_roll_spread'] = f"Roll spread estimate ({period}, lagged)"
-    feature_metadata['micro_roll_spread_pct'] = f"Roll spread as % of price ({period}, lagged)"
+    feature_metadata["micro_roll_spread"] = f"Roll spread estimate ({period}, lagged)"
+    feature_metadata["micro_roll_spread_pct"] = f"Roll spread as % of price ({period}, lagged)"
 
     return df
 
 
 def add_kyle_lambda(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    volume_period: int = 20
+    df: pd.DataFrame, feature_metadata: dict[str, str], volume_period: int = 20
 ) -> pd.DataFrame:
     """
     Add Kyle's lambda (price impact coefficient).
@@ -173,32 +165,29 @@ def add_kyle_lambda(
     pd.DataFrame
         DataFrame with Kyle's lambda estimate added
     """
-    if 'volume' not in df.columns or df['volume'].sum() == 0:
+    if "volume" not in df.columns or df["volume"].sum() == 0:
         logger.info("Skipping Kyle's lambda (no volume data)")
         return df
 
     logger.info(f"Adding Kyle's lambda with volume period: {volume_period}")
 
-    returns_abs = df['close'].pct_change().abs()
-    vol_avg = df['volume'].rolling(window=volume_period).mean()
+    returns_abs = df["close"].pct_change().abs()
+    vol_avg = df["volume"].rolling(window=volume_period).mean()
     vol_avg_safe = vol_avg.replace(0, np.nan)
 
     kyle_lambda_raw = returns_abs / vol_avg_safe
 
     # ANTI-LOOKAHEAD: shift(1)
-    df['micro_kyle_lambda'] = kyle_lambda_raw.shift(1)
+    df["micro_kyle_lambda"] = kyle_lambda_raw.shift(1)
 
-    feature_metadata['micro_kyle_lambda'] = (
+    feature_metadata["micro_kyle_lambda"] = (
         f"Kyle's lambda price impact ({volume_period}-period vol, lagged)"
     )
 
     return df
 
 
-def add_corwin_schultz_spread(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str]
-) -> pd.DataFrame:
+def add_corwin_schultz_spread(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add Corwin-Schultz high-low spread estimator.
 
@@ -222,8 +211,8 @@ def add_corwin_schultz_spread(
     """
     logger.info("Adding Corwin-Schultz high-low spread")
 
-    high = df['high']
-    low = df['low']
+    high = df["high"]
+    low = df["low"]
 
     # Prevent log(0) or log(negative)
     hl_ratio = high / low.replace(0, np.nan)
@@ -258,17 +247,15 @@ def add_corwin_schultz_spread(
     cs_spread_raw = np.maximum(cs_spread_raw, 0)
 
     # ANTI-LOOKAHEAD: shift(1)
-    df['micro_cs_spread'] = pd.Series(cs_spread_raw, index=df.index).shift(1)
+    df["micro_cs_spread"] = pd.Series(cs_spread_raw, index=df.index).shift(1)
 
-    feature_metadata['micro_cs_spread'] = "Corwin-Schultz HL spread estimate (lagged)"
+    feature_metadata["micro_cs_spread"] = "Corwin-Schultz HL spread estimate (lagged)"
 
     return df
 
 
 def add_relative_spread(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    periods: list[int] | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add relative spread (high-low range normalized by close).
@@ -296,27 +283,24 @@ def add_relative_spread(
 
     logger.info(f"Adding relative spread with periods: {periods}")
 
-    close_safe = df['close'].replace(0, np.nan)
-    rel_spread_raw = (df['high'] - df['low']) / close_safe
+    close_safe = df["close"].replace(0, np.nan)
+    rel_spread_raw = (df["high"] - df["low"]) / close_safe
 
     # ANTI-LOOKAHEAD: shift(1)
-    df['micro_rel_spread'] = rel_spread_raw.shift(1)
+    df["micro_rel_spread"] = rel_spread_raw.shift(1)
 
-    feature_metadata['micro_rel_spread'] = "Relative spread (HL range / close, lagged)"
+    feature_metadata["micro_rel_spread"] = "Relative spread (HL range / close, lagged)"
 
     # Rolling averages
     for period in periods:
-        col_name = f'micro_rel_spread_{period}'
+        col_name = f"micro_rel_spread_{period}"
         df[col_name] = rel_spread_raw.rolling(window=period).mean().shift(1)
         feature_metadata[col_name] = f"Relative spread {period}-period avg (lagged)"
 
     return df
 
 
-def add_volume_imbalance(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str]
-) -> pd.DataFrame:
+def add_volume_imbalance(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
     """
     Add volume imbalance proxy.
 
@@ -342,32 +326,28 @@ def add_volume_imbalance(
     """
     logger.info("Adding volume imbalance")
 
-    hl_range = df['high'] - df['low']
+    hl_range = df["high"] - df["low"]
     hl_range_safe = hl_range.replace(0, np.nan)
 
     # Close-open relative to range
-    imbalance_raw = (df['close'] - df['open']) / hl_range_safe
+    imbalance_raw = (df["close"] - df["open"]) / hl_range_safe
 
     # ANTI-LOOKAHEAD: shift(1)
-    df['micro_volume_imbalance'] = imbalance_raw.shift(1)
+    df["micro_volume_imbalance"] = imbalance_raw.shift(1)
 
     # Cumulative imbalance (order flow proxy)
-    df['micro_cum_imbalance_20'] = imbalance_raw.rolling(window=20).sum().shift(1)
+    df["micro_cum_imbalance_20"] = imbalance_raw.rolling(window=20).sum().shift(1)
 
-    feature_metadata['micro_volume_imbalance'] = (
+    feature_metadata["micro_volume_imbalance"] = (
         "Volume imbalance proxy (close-open)/range (lagged)"
     )
-    feature_metadata['micro_cum_imbalance_20'] = (
-        "Cumulative volume imbalance 20-period (lagged)"
-    )
+    feature_metadata["micro_cum_imbalance_20"] = "Cumulative volume imbalance 20-period (lagged)"
 
     return df
 
 
 def add_trade_intensity(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    periods: list[int] | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add trade intensity (volume relative to recent average).
@@ -391,7 +371,7 @@ def add_trade_intensity(
     pd.DataFrame
         DataFrame with trade intensity features added
     """
-    if 'volume' not in df.columns or df['volume'].sum() == 0:
+    if "volume" not in df.columns or df["volume"].sum() == 0:
         logger.info("Skipping trade intensity (no volume data)")
         return df
 
@@ -401,11 +381,11 @@ def add_trade_intensity(
     logger.info(f"Adding trade intensity with periods: {periods}")
 
     for period in periods:
-        vol_avg = df['volume'].rolling(window=period).mean()
+        vol_avg = df["volume"].rolling(window=period).mean()
         vol_avg_safe = vol_avg.replace(0, np.nan)
-        intensity_raw = df['volume'] / vol_avg_safe
+        intensity_raw = df["volume"] / vol_avg_safe
 
-        col_name = f'micro_trade_intensity_{period}'
+        col_name = f"micro_trade_intensity_{period}"
         # ANTI-LOOKAHEAD: shift(1)
         df[col_name] = intensity_raw.shift(1)
 
@@ -415,9 +395,7 @@ def add_trade_intensity(
 
 
 def add_price_efficiency(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    periods: list[int] | None = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
     """
     Add price efficiency ratio.
@@ -449,17 +427,17 @@ def add_price_efficiency(
 
     for period in periods:
         # Net change over period
-        net_change = (df['close'] - df['close'].shift(period)).abs()
+        net_change = (df["close"] - df["close"].shift(period)).abs()
 
         # Sum of absolute bar-to-bar changes
-        abs_changes = df['close'].diff().abs()
+        abs_changes = df["close"].diff().abs()
         sum_changes = abs_changes.rolling(window=period).sum()
 
         # Efficiency ratio
         sum_changes_safe = sum_changes.replace(0, np.nan)
         efficiency_raw = net_change / sum_changes_safe
 
-        col_name = f'micro_efficiency_{period}'
+        col_name = f"micro_efficiency_{period}"
         # ANTI-LOOKAHEAD: shift(1)
         df[col_name] = efficiency_raw.shift(1)
 
@@ -469,10 +447,7 @@ def add_price_efficiency(
 
 
 def add_realized_volatility_ratio(
-    df: pd.DataFrame,
-    feature_metadata: dict[str, str],
-    short_period: int = 5,
-    long_period: int = 20
+    df: pd.DataFrame, feature_metadata: dict[str, str], short_period: int = 5, long_period: int = 20
 ) -> pd.DataFrame:
     """
     Add realized volatility ratio (short/long).
@@ -496,11 +471,9 @@ def add_realized_volatility_ratio(
     pd.DataFrame
         DataFrame with volatility ratio feature added
     """
-    logger.info(
-        f"Adding realized volatility ratio (short={short_period}, long={long_period})"
-    )
+    logger.info(f"Adding realized volatility ratio (short={short_period}, long={long_period})")
 
-    returns = df['close'].pct_change()
+    returns = df["close"].pct_change()
 
     vol_short = returns.rolling(window=short_period).std()
     vol_long = returns.rolling(window=long_period).std()
@@ -509,9 +482,9 @@ def add_realized_volatility_ratio(
     vol_ratio_raw = vol_short / vol_long_safe
 
     # ANTI-LOOKAHEAD: shift(1)
-    df['micro_vol_ratio'] = vol_ratio_raw.shift(1)
+    df["micro_vol_ratio"] = vol_ratio_raw.shift(1)
 
-    feature_metadata['micro_vol_ratio'] = (
+    feature_metadata["micro_vol_ratio"] = (
         f"Realized vol ratio ({short_period}/{long_period}, lagged)"
     )
 
@@ -529,7 +502,7 @@ def add_microstructure_features(
     include_volume_imbalance: bool = True,
     include_trade_intensity: bool = True,
     include_efficiency: bool = True,
-    include_vol_ratio: bool = True
+    include_vol_ratio: bool = True,
 ) -> pd.DataFrame:
     """
     Add all market microstructure proxy features from OHLCV data.
@@ -607,14 +580,14 @@ def add_microstructure_features(
 
 
 __all__ = [
-    'add_microstructure_features',
-    'add_amihud_illiquidity',
-    'add_roll_spread',
-    'add_kyle_lambda',
-    'add_corwin_schultz_spread',
-    'add_relative_spread',
-    'add_volume_imbalance',
-    'add_trade_intensity',
-    'add_price_efficiency',
-    'add_realized_volatility_ratio',
+    "add_microstructure_features",
+    "add_amihud_illiquidity",
+    "add_roll_spread",
+    "add_kyle_lambda",
+    "add_corwin_schultz_spread",
+    "add_relative_spread",
+    "add_volume_imbalance",
+    "add_trade_intensity",
+    "add_price_efficiency",
+    "add_realized_volatility_ratio",
 ]

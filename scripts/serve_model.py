@@ -94,7 +94,8 @@ API Example:
         help="Host to bind to (default: 0.0.0.0)",
     )
     parser.add_argument(
-        "--port", "-p",
+        "--port",
+        "-p",
         type=int,
         default=8080,
         help="Port to listen on (default: 8080)",

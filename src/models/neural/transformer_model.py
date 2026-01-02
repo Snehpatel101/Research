@@ -10,6 +10,7 @@ GPU-accelerated Transformer with:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,13 +51,11 @@ class PositionalEncoding(nn.Module):
         # Create positional encoding matrix
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
-        )
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
 
         # Handle odd d_model: slice div_term to match the number of even/odd positions
-        pe[:, 0::2] = torch.sin(position * div_term[:pe[:, 0::2].shape[1]])
-        pe[:, 1::2] = torch.cos(position * div_term[:pe[:, 1::2].shape[1]])
+        pe[:, 0::2] = torch.sin(position * div_term[: pe[:, 0::2].shape[1]])
+        pe[:, 1::2] = torch.cos(position * div_term[: pe[:, 1::2].shape[1]])
         pe = pe.unsqueeze(0)  # (1, max_len, d_model)
 
         # Register as buffer (not a parameter, but should be saved with model)
@@ -451,9 +450,7 @@ class TransformerModel(BaseRNNModel):
         # Return as dict with feature indices
         return {f"feature_{i}": float(imp) for i, imp in enumerate(importance)}
 
-    def get_attention_weights(
-        self, X: np.ndarray, sample_idx: int = 0
-    ) -> np.ndarray | None:
+    def get_attention_weights(self, X: np.ndarray, sample_idx: int = 0) -> np.ndarray | None:
         """
         Extract attention weights for interpretability.
 
@@ -471,9 +468,7 @@ class TransformerModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         if sample_idx >= len(X):
-            logger.warning(
-                f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0"
-            )
+            logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
         self._model.eval()
@@ -487,9 +482,7 @@ class TransformerModel(BaseRNNModel):
             # Shape: (n_layers, 1, n_heads, seq_len, seq_len)
             return attention[:, 0, :, :, :].cpu().numpy()
 
-    def get_attention_summary(
-        self, X: np.ndarray, n_samples: int = 10
-    ) -> dict[str, np.ndarray]:
+    def get_attention_summary(self, X: np.ndarray, n_samples: int = 10) -> dict[str, np.ndarray]:
         """
         Get attention statistics across multiple samples.
 

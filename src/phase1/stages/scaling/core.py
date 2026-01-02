@@ -66,12 +66,14 @@ logger.addHandler(logging.NullHandler())
 # ENUMS AND CONFIGURATION
 # =============================================================================
 
+
 class ScalerType(Enum):
     """Supported scaler types."""
-    STANDARD = 'standard'
-    ROBUST = 'robust'
-    MINMAX = 'minmax'
-    NONE = 'none'
+
+    STANDARD = "standard"
+    ROBUST = "robust"
+    MINMAX = "minmax"
+    NONE = "none"
 
 
 @dataclass
@@ -92,95 +94,156 @@ class ScalerConfig:
 
         See module docstring for model-family specific recommendations.
     """
-    scaler_type: str = 'robust'
+
+    scaler_type: str = "robust"
     clip_outliers: bool = True
     clip_range: tuple[float, float] = (-5.0, 5.0)
 
     def to_dict(self) -> dict:
         return {
-            'scaler_type': self.scaler_type,
-            'clip_outliers': self.clip_outliers,
-            'clip_range': self.clip_range
+            "scaler_type": self.scaler_type,
+            "clip_outliers": self.clip_outliers,
+            "clip_range": self.clip_range,
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> 'ScalerConfig':
+    def from_dict(cls, d: dict) -> "ScalerConfig":
         return cls(
-            scaler_type=d.get('scaler_type', 'robust'),
-            clip_outliers=d.get('clip_outliers', True),
-            clip_range=tuple(d.get('clip_range', (-5.0, 5.0)))
+            scaler_type=d.get("scaler_type", "robust"),
+            clip_outliers=d.get("clip_outliers", True),
+            clip_range=tuple(d.get("clip_range", (-5.0, 5.0))),
         )
 
 
 class FeatureCategory(Enum):
     """Feature categories for scaling strategy selection."""
-    RETURNS = 'returns'           # Already normalized returns/percentages
-    OSCILLATOR = 'oscillator'     # RSI, Stochastic (0-100 bounded)
-    PRICE_LEVEL = 'price_level'   # Raw prices, SMAs
-    VOLATILITY = 'volatility'     # ATR, std dev features
-    VOLUME = 'volume'             # OBV, volume features
-    TEMPORAL = 'temporal'         # Sin/cos encoded time features
-    BINARY = 'binary'             # 0/1 flags
-    UNKNOWN = 'unknown'           # Default category
+
+    RETURNS = "returns"  # Already normalized returns/percentages
+    OSCILLATOR = "oscillator"  # RSI, Stochastic (0-100 bounded)
+    PRICE_LEVEL = "price_level"  # Raw prices, SMAs
+    VOLATILITY = "volatility"  # ATR, std dev features
+    VOLUME = "volume"  # OBV, volume features
+    TEMPORAL = "temporal"  # Sin/cos encoded time features
+    BINARY = "binary"  # 0/1 flags
+    UNKNOWN = "unknown"  # Default category
 
 
 # Feature categorization rules
 FEATURE_PATTERNS: dict[FeatureCategory, list[str]] = {
     FeatureCategory.RETURNS: [
-        'return', 'log_return', 'simple_return', 'pct_change',
-        'close_to_sma', 'close_to_ema', 'close_to_vwap', 'price_to_',
-        'roc_', 'high_low_range', 'close_open_range', 'range_pct',
-        'macd_hist', 'macd', 'macd_signal',
+        "return",
+        "log_return",
+        "simple_return",
+        "pct_change",
+        "close_to_sma",
+        "close_to_ema",
+        "close_to_vwap",
+        "price_to_",
+        "roc_",
+        "high_low_range",
+        "close_open_range",
+        "range_pct",
+        "macd_hist",
+        "macd",
+        "macd_signal",
         # Ratio features (normalized returns)
-        'hl_ratio', 'co_ratio', 'volume_ratio',
-        'close_sma20_ratio', 'close_ema21_ratio',
+        "hl_ratio",
+        "co_ratio",
+        "volume_ratio",
+        "close_sma20_ratio",
+        "close_ema21_ratio",
         # Z-score features (normalized)
-        'close_bb_zscore', 'volume_zscore', '_zscore',
+        "close_bb_zscore",
+        "volume_zscore",
+        "_zscore",
         # Deviation features
-        'close_kc_atr_dev', '_dev',
+        "close_kc_atr_dev",
+        "_dev",
     ],
     FeatureCategory.OSCILLATOR: [
-        'rsi', 'stoch_k', 'stoch_d', 'williams_r', 'cci', 'mfi',
-        'bb_position', 'adx', 'plus_di', 'minus_di',
+        "rsi",
+        "stoch_k",
+        "stoch_d",
+        "williams_r",
+        "cci",
+        "mfi",
+        "bb_position",
+        "adx",
+        "plus_di",
+        "minus_di",
     ],
     FeatureCategory.PRICE_LEVEL: [
-        'sma_', 'ema_', 'bb_upper', 'bb_lower', 'bb_middle',
-        'kc_upper', 'kc_lower', 'kc_middle', 'vwap', 'supertrend',
+        "sma_",
+        "ema_",
+        "bb_upper",
+        "bb_lower",
+        "bb_middle",
+        "kc_upper",
+        "kc_lower",
+        "kc_middle",
+        "vwap",
+        "supertrend",
         # MTF price levels
-        'open_', 'high_', 'low_', 'close_'
+        "open_",
+        "high_",
+        "low_",
+        "close_",
     ],
     FeatureCategory.VOLATILITY: [
-        'atr_', 'hvol_', 'parkinson', 'gk_vol', 'rs_vol', 'yz_vol',
-        'bb_width', 'kc_position'
+        "atr_",
+        "hvol_",
+        "parkinson",
+        "gk_vol",
+        "rs_vol",
+        "yz_vol",
+        "bb_width",
+        "kc_position",
     ],
-    FeatureCategory.VOLUME: [
-        'obv', 'volume_', 'obv_sma'
-    ],
+    FeatureCategory.VOLUME: ["obv", "volume_", "obv_sma"],
     FeatureCategory.TEMPORAL: [
-        'hour_sin', 'hour_cos', 'minute_sin', 'minute_cos',
-        'dayofweek_sin', 'dayofweek_cos', 'dow_sin', 'dow_cos'
+        "hour_sin",
+        "hour_cos",
+        "minute_sin",
+        "minute_cos",
+        "dayofweek_sin",
+        "dayofweek_cos",
+        "dow_sin",
+        "dow_cos",
     ],
     FeatureCategory.BINARY: [
-        'session_', 'is_rth', 'rsi_overbought', 'rsi_oversold',
-        'stoch_overbought', 'stoch_oversold', 'adx_strong_trend',
-        'macd_cross_up', 'macd_cross_down', 'supertrend_direction',
-        'volatility_regime', 'trend_regime', 'vol_regime', 'structure_regime',
-        'missing_bar', 'roll_event', 'roll_window', 'filled',
+        "session_",
+        "is_rth",
+        "rsi_overbought",
+        "rsi_oversold",
+        "stoch_overbought",
+        "stoch_oversold",
+        "adx_strong_trend",
+        "macd_cross_up",
+        "macd_cross_down",
+        "supertrend_direction",
+        "volatility_regime",
+        "trend_regime",
+        "vol_regime",
+        "structure_regime",
+        "missing_bar",
+        "roll_event",
+        "roll_window",
+        "filled",
         # Metadata flags
-        'timeframe',
-    ]
+        "timeframe",
+    ],
 }
 
 # Default scaling strategy per category
 DEFAULT_SCALING_STRATEGY: dict[FeatureCategory, ScalerType] = {
-    FeatureCategory.RETURNS: ScalerType.NONE,          # Already normalized
-    FeatureCategory.OSCILLATOR: ScalerType.MINMAX,     # Keep 0-100 range
-    FeatureCategory.PRICE_LEVEL: ScalerType.ROBUST,    # Log transform recommended
-    FeatureCategory.VOLATILITY: ScalerType.ROBUST,     # May need log transform
-    FeatureCategory.VOLUME: ScalerType.ROBUST,         # Often skewed
-    FeatureCategory.TEMPORAL: ScalerType.NONE,         # Already normalized
-    FeatureCategory.BINARY: ScalerType.NONE,           # Keep as 0/1
-    FeatureCategory.UNKNOWN: ScalerType.ROBUST         # Default to robust
+    FeatureCategory.RETURNS: ScalerType.NONE,  # Already normalized
+    FeatureCategory.OSCILLATOR: ScalerType.MINMAX,  # Keep 0-100 range
+    FeatureCategory.PRICE_LEVEL: ScalerType.ROBUST,  # Log transform recommended
+    FeatureCategory.VOLATILITY: ScalerType.ROBUST,  # May need log transform
+    FeatureCategory.VOLUME: ScalerType.ROBUST,  # Often skewed
+    FeatureCategory.TEMPORAL: ScalerType.NONE,  # Already normalized
+    FeatureCategory.BINARY: ScalerType.NONE,  # Keep as 0/1
+    FeatureCategory.UNKNOWN: ScalerType.ROBUST,  # Default to robust
 }
 
 
@@ -188,9 +251,11 @@ DEFAULT_SCALING_STRATEGY: dict[FeatureCategory, ScalerType] = {
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class FeatureScalingConfig:
     """Configuration for a single feature's scaling."""
+
     feature_name: str
     category: FeatureCategory
     scaler_type: ScalerType
@@ -199,27 +264,28 @@ class FeatureScalingConfig:
 
     def to_dict(self) -> dict:
         return {
-            'feature_name': self.feature_name,
-            'category': self.category.value,
-            'scaler_type': self.scaler_type.value,
-            'apply_log_transform': self.apply_log_transform,
-            'log_shift': self.log_shift
+            "feature_name": self.feature_name,
+            "category": self.category.value,
+            "scaler_type": self.scaler_type.value,
+            "apply_log_transform": self.apply_log_transform,
+            "log_shift": self.log_shift,
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> 'FeatureScalingConfig':
+    def from_dict(cls, d: dict) -> "FeatureScalingConfig":
         return cls(
-            feature_name=d['feature_name'],
-            category=FeatureCategory(d['category']),
-            scaler_type=ScalerType(d['scaler_type']),
-            apply_log_transform=d.get('apply_log_transform', False),
-            log_shift=d.get('log_shift', 0.0)
+            feature_name=d["feature_name"],
+            category=FeatureCategory(d["category"]),
+            scaler_type=ScalerType(d["scaler_type"]),
+            apply_log_transform=d.get("apply_log_transform", False),
+            log_shift=d.get("log_shift", 0.0),
         )
 
 
 @dataclass
 class ScalingStatistics:
     """Statistics for a scaled feature."""
+
     feature_name: str
     train_mean: float
     train_std: float
@@ -239,13 +305,14 @@ class ScalingStatistics:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> 'ScalingStatistics':
+    def from_dict(cls, d: dict) -> "ScalingStatistics":
         return cls(**d)
 
 
 @dataclass
 class ScalingReport:
     """Complete scaling report."""
+
     timestamp: str
     n_features: int
     n_samples_train: int

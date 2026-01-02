@@ -22,6 +22,7 @@ Usage:
     ])
     ensemble_predictions = pipeline.predict_ensemble(X_new)
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,6 +44,7 @@ logger = logging.getLogger(__name__)
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class InferenceResult:
     """
@@ -56,6 +58,7 @@ class InferenceResult:
         n_samples: Number of samples processed
         metadata: Additional inference metadata
     """
+
     predictions: PredictionOutput
     inference_time_ms: float
     model_name: str
@@ -65,13 +68,15 @@ class InferenceResult:
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert predictions to DataFrame."""
-        return pd.DataFrame({
-            "prediction": self.predictions.class_predictions,
-            "prob_short": self.predictions.class_probabilities[:, 0],
-            "prob_neutral": self.predictions.class_probabilities[:, 1],
-            "prob_long": self.predictions.class_probabilities[:, 2],
-            "confidence": self.predictions.confidence,
-        })
+        return pd.DataFrame(
+            {
+                "prediction": self.predictions.class_predictions,
+                "prob_short": self.predictions.class_probabilities[:, 0],
+                "prob_neutral": self.predictions.class_probabilities[:, 1],
+                "prob_long": self.predictions.class_probabilities[:, 2],
+                "confidence": self.predictions.confidence,
+            }
+        )
 
 
 @dataclass
@@ -85,6 +90,7 @@ class EnsembleResult:
         voting_method: Method used for combining predictions
         inference_time_ms: Total time in milliseconds
     """
+
     predictions: PredictionOutput
     individual_results: list[InferenceResult]
     voting_method: str
@@ -92,13 +98,15 @@ class EnsembleResult:
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert ensemble predictions to DataFrame."""
-        df = pd.DataFrame({
-            "ensemble_prediction": self.predictions.class_predictions,
-            "ensemble_prob_short": self.predictions.class_probabilities[:, 0],
-            "ensemble_prob_neutral": self.predictions.class_probabilities[:, 1],
-            "ensemble_prob_long": self.predictions.class_probabilities[:, 2],
-            "ensemble_confidence": self.predictions.confidence,
-        })
+        df = pd.DataFrame(
+            {
+                "ensemble_prediction": self.predictions.class_predictions,
+                "ensemble_prob_short": self.predictions.class_probabilities[:, 0],
+                "ensemble_prob_neutral": self.predictions.class_probabilities[:, 1],
+                "ensemble_prob_long": self.predictions.class_probabilities[:, 2],
+                "ensemble_confidence": self.predictions.confidence,
+            }
+        )
 
         # Add individual model predictions
         for result in self.individual_results:
@@ -112,6 +120,7 @@ class EnsembleResult:
 # =============================================================================
 # INFERENCE PIPELINE
 # =============================================================================
+
 
 class InferencePipeline:
     """
@@ -247,10 +256,7 @@ class InferencePipeline:
         Returns:
             List of InferenceResult, one per model
         """
-        return [
-            self._predict_single(bundle, X, calibrate)
-            for bundle in self.bundles
-        ]
+        return [self._predict_single(bundle, X, calibrate) for bundle in self.bundles]
 
     def predict_ensemble(
         self,
@@ -278,9 +284,7 @@ class InferencePipeline:
         individual_results = self.predict_all(X, calibrate)
 
         # Combine predictions
-        combined = self._combine_predictions(
-            individual_results, method, weights
-        )
+        combined = self._combine_predictions(individual_results, method, weights)
 
         total_time = (time.perf_counter() - start_time) * 1000
 
@@ -436,10 +440,7 @@ class InferencePipeline:
         }
 
     def __repr__(self) -> str:
-        return (
-            f"InferencePipeline(models={self.model_names}, "
-            f"horizon={self.horizon})"
-        )
+        return f"InferencePipeline(models={self.model_names}, " f"horizon={self.horizon})"
 
 
 __all__ = [

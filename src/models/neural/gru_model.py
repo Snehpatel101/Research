@@ -9,6 +9,7 @@ GPU-accelerated GRU with:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -122,14 +123,16 @@ class GRUModel(BaseRNNModel):
         """Return default GRU hyperparameters."""
         defaults = super().get_default_config()
         # GRU-specific defaults
-        defaults.update({
-            "hidden_size": 256,
-            "num_layers": 2,
-            "dropout": 0.3,
-            # GRU doesn't support bidirectional in this implementation
-            # but we keep the parameter for consistency
-            "bidirectional": False,
-        })
+        defaults.update(
+            {
+                "hidden_size": 256,
+                "num_layers": 2,
+                "dropout": 0.3,
+                # GRU doesn't support bidirectional in this implementation
+                # but we keep the parameter for consistency
+                "bidirectional": False,
+            }
+        )
         return defaults
 
     def _create_network(self, input_size: int) -> nn.Module:

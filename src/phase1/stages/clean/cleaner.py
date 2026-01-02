@@ -41,15 +41,15 @@ class DataCleaner:
         self,
         input_dir: str | Path,
         output_dir: str | Path,
-        timeframe: str = '1min',
-        target_timeframe: str = '5min',
-        gap_fill_method: str = 'forward',
+        timeframe: str = "1min",
+        target_timeframe: str = "5min",
+        gap_fill_method: str = "forward",
         max_gap_fill_minutes: int = 5,
-        outlier_method: str = 'atr',
+        outlier_method: str = "atr",
         atr_threshold: float = 5.0,
         zscore_threshold: float = 5.0,
         iqr_multiplier: float = 3.0,
-        calendar_aware: bool = True
+        calendar_aware: bool = True,
     ):
         """
         Initialize data cleaner.
@@ -108,7 +108,7 @@ class DataCleaner:
             freq_minutes=self.freq_minutes,
             gap_fill_method=self.gap_fill_method,
             max_gap_fill_minutes=self.max_gap_fill_minutes,
-            calendar_aware=self.calendar_aware
+            calendar_aware=self.calendar_aware,
         )
 
         logger.info("Initialized DataCleaner")
@@ -131,17 +131,18 @@ class DataCleaner:
         ValueError : If target_timeframe is not supported
         """
         from src.phase1.config import validate_timeframe
+
         validate_timeframe(target_timeframe)
 
     def _parse_timeframe(self, timeframe: str) -> int:
         """Parse timeframe string to minutes."""
         timeframe = timeframe.lower()
-        if 'min' in timeframe:
-            return int(timeframe.replace('min', ''))
-        elif 'h' in timeframe:
-            return int(timeframe.replace('h', '')) * 60
-        elif 'd' in timeframe:
-            return int(timeframe.replace('d', '')) * 60 * 24
+        if "min" in timeframe:
+            return int(timeframe.replace("min", ""))
+        elif "h" in timeframe:
+            return int(timeframe.replace("h", "")) * 60
+        elif "d" in timeframe:
+            return int(timeframe.replace("d", "")) * 60 * 24
         else:
             return 1  # Default to 1 minute
 
@@ -195,20 +196,22 @@ class DataCleaner:
         df = df.copy()
 
         # Find duplicates
-        duplicate_mask = df.duplicated(subset=['datetime'], keep='first')
+        duplicate_mask = df.duplicated(subset=["datetime"], keep="first")
         n_duplicates = duplicate_mask.sum()
 
         duplicate_report = {
-            'n_duplicates': int(n_duplicates),
-            'duplicate_pct': (n_duplicates / len(df) * 100) if len(df) > 0 else 0
+            "n_duplicates": int(n_duplicates),
+            "duplicate_pct": (n_duplicates / len(df) * 100) if len(df) > 0 else 0,
         }
 
         if n_duplicates > 0:
-            logger.warning(f"Found {n_duplicates} duplicate timestamps ({duplicate_report['duplicate_pct']:.2f}%)")
+            logger.warning(
+                f"Found {n_duplicates} duplicate timestamps ({duplicate_report['duplicate_pct']:.2f}%)"
+            )
 
             # Get some examples
-            duplicate_examples = df[df.duplicated(subset=['datetime'], keep=False)].head(10)
-            duplicate_report['examples'] = duplicate_examples['datetime'].astype(str).tolist()
+            duplicate_examples = df[df.duplicated(subset=["datetime"], keep=False)].head(10)
+            duplicate_report["examples"] = duplicate_examples["datetime"].astype(str).tolist()
 
             # Remove duplicates (keep first occurrence)
             df = df[~duplicate_mask].reset_index(drop=True)
@@ -262,7 +265,9 @@ class DataCleaner:
 
         return (series < lower_bound) | (series > upper_bound)
 
-    def detect_spikes_atr(self, df: pd.DataFrame, threshold: float = 5.0, period: int = 14) -> np.ndarray:
+    def detect_spikes_atr(
+        self, df: pd.DataFrame, threshold: float = 5.0, period: int = 14
+    ) -> np.ndarray:
         """
         Detect price spikes using ATR method.
 
@@ -278,17 +283,14 @@ class DataCleaner:
         """
         # Calculate ATR using Numba
         atr = calculate_atr_numba(
-            df['high'].values,
-            df['low'].values,
-            df['close'].values,
-            period=period
+            df["high"].values, df["low"].values, df["close"].values, period=period
         )
 
         # Calculate close-to-close changes
-        close_changes = np.abs(df['close'].pct_change())
+        close_changes = np.abs(df["close"].pct_change())
 
         # Spikes are where close change exceeds threshold * ATR
-        atr_threshold = (threshold * atr / df['close'].values)
+        atr_threshold = threshold * atr / df["close"].values
         spikes = close_changes > atr_threshold
 
         return spikes.fillna(False).values
@@ -313,27 +315,31 @@ class DataCleaner:
         outliers_by_method = {}
         total_outlier_mask = pd.Series(False, index=df.index)
 
-        if self.outlier_method in ['atr', 'all']:
+        if self.outlier_method in ["atr", "all"]:
             spike_mask = self.detect_spikes_atr(df, self.atr_threshold)
-            outliers_by_method['atr'] = int(spike_mask.sum())
+            outliers_by_method["atr"] = int(spike_mask.sum())
             total_outlier_mask |= spike_mask
 
-        if self.outlier_method in ['zscore', 'all']:
-            zscore_mask = self.detect_outliers_zscore(df['close'].pct_change().fillna(0), self.zscore_threshold)
-            outliers_by_method['zscore'] = int(zscore_mask.sum())
+        if self.outlier_method in ["zscore", "all"]:
+            zscore_mask = self.detect_outliers_zscore(
+                df["close"].pct_change().fillna(0), self.zscore_threshold
+            )
+            outliers_by_method["zscore"] = int(zscore_mask.sum())
             total_outlier_mask |= zscore_mask
 
-        if self.outlier_method in ['iqr', 'all']:
-            iqr_mask = self.detect_outliers_iqr(df['close'].pct_change().fillna(0), self.iqr_multiplier)
-            outliers_by_method['iqr'] = int(iqr_mask.sum())
+        if self.outlier_method in ["iqr", "all"]:
+            iqr_mask = self.detect_outliers_iqr(
+                df["close"].pct_change().fillna(0), self.iqr_multiplier
+            )
+            outliers_by_method["iqr"] = int(iqr_mask.sum())
             total_outlier_mask |= iqr_mask
 
         n_outliers = total_outlier_mask.sum()
         outlier_report = {
-            'method': self.outlier_method,
-            'total_outliers': int(n_outliers),
-            'outlier_pct': (n_outliers / len(df) * 100) if len(df) > 0 else 0,
-            'by_method': outliers_by_method
+            "method": self.outlier_method,
+            "total_outliers": int(n_outliers),
+            "outlier_pct": (n_outliers / len(df) * 100) if len(df) > 0 else 0,
+            "by_method": outliers_by_method,
         }
 
         if n_outliers > 0:
@@ -361,31 +367,27 @@ class DataCleaner:
         df = df.copy()
 
         # Detect large price gaps (potential contract rolls)
-        price_changes = df['close'].pct_change().abs()
+        price_changes = df["close"].pct_change().abs()
         large_gap_threshold = 0.10  # 10% gap
         potential_rolls = price_changes > large_gap_threshold
 
-        roll_report = {
-            'potential_rolls': int(potential_rolls.sum()),
-            'details': []
-        }
+        roll_report = {"potential_rolls": int(potential_rolls.sum()), "details": []}
 
         if potential_rolls.any():
             roll_indices = np.where(potential_rolls)[0]
             for idx in roll_indices:
-                roll_report['details'].append({
-                    'datetime': str(df.iloc[idx]['datetime']),
-                    'price_change_pct': float(price_changes.iloc[idx] * 100)
-                })
+                roll_report["details"].append(
+                    {
+                        "datetime": str(df.iloc[idx]["datetime"]),
+                        "price_change_pct": float(price_changes.iloc[idx] * 100),
+                    }
+                )
             logger.warning(f"Detected {potential_rolls.sum()} potential contract rolls")
 
         return df, roll_report
 
     def resample_data(
-        self,
-        df: pd.DataFrame,
-        target_timeframe: str | None = None,
-        include_metadata: bool = True
+        self, df: pd.DataFrame, target_timeframe: str | None = None, include_metadata: bool = True
     ) -> pd.DataFrame:
         """
         Resample data to the target timeframe.
@@ -425,10 +427,12 @@ class DataCleaner:
         target_minutes = self._parse_timeframe(target_timeframe)
 
         if source_minutes == target_minutes:
-            logger.info(f"Source ({self.timeframe}) equals target ({target_timeframe}), skipping resampling")
+            logger.info(
+                f"Source ({self.timeframe}) equals target ({target_timeframe}), skipping resampling"
+            )
             if include_metadata:
                 df = df.copy()
-                df['timeframe'] = target_timeframe
+                df["timeframe"] = target_timeframe
             return df
 
         # Validate target >= source
@@ -457,7 +461,7 @@ class DataCleaner:
         logger.info(f"\nCleaning {file_path.name}...")
 
         # Load data
-        if str(file_path).endswith('.csv'):
+        if str(file_path).endswith(".csv"):
             df = pd.read_csv(file_path)
         else:
             df = pd.read_parquet(file_path)
@@ -469,14 +473,14 @@ class DataCleaner:
         initial_rows = len(df)
 
         # Ensure datetime column
-        if 'datetime' not in df.columns:
-            for col in ['timestamp', 'date', 'time', 'DateTime', 'Timestamp']:
+        if "datetime" not in df.columns:
+            for col in ["timestamp", "date", "time", "DateTime", "Timestamp"]:
                 if col in df.columns:
-                    df = df.rename(columns={col: 'datetime'})
+                    df = df.rename(columns={col: "datetime"})
                     break
 
-        df['datetime'] = pd.to_datetime(df['datetime'])
-        df = df.sort_values('datetime').reset_index(drop=True)
+        df["datetime"] = pd.to_datetime(df["datetime"])
+        df = df.sort_values("datetime").reset_index(drop=True)
 
         # Step 1: Validate OHLC
         df = validate_ohlc(df)
@@ -490,7 +494,9 @@ class DataCleaner:
         # Step 4: Fill gaps
         df = self.fill_gaps(df)
 
-        gap_filling_report = {'rows_added': max(0, len(df) - (initial_rows - duplicate_report['n_duplicates']))}
+        gap_filling_report = {
+            "rows_added": max(0, len(df) - (initial_rows - duplicate_report["n_duplicates"]))
+        }
 
         # Step 5: Clean outliers
         df, outlier_report = self.clean_outliers(df)
@@ -502,29 +508,31 @@ class DataCleaner:
         df = validate_ohlc(df)
 
         # Add symbol column
-        df['symbol'] = symbol
+        df["symbol"] = symbol
 
         final_rows = len(df)
         retention_pct = (final_rows / initial_rows * 100) if initial_rows > 0 else 0
 
         # Compile cleaning report
         cleaning_report = {
-            'symbol': symbol,
-            'initial_rows': initial_rows,
-            'final_rows': final_rows,
-            'retention_pct': retention_pct,
-            'duplicates': duplicate_report,
-            'gaps': gap_report,
-            'gap_filling': gap_filling_report,
-            'outliers': outlier_report,
-            'contract_rolls': roll_report
+            "symbol": symbol,
+            "initial_rows": initial_rows,
+            "final_rows": final_rows,
+            "retention_pct": retention_pct,
+            "duplicates": duplicate_report,
+            "gaps": gap_report,
+            "gap_filling": gap_filling_report,
+            "outliers": outlier_report,
+            "contract_rolls": roll_report,
         }
 
         logger.info(f"Final rows: {final_rows:,} (retention: {retention_pct:.2f}%)")
 
         return df, cleaning_report
 
-    def save_results(self, df: pd.DataFrame, symbol: str, cleaning_report: dict) -> tuple[Path, Path]:
+    def save_results(
+        self, df: pd.DataFrame, symbol: str, cleaning_report: dict
+    ) -> tuple[Path, Path]:
         """
         Save cleaned data and report.
 
@@ -545,7 +553,7 @@ class DataCleaner:
 
         # Save cleaning report
         report_path = self.output_dir / f"{symbol}_cleaning_report.json"
-        with open(report_path, 'w') as f:
+        with open(report_path, "w") as f:
             json.dump(cleaning_report, f, indent=2, default=str)
         logger.info(f"Saved cleaning report to: {report_path}")
 
@@ -577,16 +585,14 @@ class DataCleaner:
         for file_path in files:
             try:
                 df, cleaning_report = self.clean_file(file_path)
-                symbol = cleaning_report['symbol']
+                symbol = cleaning_report["symbol"]
                 self.save_results(df, symbol, cleaning_report)
                 results[symbol] = cleaning_report
 
             except Exception as e:
-                errors.append({
-                    'file': str(file_path.name),
-                    'error': str(e),
-                    'type': type(e).__name__
-                })
+                errors.append(
+                    {"file": str(file_path.name), "error": str(e), "type": type(e).__name__}
+                )
                 logger.error(f"Error processing {file_path.name}: {e}", exc_info=True)
 
         if errors:
@@ -596,7 +602,7 @@ class DataCleaner:
 
         # Save combined cleaning report
         combined_report_path = self.output_dir / "cleaning_report.json"
-        with open(combined_report_path, 'w') as f:
+        with open(combined_report_path, "w") as f:
             json.dump(results, f, indent=2, default=str)
         logger.info(f"\nSaved combined report to: {combined_report_path}")
 

@@ -1,4 +1,5 @@
 """Configuration path constants."""
+
 from pathlib import Path
 
 # Note: 3 levels up from src/models/config/paths.py -> project root

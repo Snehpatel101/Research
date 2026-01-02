@@ -12,23 +12,23 @@ used across the pipeline stages for consistency.
 
 # Required label columns that must exist for each horizon
 REQUIRED_LABEL_TEMPLATES: list[str] = [
-    "label_h{h}",           # Primary label: -1 (short), 0 (neutral), 1 (long)
-    "sample_weight_h{h}",   # Quality-based sample weights
+    "label_h{h}",  # Primary label: -1 (short), 0 (neutral), 1 (long)
+    "sample_weight_h{h}",  # Quality-based sample weights
 ]
 
 # Optional label columns that may exist for each horizon
 OPTIONAL_LABEL_TEMPLATES: list[str] = [
-    "quality_h{h}",          # Label quality score (0-1)
-    "bars_to_hit_h{h}",      # Bars until barrier hit
-    "label_end_time_h{h}",   # Datetime when label outcome is known (for purging)
-    "mae_h{h}",              # Maximum adverse excursion
-    "mfe_h{h}",              # Maximum favorable excursion
-    "touch_type_h{h}",       # Which barrier was hit first
-    "pain_to_gain_h{h}",     # MAE/MFE ratio
-    "time_weighted_dd_h{h}", # Time-weighted drawdown
-    "fwd_return_h{h}",       # Forward return (simple)
-    "fwd_return_log_h{h}",   # Forward return (log)
-    "time_to_hit_h{h}",      # Time to first barrier hit
+    "quality_h{h}",  # Label quality score (0-1)
+    "bars_to_hit_h{h}",  # Bars until barrier hit
+    "label_end_time_h{h}",  # Datetime when label outcome is known (for purging)
+    "mae_h{h}",  # Maximum adverse excursion
+    "mfe_h{h}",  # Maximum favorable excursion
+    "touch_type_h{h}",  # Which barrier was hit first
+    "pain_to_gain_h{h}",  # MAE/MFE ratio
+    "time_weighted_dd_h{h}",  # Time-weighted drawdown
+    "fwd_return_h{h}",  # Forward return (simple)
+    "fwd_return_log_h{h}",  # Forward return (log)
+    "time_to_hit_h{h}",  # Time to first barrier hit
 ]
 
 # All label templates combined
@@ -38,6 +38,7 @@ ALL_LABEL_TEMPLATES: list[str] = REQUIRED_LABEL_TEMPLATES + OPTIONAL_LABEL_TEMPL
 # =============================================================================
 # LABEL COLUMN RESOLUTION
 # =============================================================================
+
 
 def get_required_label_columns(horizon: int) -> list[str]:
     """
@@ -89,9 +90,18 @@ def is_label_column(column_name: str) -> bool:
         True if column is a label column
     """
     prefixes = (
-        "label_", "sample_weight_", "quality_", "bars_to_hit_",
-        "label_end_time_", "mae_", "mfe_", "touch_type_", "pain_to_gain_",
-        "time_weighted_dd_", "fwd_return_", "time_to_hit_",
+        "label_",
+        "sample_weight_",
+        "quality_",
+        "bars_to_hit_",
+        "label_end_time_",
+        "mae_",
+        "mfe_",
+        "touch_type_",
+        "pain_to_gain_",
+        "time_weighted_dd_",
+        "fwd_return_",
+        "time_to_hit_",
     )
     return any(column_name.startswith(prefix) for prefix in prefixes)
 

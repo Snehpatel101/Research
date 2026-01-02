@@ -3,6 +3,7 @@ Stage 7.6: Dataset Build.
 
 Pipeline wrapper for building dataset splits and manifests.
 """
+
 import json
 import logging
 import traceback
@@ -34,12 +35,9 @@ def _select_label_columns(df: pd.DataFrame, horizon: int) -> list[str]:
     required = [t.format(h=horizon) for t in REQUIRED_LABEL_TEMPLATES]
     missing = [col for col in required if col not in df.columns]
     if missing:
-        raise ValueError(
-            f"Missing required label columns for h{horizon}: {missing}"
-        )
+        raise ValueError(f"Missing required label columns for h{horizon}: {missing}")
     optional = [
-        t.format(h=horizon) for t in OPTIONAL_LABEL_TEMPLATES
-        if t.format(h=horizon) in df.columns
+        t.format(h=horizon) for t in OPTIONAL_LABEL_TEMPLATES if t.format(h=horizon) in df.columns
     ]
     return required + optional
 
@@ -49,10 +47,7 @@ def _select_metadata_columns(df: pd.DataFrame) -> list[str]:
     return [col for col in df.columns if col in METADATA_COLUMNS]
 
 
-def run_build_datasets(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_build_datasets(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 7.6: Build dataset splits and manifests.
 
@@ -190,7 +185,5 @@ def run_build_datasets(
         logger.error(f"Dataset build failed: {e}")
         logger.error(traceback.format_exc())
         return create_failed_result(
-            stage_name="build_datasets",
-            start_time=start_time,
-            error=str(e)
+            stage_name="build_datasets", start_time=start_time, error=str(e)
         )

@@ -9,6 +9,7 @@ GPU-accelerated LSTM with:
 
 Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 """
+
 from __future__ import annotations
 
 import logging
@@ -113,12 +114,14 @@ class LSTMModel(BaseRNNModel):
         """Return default LSTM hyperparameters."""
         defaults = super().get_default_config()
         # LSTM-specific defaults (can override base)
-        defaults.update({
-            "hidden_size": 256,
-            "num_layers": 2,
-            "dropout": 0.3,
-            "bidirectional": False,
-        })
+        defaults.update(
+            {
+                "hidden_size": 256,
+                "num_layers": 2,
+                "dropout": 0.3,
+                "bidirectional": False,
+            }
+        )
         return defaults
 
     def _create_network(self, input_size: int) -> nn.Module:

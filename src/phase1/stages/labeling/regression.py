@@ -42,15 +42,10 @@ class RegressionLabeler(LabelingStrategy):
     """
 
     def __init__(
-        self,
-        use_log_returns: bool = False,
-        winsorize_pct: float = 0.0,
-        scale_factor: float = 1.0
+        self, use_log_returns: bool = False, winsorize_pct: float = 0.0, scale_factor: float = 1.0
     ):
         if winsorize_pct < 0 or winsorize_pct >= 0.5:
-            raise ValueError(
-                f"winsorize_pct must be in [0, 0.5), got {winsorize_pct}"
-            )
+            raise ValueError(f"winsorize_pct must be in [0, 0.5), got {winsorize_pct}")
         if scale_factor <= 0:
             raise ValueError(f"scale_factor must be positive, got {scale_factor}")
 
@@ -66,7 +61,7 @@ class RegressionLabeler(LabelingStrategy):
     @property
     def required_columns(self) -> list[str]:
         """Return list of required DataFrame columns."""
-        return ['close']
+        return ["close"]
 
     def compute_labels(
         self,
@@ -75,7 +70,7 @@ class RegressionLabeler(LabelingStrategy):
         use_log_returns: bool | None = None,
         winsorize_pct: float | None = None,
         scale_factor: float | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> LabelingResult:
         """
         Compute regression targets for the given horizon.
@@ -116,7 +111,7 @@ class RegressionLabeler(LabelingStrategy):
             f"  log_returns={use_log_returns}, winsorize={winsorize_pct}, scale={scale_factor}"
         )
 
-        close = df['close'].values
+        close = df["close"].values
         n = len(close)
 
         # Compute forward returns
@@ -156,9 +151,9 @@ class RegressionLabeler(LabelingStrategy):
             labels=int_labels,  # For compatibility with base class validation
             horizon=horizon,
             metadata={
-                'regression_target': labels,
-                'raw_return': (returns / scale_factor).astype(np.float32)
-            }
+                "regression_target": labels,
+                "raw_return": (returns / scale_factor).astype(np.float32),
+            },
         )
 
         # Compute quality metrics
@@ -169,51 +164,47 @@ class RegressionLabeler(LabelingStrategy):
 
         return result
 
-    def _compute_regression_metrics(
-        self,
-        labels: np.ndarray,
-        horizon: int
-    ) -> dict[str, float]:
+    def _compute_regression_metrics(self, labels: np.ndarray, horizon: int) -> dict[str, float]:
         """Compute regression-specific quality metrics."""
         # Filter out NaN values
         valid_labels = labels[~np.isnan(labels)]
 
         if len(valid_labels) == 0:
             return {
-                'total_samples': float(len(labels)),
-                'valid_samples': 0.0,
-                'invalid_samples': float(len(labels)),
+                "total_samples": float(len(labels)),
+                "valid_samples": 0.0,
+                "invalid_samples": float(len(labels)),
             }
 
         metrics: dict[str, float] = {
-            'total_samples': float(len(labels)),
-            'valid_samples': float(len(valid_labels)),
-            'invalid_samples': float(np.isnan(labels).sum()),
-            'mean': float(np.mean(valid_labels)),
-            'std': float(np.std(valid_labels)),
-            'min': float(np.min(valid_labels)),
-            'max': float(np.max(valid_labels)),
-            'median': float(np.median(valid_labels)),
+            "total_samples": float(len(labels)),
+            "valid_samples": float(len(valid_labels)),
+            "invalid_samples": float(np.isnan(labels).sum()),
+            "mean": float(np.mean(valid_labels)),
+            "std": float(np.std(valid_labels)),
+            "min": float(np.min(valid_labels)),
+            "max": float(np.max(valid_labels)),
+            "median": float(np.median(valid_labels)),
         }
 
         # Percentiles
         for pct in [5, 25, 75, 95]:
-            metrics[f'percentile_{pct}'] = float(np.percentile(valid_labels, pct))
+            metrics[f"percentile_{pct}"] = float(np.percentile(valid_labels, pct))
 
         # Skewness and kurtosis
-        if metrics['std'] > 0:
-            centered = valid_labels - metrics['mean']
-            metrics['skewness'] = float(np.mean(centered ** 3) / (metrics['std'] ** 3))
-            metrics['kurtosis'] = float(np.mean(centered ** 4) / (metrics['std'] ** 4) - 3)
+        if metrics["std"] > 0:
+            centered = valid_labels - metrics["mean"]
+            metrics["skewness"] = float(np.mean(centered**3) / (metrics["std"] ** 3))
+            metrics["kurtosis"] = float(np.mean(centered**4) / (metrics["std"] ** 4) - 3)
         else:
-            metrics['skewness'] = 0.0
-            metrics['kurtosis'] = 0.0
+            metrics["skewness"] = 0.0
+            metrics["kurtosis"] = 0.0
 
         # Positive/negative split
         positive_count = (valid_labels > 0).sum()
         negative_count = (valid_labels < 0).sum()
-        metrics['positive_pct'] = float(positive_count / len(valid_labels) * 100)
-        metrics['negative_pct'] = float(negative_count / len(valid_labels) * 100)
+        metrics["positive_pct"] = float(positive_count / len(valid_labels) * 100)
+        metrics["negative_pct"] = float(negative_count / len(valid_labels) * 100)
 
         return metrics
 
@@ -236,10 +227,7 @@ class RegressionLabeler(LabelingStrategy):
         logger.info(f"  Positive: {positive_pct:.1f}%, Negative: {100-positive_pct:.1f}%")
 
     def add_labels_to_dataframe(
-        self,
-        df: pd.DataFrame,
-        result: LabelingResult,
-        prefix: str = 'target'
+        self, df: pd.DataFrame, result: LabelingResult, prefix: str = "target"
     ) -> pd.DataFrame:
         """
         Add regression targets to the DataFrame as new columns.
@@ -250,13 +238,13 @@ class RegressionLabeler(LabelingStrategy):
         df = df.copy()
 
         # Add regression target column
-        regression_target = result.metadata.get('regression_target', np.array([]))
+        regression_target = result.metadata.get("regression_target", np.array([]))
         if len(regression_target) > 0:
-            df[f'{prefix}_h{horizon}'] = regression_target
+            df[f"{prefix}_h{horizon}"] = regression_target
 
         # Add raw return if available
-        raw_return = result.metadata.get('raw_return', np.array([]))
+        raw_return = result.metadata.get("raw_return", np.array([]))
         if len(raw_return) > 0:
-            df[f'return_h{horizon}'] = raw_return
+            df[f"return_h{horizon}"] = raw_return
 
         return df

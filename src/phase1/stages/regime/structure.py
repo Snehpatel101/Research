@@ -63,7 +63,7 @@ def calculate_hurst_exponent(prices: np.ndarray, min_lag: int = 2, max_lag: int 
         rs_list = []
 
         for i in range(n_segments):
-            segment = returns[i * lag:(i + 1) * lag]
+            segment = returns[i * lag : (i + 1) * lag]
 
             if len(segment) < lag:
                 continue
@@ -97,9 +97,9 @@ def calculate_hurst_exponent(prices: np.ndarray, min_lag: int = 2, max_lag: int 
     sum_x = np.sum(log_lags)
     sum_y = np.sum(log_rs)
     sum_xy = np.sum(log_lags * log_rs)
-    sum_x2 = np.sum(log_lags ** 2)
+    sum_x2 = np.sum(log_lags**2)
 
-    denominator = n_points * sum_x2 - sum_x ** 2
+    denominator = n_points * sum_x2 - sum_x**2
     if denominator == 0:
         return np.nan
 
@@ -110,10 +110,7 @@ def calculate_hurst_exponent(prices: np.ndarray, min_lag: int = 2, max_lag: int 
 
 
 def calculate_rolling_hurst(
-    prices: np.ndarray,
-    lookback: int,
-    min_lag: int = 2,
-    max_lag: int = 20
+    prices: np.ndarray, lookback: int, min_lag: int = 2, max_lag: int = 20
 ) -> np.ndarray:
     """
     Calculate rolling Hurst exponent.
@@ -132,7 +129,7 @@ def calculate_rolling_hurst(
 
     # Need at least lookback points for calculation
     for i in range(lookback - 1, n):
-        window = prices[i - lookback + 1:i + 1]
+        window = prices[i - lookback + 1 : i + 1]
         hurst[i] = calculate_hurst_exponent(window, min_lag, max_lag)
 
     return hurst
@@ -177,7 +174,7 @@ class MarketStructureDetector(RegimeDetector):
         min_lag: int = 2,
         max_lag: int = 20,
         mean_reverting_threshold: float = 0.4,
-        trending_threshold: float = 0.6
+        trending_threshold: float = 0.6,
     ):
         """
         Initialize market structure detector.
@@ -207,9 +204,7 @@ class MarketStructureDetector(RegimeDetector):
                 f"mean_reverting_threshold must be in (0, 0.5), got {mean_reverting_threshold}"
             )
         if not (0.5 < trending_threshold < 1.0):
-            raise ValueError(
-                f"trending_threshold must be in (0.5, 1.0), got {trending_threshold}"
-            )
+            raise ValueError(f"trending_threshold must be in (0.5, 1.0), got {trending_threshold}")
 
         self.lookback = lookback
         self.min_lag = min_lag
@@ -219,7 +214,7 @@ class MarketStructureDetector(RegimeDetector):
 
     def get_required_columns(self) -> list[str]:
         """Get required columns for detection."""
-        return ['close']
+        return ["close"]
 
     def detect(self, df: pd.DataFrame) -> pd.Series:
         """
@@ -236,7 +231,7 @@ class MarketStructureDetector(RegimeDetector):
         """
         self.validate_input(df)
 
-        prices = df['close'].values
+        prices = df["close"].values
 
         # Check for sufficient data
         min_required = self.lookback + self.max_lag
@@ -245,29 +240,20 @@ class MarketStructureDetector(RegimeDetector):
                 f"Insufficient data for Hurst calculation: {len(prices)} < {min_required}. "
                 f"Returning all NaN."
             )
-            return pd.Series(np.nan, index=df.index, dtype='object')
+            return pd.Series(np.nan, index=df.index, dtype="object")
 
         # Calculate rolling Hurst
-        hurst = calculate_rolling_hurst(
-            prices,
-            self.lookback,
-            self.min_lag,
-            self.max_lag
-        )
+        hurst = calculate_rolling_hurst(prices, self.lookback, self.min_lag, self.max_lag)
 
         hurst_series = pd.Series(hurst, index=df.index)
 
         # Classify regime
-        regimes = pd.Series(
-            StructureRegimeLabel.RANDOM.value,
-            index=df.index,
-            dtype='object'
-        )
+        regimes = pd.Series(StructureRegimeLabel.RANDOM.value, index=df.index, dtype="object")
 
-        regimes[hurst_series < self.mean_reverting_threshold] = \
+        regimes[hurst_series < self.mean_reverting_threshold] = (
             StructureRegimeLabel.MEAN_REVERTING.value
-        regimes[hurst_series > self.trending_threshold] = \
-            StructureRegimeLabel.TRENDING.value
+        )
+        regimes[hurst_series > self.trending_threshold] = StructureRegimeLabel.TRENDING.value
 
         # Handle NaN from warmup period
         regimes[hurst_series.isna()] = np.nan
@@ -290,13 +276,8 @@ class MarketStructureDetector(RegimeDetector):
         """
         self.validate_input(df)
 
-        prices = df['close'].values
-        hurst = calculate_rolling_hurst(
-            prices,
-            self.lookback,
-            self.min_lag,
-            self.max_lag
-        )
+        prices = df["close"].values
+        hurst = calculate_rolling_hurst(prices, self.lookback, self.min_lag, self.max_lag)
 
         regimes = self.detect(df)
         hurst_series = pd.Series(hurst, index=df.index)
@@ -305,7 +286,7 @@ class MarketStructureDetector(RegimeDetector):
 
 
 __all__ = [
-    'MarketStructureDetector',
-    'calculate_hurst_exponent',
-    'calculate_rolling_hurst',
+    "MarketStructureDetector",
+    "calculate_hurst_exponent",
+    "calculate_rolling_hurst",
 ]

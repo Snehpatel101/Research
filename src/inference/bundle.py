@@ -23,6 +23,7 @@ Usage:
     bundle = ModelBundle.load("/path/to/bundle")
     predictions = bundle.predict(X_new)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -62,9 +63,11 @@ BUNDLE_METADATA_FILE = "metadata.json"
 # DATA CLASSES
 # =============================================================================
 
+
 @dataclass
 class BundleMetadata:
     """Metadata for a model bundle."""
+
     version: str
     created_at: str
     model_name: str
@@ -115,6 +118,7 @@ class BundleMetadata:
 @dataclass
 class BundleManifest:
     """Manifest listing all files in a bundle."""
+
     version: str
     files: list[str]
     checksums: dict[str, str]
@@ -138,6 +142,7 @@ class BundleManifest:
 # =============================================================================
 # MODEL BUNDLE
 # =============================================================================
+
 
 class ModelBundle:
     """
@@ -233,9 +238,7 @@ class ModelBundle:
             sequence_length = getattr(model, "_config", {}).get("sequence_length", 60)
 
         # Compute feature hash for validation
-        feature_hash = hashlib.md5(
-            ",".join(feature_columns).encode()
-        ).hexdigest()[:12]
+        feature_hash = hashlib.md5(",".join(feature_columns).encode()).hexdigest()[:12]
 
         metadata = BundleMetadata(
             version=BUNDLE_VERSION,
@@ -398,10 +401,7 @@ class ModelBundle:
         model = ModelRegistry.create(metadata.model_name)
         model.load(model_dir)
 
-        logger.info(
-            f"Loaded bundle: {metadata.model_name} (H{metadata.horizon}) "
-            f"from {path}"
-        )
+        logger.info(f"Loaded bundle: {metadata.model_name} (H{metadata.horizon}) " f"from {path}")
 
         return cls(
             model=model,
@@ -467,21 +467,17 @@ class ModelBundle:
         # Validate shape
         if self.metadata.requires_sequences:
             if X.ndim != 3:
-                raise ValueError(
-                    f"Model requires 3D sequences, got shape {X.shape}"
-                )
+                raise ValueError(f"Model requires 3D sequences, got shape {X.shape}")
             if X.shape[2] != self.metadata.n_features:
                 raise ValueError(
-                    f"Expected {self.metadata.n_features} features, "
-                    f"got {X.shape[2]}"
+                    f"Expected {self.metadata.n_features} features, " f"got {X.shape[2]}"
                 )
         else:
             if X.ndim != 2:
                 raise ValueError(f"Expected 2D array, got shape {X.shape}")
             if X.shape[1] != self.metadata.n_features:
                 raise ValueError(
-                    f"Expected {self.metadata.n_features} features, "
-                    f"got {X.shape[1]}"
+                    f"Expected {self.metadata.n_features} features, " f"got {X.shape[1]}"
                 )
 
         return X

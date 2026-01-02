@@ -46,6 +46,7 @@ Usage:
         # X_4d shape: (32, 9, 60, n_features_per_tf)
         model_output = model(X_4d)
 """
+
 from __future__ import annotations
 
 import logging
@@ -77,6 +78,7 @@ logger.addHandler(logging.NullHandler())
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
+
 
 @dataclass
 class MultiResolution4DConfig:
@@ -115,6 +117,7 @@ class MultiResolution4DConfig:
 # =============================================================================
 # MULTI-RESOLUTION 4D ADAPTER
 # =============================================================================
+
 
 class MultiResolution4DAdapter:
     """
@@ -325,6 +328,7 @@ class MultiResolution4DAdapter:
 # =============================================================================
 # MULTI-RESOLUTION 4D DATASET
 # =============================================================================
+
 
 class MultiResolution4DDataset(Dataset):
     """
@@ -559,6 +563,7 @@ class MultiResolution4DDataset(Dataset):
 # =============================================================================
 # FACTORY FUNCTION
 # =============================================================================
+
 
 def create_multi_resolution_dataset(
     df: pd.DataFrame,

@@ -46,11 +46,7 @@ class SessionFilter:
         df = filter.filter_by_session(df)
     """
 
-    def __init__(
-        self,
-        config: SessionsConfig | None = None,
-        datetime_column: str = 'datetime'
-    ):
+    def __init__(self, config: SessionsConfig | None = None, datetime_column: str = "datetime"):
         """
         Initialize SessionFilter.
 
@@ -68,9 +64,7 @@ class SessionFilter:
     def _validate_config(self) -> None:
         """Validate configuration."""
         if not isinstance(self.config, SessionsConfig):
-            raise ValueError(
-                f"config must be SessionsConfig, got {type(self.config)}"
-            )
+            raise ValueError(f"config must be SessionsConfig, got {type(self.config)}")
 
     def _validate_dataframe(self, df: pd.DataFrame) -> None:
         """Validate input DataFrame."""
@@ -97,11 +91,7 @@ class SessionFilter:
         """Get time of day as minutes since midnight UTC."""
         return dt.hour * 60 + dt.minute
 
-    def _is_in_session(
-        self,
-        time_minutes: int,
-        session: SessionConfig
-    ) -> bool:
+    def _is_in_session(self, time_minutes: int, session: SessionConfig) -> bool:
         """
         Check if a time is within a session.
 
@@ -141,10 +131,7 @@ class SessionFilter:
 
         return None
 
-    def classify_sessions_vectorized(
-        self,
-        datetimes: pd.Series
-    ) -> pd.Series:
+    def classify_sessions_vectorized(self, datetimes: pd.Series) -> pd.Series:
         """
         Classify sessions for a series of datetimes (vectorized).
 
@@ -172,10 +159,7 @@ class SessionFilter:
 
         return result
 
-    def get_session_flags(
-        self,
-        datetimes: pd.Series
-    ) -> dict[str, pd.Series]:
+    def get_session_flags(self, datetimes: pd.Series) -> dict[str, pd.Series]:
         """
         Generate session flag columns for a series of datetimes.
 
@@ -200,15 +184,12 @@ class SessionFilter:
             else:
                 mask = (time_minutes >= start) & (time_minutes < end)
 
-            col_name = f'session_{session_name.value}'
+            col_name = f"session_{session_name.value}"
             flags[col_name] = mask.astype(int)
 
         return flags
 
-    def get_overlap_flags(
-        self,
-        datetimes: pd.Series
-    ) -> dict[str, pd.Series]:
+    def get_overlap_flags(self, datetimes: pd.Series) -> dict[str, pd.Series]:
         """
         Generate overlap flag columns for a series of datetimes.
 
@@ -226,10 +207,7 @@ class SessionFilter:
             end = overlap.end_utc[0] * 60 + overlap.end_utc[1]
 
             # Check if both sessions are active
-            sessions_active = all(
-                s in self.config.get_active_sessions()
-                for s in overlap.sessions
-            )
+            sessions_active = all(s in self.config.get_active_sessions() for s in overlap.sessions)
 
             if not sessions_active:
                 continue
@@ -240,15 +218,13 @@ class SessionFilter:
                 # Crosses midnight
                 mask = (time_minutes >= start) | (time_minutes < end)
 
-            col_name = f'overlap_{overlap_name}'
+            col_name = f"overlap_{overlap_name}"
             flags[col_name] = mask.astype(int)
 
         return flags
 
     def add_session_features(
-        self,
-        df: pd.DataFrame,
-        feature_metadata: dict[str, str] | None = None
+        self, df: pd.DataFrame, feature_metadata: dict[str, str] | None = None
     ) -> pd.DataFrame:
         """
         Add session and overlap flags as features to DataFrame.
@@ -274,7 +250,7 @@ class SessionFilter:
             for col_name, values in session_flags.items():
                 df[col_name] = values
                 if feature_metadata is not None:
-                    session_name = col_name.replace('session_', '')
+                    session_name = col_name.replace("session_", "")
                     session_config = SESSIONS.get(SessionName(session_name))
                     if session_config:
                         desc = (
@@ -290,7 +266,7 @@ class SessionFilter:
             for col_name, values in overlap_flags.items():
                 df[col_name] = values
                 if feature_metadata is not None:
-                    overlap_name = col_name.replace('overlap_', '')
+                    overlap_name = col_name.replace("overlap_", "")
                     overlap = SESSION_OVERLAPS.get(overlap_name)
                     if overlap:
                         feature_metadata[col_name] = overlap.description
@@ -302,11 +278,7 @@ class SessionFilter:
 
         return df
 
-    def filter_by_session(
-        self,
-        df: pd.DataFrame,
-        inplace: bool = False
-    ) -> pd.DataFrame:
+    def filter_by_session(self, df: pd.DataFrame, inplace: bool = False) -> pd.DataFrame:
         """
         Filter DataFrame to only include rows from active sessions.
 
@@ -382,24 +354,24 @@ class SessionFilter:
 
             if count > 0:
                 stats[session_name.value] = {
-                    'count': int(count),
-                    'percentage': float(100 * count / len(df)),
-                    'first': df.loc[mask, self.datetime_column].min(),
-                    'last': df.loc[mask, self.datetime_column].max(),
+                    "count": int(count),
+                    "percentage": float(100 * count / len(df)),
+                    "first": df.loc[mask, self.datetime_column].min(),
+                    "last": df.loc[mask, self.datetime_column].max(),
                 }
             else:
                 stats[session_name.value] = {
-                    'count': 0,
-                    'percentage': 0.0,
-                    'first': None,
-                    'last': None,
+                    "count": 0,
+                    "percentage": 0.0,
+                    "first": None,
+                    "last": None,
                 }
 
         # Add None/gap stats
         mask = sessions.isna()
-        stats['outside_sessions'] = {
-            'count': int(mask.sum()),
-            'percentage': float(100 * mask.sum() / len(df)) if len(df) > 0 else 0.0,
+        stats["outside_sessions"] = {
+            "count": int(mask.sum()),
+            "percentage": float(100 * mask.sum() / len(df)) if len(df) > 0 else 0.0,
         }
 
         return stats
@@ -409,7 +381,7 @@ def create_session_filter(
     include: list[str] | None = None,
     exclude: list[str] | None = None,
     add_flags: bool = True,
-    add_overlaps: bool = True
+    add_overlaps: bool = True,
 ) -> SessionFilter:
     """
     Factory function to create a SessionFilter with common configurations.
@@ -434,9 +406,7 @@ def create_session_filter(
                 include_sessions.append(SessionName(name.lower()))
             except ValueError:
                 valid = [s.value for s in SessionName]
-                raise ValueError(
-                    f"Invalid session name '{name}'. Valid names: {valid}"
-                )
+                raise ValueError(f"Invalid session name '{name}'. Valid names: {valid}")
 
     exclude_sessions = None
     if exclude:
@@ -446,9 +416,7 @@ def create_session_filter(
                 exclude_sessions.append(SessionName(name.lower()))
             except ValueError:
                 valid = [s.value for s in SessionName]
-                raise ValueError(
-                    f"Invalid session name '{name}'. Valid names: {valid}"
-                )
+                raise ValueError(f"Invalid session name '{name}'. Valid names: {valid}")
 
     config = SessionsConfig(
         include_sessions=include_sessions,
@@ -461,6 +429,6 @@ def create_session_filter(
 
 
 __all__ = [
-    'SessionFilter',
-    'create_session_filter',
+    "SessionFilter",
+    "create_session_filter",
 ]

@@ -22,6 +22,7 @@ Usage:
     # Standard time bars
     bars = build_bars(df, bar_type='time', target_timeframe='5min')
 """
+
 from src.phase1.stages.clean.bar_builders.base import (
     BarBuilderRegistry,
     BaseBarBuilder,

@@ -1,4 +1,5 @@
 """TrainerConfig dataclass for model training configuration."""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from .environment import resolve_device
 @dataclass
 class TrainerConfig:
     """Configuration for model training (hyperparameters + training settings)."""
+
     model_name: str
     horizon: int = 20
     feature_set: str = "boosting_optimal"

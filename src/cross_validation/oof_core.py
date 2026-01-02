@@ -4,6 +4,7 @@ Core OOF (Out-of-Fold) prediction generation.
 Handles the main logic for generating out-of-sample predictions
 for tabular (non-sequence) models.
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 # DATA CLASSES
 # =============================================================================
 
+
 class OOFPrediction:
     """
     Out-of-fold predictions for a single model.
@@ -35,6 +37,7 @@ class OOFPrediction:
         fold_info: Per-fold training information
         coverage: Fraction of samples with predictions
     """
+
     def __init__(
         self,
         model_name: str,
@@ -50,9 +53,11 @@ class OOFPrediction:
     def get_probabilities(self) -> np.ndarray:
         """Get probability matrix (n_samples, 3)."""
         return self.predictions[
-            [f"{self.model_name}_prob_short",
-             f"{self.model_name}_prob_neutral",
-             f"{self.model_name}_prob_long"]
+            [
+                f"{self.model_name}_prob_short",
+                f"{self.model_name}_prob_neutral",
+                f"{self.model_name}_prob_long",
+            ]
         ].values
 
     def get_class_predictions(self) -> np.ndarray:
@@ -63,6 +68,7 @@ class OOFPrediction:
 # =============================================================================
 # CORE OOF GENERATOR
 # =============================================================================
+
 
 class CoreOOFGenerator:
     """
@@ -128,9 +134,7 @@ class CoreOOFGenerator:
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
 
             # FOLD-AWARE SCALING: fit scaler on train-only, transform both
-            scaling_result = fold_scaler.fit_transform_fold(
-                X_train_raw.values, X_val_raw.values
-            )
+            scaling_result = fold_scaler.fit_transform_fold(X_train_raw.values, X_val_raw.values)
             X_train_scaled = scaling_result.X_train_scaled
             X_val_scaled = scaling_result.X_val_scaled
 
@@ -163,13 +167,15 @@ class CoreOOFGenerator:
             oof_confidence[val_idx] = prediction_output.confidence
 
             # Track fold info
-            fold_info.append({
-                "fold": fold_idx,
-                "train_size": len(train_idx),
-                "val_size": len(val_idx),
-                "val_accuracy": training_metrics.val_accuracy,
-                "val_f1": training_metrics.val_f1,
-            })
+            fold_info.append(
+                {
+                    "fold": fold_idx,
+                    "train_size": len(train_idx),
+                    "val_size": len(val_idx),
+                    "val_accuracy": training_metrics.val_accuracy,
+                    "val_f1": training_metrics.val_f1,
+                }
+            )
 
         # Validate coverage
         coverage = float((~np.isnan(oof_preds)).mean())
@@ -180,14 +186,16 @@ class CoreOOFGenerator:
             )
 
         # Build result DataFrame
-        oof_df = pd.DataFrame({
-            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-            f"{model_name}_prob_short": oof_probs[:, 0],
-            f"{model_name}_prob_neutral": oof_probs[:, 1],
-            f"{model_name}_prob_long": oof_probs[:, 2],
-            f"{model_name}_pred": oof_preds,
-            f"{model_name}_confidence": oof_confidence,
-        })
+        oof_df = pd.DataFrame(
+            {
+                "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+                f"{model_name}_prob_short": oof_probs[:, 0],
+                f"{model_name}_prob_neutral": oof_probs[:, 1],
+                f"{model_name}_prob_long": oof_probs[:, 2],
+                f"{model_name}_pred": oof_preds,
+                f"{model_name}_confidence": oof_confidence,
+            }
+        )
 
         return OOFPrediction(
             model_name=model_name,
@@ -251,8 +259,8 @@ class CoreOOFGenerator:
             oof_pred.predictions.loc[valid_mask, prob_cols] = calibrated_probs
 
             # Update confidence based on calibrated probabilities
-            oof_pred.predictions.loc[valid_mask, f"{model_name}_confidence"] = (
-                calibrated_probs.max(axis=1)
+            oof_pred.predictions.loc[valid_mask, f"{model_name}_confidence"] = calibrated_probs.max(
+                axis=1
             )
 
             logger.info(

@@ -33,8 +33,8 @@ logger.addHandler(logging.NullHandler())
 class BetSizeMethod(Enum):
     """Methods for computing bet size in meta-labeling."""
 
-    PROBABILITY = 'probability'  # Use model probability as bet size
-    FIXED = 'fixed'  # Use fixed bet size (1.0)
+    PROBABILITY = "probability"  # Use model probability as bet size
+    FIXED = "fixed"  # Use fixed bet size (1.0)
 
 
 class MetaLabeler(LabelingStrategy):
@@ -80,7 +80,7 @@ class MetaLabeler(LabelingStrategy):
         primary_signal_column: str,
         return_column: str | None = None,
         bet_size_method: str | BetSizeMethod = BetSizeMethod.PROBABILITY,
-        horizon: int | None = None
+        horizon: int | None = None,
     ):
         # Validate primary signal column
         if not primary_signal_column or not isinstance(primary_signal_column, str):
@@ -124,7 +124,7 @@ class MetaLabeler(LabelingStrategy):
         if self._return_column:
             columns.append(self._return_column)
         else:
-            columns.append('close')  # Needed to compute forward returns
+            columns.append("close")  # Needed to compute forward returns
         return columns
 
     @property
@@ -137,11 +137,7 @@ class MetaLabeler(LabelingStrategy):
         """Return the bet size method."""
         return self._bet_size_method
 
-    def _compute_forward_returns(
-        self,
-        df: pd.DataFrame,
-        horizon: int
-    ) -> np.ndarray:
+    def _compute_forward_returns(self, df: pd.DataFrame, horizon: int) -> np.ndarray:
         """
         Compute forward returns from close prices.
 
@@ -157,7 +153,7 @@ class MetaLabeler(LabelingStrategy):
         np.ndarray
             Forward returns (next_close / current_close - 1)
         """
-        close = df['close'].values
+        close = df["close"].values
         n = len(close)
         returns = np.full(n, np.nan)
 
@@ -166,12 +162,7 @@ class MetaLabeler(LabelingStrategy):
 
         return returns
 
-    def compute_labels(
-        self,
-        df: pd.DataFrame,
-        horizon: int,
-        **kwargs: Any
-    ) -> LabelingResult:
+    def compute_labels(self, df: pd.DataFrame, horizon: int, **kwargs: Any) -> LabelingResult:
         """
         Compute meta-labels indicating whether primary signals were correct.
 
@@ -277,10 +268,10 @@ class MetaLabeler(LabelingStrategy):
             labels=meta_labels,
             horizon=horizon,
             metadata={
-                'bet_size': bet_sizes,
-                'correctness_margin': correctness_margin,
-                'primary_signal': primary_signals.astype(np.int8)
-            }
+                "bet_size": bet_sizes,
+                "correctness_margin": correctness_margin,
+                "primary_signal": primary_signals.astype(np.int8),
+            },
         )
 
         # Compute quality metrics
@@ -348,9 +339,9 @@ class MetaLabeler(LabelingStrategy):
         valid_labels = labels[valid_mask]
 
         metrics: dict[str, float] = {
-            'total_samples': float(len(labels)),
-            'valid_samples': float(len(valid_labels)),
-            'invalid_samples': float((~valid_mask).sum()),
+            "total_samples": float(len(labels)),
+            "valid_samples": float(len(valid_labels)),
+            "invalid_samples": float((~valid_mask).sum()),
         }
 
         if len(valid_labels) == 0:
@@ -360,12 +351,12 @@ class MetaLabeler(LabelingStrategy):
         correct_count = (valid_labels == 1).sum()
         incorrect_count = (valid_labels == 0).sum()
 
-        metrics['correct_count'] = float(correct_count)
-        metrics['incorrect_count'] = float(incorrect_count)
+        metrics["correct_count"] = float(correct_count)
+        metrics["incorrect_count"] = float(incorrect_count)
 
         # Accuracy: overall correctness rate
         total_valid = len(valid_labels)
-        metrics['accuracy'] = correct_count / total_valid if total_valid > 0 else 0.0
+        metrics["accuracy"] = correct_count / total_valid if total_valid > 0 else 0.0
 
         # For binary classification metrics, treat correct(1) as positive class
         # Precision: TP / (TP + FP) - but in meta context, all "1" labels are true positives
@@ -377,20 +368,22 @@ class MetaLabeler(LabelingStrategy):
         # - All "correct" labels are "tradeable" predictions
         # Since we're labeling correctness, precision and recall equal accuracy
 
-        metrics['precision'] = metrics['accuracy']  # Precision = accuracy for ground truth
-        metrics['recall'] = metrics['accuracy']  # Recall = accuracy for ground truth
+        metrics["precision"] = metrics["accuracy"]  # Precision = accuracy for ground truth
+        metrics["recall"] = metrics["accuracy"]  # Recall = accuracy for ground truth
 
         # F1 score
-        if metrics['precision'] + metrics['recall'] > 0:
-            metrics['f1_score'] = (
-                2 * metrics['precision'] * metrics['recall']
-                / (metrics['precision'] + metrics['recall'])
+        if metrics["precision"] + metrics["recall"] > 0:
+            metrics["f1_score"] = (
+                2
+                * metrics["precision"]
+                * metrics["recall"]
+                / (metrics["precision"] + metrics["recall"])
             )
         else:
-            metrics['f1_score'] = 0.0
+            metrics["f1_score"] = 0.0
 
         # Correctness margin analysis
-        correctness_margin = result.metadata.get('correctness_margin', np.array([]))
+        correctness_margin = result.metadata.get("correctness_margin", np.array([]))
         if len(correctness_margin) > 0:
             valid_margins = correctness_margin[valid_mask]
 
@@ -398,39 +391,34 @@ class MetaLabeler(LabelingStrategy):
             correct_mask = valid_labels == 1
             if correct_mask.sum() > 0:
                 correct_margins = valid_margins[correct_mask]
-                metrics['avg_correct_margin'] = float(np.mean(correct_margins))
-                metrics['std_correct_margin'] = float(np.std(correct_margins))
+                metrics["avg_correct_margin"] = float(np.mean(correct_margins))
+                metrics["std_correct_margin"] = float(np.std(correct_margins))
 
             # Average margin when incorrect (this is the loss magnitude)
             incorrect_mask = valid_labels == 0
             if incorrect_mask.sum() > 0:
                 incorrect_margins = valid_margins[incorrect_mask]
                 # Note: These will be negative since direction was wrong
-                metrics['avg_incorrect_margin'] = float(np.mean(incorrect_margins))
+                metrics["avg_incorrect_margin"] = float(np.mean(incorrect_margins))
 
         # Bet size analysis
-        bet_sizes = result.metadata.get('bet_size', np.array([]))
+        bet_sizes = result.metadata.get("bet_size", np.array([]))
         if len(bet_sizes) > 0:
             valid_bet_sizes = bet_sizes[valid_mask]
             if len(valid_bet_sizes) > 0:
-                metrics['avg_bet_size'] = float(np.mean(valid_bet_sizes))
-                metrics['max_bet_size'] = float(np.max(valid_bet_sizes))
+                metrics["avg_bet_size"] = float(np.mean(valid_bet_sizes))
+                metrics["max_bet_size"] = float(np.max(valid_bet_sizes))
 
         # Class balance
         if incorrect_count > 0:
-            metrics['correct_incorrect_ratio'] = correct_count / incorrect_count
+            metrics["correct_incorrect_ratio"] = correct_count / incorrect_count
         else:
-            metrics['correct_incorrect_ratio'] = (
-                float('inf') if correct_count > 0 else 0.0
-            )
+            metrics["correct_incorrect_ratio"] = float("inf") if correct_count > 0 else 0.0
 
         return metrics
 
     def add_labels_to_dataframe(
-        self,
-        df: pd.DataFrame,
-        result: LabelingResult,
-        prefix: str = 'meta_label'
+        self, df: pd.DataFrame, result: LabelingResult, prefix: str = "meta_label"
     ) -> pd.DataFrame:
         """
         Add meta-labeling results to the DataFrame as new columns.

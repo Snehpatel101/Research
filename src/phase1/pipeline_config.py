@@ -2,6 +2,7 @@
 Pipeline Configuration Management System
 Handles all configuration for Phase 1 pipeline with validation and persistence.
 """
+
 import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -47,19 +48,21 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     # Symbols to process. Each symbol is processed in complete isolation.
     symbols: list[str] = field(default_factory=list)
     start_date: str | None = None  # YYYY-MM-DD format
-    end_date: str | None = None    # YYYY-MM-DD format
+    end_date: str | None = None  # YYYY-MM-DD format
 
     # Timeframe configuration
-    target_timeframe: str = '5min'
+    target_timeframe: str = "5min"
     bar_resolution: str = field(default=None)  # Legacy alias
 
     # Feature engineering
-    feature_set: str = 'full'  # 'full', 'minimal', 'custom'
+    feature_set: str = "full"  # 'full', 'minimal', 'custom'
     sma_periods: list[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
     ema_periods: list[int] = field(default_factory=lambda: [9, 21, 50])
     atr_periods: list[int] = field(default_factory=lambda: [7, 14, 21])
     rsi_period: int = 14
-    macd_params: dict[str, int] = field(default_factory=lambda: {'fast': 12, 'slow': 26, 'signal': 9})
+    macd_params: dict[str, int] = field(
+        default_factory=lambda: {"fast": 12, "slow": 26, "signal": 9}
+    )
     bb_period: int = 20
     bb_std: float = 2.0
 
@@ -99,7 +102,7 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     # Optional configurations
     feature_toggles: dict[str, bool] | None = None
     barrier_overrides: dict[str, float] | None = None
-    scaler_type: str = 'robust'
+    scaler_type: str = "robust"
     model_config: dict[str, Any] | None = None
 
     # Paths (auto-generated from run_id)
@@ -137,12 +140,14 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
             raise ValueError(f"Feature set validation failed: {feature_set_issues}")
 
         # Validate MTF configuration
-        valid_mtf_modes = ['bars', 'indicators', 'both']
+        valid_mtf_modes = ["bars", "indicators", "both"]
         if self.mtf_mode not in valid_mtf_modes:
             raise ValueError(f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'")
         for tf in self.mtf_timeframes:
             if tf not in MTF_TIMEFRAMES:
-                raise ValueError(f"Unsupported MTF timeframe: '{tf}'. Supported: {list(MTF_TIMEFRAMES.keys())}")
+                raise ValueError(
+                    f"Unsupported MTF timeframe: '{tf}'. Supported: {list(MTF_TIMEFRAMES.keys())}"
+                )
 
         # Handle horizon configuration
         if self.horizon_config is not None:
@@ -185,7 +190,9 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
         # Validate symbols
         if not self.symbols:
-            raise ValueError("At least one symbol must be specified. Use --symbols MES or symbols=['MES'].")
+            raise ValueError(
+                "At least one symbol must be specified. Use --symbols MES or symbols=['MES']."
+            )
 
         # Enforce single-symbol runs by default
         if len(self.symbols) > 1 and not self.allow_batch_symbols:
@@ -206,12 +213,12 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""
         config_dict = asdict(self)
-        config_dict['project_root'] = str(self.project_root)
+        config_dict["project_root"] = str(self.project_root)
         return config_dict
 
 
 # Re-export create_default_config for backward compatibility
-__all__ = ['PipelineConfig', 'create_default_config', 'HorizonConfig']
+__all__ = ["PipelineConfig", "create_default_config", "HorizonConfig"]
 
 
 if __name__ == "__main__":
@@ -221,10 +228,10 @@ if __name__ == "__main__":
 
     # Create config for single symbol (default behavior)
     config = create_default_config(
-        symbols=['MES'],
-        start_date='2020-01-01',
-        end_date='2024-12-31',
-        description='Single symbol run'
+        symbols=["MES"],
+        start_date="2020-01-01",
+        end_date="2024-12-31",
+        description="Single symbol run",
     )
 
     print(config.summary())

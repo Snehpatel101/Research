@@ -13,6 +13,7 @@ The Solution:
     For each fold, fit a fresh scaler on ONLY the fold's training data,
     then transform both train and validation using those statistics.
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FoldScalingResult:
     """Result from fold-aware scaling."""
+
     X_train_scaled: np.ndarray
     X_val_scaled: np.ndarray
     scaler: RobustScaler | StandardScaler
@@ -70,7 +72,9 @@ class FoldAwareScaler:
             clip_std: Number of standard deviations for clipping
         """
         if method not in ("robust", "standard", "none"):
-            raise ValueError(f"Unknown scaling method: {method}. Use 'robust', 'standard', or 'none'")
+            raise ValueError(
+                f"Unknown scaling method: {method}. Use 'robust', 'standard', or 'none'"
+            )
 
         self.method = method
         self.clip_outliers = clip_outliers
@@ -119,12 +123,8 @@ class FoldAwareScaler:
 
         # Optional outlier clipping
         if self.clip_outliers:
-            X_train_scaled = np.clip(
-                X_train_scaled, -self.clip_std, self.clip_std
-            )
-            X_val_scaled = np.clip(
-                X_val_scaled, -self.clip_std, self.clip_std
-            )
+            X_train_scaled = np.clip(X_train_scaled, -self.clip_std, self.clip_std)
+            X_val_scaled = np.clip(X_val_scaled, -self.clip_std, self.clip_std)
 
         self._current_scaler = scaler
 

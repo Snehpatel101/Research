@@ -337,24 +337,37 @@ def evaluate_ensemble(final_models, meta_learner, X_test, y_test):
 
 ## CLI Usage
 
+⚠️ **Status:** scripts/train_ensemble.py not yet implemented
+
+**Planned usage:**
 ```bash
 # 3-base heterogeneous ensemble
 python scripts/train_ensemble.py \
   --base-models catboost,tcn,patchtst \
-  --meta-learner logistic \
+  --meta-learner ridge_meta \
   --horizon 20
 
-# 4-base ensemble with Ridge meta-learner
+# 4-base ensemble with MLP meta-learner
 python scripts/train_ensemble.py \
   --base-models lightgbm,tcn,tft,ridge \
-  --meta-learner ridge \
+  --meta-learner mlp_meta \
   --horizon 20
 
 # Fast 2-base ensemble
 python scripts/train_ensemble.py \
   --base-models xgboost,lstm \
-  --meta-learner logistic \
+  --meta-learner ridge_meta \
   --horizon 20
+```
+
+**Current workaround:**
+```bash
+# Train base models individually
+python scripts/train_model.py --model catboost --horizon 20
+python scripts/train_model.py --model tcn --horizon 20 --seq-len 60
+
+# Then manually generate OOF and train meta-learner
+# (No automated script available yet)
 ```
 
 ---
@@ -387,11 +400,18 @@ python scripts/train_ensemble.py \
 
 ## Files Reference
 
-- **Stacker implementation:** `src/ensemble/heterogeneous_stacker.py`
-- **OOF generation:** `src/cross_validation/oof_generator.py`
-- **PurgedKFold:** `src/cross_validation/purged_kfold.py`
-- **Training script:** `scripts/train_ensemble.py`
-- **Guide:** `docs/guides/META_LEARNER_STACKING.md`
+**Implemented:**
+- ✅ **Meta-learners:** `src/models/ensemble/meta_learners.py` (4 models)
+- ✅ **OOF generation:** `src/cross_validation/oof_generator.py` (single-family)
+- ✅ **PurgedKFold:** `src/cross_validation/purged_kfold.py`
+
+**Not Yet Implemented:**
+- ❌ **Heterogeneous OOF:** `src/cross_validation/oof_heterogeneous.py` (planned)
+- ❌ **Training script:** `scripts/train_ensemble.py` (planned)
+- ❌ **Tests:** `tests/models/test_meta_learner_stacking.py` (planned)
+
+**Documentation:**
+- **Implementation guide:** `docs/implementation/PHASE_7_META_LEARNER_STACKING.md`
 
 ---
 

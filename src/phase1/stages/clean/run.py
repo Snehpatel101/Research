@@ -6,6 +6,7 @@ Cleans and resamples validated 1-minute OHLCV data to target timeframe bars.
 Uses the DataCleaner module for comprehensive gap detection, outlier removal,
 and quality reporting.
 """
+
 import logging
 import traceback
 from datetime import datetime
@@ -28,10 +29,7 @@ except ImportError:
     from pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 
-def run_data_cleaning(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> 'StageResult':
+def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") -> "StageResult":
     """
     Stage 2: Data Cleaning.
 
@@ -60,8 +58,8 @@ def run_data_cleaning(
         validated_data_dir = config.raw_data_dir / "validated"
 
         # Get cleaning configuration with defaults
-        target_timeframe = getattr(config, 'target_timeframe', '5min')
-        max_gap_minutes = getattr(config, 'max_gap_minutes', 30)
+        target_timeframe = getattr(config, "target_timeframe", "5min")
+        max_gap_minutes = getattr(config, "max_gap_minutes", 30)
 
         logger.info(f"Target timeframe: {target_timeframe}")
         logger.info(f"Max gap fill: {max_gap_minutes} minutes")
@@ -74,9 +72,7 @@ def run_data_cleaning(
             input_path = validated_data_dir / f"{symbol}_1m_validated.parquet"
             if not input_path.exists():
                 # Fall back to raw data (for backward compatibility)
-                logger.warning(
-                    f"Validated data not found for {symbol}, using raw data"
-                )
+                logger.warning(f"Validated data not found for {symbol}, using raw data")
                 input_path = config.raw_data_dir / f"{symbol}_1m.parquet"
                 if not input_path.exists():
                     input_path = config.raw_data_dir / f"{symbol}_1m.csv"
@@ -96,7 +92,7 @@ def run_data_cleaning(
                 symbol=symbol,
                 target_timeframe=target_timeframe,
                 include_timeframe_metadata=True,
-                max_gap_minutes=max_gap_minutes
+                max_gap_minutes=max_gap_minutes,
             )
 
             if output_path.exists():
@@ -106,11 +102,11 @@ def run_data_cleaning(
                 file_size = output_path.stat().st_size
 
                 cleaning_metadata[symbol] = {
-                    'input_file': str(input_path),
-                    'output_file': str(output_path),
-                    'file_size_bytes': file_size,
-                    'target_timeframe': target_timeframe,
-                    'max_gap_minutes': max_gap_minutes
+                    "input_file": str(input_path),
+                    "output_file": str(output_path),
+                    "file_size_bytes": file_size,
+                    "target_timeframe": target_timeframe,
+                    "max_gap_minutes": max_gap_minutes,
                 }
 
                 manifest.add_artifact(
@@ -118,24 +114,20 @@ def run_data_cleaning(
                     file_path=output_path,
                     stage="data_cleaning",
                     metadata={
-                        'symbol': symbol,
-                        'source': str(input_path),
-                        'timeframe': target_timeframe
-                    }
+                        "symbol": symbol,
+                        "source": str(input_path),
+                        "timeframe": target_timeframe,
+                    },
                 )
 
         return create_stage_result(
             stage_name="data_cleaning",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={'cleaning_results': cleaning_metadata}
+            metadata={"cleaning_results": cleaning_metadata},
         )
 
     except Exception as e:
         logger.error(f"Data cleaning failed: {e}")
         logger.error(traceback.format_exc())
-        return create_failed_result(
-            stage_name="data_cleaning",
-            start_time=start_time,
-            error=str(e)
-        )
+        return create_failed_result(stage_name="data_cleaning", start_time=start_time, error=str(e))

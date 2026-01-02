@@ -40,7 +40,7 @@ def triple_barrier_numba(
     atr: np.ndarray,
     k_up: float,
     k_down: float,
-    max_bars: int
+    max_bars: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Numba-optimized triple barrier labeling.
@@ -185,7 +185,7 @@ def triple_barrier_numba_with_costs(
     k_up: float,
     k_down: float,
     max_bars: int,
-    cost_in_atr: float
+    cost_in_atr: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Numba-optimized triple barrier labeling with transaction cost adjustment.
@@ -366,10 +366,10 @@ class TripleBarrierLabeler(LabelingStrategy):
         k_up: float | None = None,
         k_down: float | None = None,
         max_bars: int | None = None,
-        atr_column: str = 'atr_14',
+        atr_column: str = "atr_14",
         apply_transaction_costs: bool = True,
-        symbol: str = 'MES',
-        volatility_regime: str = 'low_vol'
+        symbol: str = "MES",
+        volatility_regime: str = "low_vol",
     ):
         self._k_up = k_up
         self._k_down = k_down
@@ -387,7 +387,7 @@ class TripleBarrierLabeler(LabelingStrategy):
     @property
     def required_columns(self) -> list[str]:
         """Return list of required DataFrame columns."""
-        return ['close', 'high', 'low', 'open', self._atr_column]
+        return ["close", "high", "low", "open", self._atr_column]
 
     def _get_default_params(self, horizon: int) -> dict[str, Any]:
         """Get default parameters for a given horizon."""
@@ -396,17 +396,10 @@ class TripleBarrierLabeler(LabelingStrategy):
 
         if horizon in BARRIER_PARAMS_DEFAULT:
             return BARRIER_PARAMS_DEFAULT[horizon]
-        return {
-            'k_up': 1.0,
-            'k_down': 1.0,
-            'max_bars': max(horizon * 3, 10)
-        }
+        return {"k_up": 1.0, "k_down": 1.0, "max_bars": max(horizon * 3, 10)}
 
     def _calculate_cost_in_atr(
-        self,
-        atr_values: np.ndarray,
-        symbol: str,
-        volatility_regime: str
+        self, atr_values: np.ndarray, symbol: str, volatility_regime: str
     ) -> float:
         """
         Calculate transaction cost expressed in ATR units.
@@ -462,7 +455,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         apply_transaction_costs: bool | None = None,
         symbol: str | None = None,
         volatility_regime: str | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> LabelingResult:
         """
         Compute triple-barrier labels for the given horizon.
@@ -513,12 +506,16 @@ class TripleBarrierLabeler(LabelingStrategy):
 
         # Resolve parameters
         defaults = self._get_default_params(horizon)
-        k_up = k_up or self._k_up or defaults['k_up']
-        k_down = k_down or self._k_down or defaults['k_down']
-        max_bars = max_bars or self._max_bars or defaults['max_bars']
+        k_up = k_up or self._k_up or defaults["k_up"]
+        k_down = k_down or self._k_down or defaults["k_down"]
+        max_bars = max_bars or self._max_bars or defaults["max_bars"]
 
         # Resolve transaction cost settings
-        apply_costs = apply_transaction_costs if apply_transaction_costs is not None else self._apply_transaction_costs
+        apply_costs = (
+            apply_transaction_costs
+            if apply_transaction_costs is not None
+            else self._apply_transaction_costs
+        )
         symbol = symbol or self._symbol
         volatility_regime = volatility_regime or self._volatility_regime
 
@@ -534,10 +531,10 @@ class TripleBarrierLabeler(LabelingStrategy):
         logger.info(f"  k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}")
 
         # Extract arrays
-        close = df['close'].values
-        high = df['high'].values
-        low = df['low'].values
-        open_prices = df['open'].values
+        close = df["close"].values
+        high = df["high"].values
+        low = df["low"].values
+        open_prices = df["open"].values
         atr = df[self._atr_column].values
 
         # Calculate transaction cost adjustment
@@ -564,25 +561,16 @@ class TripleBarrierLabeler(LabelingStrategy):
             )
 
         # Build result
-        metadata = {
-            'bars_to_hit': bars_to_hit,
-            'mae': mae,
-            'mfe': mfe,
-            'touch_type': touch_type
-        }
+        metadata = {"bars_to_hit": bars_to_hit, "mae": mae, "mfe": mfe, "touch_type": touch_type}
 
         # Add cost info to metadata if applied
         if apply_costs:
-            metadata['transaction_cost_applied'] = True
-            metadata['cost_in_atr'] = cost_in_atr
-            metadata['symbol'] = symbol
-            metadata['volatility_regime'] = volatility_regime
+            metadata["transaction_cost_applied"] = True
+            metadata["cost_in_atr"] = cost_in_atr
+            metadata["symbol"] = symbol
+            metadata["volatility_regime"] = volatility_regime
 
-        result = LabelingResult(
-            labels=labels,
-            horizon=horizon,
-            metadata=metadata
-        )
+        result = LabelingResult(labels=labels, horizon=horizon, metadata=metadata)
 
         # Compute quality metrics
         result.quality_metrics = self.get_quality_metrics(result)
@@ -613,7 +601,7 @@ class TripleBarrierLabeler(LabelingStrategy):
             logger.info(f"  {label_name:20s}: {count:6d} ({pct:5.1f}%)")
 
         # Calculate average bars to hit
-        bars_to_hit = result.metadata.get('bars_to_hit', np.array([]))
+        bars_to_hit = result.metadata.get("bars_to_hit", np.array([]))
         if len(bars_to_hit) > 0:
             valid_bars = bars_to_hit[valid_mask & (bars_to_hit > 0)]
             if len(valid_bars) > 0:
@@ -637,27 +625,27 @@ class TripleBarrierLabeler(LabelingStrategy):
         labels = result.labels
         valid_mask = labels != -99
 
-        mae = result.metadata.get('mae', np.array([]))
-        mfe = result.metadata.get('mfe', np.array([]))
-        bars_to_hit = result.metadata.get('bars_to_hit', np.array([]))
+        mae = result.metadata.get("mae", np.array([]))
+        mfe = result.metadata.get("mfe", np.array([]))
+        bars_to_hit = result.metadata.get("bars_to_hit", np.array([]))
 
         if len(mae) > 0 and len(mfe) > 0:
             valid_mae = mae[valid_mask]
             valid_mfe = mfe[valid_mask]
 
             if len(valid_mae) > 0:
-                metrics['avg_mae'] = float(np.mean(valid_mae))
-                metrics['avg_mfe'] = float(np.mean(valid_mfe))
+                metrics["avg_mae"] = float(np.mean(valid_mae))
+                metrics["avg_mfe"] = float(np.mean(valid_mfe))
 
                 # Risk-reward ratio (MFE/|MAE|)
-                avg_mae_abs = abs(metrics['avg_mae']) if metrics['avg_mae'] != 0 else 1e-6
-                metrics['mfe_mae_ratio'] = abs(metrics['avg_mfe']) / avg_mae_abs
+                avg_mae_abs = abs(metrics["avg_mae"]) if metrics["avg_mae"] != 0 else 1e-6
+                metrics["mfe_mae_ratio"] = abs(metrics["avg_mfe"]) / avg_mae_abs
 
         if len(bars_to_hit) > 0:
             valid_bars = bars_to_hit[valid_mask]
             if len(valid_bars) > 0 and valid_bars.sum() > 0:
                 non_zero_bars = valid_bars[valid_bars > 0]
                 if len(non_zero_bars) > 0:
-                    metrics['avg_bars_to_hit'] = float(np.mean(non_zero_bars))
+                    metrics["avg_bars_to_hit"] = float(np.mean(non_zero_bars))
 
         return metrics

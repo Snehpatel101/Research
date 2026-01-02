@@ -3,6 +3,7 @@ Stage 5: Genetic Algorithm Optimization.
 
 Optimizes triple-barrier labeling parameters using genetic algorithms.
 """
+
 import logging
 from typing import TYPE_CHECKING
 
@@ -15,10 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_ga_optimization(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_ga_optimization(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 5: Genetic Algorithm Optimization.
 
@@ -33,6 +31,4 @@ def run_ga_optimization(
     """
     from src.phase1.stages.ga_optimize.run import run_ga_optimization_stage
 
-    return run_ga_optimization_stage(
-        config, manifest, create_stage_result, create_failed_result
-    )
+    return run_ga_optimization_stage(config, manifest, create_stage_result, create_failed_result)

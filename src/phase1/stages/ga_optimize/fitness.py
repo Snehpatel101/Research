@@ -6,7 +6,6 @@ Contains:
     - evaluate_individual: Evaluate a GA individual (parameter set)
 """
 
-
 import numpy as np
 
 from src.phase1.config import LABEL_BALANCE_CONSTRAINTS, TICK_VALUES, get_total_trade_cost
@@ -80,11 +79,11 @@ def calculate_fitness(
     # 0. HARD CONSTRAINTS - ABSOLUTELY NON-NEGOTIABLE
     # These return values that CANNOT be recovered from by other components
     # ==========================================================================
-    min_long_pct = LABEL_BALANCE_CONSTRAINTS['min_long_pct']
-    min_short_pct = LABEL_BALANCE_CONSTRAINTS['min_short_pct']
-    min_neutral_pct = LABEL_BALANCE_CONSTRAINTS['min_neutral_pct']  # 10%
-    max_neutral_pct = LABEL_BALANCE_CONSTRAINTS['max_neutral_pct']  # 40%
-    min_any_class_pct = LABEL_BALANCE_CONSTRAINTS['min_any_class_pct']  # 10%
+    min_long_pct = LABEL_BALANCE_CONSTRAINTS["min_long_pct"]
+    min_short_pct = LABEL_BALANCE_CONSTRAINTS["min_short_pct"]
+    min_neutral_pct = LABEL_BALANCE_CONSTRAINTS["min_neutral_pct"]  # 10%
+    max_neutral_pct = LABEL_BALANCE_CONSTRAINTS["max_neutral_pct"]  # 40%
+    min_any_class_pct = LABEL_BALANCE_CONSTRAINTS["min_any_class_pct"]  # 10%
 
     # HARD CONSTRAINT 1: Minimum neutral percentage (CRITICAL)
     # This is THE most important constraint to prevent neutral destruction
@@ -109,8 +108,8 @@ def calculate_fitness(
     signal_count = n_long + n_short
     if signal_count > 0:
         short_signal_ratio = n_short / signal_count
-        min_short_ratio = LABEL_BALANCE_CONSTRAINTS['min_short_signal_ratio']
-        max_short_ratio = LABEL_BALANCE_CONSTRAINTS['max_short_signal_ratio']
+        min_short_ratio = LABEL_BALANCE_CONSTRAINTS["min_short_signal_ratio"]
+        max_short_ratio = LABEL_BALANCE_CONSTRAINTS["max_short_signal_ratio"]
         if short_signal_ratio < min_short_ratio or short_signal_ratio > max_short_ratio:
             distance = abs(short_signal_ratio - 0.5)
             return -10000.0 + ((1.0 - distance) * 10.0)
@@ -119,8 +118,8 @@ def calculate_fitness(
     # 1. NEUTRAL SCORE (HIGH WEIGHT - target 20-30% neutral)
     # This is the PRIMARY driver for preserving neutral labels
     # ==========================================================================
-    target_neutral_low = LABEL_BALANCE_CONSTRAINTS['target_neutral_low']  # 0.20
-    target_neutral_high = LABEL_BALANCE_CONSTRAINTS['target_neutral_high']  # 0.30
+    target_neutral_low = LABEL_BALANCE_CONSTRAINTS["target_neutral_low"]  # 0.20
+    target_neutral_high = LABEL_BALANCE_CONSTRAINTS["target_neutral_high"]  # 0.30
 
     if target_neutral_low <= neutral_pct <= target_neutral_high:
         # Perfect range: maximum reward
@@ -269,12 +268,12 @@ def calculate_fitness(
     # Total possible range: approximately -10 to +16
     # The neutral_score dominates, ensuring neutral preservation is prioritized
     fitness = (
-        neutral_score +
-        balance_score +
-        speed_score +
-        pf_score +
-        transaction_penalty +
-        class_balance_penalty
+        neutral_score
+        + balance_score
+        + speed_score
+        + pf_score
+        + transaction_penalty
+        + class_balance_penalty
     )
 
     return fitness

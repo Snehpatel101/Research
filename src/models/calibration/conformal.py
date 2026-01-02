@@ -25,6 +25,7 @@ Note:
     Split conformal requires a held-out calibration set separate from
     training and test. Use validation fold or dedicated calibration split.
 """
+
 from __future__ import annotations
 
 import logging
@@ -42,6 +43,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class ConformalConfig:
     """Configuration for conformal prediction.
@@ -52,6 +54,7 @@ class ConformalConfig:
         allow_empty_sets: Whether to allow empty prediction sets
         epsilon: Numerical stability constant
     """
+
     confidence_level: float = 0.90
     method: Literal["lac", "aps", "naive"] = "lac"
     allow_empty_sets: bool = False
@@ -59,9 +62,7 @@ class ConformalConfig:
 
     def __post_init__(self) -> None:
         if not 0.5 < self.confidence_level < 1.0:
-            raise ValueError(
-                f"confidence_level must be in (0.5, 1.0), got {self.confidence_level}"
-            )
+            raise ValueError(f"confidence_level must be in (0.5, 1.0), got {self.confidence_level}")
         if self.method not in ("lac", "aps", "naive"):
             raise ValueError(f"Unknown method: {self.method}")
 
@@ -69,6 +70,7 @@ class ConformalConfig:
 # =============================================================================
 # METRICS
 # =============================================================================
+
 
 @dataclass
 class ConformalMetrics:
@@ -83,6 +85,7 @@ class ConformalMetrics:
         method_used: Conformal method used
         n_samples: Number of samples evaluated
     """
+
     empirical_coverage: float
     average_set_size: float
     singleton_rate: float
@@ -109,6 +112,7 @@ class ConformalMetrics:
 # =============================================================================
 # CONFORMAL PREDICTOR
 # =============================================================================
+
 
 class ConformalPredictor:
     """
@@ -261,9 +265,7 @@ class ConformalPredictor:
         n_samples, n_classes = probabilities.shape
 
         if n_classes != self._n_classes:
-            raise ValueError(
-                f"Expected {self._n_classes} classes, got {n_classes}"
-            )
+            raise ValueError(f"Expected {self._n_classes} classes, got {n_classes}")
 
         # Compute scores for all classes
         if self.config.method == "lac":
@@ -413,9 +415,7 @@ class ConformalPredictor:
         n_samples = len(y_true)
 
         # Coverage: true class in prediction set
-        coverage = np.mean([
-            prediction_sets[i, y_true[i]] for i in range(n_samples)
-        ])
+        coverage = np.mean([prediction_sets[i, y_true[i]] for i in range(n_samples)])
 
         # Set size statistics
         avg_size = set_sizes.mean()
@@ -427,9 +427,7 @@ class ConformalPredictor:
         for c in range(self._n_classes):
             mask = y_true == c
             if mask.sum() > 0:
-                class_coverage = np.mean([
-                    prediction_sets[i, c] for i in np.where(mask)[0]
-                ])
+                class_coverage = np.mean([prediction_sets[i, c] for i in np.where(mask)[0]])
                 conditional_coverage[c] = float(class_coverage)
 
         return ConformalMetrics(
@@ -496,6 +494,7 @@ class ConformalPredictor:
 # COVERAGE VALIDATION
 # =============================================================================
 
+
 def validate_coverage(
     y_true: np.ndarray,
     prediction_sets: np.ndarray,
@@ -518,9 +517,7 @@ def validate_coverage(
     n_samples = len(y_true)
 
     # Compute empirical coverage
-    covered = np.array([
-        prediction_sets[i, y_true[i]] for i in range(n_samples)
-    ])
+    covered = np.array([prediction_sets[i, y_true[i]] for i in range(n_samples)])
     empirical = covered.mean()
 
     # Standard error of coverage

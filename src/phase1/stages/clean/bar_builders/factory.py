@@ -14,6 +14,7 @@ Usage:
     config = BarConfig(bar_type='dollar', dollar_threshold=10_000_000)
     bars = build_bars(df, config=config)
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class BarConfig:
     """
@@ -45,6 +47,7 @@ class BarConfig:
         use_vwap: For dollar bars, use VWAP instead of close price
         include_metadata: Add bar_type column to output
     """
+
     bar_type: str = "time"
     target_timeframe: str = "5min"
     volume_threshold: float = 100_000
@@ -57,10 +60,7 @@ class BarConfig:
     def __post_init__(self) -> None:
         valid_types = BarBuilderRegistry.list_all() or ["time", "volume", "dollar"]
         if self.bar_type.lower() not in [t.lower() for t in valid_types]:
-            raise ValueError(
-                f"Unknown bar_type: {self.bar_type}. "
-                f"Available: {valid_types}"
-            )
+            raise ValueError(f"Unknown bar_type: {self.bar_type}. " f"Available: {valid_types}")
 
     def get_builder_kwargs(self) -> dict[str, Any]:
         """Get keyword arguments for the builder."""
@@ -86,6 +86,7 @@ class BarConfig:
 # =============================================================================
 # FACTORY FUNCTIONS
 # =============================================================================
+
 
 def build_bars(
     df: pd.DataFrame,
@@ -143,9 +144,7 @@ def build_bars(
     # Build bars
     result = builder.build(df, symbol=symbol, include_metadata=include_metadata)
 
-    logger.info(
-        f"Built {len(result)} {bar_type} bars from {len(df)} input bars"
-    )
+    logger.info(f"Built {len(result)} {bar_type} bars from {len(df)} input bars")
 
     return result
 
@@ -191,8 +190,14 @@ def estimate_bar_count(
     if bar_type == "time":
         # Estimate based on timeframe ratio
         tf_minutes = {
-            "1min": 1, "5min": 5, "10min": 10, "15min": 15,
-            "20min": 20, "30min": 30, "45min": 45, "60min": 60,
+            "1min": 1,
+            "5min": 5,
+            "10min": 10,
+            "15min": 15,
+            "20min": 20,
+            "30min": 30,
+            "45min": 45,
+            "60min": 60,
         }
         if target_timeframe:
             ratio = tf_minutes.get(target_timeframe, 5)

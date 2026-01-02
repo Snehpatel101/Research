@@ -1,4 +1,5 @@
 """Persistence functions for PipelineConfig."""
+
 import json
 import logging
 from dataclasses import asdict
@@ -8,7 +9,7 @@ from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 def save_config_to_file(config: Any, path: Path) -> Path:
@@ -23,18 +24,18 @@ def save_config_to_file(config: Any, path: Path) -> Path:
         Path where config was saved
     """
     config_dict = asdict(config)
-    config_dict['project_root'] = str(config.project_root)
+    config_dict["project_root"] = str(config.project_root)
 
     # Add metadata
-    config_dict['_metadata'] = {
-        'created_at': datetime.now().isoformat(),
-        'config_version': '1.0',
+    config_dict["_metadata"] = {
+        "created_at": datetime.now().isoformat(),
+        "config_version": "1.0",
     }
 
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         json.dump(config_dict, f, indent=2)
 
     logger.info(f"Configuration saved to {path}")
@@ -61,19 +62,17 @@ def load_config_from_file(cls: type[T], path: Path) -> T:
         config_dict = json.load(f)
 
     # Remove metadata if present
-    config_dict.pop('_metadata', None)
+    config_dict.pop("_metadata", None)
 
     # Convert project_root back to Path
-    if 'project_root' in config_dict:
-        config_dict['project_root'] = Path(config_dict['project_root'])
+    if "project_root" in config_dict:
+        config_dict["project_root"] = Path(config_dict["project_root"])
 
     logger.info(f"Configuration loaded from {path}")
     return cls(**config_dict)
 
 
-def load_config_from_run_id(
-    cls: type[T], run_id: str, project_root: Path | None = None
-) -> T:
+def load_config_from_run_id(cls: type[T], run_id: str, project_root: Path | None = None) -> T:
     """
     Load configuration from a run ID.
 
@@ -114,13 +113,13 @@ class PipelinePersistenceMixin:
         return save_config_to_file(self, path)
 
     @classmethod
-    def load_config(cls, path: Path) -> 'PipelinePersistenceMixin':
+    def load_config(cls, path: Path) -> "PipelinePersistenceMixin":
         """Load configuration from JSON file."""
         return load_config_from_file(cls, path)
 
     @classmethod
     def load_from_run_id(
         cls, run_id: str, project_root: Path | None = None
-    ) -> 'PipelinePersistenceMixin':
+    ) -> "PipelinePersistenceMixin":
         """Load configuration from a run ID."""
         return load_config_from_run_id(cls, run_id, project_root)

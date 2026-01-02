@@ -14,9 +14,9 @@ from .core import (
 )
 
 __all__ = [
-    'apply_optimized_labels',
-    'compute_quality_scores',
-    'assign_sample_weights',
-    'add_forward_return_columns',
-    'generate_labeling_report',
+    "apply_optimized_labels",
+    "compute_quality_scores",
+    "assign_sample_weights",
+    "add_forward_return_columns",
+    "generate_labeling_report",
 ]

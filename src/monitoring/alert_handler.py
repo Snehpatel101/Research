@@ -12,6 +12,7 @@ Example:
     >>> handler.add_callback(lambda r: print(f"DRIFT: {r.feature_name}"))
     >>> handler.handle(drift_result)
 """
+
 from __future__ import annotations
 
 import logging
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AlertConfig:
     """Configuration for alert handling."""
+
     min_severity: DriftSeverity = DriftSeverity.LOW
     rate_limit_seconds: float = 60.0  # Min time between alerts per feature
     aggregate_window_seconds: float = 300.0  # Window for aggregation
@@ -38,6 +40,7 @@ class AlertConfig:
 @dataclass
 class AlertRecord:
     """Record of a triggered alert."""
+
     result: DriftResult
     timestamp: float
     acknowledged: bool = False
@@ -188,9 +191,7 @@ class AlertHandler:
             DriftSeverity.HIGH,
             DriftSeverity.CRITICAL,
         ]
-        return severity_order.index(severity) >= severity_order.index(
-            self.config.min_severity
-        )
+        return severity_order.index(severity) >= severity_order.index(self.config.min_severity)
 
     def _check_rate_limit(self, result: DriftResult) -> bool:
         """Check if alert is rate limited."""
@@ -214,7 +215,7 @@ class AlertHandler:
     def _trim_history(self) -> None:
         """Trim history to max size."""
         if len(self._history) > self._max_history:
-            self._history = self._history[-self._max_history:]
+            self._history = self._history[-self._max_history :]
 
     def get_history(
         self,
@@ -387,9 +388,7 @@ class DriftAlertAggregator:
             if feat not in features:
                 features[feat] = {"count": 0, "max_metric": 0}
             features[feat]["count"] += 1
-            features[feat]["max_metric"] = max(
-                features[feat]["max_metric"], alert.metric_value
-            )
+            features[feat]["max_metric"] = max(features[feat]["max_metric"], alert.metric_value)
 
         return {
             "n_alerts": len(self._alerts),

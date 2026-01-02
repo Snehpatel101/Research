@@ -32,6 +32,7 @@ Usage:
         # weights: (batch_size,)
         pass
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,9 +51,11 @@ logger.addHandler(logging.NullHandler())
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class SequenceConfig:
     """Configuration for sequence generation."""
+
     seq_len: int
     stride: int = 1
     feature_columns: list[str] = None
@@ -73,11 +76,9 @@ class SequenceConfig:
 # SEQUENCE INDEX BUILDER
 # =============================================================================
 
+
 def build_sequence_indices(
-    n_samples: int,
-    seq_len: int,
-    stride: int,
-    symbol_boundaries: list[int] | None = None
+    n_samples: int, seq_len: int, stride: int, symbol_boundaries: list[int] | None = None
 ) -> np.ndarray:
     """
     Build valid sequence start indices.
@@ -143,10 +144,7 @@ def build_sequence_indices(
     return np.concatenate(valid_indices)
 
 
-def find_symbol_boundaries(
-    df: pd.DataFrame,
-    symbol_column: str
-) -> list[int]:
+def find_symbol_boundaries(df: pd.DataFrame, symbol_column: str) -> list[int]:
     """
     Find indices where symbol changes.
 
@@ -178,6 +176,7 @@ def find_symbol_boundaries(
 # =============================================================================
 # SEQUENCE DATASET
 # =============================================================================
+
 
 class SequenceDataset(Dataset):
     """
@@ -283,10 +282,7 @@ class SequenceDataset(Dataset):
 
         # Build valid sequence indices
         self._indices = build_sequence_indices(
-            n_samples=len(df),
-            seq_len=seq_len,
-            stride=stride,
-            symbol_boundaries=boundaries
+            n_samples=len(df), seq_len=seq_len, stride=stride, symbol_boundaries=boundaries
         )
 
         if len(self._indices) == 0:
@@ -385,6 +381,7 @@ class SequenceDataset(Dataset):
 # =============================================================================
 # FACTORY FUNCTION
 # =============================================================================
+
 
 def create_sequence_dataset(
     df: pd.DataFrame,

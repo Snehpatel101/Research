@@ -19,6 +19,7 @@ Example:
     >>> result = compute_pbo(performance_matrix, n_partitions=16)
     >>> print(f"PBO: {result.pbo:.3f}, Overfit: {result.is_overfit}")
 """
+
 from __future__ import annotations
 
 import logging
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # =============================================================================
 
+
 @dataclass
 class PBOConfig:
     """
@@ -48,6 +50,7 @@ class PBOConfig:
         min_paths: Minimum paths required for reliable PBO estimate
         use_sharpe: If True, use Sharpe ratio; if False, use raw returns
     """
+
     n_partitions: int = 16
     warn_threshold: float = 0.5
     block_threshold: float = 0.8
@@ -70,6 +73,7 @@ class PBOConfig:
 # PBO RESULT
 # =============================================================================
 
+
 @dataclass
 class PBOResult:
     """
@@ -86,6 +90,7 @@ class PBOResult:
         best_is_strategy_idx: Index of best in-sample strategy
         best_is_oos_rank: OOS rank of best IS strategy (lower = better)
     """
+
     pbo: float
     logit_distribution: np.ndarray
     performance_degradation: float
@@ -127,6 +132,7 @@ class PBOResult:
 # =============================================================================
 # PBO COMPUTATION
 # =============================================================================
+
 
 def _compute_sharpe(returns: np.ndarray, annualization: float = 252.0) -> float:
     """Compute Sharpe ratio from returns array."""
@@ -197,9 +203,7 @@ def compute_pbo(
         raise ValueError(f"Need at least 2 strategies, got {n_strategies}")
 
     if n_paths < config.min_paths:
-        raise ValueError(
-            f"Need at least {config.min_paths} paths for reliable PBO, got {n_paths}"
-        )
+        raise ValueError(f"Need at least {config.min_paths} paths for reliable PBO, got {n_paths}")
 
     # Partition paths into groups
     n_partitions = min(config.n_partitions, n_paths)
@@ -230,9 +234,7 @@ def compute_pbo(
     is_oos_pairs = []  # For correlation computation
 
     for test_partition_ids in all_combos:
-        train_partition_ids = tuple(
-            p for p in range(n_partitions) if p not in test_partition_ids
-        )
+        train_partition_ids = tuple(p for p in range(n_partitions) if p not in test_partition_ids)
 
         # Get path indices for train (IS) and test (OOS)
         is_paths = []
@@ -374,8 +376,7 @@ def compute_pbo_from_returns(
             end = start + window
             for strat in range(n_strategies):
                 perf_matrix[strat, path] = _compute_sharpe(
-                    returns_matrix[strat, start:end],
-                    annualization=252.0
+                    returns_matrix[strat, start:end], annualization=252.0
                 )
     else:
         # Use cumulative returns as performance metric
@@ -387,9 +388,7 @@ def compute_pbo_from_returns(
             start = path * window
             end = start + window
             for strat in range(n_strategies):
-                perf_matrix[strat, path] = float(
-                    np.nansum(returns_matrix[strat, start:end])
-                )
+                perf_matrix[strat, path] = float(np.nansum(returns_matrix[strat, start:end]))
 
     return compute_pbo(perf_matrix, config)
 
@@ -397,6 +396,7 @@ def compute_pbo_from_returns(
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
 
 def pbo_gate(
     pbo_result: PBOResult,
@@ -454,14 +454,16 @@ def analyze_overfitting_risk(
     strategy_analysis = []
     for i, name in enumerate(strategy_names):
         strat_perf = performance_matrix[i, :]
-        strategy_analysis.append({
-            "name": name,
-            "mean_performance": float(np.nanmean(strat_perf)),
-            "std_performance": float(np.nanstd(strat_perf)),
-            "min_performance": float(np.nanmin(strat_perf)),
-            "max_performance": float(np.nanmax(strat_perf)),
-            "is_best_is": i == pbo_result.best_is_strategy_idx,
-        })
+        strategy_analysis.append(
+            {
+                "name": name,
+                "mean_performance": float(np.nanmean(strat_perf)),
+                "std_performance": float(np.nanstd(strat_perf)),
+                "min_performance": float(np.nanmin(strat_perf)),
+                "max_performance": float(np.nanmax(strat_perf)),
+                "is_best_is": i == pbo_result.best_is_strategy_idx,
+            }
+        )
 
     return {
         "pbo": pbo_result.pbo,

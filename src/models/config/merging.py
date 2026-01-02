@@ -1,4 +1,5 @@
 """Configuration merging and building functions."""
+
 from __future__ import annotations
 
 import logging
@@ -28,12 +29,7 @@ def merge_configs(
     result = base.copy()
 
     for key, value in override.items():
-        if (
-            deep
-            and key in result
-            and isinstance(result[key], dict)
-            and isinstance(value, dict)
-        ):
+        if deep and key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = merge_configs(result[key], value, deep=True)
         else:
             result[key] = value

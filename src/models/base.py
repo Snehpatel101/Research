@@ -9,6 +9,7 @@ This module provides:
 - TrainingMetrics: Standardized training metrics container
 - BaseModel: Abstract base class for all models
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -21,6 +22,7 @@ import numpy as np
 # =============================================================================
 # PREDICTION OUTPUT
 # =============================================================================
+
 
 @dataclass
 class PredictionOutput:
@@ -42,6 +44,7 @@ class PredictionOutput:
         >>> print(output.class_probabilities.shape)  # (1000, 3)
         >>> print(output.confidence.mean())  # 0.65
     """
+
     class_predictions: np.ndarray
     class_probabilities: np.ndarray
     confidence: np.ndarray
@@ -87,6 +90,7 @@ class PredictionOutput:
 # TRAINING METRICS
 # =============================================================================
 
+
 @dataclass
 class TrainingMetrics:
     """
@@ -114,6 +118,7 @@ class TrainingMetrics:
         >>> print(f"Best epoch: {metrics.best_epoch}")
         >>> print(f"Val F1: {metrics.val_f1:.3f}")
     """
+
     train_loss: float
     val_loss: float
     train_accuracy: float
@@ -157,6 +162,7 @@ class TrainingMetrics:
 # =============================================================================
 # BASE MODEL INTERFACE
 # =============================================================================
+
 
 class BaseModel(ABC):
     """
@@ -394,11 +400,7 @@ class BaseModel(ABC):
     # VALIDATION HELPERS
     # =========================================================================
 
-    def _validate_input_shape(
-        self,
-        X: np.ndarray,
-        context: str = "input"
-    ) -> None:
+    def _validate_input_shape(self, X: np.ndarray, context: str = "input") -> None:
         """
         Validate input array shape.
 
@@ -410,9 +412,7 @@ class BaseModel(ABC):
             ValueError: If shape is invalid for this model type
         """
         if X.ndim == 1:
-            raise ValueError(
-                f"{context} must be 2D or 3D, got 1D array with shape {X.shape}"
-            )
+            raise ValueError(f"{context} must be 2D or 3D, got 1D array with shape {X.shape}")
 
         if self.requires_sequences:
             if X.ndim != 3:
@@ -435,9 +435,7 @@ class BaseModel(ABC):
             RuntimeError: If model is not fitted
         """
         if not self._is_fitted:
-            raise RuntimeError(
-                f"{self.__class__.__name__} is not fitted. Call fit() first."
-            )
+            raise RuntimeError(f"{self.__class__.__name__} is not fitted. Call fit() first.")
 
     def __repr__(self) -> str:
         """Return string representation."""

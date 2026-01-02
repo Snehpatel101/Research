@@ -1,4 +1,5 @@
 """Utility functions for model configuration."""
+
 import logging
 from typing import Any
 

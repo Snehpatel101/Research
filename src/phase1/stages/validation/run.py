@@ -3,6 +3,7 @@ Stage 8: Data Validation.
 
 Pipeline wrapper for comprehensive data validation.
 """
+
 import logging
 import traceback
 from datetime import datetime
@@ -18,10 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_validation(
-    config: 'PipelineConfig',
-    manifest: 'ArtifactManifest'
-) -> StageResult:
+def run_validation(config: "PipelineConfig", manifest: "ArtifactManifest") -> StageResult:
     """
     Stage 8: Comprehensive data validation.
 
@@ -67,7 +65,7 @@ def run_validation(
             run_feature_selection=True,
             correlation_threshold=0.85,
             variance_threshold=0.01,
-            feature_selection_output_path=feature_selection_path
+            feature_selection_output_path=feature_selection_path,
         )
 
         artifacts = [validation_report_path]
@@ -81,16 +79,16 @@ def run_validation(
         logger.info(f"Issues: {summary['issues_count']}")
         logger.info(f"Warnings: {summary['warnings_count']}")
 
-        if summary['issues']:
+        if summary["issues"]:
             logger.error("Critical Issues Found:")
-            for issue in summary['issues'][:10]:
+            for issue in summary["issues"][:10]:
                 logger.error(f"  - {issue}")
-            if len(summary['issues']) > 10:
+            if len(summary["issues"]) > 10:
                 logger.error(f"  ... and {len(summary['issues'])-10} more")
 
-        if summary['warnings']:
+        if summary["warnings"]:
             logger.warning("Warnings:")
-            for warning in summary['warnings'][:10]:
+            for warning in summary["warnings"][:10]:
                 logger.warning(f"  - {warning}")
 
         if feature_selection_result:
@@ -104,16 +102,14 @@ def run_validation(
             file_path=validation_report_path,
             stage="validate",
             metadata={
-                'status': summary['status'],
-                'issues_count': summary['issues_count'],
-                'warnings_count': summary['warnings_count']
-            }
+                "status": summary["status"],
+                "issues_count": summary["issues_count"],
+                "warnings_count": summary["warnings_count"],
+            },
         )
 
-        if summary['status'] == 'FAILED':
-            logger.error(
-                f"\nValidation FAILED with {summary['issues_count']} critical issues"
-            )
+        if summary["status"] == "FAILED":
+            logger.error(f"\nValidation FAILED with {summary['issues_count']} critical issues")
             end_time = datetime.now()
             return StageResult(
                 stage_name="validate",
@@ -123,23 +119,16 @@ def run_validation(
                 duration_seconds=(end_time - start_time).total_seconds(),
                 artifacts=artifacts,
                 error=f"Validation failed with {summary['issues_count']} critical issues",
-                metadata=summary
+                metadata=summary,
             )
 
         logger.info(f"\nValidation PASSED (with {summary['warnings_count']} warnings)")
 
         return create_stage_result(
-            stage_name="validate",
-            start_time=start_time,
-            artifacts=artifacts,
-            metadata=summary
+            stage_name="validate", start_time=start_time, artifacts=artifacts, metadata=summary
         )
 
     except Exception as e:
         logger.error(f"Validation failed: {e}")
         logger.error(traceback.format_exc())
-        return create_failed_result(
-            stage_name="validate",
-            start_time=start_time,
-            error=str(e)
-        )
+        return create_failed_result(stage_name="validate", start_time=start_time, error=str(e))

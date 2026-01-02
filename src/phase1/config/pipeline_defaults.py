@@ -1,4 +1,5 @@
 """Default configuration factory for PipelineConfig."""
+
 from typing import Any
 
 
@@ -7,7 +8,7 @@ def create_default_config(
     start_date: str | None = None,
     end_date: str | None = None,
     run_id: str | None = None,
-    **kwargs: Any
+    **kwargs: Any,
 ):
     """
     Create a default configuration with optional overrides.
@@ -28,16 +29,16 @@ def create_default_config(
     config_kwargs = {}
 
     if symbols is not None:
-        config_kwargs['symbols'] = symbols
+        config_kwargs["symbols"] = symbols
 
     if start_date is not None:
-        config_kwargs['start_date'] = start_date
+        config_kwargs["start_date"] = start_date
 
     if end_date is not None:
-        config_kwargs['end_date'] = end_date
+        config_kwargs["end_date"] = end_date
 
     if run_id is not None:
-        config_kwargs['run_id'] = run_id
+        config_kwargs["run_id"] = run_id
 
     # Merge with additional kwargs
     config_kwargs.update(kwargs)

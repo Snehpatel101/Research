@@ -11,6 +11,7 @@ Key Principles:
 - LONGEST sequences: Create sequences with max length across models
 - SAVE multiple scalers: Persist scalers for each model family's preferences
 """
+
 import logging
 from dataclasses import dataclass, field
 
@@ -45,6 +46,7 @@ class MultiModelPipelineConfig:
         max_features: Minimum of all max_features constraints (conservative)
         save_unscaled: Whether to also save unscaled data (for boosting models)
     """
+
     model_names: list[str]
     feature_sets: set[str] = field(default_factory=set)
     requires_scaling: bool = False

@@ -52,13 +52,13 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 | Phase | Name | Description | Status | Doc |
 |:-----:|------|-------------|:------:|-----|
 | 1 | Ingestion | Load and validate raw OHLCV data | Complete | [PHASE_1_INGESTION.md](implementation/PHASE_1_INGESTION.md) |
-| 2 | MTF Upscaling | Multi-timeframe resampling | Partial (5/9 TFs) | [PHASE_2_MTF_UPSCALING.md](implementation/PHASE_2_MTF_UPSCALING.md) |
-| 3 | Features | 180+ indicator features | Complete | [PHASE_3_FEATURES.md](implementation/PHASE_3_FEATURES.md) |
-| 4 | Labeling | Triple-barrier + Optuna optimization | Complete | [PHASE_4_LABELING.md](implementation/PHASE_4_LABELING.md) |
-| 5 | Adapters | Model-family data adapters | Complete | [PHASE_5_ADAPTERS.md](implementation/PHASE_5_ADAPTERS.md) |
-| 6 | Training | 13 models across 4 families | Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
-| 7 | Ensembles | Voting, Stacking, Blending | Complete | [PHASE_7_ENSEMBLES.md](implementation/PHASE_7_ENSEMBLES.md) |
-| 8 | Meta-Learners | Regime-aware, adaptive | Planned | [PHASE_8_META_LEARNERS.md](implementation/PHASE_8_META_LEARNERS.md) |
+| 2 | MTF Upscaling | Multi-timeframe resampling | ⚠️ Partial (5/9 TFs) | [PHASE_2_MTF_UPSCALING.md](implementation/PHASE_2_MTF_UPSCALING.md) |
+| 3 | Features | 180+ indicator features | ✅ Complete | [PHASE_3_FEATURES.md](implementation/PHASE_3_FEATURES.md) |
+| 4 | Labeling | Triple-barrier + Optuna optimization | ✅ Complete | [PHASE_4_LABELING.md](implementation/PHASE_4_LABELING.md) |
+| 5 | Adapters | Model-family data adapters | ✅ Complete | [PHASE_5_ADAPTERS.md](implementation/PHASE_5_ADAPTERS.md) |
+| 6 | Training | 17 models across 5 families | ✅ Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
+| 7 | Ensembles | Heterogeneous stacking | ⚠️ PLANNED | [PHASE_7_META_LEARNER_STACKING.md](implementation/PHASE_7_META_LEARNER_STACKING.md) |
+| 8 | Meta-Learners | Regime-aware, adaptive | ⚠️ Planned | [PHASE_8_META_LEARNERS.md](implementation/PHASE_8_META_LEARNERS.md) |
 
 ---
 
@@ -155,16 +155,18 @@ Historical and legacy documentation is preserved in [archive/](archive/). These 
 
 | Component | Status | Count |
 |-----------|--------|-------|
-| **Models Implemented** | Complete | 13 of 19 |
-| **MTF Timeframes** | Partial | 5 of 9 |
-| **Ensemble Methods** | Complete | 3 (Voting, Stacking, Blending) |
-| **Features** | Complete | ~180 |
+| **Models Implemented** | ✅ Complete | 17 of 23 |
+| **MTF Timeframes** | ⚠️ Partial | 5 of 9 |
+| **Ensemble Methods** | ✅ Complete | 3 (Voting, Stacking, Blending) |
+| **Meta-Learners** | ✅ Complete | 4 (Ridge, MLP, Calibrated, XGBoost) |
+| **Features** | ✅ Complete | ~180 |
 
 **Models by Family:**
 - Boosting (3): XGBoost, LightGBM, CatBoost
 - Neural (4): LSTM, GRU, TCN, Transformer
 - Classical (3): Random Forest, Logistic, SVM
 - Ensemble (3): Voting, Stacking, Blending
+- Meta-learners (4): Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
 - Planned (6): InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
 
 ---
