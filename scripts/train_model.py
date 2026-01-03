@@ -164,6 +164,14 @@ Examples:
         default=20,
         help="Label horizon (default: 20)",
     )
+    parser.add_argument(
+        "--feature-set",
+        type=str,
+        help=(
+            "Feature set name (e.g., 'boosting_optimal', 'neural_optimal', 'transformer_raw'). "
+            "If not specified, uses model family default from FEATURE_SET_ALIASES."
+        ),
+    )
 
     # Ensemble arguments
     parser.add_argument(
@@ -356,6 +364,7 @@ def build_config_overrides(args: argparse.Namespace) -> Dict[str, Any]:
         "kernel_size": "kernel_size",
         "n_estimators": "n_estimators",
         "max_depth": "max_depth",
+        "feature_set": "feature_set",
     }
 
     for arg_name, config_key in arg_mapping.items():

@@ -90,6 +90,9 @@ class Trainer:
         self.feature_selector: FeatureSelectionManager | None = None
         self._setup_feature_selection()
 
+        # Feature set columns (set during run() for per-model filtering)
+        self._feature_set_columns: list[str] | None = None
+
         logger.info(
             f"Initialized Trainer: model={config.model_name}, "
             f"horizon={config.horizon}, run_id={self.run_id}, "
@@ -148,6 +151,94 @@ class Trainer:
 
         base_models = self.config.model_config.get("base_model_names", [])
         return is_heterogeneous_ensemble(base_models)
+
+    def _resolve_feature_set_columns(self, df: pd.DataFrame) -> list[str] | None:
+        """
+        Resolve feature set columns based on config.feature_set.
+
+        Uses FEATURE_SET_ALIASES to map model names to feature sets.
+        Returns None if no feature set filtering should be applied.
+
+        Args:
+            df: DataFrame with all available columns
+
+        Returns:
+            List of column names to use, or None to use all features
+        """
+        # Import locally to avoid circular imports
+        from src.phase1.config.feature_sets import (
+            FEATURE_SET_ALIASES,
+            FEATURE_SET_DEFINITIONS,
+        )
+        from src.phase1.utils.feature_sets import resolve_feature_set
+
+        feature_set_name = self.config.feature_set
+
+        # If not specified, try to get from model family alias
+        if not feature_set_name:
+            # Check if model name has an alias
+            model_name = self.config.model_name.lower()
+            feature_set_name = FEATURE_SET_ALIASES.get(model_name)
+
+            if not feature_set_name:
+                # Try model family
+                model_family = self.model.model_family.lower()
+                feature_set_name = FEATURE_SET_ALIASES.get(model_family)
+
+        if not feature_set_name:
+            logger.debug("No feature set specified, using all features")
+            return None
+
+        # Resolve alias to canonical name
+        canonical_name = FEATURE_SET_ALIASES.get(feature_set_name, feature_set_name)
+
+        if canonical_name not in FEATURE_SET_DEFINITIONS:
+            logger.warning(
+                f"Unknown feature set '{feature_set_name}' (resolved to '{canonical_name}'). "
+                f"Available: {list(FEATURE_SET_DEFINITIONS.keys())}. Using all features."
+            )
+            return None
+
+        # Resolve feature set
+        definition = FEATURE_SET_DEFINITIONS[canonical_name]
+        feature_columns = resolve_feature_set(df, definition)
+
+        logger.info(
+            f"Feature set '{canonical_name}' resolved: {len(feature_columns)} features "
+            f"(from {len(df.columns)} total columns)"
+        )
+
+        return feature_columns
+
+    def _apply_feature_set_filter(
+        self,
+        X_df: pd.DataFrame,
+        feature_columns: list[str] | None,
+    ) -> pd.DataFrame:
+        """
+        Apply feature set filtering to a DataFrame.
+
+        Args:
+            X_df: DataFrame with features
+            feature_columns: List of columns to keep, or None to keep all
+
+        Returns:
+            Filtered DataFrame
+        """
+        if feature_columns is None:
+            return X_df
+
+        # Filter to only columns that exist in both
+        available_cols = [c for c in feature_columns if c in X_df.columns]
+        missing_cols = set(feature_columns) - set(available_cols)
+
+        if missing_cols:
+            logger.warning(
+                f"Feature set requested {len(feature_columns)} features, "
+                f"but {len(missing_cols)} are missing from data: {list(missing_cols)[:5]}..."
+            )
+
+        return X_df[available_cols]
 
     def _generate_run_id(self) -> str:
         """
@@ -234,6 +325,20 @@ class Trainer:
             logger.info(
                 "Label end times available for purging overlapping labels "
                 "(prevents leakage in stacking/blending ensembles)"
+            )
+
+        # Apply per-model feature set filtering (if specified)
+        # This filters features BEFORE MDA-based feature selection
+        feature_set_columns = self._resolve_feature_set_columns(X_train_df)
+        self._feature_set_columns = feature_set_columns  # Store for test set evaluation
+        if feature_set_columns is not None:
+            X_train_df = self._apply_feature_set_filter(X_train_df, feature_set_columns)
+            X_val_df = self._apply_feature_set_filter(X_val_df, feature_set_columns)
+            # Update feature_names to reflect filtered set
+            feature_names = list(X_train_df.columns)
+            logger.info(
+                f"Feature set filter applied: {len(feature_names)} features "
+                f"(from original {len(container.feature_columns)})"
             )
 
         # Run feature selection (for tabular/classical models only)
@@ -501,6 +606,13 @@ class Trainer:
             # Tabular test data
             X_test_df, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
 
+            # Apply feature set filtering (must happen before feature selection)
+            if self._feature_set_columns is not None:
+                X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
+                logger.debug(
+                    f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
+                )
+
             # Apply feature selection if enabled
             if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
                 X_test_df = self.feature_selector.apply_selection_df(X_test_df)
@@ -533,6 +645,13 @@ class Trainer:
         else:
             # Tabular models: load DataFrame and apply feature selection
             X_test_df, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+
+            # Apply feature set filtering (must happen before feature selection)
+            if self._feature_set_columns is not None:
+                X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
+                logger.debug(
+                    f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
+                )
 
             # Apply feature selection if enabled
             if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:

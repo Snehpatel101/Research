@@ -94,6 +94,14 @@ Examples:
         default=20,
         help="Label horizon (default: 20)",
     )
+    parser.add_argument(
+        "--feature-set",
+        type=str,
+        help=(
+            "Feature set name (e.g., 'boosting_optimal', 'ensemble_base'). "
+            "If not specified, uses 'ensemble_base' for heterogeneous stacking."
+        ),
+    )
 
     # Stacking configuration
     parser.add_argument(
@@ -252,6 +260,10 @@ def build_stacking_config(args: argparse.Namespace) -> Dict[str, Any]:
         "passthrough": False,
         "use_default_configs_for_oof": True,
     }
+
+    # Add feature set if specified (defaults to 'ensemble_base' for heterogeneous stacking)
+    if args.feature_set:
+        config["feature_set"] = args.feature_set.strip().lower()
 
     return config
 
