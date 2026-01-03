@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.phase1.utils.feature_sets import LABEL_PREFIXES, METADATA_COLUMNS
+from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

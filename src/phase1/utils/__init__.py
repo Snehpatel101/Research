@@ -3,6 +3,7 @@
 Provides feature selection and feature set resolution utilities.
 """
 
+from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 from src.phase1.utils.feature_selection import (
     DEFAULT_PRIORITY,
     FEATURE_PRIORITY,
@@ -16,8 +17,6 @@ from src.phase1.utils.feature_selection import (
     select_features,
 )
 from src.phase1.utils.feature_sets import (
-    LABEL_PREFIXES,
-    METADATA_COLUMNS,
     build_feature_set_manifest,
     resolve_feature_set,
     validate_feature_set_columns,

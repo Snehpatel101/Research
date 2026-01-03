@@ -7,46 +7,24 @@ from collections.abc import Sequence
 import pandas as pd
 
 from src.phase1.config.feature_sets import FeatureSetDefinition
-from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
+from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 
-METADATA_COLUMNS = {
-    "datetime",
-    "symbol",
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "timestamp",
-    "date",
-    "time",
-    "timeframe",
-    "session_id",
-    "missing_bar",
-    "roll_event",
-    "roll_window",
-    "filled",
-}
+# Import MTF_TIMEFRAMES lazily to avoid circular imports
+_MTF_TIMEFRAMES = None
 
-LABEL_PREFIXES = (
-    "label_",
-    "bars_to_hit_",
-    "mae_",
-    "mfe_",
-    "quality_",
-    "sample_weight_",
-    "touch_type_",
-    "pain_to_gain_",
-    "time_weighted_dd_",
-    "fwd_return_",
-    "fwd_return_log_",
-    "time_to_hit_",
-)
+
+def _get_mtf_timeframes():
+    """Lazy loader for MTF_TIMEFRAMES to avoid circular imports."""
+    global _MTF_TIMEFRAMES
+    if _MTF_TIMEFRAMES is None:
+        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
+        _MTF_TIMEFRAMES = MTF_TIMEFRAMES
+    return _MTF_TIMEFRAMES
 
 
 def _mtf_suffixes() -> list[str]:
     suffixes = set()
-    for tf in MTF_TIMEFRAMES.keys():
+    for tf in _get_mtf_timeframes().keys():
         if tf.endswith("min"):
             minutes = tf.replace("min", "")
             suffixes.add(f"_{minutes}m")

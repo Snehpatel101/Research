@@ -294,6 +294,8 @@ python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru
 
 **Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 
+**Note on CatBoost:** CatBoost has **conditional registration** - it only registers if `catboost` library is installed. If CatBoost is unavailable, the model count will be 21 instead of 22. Install with `pip install catboost` if needed.
+
 ### Heterogeneous Ensemble Architecture
 
 The factory supports **heterogeneous ensembles** where base models from different families train on **different timeframes and features**, all derived from the **same 1-min canonical OHLCV source**, then feed a single meta-learner via OOF stacking.
