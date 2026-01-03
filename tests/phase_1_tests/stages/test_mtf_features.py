@@ -178,7 +178,8 @@ class TestMTFFeatureGeneratorInit:
         generator = MTFFeatureGenerator()
 
         assert generator.base_timeframe == '5min'
-        assert generator.mtf_timeframes == ['15min', '30min', '1h', '4h', 'daily']
+        # New 7-TF intraday ladder (excludes 5min since it's commonly used as base)
+        assert generator.mtf_timeframes == ['10min', '15min', '20min', '25min', '30min', '45min', '1h']
         assert generator.include_ohlcv is True
         assert generator.include_indicators is True
 

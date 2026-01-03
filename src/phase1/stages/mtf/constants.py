@@ -44,11 +44,11 @@ MTF_TIMEFRAMES = {
 # Required OHLCV columns
 REQUIRED_OHLCV_COLS = ["open", "high", "low", "close", "volume"]
 
-# Default MTF configuration - 8-timeframe intraday ladder
-# Provides comprehensive multi-scale analysis from 5min to 1h
+# Default MTF configuration - 7-timeframe intraday ladder
+# Provides comprehensive multi-scale analysis from 10min to 1h
+# Excludes 5min since it's commonly used as base timeframe
 # Daily excluded by default for intraday trading focus
 DEFAULT_MTF_TIMEFRAMES = [
-    "5min",   # Base for scalping
     "10min",  # Short-term momentum
     "15min",  # Standard short-term
     "20min",  # Extended short-term
@@ -88,6 +88,8 @@ PANDAS_FREQ_MAP = {
     "5min": "5min",
     "10min": "10min",
     "15min": "15min",
+    "20min": "20min",  # Extended short-term
+    "25min": "25min",  # Medium transition
     "30min": "30min",
     "45min": "45min",
     "60min": "60min",

@@ -114,6 +114,46 @@ class StackingEnsemble(BaseModel):
                     return True
         return False
 
+    def _validate_input_shape(self, X: np.ndarray, context: str = "input") -> None:
+        """
+        Validate input array shape for stacking ensemble.
+
+        For heterogeneous ensembles, the main X parameter is always 2D tabular data.
+        Sequence models receive 3D data via separate X_seq parameter.
+
+        Args:
+            X: Input array to validate
+            context: Context for error messages
+
+        Raises:
+            ValueError: If shape is invalid
+        """
+        if X.ndim == 1:
+            raise ValueError(f"{context} must be 2D or 3D, got 1D array with shape {X.shape}")
+
+        # For heterogeneous ensembles, main X is always 2D tabular
+        # Sequence data is passed separately via X_seq parameter
+        if self._is_heterogeneous:
+            if X.ndim != 2:
+                raise ValueError(
+                    f"{context} must be 2D (n_samples, n_features) for heterogeneous "
+                    f"stacking ensemble (sequence data passed separately), got shape {X.shape}"
+                )
+        elif self.requires_sequences:
+            # Homogeneous sequence ensemble
+            if X.ndim != 3:
+                raise ValueError(
+                    f"{context} must be 3D (n_samples, seq_len, n_features) "
+                    f"for sequence models, got shape {X.shape}"
+                )
+        else:
+            # Homogeneous tabular ensemble
+            if X.ndim != 2:
+                raise ValueError(
+                    f"{context} must be 2D (n_samples, n_features) "
+                    f"for tabular models, got shape {X.shape}"
+                )
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "base_model_names": ["xgboost", "lightgbm"],

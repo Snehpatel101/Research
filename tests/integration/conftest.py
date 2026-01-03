@@ -45,13 +45,24 @@ def create_mock_container(
     mock = MagicMock()
 
     # Mock tabular data access
-    def get_sklearn_arrays(split: str):
+    def get_sklearn_arrays(split: str, return_df: bool = False):
+        import pandas as pd
         if split == "train":
-            return (X_train, y_train, weights_train)
+            data = (X_train, y_train, weights_train)
         elif split == "val":
-            return (X_val, y_val, weights_val)
+            data = (X_val, y_val, weights_val)
         else:
-            return (X_val, y_val, weights_val)
+            data = (X_val, y_val, weights_val)
+
+        if return_df:
+            # Return as DataFrame/Series like real container
+            feature_cols = [f"feature_{i}" for i in range(data[0].shape[1])]
+            return (
+                pd.DataFrame(data[0], columns=feature_cols),
+                pd.Series(data[1], name="label"),
+                pd.Series(data[2], name="weight"),
+            )
+        return data
 
     mock.get_sklearn_arrays = get_sklearn_arrays
 

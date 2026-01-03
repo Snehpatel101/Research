@@ -147,8 +147,9 @@ class TestMTFConfigurationPropagation:
             project_root=temp_project_dir
         )
 
-        # Default MTF timeframes from constants.py
-        expected = ['15min', '30min', '1h', '4h', 'daily']
+        # Default MTF timeframes from constants.py - 7-TF intraday ladder
+        # Excludes 5min since it's commonly used as base timeframe
+        expected = ['10min', '15min', '20min', '25min', '30min', '45min', '1h']
         assert config.mtf_timeframes == expected
 
     def test_default_mtf_mode(self, temp_project_dir: Path) -> None:
