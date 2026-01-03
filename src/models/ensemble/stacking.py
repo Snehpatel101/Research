@@ -167,8 +167,6 @@ class StackingEnsemble(BaseModel):
             - Sequence models receive X_train_seq/X_val_seq (3D) if provided
             - The meta-learner always receives 2D OOF predictions regardless of base model type
         """
-        self._validate_input_shape(X_train, "X_train")
-        self._validate_input_shape(X_val, "X_val")
         start_time = time.time()
 
         train_config = self._config.copy()
@@ -198,6 +196,20 @@ class StackingEnsemble(BaseModel):
                 f"Each model family will receive appropriately shaped data."
             )
 
+            # For heterogeneous ensembles:
+            # - X_train/X_val must be 2D (for tabular models)
+            # - X_train_seq/X_val_seq must be 3D (for sequence models)
+            if X_train.ndim != 2:
+                raise ValueError(
+                    f"For heterogeneous stacking, X_train must be 2D for tabular models, "
+                    f"got shape {X_train.shape}. Provide sequence data via X_train_seq."
+                )
+            if X_val.ndim != 2:
+                raise ValueError(
+                    f"For heterogeneous stacking, X_val must be 2D for tabular models, "
+                    f"got shape {X_val.shape}. Provide sequence data via X_val_seq."
+                )
+
             # Validate sequence data is provided for heterogeneous ensembles
             if X_train_seq is None or X_val_seq is None:
                 logger.warning(
@@ -206,9 +218,24 @@ class StackingEnsemble(BaseModel):
                     "which may cause errors. Consider providing sequence data or using "
                     "homogeneous ensembles."
                 )
+            else:
+                # Validate sequence data shapes
+                if X_train_seq.ndim != 3:
+                    raise ValueError(
+                        f"X_train_seq must be 3D (n_samples, seq_len, n_features), "
+                        f"got shape {X_train_seq.shape}"
+                    )
+                if X_val_seq.ndim != 3:
+                    raise ValueError(
+                        f"X_val_seq must be 3D (n_samples, seq_len, n_features), "
+                        f"got shape {X_val_seq.shape}"
+                    )
         else:
             self._tabular_models = set()
             self._sequence_models = set()
+            # For homogeneous ensembles, use standard validation
+            self._validate_input_shape(X_train, "X_train")
+            self._validate_input_shape(X_val, "X_val")
 
         # Store sequence data for heterogeneous ensembles
         self._X_train_seq = X_train_seq
