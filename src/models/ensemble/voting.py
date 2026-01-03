@@ -80,6 +80,11 @@ class VotingEnsemble(BaseModel):
         return "ensemble"
 
     @property
+    def ensemble_type(self) -> str:
+        """Return the ensemble type identifier."""
+        return "voting"
+
+    @property
     def requires_scaling(self) -> bool:
         # Check if any base model requires scaling
         if not self._base_models:

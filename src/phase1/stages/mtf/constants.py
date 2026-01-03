@@ -44,9 +44,32 @@ MTF_TIMEFRAMES = {
 # Required OHLCV columns
 REQUIRED_OHLCV_COLS = ["open", "high", "low", "close", "volume"]
 
-# Default MTF configuration
-# Includes all commonly useful timeframes for multi-timeframe analysis
-DEFAULT_MTF_TIMEFRAMES = ["15min", "30min", "1h", "4h", "daily"]
+# Default MTF configuration - 8-timeframe intraday ladder
+# Provides comprehensive multi-scale analysis from 5min to 1h
+# Daily excluded by default for intraday trading focus
+DEFAULT_MTF_TIMEFRAMES = [
+    "5min",   # Base for scalping
+    "10min",  # Short-term momentum
+    "15min",  # Standard short-term
+    "20min",  # Extended short-term
+    "25min",  # Medium transition
+    "30min",  # Standard medium-term
+    "45min",  # Extended medium-term
+    "1h",     # Hourly trend
+]
+
+# Full 9-timeframe ladder including 1min base
+FULL_MTF_TIMEFRAMES = [
+    "1min",   # True base timeframe
+    "5min",   # Scalping
+    "10min",  # Short momentum
+    "15min",  # Short-term
+    "20min",  # Extended short
+    "25min",  # Medium transition
+    "30min",  # Medium-term
+    "45min",  # Extended medium
+    "1h",     # Hourly
+]
 
 # Default mode is to generate both bars and indicators
 DEFAULT_MTF_MODE = MTFMode.BOTH

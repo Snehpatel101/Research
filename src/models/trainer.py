@@ -134,6 +134,21 @@ class Trainer:
         """Check if feature selection is enabled for this trainer."""
         return self.feature_selector is not None and self.feature_selector.is_enabled
 
+    def _is_heterogeneous_ensemble(self) -> bool:
+        """Check if this is a heterogeneous stacking ensemble requiring both 2D and 3D data."""
+        if self.model.model_family != "ensemble":
+            return False
+        if not hasattr(self.model, "ensemble_type"):
+            return False
+        # Only stacking supports heterogeneous (voting/blending require same shape)
+        if self.model.ensemble_type != "stacking":
+            return False
+        # Check if base models have mixed input requirements
+        from .ensemble.validator import is_heterogeneous_ensemble
+
+        base_models = self.config.model_config.get("base_model_names", [])
+        return is_heterogeneous_ensemble(base_models)
+
     def _generate_run_id(self) -> str:
         """
         Generate unique run identifier with collision prevention.
@@ -241,15 +256,44 @@ class Trainer:
             )
 
         # Convert to numpy arrays and apply model-specific preprocessing
-        if self.model.requires_sequences:
-            # For sequence models, reload with sequences
+        # Track sequence data for heterogeneous stacking ensembles
+        X_train_seq = None
+        X_val_seq = None
+
+        if self._is_heterogeneous_ensemble():
+            # Heterogeneous stacking: load BOTH tabular and sequence data
+            logger.info(
+                "Heterogeneous stacking detected: preparing both tabular and sequence data"
+            )
+
+            # Tabular data (already loaded as DataFrames)
+            X_train = X_train_df.values
+            y_train = y_train_series.values
+            w_train = w_train_series.values
+            X_val = X_val_df.values
+            y_val = y_val_series.values
+
+            # Sequence data for sequence-based base models
+            X_train_seq, _, _, X_val_seq, _ = prepare_training_data(
+                container,
+                requires_sequences=True,
+                sequence_length=self.config.sequence_length,
+            )
+
+            logger.info(
+                f"Heterogeneous data prepared: "
+                f"tabular={X_train.shape}, sequence={X_train_seq.shape}"
+            )
+
+        elif self.model.requires_sequences:
+            # Pure sequence model
             X_train, y_train, w_train, X_val, y_val = prepare_training_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
             )
         else:
-            # Use the (possibly filtered) DataFrames
+            # Pure tabular model
             X_train = X_train_df.values
             y_train = y_train_series.values
             w_train = w_train_series.values
@@ -286,11 +330,21 @@ class Trainer:
         if self.model.model_family == "ensemble" and label_end_times is not None:
             fit_kwargs["label_end_times"] = label_end_times
 
+        # Add sequence data if heterogeneous stacking ensemble
+        if self._is_heterogeneous_ensemble() and X_train_seq is not None:
+            fit_kwargs["X_train_seq"] = X_train_seq
+            fit_kwargs["X_val_seq"] = X_val_seq
+            logger.info("Passing sequence data to heterogeneous stacking ensemble")
+
         training_metrics = self.model.fit(**fit_kwargs)
 
         # Evaluate
         logger.info("Evaluating on validation set...")
-        val_predictions = self.model.predict(X_val)
+        # For heterogeneous stacking, pass both tabular and sequence data
+        if self._is_heterogeneous_ensemble() and X_val_seq is not None:
+            val_predictions = self.model.predict(X_val, X_seq=X_val_seq)
+        else:
+            val_predictions = self.model.predict(X_val)
         eval_metrics = compute_classification_metrics(
             y_true=y_val,
             y_pred=val_predictions.class_predictions,
@@ -435,7 +489,41 @@ class Trainer:
         logger.warning("=" * 70)
 
         # Load test data
-        if self.model.requires_sequences:
+        # Track sequence data for heterogeneous stacking ensembles
+        X_test_seq = None
+
+        if self._is_heterogeneous_ensemble():
+            # Heterogeneous stacking: load BOTH tabular and sequence test data
+            logger.info(
+                "Heterogeneous stacking: preparing both tabular and sequence test data"
+            )
+
+            # Tabular test data
+            X_test_df, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+
+            # Apply feature selection if enabled
+            if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
+                X_test_df = self.feature_selector.apply_selection_df(X_test_df)
+                logger.debug(
+                    f"Applied feature selection to test set: {X_test_df.shape[1]} features"
+                )
+
+            X_test = X_test_df.values
+            y_test = y_test_series.values
+
+            # Sequence test data for sequence-based base models
+            X_test_seq, _, _ = prepare_test_data(
+                container,
+                requires_sequences=True,
+                sequence_length=self.config.sequence_length,
+            )
+
+            logger.info(
+                f"Heterogeneous test data prepared: "
+                f"tabular={X_test.shape}, sequence={X_test_seq.shape}"
+            )
+
+        elif self.model.requires_sequences:
             # Sequence models: load sequences directly
             X_test, y_test, _ = prepare_test_data(
                 container,
@@ -450,7 +538,7 @@ class Trainer:
             if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
                 X_test_df = self.feature_selector.apply_selection_df(X_test_df)
                 logger.debug(
-                    f"Applied feature selection to test set: " f"{X_test_df.shape[1]} features"
+                    f"Applied feature selection to test set: {X_test_df.shape[1]} features"
                 )
 
             X_test = X_test_df.values
@@ -459,7 +547,11 @@ class Trainer:
         logger.info(f"Test set size: {X_test.shape}")
 
         # Evaluate on test set
-        test_predictions = self.model.predict(X_test)
+        # For heterogeneous stacking, pass both tabular and sequence data
+        if self._is_heterogeneous_ensemble() and X_test_seq is not None:
+            test_predictions = self.model.predict(X_test, X_seq=X_test_seq)
+        else:
+            test_predictions = self.model.predict(X_test)
         test_metrics = compute_classification_metrics(
             y_true=y_test,
             y_pred=test_predictions.class_predictions,

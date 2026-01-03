@@ -1,0 +1,53 @@
+# PatchTST Configuration
+# Patch Time Series Transformer - divides time series into patches for efficient attention
+# GPU: Optimized for CUDA acceleration with efficient patch-based attention
+
+# Model identification
+model:
+  name: patchtst
+  family: neural
+  description: Patch-based Time Series Transformer for long-range temporal dependencies
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  patch_size: 16
+  stride: 8
+  d_model: 256
+  n_heads: 8
+  n_layers: 3
+  d_ff: 512
+  dropout: 0.3
+  attention_dropout: 0.1
+  use_cls_token: true
+  use_learnable_pe: true
+
+  # Input
+  sequence_length: 60
+  input_features: null         # Auto-detected from data
+
+  # Learning
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+
+  # Optimizer
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+
+# Training settings
+training:
+  batch_size: 512
+  max_epochs: 100
+  early_stopping_patience: 15
+  min_delta: 0.0001
+  feature_set: neural_optimal
+  random_seed: 42
+  num_workers: 4
+  pin_memory: true
+
+# Device settings
+device:
+  default: auto                # auto, cuda, or cpu
+  mixed_precision: true        # Use FP16 for faster training

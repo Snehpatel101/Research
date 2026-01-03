@@ -50,13 +50,14 @@ logger = logging.getLogger(__name__)
 # VERSION AND CONSTANTS
 # =============================================================================
 
-BUNDLE_VERSION = "1.0.0"
+BUNDLE_VERSION = "1.1.0"  # Updated for preprocessing graph support
 BUNDLE_MANIFEST_FILE = "manifest.json"
 BUNDLE_MODEL_DIR = "model"
 BUNDLE_SCALER_FILE = "scaler.pkl"
 BUNDLE_CALIBRATOR_FILE = "calibrator.pkl"
 BUNDLE_FEATURES_FILE = "features.json"
 BUNDLE_METADATA_FILE = "metadata.json"
+BUNDLE_PREPROCESSING_GRAPH_FILE = "preprocessing_graph.json"
 
 
 # =============================================================================
@@ -78,6 +79,9 @@ class BundleMetadata:
     requires_sequences: bool = False
     sequence_length: int = 0
     has_calibrator: bool = False
+    has_preprocessing_graph: bool = False
+    preprocessing_graph_hash: str = ""
+    symbol: str = ""
     training_metrics: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -93,6 +97,9 @@ class BundleMetadata:
             "requires_sequences": self.requires_sequences,
             "sequence_length": self.sequence_length,
             "has_calibrator": self.has_calibrator,
+            "has_preprocessing_graph": self.has_preprocessing_graph,
+            "preprocessing_graph_hash": self.preprocessing_graph_hash,
+            "symbol": self.symbol,
             "training_metrics": self.training_metrics,
             "extra": self.extra,
         }
@@ -110,6 +117,9 @@ class BundleMetadata:
             requires_sequences=data.get("requires_sequences", False),
             sequence_length=data.get("sequence_length", 0),
             has_calibrator=data.get("has_calibrator", False),
+            has_preprocessing_graph=data.get("has_preprocessing_graph", False),
+            preprocessing_graph_hash=data.get("preprocessing_graph_hash", ""),
+            symbol=data.get("symbol", ""),
             training_metrics=data.get("training_metrics", {}),
             extra=data.get("extra", {}),
         )
@@ -153,16 +163,18 @@ class ModelBundle:
     - Feature scaler (for normalizing inputs)
     - Feature column names and order
     - Probability calibrator (optional)
+    - Preprocessing graph (optional, for train/serve parity)
     - Metadata about training
 
     Bundles are saved as directories with a standardized structure:
         bundle_dir/
-            manifest.json       # File listing and checksums
-            metadata.json       # Model metadata
-            features.json       # Feature column names
-            scaler.pkl          # Fitted scaler
-            calibrator.pkl      # Fitted calibrator (optional)
-            model/              # Model artifacts (via model.save())
+            manifest.json               # File listing and checksums
+            metadata.json               # Model metadata
+            features.json               # Feature column names
+            scaler.pkl                  # Fitted scaler
+            calibrator.pkl              # Fitted calibrator (optional)
+            preprocessing_graph.json    # Preprocessing config (optional)
+            model/                      # Model artifacts (via model.save())
 
     Example:
         >>> # Create bundle from trained components
@@ -177,6 +189,17 @@ class ModelBundle:
         >>> # Load and predict
         >>> bundle = ModelBundle.load("./bundles/xgb_h20")
         >>> predictions = bundle.predict(X_test)
+
+        >>> # With preprocessing graph for raw OHLCV inference
+        >>> from src.inference import PreprocessingGraph
+        >>> graph = PreprocessingGraph.from_pipeline_config(config)
+        >>> bundle.set_preprocessing_graph(graph)
+        >>> bundle.save("./bundles/xgb_h20_with_graph")
+        >>>
+        >>> # At inference time
+        >>> bundle = ModelBundle.load("./bundles/xgb_h20_with_graph")
+        >>> features = bundle.preprocess(raw_ohlcv_df)
+        >>> predictions = bundle.predict(features)
     """
 
     def __init__(
@@ -186,6 +209,7 @@ class ModelBundle:
         feature_columns: list[str],
         metadata: BundleMetadata,
         calibrator: Any | None = None,
+        preprocessing_graph: Any | None = None,
     ) -> None:
         """
         Initialize ModelBundle.
@@ -196,12 +220,14 @@ class ModelBundle:
             feature_columns: Ordered list of feature column names
             metadata: Bundle metadata
             calibrator: Optional fitted probability calibrator
+            preprocessing_graph: Optional PreprocessingGraph for raw data inference
         """
         self.model = model
         self.scaler = scaler
         self.feature_columns = feature_columns
         self.metadata = metadata
         self.calibrator = calibrator
+        self.preprocessing_graph = preprocessing_graph
 
     @classmethod
     def from_training(
@@ -211,6 +237,8 @@ class ModelBundle:
         feature_columns: list[str],
         horizon: int,
         calibrator: Any | None = None,
+        preprocessing_graph: Any | None = None,
+        symbol: str = "",
         training_metrics: dict[str, Any] | None = None,
         extra_metadata: dict[str, Any] | None = None,
     ) -> ModelBundle:
@@ -223,6 +251,8 @@ class ModelBundle:
             feature_columns: Feature column names
             horizon: Prediction horizon
             calibrator: Optional fitted calibrator
+            preprocessing_graph: Optional PreprocessingGraph for train/serve parity
+            symbol: Trading symbol (e.g., "MES", "MGC")
             training_metrics: Optional training metrics to store
             extra_metadata: Additional metadata
 
@@ -240,6 +270,15 @@ class ModelBundle:
         # Compute feature hash for validation
         feature_hash = hashlib.md5(",".join(feature_columns).encode()).hexdigest()[:12]
 
+        # Get preprocessing graph hash if available
+        preprocessing_graph_hash = ""
+        if preprocessing_graph is not None:
+            preprocessing_graph_hash = getattr(
+                getattr(preprocessing_graph, "config", None),
+                "config_hash",
+                "",
+            )
+
         metadata = BundleMetadata(
             version=BUNDLE_VERSION,
             created_at=datetime.now().isoformat(),
@@ -251,6 +290,9 @@ class ModelBundle:
             requires_sequences=requires_sequences,
             sequence_length=sequence_length,
             has_calibrator=calibrator is not None,
+            has_preprocessing_graph=preprocessing_graph is not None,
+            preprocessing_graph_hash=preprocessing_graph_hash,
+            symbol=symbol,
             training_metrics=training_metrics or {},
             extra=extra_metadata or {},
         )
@@ -261,6 +303,7 @@ class ModelBundle:
             feature_columns=feature_columns,
             metadata=metadata,
             calibrator=calibrator,
+            preprocessing_graph=preprocessing_graph,
         )
 
     def save(self, path: str | Path, overwrite: bool = False) -> Path:
@@ -321,6 +364,14 @@ class ModelBundle:
                 pickle.dump(self.calibrator, f)
             files.append(BUNDLE_CALIBRATOR_FILE)
             checksums[BUNDLE_CALIBRATOR_FILE] = self._file_checksum(calibrator_path)
+
+        # Save preprocessing graph
+        if self.preprocessing_graph is not None:
+            graph_path = path / BUNDLE_PREPROCESSING_GRAPH_FILE
+            self.preprocessing_graph.save(graph_path)
+            files.append(BUNDLE_PREPROCESSING_GRAPH_FILE)
+            checksums[BUNDLE_PREPROCESSING_GRAPH_FILE] = self._file_checksum(graph_path)
+            logger.info(f"Saved preprocessing graph to {graph_path}")
 
         # Save model
         model_dir = path / BUNDLE_MODEL_DIR
@@ -396,12 +447,29 @@ class ModelBundle:
             with open(calibrator_path, "rb") as f:
                 calibrator = pickle.load(f)
 
+        # Load preprocessing graph
+        preprocessing_graph = None
+        graph_path = path / BUNDLE_PREPROCESSING_GRAPH_FILE
+        if graph_path.exists():
+            try:
+                from src.inference.preprocessing_graph import PreprocessingGraph
+
+                preprocessing_graph = PreprocessingGraph.load(graph_path)
+                # Set the scaler on the preprocessing graph
+                if preprocessing_graph is not None and scaler is not None:
+                    preprocessing_graph.set_scaler(scaler)
+                logger.info(f"Loaded preprocessing graph from {graph_path}")
+            except ImportError:
+                logger.warning(
+                    "PreprocessingGraph module not available, skipping graph loading"
+                )
+
         # Load model
         model_dir = path / BUNDLE_MODEL_DIR
         model = ModelRegistry.create(metadata.model_name)
         model.load(model_dir)
 
-        logger.info(f"Loaded bundle: {metadata.model_name} (H{metadata.horizon}) " f"from {path}")
+        logger.info(f"Loaded bundle: {metadata.model_name} (H{metadata.horizon}) from {path}")
 
         return cls(
             model=model,
@@ -409,6 +477,7 @@ class ModelBundle:
             feature_columns=feature_columns,
             metadata=metadata,
             calibrator=calibrator,
+            preprocessing_graph=preprocessing_graph,
         )
 
     def predict(
@@ -525,6 +594,102 @@ class ModelBundle:
             "metadata": self.metadata.to_dict(),
         }
 
+    def set_preprocessing_graph(self, graph: Any) -> None:
+        """
+        Set or update the preprocessing graph.
+
+        Args:
+            graph: PreprocessingGraph instance
+        """
+        self.preprocessing_graph = graph
+
+        # Update metadata
+        self.metadata.has_preprocessing_graph = True
+        self.metadata.preprocessing_graph_hash = getattr(
+            getattr(graph, "config", None),
+            "config_hash",
+            "",
+        )
+
+        # Set the scaler on the graph
+        if self.scaler is not None:
+            graph.set_scaler(self.scaler)
+
+        logger.info(
+            f"Set preprocessing graph (hash: {self.metadata.preprocessing_graph_hash})"
+        )
+
+    def preprocess(
+        self,
+        raw_df: pd.DataFrame,
+        skip_cleaning: bool = False,
+    ) -> pd.DataFrame:
+        """
+        Apply preprocessing to raw OHLCV data.
+
+        Uses the bundled preprocessing graph to transform raw data into
+        features suitable for model prediction. This ensures train/serve
+        parity by applying the exact same preprocessing as during training.
+
+        Args:
+            raw_df: DataFrame with raw OHLCV data. Must have columns:
+                   [datetime, open, high, low, close, volume]
+            skip_cleaning: If True, skip resampling (data already at target timeframe)
+
+        Returns:
+            DataFrame with features ready for model prediction
+
+        Raises:
+            RuntimeError: If no preprocessing graph is available
+        """
+        if self.preprocessing_graph is None:
+            raise RuntimeError(
+                "No preprocessing graph available. Either load a bundle with "
+                "a preprocessing graph or call set_preprocessing_graph() first."
+            )
+
+        # Apply preprocessing
+        features = self.preprocessing_graph.transform(
+            raw_df,
+            skip_cleaning=skip_cleaning,
+            skip_scaling=False,
+        )
+
+        # Ensure feature columns match
+        available_cols = [c for c in self.feature_columns if c in features.columns]
+        if len(available_cols) != len(self.feature_columns):
+            missing = set(self.feature_columns) - set(available_cols)
+            logger.warning(
+                f"Preprocessing generated {len(features.columns)} columns, "
+                f"but model expects {len(self.feature_columns)}. "
+                f"Missing {len(missing)} columns: {list(missing)[:5]}..."
+            )
+
+        return features[available_cols]
+
+    def predict_from_raw(
+        self,
+        raw_df: pd.DataFrame,
+        calibrate: bool = True,
+        skip_cleaning: bool = False,
+    ) -> PredictionOutput:
+        """
+        End-to-end prediction from raw OHLCV data.
+
+        Combines preprocessing and prediction into a single call for
+        convenience during inference.
+
+        Args:
+            raw_df: DataFrame with raw OHLCV data
+            calibrate: Whether to apply probability calibration
+            skip_cleaning: If True, skip resampling step
+
+        Returns:
+            PredictionOutput with predictions and probabilities
+        """
+        features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
+        return self.predict(features, calibrate=calibrate)
+
     @staticmethod
     def _file_checksum(path: Path) -> str:
         """Compute MD5 checksum of a file."""
@@ -539,7 +704,8 @@ class ModelBundle:
             f"ModelBundle(model={self.metadata.model_name}, "
             f"horizon={self.metadata.horizon}, "
             f"features={self.metadata.n_features}, "
-            f"calibrated={self.metadata.has_calibrator})"
+            f"calibrated={self.metadata.has_calibrator}, "
+            f"has_preprocessing_graph={self.metadata.has_preprocessing_graph})"
         )
 
 
@@ -548,4 +714,5 @@ __all__ = [
     "BundleMetadata",
     "BundleManifest",
     "BUNDLE_VERSION",
+    "BUNDLE_PREPROCESSING_GRAPH_FILE",
 ]

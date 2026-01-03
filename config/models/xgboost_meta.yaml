@@ -1,0 +1,31 @@
+# XGBoost Meta-Learner Configuration
+# For use as meta-learner in stacking ensembles
+# Gradient boosting meta-learner for learning complex prediction combinations
+
+# Model identification
+model:
+  name: xgboost_meta
+  family: meta_learner
+  description: XGBoost gradient boosting meta-learner for stacking ensembles
+
+# Default hyperparameters
+defaults:
+  # Tree parameters
+  n_estimators: 100          # Number of boosting rounds
+  max_depth: 3               # Shallow trees to prevent overfitting on OOF predictions
+
+  # Learning
+  learning_rate: 0.1         # Step size shrinkage
+
+  # Sampling
+  subsample: 0.8             # Row subsampling ratio
+  colsample_bytree: 0.8      # Column subsampling ratio
+
+  # Early stopping
+  early_stopping_rounds: 10  # Early stopping patience
+
+# Training settings
+training:
+  random_seed: 42
+
+# Note: Meta-learners receive 2D OOF predictions (n_samples, n_base_models * n_classes)

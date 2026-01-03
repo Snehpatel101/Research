@@ -72,6 +72,11 @@ class BlendingEnsemble(BaseModel):
         return "ensemble"
 
     @property
+    def ensemble_type(self) -> str:
+        """Return the ensemble type identifier."""
+        return "blending"
+
+    @property
     def requires_scaling(self) -> bool:
         return False
 

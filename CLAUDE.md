@@ -16,9 +16,8 @@ The ML factory implements a **single unified pipeline** that ingests canonical O
 ```
 Raw 1-min OHLCV (canonical - single source of truth)
   ↓
-[MTF Upscaling] → ⚠️ 5 of 9 timeframes implemented (partial - see Phase 2 status)
-  Currently: 15m, 30m, 1h, 4h, daily
-  Planned: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
+[MTF Upscaling] → ✅ 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+  Full 9-TF ladder available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
   ↓
 EACH base model independently chooses (configurable per-model):
   • Primary training TF (e.g., CatBoost→15min, TCN→5min, PatchTST→1min)
@@ -34,7 +33,7 @@ Triple-Barrier Labeling (Optuna-optimized)
 Model-Family Adapters
   ├─ Tabular (2D): XGBoost, LightGBM, CatBoost, RF, Logistic, SVM
   ├─ Sequence (3D): LSTM, GRU, TCN, Transformer
-  └─ Multi-Res (4D): Planned for advanced models
+  └─ Multi-Res (4D): PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
   ↓
 Training (single models + heterogeneous ensembles via meta-learner stacking)
   ↓
@@ -42,7 +41,7 @@ Standardized Artifacts (models, predictions, metrics)
 ```
 
 **Key Architectural Points:**
-- **ONE Canonical Source:** Single 1-min OHLCV dataset → ⚠️ 5 of 9 timeframes implemented (partial)
+- **ONE Canonical Source:** Single 1-min OHLCV dataset → ✅ 8 intraday timeframes implemented
 - **Per-Model Timeframe Configuration:** EACH base model independently chooses its primary training timeframe:
   - CatBoost trains on 15min (derived from 1-min canonical)
   - TCN trains on 5min (derived from 1-min canonical)
@@ -59,9 +58,9 @@ Standardized Artifacts (models, predictions, metrics)
 - **Direct Stacking:** Meta-learner trained on OOF predictions from heterogeneous bases
 
 **Implementation Status:**
-- Phases 1-6: Complete (13 base models + 4 meta-learners across 5 families)
-- Phase 7: ⚠️ PLANNED (heterogeneous ensemble training script not yet implemented)
-- MTF: ⚠️ PARTIAL (5 of 9 timeframes implemented - 15m, 30m, 1h, 4h, daily)
+- Phases 1-6: Complete (18 base models + 4 meta-learners = 22 models across 6 families)
+- Phase 7: ✅ Complete (heterogeneous stacking in trainer.py implemented)
+- MTF: ✅ Complete (8 intraday timeframes: 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
 **Documentation:** See `docs/ARCHITECTURE.md` and `docs/phases/` for comprehensive guides.
 
@@ -133,10 +132,10 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 ### Data Pipeline Details
 
 **Configurable Primary Timeframe:**
-- ⚠️ PLANNED: Primary training timeframe configurable per experiment
-- Current: Hardcoded to 5-min base timeframe
-- Intended: 9-TF ladder (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
-- Status: Only 5 TFs implemented (15m, 30m, 1h, 4h, daily)
+- ✅ Complete: Primary training timeframe configurable per experiment
+- Default: 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- Full 9-TF ladder available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
+- Status: All timeframes implemented and configurable
 
 **MTF Enrichment (Optional):**
 - **Strategy 1: Single-TF** - Train on primary timeframe only, no MTF features
@@ -148,17 +147,17 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 | Phase | Name | Description | Status |
 |:-----:|------|-------------|:------:|
 | 1 | Ingestion | Load and validate raw OHLCV | ✅ Complete |
-| 2 | MTF Upscaling | Multi-timeframe resampling (optional) | ⚠️ Partial (5/9 TFs) |
+| 2 | MTF Upscaling | Multi-timeframe resampling (8 intraday TFs) | ✅ Complete |
 | 3 | Features | 180+ indicator features | ✅ Complete |
 | 4 | Labeling | Triple-barrier + Optuna | ✅ Complete |
-| 5 | Adapters | Model-family data preparation | ✅ Complete |
-| 6 | Training | 17 models, 5 families | ✅ Complete |
-| 7 | Stacking | Heterogeneous ensemble training | ⚠️ PLANNED |
+| 5 | Adapters | Model-family data preparation (2D, 3D, 4D) | ✅ Complete |
+| 6 | Training | 22 models, 6 families | ✅ Complete |
+| 7 | Stacking | Heterogeneous ensemble training | ✅ Complete |
 
 **Data Shapes by Model Family:**
 - **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, ~180)`
 - **Sequence models** (Neural): 3D windows `(n_samples, seq_len, ~180)`
-- **Advanced models** (Planned): 4D multi-resolution `(n_samples, n_timeframes, seq_len, 4)`
+- **Advanced models** (Multi-Res): 4D tensors `(n_samples, n_timeframes, seq_len, n_features)`
 
 **See:** `docs/ARCHITECTURE.md` for comprehensive architecture documentation
 
@@ -167,8 +166,8 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 **Data Pipeline (Phases 1-5):**
 - **Phase 1:** Ingest raw 1-min OHLCV (canonical - single source of truth)
 - **Phase 2:** Multi-timeframe upscaling
-  - ⚠️ PARTIAL: Only 5 of 9 timeframes implemented (15m, 30m, 1h, 4h, daily)
-  - Planned: Full 9-TF ladder (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+  - ✅ Complete: 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+  - Full 9-TF ladder available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
   - All timeframes resampled from same 1-min source
 - **Phase 3:** Feature engineering (~150 base indicators + wavelets + microstructure)
 - **Phase 4:** Triple-barrier labeling with Optuna optimization (same labels for all models)
@@ -263,24 +262,25 @@ python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,
 python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru,tcn
 ```
 
-### Model Families (17 Implemented + 6 Planned = 23 Total)
+### Model Families (22 Models Implemented)
 
 | Family | Models | Data Format | Strengths | Status |
 |--------|--------|-------------|-----------|--------|
 | **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Fast, interpretable, feature interactions | ✅ Complete |
 | **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Temporal dependencies, sequential patterns | ✅ Complete |
 | **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | Robust baselines, interpretable | ✅ Complete |
-| **Ensemble** (3) | Voting, Stacking, Blending | OOF predictions | Same-family ensemble methods | ✅ Complete |
-| **Inference/Meta** (4) | Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta | OOF predictions | Meta-learner stacking from heterogeneous bases | ✅ Complete |
-| **CNN** (2) | InceptionTime, 1D ResNet | 3D sequences | Multi-scale pattern detection, deep residual learning | ⚠️ Planned |
-| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 3D sequences | SOTA long-term forecasting, interpretable attention | ⚠️ Planned |
-| **MLP** (1) | N-BEATS | 3D sequences | Interpretable decomposition, M4 winner | ⚠️ Planned |
+| **CNN** (2) | InceptionTime, ResNet1D | 3D/4D sequences | Multi-scale pattern detection, deep residual learning | ✅ Complete |
+| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 4D multi-res | SOTA long-term forecasting, interpretable attention | ✅ Complete |
+| **MLP** (1) | N-BEATS | 3D sequences | Interpretable decomposition, M4 winner | ✅ Complete |
+| **Ensemble** (3) | Voting, Stacking, Blending | OOF predictions | Same-family or heterogeneous ensemble methods | ✅ Complete |
+| **Meta-Learners** (4) | Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta | OOF predictions | Meta-learner stacking from heterogeneous bases | ✅ Complete |
 
 **Family Classification:**
 - **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, n_features)` - 6 models
-- **Sequence models** (Neural + CNN + Advanced + MLP): 3D windows `(n_samples, seq_len, n_features)` - 4 implemented + 6 planned
-- **Ensemble models**: Same-family ensemble methods - 3 models (Voting, Stacking, Blending)
-- **Inference/Meta models**: OOF predictions from heterogeneous bases - 4 meta-learners
+- **Sequence models** (Neural + CNN + MLP): 3D windows `(n_samples, seq_len, n_features)` - 7 models
+- **Multi-Res models** (Advanced Transformers): 4D tensors `(n_samples, n_timeframes, seq_len, n_features)` - 3 models
+- **Ensemble models**: Same-family or heterogeneous ensembles - 3 models (Voting, Stacking, Blending)
+- **Meta-Learners**: OOF predictions from heterogeneous bases - 4 meta-learners
 
 **Inference/Meta Family Details:**
 | Meta-Learner | Method | Use Case |
@@ -302,7 +302,7 @@ The factory supports **heterogeneous ensembles** where base models from differen
 ```
 1-min OHLCV Canonical Source (single source of truth)
        ↓
-Derive 5 of 9 timeframes (currently: 15m, 30m, 1h, 4h, daily)
+Derive 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
        ↓
 Base Model Selection (1 per family, EACH chooses its own TF + features)
   |-- Tabular: CatBoost → 15min + MTF indicators (from 1-min source)
@@ -344,13 +344,13 @@ Test Evaluation (meta-learner combines base predictions)
 
 **CLI Usage:**
 ```bash
-# ⚠️ TODO: Heterogeneous ensemble training script not yet implemented
-# Planned: scripts/train_ensemble.py for automated heterogeneous stacking
+# Heterogeneous stacking ensemble (trainer.py now supports dual data loading)
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models xgboost,lstm,tcn --meta-learner ridge_meta
 
-# Current workaround: Train base models individually, then manually stack
-python scripts/train_model.py --model catboost --horizon 20
-python scripts/train_model.py --model tcn --horizon 20 --seq-len 60
-# ... then use stacking model for manual meta-learner training
+# Base models from different families now work together
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models catboost,gru,patchtst --meta-learner xgboost_meta
 ```
 
 See `docs/implementation/PHASE_7_META_LEARNER_STACKING.md` for planned implementation.
@@ -501,31 +501,35 @@ src/phase1/stages/
 
 ## Model Factory (Phase 6 - Complete)
 
-Plugin-based model training system with **17 models across 5 families**:
+Plugin-based model training system with **22 models across 6 families**:
 
 ```
 src/models/
-├── registry.py         → ModelRegistry plugin system (17 models registered)
+├── registry.py         → ModelRegistry plugin system (22 models registered)
 ├── base.py             → BaseModel interface, TrainingMetrics, PredictionOutput
 ├── config/             → Configuration package (modular)
 │   ├── trainer_config.py  → TrainerConfig dataclass
 │   ├── loaders.py         → YAML config loading
 │   ├── paths.py           → Config file paths
 │   └── environment.py     → Environment detection
-├── trainer.py          → Unified training orchestration
+├── trainer.py          → Unified training orchestration (supports heterogeneous stacking)
 ├── metrics.py          → Metric calculation utilities
 ├── data_preparation.py → Dataset preparation utilities
 ├── device.py           → GPU detection, memory estimation
 ├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
-├── neural/             → LSTM, GRU, TCN, Transformer (4 models)
+├── neural/             → LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT (7 models)
 ├── classical/          → Random Forest, Logistic, SVM (3 models)
-└── ensemble/           → Voting, Stacking, Blending (3 models)
+├── cnn/                → InceptionTime, ResNet1D (2 models)
+├── nbeats/             → N-BEATS (1 model)
+└── ensemble/           → Voting, Stacking, Blending + Meta-learners (7 models)
 ```
 
 **Output:** Trained models + unified performance reports
 
-**17 models available:**
-- **Base (10):** `xgboost`, `lightgbm`, `catboost`, `lstm`, `gru`, `tcn`, `transformer`, `random_forest`, `logistic`, `svm`
+**22 models available:**
+- **Tabular (6):** `xgboost`, `lightgbm`, `catboost`, `random_forest`, `logistic`, `svm`
+- **Sequence (7):** `lstm`, `gru`, `tcn`, `transformer`, `inceptiontime`, `resnet1d`, `nbeats`
+- **Multi-Res (3):** `patchtst`, `itransformer`, `tft`
 - **Ensemble (3):** `voting`, `stacking`, `blending`
 - **Meta-learners (4):** `ridge_meta`, `mlp_meta`, `calibrated_meta`, `xgboost_meta`
 
@@ -564,18 +568,19 @@ python scripts/train_model.py --model xgboost --horizon 20
 python scripts/train_model.py --model lstm --horizon 20 --seq-len 30
 python scripts/train_model.py --model random_forest --horizon 20
 
-# Train ensemble (Phase 6 - same-family only)
+# Train ensemble (Phase 6 - same-family)
 python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,lightgbm,catboost
 python scripts/train_model.py --model stacking --horizon 20 --base-models lstm,gru,tcn --seq-len 30
 
-# ⚠️ TODO: Heterogeneous ensemble training (Phase 7 - not yet implemented)
-# Planned: scripts/train_ensemble.py --base-models catboost,tcn,patchtst --meta-learner ridge_meta --horizon 20
+# Heterogeneous ensemble training (Phase 7 - now supported!)
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models xgboost,lstm,patchtst --meta-learner ridge_meta
 
 # Run cross-validation (Phase 3)
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
 python scripts/run_cv.py --models all --horizons 5,10,15,20 --tune
 
-# List available models (should print 17)
+# List available models (should print 22)
 python scripts/train_model.py --list-models
 python -c "from src.models import ModelRegistry; print(len(ModelRegistry.list_all()))"
 ```
@@ -610,15 +615,14 @@ TRAIN/VAL/TEST = 70/15/15
 - TimeSeriesDataContainer for unified model training interface (2D for tabular, 3D for sequence)
 
 **Models (Phase 6):**
-- 17 models implemented across 5 families (Boosting, Neural, Classical, Ensemble, Meta-learners)
+- 22 models implemented across 6 families (Boosting, Neural, Classical, CNN, Advanced, Ensemble, Meta-learners)
 - Plugin-based model registry with `@register` decorator
-- 3 ensemble methods: Voting, Stacking, Blending (same-family)
+- 3 ensemble methods: Voting, Stacking, Blending (same-family or heterogeneous)
 - 4 meta-learners: Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
+- 6 advanced models: InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS
 
 **Roadmap:**
-- Phase 2 extension: 9-timeframe ladder (4 additional timeframes to complete)
-- Phase 7: Heterogeneous ensemble training (scripts/train_ensemble.py implementation)
 - Phase 8: Advanced meta-learners (regime-aware, adaptive)
-- 6 advanced models: InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
+- Phase 9: Real-time inference pipeline with streaming predictions
 
 **Performance expectations:** Do not treat any Sharpe/win-rate targets as "built-in". Measure performance empirically via `scripts/run_cv.py`, `scripts/run_walk_forward.py`, and `scripts/run_cpcv_pbo.py` on your own data/cost assumptions.

@@ -78,6 +78,11 @@ class StackingEnsemble(BaseModel):
         return "ensemble"
 
     @property
+    def ensemble_type(self) -> str:
+        """Return the ensemble type identifier."""
+        return "stacking"
+
+    @property
     def requires_scaling(self) -> bool:
         # Stacking handles scaling internally via meta-learner
         return False

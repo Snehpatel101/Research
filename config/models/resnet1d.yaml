@@ -1,0 +1,63 @@
+# ResNet1D Configuration
+# 1D Residual Network for time series - adapts ResNet architecture for sequential data
+# GPU: Optimized for CUDA acceleration with skip connections
+
+# Model identification
+model:
+  name: resnet1d
+  family: neural
+  description: 1D ResNet with residual blocks for deep temporal feature extraction
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  num_blocks:
+    - 2
+    - 2
+    - 2
+    - 2
+  base_channels: 64
+  kernel_size: 7
+  use_batch_norm: true
+  dropout: 0.2
+
+  # Residual connections
+  use_shortcut_conv: true      # Use 1x1 conv for dimension matching
+  downsample_first: true       # Downsample at first block of each stage
+
+  # Pooling
+  use_global_avg_pool: true
+  use_adaptive_pool: true
+
+  # Activation
+  activation: relu
+
+  # Input
+  sequence_length: 60
+  input_features: null         # Auto-detected from data
+
+  # Learning
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+
+  # Optimizer
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+
+# Training settings
+training:
+  batch_size: 512
+  max_epochs: 100
+  early_stopping_patience: 15
+  min_delta: 0.0001
+  feature_set: neural_optimal
+  random_seed: 42
+  num_workers: 4
+  pin_memory: true
+
+# Device settings
+device:
+  default: auto                # auto, cuda, or cpu
+  mixed_precision: true        # Use FP16 for faster training

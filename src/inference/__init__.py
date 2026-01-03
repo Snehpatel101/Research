@@ -3,6 +3,7 @@ Inference package for ML Model Factory.
 
 This package provides end-to-end inference capabilities:
 - ModelBundle: Serializable container for model artifacts
+- PreprocessingGraph: Serializable preprocessing pipeline for train/serve parity
 - InferencePipeline: High-level prediction interface
 - BatchPredictor: Efficient batch processing
 - ModelServer: Optional HTTP serving
@@ -30,6 +31,17 @@ Usage:
 
     predictor = BatchPredictor.from_bundle("./bundles/xgb_h20")
     result = predictor.predict_batch(df, output_path="predictions.parquet")
+
+    # With preprocessing graph for raw OHLCV inference
+    from src.inference import PreprocessingGraph
+
+    graph = PreprocessingGraph.from_pipeline_config(pipeline_config)
+    bundle.set_preprocessing_graph(graph)
+    bundle.save("./bundles/xgb_h20_with_graph")
+
+    # At inference time - predict directly from raw OHLCV
+    bundle = ModelBundle.load("./bundles/xgb_h20_with_graph")
+    predictions = bundle.predict_from_raw(raw_ohlcv_df)
 """
 
 from src.inference.batch import (
@@ -39,6 +51,7 @@ from src.inference.batch import (
     run_batch_inference,
 )
 from src.inference.bundle import (
+    BUNDLE_PREPROCESSING_GRAPH_FILE,
     BUNDLE_VERSION,
     BundleManifest,
     BundleMetadata,
@@ -48,6 +61,18 @@ from src.inference.pipeline import (
     EnsembleResult,
     InferencePipeline,
     InferenceResult,
+)
+from src.inference.preprocessing_graph import (
+    PREPROCESSING_GRAPH_FILE,
+    PREPROCESSING_GRAPH_VERSION,
+    CleaningConfig,
+    IndicatorConfig,
+    MTFConfig,
+    PreprocessingGraph,
+    PreprocessingGraphConfig,
+    RegimeConfig,
+    ScalingConfig,
+    WaveletConfig,
 )
 from src.inference.server import (
     ModelServer,
@@ -61,6 +86,18 @@ __all__ = [
     "BundleMetadata",
     "BundleManifest",
     "BUNDLE_VERSION",
+    "BUNDLE_PREPROCESSING_GRAPH_FILE",
+    # Preprocessing Graph
+    "PreprocessingGraph",
+    "PreprocessingGraphConfig",
+    "CleaningConfig",
+    "IndicatorConfig",
+    "MTFConfig",
+    "WaveletConfig",
+    "RegimeConfig",
+    "ScalingConfig",
+    "PREPROCESSING_GRAPH_VERSION",
+    "PREPROCESSING_GRAPH_FILE",
     # Pipeline
     "InferencePipeline",
     "InferenceResult",

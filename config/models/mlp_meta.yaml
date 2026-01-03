@@ -1,0 +1,31 @@
+# MLP Neural Meta-Learner Configuration
+# For use as meta-learner in stacking ensembles
+# Multi-layer perceptron for learning non-linear combinations of base model predictions
+
+# Model identification
+model:
+  name: mlp_meta
+  family: meta_learner
+  description: MLP neural network meta-learner for stacking ensembles
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  hidden_sizes: [64, 32]     # Hidden layer dimensions
+
+  # Regularization
+  dropout: 0.3               # Dropout rate between layers
+
+  # Optimization
+  learning_rate: 0.001       # Adam learning rate
+  max_epochs: 50             # Maximum training epochs
+  batch_size: 256            # Mini-batch size
+
+  # Early stopping
+  early_stopping_patience: 10  # Patience for early stopping
+
+# Training settings
+training:
+  random_seed: 42
+
+# Note: Meta-learners receive 2D OOF predictions (n_samples, n_base_models * n_classes)

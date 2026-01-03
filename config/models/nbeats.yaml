@@ -1,0 +1,61 @@
+# N-BEATS Configuration
+# Neural Basis Expansion Analysis for Time Series - pure deep learning architecture
+# GPU: Optimized for CUDA acceleration with interpretable basis expansion
+
+# Model identification
+model:
+  name: nbeats
+  family: neural
+  description: N-BEATS with interpretable trend and seasonality decomposition
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  stack_types:
+    - trend
+    - seasonality
+    - generic
+  num_blocks: 3                # Blocks per stack
+  num_layers: 4                # FC layers per block
+  layer_size: 512
+  dropout: 0.1
+
+  # Basis expansion
+  trend_degree: 2              # Polynomial degree for trend stack
+  seasonality_harmonics: 2     # Fourier harmonics for seasonality stack
+
+  # Generic stack
+  generic_expansion_coef: 32
+
+  # Sharing
+  share_weights_in_stack: false
+
+  # Input
+  sequence_length: 60
+  input_features: null         # Auto-detected from data
+
+  # Learning
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+
+  # Optimizer
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+
+# Training settings
+training:
+  batch_size: 512
+  max_epochs: 100
+  early_stopping_patience: 15
+  min_delta: 0.0001
+  feature_set: neural_optimal
+  random_seed: 42
+  num_workers: 4
+  pin_memory: true
+
+# Device settings
+device:
+  default: auto                # auto, cuda, or cpu
+  mixed_precision: true        # Use FP16 for faster training

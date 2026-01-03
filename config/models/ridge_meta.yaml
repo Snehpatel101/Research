@@ -1,0 +1,24 @@
+# Ridge Regression Meta-Learner Configuration
+# For use as meta-learner in stacking ensembles
+# Linear model with L2 regularization - simple but effective for combining predictions
+
+# Model identification
+model:
+  name: ridge_meta
+  family: meta_learner
+  description: Ridge regression meta-learner for stacking ensembles
+
+# Default hyperparameters
+defaults:
+  # Regularization
+  alpha: 1.0                 # L2 regularization strength
+
+  # Model settings
+  fit_intercept: true        # Whether to fit the intercept
+  solver: lsqr               # lsqr is efficient for large datasets
+
+# Training settings
+training:
+  random_seed: 42
+
+# Note: Meta-learners receive 2D OOF predictions (n_samples, n_base_models * n_classes)

@@ -1,0 +1,24 @@
+# Calibrated Meta-Learner Configuration
+# For use as meta-learner in stacking ensembles
+# Probability calibration wrapper for well-calibrated prediction probabilities
+
+# Model identification
+model:
+  name: calibrated_meta
+  family: meta_learner
+  description: Calibrated classifier meta-learner for stacking ensembles
+
+# Default hyperparameters
+defaults:
+  # Base estimator
+  base_estimator: logistic   # Base classifier to calibrate
+
+  # Calibration settings
+  method: isotonic           # Calibration method: isotonic or sigmoid
+  cv: 5                      # Cross-validation folds for calibration
+
+# Training settings
+training:
+  random_seed: 42
+
+# Note: Meta-learners receive 2D OOF predictions (n_samples, n_base_models * n_classes)

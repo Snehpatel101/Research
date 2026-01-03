@@ -1,0 +1,61 @@
+# InceptionTime Configuration
+# Inception-based CNN ensemble for time series classification
+# GPU: Optimized for CUDA acceleration with multi-scale convolutions
+
+# Model identification
+model:
+  name: inceptiontime
+  family: neural
+  description: InceptionTime CNN with multi-scale temporal convolutions and residual connections
+
+# Default hyperparameters
+defaults:
+  # Architecture
+  num_inception_modules: 6
+  bottleneck_channels: 32
+  kernel_sizes:
+    - 10
+    - 20
+    - 40
+  num_filters: 32              # Filters per kernel size
+  use_residual: true
+  use_bottleneck: true
+
+  # Pooling
+  use_max_pooling: true
+  pool_size: 3
+  pool_stride: 1
+
+  # Regularization
+  dropout: 0.2
+  use_batch_norm: true
+
+  # Input
+  sequence_length: 60
+  input_features: null         # Auto-detected from data
+
+  # Learning
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  gradient_clip: 1.0
+
+  # Optimizer
+  optimizer: adamw
+  scheduler: cosine
+  warmup_epochs: 5
+
+# Training settings
+training:
+  batch_size: 512
+  max_epochs: 100
+  early_stopping_patience: 15
+  min_delta: 0.0001
+  feature_set: neural_optimal
+  random_seed: 42
+  num_workers: 4
+  pin_memory: true
+
+# Device settings
+device:
+  default: auto                # auto, cuda, or cpu
+  mixed_precision: true        # Use FP16 for faster training

@@ -244,4 +244,31 @@ pytest tests/ -v --tb=short
 
 ---
 
-Last Updated: 2026-01-01
+Last Updated: 2026-01-02
+
+---
+
+## IMPLEMENTATION COMPLETED (2026-01-02)
+
+All major gaps have been fixed:
+
+### ✅ Completed Today
+
+1. **Advanced Model Configs (6 files):** patchtst.yaml, itransformer.yaml, tft.yaml, nbeats.yaml, inceptiontime.yaml, resnet1d.yaml
+
+2. **Meta-Learner Configs (4 files):** ridge_meta.yaml, mlp_meta.yaml, calibrated_meta.yaml, xgboost_meta.yaml
+
+3. **Heterogeneous Stacking in Trainer:** Added `_is_heterogeneous_ensemble()` method and dual data loading (2D+3D) for mixed tabular+sequence ensembles
+
+4. **9-TF Ladder Configuration:** Updated DEFAULT_MTF_TIMEFRAMES to 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h), added FULL_MTF_TIMEFRAMES with 9 TFs including 1min
+
+5. **Preprocessing Graph:** Created `src/inference/preprocessing_graph.py` (907 lines) for train/serve parity, updated ModelBundle to save/load preprocessing config
+
+6. **Documentation Updated:** CLAUDE.md now correctly shows 22 models, all phases complete
+
+### Verification
+
+- 22 models registered in ModelRegistry
+- 8 default MTF timeframes configured
+- 23 model config YAML files
+- All syntax validations passed
