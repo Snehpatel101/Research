@@ -44,10 +44,50 @@ from .feature_selection import FeatureSelectionConfig, FeatureSelectionManager
 from .metrics import compute_classification_metrics, compute_trading_metrics
 from .registry import ModelRegistry
 
+# Invalid label sentinel used by the pipeline (see src/phase1/stages/datasets/validators.py)
+INVALID_LABEL_SENTINEL = -99
+
 if TYPE_CHECKING:
     from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_labels(
+    y: np.ndarray | pd.Series,
+    context: str = "labels",
+) -> None:
+    """
+    Validate that labels do not contain invalid sentinel values.
+
+    LEAKAGE PREVENTION: Labels marked as -99 indicate edge cases where
+    the triple-barrier outcome could not be computed (e.g., end of data).
+    Training on these corrupted labels inflates metrics artificially.
+
+    The TimeSeriesDataContainer filters these by default (exclude_invalid_labels=True),
+    but this provides a defensive safety check in case filtering was bypassed.
+
+    Args:
+        y: Labels array or series
+        context: Description for error message
+
+    Raises:
+        ValueError: If invalid labels are found
+    """
+    y_array = y.values if hasattr(y, "values") else y
+    n_invalid = (y_array == INVALID_LABEL_SENTINEL).sum()
+
+    if n_invalid > 0:
+        raise ValueError(
+            f"LEAKAGE DETECTED: {context} contains {n_invalid} invalid labels "
+            f"(sentinel value {INVALID_LABEL_SENTINEL}). These indicate edge cases "
+            "where the triple-barrier outcome could not be computed. Training on "
+            "these corrupted labels inflates metrics artificially.\n\n"
+            "Fix: Ensure TimeSeriesDataContainer was loaded with "
+            "exclude_invalid_labels=True (the default), or filter manually:\n"
+            f"  mask = y != {INVALID_LABEL_SENTINEL}\n"
+            "  X, y, weights = X[mask], y[mask], weights[mask]"
+        )
 
 
 class Trainer:
@@ -331,6 +371,11 @@ class Trainer:
             "train", return_df=True
         )
         X_val_df, y_val_series, _ = container.get_sklearn_arrays("val", return_df=True)
+
+        # LEAKAGE PREVENTION: Validate no invalid labels (-99) in training data
+        # The container should filter these by default, but this is a defensive check
+        _validate_labels(y_train_series, "training labels")
+        _validate_labels(y_val_series, "validation labels")
 
         # Extract label_end_times for overlapping label purging
         label_end_times = container.get_label_end_times("train")
@@ -675,6 +720,9 @@ class Trainer:
 
             X_test = X_test_df.values
             y_test = y_test_series.values
+
+        # LEAKAGE PREVENTION: Validate no invalid labels (-99) in test data
+        _validate_labels(y_test, "test labels")
 
         logger.info(f"Test set size: {X_test.shape}")
 

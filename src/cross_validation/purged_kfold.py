@@ -283,6 +283,10 @@ class PurgedKFold:
                 for i in range(n_samples):
                     if train_mask[i]:  # Only check samples still in training set
                         label_end = label_end_times.iloc[i]
+                        # Skip samples with missing label_end_times (NaT/None)
+                        # These are typically invalid labels that should have been filtered
+                        if pd.isna(label_end):
+                            continue
                         # Remove if label's outcome period overlaps with test period
                         # This handles:
                         # 1. Samples before test whose labels extend into test period
