@@ -1,0 +1,28 @@
+# Google Colab-specific dependencies
+# Install with: pip install -r requirements-colab.txt
+
+# Experiment tracking (CRITICAL for Colab)
+wandb>=0.16.0
+
+# Data versioning (recommended)
+dvc[gdrive]>=3.0.0
+
+# Notebook execution (for automation)
+papermill>=2.5.0
+
+# GPU monitoring
+pynvml>=11.5.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Google Colab utilities (pre-installed, but listed for reference)
+# google-colab  # Already available in Colab
+
+# Optional: Cloud storage alternatives
+# google-cloud-storage>=2.10.0  # For GCS instead of Drive
+# boto3>=1.28.0  # For S3
+
+# Optional: Advanced experiment tracking
+# comet-ml>=3.35.0  # Alternative to W&B
+# neptune>=1.8.0  # Another alternative
