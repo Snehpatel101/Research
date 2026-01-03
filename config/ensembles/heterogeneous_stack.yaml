@@ -1,0 +1,263 @@
+# Heterogeneous Stacking Ensemble Configuration
+# Combines models from 3 DIFFERENT families for maximum diversity
+# This is the RECOMMENDED architecture for best generalization
+
+# =============================================================================
+# HETEROGENEOUS ENSEMBLES (Mixed 2D + 3D + 4D Input)
+# =============================================================================
+
+# The key insight: While base models require different input shapes,
+# the meta-learner ALWAYS receives 2D OOF predictions, making the combination possible.
+
+# -----------------------------------------------------------------------------
+# 3-BASE STANDARD (RECOMMENDED)
+# -----------------------------------------------------------------------------
+# One model from each of the 3 families:
+# - Tabular (2D): CatBoost - feature interactions, fast training
+# - Neural/CNN (3D): TCN - local temporal patterns, multi-scale
+# - Transformer (4D): PatchTST - long-range dependencies, global context
+# Training time: 2-3 hours (GPU)
+# Expected lift: +0.05-0.08 F1 over homogeneous ensembles
+# -----------------------------------------------------------------------------
+heterogeneous_standard:
+  # Base models - ONE from each family
+  base_model_names:
+    - catboost     # Tabular (2D) - feature interactions
+    - tcn          # Neural/CNN (3D) - local temporal patterns
+    - patchtst     # Transformer (4D) - long-range dependencies
+
+  base_model_configs: {}  # Use defaults for OOF
+
+  # Meta-learner
+  meta_learner_name: logistic  # Fast, calibrated, regularized
+  meta_learner_config: {}
+
+  # Cross-validation
+  n_folds: 3  # Fewer folds for neural models (slow training)
+
+  # Meta-learner input
+  use_probabilities: true  # 3*n_models features (9 features)
+  passthrough: false
+
+  # Leakage prevention (CRITICAL)
+  use_default_configs_for_oof: true
+
+  # PurgedKFold settings
+  purge_bars: 60     # 3x max horizon=20
+  embargo_bars: 1440  # 5 days at 5min
+
+  # Sequence settings for neural/transformer models
+  sequence_length: 60
+
+# -----------------------------------------------------------------------------
+# 3-BASE ALTERNATIVE (XGBoost + LSTM + TFT)
+# -----------------------------------------------------------------------------
+# Alternative selection for different use cases:
+# - XGBoost: Faster than CatBoost, strong baseline
+# - LSTM: Better for longer sequences, memory of past
+# - TFT: Interpretable attention, temporal fusion
+# -----------------------------------------------------------------------------
+heterogeneous_alternative:
+  base_model_names:
+    - xgboost      # Tabular (2D) - fast, interpretable
+    - lstm         # Neural/RNN (3D) - long-term memory
+    - tft          # Transformer (4D) - temporal fusion, interpretable
+
+  base_model_configs: {}
+  meta_learner_name: logistic
+  meta_learner_config: {}
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+  sequence_length: 60
+
+# -----------------------------------------------------------------------------
+# 4-BASE MAXIMUM DIVERSITY
+# -----------------------------------------------------------------------------
+# 4 models for maximum diversity (higher training cost):
+# - LightGBM: Fastest boosting, feature selection
+# - TCN: Multi-scale convolutions
+# - Transformer: Vanilla attention
+# - PatchTST: Patching for efficiency + multi-resolution
+# Training time: 4-5 hours (GPU)
+# -----------------------------------------------------------------------------
+heterogeneous_maximum:
+  base_model_names:
+    - lightgbm     # Tabular (2D) - fastest boosting
+    - tcn          # Neural/CNN (3D) - multi-scale patterns
+    - transformer  # Transformer (3D) - vanilla attention
+    - patchtst     # Transformer (4D) - patching + multi-res
+
+  base_model_configs: {}
+  meta_learner_name: ridge_meta  # Ridge for more features
+  meta_learner_config: {}
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+  sequence_length: 60
+
+# -----------------------------------------------------------------------------
+# 2-BASE MINIMAL (Fast Prototyping)
+# -----------------------------------------------------------------------------
+# Quick heterogeneous ensemble for fast iteration:
+# - CatBoost: Strong tabular baseline
+# - LSTM: Simple sequence baseline
+# Training time: 1-1.5 hours (GPU)
+# -----------------------------------------------------------------------------
+heterogeneous_minimal:
+  base_model_names:
+    - catboost     # Tabular (2D)
+    - lstm         # Neural/RNN (3D)
+
+  base_model_configs: {}
+  meta_learner_name: logistic
+  meta_learner_config: {}
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+  sequence_length: 30  # Shorter for faster training
+
+# -----------------------------------------------------------------------------
+# NEURAL META-LEARNER
+# -----------------------------------------------------------------------------
+# Use MLP meta-learner for non-linear combination:
+# Best when base model predictions have complex interactions
+# -----------------------------------------------------------------------------
+heterogeneous_mlp_meta:
+  base_model_names:
+    - catboost
+    - tcn
+    - patchtst
+
+  base_model_configs: {}
+  meta_learner_name: mlp_meta  # Non-linear meta-learner
+  meta_learner_config:
+    hidden_sizes: [64, 32]
+    dropout: 0.3
+    learning_rate: 0.001
+
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+  sequence_length: 60
+
+# -----------------------------------------------------------------------------
+# XGBOOST META-LEARNER
+# -----------------------------------------------------------------------------
+# Use XGBoost meta-learner for feature interactions in OOF:
+# Best when base models capture different aspects that combine non-linearly
+# -----------------------------------------------------------------------------
+heterogeneous_xgb_meta:
+  base_model_names:
+    - catboost
+    - tcn
+    - patchtst
+
+  base_model_configs: {}
+  meta_learner_name: xgboost_meta
+  meta_learner_config:
+    max_depth: 3
+    n_estimators: 100
+    learning_rate: 0.1
+
+  n_folds: 3
+  use_probabilities: true
+  passthrough: false
+  use_default_configs_for_oof: true
+  purge_bars: 60
+  embargo_bars: 1440
+  sequence_length: 60
+
+# =============================================================================
+# ARCHITECTURE DIAGRAM
+# =============================================================================
+#
+#                    RAW 1-MIN OHLCV (Canonical Source)
+#                              |
+#                              v
+#         +------------------------------------------+
+#         |        PHASE 1: 14-STAGE PIPELINE        |
+#         |  Clean -> Features -> MTF -> Labels      |
+#         |  -> Splits -> Scaling -> Datasets        |
+#         +------------------------------------------+
+#                              |
+#                              v
+#                 +-----------------------+
+#                 | TimeSeriesDataContainer|
+#                 +-----------------------+
+#                    /         |         \
+#                   /          |          \
+#                  v           v           v
+#         +--------+    +--------+    +--------+
+#         |CatBoost|    |  TCN   |    |PatchTST|
+#         | (2D)   |    | (3D)   |    | (4D)   |
+#         +--------+    +--------+    +--------+
+#              |            |             |
+#              v            v             v
+#         +--------+    +--------+    +--------+
+#         |OOF Pred|    |OOF Pred|    |OOF Pred|
+#         | (N,3)  |    | (N,3)  |    | (N,3)  |
+#         +--------+    +--------+    +--------+
+#              \            |            /
+#               \           |           /
+#                v          v          v
+#              +---------------------+
+#              | Stacked OOF (N, 9)  |
+#              +---------------------+
+#                        |
+#                        v
+#              +---------------------+
+#              |    META-LEARNER     |
+#              | (Logistic/Ridge/MLP)|
+#              +---------------------+
+#                        |
+#                        v
+#              +---------------------+
+#              |  FINAL PREDICTIONS  |
+#              +---------------------+
+#
+# =============================================================================
+# WHY THESE 3 MODELS?
+# =============================================================================
+#
+# 1. CatBoost (Tabular/Boosting):
+#    - Captures feature interactions and non-linear relationships
+#    - Fast training, handles categorical features
+#    - Inductive bias: Feature engineering matters
+#
+# 2. TCN (Temporal Convolutional Network):
+#    - Captures local temporal patterns at multiple scales
+#    - Dilated convolutions for efficient long-range modeling
+#    - Inductive bias: Recent patterns matter, locality
+#
+# 3. PatchTST (Patch Time Series Transformer):
+#    - Captures global context and long-range dependencies
+#    - Multi-resolution analysis via patching
+#    - Inductive bias: All history matters, attention
+#
+# Diversity of inductive biases = reduced error correlation = robust ensemble
+#
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+#
+# CLI:
+# python scripts/train_model.py --model stacking --horizon 20 \
+#   --base-models catboost,tcn,patchtst --meta-learner logistic --seq-len 60
+#
+# Or use config file:
+# python scripts/train_model.py --model stacking --horizon 20 \
+#   --config-file config/ensembles/heterogeneous_stack.yaml:heterogeneous_standard
+#
