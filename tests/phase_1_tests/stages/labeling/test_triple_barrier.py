@@ -198,7 +198,12 @@ class TestTripleBarrierNumba:
         assert bars_to_hit[0] == 5  # max_bars
 
     def test_same_bar_hit_resolution(self):
-        """Test resolution when both barriers hit on same bar."""
+        """Test resolution when both barriers hit on same bar.
+
+        When both barriers are hit on the same bar, we CANNOT determine
+        which was hit first without tick data. The distance-from-open
+        heuristic was statistically invalid. Now we mark these as invalid (-99).
+        """
         n = 30
         close = np.full(n, 100.0)
         high = close.copy()
@@ -208,7 +213,7 @@ class TestTripleBarrierNumba:
         # Bar 1 crosses both barriers
         high[1] = 108.0   # Hits upper (100 + 2*2 = 104)
         low[1] = 92.0     # Hits lower (100 - 2*2 = 96)
-        open_[1] = 102.0  # Open closer to upper
+        open_[1] = 102.0  # Open closer to upper (but this doesn't matter anymore)
 
         atr = np.ones(n) * 2.0
 
@@ -216,9 +221,10 @@ class TestTripleBarrierNumba:
             close, high, low, open_, atr, k_up=2.0, k_down=2.0, max_bars=15
         )
 
-        # Open closer to upper barrier, so upper hit first
-        assert labels[0] == 1
-        assert touch_type[0] == 1
+        # Simultaneous barrier hits are now marked as invalid (-99)
+        # because we cannot determine hit order without tick data
+        assert labels[0] == -99
+        assert touch_type[0] == 0  # No clear touch type for ambiguous case
 
     def test_invalid_atr_handling(self):
         """Test that invalid ATR values are handled."""

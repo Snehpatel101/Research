@@ -350,7 +350,9 @@ class BaseRNNModel(BaseModel):
         # Compute class weights for imbalanced datasets (common in trading: neutral >> long/short)
         use_class_weights = train_config.get("use_class_weights", True)
         if use_class_weights:
-            class_counts = np.bincount(y_train.astype(np.int64), minlength=self._model.n_classes)
+            # Labels can be -1, 0, 1 (short/neutral/long) - offset to 0, 1, 2 for bincount
+            y_offset = y_train.astype(np.int64) + 1  # Shift -1,0,1 to 0,1,2
+            class_counts = np.bincount(y_offset, minlength=self._n_classes)
             # Handle edge case of zero counts (shouldn't happen in practice)
             class_counts = np.maximum(class_counts, 1)
             # Inverse frequency weighting: rarer classes get higher weights
