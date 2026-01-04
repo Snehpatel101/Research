@@ -849,12 +849,15 @@ from google.colab import drive
 drive.mount('/content/drive')
 
 # Clone repo and install
-!git clone https://github.com/user/research.git
+!git clone https://github.com/YOUR_USERNAME/research.git  # Replace with actual repo URL
 %cd research
 !pip install -r requirements-colab.txt
 
-# Run pipeline phases 1-5 (saves to Drive)
-!./pipeline run --symbols MES --save-to /content/drive/MyDrive/ml_factory/
+# Run pipeline phases 1-5
+# NOTE: Pipeline outputs to data/splits/scaled/ by default
+# Manual copy to Drive required after completion
+!./pipeline run --symbols MES
+!cp -r data/splits/scaled /content/drive/MyDrive/ml_factory/
 ```
 
 **Output:** Processed data saved to Drive (~2 GB)
@@ -863,43 +866,50 @@ drive.mount('/content/drive')
 
 **Session 2A - Tabular Models (30 min):**
 ```bash
-# Load data from Drive
+# Copy data from Drive to local (faster I/O)
+!cp -r /content/drive/MyDrive/ml_factory/scaled data/splits/
+
+# Run CV with tabular models
 !python scripts/run_cv.py \
   --models xgboost,lightgbm,catboost \
   --horizons 20 --n-splits 5 \
-  --load-from /content/drive/MyDrive/ml_factory/ \
-  --save-to /content/drive/MyDrive/ml_factory/cv_results/
+  --data-dir data/splits/scaled \
+  --output-dir /content/drive/MyDrive/ml_factory/cv_results/
 ```
 
 **Session 2B - Neural Models (4-6 hours):**
 ```bash
+# NOTE: --checkpoint-every is NOT YET IMPLEMENTED
+# Neural training will need to complete in one session or implement epoch checkpointing
 !python scripts/run_cv.py \
   --models lstm,gru,tcn \
-  --horizons 20 --n-splits 5 --seq-len 60 \
-  --load-from /content/drive/MyDrive/ml_factory/ \
-  --save-to /content/drive/MyDrive/ml_factory/cv_results/ \
-  --checkpoint-every 10  # Save every 10 epochs
+  --horizons 20 --n-splits 5 \
+  --data-dir data/splits/scaled \
+  --output-dir /content/drive/MyDrive/ml_factory/cv_results/
+# TODO: Add epoch-level checkpointing to neural models for Colab reliability
 ```
 
 **Session 2C - Advanced Models (4-6 hours):**
 ```bash
+# NOTE: Requires implementing epoch-level checkpointing for Colab reliability
 !python scripts/run_cv.py \
   --models patchtst,itransformer \
-  --horizons 20 --n-splits 5 --seq-len 60 \
-  --load-from /content/drive/MyDrive/ml_factory/ \
-  --save-to /content/drive/MyDrive/ml_factory/cv_results/ \
-  --checkpoint-every 10
+  --horizons 20 --n-splits 5 \
+  --data-dir data/splits/scaled \
+  --output-dir /content/drive/MyDrive/ml_factory/cv_results/
 ```
 
 #### Phase 3: Ensemble Training (30 min)
 
 **Session 3 - Meta-Learner:**
 ```bash
-# Use saved OOF predictions from Phase 2
+# Load CV results and train stacking ensemble
+# NOTE: --stacking-data takes a CV run ID (timestamp), not a directory path
 !python scripts/train_model.py --model stacking --horizon 20 \
   --base-models catboost,tcn,patchtst \
   --meta-learner ridge_meta \
-  --oof-dir /content/drive/MyDrive/ml_factory/cv_results/
+  --stacking-data "20260103_120000_123456_a1b2" \
+  --phase3-output /content/drive/MyDrive/ml_factory/cv_results/
 ```
 
 ### 4.8 Colab-Specific Recommendations
@@ -957,6 +967,34 @@ drive.mount('/content/drive')
    - Trade 20% speed for 50% memory reduction
    - **Location:** Transformer models
    - **Effort:** ~10 lines per model, 2 hours
+
+#### Priority 3 (CRITICAL - Data Integrity)
+
+9. **Checkpoint Leakage Prevention**
+   - **CRITICAL:** Checkpoints must NOT leak information across train/val/test splits
+   - When resuming mid-fold, ensure validation data was never seen during previous partial training
+   - Save and restore RNG states for reproducibility
+   - **Location:** All checkpointing code
+   - **Considerations:**
+     - Checkpoints should save: model weights, optimizer state, epoch number, RNG states
+     - Checkpoints should NOT save: validation metrics from future epochs
+     - On resume, validation set must be exactly the same (use saved fold indices)
+
+10. **Cross-Session Reproducibility**
+    - Different Colab sessions may have different GPU types (T4 vs P100 vs V100)
+    - Floating-point operations may differ slightly across GPU architectures
+    - **Mitigations:**
+      - Set `torch.backends.cudnn.deterministic = True`
+      - Log GPU type in experiment metadata
+      - Accept that exact reproducibility across different GPUs is not guaranteed
+    - **Location:** `colab_notebooks/utils/colab_setup.py`
+
+11. **OOF Prediction Integrity for Stacking**
+    - When checkpointing CV folds, OOF predictions must align exactly
+    - **CRITICAL:** If fold N crashes mid-training, re-run from scratch (do NOT use partial OOF)
+    - Save fold completion status: "not_started", "in_progress", "completed"
+    - Only use OOF predictions from completed folds
+    - **Location:** `src/cross_validation/oof_generator.py`
 
 ### 4.9 Colab Compatibility Matrix
 
@@ -1447,7 +1485,7 @@ def setup_colab_environment():
     # Clone repo (if not already cloned)
     if not Path("/content/research").exists():
         print("📦 Cloning repository...")
-        os.system("git clone https://github.com/user/research.git /content/research")
+        os.system("git clone https://github.com/YOUR_USERNAME/research.git /content/research")  # Replace with actual repo
 
     # Install dependencies
     print("📚 Installing dependencies...")
@@ -1884,28 +1922,42 @@ After these critical fixes, implement Phase 2 (CI/CD, serving, monitoring) befor
 
 ### 9.2 Colab Implementation Effort
 
+> **Note:** Initial scaffolding exists in `colab_notebooks/utils/` (colab_setup.py, checkpoint_manager.py)
+> but requires API alignment with actual codebase. See "Current Implementation Status" below.
+
 **Week 1 (Colab Phase 0 - CRITICAL):**
-- Epoch-level checkpointing: 2-3 hours
-- Google Drive integration: 1 hour
-- W&B experiment tracking: 2 hours
-- Testing and validation: 2-3 hours
-- **Total: 7-9 hours**
+- Epoch-level checkpointing: 4-5 hours (requires modifying neural training loops)
+- Google Drive integration: 2 hours (align existing scaffold with actual APIs)
+- W&B experiment tracking: 3-4 hours (integrate with Trainer class)
+- Testing and validation: 3-4 hours
+- **Total: 12-15 hours**
 
 **Week 2 (Colab Phase 1 - HIGH PRIORITY):**
-- Fold-level CV checkpointing: 1-2 hours
-- Batch size auto-adjustment: 2 hours
-- Resource monitoring: 1 hour
-- Testing: 2 hours
-- **Total: 6-7 hours**
+- Fold-level CV checkpointing: 2-3 hours (modify CVRunner)
+- Batch size auto-adjustment: 3 hours (GPU memory detection + fallback)
+- Resource monitoring: 1-2 hours
+- Testing: 3 hours
+- **Total: 9-11 hours**
 
 **Week 3 (Colab Phase 2 - NICE TO HAVE):**
-- Colab notebook templates (5 notebooks): 4-6 hours
-- Session time manager: 1-2 hours
-- requirements-colab.txt: 30 min
-- Documentation updates: 2-3 hours
-- **Total: 8-12 hours**
+- Colab notebook templates (5 notebooks): 6-8 hours (fix API mismatches in existing notebooks)
+- Session time manager: 2 hours
+- requirements-colab.txt: 1 hour (add missing dependencies)
+- Documentation updates: 3-4 hours
+- **Total: 12-15 hours**
 
-**Total effort:** 21-28 hours (3-4 weeks part-time)
+**Total effort:** 33-41 hours (4-5 weeks part-time)
+
+**Current Implementation Status:**
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `colab_notebooks/utils/colab_setup.py` | Scaffolded | Requires API alignment |
+| `colab_notebooks/utils/checkpoint_manager.py` | Scaffolded | `save_checkpoint()` type issues |
+| `notebooks/colab_setup.py` | Working | Basic Colab setup, `get_trainer_for_colab()` |
+| Epoch checkpointing in neural models | NOT IMPLEMENTED | Critical gap |
+| Fold-level CV checkpointing | NOT IMPLEMENTED | High priority |
+| W&B integration | NOT IMPLEMENTED | Scaffolded only |
+| `requirements-colab.txt` | Incomplete | Missing: pandas, numpy, torch, xgboost, etc. |
 
 ### 9.3 Colab Success Metrics
 

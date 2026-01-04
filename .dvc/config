@@ -2,6 +2,9 @@
     remote = gdrive
     autostage = true
 
+# IMPORTANT: Replace '1YourGoogleDriveFolderID' with your actual Google Drive folder ID
+# To get folder ID: Open Drive folder in browser, copy the ID from URL
+# Example: https://drive.google.com/drive/folders/1ABC123xyz -> ID is 1ABC123xyz
 ['remote "gdrive"']
     url = gdrive://1YourGoogleDriveFolderID
     gdrive_acknowledge_abuse = true
