@@ -159,6 +159,26 @@ class TransformerNetwork(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
+    def _generate_causal_mask(self, seq_len: int, device: torch.device) -> torch.Tensor:
+        """
+        Generate causal attention mask to prevent attending to future positions.
+
+        This is CRITICAL for production trading - without this mask, the model
+        can "see" future positions during training, causing train-test mismatch.
+
+        Args:
+            seq_len: Sequence length
+            device: Device to create mask on
+
+        Returns:
+            Causal mask of shape (seq_len, seq_len)
+        """
+        # Upper triangular mask: True where attention should be blocked
+        mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1)
+        # Convert to float mask: -inf where blocked, 0 where allowed
+        mask = mask.masked_fill(mask == 1, float("-inf"))
+        return mask
+
     def forward(
         self,
         x: torch.Tensor,
@@ -180,8 +200,12 @@ class TransformerNetwork(nn.Module):
         # Add positional encoding
         x = self.pos_encoder(x)  # (batch, seq_len, d_model)
 
-        # Transformer encoder
-        x = self.transformer_encoder(x)  # (batch, seq_len, d_model)
+        # Generate causal mask to prevent attending to future positions
+        seq_len = x.size(1)
+        causal_mask = self._generate_causal_mask(seq_len, x.device)
+
+        # Transformer encoder with causal mask
+        x = self.transformer_encoder(x, mask=causal_mask)  # (batch, seq_len, d_model)
 
         # Global average pooling over sequence dimension
         x = x.mean(dim=1)  # (batch, d_model)

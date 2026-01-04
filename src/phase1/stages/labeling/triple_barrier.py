@@ -127,17 +127,15 @@ def triple_barrier_numba(
             lower_hit = bar_low <= lower_barrier
 
             if upper_hit and lower_hit:
-                # BOTH barriers hit on same bar - determine which was hit first
-                # Use distance from bar open as proxy for which barrier hit first
-                dist_to_upper = abs(bar_open - upper_barrier)
-                dist_to_lower = abs(bar_open - lower_barrier)
-
-                if dist_to_upper <= dist_to_lower:
-                    labels[i] = 1
-                    touch_type[i] = 1
-                else:
-                    labels[i] = -1
-                    touch_type[i] = -1
+                # BOTH barriers hit on same bar - CANNOT determine order without tick data
+                # The previous "distance from open" heuristic was statistically flawed:
+                # - Bar open has no causal relationship to barrier hit order
+                # - A bar could open mid-range, hit lower barrier, then rally to upper
+                # Mark as invalid (-99) to exclude from training - this is the safe approach
+                # In volatile markets, this affects 5-15% of labels, but noise reduction
+                # from proper handling outweighs the sample loss
+                labels[i] = -99  # Invalid: ambiguous barrier hit order
+                touch_type[i] = 0
                 bars_to_hit[i] = j
                 hit = True
                 break
@@ -283,16 +281,10 @@ def triple_barrier_numba_with_costs(
             lower_hit = bar_low <= lower_barrier
 
             if upper_hit and lower_hit:
-                # BOTH barriers hit on same bar - determine which was hit first
-                dist_to_upper = abs(bar_open - upper_barrier)
-                dist_to_lower = abs(bar_open - lower_barrier)
-
-                if dist_to_upper <= dist_to_lower:
-                    labels[i] = 1
-                    touch_type[i] = 1
-                else:
-                    labels[i] = -1
-                    touch_type[i] = -1
+                # BOTH barriers hit on same bar - CANNOT determine order without tick data
+                # Mark as invalid (-99) for consistent handling across both barrier functions
+                labels[i] = -99  # Invalid: ambiguous barrier hit order
+                touch_type[i] = 0
                 bars_to_hit[i] = j
                 hit = True
                 break

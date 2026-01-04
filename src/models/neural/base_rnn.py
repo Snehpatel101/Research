@@ -346,7 +346,20 @@ class BaseRNNModel(BaseModel):
         # Setup training components
         optimizer = self._create_optimizer(train_config)
         scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
-        criterion = nn.CrossEntropyLoss()
+
+        # Compute class weights for imbalanced datasets (common in trading: neutral >> long/short)
+        use_class_weights = train_config.get("use_class_weights", True)
+        if use_class_weights:
+            class_counts = np.bincount(y_train.astype(np.int64), minlength=self._model.n_classes)
+            # Handle edge case of zero counts (shouldn't happen in practice)
+            class_counts = np.maximum(class_counts, 1)
+            # Inverse frequency weighting: rarer classes get higher weights
+            class_weights = len(y_train) / (len(class_counts) * class_counts)
+            class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32, device=self._device)
+            criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+            logger.debug(f"Class weights: {class_weights}")
+        else:
+            criterion = nn.CrossEntropyLoss()
 
         # Mixed precision scaler (only needed for float16, not bfloat16)
         scaler = (
