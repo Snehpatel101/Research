@@ -1,7 +1,13 @@
 # Model-Specific Feature Requirements and Recommendations
 # ML Model Factory - Feature Lists by Model Family
 #
-# Reference: src/models/registry.py (13 models across 4 families)
+# Reference: src/models/registry.py (23 models across 4 families)
+#
+# Model Count:
+#   - Tabular (6): xgboost, lightgbm, catboost, random_forest, logistic, svm
+#   - Neural (10): lstm, gru, tcn, transformer, patchtst, itransformer, tft, nbeats, inceptiontime, resnet1d
+#   - Ensemble (3): voting, stacking, blending
+#   - Meta-Learners (4): ridge_meta, mlp_meta, calibrated_meta, xgboost_meta
 
 ---
 
@@ -65,6 +71,7 @@ model_families:
       - gru
       - tcn
       - transformer
+      - nbeats
 
     input_shape: "3D (samples, sequence_length, features)"
     feature_engineering_importance: "Medium (learn representations, but good features help)"
@@ -82,7 +89,7 @@ model_families:
         description: "Number of historical bars to look back"
 
     feature_selection:
-      required: false  # Optional but recommended
+      required: false
       recommended_method: "mda"
       reason: "Sequence models can learn from moderate feature sets"
 
@@ -95,7 +102,6 @@ model_families:
         - "Volume features (normalized)"
         - "Temporal features"
         - "MTF features (provides multi-scale context)"
-
       not_recommended:
         - "Raw prices (non-stationary, use returns instead)"
         - "Redundant features (highly correlated)"
@@ -107,6 +113,121 @@ model_families:
         For sequence_length=60 and prediction at bar t:
         X[t] = features[t-60:t]  # 60 historical bars
         y[t] = label[t]          # Current label
+
+  # ---------------------------------------------------------------------------
+  # CNN MODELS (3D/4D input: multi-scale pattern detection)
+  # ---------------------------------------------------------------------------
+  cnn:
+    description: "CNN-based models for time series (InceptionTime, ResNet1D)"
+
+    models:
+      - inceptiontime
+      - resnet1d
+
+    input_shape: "3D (samples, sequence_length, features)"
+    feature_engineering_importance: "Medium (learns multi-scale patterns)"
+
+    recommended_features:
+      min: 20
+      max: 60
+      default: 30-50
+
+    sequence_parameters:
+      sequence_length:
+        min: 30
+        max: 240
+        default: 60
+        description: "Number of historical bars for pattern detection"
+
+    feature_selection:
+      required: false
+      recommended_method: "mda"
+      reason: "CNN models learn representations from raw features"
+
+    feature_types:
+      all_supported: true
+      recommended:
+        - "Returns and price ratios (stationary)"
+        - "Volume features (normalized)"
+        - "Volatility features"
+        - "Temporal features"
+
+  # ---------------------------------------------------------------------------
+  # MULTI-RESOLUTION MODELS (4D input: samples × timeframes × seq_len × features)
+  # ---------------------------------------------------------------------------
+  multi_res:
+    description: "Advanced transformers with multi-resolution/multi-timeframe input"
+
+    models:
+      - patchtst
+      - itransformer
+      - tft
+
+    input_shape: "4D (samples, n_timeframes, seq_len, features) or specialized"
+    feature_engineering_importance: "Low (learns from raw OHLCV)"
+
+    recommended_features:
+      min: 4
+      max: 20
+      default: 4-10
+      note: "Often use raw OHLCV only, model learns features"
+
+    sequence_parameters:
+      patch_length:
+        min: 8
+        max: 64
+        default: 16
+        description: "Size of patches for PatchTST"
+      n_timeframes:
+        min: 1
+        max: 5
+        default: 3
+        description: "Number of timeframes for multi-resolution"
+
+    feature_selection:
+      required: false
+      recommended_method: "none"
+      reason: "Multi-res models learn features from raw data"
+
+    feature_types:
+      recommended:
+        - "Raw OHLCV (normalized)"
+        - "Returns"
+        - "Volume (normalized)"
+      not_recommended:
+        - "Many engineered features (model learns its own)"
+
+  # ---------------------------------------------------------------------------
+  # META-LEARNERS (OOF predictions as input)
+  # ---------------------------------------------------------------------------
+  meta_learners:
+    description: "Meta-learners that combine OOF predictions from heterogeneous base models"
+
+    models:
+      - ridge_meta
+      - mlp_meta
+      - calibrated_meta
+      - xgboost_meta
+
+    input_shape: "2D (samples, n_base_models * n_classes)"
+    feature_engineering_importance: "None (uses OOF predictions only)"
+
+    recommended_features:
+      min: 2
+      max: 20
+      default: 6-12
+      note: "Input is OOF probabilities from base models, not raw features"
+
+    feature_selection:
+      required: false
+      recommended_method: "none"
+      reason: "Meta-learners train on OOF predictions, not raw features"
+
+    heterogeneous_support:
+      enabled: true
+      description: "Can combine base models from different families (tabular + sequence + multi_res)"
+      example:
+        - "CatBoost (tabular) + TCN (sequence) + PatchTST (multi_res)"
 
   # ---------------------------------------------------------------------------
   # ENSEMBLE MODELS (2D or 3D, depending on base models)
@@ -416,6 +537,253 @@ models:
       scaling: "Required"
 
   # ---------------------------------------------------------------------------
+  # N-BEATS
+  # ---------------------------------------------------------------------------
+  nbeats:
+    family: sequence
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 20-40
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Interpretable decomposition (trend + seasonality)"
+      - "M4 competition winner"
+      - "No recurrence or attention (pure MLP)"
+      - "Fast training compared to transformers"
+
+    weaknesses:
+      - "May underfit complex patterns"
+      - "Less flexible than attention-based models"
+
+    feature_preferences:
+      - "Normalized returns"
+      - "Trend indicators"
+      - "Seasonality-related features"
+
+    preprocessing:
+      scaling: "Required"
+
+  # ---------------------------------------------------------------------------
+  # INCEPTIONTIME (CNN)
+  # ---------------------------------------------------------------------------
+  inceptiontime:
+    family: cnn
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 30-50
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Multi-scale pattern detection (Inception modules)"
+      - "State-of-the-art for time series classification"
+      - "Ensemble of 5 networks for robustness"
+      - "Captures patterns at multiple temporal scales"
+
+    weaknesses:
+      - "Computationally expensive (5 networks)"
+      - "Requires more data for optimal performance"
+
+    feature_preferences:
+      - "Returns and price ratios"
+      - "Volatility features"
+      - "Volume features (normalized)"
+
+    preprocessing:
+      scaling: "Required (per-feature normalization)"
+
+  # ---------------------------------------------------------------------------
+  # RESNET1D (CNN)
+  # ---------------------------------------------------------------------------
+  resnet1d:
+    family: cnn
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 30-50
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Deep residual learning (skip connections)"
+      - "Handles vanishing gradient well"
+      - "Good for longer sequences"
+
+    weaknesses:
+      - "May overfit on small datasets"
+      - "Less interpretable than N-BEATS"
+
+    feature_preferences:
+      - "Same as InceptionTime"
+
+    preprocessing:
+      scaling: "Required"
+
+  # ---------------------------------------------------------------------------
+  # PATCHTST (Multi-Resolution Transformer)
+  # ---------------------------------------------------------------------------
+  patchtst:
+    family: multi_res
+    input_shape: "3D or 4D (patched input)"
+
+    recommended_features: 4-10
+    patch_length: 16
+    sequence_length: 96
+    feature_selection: "not required"
+
+    strengths:
+      - "Channel-independent patching"
+      - "State-of-the-art for long-term forecasting"
+      - "Efficient attention via patches"
+      - "Learns features from raw data"
+
+    weaknesses:
+      - "Requires tuning of patch length"
+      - "May need more data than simpler models"
+
+    feature_preferences:
+      - "Raw OHLCV (normalized)"
+      - "Returns"
+      - "Minimal feature engineering"
+
+    preprocessing:
+      scaling: "Required (instance normalization)"
+
+  # ---------------------------------------------------------------------------
+  # ITRANSFORMER (Inverted Transformer)
+  # ---------------------------------------------------------------------------
+  itransformer:
+    family: multi_res
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 4-10
+    sequence_length: 96
+    feature_selection: "not required"
+
+    strengths:
+      - "Inverted attention (feature-wise instead of time-wise)"
+      - "Better for multivariate forecasting"
+      - "Captures cross-feature dependencies"
+
+    weaknesses:
+      - "Newer architecture, less battle-tested"
+      - "May struggle with very long sequences"
+
+    feature_preferences:
+      - "Raw OHLCV (normalized)"
+      - "Returns"
+      - "Multiple related features (benefits from cross-feature attention)"
+
+    preprocessing:
+      scaling: "Required"
+
+  # ---------------------------------------------------------------------------
+  # TFT (Temporal Fusion Transformer)
+  # ---------------------------------------------------------------------------
+  tft:
+    family: multi_res
+    input_shape: "3D (samples, seq_len, features)"
+
+    recommended_features: 10-30
+    sequence_length: 60
+    feature_selection: "optional"
+
+    strengths:
+      - "Interpretable attention weights"
+      - "Variable selection networks"
+      - "Handles known future inputs"
+      - "Multi-horizon forecasting"
+
+    weaknesses:
+      - "Complex architecture"
+      - "Slower training than simpler models"
+      - "Requires careful hyperparameter tuning"
+
+    feature_preferences:
+      - "Static features (symbol, contract info)"
+      - "Known future inputs (time features)"
+      - "Observed inputs (OHLCV, indicators)"
+
+    preprocessing:
+      scaling: "Required"
+      special: "Separate handling for static, known, and observed features"
+
+  # ---------------------------------------------------------------------------
+  # RIDGE META-LEARNER
+  # ---------------------------------------------------------------------------
+  ridge_meta:
+    family: meta_learner
+    input_shape: "2D (samples, n_base_predictions)"
+
+    strengths:
+      - "Fast linear stacking"
+      - "L2 regularization prevents overfitting"
+      - "Interpretable weights"
+
+    feature_preferences:
+      - "OOF predictions from base models"
+
+    heterogeneous_support: true
+
+  # ---------------------------------------------------------------------------
+  # MLP META-LEARNER
+  # ---------------------------------------------------------------------------
+  mlp_meta:
+    family: meta_learner
+    input_shape: "2D (samples, n_base_predictions)"
+
+    strengths:
+      - "Learns non-linear blending"
+      - "Can capture complex prediction interactions"
+
+    weaknesses:
+      - "May overfit with few base models"
+
+    feature_preferences:
+      - "OOF predictions from base models"
+
+    heterogeneous_support: true
+
+  # ---------------------------------------------------------------------------
+  # CALIBRATED META-LEARNER
+  # ---------------------------------------------------------------------------
+  calibrated_meta:
+    family: meta_learner
+    input_shape: "2D (samples, n_base_predictions)"
+
+    strengths:
+      - "Isotonic/Platt calibration"
+      - "Well-calibrated probability outputs"
+      - "Useful for trading signals"
+
+    feature_preferences:
+      - "OOF predictions from base models"
+
+    heterogeneous_support: true
+
+  # ---------------------------------------------------------------------------
+  # XGBOOST META-LEARNER
+  # ---------------------------------------------------------------------------
+  xgboost_meta:
+    family: meta_learner
+    input_shape: "2D (samples, n_base_predictions)"
+
+    strengths:
+      - "Non-linear feature interactions"
+      - "Can learn complex prediction patterns"
+      - "Robust to outliers"
+
+    weaknesses:
+      - "May overfit with few base models"
+      - "Slower than linear meta-learners"
+
+    feature_preferences:
+      - "OOF predictions from base models"
+
+    heterogeneous_support: true
+
+  # ---------------------------------------------------------------------------
   # VOTING ENSEMBLE
   # ---------------------------------------------------------------------------
   voting:
@@ -513,6 +881,28 @@ feature_selection_by_model:
     min_feature_frequency: 0.6
     note: "Diverse features, handle correlation"
 
+  # CNN models (InceptionTime, ResNet1D)
+  cnn:
+    recommended_preset: "default"
+    n_features: 30-50
+    method: "mda"
+    min_feature_frequency: 0.6
+    note: "CNN learns multi-scale patterns, moderate feature selection"
+
+  # Multi-resolution models (PatchTST, iTransformer, TFT)
+  multi_res:
+    recommended_preset: "minimal"
+    n_features: 4-20
+    method: "none"
+    note: "Multi-res models learn features from raw data, minimal engineering"
+
+  # Meta-learners (ridge_meta, mlp_meta, calibrated_meta, xgboost_meta)
+  meta_learners:
+    recommended_preset: "none"
+    n_features: "n_base_models * n_classes"
+    method: "none"
+    note: "Meta-learners use OOF predictions, not raw features"
+
 # =============================================================================
 # MTF RECOMMENDATIONS BY MODEL
 # =============================================================================
@@ -542,6 +932,24 @@ mtf_recommendations_by_model:
     recommended_mtf: true
     mtf_strategy: "default or aggressive"
     reason: "Ensembles benefit from diverse multi-scale features"
+
+  # CNN models (InceptionTime, ResNet1D)
+  cnn:
+    recommended_mtf: true
+    mtf_strategy: "minimal or default"
+    reason: "CNN captures multi-scale patterns, MTF adds scale diversity"
+
+  # Multi-resolution models (PatchTST, iTransformer, TFT)
+  multi_res:
+    recommended_mtf: false
+    mtf_strategy: "native"
+    reason: "Multi-res models use MTF ingestion natively, not MTF indicator features"
+
+  # Meta-learners
+  meta_learners:
+    recommended_mtf: false
+    mtf_strategy: "not applicable"
+    reason: "Meta-learners train on OOF predictions, MTF handled by base models"
 
 # =============================================================================
 # COMPLETE FEATURE ENGINEERING CONFIGS BY MODEL

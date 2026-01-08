@@ -328,7 +328,7 @@ notebooks/ML_Pipeline.ipynb
 3. Run All Cells
 4. Export trained models
 
-**Full documentation:** `docs/notebook/README.md`
+**Full documentation:** `docs/guides/NOTEBOOK_SETUP.md`
 
 ### Complete Workflow (CLI)
 

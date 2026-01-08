@@ -529,11 +529,11 @@ signal = pipeline.predict(new_bar)
 
 ### Detailed Docs
 
-- **docs/implementation/PHASE_1.md** - Data pipeline details
-- **docs/implementation/PHASE_2.md** - Model training details
-- **docs/implementation/PHASE_3.md** - Cross-validation details
-- **docs/reference/ARCHITECTURE.md** - System architecture
-- **docs/reference/FEATURES.md** - Feature catalog
+- **docs/implementation/PHASE_1_INGESTION.md** - Data pipeline details
+- **docs/implementation/PHASE_6_TRAINING.md** - Model training details
+- **docs/implementation/PHASE_3_FEATURES.md** - Feature engineering details
+- **docs/ARCHITECTURE.md** - System architecture
+- **docs/guides/FEATURE_ENGINEERING.md** - Feature catalog
 
 ---
 

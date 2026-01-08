@@ -8,7 +8,7 @@ This is the documentation hub for the **ML Model Factory** - a single-pipeline a
 
 **Key Principle:** One canonical dataset -> Deterministic adapters -> Model-specific training
 
-The factory processes one futures contract at a time through a unified 8-phase pipeline, producing trained models with standardized artifacts and performance reports.
+The factory processes one futures contract at a time through a unified 7-phase pipeline, producing trained models with standardized artifacts and performance reports.
 
 ---
 
@@ -19,14 +19,13 @@ The factory processes one futures contract at a time through a unified 8-phase p
 | Resource | Description |
 |----------|-------------|
 | [Quick Reference](QUICK_REFERENCE.md) | Command cheatsheet for common tasks |
-| [Quickstart Guide](getting-started/QUICKSTART.md) | First pipeline run tutorial |
 | [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter/Colab setup |
 
 ---
 
 ## Architecture
 
-The factory implements a single-pipeline architecture with 8 implementation phases:
+The factory implements a single-pipeline architecture with 7 implementation phases:
 
 ```
 Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
@@ -36,9 +35,9 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
                                           Tabular(2D)    Sequence(3D)    Multi-Res(4D)
                                               |               |               |
                                           Boosting       Neural          Advanced
-                                          Classical      TCN/Trans       (Planned)
-                                              |               |
-                                              +-------+-------+
+                                          Classical      CNN/MLP         Transformers
+                                              |               |               |
+                                              +-------+-------+---------------+
                                                       |
                                               [Ensembles] -> [Meta-Learners]
 ```
@@ -51,14 +50,13 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 
 | Phase | Name | Description | Status | Doc |
 |:-----:|------|-------------|:------:|-----|
-| 1 | Ingestion | Load and validate raw OHLCV data | Complete | [PHASE_1_INGESTION.md](implementation/PHASE_1_INGESTION.md) |
-| 2 | MTF Upscaling | Multi-timeframe resampling | ⚠️ Partial (5/9 TFs) | [PHASE_2_MTF_UPSCALING.md](implementation/PHASE_2_MTF_UPSCALING.md) |
+| 1 | Ingestion | Load and validate raw OHLCV data | ✅ Complete | [PHASE_1_INGESTION.md](implementation/PHASE_1_INGESTION.md) |
+| 2 | MTF Upscaling | Multi-timeframe resampling (9 TFs) | ✅ Complete | [PHASE_2_MTF_UPSCALING.md](implementation/PHASE_2_MTF_UPSCALING.md) |
 | 3 | Features | 180+ indicator features | ✅ Complete | [PHASE_3_FEATURES.md](implementation/PHASE_3_FEATURES.md) |
 | 4 | Labeling | Triple-barrier + Optuna optimization | ✅ Complete | [PHASE_4_LABELING.md](implementation/PHASE_4_LABELING.md) |
 | 5 | Adapters | Model-family data adapters | ✅ Complete | [PHASE_5_ADAPTERS.md](implementation/PHASE_5_ADAPTERS.md) |
-| 6 | Training | 17 models across 5 families | ✅ Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
-| 7 | Ensembles | Heterogeneous stacking | ⚠️ PLANNED | [PHASE_7_META_LEARNER_STACKING.md](implementation/PHASE_7_META_LEARNER_STACKING.md) |
-| 8 | Meta-Learners | Regime-aware, adaptive | ⚠️ Planned | [PHASE_8_META_LEARNERS.md](implementation/PHASE_8_META_LEARNERS.md) |
+| 6 | Training | 23 models across 4 families | ✅ Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
+| 7 | Stacking | Heterogeneous ensemble training | ✅ Complete | [PHASE_7_META_LEARNER_STACKING.md](implementation/PHASE_7_META_LEARNER_STACKING.md) |
 
 ---
 
@@ -68,16 +66,15 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 
 | Guide | Purpose |
 |-------|---------|
-| [Quickstart](getting-started/QUICKSTART.md) | First pipeline run |
-| [Pipeline CLI](getting-started/PIPELINE_CLI.md) | CLI options reference |
 | [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter and Colab setup |
+| [Quick Reference](QUICK_REFERENCE.md) | Command cheatsheet |
 
 ### Core Guides
 
 | Guide | Purpose |
 |-------|---------|
 | [Model Integration](guides/MODEL_INTEGRATION.md) | Adding new models |
-| [Ensemble Configuration](guides/ENSEMBLE_CONFIGURATION.md) | Ensemble methods and configs |
+| [Meta-Learner Stacking](guides/META_LEARNER_STACKING.md) | Heterogeneous ensemble training |
 | [Feature Engineering](guides/FEATURE_ENGINEERING.md) | Feature strategies |
 | [Hyperparameter Tuning](guides/HYPERPARAMETER_TUNING.md) | Optuna tuning |
 
@@ -86,7 +83,6 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 | Guide | Purpose |
 |-------|---------|
 | [Infrastructure Requirements](reference/INFRASTRUCTURE.md) | Hardware requirements |
-| [Notebook Configuration](notebook/CONFIGURATION.md) | Notebook parameters |
 
 ---
 
@@ -98,15 +94,13 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 |-----|---------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Complete system architecture |
 | [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Command cheatsheet |
-| [Models Reference](reference/MODELS.md) | All 19 models (13 implemented, 6 planned) |
-| [Features Reference](reference/FEATURES.md) | 180+ feature catalog |
+| [Models Reference](reference/MODELS.md) | All 23 models (22 if CatBoost unavailable) |
 
 ### Technical Reference
 
 | Doc | Purpose |
 |-----|---------|
 | [Pipeline Stages](reference/PIPELINE_STAGES.md) | Data flow details |
-| [Slippage](reference/SLIPPAGE.md) | Transaction cost modeling |
 
 ---
 
@@ -115,7 +109,6 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 | Doc | Purpose |
 |-----|---------|
 | [MTF Troubleshooting](troubleshooting/MTF_TROUBLESHOOTING.md) | MTF-specific issues |
-| [Notebook Troubleshooting](notebook/TROUBLESHOOTING.md) | Colab/Jupyter issues |
 
 ---
 
@@ -140,14 +133,7 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 
 ## Archive
 
-Historical and legacy documentation is preserved in [archive/](archive/). These documents are for reference only and do not reflect the current implementation.
-
-| Archive | Contents |
-|---------|----------|
-| [Phases](archive/phases/) | Legacy phase docs |
-| [Reference](archive/reference/) | Outdated reference docs |
-| [Research](archive/research/) | Historical research notes |
-| [Roadmaps](archive/roadmaps/) | Completed or superseded roadmaps |
+Historical and legacy documentation is preserved in [archive/implementation/](archive/implementation/). These documents are for reference only and do not reflect the current implementation.
 
 ---
 
@@ -155,19 +141,17 @@ Historical and legacy documentation is preserved in [archive/](archive/). These 
 
 | Component | Status | Count |
 |-----------|--------|-------|
-| **Models Implemented** | ✅ Complete | 17 of 23 |
-| **MTF Timeframes** | ⚠️ Partial | 5 of 9 |
+| **Models Implemented** | ✅ Complete | 23 of 23 (22 if CatBoost unavailable) |
+| **MTF Timeframes** | ✅ Complete | 9 of 9 (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h) |
 | **Ensemble Methods** | ✅ Complete | 3 (Voting, Stacking, Blending) |
 | **Meta-Learners** | ✅ Complete | 4 (Ridge, MLP, Calibrated, XGBoost) |
 | **Features** | ✅ Complete | ~180 |
 
-**Models by Family:**
-- Boosting (3): XGBoost, LightGBM, CatBoost
-- Neural (4): LSTM, GRU, TCN, Transformer
-- Classical (3): Random Forest, Logistic, SVM
-- Ensemble (3): Voting, Stacking, Blending
-- Meta-learners (4): Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
-- Planned (6): InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
+**Models by Family (4 Families, 23 Models):**
+- **Tabular (6):** XGBoost, LightGBM, CatBoost, Random Forest, Logistic, SVM
+- **Neural (10):** LSTM, GRU, TCN, Transformer, InceptionTime, ResNet1D, N-BEATS, PatchTST, iTransformer, TFT
+- **Ensemble (3):** Voting, Stacking, Blending
+- **Meta-Learners (4):** Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
 
 ---
 
@@ -182,4 +166,4 @@ Historical and legacy documentation is preserved in [archive/](archive/). These 
 
 ---
 
-*Last Updated: 2026-01-01*
+*Last Updated: 2026-01-08*

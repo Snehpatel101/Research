@@ -354,9 +354,9 @@ ValueError: Meta-learner must be a tabular model
 
 ## Related Documentation
 
-- [Configuration Index](../INDEX.md) - Comprehensive config reference
-- [Phase 4 Documentation](../../docs/phases/PHASE_4.md) - Ensemble architecture
-- [Model Integration Guide](../../docs/guides/MODEL_INTEGRATION_GUIDE.md) - Adding models
+- [Phase 7 Meta-Learner Stacking](../../docs/implementation/PHASE_7_META_LEARNER_STACKING.md) - Ensemble architecture
+- [Model Integration Guide](../../docs/guides/MODEL_INTEGRATION.md) - Adding models
+- [Meta-Learner Stacking Guide](../../docs/guides/META_LEARNER_STACKING.md) - Heterogeneous ensemble training
 
 ---
 

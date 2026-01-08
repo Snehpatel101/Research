@@ -16,7 +16,7 @@ The ML factory implements a **single unified pipeline** that ingests canonical O
 ```
 Raw 1-min OHLCV (canonical - single source of truth)
   ↓
-[MTF Upscaling] → ✅ 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+[MTF Upscaling] → ✅ 9 intraday timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
   Full 9-TF ladder available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
   ↓
 EACH base model independently chooses (configurable per-model):
@@ -32,8 +32,7 @@ Triple-Barrier Labeling (Optuna-optimized)
   ↓
 Model-Family Adapters
   ├─ Tabular (2D): XGBoost, LightGBM, CatBoost, RF, Logistic, SVM
-  ├─ Sequence (3D): LSTM, GRU, TCN, Transformer
-  └─ Multi-Res (4D): PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
+  └─ Neural (3D/4D): LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
   ↓
 Training (single models + heterogeneous ensembles via meta-learner stacking)
   ↓
@@ -41,7 +40,7 @@ Standardized Artifacts (models, predictions, metrics)
 ```
 
 **Key Architectural Points:**
-- **ONE Canonical Source:** Single 1-min OHLCV dataset → ✅ 8 intraday timeframes implemented
+- **ONE Canonical Source:** Single 1-min OHLCV dataset → ✅ 9 intraday timeframes implemented
 - **Per-Model Timeframe Configuration:** EACH base model independently chooses its primary training timeframe:
   - CatBoost trains on 15min (derived from 1-min canonical)
   - TCN trains on 5min (derived from 1-min canonical)
@@ -58,11 +57,11 @@ Standardized Artifacts (models, predictions, metrics)
 - **Direct Stacking:** Meta-learner trained on OOF predictions from heterogeneous bases
 
 **Implementation Status:**
-- Phases 1-6: Complete (18 base models + 4 meta-learners = 22 models across 6 families)
+- Phases 1-6: Complete (19 base models + 4 meta-learners = 23 models across 4 families)
 - Phase 7: ✅ Complete (heterogeneous stacking in trainer.py implemented)
-- MTF: ✅ Complete (8 intraday timeframes: 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- MTF: ✅ Complete (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
-**Documentation:** See `docs/ARCHITECTURE.md` and `docs/phases/` for comprehensive guides.
+**Documentation:** See `docs/ARCHITECTURE.md` and `docs/implementation/` for comprehensive guides.
 
 ---
 
@@ -133,7 +132,7 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 
 **Configurable Primary Timeframe:**
 - ✅ Complete: Primary training timeframe configurable per experiment
-- Default: 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- Default: 9 intraday timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - Full 9-TF ladder available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
 - Status: All timeframes implemented and configurable
 
@@ -147,11 +146,11 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 | Phase | Name | Description | Status |
 |:-----:|------|-------------|:------:|
 | 1 | Ingestion | Load and validate raw OHLCV | ✅ Complete |
-| 2 | MTF Upscaling | Multi-timeframe resampling (8 intraday TFs) | ✅ Complete |
+| 2 | MTF Upscaling | Multi-timeframe resampling (9 intraday TFs) | ✅ Complete |
 | 3 | Features | 180+ indicator features | ✅ Complete |
 | 4 | Labeling | Triple-barrier + Optuna | ✅ Complete |
 | 5 | Adapters | Model-family data preparation (2D, 3D, 4D) | ✅ Complete |
-| 6 | Training | 22 models, 6 families | ✅ Complete |
+| 6 | Training | 23 models, 4 families | ✅ Complete |
 | 7 | Stacking | Heterogeneous ensemble training | ✅ Complete |
 
 **Data Shapes by Model Family:**
@@ -166,7 +165,7 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 **Data Pipeline (Phases 1-5):**
 - **Phase 1:** Ingest raw 1-min OHLCV (canonical - single source of truth)
 - **Phase 2:** Multi-timeframe upscaling
-  - ✅ Complete: 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+  - ✅ Complete: 9 intraday timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
   - Full 9-TF ladder available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
   - All timeframes resampled from same 1-min source
 - **Phase 3:** Feature engineering (~150 base indicators + wavelets + microstructure)
@@ -262,23 +261,19 @@ python scripts/train_model.py --model voting --horizon 20 --base-models xgboost,
 python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru,tcn
 ```
 
-### Model Families (22 Models Implemented)
+### Model Families (23 Models Implemented)
 
 | Family | Models | Data Format | Strengths | Status |
 |--------|--------|-------------|-----------|--------|
 | **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Fast, interpretable, feature interactions | ✅ Complete |
-| **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Temporal dependencies, sequential patterns | ✅ Complete |
 | **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | Robust baselines, interpretable | ✅ Complete |
-| **CNN** (2) | InceptionTime, ResNet1D | 3D/4D sequences | Multi-scale pattern detection, deep residual learning | ✅ Complete |
-| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 4D multi-res | SOTA long-term forecasting, interpretable attention | ✅ Complete |
-| **MLP** (1) | N-BEATS | 3D sequences | Interpretable decomposition, M4 winner | ✅ Complete |
+| **Neural** (10) | LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D | 3D/4D sequences | Temporal dependencies, sequential patterns, multi-scale detection | ✅ Complete |
 | **Ensemble** (3) | Voting, Stacking, Blending | OOF predictions | Same-family or heterogeneous ensemble methods | ✅ Complete |
 | **Meta-Learners** (4) | Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta | OOF predictions | Meta-learner stacking from heterogeneous bases | ✅ Complete |
 
 **Family Classification:**
 - **Tabular models** (Boosting + Classical): 2D arrays `(n_samples, n_features)` - 6 models
-- **Sequence models** (Neural + CNN + MLP): 3D windows `(n_samples, seq_len, n_features)` - 7 models
-- **Multi-Res models** (Advanced Transformers): 4D tensors `(n_samples, n_timeframes, seq_len, n_features)` - 3 models
+- **Neural models**: 3D/4D sequences - 10 models (LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D)
 - **Ensemble models**: Same-family or heterogeneous ensembles - 3 models (Voting, Stacking, Blending)
 - **Meta-Learners**: OOF predictions from heterogeneous bases - 4 meta-learners
 
@@ -294,7 +289,7 @@ python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru
 
 **Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 
-**Note on CatBoost:** CatBoost has **conditional registration** - it only registers if `catboost` library is installed. If CatBoost is unavailable, the model count will be 21 instead of 22. Install with `pip install catboost` if needed.
+**Note on CatBoost:** CatBoost has **conditional registration** - it only registers if `catboost` library is installed. If CatBoost is unavailable, the model count will be 22 instead of 23. Install with `pip install catboost` if needed.
 
 ### Heterogeneous Ensemble Architecture
 
@@ -304,7 +299,7 @@ The factory supports **heterogeneous ensembles** where base models from differen
 ```
 1-min OHLCV Canonical Source (single source of truth)
        ↓
-Derive 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+Derive 9 intraday timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
        ↓
 Base Model Selection (1 per family, EACH chooses its own TF + features)
   |-- Tabular: CatBoost → 15min + MTF indicators (from 1-min source)
@@ -365,7 +360,7 @@ See `docs/implementation/PHASE_7_META_LEARNER_STACKING.md` for planned implement
 We do not build monoliths. Responsibilities must be split into small, composable modules with clear contracts and minimal coupling. Each module should do one thing well and expose a narrow, well-documented interface. Prefer dependency injection and explicit wiring over hidden globals or implicit side effects.
 
 ### File and Complexity Limits
-Files should target **650 lines** as the ideal maximum. Files up to **800 lines** are acceptable if the logic is cohesive and cannot be reasonably split without introducing artificial abstractions. Beyond 800 lines is a signal that boundaries are wrong and responsibilities need to be refactored. Keep functions short, keep layers separated, and keep the cognitive load low.
+Files should target **650 lines** as the ideal maximum. Files up to **1300 lines** are acceptable if the logic is cohesive and cannot be reasonably split without introducing artificial abstractions. Beyond 1250 lines is a signal that boundaries are wrong and responsibilities need to be refactored. Keep functions short, keep layers separated, and keep the cognitive load low.
 
 ### Fail Fast, Fail Hard
 We would rather crash early than silently continue in an invalid state. Inputs are validated at the boundary. Assumptions are enforced with explicit checks. If something is wrong, we stop and surface a clear error message that points to the cause.
@@ -403,7 +398,7 @@ Every module ships with tests that prove the contract. Unit tests cover pure log
 ### Definition of Done
 A change is complete only when:
 - Implementation is modular
-- Stays within file limits (target 650 lines, max 800 lines)
+- Stays within file limits (target 800 lines, max 1250 lines)
 - Validates inputs at boundaries
 - Backed by tests that clearly demonstrate correctness
 
@@ -503,11 +498,11 @@ src/phase1/stages/
 
 ## Model Factory (Phase 6 - Complete)
 
-Plugin-based model training system with **22 models across 6 families**:
+Plugin-based model training system with **23 models across 4 families** (22 if CatBoost unavailable):
 
 ```
 src/models/
-├── registry.py         → ModelRegistry plugin system (22 models registered)
+├── registry.py         → ModelRegistry plugin system (23 models registered)
 ├── base.py             → BaseModel interface, TrainingMetrics, PredictionOutput
 ├── config/             → Configuration package (modular)
 │   ├── trainer_config.py  → TrainerConfig dataclass
@@ -519,19 +514,16 @@ src/models/
 ├── data_preparation.py → Dataset preparation utilities
 ├── device.py           → GPU detection, memory estimation
 ├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
-├── neural/             → LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT (7 models)
+├── neural/             → LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D (10 models)
 ├── classical/          → Random Forest, Logistic, SVM (3 models)
-├── cnn/                → InceptionTime, ResNet1D (2 models)
-├── nbeats/             → N-BEATS (1 model)
 └── ensemble/           → Voting, Stacking, Blending + Meta-learners (7 models)
 ```
 
 **Output:** Trained models + unified performance reports
 
-**22 models available:**
+**23 models available** (22 if CatBoost unavailable):
 - **Tabular (6):** `xgboost`, `lightgbm`, `catboost`, `random_forest`, `logistic`, `svm`
-- **Sequence (7):** `lstm`, `gru`, `tcn`, `transformer`, `inceptiontime`, `resnet1d`, `nbeats`
-- **Multi-Res (3):** `patchtst`, `itransformer`, `tft`
+- **Neural (10):** `lstm`, `gru`, `tcn`, `transformer`, `patchtst`, `itransformer`, `tft`, `nbeats`, `inceptiontime`, `resnet1d`
 - **Ensemble (3):** `voting`, `stacking`, `blending`
 - **Meta-learners (4):** `ridge_meta`, `mlp_meta`, `calibrated_meta`, `xgboost_meta`
 
@@ -582,7 +574,7 @@ python scripts/train_model.py --model stacking --horizon 20 \
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
 python scripts/run_cv.py --models all --horizons 5,10,15,20 --tune
 
-# List available models (should print 22)
+# List available models (should print 23, or 22 if CatBoost unavailable)
 python scripts/train_model.py --list-models
 python -c "from src.models import ModelRegistry; print(len(ModelRegistry.list_all()))"
 ```
@@ -617,11 +609,11 @@ TRAIN/VAL/TEST = 70/15/15
 - TimeSeriesDataContainer for unified model training interface (2D for tabular, 3D for sequence)
 
 **Models (Phase 6):**
-- 22 models implemented across 6 families (Boosting, Neural, Classical, CNN, Advanced, Ensemble, Meta-learners)
+- 23 models implemented across 4 families (Tabular, Neural, Ensemble, Meta-learners) - 22 if CatBoost unavailable
 - Plugin-based model registry with `@register` decorator
 - 3 ensemble methods: Voting, Stacking, Blending (same-family or heterogeneous)
 - 4 meta-learners: Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
-- 6 advanced models: InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS
+- 10 neural models: LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
 
 **Roadmap:**
 - Phase 8: Advanced meta-learners (regime-aware, adaptive)

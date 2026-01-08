@@ -1,6 +1,6 @@
 # ML Model Factory Architecture
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-08
 
 ---
 
@@ -23,16 +23,15 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    MULTI-TIMEFRAME UPSCALING (PARTIAL)              │
+│                    MULTI-TIMEFRAME UPSCALING (COMPLETE)             │
 │                                                                     │
-│  1-min OHLCV (canonical)  →  [Upscale to 5 of 9 Timeframes]        │
+│  1-min OHLCV (canonical)  →  [Upscale to 9 Intraday Timeframes]    │
 │                                                                     │
-│  ⚠️ Currently: 15min, 30min, 1h, 4h, daily (5 timeframes)           │
-│  ⚠️ Planned: 1min, 5min, 10min, 15min, 20min, 25min, 30min,         │
-│              45min, 1h (9 timeframes for full flexibility)          │
+│  ✅ Complete: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h              │
+│     (Full 9-TF intraday ladder implemented)                         │
 │                                                                     │
 │  Then models choose:                                                │
-│  • Primary training TF (currently hardcoded to 5min)               │
+│  • Primary training TF (configurable per-model)                     │
 │  • MTF strategy (single-TF / MTF indicators / MTF ingestion)        │
 │  • Which TFs to use for enrichment/multi-stream                     │
 └────────────────────────────┬────────────────────────────────────────┘
@@ -79,29 +78,26 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      MODEL TRAINING (PHASE 6)                       │
 │                                                                     │
-│  Base Models (10 implemented):                                     │
-│  ├─ Boosting (3):     XGBoost, LightGBM, CatBoost                 │
-│  ├─ Neural (4):       LSTM, GRU, TCN, Transformer                 │
-│  └─ Classical (3):    Random Forest, Logistic, SVM                │
+│  Base Models (19 implemented):                                      │
+│  ├─ Tabular (6):      XGBoost, LightGBM, CatBoost,                 │
+│  │                    Random Forest, Logistic, SVM                 │
+│  ├─ Neural (10):      LSTM, GRU, TCN, Transformer,                 │
+│  │                    PatchTST, iTransformer, TFT, N-BEATS,        │
+│  │                    InceptionTime, ResNet1D                       │
+│  └─ Ensemble (3):     Voting, Stacking, Blending                   │
 │                                                                     │
-│  Ensemble Models (3 implemented):                                  │
-│  └─ Same-family:      Voting, Stacking, Blending                  │
+│  Meta-Learners (4 implemented):                                     │
+│  └─ Inference:        Ridge Meta, MLP Meta, Calibrated, XGBoost    │
 │                                                                     │
-│  Meta-Learners (4 implemented):                                    │
-│  └─ Inference:        Ridge Meta, MLP Meta, Calibrated, XGBoost   │
-│                                                                     │
-│  Advanced Models (6 planned):                                      │
-│  ├─ CNN (2):          InceptionTime, 1D ResNet                     │
-│  ├─ Transformers (3): PatchTST, iTransformer, TFT                 │
-│  └─ MLP (1):          N-BEATS                                      │
+│  Total: 23 models (19 base + 4 meta-learners)                       │
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│       HETEROGENEOUS ENSEMBLE STACKING (PHASE 7 - PLANNED)          │
+│       HETEROGENEOUS ENSEMBLE STACKING (PHASE 7 - COMPLETE)         │
 │                                                                     │
-│  ⚠️ Status: Meta-learners implemented, training script planned     │
-│  Goal: Automated heterogeneous ensemble training workflow          │
-│  Missing: scripts/train_ensemble.py for coordinated training       │
+│  ✅ Status: Fully implemented in trainer.py                         │
+│  Features: Heterogeneous base model stacking with dual data loading│
+│  Usage: --base-models xgboost,lstm,patchtst --meta-learner ridge   │
 └────────────────────────────┬────────────────────────────────────────┘
                              ↓
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -154,7 +150,7 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 ### 2. Canonical Dataset with Per-Model Feature Selection
 
 **One canonical source, different feature sets:**
-- Single 1-min OHLCV source → ⚠️ 5 of 9 timeframes derived (partial implementation)
+- Single 1-min OHLCV source → ✅ 9 intraday timeframes derived (complete)
 - Same timestamps, labels, splits for all models
 - **Different features per model family** based on inductive biases:
   - Tabular models: ~200 engineered features (indicators + MTF indicators)
@@ -183,7 +179,7 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 |---------|--------------|----------------|--------|
 | **Tabular** | 2D `(N, F)` | Boosting, Classical | ✅ Complete |
 | **Sequence** | 3D `(N, T, F)` | Neural | ✅ Complete |
-| **Multi-Resolution** | 4D `(N, TF, T, 4)` | Advanced (PatchTST, etc.) | ❌ Planned |
+| **Multi-Resolution** | 4D `(N, TF, T, 4)` | Advanced (PatchTST, etc.) | ✅ Complete |
 
 **Adapter responsibilities:**
 - Read canonical dataset from `data/splits/scaled/`
@@ -245,14 +241,14 @@ class MyModel(BaseModel):
 
 ### Phase 2: Multi-Timeframe Upscaling
 **Input:** `data/processed/{symbol}_1m_clean.parquet`
-**Output:** `data/processed/{symbol}_{timeframe}.parquet` (5 files: 15m, 30m, 1h, 4h, 1d)
+**Output:** `data/processed/{symbol}_{timeframe}.parquet` (9 files: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
 **Operations:**
 - Resample to higher timeframes (OHLCV aggregation)
-- Align to 5-minute base index (forward-fill)
+- Align to base index (forward-fill)
 - Apply shift(1) to prevent lookahead
 
-**Status:** ⚠️ 5 of 9 timeframes (intended: 9-TF ladder)
+**Status:** ✅ Complete (9 intraday timeframes)
 
 **Time:** ~4 seconds
 
@@ -385,31 +381,32 @@ Different model families get different features tailored to their inductive bias
 
 ### Sequence Models (3D Input)
 
-**Neural Networks (4 models):**
-- LSTM, GRU, TCN, Transformer
+**Neural Networks (10 models):**
+- LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
 - **Input:** `(N, seq_len, 180)` - lookback windows (seq_len = 30-60)
-- **Strengths:** Temporal dependencies, sequential patterns
+- **Strengths:** Temporal dependencies, sequential patterns, multi-scale detection
 - **Training Time:** 2-5 minutes (GPU)
+- **Status:** ✅ All 10 implemented
 
-### Advanced Models (4D Input - Planned)
+**Model Details:**
 
 **CNN (2 models):**
-- InceptionTime, 1D ResNet
+- InceptionTime, ResNet1D
 - **Input:** `(N, seq_len, 180)` or multi-resolution `(N, 9, T, 4)`
 - **Strengths:** Multi-scale pattern detection
-- **Status:** ❌ Not implemented
+- **Status:** ✅ Complete
 
 **Advanced Transformers (3 models):**
 - PatchTST, iTransformer, TFT
 - **Input:** `(N, 9, T, 4)` - raw multi-resolution OHLCV
 - **Strengths:** SOTA long-term forecasting, interpretable attention
-- **Status:** ❌ Not implemented (requires Phase 2 Strategy 3)
+- **Status:** ✅ Complete
 
 **MLP (1 model):**
 - N-BEATS
 - **Input:** `(N, seq_len, 180)` or `(N, 9, T, 4)`
 - **Strengths:** Interpretable decomposition, M4 competition winner
-- **Status:** ❌ Not implemented
+- **Status:** ✅ Complete
 
 ---
 
@@ -423,28 +420,28 @@ Different model families get different features tailored to their inductive bias
 - MTF enrichment is optional (not required)
 
 **Current State:**
-- Hardcoded to 5-minute base
-- ~180 indicator-derived features (150 base + 30 MTF from 5 timeframes)
+- 9 intraday timeframes available: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
+- ~180 indicator-derived features (150 base + 30 MTF from 9 timeframes)
 
 **Data format:**
 - Tabular models: 2D arrays `(N, 180)`
 - Sequence models: 3D windows `(N, seq_len, 180)`
 
-**Status:** ⚠️ Flexible TF selection not yet configurable
+**Status:** ✅ Complete (9 intraday timeframes, configurable per-model)
 
 ### Strategy 1: Single-TF (Baseline)
 
 **Purpose:** Train on chosen timeframe without MTF enrichment
 **Data:** Features from one timeframe only (e.g., only 5-minute)
 **Models:** All families
-**Status:** ❌ Not implemented (simple config flag)
+**Status:** ✅ Complete
 
 ### Strategy 2: MTF Indicators (Optional Enrichment)
 
 **Purpose:** Add indicator features from other timeframes
 **Data:** Indicator-derived features from multiple timeframes
 **Models:** Tabular models (Boosting, Classical)
-**Status:** ⚠️ Partial (5 of 9 timeframes)
+**Status:** ✅ Complete (9 intraday timeframes)
 
 ### Strategy 3: MTF Ingestion (Optional for Sequence Models)
 
@@ -452,7 +449,7 @@ Different model families get different features tailored to their inductive bias
 **Data:** Raw OHLCV bars from multiple timeframes as multi-stream input
 **Shape:** `(N, T_primary, F)` + optional multi-TF streams
 **Models:** Sequence models (Neural, CNN, Transformer, MLP)
-**Status:** ❌ Not implemented
+**Status:** ✅ Complete
 
 **Note:** Models can mix-and-match strategies in same experiment
 
@@ -713,7 +710,8 @@ python scripts/run_cv.py --models xgboost --horizons 20 --tune --n-trials 50
 ### List Available Models
 ```bash
 python scripts/train_model.py --list-models
-# Output: 17 models (10 base + 3 ensemble + 4 meta-learners)
+# Output: 23 models (19 base + 4 meta-learners)
+# Families: Tabular (6), Neural (10), Ensemble (3), Meta-Learners (4)
 ```
 
 ---
@@ -726,7 +724,7 @@ python scripts/train_model.py --list-models
 | Phase | Operation | Time | Memory |
 |-------|-----------|------|--------|
 | **Phase 1** | Ingestion + Cleaning | ~3s | 50 MB |
-| **Phase 2** | MTF Upscaling (5 TFs) | ~4s | 80 MB |
+| **Phase 2** | MTF Upscaling (9 TFs) | ~4s | 80 MB |
 | **Phase 3** | Feature Engineering | ~16s | 150 MB |
 | **Phase 4** | Labeling + Splits + Scaling | ~2.5min | 200 MB |
 | **Phase 5** | Adapters (in-memory) | <2s | +50-150 MB |
@@ -735,7 +733,7 @@ python scripts/train_model.py --list-models
 | **Phase 7** | Stacking (5-fold) | ~5min | +100 MB |
 
 **Total Pipeline (Data + Train XGBoost):** ~3 minutes
-**Total Pipeline (Data + Train All 10 Single Models):** ~20 minutes (with GPU)
+**Total Pipeline (Data + Train All 19 Base Models):** ~35 minutes (with GPU)
 
 ---
 
@@ -866,23 +864,25 @@ phase2:
 
 ## Future Roadmap
 
-### Short-Term (1-2 weeks)
-1. Complete 9-timeframe MTF ladder (Phase 2 extension)
-2. Implement Strategy 1 (single-TF baselines for ablation)
-3. Add CNN models (InceptionTime, 1D ResNet)
+### Completed (All 7 Phases)
+- ✅ 9-timeframe MTF ladder (Phase 2 complete)
+- ✅ Strategy 1, 2, 3 (all MTF strategies complete)
+- ✅ CNN models: InceptionTime, ResNet1D
+- ✅ Advanced transformers: PatchTST, iTransformer, TFT
+- ✅ N-BEATS (MLP-based forecasting)
+- ✅ Heterogeneous stacking with meta-learners (Phase 7 complete)
 
-### Medium-Term (1-2 months)
-1. Implement Strategy 3 (multi-resolution raw OHLCV tensors)
-2. Add advanced transformer models (PatchTST, iTransformer, TFT)
-3. Add N-BEATS (MLP-based forecasting)
-4. Implement meta-learners (regime-aware, adaptive)
-
-### Long-Term (3-6 months)
-1. Online learning (update models in production)
+### Short-Term (Phase 8)
+1. Advanced meta-learners (regime-aware, adaptive weighting)
 2. Multi-horizon meta-learners (train across 5, 10, 15, 20 horizons)
-3. Contextual bandits for ensemble selection
-4. Real-time inference pipeline
-5. Multi-contract correlation models (if needed)
+
+### Medium-Term (Phase 9)
+1. Real-time inference pipeline with streaming predictions
+2. Online learning (update models in production)
+
+### Long-Term
+1. Contextual bandits for ensemble selection
+2. Multi-contract correlation models (if needed)
 
 ---
 
@@ -910,5 +910,5 @@ phase2:
 
 ---
 
-**Last Updated:** 2026-01-01
-**Architecture Version:** 2.0 (post-cleanup)
+**Last Updated:** 2026-01-08
+**Architecture Version:** 3.0 (all 7 phases complete)

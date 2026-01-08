@@ -2,7 +2,7 @@
 
 Command cheatsheet and FAQ for the ML Model Factory.
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-08
 
 ---
 
@@ -68,14 +68,14 @@ ls -la runs/
 python scripts/train_model.py --list-models
 ```
 
-**Output:** 13 models across 4 families
+**Output:** 23 models across 4 families (22 if CatBoost unavailable)
 
 | Family | Models |
 |--------|--------|
-| Boosting | `xgboost`, `lightgbm`, `catboost` |
-| Neural | `lstm`, `gru`, `tcn`, `transformer` |
-| Classical | `random_forest`, `logistic`, `svm` |
-| Ensemble | `voting`, `stacking`, `blending` |
+| Tabular (6) | `xgboost`, `lightgbm`, `catboost`, `random_forest`, `logistic`, `svm` |
+| Neural (10) | `lstm`, `gru`, `tcn`, `transformer`, `inceptiontime`, `resnet1d`, `nbeats`, `patchtst`, `itransformer`, `tft` |
+| Ensemble (3) | `voting`, `stacking`, `blending` |
+| Meta-Learners (4) | `ridge_meta`, `mlp_meta`, `calibrated_meta`, `xgboost_meta` |
 
 ### Train Single Model
 
@@ -85,13 +85,21 @@ python scripts/train_model.py --model xgboost --horizon 20
 python scripts/train_model.py --model lightgbm --horizon 20
 python scripts/train_model.py --model catboost --horizon 20
 
-# Neural models (GPU required)
+# Neural sequence models (GPU recommended)
 python scripts/train_model.py --model lstm --horizon 20 --seq-len 60
 python scripts/train_model.py --model gru --horizon 20 --seq-len 60
 python scripts/train_model.py --model tcn --horizon 20 --seq-len 120
 python scripts/train_model.py --model transformer --horizon 20 --seq-len 60
 
-# Classical models (CPU only)
+# Advanced neural models (GPU recommended)
+python scripts/train_model.py --model inceptiontime --horizon 20 --seq-len 60
+python scripts/train_model.py --model resnet1d --horizon 20 --seq-len 60
+python scripts/train_model.py --model nbeats --horizon 20 --seq-len 60
+python scripts/train_model.py --model patchtst --horizon 20 --seq-len 60
+python scripts/train_model.py --model itransformer --horizon 20 --seq-len 60
+python scripts/train_model.py --model tft --horizon 20 --seq-len 60
+
+# Classical tabular models (CPU only)
 python scripts/train_model.py --model random_forest --horizon 20
 python scripts/train_model.py --model logistic --horizon 20
 python scripts/train_model.py --model svm --horizon 20
@@ -204,13 +212,26 @@ python scripts/train_model.py --model blending --horizon 20 \
   --config '{"holdout_fraction": 0.3}'
 ```
 
+### Heterogeneous Stacking (Phase 7)
+
+```bash
+# Cross-family stacking with meta-learner
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models xgboost,lstm,patchtst --meta-learner ridge_meta
+
+# Meta-learner options: ridge_meta, mlp_meta, calibrated_meta, xgboost_meta
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models catboost,gru,tft --meta-learner xgboost_meta
+```
+
 ### Compatibility Rules
 
-| Valid Ensembles | Invalid Ensembles |
-|-----------------|-------------------|
-| `xgboost + lightgbm + catboost` | `xgboost + lstm` (mixed) |
-| `lstm + gru + tcn` | `lightgbm + transformer` (mixed) |
-| `xgboost + random_forest` | `svm + gru` (mixed) |
+| Valid Ensembles | Notes |
+|-----------------|-------|
+| `xgboost + lightgbm + catboost` | Same-family (tabular) |
+| `lstm + gru + tcn` | Same-family (neural sequence) |
+| `xgboost + lstm + patchtst` | Heterogeneous (requires meta-learner) |
+| `catboost + tcn + tft` | Heterogeneous (requires meta-learner) |
 
 ---
 
@@ -349,7 +370,7 @@ python scripts/train_model.py --model xgboost --horizon 20
 
 **A:** Tabular models use 2D input `(N, F)`, neural models use 3D input `(N, T, F)`. Ensembles require consistent input shapes.
 
-**See:** `docs/guides/ENSEMBLE_CONFIGURATION.md`
+**See:** `docs/guides/META_LEARNER_STACKING.md`
 
 ---
 
@@ -413,7 +434,7 @@ defaults:
 - Wavelets: Db4/Haar decomposition (3 levels)
 - Microstructure: Spread proxies, order flow
 
-**See:** `docs/reference/FEATURES.md`
+**See:** `docs/guides/FEATURE_ENGINEERING.md`
 
 ---
 
@@ -438,7 +459,7 @@ python scripts/run_cv.py --models xgboost --horizons 20 --tune --n-trials 100
 | Data file not found | `docs/guides/NOTEBOOK_SETUP.md#issue-data-file-not-found` |
 | MTF issues | `docs/troubleshooting/MTF_TROUBLESHOOTING.md` |
 | Import errors | `docs/guides/NOTEBOOK_SETUP.md#issue-package-import-errors` |
-| Ensemble compatibility | `docs/guides/ENSEMBLE_CONFIGURATION.md#troubleshooting` |
+| Ensemble compatibility | `docs/guides/META_LEARNER_STACKING.md` |
 | Session timeout (Colab) | `docs/guides/NOTEBOOK_SETUP.md#issue-session-timeout` |
 
 ---

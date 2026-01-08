@@ -630,7 +630,6 @@ validation:
 
 **Documentation:**
 - `docs/guides/FEATURE_ENGINEERING.md` - Detailed feature guide
-- `docs/reference/FEATURES.md` - Feature catalog
 
 **Tests:**
 - `tests/phase1/test_feature_engineering.py` - Unit tests

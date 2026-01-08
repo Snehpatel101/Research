@@ -25,7 +25,7 @@ assignees: ''
 - [ ] Add GPU support (if applicable)
 - [ ] Add mixed precision training (if applicable)
 - [ ] Update `ModelRegistry` to verify registration
-- [ ] Add to documentation: `docs/phases/PHASE_2.md`
+- [ ] Add to documentation: `docs/implementation/PHASE_6_TRAINING.md`
 - [ ] Verify model appears in `./train_model.py --list-models`
 - [ ] Run smoke test: `pytest tests/integration/models/test_{model_name}_integration.py -v`
 

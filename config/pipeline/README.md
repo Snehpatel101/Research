@@ -253,10 +253,9 @@ python scripts/train_model.py \
 
 ## Related Documentation
 
-- [Configuration Index](../INDEX.md) - Comprehensive config reference
-- [Phase 1 Documentation](../../docs/phases/PHASE_1.md) - Data pipeline
-- [Phase 3 Documentation](../../docs/phases/PHASE_3.md) - Cross-validation
-- [Hyperparameter Optimization Guide](../../docs/guides/HYPERPARAMETER_OPTIMIZATION_GUIDE.md)
+- [Phase 1 Ingestion](../../docs/implementation/PHASE_1_INGESTION.md) - Data pipeline
+- [Phase 3 Features](../../docs/implementation/PHASE_3_FEATURES.md) - Feature engineering
+- [Hyperparameter Tuning](../../docs/guides/HYPERPARAMETER_TUNING.md)
 
 ---
 

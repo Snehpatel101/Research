@@ -134,10 +134,10 @@ See [config/INDEX.md](../INDEX.md) for comprehensive configuration reference inc
 
 ## Related Documentation
 
-- [Model Integration Guide](../../docs/guides/MODEL_INTEGRATION_GUIDE.md) - How to add new models
-- [Hyperparameter Optimization Guide](../../docs/guides/HYPERPARAMETER_OPTIMIZATION_GUIDE.md) - Tuning strategies
-- [Model Infrastructure Requirements](../../docs/guides/MODEL_INFRASTRUCTURE_REQUIREMENTS.md) - Hardware requirements
-- [Phase 2 Documentation](../../docs/phases/PHASE_2.md) - Model training pipeline
+- [Model Integration Guide](../../docs/guides/MODEL_INTEGRATION.md) - How to add new models
+- [Hyperparameter Tuning](../../docs/guides/HYPERPARAMETER_TUNING.md) - Tuning strategies
+- [Infrastructure Requirements](../../docs/reference/INFRASTRUCTURE.md) - Hardware requirements
+- [Phase 6 Training](../../docs/implementation/PHASE_6_TRAINING.md) - Model training pipeline
 
 ---
 

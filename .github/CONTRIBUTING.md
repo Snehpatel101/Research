@@ -102,7 +102,7 @@ See [Model Integration Guide](../docs/guides/MODEL_INTEGRATION_GUIDE.md) for det
    - Unit tests: `tests/unit/models/{family}/test_{model_name}.py`
    - Integration tests: `tests/integration/models/test_{model_name}_integration.py`
 5. **Update documentation:**
-   - Add to `docs/phases/PHASE_2.md`
+   - Add to `docs/implementation/PHASE_6_TRAINING.md`
    - Update model count in `docs/planning/PROJECT_CHARTER.md`
 6. **Verify registration:**
    ```bash
@@ -111,7 +111,7 @@ See [Model Integration Guide](../docs/guides/MODEL_INTEGRATION_GUIDE.md) for det
 
 ## Adding New Features
 
-See [Feature Engineering Guide](../docs/guides/FEATURE_ENGINEERING_GUIDE.md).
+See [Feature Engineering Guide](../docs/guides/FEATURE_ENGINEERING.md).
 
 ### Feature Engineering Workflow
 1. **Add feature calculation** in `src/phase1/stages/features/`
@@ -121,7 +121,7 @@ See [Feature Engineering Guide](../docs/guides/FEATURE_ENGINEERING_GUIDE.md).
    - Use only current + historical data
    - No future peeking
 5. **Document feature:**
-   - Add to `docs/reference/FEATURES.md`
+   - Add to `docs/guides/FEATURE_ENGINEERING.md`
    - Include formula and interpretation
 
 ## File Organization

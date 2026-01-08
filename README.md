@@ -5,8 +5,8 @@ Modular ML pipeline that turns raw OHLCV bars into trained models with leakage-s
 **Single-Contract Architecture:** Each contract (MES, MGC, SI, etc.) is trained in complete isolation. No cross-symbol correlation.
 
 ```
-[ Phase 1: Data ] → [ Phase 2: Models ] → [ Phase 3: CV ] → [ Phase 4: Ensemble ]
-    COMPLETE           COMPLETE            COMPLETE           COMPLETE
+[ Phase 1: Data ] -> [ Phase 6: Models ] -> [ Phase 7: Stacking ]
+    COMPLETE            COMPLETE             COMPLETE
 ```
 
 ---
@@ -24,7 +24,7 @@ notebooks/ML_Pipeline.ipynb
 3. Run All Cells
 4. Export trained models from Section 7
 
-**Full notebook documentation:** [docs/notebook/README.md](docs/notebook/README.md)
+**Full notebook documentation:** [docs/guides/NOTEBOOK_SETUP.md](docs/guides/NOTEBOOK_SETUP.md)
 
 ---
 
@@ -32,7 +32,7 @@ notebooks/ML_Pipeline.ipynb
 
 ```bash
 # Run Phase 1 pipeline (requires data in data/raw/)
-./pipeline run --symbols SI
+./pipeline run --symbols MES
 
 # Train a model
 python scripts/train_model.py --model xgboost --horizon 20
@@ -40,32 +40,38 @@ python scripts/train_model.py --model xgboost --horizon 20
 # Run cross-validation
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5
 
-# Train ensemble (tabular-only or sequence-only)
+# Train ensemble (same-family or heterogeneous)
 python scripts/train_model.py --model voting --base-models xgboost,lightgbm,catboost --horizon 20
 
-# List available models (should show 13)
+# Heterogeneous stacking (different model families)
+python scripts/train_model.py --model stacking --base-models xgboost,lstm,patchtst --meta-learner ridge_meta --horizon 20
+
+# List available models (should show 22)
 python scripts/train_model.py --list-models
 ```
 
 ---
 
-## Available Models (13 Implemented + 6 Planned = 19 Total)
+## Available Models (22 Implemented)
 
 | Family | Models | Input | GPU | Status |
 |--------|--------|-------|-----|--------|
-| **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Optional | ✅ Complete |
-| **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Required | ✅ Complete |
-| **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | No | ✅ Complete |
-| **Ensemble** (3) | Voting, Stacking, Blending | Mixed | No | ✅ Complete |
-| **CNN** (2) | InceptionTime, 1D ResNet | 3D sequences | Required | 📋 Planned |
-| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 3D sequences | Required | 📋 Planned |
-| **MLP** (1) | N-BEATS | 3D sequences | Optional | 📋 Planned |
+| **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D tabular | Optional | Complete |
+| **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D sequences | Required | Complete |
+| **Classical** (3) | Random Forest, Logistic, SVM | 2D tabular | No | Complete |
+| **CNN** (2) | InceptionTime, ResNet1D | 3D sequences | Required | Complete |
+| **Advanced Transformers** (3) | PatchTST, iTransformer, TFT | 4D multi-res | Required | Complete |
+| **MLP** (1) | N-BEATS | 3D sequences | Optional | Complete |
+| **Ensemble** (3) | Voting, Stacking, Blending | OOF predictions | No | Complete |
+| **Meta-Learners** (4) | Ridge, MLP, Calibrated, XGBoost | OOF predictions | No | Complete |
 
 **Model Categories:**
-- **Tabular (6):** Boosting + Classical → 2D input `(n_samples, n_features)`
-- **Sequence (13):** Neural + CNN + Advanced + MLP → 3D input `(n_samples, seq_len, n_features)`
+- **Tabular (6):** Boosting + Classical -> 2D input `(n_samples, n_features)`
+- **Sequence (7):** Neural + CNN + MLP -> 3D input `(n_samples, seq_len, n_features)`
+- **Multi-Res (3):** Advanced Transformers -> 4D input `(n_samples, n_timeframes, seq_len, n_features)`
+- **Ensemble (6):** Same-family or heterogeneous stacking
 
-All models implement the unified `BaseModel` interface. See `docs/roadmaps/ADVANCED_MODELS_ROADMAP.md` for planned models.
+All models implement the unified `BaseModel` interface.
 
 ---
 
@@ -73,36 +79,28 @@ All models implement the unified `BaseModel` interface. See `docs/roadmaps/ADVAN
 
 ```
 Raw OHLCV (.csv/.parquet)
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│           PHASE 1: DATA PIPELINE        │
-│  Clean → Features (150+) → Labels       │
-│  → Split (70/15/15) → Scale             │
-└─────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│          PHASE 2: MODEL TRAINING        │
-│  Boosting │ Neural │ Classical          │
-└─────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│     PHASE 3: CROSS-VALIDATION (opt)     │
-│  PurgedKFold │ Optuna Tuning            │
-└─────────────────────────────────────────┘
-       │
-       ▼
-┌─────────────────────────────────────────┐
-│       PHASE 4: ENSEMBLE (opt)           │
-│  Voting │ Stacking │ Blending           │
-└─────────────────────────────────────────┘
-       │
-       ▼
-   Saved training artifacts (see `experiments/runs/`)
-
-Note: The notebook includes optional export helpers (e.g. ONNX) but the core trainer saves model-family artifacts under each run directory.
+       |
+       v
++---------------------------------------------+
+|           PHASE 1: DATA PIPELINE            |
+|  Ingest -> MTF (8 TFs) -> Features (180+)   |
+|  -> Labels -> Split (70/15/15) -> Scale     |
++---------------------------------------------+
+       |
+       v
++---------------------------------------------+
+|          PHASE 6: MODEL TRAINING            |
+|  Boosting | Neural | Classical | Advanced   |
++---------------------------------------------+
+       |
+       v
++---------------------------------------------+
+|     PHASE 7: HETEROGENEOUS STACKING         |
+|  OOF Generation -> Meta-Learner Training    |
++---------------------------------------------+
+       |
+       v
+   Saved training artifacts (experiments/runs/)
 ```
 
 ---
@@ -110,80 +108,54 @@ Note: The notebook includes optional export helpers (e.g. ONNX) but the core tra
 ## Key Features
 
 - **No Data Leakage**: Purge (60 bars) + Embargo (1440 bars) between splits
-- **Seeded**: Configuration includes a `random_seed` (full determinism depends on backend)
+- **Multi-Timeframe**: 8 intraday timeframes (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- **180+ Features**: Base indicators + MTF indicators + wavelets + microstructure
+- **Heterogeneous Ensembles**: Different model families with different timeframes
 - **Class Balanced**: Automatic class weight calculation
 - **Quality Weighted**: Pipeline quality scores used in training
-- **180+ Features**: ~150 base indicators + ~30 MTF indicators (all indicator-derived, from 5 of 9 intended timeframes)
-- **Multi-Timeframe**: Indicator features from 5 timeframes (15min, 30min, 1h, 4h, daily) - **intended: 9-timeframe ladder** (1min→1h)
-
----
-
-## ⚠️ Current MTF Limitations
-
-**All models currently receive the same indicator-derived features (~180 total).**
-
-The intended architecture (per `docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md`) includes **model-specific data strategies**:
-
-| Strategy | Data Type | Model Families | Status |
-|----------|-----------|----------------|--------|
-| **Strategy 1: Single-TF** | One timeframe, no MTF | All 19 models (baselines) | ❌ Not implemented |
-| **Strategy 2: MTF Indicators** | Indicator features from 9 timeframes | **Tabular (6):** Boosting + Classical | ⚠️ Partial (5 of 9 TFs, all models get this) |
-| **Strategy 3: MTF Ingestion** | Raw OHLCV bars from 9 timeframes | **Sequence (13):** Neural + CNN + Advanced + MLP | ❌ Not implemented |
-
-**Current Impact:**
-- **Tabular models** (6: XGBoost, LightGBM, CatBoost, RF, Logistic, SVM) → Receive indicator features ✅ Appropriate, but only 5 of 9 timeframes
-- **Sequence models** (7 implemented + 6 planned = 13) → Receive indicators when they should get raw multi-resolution OHLCV bars ⚠️
-
-**Planned Sequence Models (6):** InceptionTime, 1D ResNet, PatchTST, iTransformer, TFT, N-BEATS
-
-**See:** `docs/CURRENT_VS_INTENDED_ARCHITECTURE.md` for detailed analysis
 
 ---
 
 ## Project Structure
 
 ```
-├── notebooks/
-│   └── ML_Pipeline.ipynb    # Unified notebook (recommended)
-├── src/
-│   ├── models/              # 13 model implementations
-│   ├── cross_validation/    # PurgedKFold, Optuna tuning
-│   └── phase1/              # Data pipeline stages
-├── data/
-│   ├── raw/                 # Input: {symbol}_1m.csv
-│   └── splits/scaled/       # Output: train/val/test parquet
-├── experiments/             # Training outputs
-└── config/models/           # Model YAML configs
++-- notebooks/
+|   +-- ML_Pipeline.ipynb    # Unified notebook (recommended)
++-- src/
+|   +-- models/              # 22 model implementations
+|   +-- cross_validation/    # PurgedKFold, Optuna tuning
+|   +-- phase1/              # Data pipeline stages (15 stages)
++-- data/
+|   +-- raw/                 # Input: {symbol}_1m.csv
+|   +-- splits/scaled/       # Output: train/val/test parquet
++-- experiments/             # Training outputs
++-- config/models/           # Model YAML configs
++-- docs/                    # Comprehensive documentation
 ```
 
 ---
 
 ## Documentation
 
-**📚 [Complete Documentation Index](docs/INDEX.md)** - Start here for comprehensive guides
+**[Documentation Hub](docs/README.md)** - Start here for comprehensive guides
 
 ### Quick Links
 
 | Category | Document | Purpose |
 |----------|----------|---------|
-| **Getting Started** | [Quickstart Guide](docs/getting-started/QUICKSTART.md) | Step-by-step setup |
 | **Getting Started** | [Quick Reference](docs/QUICK_REFERENCE.md) | Command cheatsheet |
-| **Planning** | [Project Charter](docs/planning/PROJECT_CHARTER.md) | Project status: 13 implemented + 6 planned models |
-| **Roadmaps** | [Advanced Models Roadmap](docs/roadmaps/ADVANCED_MODELS_ROADMAP.md) | 6 new models, 18 days implementation |
-| **Roadmaps** | [MTF Implementation Roadmap](docs/roadmaps/MTF_IMPLEMENTATION_ROADMAP.md) | Multi-timeframe expansion |
-| **Guides** | [Model Integration Guide](docs/guides/MODEL_INTEGRATION_GUIDE.md) | How to add new models |
-| **Guides** | [Feature Engineering Guide](docs/guides/FEATURE_ENGINEERING_GUIDE.md) | Model-specific feature strategies |
-| **Reference** | [Architecture](docs/reference/ARCHITECTURE.md) | System design patterns |
-| **Notebook** | [Notebook README](docs/notebook/README.md) | Jupyter/Colab guide |
-
-**5,617 lines** of implementation guides covering model integration, feature engineering, hyperparameter optimization, and infrastructure requirements
+| **Getting Started** | [Notebook Setup](docs/guides/NOTEBOOK_SETUP.md) | Jupyter/Colab guide |
+| **Planning** | [Project Charter](docs/planning/PROJECT_CHARTER.md) | Project scope and status |
+| **Architecture** | [Architecture](docs/ARCHITECTURE.md) | System design patterns |
+| **Implementation** | [Phase 7 Stacking](docs/implementation/PHASE_7_META_LEARNER_STACKING.md) | Heterogeneous ensemble |
+| **Guides** | [Model Integration](docs/guides/MODEL_INTEGRATION.md) | How to add new models |
 
 ---
 
 ## Configuration
 
 ```python
-SYMBOL = 'SI'              # Contract symbol
+SYMBOL = 'MES'             # Contract symbol
 HORIZONS = [5, 10, 15, 20] # Prediction horizons (bars forward)
 TRAIN/VAL/TEST = 70/15/15  # Split ratios
 PURGE_BARS = 60            # Gap to prevent label leakage

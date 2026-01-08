@@ -473,9 +473,6 @@ files.download('results.zip')
 
 ## References
 
-- **Notebook Docs:** `docs/notebook/README.md`
-- **Cell Reference:** `docs/notebook/CELL_REFERENCE.md`
-- **Configuration:** `docs/notebook/CONFIGURATION.md`
-- **Troubleshooting:** `docs/notebook/TROUBLESHOOTING.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
 - **Quick Reference:** `docs/QUICK_REFERENCE.md`
+- **MTF Troubleshooting:** `docs/troubleshooting/MTF_TROUBLESHOOTING.md`

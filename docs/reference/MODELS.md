@@ -1,62 +1,99 @@
-# Models Reference
+# Model Reference
 
 Comprehensive reference for all models in the ML Model Factory.
 
-**Last Updated:** 2026-01-01
-
----
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Implemented Models (13)](#implemented-models)
-3. [Planned Models (6)](#planned-models)
-4. [Model Registration](#model-registration)
-5. [Data Adapter Requirements](#data-adapter-requirements)
-6. [Hardware Requirements](#hardware-requirements)
-7. [Configuration Files](#configuration-files)
+**Last Updated:** 2026-01-08
 
 ---
 
 ## Overview
 
-The ML Model Factory supports **13 implemented models** across 4 families, with **6 additional models planned**.
+The ML Model Factory includes **23 models** (22 if CatBoost unavailable) across 4 families:
 
-### Quick Reference
-
-| Family | Models | Input Shape | Status |
-|--------|--------|-------------|--------|
-| **Boosting** (3) | XGBoost, LightGBM, CatBoost | 2D `(N, F)` | Complete |
-| **Neural** (4) | LSTM, GRU, TCN, Transformer | 3D `(N, T, F)` | Complete |
-| **Classical** (3) | Random Forest, Logistic, SVM | 2D `(N, F)` | Complete |
-| **Ensemble** (3) | Voting, Stacking, Blending | Same as base | ❌ Removed (replaced by meta-learner stacking) |
-| **Inference** (4) | Logistic Meta, Ridge Meta, MLP Meta, Calibrated Blender | 2D `(N, n_bases*3)` | Planned |
-| **CNN** (2) | InceptionTime, 1D ResNet | 3D `(N, T, F)` | Planned |
-| **Advanced** (3) | PatchTST, iTransformer, TFT | 4D `(N, TF, T, 4)` | Planned |
-| **MLP** (1) | N-BEATS | 3D `(N, T, F)` | Planned |
-
-**Total:** 10 implemented (13 - 3 removed ensembles) + 10 planned = 20 models
-
-**Note:** Homogeneous ensembles (Voting, Stacking, Blending) removed in favor of heterogeneous meta-learner stacking (Phase 7).
+| Family | Count | Models |
+|--------|-------|--------|
+| **Tabular** | 6 | XGBoost, LightGBM, CatBoost, Random Forest, Logistic, SVM |
+| **Neural** | 10 | LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D |
+| **Ensemble** | 3 | Voting, Stacking, Blending |
+| **Meta-Learners** | 4 | Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta |
 
 ---
 
-## Implemented Models
+## Model Families
 
-### Boosting Family (3 Models)
+### Tabular Models (6)
 
-**Input:** 2D arrays `(n_samples, n_features)` - ~180 indicator features
+Models that accept 2D input `(n_samples, n_features)`. Do not require feature scaling or sequential input.
 
-#### XGBoost
+| Name | Registry Key | Family | Input Shape | Requires Scaling | GPU Support | Status |
+|------|--------------|--------|-------------|------------------|-------------|--------|
+| XGBoost | `xgboost` | boosting | 2D | No | Yes | Complete |
+| LightGBM | `lightgbm` | boosting | 2D | No | Yes | Complete |
+| CatBoost | `catboost` | boosting | 2D | No | Yes | Complete (optional) |
+| Random Forest | `random_forest` | classical | 2D | No | No | Complete |
+| Logistic Regression | `logistic` | classical | 2D | Yes | No | Complete |
+| SVM | `svm` | classical | 2D | Yes | No | Complete |
+
+**Note:** CatBoost has conditional registration - only registers if the `catboost` library is installed. If unavailable, model count is 22 instead of 23.
+
+### Neural Models (10)
+
+Models that accept 3D sequential input `(n_samples, seq_len, n_features)`. Require feature scaling and GPU for practical training times.
+
+| Name | Registry Key | Family | Input Shape | Requires Scaling | GPU Support | Status |
+|------|--------------|--------|-------------|------------------|-------------|--------|
+| LSTM | `lstm` | neural | 3D | Yes | Yes (required) | Complete |
+| GRU | `gru` | neural | 3D | Yes | Yes (required) | Complete |
+| TCN | `tcn` | neural | 3D | Yes | Yes (required) | Complete |
+| Transformer | `transformer` | neural | 3D | Yes | Yes (required) | Complete |
+| PatchTST | `patchtst` | neural | 3D | Yes | Yes (required) | Complete |
+| iTransformer | `itransformer` | neural | 3D | Yes | Yes (required) | Complete |
+| TFT | `tft` | neural | 3D | Yes | Yes (required) | Complete |
+| N-BEATS | `nbeats` | neural | 3D | Yes | Yes (required) | Complete |
+| InceptionTime | `inceptiontime` | neural | 3D | Yes | Yes (required) | Complete |
+| ResNet1D | `resnet1d` | neural | 3D | Yes | Yes (required) | Complete |
+
+### Ensemble Models (3)
+
+Models that combine predictions from multiple base models.
+
+| Name | Registry Key | Family | Input Shape | Base Model Type | Status |
+|------|--------------|--------|-------------|-----------------|--------|
+| Voting | `voting` | ensemble | Same as base | Homogeneous only | Complete |
+| Stacking | `stacking` | ensemble | Same as base | Homogeneous or Heterogeneous | Complete |
+| Blending | `blending` | ensemble | Same as base | Homogeneous only | Complete |
+
+**Homogeneous:** All base models must have same input shape (all tabular or all sequence).
+**Heterogeneous:** Stacking supports mixed tabular + sequence base models via dual data loading.
+
+### Meta-Learners (4)
+
+Specialized models for combining out-of-fold (OOF) predictions from base models. Accept 2D input of stacked probabilities.
+
+| Name | Registry Key | Family | Input Shape | Requires Scaling | GPU Support | Status |
+|------|--------------|--------|-------------|------------------|-------------|--------|
+| Ridge Meta | `ridge_meta` | ensemble | 2D (OOF) | No (internal) | No | Complete |
+| MLP Meta | `mlp_meta` | ensemble | 2D (OOF) | No (internal) | Yes (optional) | Complete |
+| Calibrated Meta | `calibrated_meta` | ensemble | 2D (OOF) | No | No | Complete |
+| XGBoost Meta | `xgboost_meta` | ensemble | 2D (OOF) | No | Yes | Complete |
+
+---
+
+## Model Details
+
+### XGBoost
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `xgboost` |
+| **Registry Key** | `xgboost` |
+| **Family** | boosting |
+| **Input Shape** | 2D `(n_samples, n_features)` |
+| **Requires Scaling** | No |
+| **Requires Sequences** | No |
+| **GPU Support** | Yes (`tree_method: hist`, `device: cuda`) |
 | **Implementation** | `src/models/boosting/xgboost_model.py` |
-| **Config** | `config/models/xgboost.yaml` |
-| **GPU Support** | Yes (`tree_method: hist`) |
-| **Training Time** | 2-5 min (GPU), 10-20 min (CPU) |
-| **Memory** | 2-4 GB VRAM (fixed) |
+
+**Strengths:** Fast training, regularization (L1/L2), handles missing values, feature importance, early stopping.
 
 **Default Configuration:**
 ```yaml
@@ -67,16 +104,21 @@ subsample: 0.8
 colsample_bytree: 0.8
 ```
 
-#### LightGBM
+---
+
+### LightGBM
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `lightgbm` |
-| **Implementation** | `src/models/boosting/lightgbm_model.py` |
-| **Config** | `config/models/lightgbm.yaml` |
+| **Registry Key** | `lightgbm` |
+| **Family** | boosting |
+| **Input Shape** | 2D `(n_samples, n_features)` |
+| **Requires Scaling** | No |
+| **Requires Sequences** | No |
 | **GPU Support** | Yes (`device_type: gpu`) |
-| **Training Time** | 1.5-4 min (GPU), 8-15 min (CPU) |
-| **Memory** | 2-3 GB VRAM |
+| **Implementation** | `src/models/boosting/lightgbm_model.py` |
+
+**Strengths:** Leaf-wise growth, faster than XGBoost on large datasets, lower memory usage, categorical feature support.
 
 **Default Configuration:**
 ```yaml
@@ -86,16 +128,23 @@ learning_rate: 0.05
 n_estimators: 500
 ```
 
-#### CatBoost
+---
+
+### CatBoost
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `catboost` |
-| **Implementation** | `src/models/boosting/catboost_model.py` |
-| **Config** | `config/models/catboost.yaml` |
+| **Registry Key** | `catboost` |
+| **Family** | boosting |
+| **Input Shape** | 2D `(n_samples, n_features)` |
+| **Requires Scaling** | No |
+| **Requires Sequences** | No |
 | **GPU Support** | Yes (`task_type: GPU`) |
-| **Training Time** | 3-6 min (GPU), 12-25 min (CPU) |
-| **Memory** | 2-4 GB VRAM |
+| **Implementation** | `src/models/boosting/catboost_model.py` |
+
+**Strengths:** Excellent categorical handling, ordered boosting reduces overfitting, symmetric trees.
+
+**Note:** Optional dependency. Only registered if `catboost` library is installed.
 
 **Default Configuration:**
 ```yaml
@@ -106,20 +155,93 @@ learning_rate: 0.1
 
 ---
 
-### Neural Family (4 Models)
-
-**Input:** 3D arrays `(n_samples, seq_len, n_features)` - ~180 features per timestep
-
-#### LSTM
+### Random Forest
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `lstm` |
+| **Registry Key** | `random_forest` |
+| **Family** | classical |
+| **Input Shape** | 2D `(n_samples, n_features)` |
+| **Requires Scaling** | No |
+| **Requires Sequences** | No |
+| **GPU Support** | No (CPU only) |
+| **Implementation** | `src/models/classical/random_forest.py` |
+
+**Strengths:** Robust to overfitting, interpretable feature importance, handles non-linear relationships, parallelizable.
+
+**Default Configuration:**
+```yaml
+n_estimators: 300
+max_depth: 8
+min_samples_split: 5
+min_samples_leaf: 2
+n_jobs: -1
+```
+
+---
+
+### Logistic Regression
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `logistic` |
+| **Family** | classical |
+| **Input Shape** | 2D `(n_samples, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | No |
+| **GPU Support** | No |
+| **Implementation** | `src/models/classical/logistic.py` |
+
+**Strengths:** Fast training, interpretable coefficients, well-calibrated probabilities, regularization options.
+
+**Default Configuration:**
+```yaml
+C: 1.0
+solver: lbfgs
+max_iter: 1000
+multi_class: multinomial
+```
+
+---
+
+### SVM
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `svm` |
+| **Family** | classical |
+| **Input Shape** | 2D `(n_samples, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | No |
+| **GPU Support** | No |
+| **Implementation** | `src/models/classical/svm.py` |
+
+**Strengths:** Effective in high-dimensional spaces, kernel trick for non-linear boundaries, margin maximization.
+
+**Warning:** O(n^2) memory complexity. Subsample to 10-20K samples for large datasets.
+
+**Default Configuration:**
+```yaml
+C: 1.0
+kernel: rbf
+probability: true
+```
+
+---
+
+### LSTM
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `lstm` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required for practical training) |
 | **Implementation** | `src/models/neural/lstm_model.py` |
-| **Config** | `config/models/lstm.yaml` |
-| **GPU Required** | Yes (CPU impractical) |
-| **Training Time** | 15-30 min (RTX 3080), 5-10 min (RTX 4090) |
-| **Memory Formula** | `4 * hidden * (features + hidden + 1) * layers` |
+
+**Strengths:** Long-term dependency modeling, gated memory cells, effective for temporal patterns.
 
 **Default Configuration:**
 ```yaml
@@ -133,37 +255,39 @@ max_epochs: 100
 early_stopping_patience: 15
 ```
 
-**Batch Size by GPU:**
-| GPU | VRAM | Batch Size |
-|-----|------|------------|
-| GTX 1080 Ti | 11GB | 256 |
-| RTX 3080 | 10GB | 512 |
-| RTX 3090 | 24GB | 1024 |
-| A100 | 40GB | 2048 |
+---
 
-#### GRU
+### GRU
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `gru` |
+| **Registry Key** | `gru` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
 | **Implementation** | `src/models/neural/gru_model.py` |
-| **Config** | `config/models/gru.yaml` |
-| **GPU Required** | Yes |
-| **Training Time** | 12-25 min (RTX 3080) |
-| **Memory** | ~25% less than LSTM (3 gates vs 4) |
 
-**Default Configuration:** Same as LSTM
+**Strengths:** ~25% fewer parameters than LSTM (3 gates vs 4), faster training, similar performance.
 
-#### TCN
+**Default Configuration:** Same as LSTM.
+
+---
+
+### TCN
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `tcn` |
+| **Registry Key** | `tcn` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
 | **Implementation** | `src/models/neural/tcn_model.py` |
-| **Config** | `config/models/tcn.yaml` |
-| **GPU Required** | Yes |
-| **Training Time** | 20-35 min (RTX 3080) |
-| **Memory Formula** | `channels * kernel * layers` |
+
+**Strengths:** Parallelizable (unlike RNNs), dilated causal convolutions, flexible receptive field, stable gradients.
 
 **Default Configuration:**
 ```yaml
@@ -173,16 +297,23 @@ dropout: 0.2
 sequence_length: 120
 ```
 
-#### Transformer
+---
+
+### Transformer
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `transformer` |
+| **Registry Key** | `transformer` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (high memory required) |
 | **Implementation** | `src/models/neural/transformer_model.py` |
-| **Config** | `config/models/transformer.yaml` |
-| **GPU Required** | Yes (high memory) |
-| **Training Time** | 30-60 min (RTX 3080) |
-| **Memory Formula** | `seq^2 * d_model` (quadratic in sequence length) |
+
+**Strengths:** Self-attention captures global dependencies, parallelizable, interpretable attention weights.
+
+**Memory Note:** O(seq^2) attention complexity. Use smaller batch sizes for longer sequences.
 
 **Default Configuration:**
 ```yaml
@@ -196,122 +327,270 @@ batch_size: 128
 
 ---
 
-### Classical Family (3 Models)
-
-**Input:** 2D arrays `(n_samples, n_features)` - ~180 indicator features
-
-#### Random Forest
+### PatchTST
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `random_forest` |
-| **Implementation** | `src/models/classical/random_forest_model.py` |
-| **Config** | `config/models/random_forest.yaml` |
-| **GPU Support** | No (CPU only) |
-| **Training Time** | 3-8 min |
-| **Memory** | 1-4 GB RAM |
+| **Registry Key** | `patchtst` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
+| **Implementation** | `src/models/neural/patchtst_model.py` |
+
+**Strengths:** Patch-based attention O((L/P)^2), channel-independence, effective for long sequences, SOTA forecasting.
+
+**Reference:** Nie et al., "A Time Series is Worth 64 Words" (ICLR 2023)
 
 **Default Configuration:**
 ```yaml
-n_estimators: 300
-max_depth: 8
-min_samples_split: 5
-min_samples_leaf: 2
-n_jobs: -1
+patch_len: 16
+stride: 8
+d_model: 256
+nhead: 8
+num_layers: 4
 ```
-
-#### Logistic Regression
-
-| Property | Value |
-|----------|-------|
-| **Registry Name** | `logistic` |
-| **Implementation** | `src/models/classical/logistic_model.py` |
-| **Config** | `config/models/logistic.yaml` |
-| **GPU Support** | No |
-| **Training Time** | 1-2 min |
-| **Memory** | <1 GB |
-
-**Default Configuration:**
-```yaml
-C: 1.0
-solver: lbfgs
-max_iter: 1000
-multi_class: multinomial
-```
-
-#### SVM
-
-| Property | Value |
-|----------|-------|
-| **Registry Name** | `svm` |
-| **Implementation** | `src/models/classical/svm_model.py` |
-| **Config** | `config/models/svm.yaml` |
-| **GPU Support** | No |
-| **Training Time** | 5-15 min |
-| **Memory** | O(n^2) - subsample for large datasets |
-
-**Default Configuration:**
-```yaml
-C: 1.0
-kernel: rbf
-probability: true
-```
-
-**Warning:** SVM scales poorly with dataset size. Subsample to 10-20K samples for large datasets.
 
 ---
 
-### Inference Family (4 Models - Meta-Learners)
-
-**Input:** 2D arrays `(n_samples, n_bases * 3)` - OOF predictions from 3-4 heterogeneous base models
-
-**Use Case:** Train on out-of-fold predictions from heterogeneous base models (e.g., CatBoost + TCN + PatchTST) to create final ensemble
-
-#### Logistic Meta-Learner
+### iTransformer
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `meta_logistic` |
-| **Implementation** | `src/models/inference/logistic_meta.py` |
-| **Config** | `config/models/meta_logistic.yaml` |
-| **Training Time** | 1-2 min |
-| **Memory** | <1 GB |
+| **Registry Key** | `itransformer` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
+| **Implementation** | `src/models/neural/itransformer_model.py` |
+
+**Strengths:** Attention over features (not time), O(F^2) complexity, efficient for high-dimensional features, multivariate focus.
+
+**Reference:** Liu et al., "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting" (ICLR 2024)
 
 **Default Configuration:**
 ```yaml
-C: 1.0
-solver: lbfgs
-multi_class: multinomial
-max_iter: 1000
+d_model: 256
+nhead: 8
+num_layers: 3
 ```
 
-#### Ridge Meta-Learner
+---
+
+### TFT (Temporal Fusion Transformer)
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `meta_ridge` |
-| **Implementation** | `src/models/inference/ridge_meta.py` |
-| **Config** | `config/models/meta_ridge.yaml` |
-| **Training Time** | 1-2 min |
-| **Memory** | <1 GB |
+| **Registry Key** | `tft` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
+| **Implementation** | `src/models/neural/tft_model.py` |
+
+**Strengths:** Interpretable attention, variable selection networks, gated residual connections, multi-horizon forecasting.
+
+**Reference:** Lim et al., "Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting" (2021)
+
+**Default Configuration:**
+```yaml
+lstm_layers: 2
+attention_layers: 1
+hidden_size: 256
+```
+
+---
+
+### N-BEATS
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `nbeats` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
+| **Implementation** | `src/models/neural/nbeats.py` |
+
+**Strengths:** Interpretable decomposition (trend + seasonality), stacked architecture, backward/forward residuals, M4 winner.
+
+**Reference:** Oreshkin et al., "N-BEATS: Neural Basis Expansion Analysis" (ICLR 2020)
+
+**Default Configuration:**
+```yaml
+n_stacks: 3
+n_blocks: 3
+hidden_size: 256
+theta_dim: 8
+```
+
+---
+
+### InceptionTime
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `inceptiontime` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
+| **Implementation** | `src/models/neural/cnn.py` |
+
+**Strengths:** Multi-scale convolutions (kernel sizes 10, 20, 40), ensemble of 5 Inception networks, bottleneck layers.
+
+**Reference:** Fawaz et al., "InceptionTime: Finding AlexNet for Time Series Classification" (2020)
+
+**Default Configuration:**
+```yaml
+n_blocks: 6
+n_filters: 32
+kernel_sizes: [10, 20, 40]
+bottleneck_channels: 32
+```
+
+---
+
+### ResNet1D
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `resnet1d` |
+| **Family** | neural |
+| **Input Shape** | 3D `(n_samples, seq_len, n_features)` |
+| **Requires Scaling** | Yes |
+| **Requires Sequences** | Yes |
+| **GPU Support** | Yes (required) |
+| **Implementation** | `src/models/neural/cnn.py` |
+
+**Strengths:** Residual connections prevent vanishing gradients, deep architectures (4-8 blocks), batch normalization.
+
+**Reference:** Wang et al., "Time Series Classification from Scratch with Deep Neural Networks" (2017)
+
+**Default Configuration:**
+```yaml
+channels: [64, 128, 256, 512]
+kernel_size: 3
+```
+
+---
+
+### Voting Ensemble
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `voting` |
+| **Family** | ensemble |
+| **Input Shape** | Same as base models |
+| **Requires Scaling** | Inherited from base models |
+| **Requires Sequences** | Inherited from base models |
+| **Implementation** | `src/models/ensemble/voting.py` |
+
+**Strengths:** Simple averaging of predictions, soft or hard voting, no training required for meta-learner.
+
+**Constraint:** Homogeneous only (all base models must have same input shape).
+
+**Default Configuration:**
+```yaml
+voting: soft
+base_model_names: [xgboost, lightgbm, catboost]
+```
+
+---
+
+### Stacking Ensemble
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `stacking` |
+| **Family** | ensemble |
+| **Input Shape** | Same as base models |
+| **Requires Scaling** | Inherited from base models |
+| **Requires Sequences** | Inherited from base models |
+| **Implementation** | `src/models/ensemble/stacking.py` |
+
+**Strengths:** OOF predictions avoid leakage, meta-learner learns optimal combination, supports heterogeneous bases.
+
+**Heterogeneous Support:** Mix tabular + sequence models by providing both 2D and 3D data.
+
+**Default Configuration:**
+```yaml
+base_model_names: [xgboost, lightgbm, catboost]
+meta_learner_name: logistic
+n_folds: 5
+```
+
+---
+
+### Blending Ensemble
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `blending` |
+| **Family** | ensemble |
+| **Input Shape** | Same as base models |
+| **Requires Scaling** | Inherited from base models |
+| **Requires Sequences** | Inherited from base models |
+| **Implementation** | `src/models/ensemble/blending.py` |
+
+**Strengths:** Simpler than stacking (single holdout), faster training, good for quick prototyping.
+
+**Constraint:** Homogeneous only (all base models must have same input shape).
+
+**Default Configuration:**
+```yaml
+base_model_names: [xgboost, random_forest]
+meta_learner_name: logistic
+holdout_fraction: 0.2
+```
+
+---
+
+### Ridge Meta-Learner
+
+| Property | Value |
+|----------|-------|
+| **Registry Key** | `ridge_meta` |
+| **Family** | ensemble |
+| **Input Shape** | 2D `(n_samples, n_base_models * n_classes)` |
+| **Requires Scaling** | No (internal scaling) |
+| **Requires Sequences** | No |
+| **GPU Support** | No |
+| **Implementation** | `src/models/ensemble/meta_learners/ridge_meta.py` |
+
+**Strengths:** Fast closed-form solution, L2 regularization, robust to multicollinearity, interpretable weights.
+
+**Aliases:** `ridge_meta_learner`, `ridge_stacking`
 
 **Default Configuration:**
 ```yaml
 alpha: 1.0
-solver: auto
-max_iter: 1000
+fit_intercept: true
+class_weight: balanced
 ```
 
-#### MLP Meta-Learner
+---
+
+### MLP Meta-Learner
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `meta_mlp` |
-| **Implementation** | `src/models/inference/mlp_meta.py` |
-| **Config** | `config/models/meta_mlp.yaml` |
+| **Registry Key** | `mlp_meta` |
+| **Family** | ensemble |
+| **Input Shape** | 2D `(n_samples, n_base_models * n_classes)` |
+| **Requires Scaling** | No (internal scaling) |
+| **Requires Sequences** | No |
 | **GPU Support** | Yes (optional) |
-| **Training Time** | 3-5 min |
-| **Memory** | 1-2 GB |
+| **Implementation** | `src/models/ensemble/meta_learners/mlp_meta.py` |
+
+**Strengths:** Non-linear combination of predictions, dropout regularization, learns complex interactions.
+
+**Aliases:** `mlp_meta_learner`
 
 **Default Configuration:**
 ```yaml
@@ -322,308 +601,135 @@ max_epochs: 100
 batch_size: 512
 ```
 
-#### Calibrated Blender
+---
+
+### Calibrated Meta-Learner
 
 | Property | Value |
 |----------|-------|
-| **Registry Name** | `meta_calibrated` |
-| **Implementation** | `src/models/inference/calibrated_blender.py` |
-| **Config** | `config/models/meta_calibrated.yaml` |
-| **Training Time** | 2-3 min |
-| **Memory** | <1 GB |
+| **Registry Key** | `calibrated_meta` |
+| **Family** | ensemble |
+| **Input Shape** | 2D `(n_samples, n_base_models * n_classes)` |
+| **Requires Scaling** | No |
+| **Requires Sequences** | No |
+| **GPU Support** | No |
+| **Implementation** | `src/models/ensemble/meta_learners/calibrated_meta.py` |
+
+**Strengths:** Probability calibration (isotonic or Platt), well-calibrated final probabilities.
+
+**Aliases:** `calibrated_meta_learner`, `calibrated_blender`
 
 **Default Configuration:**
 ```yaml
-calibration_method: isotonic  # or 'sigmoid'
+calibration_method: isotonic
 voting: soft
-ensemble_size: 5
 ```
 
 ---
 
-## Planned Models
-
-### CNN Family (2 Models)
-
-#### InceptionTime
+### XGBoost Meta-Learner
 
 | Property | Value |
 |----------|-------|
-| **Status** | Planned |
-| **Input** | 3D `(N, T, F)` |
-| **Strengths** | Multi-scale pattern detection |
-| **Est. Training Time** | 30-60 min |
-| **Implementation Effort** | 3 days |
+| **Registry Key** | `xgboost_meta` |
+| **Family** | ensemble |
+| **Input Shape** | 2D `(n_samples, n_base_models * n_classes)` |
+| **Requires Scaling** | No |
+| **Requires Sequences** | No |
+| **GPU Support** | Yes |
+| **Implementation** | `src/models/ensemble/meta_learners/xgboost_meta.py` |
 
-**Architecture:**
-- 5 parallel Inception networks
-- 6 Inception modules per network
-- Multi-scale convolutions (kernel sizes 10, 20, 40)
+**Strengths:** Non-linear feature interactions, gradient boosting on OOF predictions, handles correlations.
 
-#### 1D ResNet
+**Aliases:** `xgb_meta`, `xgboost_stacking`
 
-| Property | Value |
-|----------|-------|
-| **Status** | Planned |
-| **Input** | 3D `(N, T, F)` |
-| **Strengths** | Deep residual learning |
-| **Est. Training Time** | 20-40 min |
-| **Implementation Effort** | 2 days |
-
-**Architecture:**
-- Residual blocks with skip connections
-- Batch normalization
-- 4-8 blocks depth
-
----
-
-### Advanced Transformer Family (3 Models)
-
-#### PatchTST
-
-| Property | Value |
-|----------|-------|
-| **Status** | Planned |
-| **Input** | 4D `(N, TF, T, 4)` multi-resolution |
-| **Strengths** | Patch-based attention, O((L/P)^2) |
-| **Est. Training Time** | 30-60 min |
-| **Implementation Effort** | 4 days |
-
-**Architecture:**
-- Patching: Divide time series into patches
-- Channel-independent processing
-- Reduced attention complexity
-
-#### iTransformer
-
-| Property | Value |
-|----------|-------|
-| **Status** | Planned |
-| **Input** | 4D `(N, TF, T, 4)` multi-resolution |
-| **Strengths** | Attention over features (not time) |
-| **Est. Training Time** | 25-50 min |
-| **Implementation Effort** | 3 days |
-
-**Architecture:**
-- Inverted attention: O(F^2) instead of O(T^2)
-- Efficient for high-dimensional features
-- Better for multivariate forecasting
-
-#### TFT (Temporal Fusion Transformer)
-
-| Property | Value |
-|----------|-------|
-| **Status** | Planned |
-| **Input** | 4D `(N, TF, T, 4)` multi-resolution |
-| **Strengths** | Interpretable, variable selection |
-| **Est. Training Time** | 45-90 min |
-| **Implementation Effort** | 5 days |
-
-**Architecture:**
-- Variable Selection Networks
-- LSTM encoder + multi-head attention
-- Gated residual connections
-- Quantile forecasting
-
----
-
-### MLP Family (1 Model)
-
-#### N-BEATS
-
-| Property | Value |
-|----------|-------|
-| **Status** | Planned |
-| **Input** | 3D `(N, T, F)` |
-| **Strengths** | Interpretable decomposition |
-| **Est. Training Time** | 15-30 min |
-| **Implementation Effort** | 1 day |
-
-**Architecture:**
-- Stacks of fully connected layers
-- Trend and seasonality blocks
-- Backward and forward residual links
-- M4 competition winner
-
----
-
-## Model Registration
-
-### Plugin Architecture
-
-Models register automatically via the `@register` decorator:
-
-```python
-from src.models import register, BaseModel
-
-@register(name="my_model", family="boosting")
-class MyModel(BaseModel):
-    def fit(self, X_train, y_train, X_val, y_val, sample_weights=None, config=None):
-        # Training logic
-        return TrainingMetrics(...)
-
-    def predict(self, X):
-        # Prediction logic
-        return PredictionOutput(...)
-
-    def save(self, path):
-        # Persistence logic
-        pass
-
-    @classmethod
-    def load(cls, path):
-        # Loading logic
-        pass
+**Default Configuration:**
+```yaml
+n_estimators: 100
+max_depth: 4
+learning_rate: 0.1
 ```
 
-### BaseModel Interface
+---
 
-```python
-class BaseModel(ABC):
-    @abstractmethod
-    def fit(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
-        config: Optional[Dict[str, Any]] = None,
-    ) -> TrainingMetrics:
-        """Train the model."""
-        pass
+## Usage Examples
 
-    @abstractmethod
-    def predict(self, X: np.ndarray) -> PredictionOutput:
-        """Generate predictions with probabilities and confidence."""
-        pass
+### Training Individual Models
 
-    @abstractmethod
-    def save(self, path: Path) -> None:
-        """Persist trained model."""
-        pass
+```bash
+# Train boosting models (2D input)
+python scripts/train_model.py --model xgboost --horizon 20
+python scripts/train_model.py --model lightgbm --horizon 20
+python scripts/train_model.py --model catboost --horizon 20
 
-    @classmethod
-    @abstractmethod
-    def load(cls, path: Path) -> "BaseModel":
-        """Load trained model."""
-        pass
+# Train classical models (2D input)
+python scripts/train_model.py --model random_forest --horizon 20
+python scripts/train_model.py --model logistic --horizon 20
+
+# Train sequence models (3D input)
+python scripts/train_model.py --model lstm --horizon 20 --seq-len 60
+python scripts/train_model.py --model tcn --horizon 20 --seq-len 120
+python scripts/train_model.py --model transformer --horizon 20 --seq-len 60
+
+# Train advanced models
+python scripts/train_model.py --model patchtst --horizon 20 --seq-len 64
+python scripts/train_model.py --model nbeats --horizon 20 --seq-len 60
+python scripts/train_model.py --model inceptiontime --horizon 20 --seq-len 60
 ```
 
-### Listing Models
+### Training Ensembles
+
+```bash
+# Homogeneous voting (same-family base models)
+python scripts/train_model.py --model voting --horizon 20 \
+  --base-models xgboost,lightgbm,catboost
+
+# Homogeneous stacking (same-family base models)
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models lstm,gru,tcn --meta-learner ridge_meta --seq-len 60
+
+# Heterogeneous stacking (mixed tabular + sequence)
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models xgboost,lstm,patchtst --meta-learner xgboost_meta
+```
+
+### Programmatic Usage
 
 ```python
 from src.models import ModelRegistry
 
-# List all registered models
+# List all models
 all_models = ModelRegistry.list_all()
-print(all_models)
-# ['xgboost', 'lightgbm', 'catboost', 'lstm', 'gru', 'tcn', 'transformer',
-#  'random_forest', 'logistic', 'svm', 'voting', 'stacking', 'blending']
+print(f"Total models: {len(all_models)}")  # 23 (or 22 without CatBoost)
 
-# Get model by name
-model = ModelRegistry.create("xgboost", config={...})
+# List by family
+by_family = ModelRegistry.list_models()
+print(by_family)
+# {'boosting': ['xgboost', 'lightgbm', 'catboost'],
+#  'neural': ['lstm', 'gru', 'tcn', 'transformer', 'patchtst', ...],
+#  'classical': ['random_forest', 'logistic', 'svm'],
+#  'ensemble': ['voting', 'stacking', 'blending', 'ridge_meta', ...]}
+
+# Create model instance
+model = ModelRegistry.create("xgboost", config={"max_depth": 8})
+print(model.requires_scaling)    # False
+print(model.requires_sequences)  # False
+
+# Train
+metrics = model.fit(X_train, y_train, X_val, y_val)
+print(f"Val F1: {metrics.val_f1:.3f}")
+
+# Predict
+output = model.predict(X_test)
+print(output.class_predictions.shape)
+print(output.class_probabilities.shape)
 ```
 
 ---
 
-## Data Adapter Requirements
+## Configuration Reference
 
-### Tabular Adapter (2D)
-
-**Used by:** Boosting (3) + Classical (3) = 6 models
-
-**Input Shape:** `(n_samples, n_features)` - ~180 features
-
-**Adapter Location:** `src/models/data_preparation.py`
-
-```python
-# Tabular models receive flat 2D arrays
-X_train.shape  # (50000, 180)
-X_val.shape    # (10000, 180)
-X_test.shape   # (10000, 180)
-```
-
-### Sequence Adapter (3D)
-
-**Used by:** Neural (4) + CNN (2, planned) + MLP (1, planned) = 7 models
-
-**Input Shape:** `(n_samples, seq_len, n_features)` - ~180 features per timestep
-
-**Adapter Location:** `src/models/data_preparation.py`
-
-```python
-# Sequence models receive windowed 3D arrays
-X_train.shape  # (50000, 60, 180)  # seq_len=60
-X_val.shape    # (10000, 60, 180)
-X_test.shape   # (10000, 60, 180)
-```
-
-### Inference Adapter (2D OOF Predictions)
-
-**Used by:** Inference (4 planned models)
-
-**Input Shape:** `(n_samples, n_bases * 3)` - Base model OOF predictions
-
-**Adapter Location:** `src/cross_validation/oof_heterogeneous.py`
-
-```python
-# Meta-learners receive OOF predictions from heterogeneous base models
-# Example: 3 base models (CatBoost, TCN, PatchTST) → 9 features (3 bases * 3 class probs)
-X_meta_train.shape  # (50000, 9)
-X_meta_val.shape    # (10000, 9)
-X_meta_test.shape   # (10000, 9)
-```
-
-### Multi-Resolution Adapter (4D) - Planned
-
-**Used by:** PatchTST, iTransformer, TFT (3 planned models)
-
-**Input Shape:** `(n_samples, n_timeframes, seq_len, 4)` - Raw OHLC from 9 timeframes
-
-**Status:** Not implemented (requires Phase 2 MTF extension)
-
-```python
-# Advanced models receive multi-resolution tensors
-X_train.shape  # (50000, 9, 60, 4)  # 9 timeframes, 60 bars each, OHLC
-```
-
----
-
-## Hardware Requirements
-
-### By Model Family
-
-| Family | Min GPU | Recommended GPU | CPU Fallback |
-|--------|---------|-----------------|--------------|
-| **Boosting** | None | RTX 3070 (8GB) | Yes (10-20 min) |
-| **Neural** | GTX 1080 Ti | RTX 3080 (10GB) | No (hours) |
-| **Classical** | None | None | Yes (native) |
-| **Ensemble** | Inherited | Inherited | Depends |
-| **CNN** (planned) | RTX 3060 | RTX 3080 | No |
-| **Advanced** (planned) | RTX 3070 | RTX 3090 (24GB) | No |
-| **MLP** (planned) | RTX 2060 | RTX 3070 | Possible |
-
-### Budget Recommendations
-
-| Budget | GPU | Models Supported |
-|--------|-----|------------------|
-| $0 | CPU only | Boosting (CPU), Classical |
-| $800 | RTX 4070 Ti (12GB) | All 13 implemented |
-| $1,600 | RTX 4090 (24GB) | All 19 (when released) |
-
-### Cloud Options
-
-| GPU | Instance | Cost/Hour | 100K Training |
-|-----|----------|-----------|---------------|
-| Tesla V100 | p3.2xlarge | $3.06 | $0.76 (15 min) |
-| A100 (40GB) | p4d.24xlarge | $32.77 | $1.64 (3 min) |
-
----
-
-## Configuration Files
-
-### Location
+### Config File Locations
 
 ```
 config/models/
@@ -634,12 +740,22 @@ config/models/
   gru.yaml
   tcn.yaml
   transformer.yaml
+  patchtst.yaml
+  itransformer.yaml
+  tft.yaml
+  nbeats.yaml
+  inceptiontime.yaml
+  resnet1d.yaml
   random_forest.yaml
   logistic.yaml
   svm.yaml
   voting.yaml
   stacking.yaml
   blending.yaml
+  ridge_meta.yaml
+  mlp_meta.yaml
+  calibrated_meta.yaml
+  xgboost_meta.yaml
 ```
 
 ### Config Structure
@@ -651,17 +767,14 @@ model:
   description: Gradient boosted trees
 
 defaults:
-  # Model-specific hyperparameters
   n_estimators: 500
   max_depth: 6
   learning_rate: 0.1
 
 training:
-  # Training settings
   early_stopping_rounds: 50
 
 device:
-  # Hardware settings
   default: auto
   mixed_precision: false
 ```
@@ -677,11 +790,128 @@ config = load_model_config("xgboost")
 
 ---
 
+## Hardware Requirements
+
+### By Model Family
+
+| Family | Min GPU | Recommended GPU | CPU Fallback |
+|--------|---------|-----------------|--------------|
+| **Boosting** | None | RTX 3070 (8GB) | Yes (10-20 min) |
+| **Neural** | GTX 1080 Ti | RTX 3080 (10GB) | No (impractical) |
+| **Classical** | None | None | Yes (native) |
+| **Ensemble** | Inherited | Inherited | Depends on bases |
+| **Meta-Learners** | None | None | Yes (most are CPU) |
+
+### GPU Memory by Model
+
+| Model | Batch 256 | Batch 512 | Batch 1024 |
+|-------|-----------|-----------|------------|
+| LSTM | 3 GB | 5 GB | 8 GB |
+| GRU | 2.5 GB | 4 GB | 7 GB |
+| TCN | 4 GB | 6 GB | 10 GB |
+| Transformer | 6 GB | 10 GB | 16+ GB |
+| PatchTST | 5 GB | 8 GB | 14 GB |
+| InceptionTime | 4 GB | 7 GB | 12 GB |
+
+---
+
+## Model Registration
+
+### Plugin Architecture
+
+Models register automatically via the `@register` decorator:
+
+```python
+from src.models import register, BaseModel
+
+@register(name="my_model", family="boosting", description="Custom boosting model")
+class MyModel(BaseModel):
+    @property
+    def model_family(self) -> str:
+        return "boosting"
+
+    @property
+    def requires_scaling(self) -> bool:
+        return False
+
+    @property
+    def requires_sequences(self) -> bool:
+        return False
+
+    def get_default_config(self) -> dict:
+        return {"param": 1.0}
+
+    def fit(self, X_train, y_train, X_val, y_val, sample_weights=None, config=None):
+        # Training logic
+        return TrainingMetrics(...)
+
+    def predict(self, X):
+        # Prediction logic
+        return PredictionOutput(...)
+
+    def save(self, path):
+        # Persistence logic
+        pass
+
+    def load(self, path):
+        # Loading logic
+        pass
+```
+
+### BaseModel Interface
+
+```python
+class BaseModel(ABC):
+    @property
+    @abstractmethod
+    def model_family(self) -> str:
+        """Return: 'boosting', 'neural', 'classical', 'ensemble'"""
+        pass
+
+    @property
+    @abstractmethod
+    def requires_scaling(self) -> bool:
+        """Whether features should be scaled before training."""
+        pass
+
+    @property
+    @abstractmethod
+    def requires_sequences(self) -> bool:
+        """Whether input should be 3D (n_samples, seq_len, n_features)."""
+        pass
+
+    @abstractmethod
+    def get_default_config(self) -> dict:
+        """Return default hyperparameters."""
+        pass
+
+    @abstractmethod
+    def fit(self, X_train, y_train, X_val, y_val, ...) -> TrainingMetrics:
+        """Train the model."""
+        pass
+
+    @abstractmethod
+    def predict(self, X) -> PredictionOutput:
+        """Generate predictions with probabilities and confidence."""
+        pass
+
+    @abstractmethod
+    def save(self, path: Path) -> None:
+        """Persist trained model."""
+        pass
+
+    @abstractmethod
+    def load(self, path: Path) -> None:
+        """Load trained model."""
+        pass
+```
+
+---
+
 ## References
 
 - **Architecture:** `docs/ARCHITECTURE.md`
 - **Training Guide:** `docs/implementation/PHASE_6_TRAINING.md`
-- **Ensemble Guide:** `docs/guides/ENSEMBLE_CONFIGURATION.md`
+- **Meta-Learner Guide:** `docs/guides/META_LEARNER_STACKING.md`
 - **Model Integration:** `docs/guides/MODEL_INTEGRATION.md`
-- **Hardware Requirements:** `docs/models/REQUIREMENTS_MATRIX.md`
-- **Training Guides:** `docs/models/*_TRAINING_GUIDE.md`
+- **Infrastructure Requirements:** `docs/reference/INFRASTRUCTURE.md`
