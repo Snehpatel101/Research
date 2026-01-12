@@ -293,6 +293,114 @@ class Trainer:
 
         return X_df[available_cols]
 
+    def _get_sequence_model_feature_columns(
+        self,
+        model_name: str,
+        container: TimeSeriesDataContainer,
+    ) -> list[str] | None:
+        """
+        Get feature columns for a specific sequence model from the feature set manifest.
+
+        Uses FEATURE_SET_ALIASES to map model names to their optimal feature sets:
+        - tcn -> tcn_optimal (50 features)
+        - lstm/gru -> neural_optimal (43 features)
+        - patchtst -> patchtst_optimal (23 features)
+        - transformer -> transformer_raw (23 features)
+
+        Args:
+            model_name: Name of the sequence model (e.g., 'tcn', 'lstm')
+            container: TimeSeriesDataContainer to get available features
+
+        Returns:
+            List of feature column names, or None to use all features
+        """
+        import importlib
+
+        feature_sets_config = importlib.import_module("src.phase1.config.feature_sets")
+        FEATURE_SET_ALIASES = feature_sets_config.FEATURE_SET_ALIASES
+
+        # Get the optimal feature set for this model
+        model_lower = model_name.lower()
+        feature_set_name = FEATURE_SET_ALIASES.get(model_lower)
+
+        if not feature_set_name:
+            logger.debug(
+                f"No feature set alias for model '{model_name}', using all features"
+            )
+            return None
+
+        # Try to load feature list from manifest (produced by Phase 1 pipeline)
+        # The manifest contains pre-computed feature lists for each feature set
+        manifest_path = None
+
+        # Try to find manifest from container's source path or common locations
+        possible_paths = []
+
+        # Check if container has source_path attribute
+        if hasattr(container, "source_path") and container.source_path:
+            base = Path(container.source_path)
+            possible_paths.extend([
+                base / "artifacts" / "feature_set_manifest.json",
+                base.parent / "artifacts" / "feature_set_manifest.json",
+                base.parent.parent / "artifacts" / "feature_set_manifest.json",
+            ])
+
+        # Also check common project locations
+        project_root = Path(__file__).parent.parent.parent
+        possible_paths.extend([
+            project_root / "runs" / "latest" / "artifacts" / "feature_set_manifest.json",
+        ])
+
+        for path in possible_paths:
+            if path.exists():
+                manifest_path = path
+                break
+
+        if manifest_path and manifest_path.exists():
+            try:
+                with open(manifest_path) as f:
+                    manifest = json.load(f)
+
+                if feature_set_name in manifest:
+                    feature_info = manifest[feature_set_name]
+                    features = feature_info.get("features", [])
+                    if features:
+                        logger.info(
+                            f"Sequence model '{model_name}' using feature set "
+                            f"'{feature_set_name}': {len(features)} features"
+                        )
+                        return features
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Failed to load feature set manifest: {e}")
+
+        # Fallback: resolve feature set from definition (slower but works without manifest)
+        logger.debug(
+            f"Manifest not found or feature set missing, falling back to definition-based resolution"
+        )
+
+        # Get sample DataFrame to resolve features
+        split_data = container.get_split("train")
+        sample_df = split_data.df[split_data.feature_columns[:1]]  # Just need columns
+
+        # Use the existing resolve method with a DataFrame that has all feature columns
+        feature_cols_df = pd.DataFrame(columns=split_data.feature_columns)
+
+        # Temporarily set config to use this feature set
+        original_feature_set = self.config.feature_set
+        self.config.feature_set = feature_set_name
+        try:
+            result = self._resolve_feature_set_columns(feature_cols_df)
+        finally:
+            self.config.feature_set = original_feature_set
+
+        if result:
+            logger.info(
+                f"Sequence model '{model_name}' using feature set "
+                f"'{feature_set_name}': {len(result)} features (from definition)"
+            )
+
+        return result
+
     def _generate_run_id(self) -> str:
         """
         Generate unique run identifier with collision prevention.
@@ -410,8 +518,9 @@ class Trainer:
             )
 
             # Apply feature selection to training data
-            X_train_df = self.feature_selector.apply_selection_df(X_train_df)
-            X_val_df = self.feature_selector.apply_selection_df(X_val_df)
+            if self.feature_selector is not None:
+                X_train_df = self.feature_selector.apply_selection_df(X_train_df)
+                X_val_df = self.feature_selector.apply_selection_df(X_val_df)
 
             logger.info(
                 f"Applied feature selection: {feature_selection_result.n_features_selected} features "
@@ -430,17 +539,31 @@ class Trainer:
             )
 
             # Tabular data (already loaded as DataFrames)
-            X_train = X_train_df.values
-            y_train = y_train_series.values
-            w_train = w_train_series.values
-            X_val = X_val_df.values
-            y_val = y_val_series.values
+            # Use np.asarray for type-safe conversion (handles both DataFrame and ndarray)
+            X_train = np.asarray(X_train_df)
+            y_train = np.asarray(y_train_series)
+            w_train = np.asarray(w_train_series)
+            X_val = np.asarray(X_val_df)
+            y_val = np.asarray(y_val_series)
 
-            # Sequence data for sequence-based base models
+            # Get feature columns for sequence models
+            # Use the first sequence model's optimal feature set
+            seq_feature_columns = None
+            base_model_names = self.config.model_config.get("base_model_names", [])
+            for model_name in base_model_names:
+                model_info = ModelRegistry.get_model_info(model_name)
+                if model_info and model_info.get("requires_sequences", False):
+                    seq_feature_columns = self._get_sequence_model_feature_columns(
+                        model_name, container
+                    )
+                    break  # Use first sequence model's feature set
+
+            # Sequence data for sequence-based base models (with feature filtering)
             X_train_seq, _, _, X_val_seq, _ = prepare_training_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
+                feature_columns=seq_feature_columns,
             )
 
             logger.info(
@@ -449,19 +572,24 @@ class Trainer:
             )
 
         elif self.model.requires_sequences:
-            # Pure sequence model
+            # Pure sequence model - get model-specific feature columns
+            seq_feature_columns = self._get_sequence_model_feature_columns(
+                self.config.model_name, container
+            )
             X_train, y_train, w_train, X_val, y_val = prepare_training_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
+                feature_columns=seq_feature_columns,
             )
         else:
             # Pure tabular model
-            X_train = X_train_df.values
-            y_train = y_train_series.values
-            w_train = w_train_series.values
-            X_val = X_val_df.values
-            y_val = y_val_series.values
+            # Use np.asarray for type-safe conversion (handles both DataFrame and ndarray)
+            X_train = np.asarray(X_train_df)
+            y_train = np.asarray(y_train_series)
+            w_train = np.asarray(w_train_series)
+            X_val = np.asarray(X_val_df)
+            y_val = np.asarray(y_val_series)
 
         # Log data shapes
         logger.info(
@@ -472,10 +600,14 @@ class Trainer:
 
         # Set feature names on model (for interpretability)
         if hasattr(self.model, "set_feature_names") and not self.model.requires_sequences:
-            if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
-                self.model.set_feature_names(self.feature_selector.selected_features)
+            if (
+                self._is_feature_selection_enabled()
+                and self.feature_selector is not None
+                and self.feature_selector.is_fitted
+            ):
+                self.model.set_feature_names(self.feature_selector.selected_features)  # type: ignore[union-attr]
             else:
-                self.model.set_feature_names(feature_names)
+                self.model.set_feature_names(feature_names)  # type: ignore[union-attr]
 
         # Train model (pass label_end_times for ensemble models with internal CV)
         logger.info(f"Training {self.config.model_name}...")
@@ -505,18 +637,26 @@ class Trainer:
         logger.info("Evaluating on validation set...")
         # For heterogeneous stacking, pass both tabular and sequence data
         if self._is_heterogeneous_ensemble() and X_val_seq is not None:
-            val_predictions = self.model.predict(X_val, X_seq=X_val_seq)
+            # Heterogeneous stacking models accept X_seq as keyword argument
+            val_predictions = self.model.predict(X_val, X_seq=X_val_seq)  # type: ignore[call-arg]
         else:
             val_predictions = self.model.predict(X_val)
+
+        # Align y_val with predictions (may be trimmed for heterogeneous ensembles)
+        y_val_aligned = y_val
+        if len(val_predictions.class_predictions) < len(y_val):
+            offset = len(y_val) - len(val_predictions.class_predictions)
+            y_val_aligned = y_val[offset:]
+
         eval_metrics = compute_classification_metrics(
-            y_true=y_val,
+            y_true=y_val_aligned,
             y_pred=val_predictions.class_predictions,
             y_proba=val_predictions.class_probabilities,
         )
 
         # Add trading metrics
         eval_metrics["trading"] = compute_trading_metrics(
-            y_true=y_val,
+            y_true=y_val_aligned,
             y_pred=val_predictions.class_predictions,
         )
 
@@ -539,10 +679,14 @@ class Trainer:
         self.calibrator = None
         if self.config.use_calibration:
             logger.info("Applying probability calibration...")
-            cal_config = CalibrationConfig(method=self.config.calibration_method)
+            # Cast calibration_method to Literal type for CalibrationConfig
+            calibration_method = self.config.calibration_method
+            if calibration_method not in ("isotonic", "sigmoid", "auto"):
+                calibration_method = "auto"
+            cal_config = CalibrationConfig(method=calibration_method)  # type: ignore[arg-type]
             self.calibrator = ProbabilityCalibrator(cal_config)
             calibration_metrics = self.calibrator.fit(
-                y_true=y_val,
+                y_true=y_val_aligned,
                 probabilities=val_predictions.class_probabilities,
             )
             eval_metrics["calibration"] = calibration_metrics.to_dict()
@@ -573,10 +717,10 @@ class Trainer:
             "output_path": str(self.output_path),
             "total_time_seconds": total_time,
             "val_predictions": val_predictions.class_predictions,
-            "val_true": y_val,
+            "val_true": y_val_aligned,
             "feature_selection": (
                 self.feature_selector.get_feature_report()
-                if self._is_feature_selection_enabled()
+                if self._is_feature_selection_enabled() and self.feature_selector is not None
                 else None
             ),
         }
@@ -610,6 +754,8 @@ class Trainer:
         )
 
         # Run walk-forward feature selection
+        if self.feature_selector is None:
+            raise RuntimeError("Feature selector not initialized")
         result = self.feature_selector.select_features(
             X=X_train_df,
             y=y_train,
@@ -662,7 +808,9 @@ class Trainer:
             )
 
             # Tabular test data
-            X_test_df, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+            X_test_result, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+            # Ensure we have a DataFrame for feature operations
+            X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
 
             # Apply feature set filtering (must happen before feature selection)
             if self._feature_set_columns is not None:
@@ -672,20 +820,36 @@ class Trainer:
                 )
 
             # Apply feature selection if enabled
-            if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
+            if (
+                self._is_feature_selection_enabled()
+                and self.feature_selector is not None
+                and self.feature_selector.is_fitted
+            ):
                 X_test_df = self.feature_selector.apply_selection_df(X_test_df)
                 logger.debug(
                     f"Applied feature selection to test set: {X_test_df.shape[1]} features"
                 )
 
-            X_test = X_test_df.values
-            y_test = y_test_series.values
+            X_test = np.asarray(X_test_df)
+            y_test = np.asarray(y_test_series)
 
-            # Sequence test data for sequence-based base models
+            # Get feature columns for sequence models (same as training)
+            seq_feature_columns = None
+            base_model_names = self.config.model_config.get("base_model_names", [])
+            for model_name in base_model_names:
+                model_info = ModelRegistry.get_model_info(model_name)
+                if model_info and model_info.get("requires_sequences", False):
+                    seq_feature_columns = self._get_sequence_model_feature_columns(
+                        model_name, container
+                    )
+                    break
+
+            # Sequence test data for sequence-based base models (with feature filtering)
             X_test_seq, _, _ = prepare_test_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
+                feature_columns=seq_feature_columns,
             )
 
             logger.info(
@@ -694,15 +858,21 @@ class Trainer:
             )
 
         elif self.model.requires_sequences:
-            # Sequence models: load sequences directly
+            # Sequence models: load sequences directly with model-specific features
+            seq_feature_columns = self._get_sequence_model_feature_columns(
+                self.config.model_name, container
+            )
             X_test, y_test, _ = prepare_test_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
+                feature_columns=seq_feature_columns,
             )
         else:
             # Tabular models: load DataFrame and apply feature selection
-            X_test_df, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+            X_test_result, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
+            # Ensure we have a DataFrame for feature operations
+            X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
 
             # Apply feature set filtering (must happen before feature selection)
             if self._feature_set_columns is not None:
@@ -712,14 +882,18 @@ class Trainer:
                 )
 
             # Apply feature selection if enabled
-            if self._is_feature_selection_enabled() and self.feature_selector.is_fitted:
+            if (
+                self._is_feature_selection_enabled()
+                and self.feature_selector is not None
+                and self.feature_selector.is_fitted
+            ):
                 X_test_df = self.feature_selector.apply_selection_df(X_test_df)
                 logger.debug(
                     f"Applied feature selection to test set: {X_test_df.shape[1]} features"
                 )
 
-            X_test = X_test_df.values
-            y_test = y_test_series.values
+            X_test = np.asarray(X_test_df)
+            y_test = np.asarray(y_test_series)
 
         # LEAKAGE PREVENTION: Validate no invalid labels (-99) in test data
         _validate_labels(y_test, "test labels")
@@ -729,16 +903,24 @@ class Trainer:
         # Evaluate on test set
         # For heterogeneous stacking, pass both tabular and sequence data
         if self._is_heterogeneous_ensemble() and X_test_seq is not None:
-            test_predictions = self.model.predict(X_test, X_seq=X_test_seq)
+            # Heterogeneous stacking models accept X_seq as keyword argument
+            test_predictions = self.model.predict(X_test, X_seq=X_test_seq)  # type: ignore[call-arg]
         else:
             test_predictions = self.model.predict(X_test)
+
+        # Align y_test with predictions (may be trimmed for heterogeneous ensembles)
+        y_test_aligned = y_test
+        if len(test_predictions.class_predictions) < len(y_test):
+            offset = len(y_test) - len(test_predictions.class_predictions)
+            y_test_aligned = y_test[offset:]
+
         test_metrics = compute_classification_metrics(
-            y_true=y_test,
+            y_true=y_test_aligned,
             y_pred=test_predictions.class_predictions,
             y_proba=test_predictions.class_probabilities,
         )
         test_metrics["trading"] = compute_trading_metrics(
-            y_true=y_test,
+            y_true=y_test_aligned,
             y_pred=test_predictions.class_predictions,
         )
 
@@ -829,7 +1011,7 @@ class Trainer:
         """Save feature selection result with model artifacts."""
         if not self._is_feature_selection_enabled():
             return
-        if not self.feature_selector.is_fitted:
+        if self.feature_selector is None or not self.feature_selector.is_fitted:
             return
 
         fs_path = self.output_path / "config" / "feature_selection.json"

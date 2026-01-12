@@ -7,6 +7,7 @@ into formats suitable for different model types (tabular vs sequential).
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -16,11 +17,14 @@ if TYPE_CHECKING:
 
     from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
+logger = logging.getLogger(__name__)
+
 
 def prepare_training_data(
     container: TimeSeriesDataContainer,
     requires_sequences: bool,
     sequence_length: int = 60,
+    feature_columns: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare data for training based on model requirements.
@@ -29,6 +33,9 @@ def prepare_training_data(
         container: TimeSeriesDataContainer with data
         requires_sequences: Whether model needs sequential data (LSTM, etc.)
         sequence_length: Sequence length for sequential models
+        feature_columns: Optional list of feature columns to use for sequences.
+            If None, uses all available features. Use this to filter to
+            model-specific optimal feature sets (e.g., tcn_optimal, neural_optimal).
 
     Returns:
         Tuple of (X_train, y_train, w_train, X_val, y_val)
@@ -39,12 +46,21 @@ def prepare_training_data(
             "train",
             seq_len=sequence_length,
             symbol_isolated=True,
+            feature_columns=feature_columns,
         )
         val_dataset = container.get_pytorch_sequences(
             "val",
             seq_len=sequence_length,
             symbol_isolated=True,
+            feature_columns=feature_columns,
         )
+
+        # Log feature count if filtering was applied
+        if feature_columns is not None:
+            logger.info(
+                f"Sequence data prepared with {len(feature_columns)} filtered features "
+                f"(from feature set)"
+            )
 
         # Convert to numpy arrays
         X_train, y_train, w_train = dataset_to_arrays(train_dataset)
@@ -62,6 +78,7 @@ def prepare_test_data(
     container: TimeSeriesDataContainer,
     requires_sequences: bool,
     sequence_length: int = 60,
+    feature_columns: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare test data for final evaluation.
@@ -70,6 +87,8 @@ def prepare_test_data(
         container: TimeSeriesDataContainer with test split
         requires_sequences: Whether model needs sequential data
         sequence_length: Sequence length for sequential models
+        feature_columns: Optional list of feature columns to use for sequences.
+            If None, uses all available features.
 
     Returns:
         Tuple of (X_test, y_test, w_test)
@@ -80,6 +99,7 @@ def prepare_test_data(
             "test",
             seq_len=sequence_length,
             symbol_isolated=True,
+            feature_columns=feature_columns,
         )
         # Convert to numpy arrays
         X_test, y_test, w_test = dataset_to_arrays(test_dataset)

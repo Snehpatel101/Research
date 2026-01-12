@@ -354,15 +354,24 @@ class StackingEnsemble(BaseModel):
         val_predictions = self._generate_base_predictions(
             X_val, fold_models, use_probabilities, X_seq=X_val_seq
         )
+
+        # Align validation labels with predictions (may be trimmed for heterogeneous ensembles)
+        y_val_aligned = y_val
+        X_val_aligned = X_val
+        if val_predictions.shape[0] < len(y_val):
+            offset = len(y_val) - val_predictions.shape[0]
+            y_val_aligned = y_val[offset:]
+            X_val_aligned = X_val[offset:]
+
         meta_features_val = val_predictions
         if passthrough:
-            meta_features_val = np.hstack([X_val, val_predictions])
+            meta_features_val = np.hstack([X_val_aligned, val_predictions])
 
         meta_metrics = self._meta_learner.fit(
             X_train=meta_features_train,
             y_train=y_train,
             X_val=meta_features_val,
-            y_val=y_val,
+            y_val=y_val_aligned,
             sample_weights=sample_weights,
         )
 
@@ -475,6 +484,18 @@ class StackingEnsemble(BaseModel):
         # Pre-slice sequence data for heterogeneous ensembles
         X_seq_fold_train_cache: np.ndarray | None = None
         X_seq_fold_val_cache: np.ndarray | None = None
+        y_seq_fold_train: np.ndarray | None = None
+        y_seq_fold_val: np.ndarray | None = None
+
+        # Calculate offset between tabular and sequence data
+        # Sequence data has fewer samples due to windowing (loses seq_len-1 samples at start)
+        seq_offset = 0
+        if self._is_heterogeneous and X_train_seq is not None:
+            seq_offset = n_samples - X_train_seq.shape[0]
+            logger.debug(
+                f"Heterogeneous data alignment: tabular={n_samples}, "
+                f"sequence={X_train_seq.shape[0]}, offset={seq_offset}"
+            )
 
         for fold_idx, (train_idx, val_idx) in enumerate(
             kfold.split(X_df, label_end_times=label_end_times)
@@ -488,9 +509,17 @@ class StackingEnsemble(BaseModel):
             y_fold_val = y_train[val_idx]
 
             # Sequence data slicing (only if heterogeneous and seq data provided)
+            # Must adjust indices by offset since sequence data is shorter
             if self._is_heterogeneous and X_train_seq is not None:
-                X_seq_fold_train_cache = X_train_seq[train_idx]
-                X_seq_fold_val_cache = X_train_seq[val_idx]
+                # Filter indices to only those valid for sequence data (>= offset)
+                # and adjust by subtracting offset
+                seq_train_idx = train_idx[train_idx >= seq_offset] - seq_offset
+                seq_val_idx = val_idx[val_idx >= seq_offset] - seq_offset
+                X_seq_fold_train_cache = X_train_seq[seq_train_idx]
+                X_seq_fold_val_cache = X_train_seq[seq_val_idx]
+                # Also need aligned labels for sequence models
+                y_seq_fold_train = y_train[train_idx[train_idx >= seq_offset]]
+                y_seq_fold_val = y_train[val_idx[val_idx >= seq_offset]]
 
             w_train = None
             if sample_weights is not None:
@@ -501,27 +530,47 @@ class StackingEnsemble(BaseModel):
                 model_config = base_model_configs.get(model_name, {})
                 model = ModelRegistry.create(model_name, config=model_config)
 
-                # Select appropriate data format based on model type
+                # Select appropriate data format and labels based on model type
                 # For heterogeneous ensembles: tabular models get 2D, sequence models get 3D
-                if self._is_heterogeneous and model_name in self._sequence_models:
+                is_seq_model = self._is_heterogeneous and model_name in self._sequence_models
+                if is_seq_model:
                     if X_seq_fold_train_cache is not None:
                         model_X_train = X_seq_fold_train_cache
                         model_X_val = X_seq_fold_val_cache
+                        model_y_train = y_seq_fold_train
+                        model_y_val = y_seq_fold_val
+                        # Sequence models use filtered val_idx for OOF storage
+                        oof_val_idx = val_idx[val_idx >= seq_offset]
                     else:
                         # Fallback to tabular data (will likely fail but warn was issued)
                         model_X_train = X_fold_train
                         model_X_val = X_fold_val
+                        model_y_train = y_fold_train
+                        model_y_val = y_fold_val
+                        oof_val_idx = val_idx
                 else:
                     # Tabular model or homogeneous ensemble
                     model_X_train = X_fold_train
                     model_X_val = X_fold_val
+                    model_y_train = y_fold_train
+                    model_y_val = y_fold_val
+                    oof_val_idx = val_idx
+
+                # Get sample weights aligned with model data
+                model_w_train = None
+                if sample_weights is not None:
+                    if is_seq_model and seq_offset > 0:
+                        # Sequence model weights need to be filtered
+                        model_w_train = sample_weights[train_idx[train_idx >= seq_offset]]
+                    else:
+                        model_w_train = w_train
 
                 model.fit(
                     X_train=model_X_train,
-                    y_train=y_fold_train,
+                    y_train=model_y_train,
                     X_val=model_X_val,
-                    y_val=y_fold_val,
-                    sample_weights=w_train,
+                    y_val=model_y_val,
+                    sample_weights=model_w_train,
                 )
 
                 # Generate predictions for OOF samples
@@ -530,9 +579,9 @@ class StackingEnsemble(BaseModel):
                 if use_probabilities:
                     start_col = model_idx * n_classes
                     end_col = start_col + n_classes
-                    oof_predictions[val_idx, start_col:end_col] = output.class_probabilities
+                    oof_predictions[oof_val_idx, start_col:end_col] = output.class_probabilities
                 else:
-                    oof_predictions[val_idx, model_idx] = output.class_predictions
+                    oof_predictions[oof_val_idx, model_idx] = output.class_predictions
 
                 fold_models[model_idx].append(model)
 
@@ -559,9 +608,18 @@ class StackingEnsemble(BaseModel):
         Returns:
             Predictions array (2D) - always 2D regardless of input model types
         """
-        n_samples = X.shape[0]
         n_classes = 3
         n_models = len(fold_models)
+
+        # For heterogeneous ensembles, use the smaller of tabular/sequence size
+        # since we can only make predictions where all models have data
+        n_samples = X.shape[0]
+        seq_offset = 0
+        if self._is_heterogeneous and X_seq is not None and X_seq.shape[0] < n_samples:
+            seq_offset = n_samples - X_seq.shape[0]
+            n_samples = X_seq.shape[0]  # Use sequence size as common denominator
+            # Trim tabular data to match
+            X = X[seq_offset:]
 
         if use_probabilities:
             predictions = np.zeros((n_samples, n_models * n_classes))
@@ -785,6 +843,11 @@ class StackingEnsemble(BaseModel):
         """
         output = self.predict(X, X_seq=X_seq)
         y_pred = output.class_predictions
+
+        # Align y_true with predictions (may be trimmed for heterogeneous ensembles)
+        if len(y_pred) < len(y_true):
+            offset = len(y_true) - len(y_pred)
+            y_true = y_true[offset:]
 
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),

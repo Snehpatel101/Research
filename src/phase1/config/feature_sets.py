@@ -430,6 +430,303 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
+    # =========================================================================
+    # ARCHITECTURE-SPECIFIC FEATURE SETS (Research-based)
+    # =========================================================================
+    # These feature sets are derived from statistical analysis of:
+    # - Feature correlation structure
+    # - Model architecture constraints
+    # - Bias-variance tradeoff per architecture
+    # See: docs/FEATURE_SELECTION_BY_ARCHITECTURE.md
+    # =========================================================================
+    "nbeats_optimal": FeatureSetDefinition(
+        name="nbeats_optimal",
+        description=(
+            "Minimal feature set for N-BEATS. N-BEATS performs automatic "
+            "trend-seasonality decomposition and works best with univariate "
+            "or near-univariate input. Adding engineered features typically "
+            "degrades performance by conflicting with internal decomposition."
+        ),
+        include_prefixes=[
+            # Only returns for stationary version
+            "log_return_",
+        ],
+        include_columns=[
+            # Optional volume signal (can be omitted for pure univariate)
+            "volume_ratio_20",
+        ],
+        include_mtf=False,
+        supported_model_types=["sequential"],
+        default_sequence_length=128,  # N-BEATS uses longer lookback
+        recommended_scaler="standard",
+    ),
+    "inceptiontime_optimal": FeatureSetDefinition(
+        name="inceptiontime_optimal",
+        description=(
+            "Optimal feature set for InceptionTime (55 features). "
+            "InceptionTime uses multiple filter sizes in parallel, benefiting "
+            "from multi-scale features like wavelets. Includes diverse feature "
+            "types for inception modules to learn different patterns."
+        ),
+        include_prefixes=[
+            # Returns and momentum
+            "log_return_",
+            "roc_",
+            "rsi_",
+            "stoch_",
+            "williams_",
+            "cci_",
+            "mfi_",
+            "macd_",
+            # Volatility
+            "atr_",
+            "hvol_",
+            "bb_position",
+            "bb_width",
+            "close_bb_zscore",
+            "kc_position",
+            "close_kc_atr_dev",
+            "return_skew_",
+            "return_kurt_",
+            # Wavelets (multi-scale critical for inception modules)
+            "wavelet_close_",
+            "wavelet_volume_",
+            # Volume
+            "volume_ratio",
+            "volume_zscore",
+            "obv_zscore",
+            # Microstructure
+            "micro_amihud_",
+            "micro_roll_spread",
+            "micro_efficiency_",
+            "micro_rel_spread_",
+            "micro_cs_spread",
+            "micro_volume_imbalance",
+            "micro_trade_intensity_",
+            # Temporal
+            "hour_",
+            "dayofweek_",
+        ],
+        include_columns=[
+            "clv",
+            "price_to_vwap",
+            "yz_vol",
+            "trend_regime",
+            "volatility_regime",
+            "micro_vol_ratio",
+        ],
+        include_mtf=False,
+        supported_model_types=["sequential"],
+        default_sequence_length=100,  # InceptionTime works well with medium sequences
+        recommended_scaler="robust",
+    ),
+    "resnet1d_optimal": FeatureSetDefinition(
+        name="resnet1d_optimal",
+        description=(
+            "Optimal feature set for ResNet1D (48 features). "
+            "Residual connections benefit from multi-scale wavelet features. "
+            "Skip connections help with gradient flow, allowing moderate feature count."
+        ),
+        include_prefixes=[
+            # Returns
+            "log_return_",
+            # Momentum
+            "rsi_",
+            "stoch_",
+            "cci_",
+            "mfi_",
+            "macd_hist",  # Only histogram (normalized)
+            "roc_",
+            # Volatility
+            "atr_pct_",
+            "hvol_",
+            "bb_position",
+            "close_bb_zscore",
+            "kc_position",
+            "close_kc_atr_dev",
+            "return_skew_",
+            "return_kurt_",
+            # Wavelets (multi-scale for residual learning)
+            "wavelet_close_approx",
+            "wavelet_close_d",
+            "wavelet_close_energy_ratio",
+            "wavelet_close_volatility",
+            "wavelet_close_trend_",
+            # Volume
+            "volume_ratio",
+            "volume_zscore",
+            "obv_zscore",
+            # Microstructure
+            "micro_efficiency_",
+            "micro_rel_spread_",
+            "micro_trade_intensity_",
+            "micro_amihud_",
+            "micro_roll_spread_pct",
+            "micro_cs_spread",
+            # Temporal
+            "hour_",
+            "dayofweek_",
+        ],
+        include_columns=[
+            "yz_vol",
+            "price_to_vwap",
+            "micro_volume_imbalance",
+            "micro_vol_ratio",
+            "trend_regime",
+            "volatility_regime",
+        ],
+        include_mtf=False,
+        supported_model_types=["sequential"],
+        default_sequence_length=80,
+        recommended_scaler="robust",
+    ),
+    "itransformer_optimal": FeatureSetDefinition(
+        name="itransformer_optimal",
+        description=(
+            "Optimal feature set for iTransformer (25-40 features). "
+            "iTransformer applies attention over FEATURES (not time), learning "
+            "cross-feature correlations. Attention complexity is O(n_features^2), "
+            "so moderate feature count is optimal. Features organized in groups "
+            "(momentum, volatility, volume) for meaningful cross-correlation learning."
+        ),
+        include_prefixes=[
+            # Momentum group (for cross-correlation learning)
+            "return_",
+            "log_return_",
+            "roc_",
+            "rsi_",
+            # Mean reversion group
+            "stoch_",
+            "williams_",
+            "bb_position",
+            "kc_position",
+            # Trend group
+            "macd_signal",
+            "macd_hist",
+            "adx_",
+            # Volatility group (correlates with momentum)
+            "hvol_",
+            "atr_pct",
+            # Volume group (correlates with volatility)
+            "volume_ratio",
+            "volume_zscore",
+        ],
+        include_columns=[
+            # Core ratio features (good for attention)
+            "price_to_vwap",
+            "close_bb_zscore",
+            # Regime indicators (categorical-like)
+            "trend_regime",
+            "volatility_regime",
+            # Temporal context (for cross-correlation with patterns)
+            "hour_sin",
+            "hour_cos",
+            "dayofweek_sin",
+            "dayofweek_cos",
+            "is_rth",
+        ],
+        exclude_prefixes=[
+            # Exclude raw prices and redundant features
+            "sma_",
+            "ema_",
+            "bb_upper",
+            "bb_lower",
+            "bb_middle",
+            "vwap",
+            "open_",
+            "high_",
+            "low_",
+            "close_",
+            # Exclude noisy features
+            "return_skew_",
+            "return_kurt_",
+            "return_autocorr_",
+        ],
+        include_mtf=False,
+        supported_model_types=["sequential", "transformer"],
+        default_sequence_length=60,
+        recommended_scaler="standard",  # Standard for transformer stability
+    ),
+    "tft_optimal": FeatureSetDefinition(
+        name="tft_optimal",
+        description=(
+            "Rich feature set for Temporal Fusion Transformer (60-80 features). "
+            "TFT has Variable Selection Networks (VSN) that learn feature importance "
+            "automatically, so it can handle many features. Includes diverse feature "
+            "groups - the model will select the most relevant ones. This is the "
+            "richest feature set for maximum interpretability through VSN attention."
+        ),
+        include_prefixes=[
+            # Full price action (VSN will select)
+            "return_",
+            "log_return_",
+            "roc_",
+            # Full momentum oscillators
+            "rsi_",
+            "stoch_",
+            "williams_",
+            "cci_",
+            "mfi_",
+            # Full trend indicators
+            "macd_",
+            "adx_",
+            "supertrend",
+            # Full volatility suite
+            "hvol_",
+            "atr_",
+            "parkinson_",
+            "garman_",
+            "bb_position",
+            "bb_width",
+            "kc_position",
+            # Volume analysis
+            "volume_",
+            "obv",
+            # Higher moments (TFT can learn when these matter)
+            "return_skew_",
+            "return_kurt_",
+            "return_autocorr_",
+            # Wavelets (multi-scale patterns)
+            "wavelet_close_",
+            # Microstructure
+            "micro_amihud_",
+            "micro_efficiency_",
+            "micro_rel_spread_",
+            # Temporal features (TFT handles time well)
+            "hour_sin",
+            "hour_cos",
+            "dayofweek_sin",
+            "dayofweek_cos",
+            "session_",
+        ],
+        include_columns=[
+            "price_to_vwap",
+            "close_bb_zscore",
+            "clv",
+            "range_pct",
+            "trend_regime",
+            "volatility_regime",
+            "is_rth",
+            "yz_vol",
+        ],
+        exclude_prefixes=[
+            # Only exclude raw prices
+            "sma_",
+            "ema_",
+            "bb_upper",
+            "bb_lower",
+            "bb_middle",
+            "vwap",
+            "open_",
+            "high_",
+            "low_",
+            "close_",
+        ],
+        include_mtf=False,  # Can enable for even richer set
+        supported_model_types=["sequential", "transformer"],
+        default_sequence_length=60,
+        recommended_scaler="robust",  # Robust for diverse feature types
+    ),
 }
 
 
@@ -461,6 +758,22 @@ FEATURE_SET_ALIASES = {
     "informer": "transformer_raw",
     "volatility": "volatility_focus",
     "vol": "volatility_focus",
+    # Architecture-specific aliases (added from research)
+    "nbeats": "nbeats_optimal",
+    "n_beats": "nbeats_optimal",
+    "n-beats": "nbeats_optimal",
+    "inceptiontime": "inceptiontime_optimal",
+    "inception_time": "inceptiontime_optimal",
+    "inception": "inceptiontime_optimal",
+    "resnet1d": "resnet1d_optimal",
+    "resnet": "resnet1d_optimal",
+    "resnet_1d": "resnet1d_optimal",
+    "itransformer": "itransformer_optimal",
+    "i_transformer": "itransformer_optimal",
+    "inverted_transformer": "itransformer_optimal",
+    "tft": "tft_optimal",
+    "temporal_fusion": "tft_optimal",
+    "temporal_fusion_transformer": "tft_optimal",
 }
 
 

@@ -19,7 +19,7 @@ from src.cross_validation.feature_selector import (
     FeatureSelectionResult,
     WalkForwardFeatureSelector,
 )
-from src.cross_validation.purged_kfold import PurgedKFold
+from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
 from .config import FeatureSelectionConfig, ModelFamilyDefaults
 from .result import PersistedFeatureSelection
@@ -209,11 +209,12 @@ class FeatureSelectionManager:
         )
 
         # Create CV splits for walk-forward selection
-        cv = PurgedKFold(
+        cv_config = PurgedKFoldConfig(
             n_splits=n_splits,
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
         )
+        cv = PurgedKFold(cv_config)
 
         # Convert y to Series if needed
         y_series = pd.Series(y) if isinstance(y, np.ndarray) else y

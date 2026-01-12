@@ -479,7 +479,12 @@ class TimeSeriesDataContainer:
     # =========================================================================
 
     def get_pytorch_sequences(
-        self, split: str, seq_len: int, stride: int = 1, symbol_isolated: bool = True
+        self,
+        split: str,
+        seq_len: int,
+        stride: int = 1,
+        symbol_isolated: bool = True,
+        feature_columns: list[str] | None = None,
     ) -> Dataset:
         """
         Get PyTorch Dataset with sliding window sequences.
@@ -493,6 +498,9 @@ class TimeSeriesDataContainer:
             seq_len: Sequence length (number of time steps)
             stride: Step size between sequences (default 1)
             symbol_isolated: If True, sequences don't cross symbol boundaries
+            feature_columns: Optional list of feature columns to use.
+                If None, uses all available features. Use this to filter
+                to model-specific optimal feature sets.
 
         Returns:
             SequenceDataset instance (PyTorch Dataset)
@@ -510,9 +518,24 @@ class TimeSeriesDataContainer:
 
         split_data = self.get_split(split)
 
+        # Use provided feature columns or default to all features
+        if feature_columns is not None:
+            # Filter to only features that exist in the data
+            available = set(split_data.feature_columns)
+            filtered_features = [f for f in feature_columns if f in available]
+            missing = set(feature_columns) - available
+            if missing:
+                logger.warning(
+                    f"Feature filtering: {len(missing)} features not found in data, "
+                    f"using {len(filtered_features)}/{len(feature_columns)} requested features"
+                )
+            use_features = filtered_features
+        else:
+            use_features = split_data.feature_columns
+
         return SequenceDataset(
             df=split_data.df,
-            feature_columns=split_data.feature_columns,
+            feature_columns=use_features,
             label_column=split_data.label_column,
             weight_column=split_data.weight_column,
             symbol_column=split_data.symbol_column if symbol_isolated else None,
