@@ -265,12 +265,20 @@ class SequenceDataset(Dataset):
         self.dtype = dtype
 
         # Pre-convert data to numpy arrays for efficiency
-        self._features = df[feature_columns].values.astype(np.float32)
-        self._labels = df[label_column].values.astype(np.float32)
+        # Use .copy() to ensure arrays are writable (fixes PyTorch warning about
+        # non-writable arrays leading to undefined behavior)
+        self._features = np.ascontiguousarray(
+            df[feature_columns].to_numpy(dtype=np.float32, copy=True)
+        )
+        self._labels = np.ascontiguousarray(
+            df[label_column].to_numpy(dtype=np.float32, copy=True)
+        )
 
         # Handle weights
         if weight_column and weight_column in df.columns:
-            self._weights = df[weight_column].values.astype(np.float32)
+            self._weights = np.ascontiguousarray(
+                df[weight_column].to_numpy(dtype=np.float32, copy=True)
+            )
         else:
             self._weights = np.ones(len(df), dtype=np.float32)
 
@@ -319,8 +327,8 @@ class SequenceDataset(Dataset):
         start_idx = self._indices[idx]
         end_idx = start_idx + self.config.seq_len
 
-        # Extract sequence
-        X_seq = self._features[start_idx:end_idx]
+        # Extract sequence (copy to ensure writable for PyTorch)
+        X_seq = self._features[start_idx:end_idx].copy()
 
         # Label and weight from the last position in the sequence
         # This is the "prediction target" for the sequence
@@ -329,7 +337,7 @@ class SequenceDataset(Dataset):
         weight = self._weights[target_idx]
 
         return (
-            torch.tensor(X_seq, dtype=self.dtype),
+            torch.from_numpy(X_seq).to(self.dtype),
             torch.tensor(y, dtype=self.dtype),
             torch.tensor(weight, dtype=self.dtype),
         )
