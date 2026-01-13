@@ -133,7 +133,13 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 
 ## Archive
 
-Historical and legacy documentation is preserved in [archive/implementation/](archive/implementation/). These documents are for reference only and do not reflect the current implementation.
+Historical and legacy documentation is preserved in [archive/implementation/](archive/implementation/README.md). These documents are for reference only and do not reflect the current implementation.
+
+---
+
+## Notes
+
+Project notes and refactor summaries live in [notes/](notes/README.md).
 
 ---
 
@@ -166,4 +172,4 @@ Historical and legacy documentation is preserved in [archive/implementation/](ar
 
 ---
 
-*Last Updated: 2026-01-08*
+*Last Updated: 2026-01-13*

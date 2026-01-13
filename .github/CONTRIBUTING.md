@@ -92,7 +92,7 @@ git push origin feature/your-feature-name
 
 ## Adding a New Model
 
-See [Model Integration Guide](../docs/guides/MODEL_INTEGRATION_GUIDE.md) for detailed instructions.
+See [Model Integration Guide](../docs/guides/MODEL_INTEGRATION.md) for detailed instructions.
 
 ### Quick Checklist
 1. **Create model class** implementing `BaseModel` interface
@@ -128,7 +128,6 @@ See [Feature Engineering Guide](../docs/guides/FEATURE_ENGINEERING.md).
 
 ### Root Directory
 - `CLAUDE.md` - Repository constitution (do not modify without discussion)
-- `CLAUDE2.md` - Extended instructions
 - `README.md` - User-facing documentation
 - `pyproject.toml` - Package configuration
 - `requirements.txt` - Dependencies
@@ -154,12 +153,13 @@ config/
 ### Documentation
 ```
 docs/
-├── getting-started/ → Quickstart guides
-├── guides/         → Implementation guides
-├── phases/         → Phase-specific documentation
+├── guides/         → Task-focused guides
+├── implementation/ → Phase-specific implementation docs
 ├── planning/       → Project planning documents
 ├── reference/      → Technical references
-└── research/       → Research papers and analysis
+├── troubleshooting/→ Troubleshooting guides
+├── analysis/       → Analysis and research
+└── notes/          → Refactors and write-ups
 ```
 
 ## Testing Requirements

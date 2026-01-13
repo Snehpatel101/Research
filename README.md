@@ -149,6 +149,7 @@ Raw OHLCV (.csv/.parquet)
 | **Architecture** | [Architecture](docs/ARCHITECTURE.md) | System design patterns |
 | **Implementation** | [Phase 7 Stacking](docs/implementation/PHASE_7_META_LEARNER_STACKING.md) | Heterogeneous ensemble |
 | **Guides** | [Model Integration](docs/guides/MODEL_INTEGRATION.md) | How to add new models |
+| **Notes** | [Notes](docs/notes/README.md) | Refactors, write-ups, and misc |
 
 ---
 

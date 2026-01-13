@@ -12,7 +12,7 @@ Usage in Colab:
     !pip install -r requirements.txt
 
     # Cell 2: Initialize Colab environment
-    from notebooks.colab_setup import setup_colab_environment, get_trainer_for_colab
+    from src.utils.colab_setup import setup_colab_environment, get_trainer_for_colab
     setup_colab_environment()
 
     # Cell 3: Run training
@@ -323,6 +323,35 @@ def get_colab_dataloader_kwargs() -> dict:
     }
 
 
+def ensure_data_in_workspace(config, target_dir: str = "data/raw") -> None:
+    """
+    Ensure raw data file is present in the project workspace.
+    
+    If running in Colab and the file is in Drive but not in the project,
+    it copies it to the specified target directory.
+    
+    Args:
+        config: The notebook configuration object.
+        target_dir: Relative path to target directory within project root.
+    """
+    import shutil
+    
+    if not config.is_colab or config.raw_data_file is None:
+        return
+
+    project_raw_dir = config.project_root / target_dir
+    project_raw_dir.mkdir(parents=True, exist_ok=True)
+    
+    target_filename = f"{config.symbol}_1m{config.raw_data_file.suffix}"
+    target_path = project_raw_dir / target_filename
+    
+    if not str(config.raw_data_file).startswith(str(config.project_root)):
+        if not target_path.exists():
+            print(f"\n  Copying data to project directory...")
+            shutil.copy2(config.raw_data_file, target_path)
+            print(f"  Done: {target_path.name}")
+
+
 __all__ = [
     "is_colab",
     "setup_environment",
@@ -330,4 +359,5 @@ __all__ = [
     "get_trainer_for_colab",
     "train_ensemble_colab",
     "get_colab_dataloader_kwargs",
+    "ensure_data_in_workspace",
 ]

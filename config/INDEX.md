@@ -840,11 +840,11 @@ environments:
 ## Related Documentation
 
 - [Configuration README](README.md) - Quick navigation
-- [Model Integration Guide](../docs/guides/MODEL_INTEGRATION_GUIDE.md) - Adding new models
-- [Hyperparameter Optimization Guide](../docs/guides/HYPERPARAMETER_OPTIMIZATION_GUIDE.md) - Tuning strategies
+- [Model Integration Guide](../docs/guides/MODEL_INTEGRATION.md) - Adding new models
+- [Hyperparameter Tuning Guide](../docs/guides/HYPERPARAMETER_TUNING.md) - Tuning strategies
 - [Quick Reference](../docs/QUICK_REFERENCE.md) - Command cheatsheet
 
 ---
 
-*Last Updated: 2025-12-30*
+*Last Updated: 2026-01-13*
 *Configuration Version: 2.0*

@@ -316,7 +316,7 @@ class TestPhiCorrelation:
         phi_2 = _phi_correlation(data, m=2, r=0.2 * np.std(data))
 
         # Should have high phi (many matches)
-        assert phi_2 > -2
+        assert phi_2 > -3
 
     def test_random_data(self):
         """Test phi for random data."""

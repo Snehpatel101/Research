@@ -10,8 +10,8 @@ This directory contains all configuration files for the ML Model Factory.
 | [pipeline/](pipeline/) | Pipeline and training settings | training.yaml, cv.yaml, scaling_stats.json |
 | [ensembles/](ensembles/) | Ensemble configurations | boosting_trio.yaml, temporal_stack.yaml |
 | [experiments/](experiments/) | Experiment templates | baseline_experiment.yaml, full_benchmark.yaml |
-| [optimization/](optimization/) | GA optimization results | ga_results/ (symbol-specific) |
-| [features/](features/) | Feature engineering configs | (reserved for future use) |
+| [optimization/](optimization/README.md) | GA optimization results | ga_results/ (symbol-specific) |
+| [features/](features/README.md) | Feature engineering configs | selection + MTF strategies |
 
 ## Configuration Structure
 
@@ -259,17 +259,17 @@ Expected batch_size=512 (colab), got batch_size=256 (default)
 ## Related Documentation
 
 - [Configuration Index (INDEX.md)](INDEX.md) - Comprehensive config guide
-- [Model Integration Guide](../docs/guides/MODEL_INTEGRATION_GUIDE.md) - Adding new models
-- [Hyperparameter Optimization Guide](../docs/guides/HYPERPARAMETER_OPTIMIZATION_GUIDE.md) - Tuning strategies
+- [Model Integration Guide](../docs/guides/MODEL_INTEGRATION.md) - Adding new models
+- [Hyperparameter Tuning Guide](../docs/guides/HYPERPARAMETER_TUNING.md) - Tuning strategies
 - [Quick Reference](../docs/QUICK_REFERENCE.md) - Command cheatsheet
 
 ## Questions?
 
 - Check [INDEX.md](INDEX.md) for detailed configuration reference
-- Review [docs/guides/](../docs/guides/) for implementation guides
+- Review [docs/guides/](../docs/guides/README.md) for implementation guides
 - Open an issue for configuration-related questions
 
 ---
 
-*Last Updated: 2025-12-30*
+*Last Updated: 2026-01-13*
 *Configuration Version: 2.0*
