@@ -7,9 +7,9 @@ Run this at the start of your Colab notebook before importing any pipeline modul
 Usage in Colab:
     ```python
     # Cell 1: Clone repo and setup
-    !git clone https://github.com/YOUR_REPO/research.git
-    %cd research
-    !pip install -r requirements.txt
+    !git clone https://github.com/Snehpatel101/Research.git
+    %cd Research
+    !pip install -r requirements-colab.txt
 
     # Cell 2: Initialize Colab environment
     from src.utils.colab_setup import setup_colab_environment, get_trainer_for_colab
@@ -146,6 +146,7 @@ def setup_colab_environment(
     project_root: str | None = None,
     mount_drive: bool = True,
     use_gpu: bool = True,
+    repo_url: str = "https://github.com/Snehpatel101/Research.git",
 ) -> dict:
     """
     Configure environment for Google Colab compatibility.
@@ -154,6 +155,7 @@ def setup_colab_environment(
         project_root: Path to the cloned project. If None, auto-detects.
         mount_drive: Whether to mount Google Drive for data access.
         use_gpu: Whether to configure GPU support (if available).
+        repo_url: Git URL to clone if project is missing.
 
     Returns:
         Dict with environment info (gpu_available, drive_mounted, etc.)
@@ -176,6 +178,7 @@ def setup_colab_environment(
         repo_root=project_root,
         mount_drive=mount_drive,
         use_gpu=use_gpu,
+        repo_url=repo_url,
     )
 
     # Colab-specific defaults

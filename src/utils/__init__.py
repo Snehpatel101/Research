@@ -5,6 +5,16 @@ This package provides helper functions for notebooks, visualization,
 configuration validation, and common operations.
 """
 
+from src.utils.checkpoint_manager import CheckpointManager
+from src.utils.colab_setup import (
+    ensure_data_in_workspace,
+    get_colab_dataloader_kwargs,
+    get_trainer_for_colab,
+    is_colab,
+    setup_colab_environment,
+    setup_environment,
+    train_ensemble_colab,
+)
 from src.utils.config_validator import (
     ValidationResult,
     generate_validation_report,
@@ -29,6 +39,16 @@ from src.utils.notebook import (
 )
 
 __all__ = [
+    # Colab & Environment setup
+    "is_colab",
+    "setup_environment",
+    "setup_colab_environment",
+    "get_trainer_for_colab",
+    "train_ensemble_colab",
+    "get_colab_dataloader_kwargs",
+    "ensure_data_in_workspace",
+    # Checkpoint management
+    "CheckpointManager",
     # Notebook utilities
     "setup_notebook",
     "install_dependencies",
