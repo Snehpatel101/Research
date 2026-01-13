@@ -18,7 +18,7 @@ class PipelineStage:
     description: str = ""
     required: bool = True
     can_run_parallel: bool = False
-    stage_number: int = 0
+    stage_number: float = 0.0
 
     def __post_init__(self):
         """Validate stage definition."""

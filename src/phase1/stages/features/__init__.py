@@ -19,6 +19,7 @@ Feature Categories:
     temporal: Time encoding, trading sessions
     regime: Volatility and trend regime classification
     wavelets: Multi-scale wavelet decomposition (DWT coefficients, energy, trend)
+    entropy: Information-theoretic features (Shannon, Lempel-Ziv, ApEn)
 
 Note: Each symbol is processed independently (no cross-symbol correlation).
 
@@ -162,6 +163,20 @@ from .wavelets import (
     add_wavelet_volatility,
 )
 
+# Feature functions - Entropy
+from .entropy import (
+    DEFAULT_APEN_M,
+    DEFAULT_APEN_R,
+    DEFAULT_APEN_WINDOWS,
+    DEFAULT_LZ_WINDOWS,
+    DEFAULT_SHANNON_BINS,
+    DEFAULT_SHANNON_WINDOWS,
+    add_approximate_entropy,
+    add_entropy_features,
+    add_lempel_ziv_complexity,
+    add_shannon_entropy,
+)
+
 __all__ = [
     # Main class
     "FeatureEngineer",
@@ -255,4 +270,15 @@ __all__ = [
     "add_mtf_features",
     "validate_mtf_alignment",
     "MTF_TIMEFRAMES",
+    # Entropy Features
+    "add_entropy_features",
+    "add_shannon_entropy",
+    "add_lempel_ziv_complexity",
+    "add_approximate_entropy",
+    "DEFAULT_SHANNON_WINDOWS",
+    "DEFAULT_SHANNON_BINS",
+    "DEFAULT_LZ_WINDOWS",
+    "DEFAULT_APEN_WINDOWS",
+    "DEFAULT_APEN_M",
+    "DEFAULT_APEN_R",
 ]

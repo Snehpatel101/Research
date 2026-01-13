@@ -15,6 +15,7 @@ import pandas as pd
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
 from .microstructure import add_microstructure_features
+from .entropy import add_entropy_features
 from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
 from .moving_averages import add_ema, add_sma
 from .nan_handling import clean_nan_columns
@@ -270,6 +271,9 @@ class FeatureEngineer:
 
         # Add microstructure proxy features (liquidity, spread, price impact from OHLCV)
         df = add_microstructure_features(df, self.feature_metadata)
+
+        # Add information-theoretic entropy features (Shannon, LZ, ApEn)
+        df = add_entropy_features(df, self.feature_metadata)
 
         # Add Wavelet decomposition features
         wavelet_cols_added = 0

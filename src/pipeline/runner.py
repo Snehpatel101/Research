@@ -87,6 +87,18 @@ class PipelineRunner:
 
     def _setup_logging(self) -> None:
         """Configure logging for the pipeline."""
+        # Get root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
+
+        # Check if handlers already exist to avoid duplicates
+        if root_logger.hasHandlers():
+            # Clear existing handlers only if they're generic (not from other loggers)
+            # This prevents duplicate logging in repeated runs
+            for handler in root_logger.handlers[:]:
+                if isinstance(handler, (logging.FileHandler, logging.StreamHandler)):
+                    root_logger.removeHandler(handler)
+
         # File handler
         file_handler = logging.FileHandler(self.log_file)
         file_handler.setLevel(logging.DEBUG)
@@ -99,9 +111,7 @@ class PipelineRunner:
         console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         console_handler.setFormatter(console_formatter)
 
-        # Configure root logger
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.DEBUG)
+        # Add handlers
         root_logger.addHandler(file_handler)
         root_logger.addHandler(console_handler)
 

@@ -27,6 +27,7 @@ from src.cross_validation.param_spaces import (
 )
 from src.cross_validation.purged_kfold import ModelAwareCV, PurgedKFold
 from src.models.registry import ModelRegistry
+from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
 
 logger = logging.getLogger(__name__)
 
@@ -222,11 +223,38 @@ class TimeSeriesOptunaTuner:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study.optimize(objective, n_trials=self.n_trials, show_progress_bar=False)
 
-        return {
+        # Compute Deflated Sharpe Ratio to correct for selection bias
+        dsr_result = None
+        try:
+            # Assumes the objective is maximizing a performance metric (e.g., F1 or Sharpe)
+            # For deployment gating, DSR > 0.5 is recommended threshold
+            dsr_result = compute_dsr_from_optuna_study(study, deployment_threshold=0.5)
+            logger.info(
+                f"DSR computed: Raw={dsr_result.sharpe_ratio:.3f}, "
+                f"Deflated={dsr_result.deflated_sharpe:.3f}, "
+                f"Deploy={dsr_result.should_deploy}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to compute DSR: {e}")
+
+        result = {
             "best_params": study.best_params,
             "best_value": study.best_value,
             "n_trials": len(study.trials),
         }
+
+        # Add DSR metrics if computed successfully
+        if dsr_result is not None:
+            result["dsr"] = {
+                "raw_sharpe": dsr_result.sharpe_ratio,
+                "deflated_sharpe": dsr_result.deflated_sharpe,
+                "deflation_pct": dsr_result.get_deflation_pct(),
+                "is_significant": dsr_result.is_significant,
+                "should_deploy": dsr_result.should_deploy,
+                "risk_level": dsr_result.get_risk_level(),
+            }
+
+        return result
 
     def _sample_params(self, trial, param_space: dict) -> dict:
         """
