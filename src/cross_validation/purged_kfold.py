@@ -235,10 +235,23 @@ class PurgedKFold:
             Tuple of (train_indices, test_indices) for each fold
 
         Raises:
-            ValueError: If training set becomes too small after purge/embargo
+            ValueError: If training set becomes too small after purge/embargo or
+                       if n_splits is too large relative to data size
         """
         n_samples = len(X)
         indices = np.arange(n_samples)
+
+        # Validate n_splits is reasonable for data size
+        min_fold_size = self.config.purge_bars + self.config.embargo_bars + 50  # +50 for meaningful test set
+        max_reasonable_splits = max(2, n_samples // min_fold_size)
+
+        if self.config.n_splits > max_reasonable_splits:
+            raise ValueError(
+                f"n_splits={self.config.n_splits} is too large for {n_samples} samples. "
+                f"With purge_bars={self.config.purge_bars} and embargo_bars={self.config.embargo_bars}, "
+                f"maximum reasonable n_splits is {max_reasonable_splits}. "
+                f"Consider reducing n_splits or increasing data size."
+            )
 
         # Get timestamps if available (for label-aware purging)
         has_datetime_index = isinstance(X.index, pd.DatetimeIndex)

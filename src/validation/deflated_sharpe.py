@@ -484,7 +484,7 @@ def compute_dsr_from_optuna_study(
         DSRResult with deflated Sharpe based on optimization history
 
     Raises:
-        ValueError: If study has no completed trials or all trials failed
+        ValueError: If study is None or has no completed trials or all trials failed
 
     Example:
         >>> import optuna
@@ -496,6 +496,10 @@ def compute_dsr_from_optuna_study(
         >>> else:
         ...     print(f"WARNING: DSR={dsr_result.deflated_sharpe:.2f}, likely overfit")
     """
+    # Validate input
+    if study is None:
+        raise ValueError("Optuna study cannot be None")
+
     # Get completed trials only
     completed_trials = [t for t in study.trials if t.state.is_finished() and t.value is not None]
 
