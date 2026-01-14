@@ -14,7 +14,7 @@ This module contains configuration for:
 # Supported timeframes for resampling pipeline.
 # Input data (1min bars) can be resampled to any of these target timeframes.
 # The base timeframe for ML features is typically 5min.
-SUPPORTED_TIMEFRAMES = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"]
+SUPPORTED_TIMEFRAMES = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min", "1h"]
 
 # Mapping from timeframe string to pandas frequency for resampling
 TIMEFRAME_TO_FREQ = {

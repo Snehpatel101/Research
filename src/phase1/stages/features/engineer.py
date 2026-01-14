@@ -77,6 +77,9 @@ class FeatureEngineer:
         scale_periods: bool = True,
         base_timeframe: str = "5min",
         enable_wavelets: bool = True,
+        enable_microstructure: bool = True,
+        enable_volume_features: bool = True,
+        enable_volatility_features: bool = True,
         wavelet_type: str = "db4",
         wavelet_level: int = 3,
         wavelet_window: int = 64,
@@ -158,6 +161,11 @@ class FeatureEngineer:
         self.wavelet_window = wavelet_window
         if enable_wavelets and not PYWT_AVAILABLE:
             logger.warning("Wavelets disabled: PyWavelets not installed")
+
+        # Feature toggle configuration
+        self.enable_microstructure = enable_microstructure
+        self.enable_volume_features = enable_volume_features
+        self.enable_volatility_features = enable_volatility_features
 
         # NaN handling configuration
         if not 0.0 <= nan_threshold <= 1.0:
@@ -242,23 +250,32 @@ class FeatureEngineer:
         df = add_roc(df, self.feature_metadata, periods=pc.get("roc"))
         df = add_cci(df, self.feature_metadata, period=pc.get("cci", [20])[0])
         df = add_mfi(df, self.feature_metadata, period=pc.get("mfi", [14])[0])
-        df = add_atr(df, self.feature_metadata, periods=pc.get("atr"))
-        df = add_bollinger_bands(df, self.feature_metadata, period=pc.get("bollinger", [20])[0])
-        df = add_keltner_channels(df, self.feature_metadata, period=pc.get("keltner", [20])[0])
-        df = add_historical_volatility(df, self.feature_metadata, periods=pc.get("hvol"))
-        df = add_parkinson_volatility(
-            df, self.feature_metadata, period=pc.get("parkinson", [20])[0]
-        )
-        df = add_garman_klass_volatility(
-            df, self.feature_metadata, period=pc.get("garman_klass", [20])[0]
-        )
-        df = add_rogers_satchell_volatility(
-            df, self.feature_metadata, period=pc.get("rs_vol", [20])[0]
-        )
-        df = add_yang_zhang_volatility(df, self.feature_metadata, period=pc.get("yz_vol", [20])[0])
-        df = add_volume_features(df, self.feature_metadata, period=pc.get("volume_sma", [20])[0])
-        df = add_vwap(df, self.feature_metadata)
-        df = add_dollar_volume(df, self.feature_metadata)
+        # Volatility features (conditional on enable_volatility_features)
+        if self.enable_volatility_features:
+            df = add_atr(df, self.feature_metadata, periods=pc.get("atr"))
+            df = add_bollinger_bands(df, self.feature_metadata, period=pc.get("bollinger", [20])[0])
+            df = add_keltner_channels(df, self.feature_metadata, period=pc.get("keltner", [20])[0])
+            df = add_historical_volatility(df, self.feature_metadata, periods=pc.get("hvol"))
+            df = add_parkinson_volatility(
+                df, self.feature_metadata, period=pc.get("parkinson", [20])[0]
+            )
+            df = add_garman_klass_volatility(
+                df, self.feature_metadata, period=pc.get("garman_klass", [20])[0]
+            )
+            df = add_rogers_satchell_volatility(
+                df, self.feature_metadata, period=pc.get("rs_vol", [20])[0]
+            )
+            df = add_yang_zhang_volatility(df, self.feature_metadata, period=pc.get("yz_vol", [20])[0])
+        else:
+            logger.info("Volatility features disabled via config")
+
+        # Volume features (conditional on enable_volume_features)
+        if self.enable_volume_features:
+            df = add_volume_features(df, self.feature_metadata, period=pc.get("volume_sma", [20])[0])
+            df = add_vwap(df, self.feature_metadata)
+            df = add_dollar_volume(df, self.feature_metadata)
+        else:
+            logger.info("Volume features disabled via config")
         df = add_adx(df, self.feature_metadata, period=pc.get("adx", [14])[0])
         df = add_supertrend(df, self.feature_metadata, period=pc.get("supertrend_period", [10])[0])
         df = add_temporal_features(df, self.feature_metadata)
@@ -270,7 +287,10 @@ class FeatureEngineer:
         df = add_higher_moments(df, self.feature_metadata)
 
         # Add microstructure proxy features (liquidity, spread, price impact from OHLCV)
-        df = add_microstructure_features(df, self.feature_metadata)
+        if self.enable_microstructure:
+            df = add_microstructure_features(df, self.feature_metadata)
+        else:
+            logger.info("Microstructure features disabled via config")
 
         # Add information-theoretic entropy features (Shannon, LZ, ApEn)
         df = add_entropy_features(df, self.feature_metadata)

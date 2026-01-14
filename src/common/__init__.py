@@ -1,6 +1,6 @@
 """Common utilities shared across phases.
 
-Provides artifact manifest management and horizon configuration.
+Provides artifact manifest management, horizon configuration, and timeframe utilities.
 """
 
 from src.common.horizon_config import (
@@ -17,6 +17,18 @@ from src.common.horizon_config import (
     validate_horizons,
 )
 from src.common.manifest import ArtifactManifest
+from src.common.timeframes import (
+    CANONICAL_TIMEFRAMES,
+    FULL_9TF_LADDER,
+    SUPPORTED_TIMEFRAMES,
+    TIMEFRAME_ALIASES,
+    TIMEFRAME_TO_FREQ,
+    TIMEFRAME_TO_MINUTES,
+    is_valid_timeframe,
+    normalize_timeframe,
+    timeframe_to_minutes,
+    validate_timeframe,
+)
 
 __all__ = [
     # manifest
@@ -33,4 +45,15 @@ __all__ = [
     "get_scaled_horizons",
     "auto_scale_purge_embargo",
     "get_default_barrier_params_for_horizon",
+    # timeframes
+    "CANONICAL_TIMEFRAMES",
+    "FULL_9TF_LADDER",
+    "SUPPORTED_TIMEFRAMES",
+    "TIMEFRAME_ALIASES",
+    "TIMEFRAME_TO_FREQ",
+    "TIMEFRAME_TO_MINUTES",
+    "is_valid_timeframe",
+    "normalize_timeframe",
+    "timeframe_to_minutes",
+    "validate_timeframe",
 ]

@@ -57,9 +57,10 @@ Standardized Artifacts (models, predictions, metrics)
 - **Direct Stacking:** Meta-learner trained on OOF predictions from heterogeneous bases
 
 **Implementation Status:**
-- Phases 1-6: Complete (19 base models + 4 meta-learners = 23 models across 4 families)
+- Phases 1-6: Complete (18 base models + 4 meta-learners = 22 models across 6 families)
 - Phase 7: ✅ Complete (heterogeneous stacking in trainer.py implemented)
-- MTF: ✅ Complete (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- MTF Stage 2: ✅ Complete (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- MTF Stages 3-6: ⚠️ Partial (downstream stages process target_timeframe only; multi-TF iteration pending)
 
 **Documentation:** See `docs/ARCHITECTURE.md` and `docs/implementation/` for comprehensive guides.
 
@@ -150,7 +151,7 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 | 3 | Features | 180+ indicator features | ✅ Complete |
 | 4 | Labeling | Triple-barrier + Optuna | ✅ Complete |
 | 5 | Adapters | Model-family data preparation (2D, 3D, 4D) | ✅ Complete |
-| 6 | Training | 23 models, 4 families | ✅ Complete |
+| 6 | Training | 22 models, 6 families | ✅ Complete |
 | 7 | Stacking | Heterogeneous ensemble training | ✅ Complete |
 
 **Data Shapes by Model Family:**

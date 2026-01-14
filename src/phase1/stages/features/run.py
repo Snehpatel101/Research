@@ -73,6 +73,9 @@ def run_feature_engineering(
         # Get feature toggles from config (if specified)
         feature_toggles = getattr(config, "feature_toggles", None) or {}
         enable_wavelets = feature_toggles.get("wavelets", True)
+        enable_microstructure = feature_toggles.get("microstructure", True)
+        enable_volume_features = feature_toggles.get("volume", True)
+        enable_volatility_features = feature_toggles.get("volatility", True)
 
         # Initialize FeatureEngineer from modular implementation
         # MTF settings come from PipelineConfig, not global MTF_CONFIG
@@ -86,6 +89,9 @@ def run_feature_engineering(
             mtf_include_indicators=mtf_include_indicators,
             base_timeframe=target_timeframe,  # Use run's target timeframe, not hardcoded '5min'
             enable_wavelets=enable_wavelets,  # Wire feature toggle from config
+            enable_microstructure=enable_microstructure,  # Wire feature toggle from config
+            enable_volume_features=enable_volume_features,  # Wire feature toggle from config
+            enable_volatility_features=enable_volatility_features,  # Wire feature toggle from config
         )
 
         # Process each symbol independently (no cross-symbol correlation)

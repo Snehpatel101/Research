@@ -87,6 +87,13 @@ def run_final_labels(
 
         target_timeframe = config.target_timeframe
 
+        # Get CLI barrier overrides (these take precedence over GA results)
+        barrier_overrides = getattr(config, "barrier_overrides", None) or {}
+        has_cli_overrides = bool(barrier_overrides)
+        if has_cli_overrides:
+            logger.info(f"CLI barrier overrides provided: {barrier_overrides}")
+            logger.info("CLI overrides take precedence over GA-optimized parameters")
+
         for symbol in config.symbols:
             logger.info(f"\n{'='*50}")
             logger.info(f"Processing {symbol}")
@@ -103,10 +110,33 @@ def run_final_labels(
             symbol_params: dict[str, dict[str, Any]] = {}
 
             # Apply optimized labels for each horizon
+            # Priority: CLI overrides > GA results > defaults
             for horizon in config.label_horizons:
                 results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
 
-                if results_path.exists():
+                # Priority 1: CLI barrier overrides (highest precedence)
+                if has_cli_overrides:
+                    # Use CLI overrides, with defaults for any missing keys
+                    best_params = {
+                        "k_up": barrier_overrides.get("k_up", 2.0),
+                        "k_down": barrier_overrides.get("k_down", 1.0),
+                        "max_bars": int(barrier_overrides.get("max_bars", horizon * 3)),
+                    }
+                    symbol_params[str(horizon)] = {
+                        "k_up": best_params["k_up"],
+                        "k_down": best_params["k_down"],
+                        "max_bars": best_params["max_bars"],
+                        "source": "cli_override",
+                        "ga_results_path": None,
+                    }
+                    logger.info(f"\n  Horizon {horizon}: Using CLI-override params")
+                    logger.info(
+                        f"    k_up={best_params['k_up']:.3f}, "
+                        f"k_down={best_params['k_down']:.3f}, "
+                        f"max_bars={best_params['max_bars']}"
+                    )
+                # Priority 2: GA-optimized results
+                elif results_path.exists():
                     with open(results_path) as f:
                         results = json.load(f)
                     best_params = {
@@ -130,8 +160,8 @@ def run_final_labels(
                         f"k_down={best_params['k_down']:.3f}, "
                         f"max_bars={best_params['max_bars']}"
                     )
+                # Priority 3: Default fallback
                 else:
-                    # Fall back to defaults if no GA results
                     logger.warning(f"  Horizon {horizon}: No GA results found, using defaults")
                     best_params = {"k_up": 2.0, "k_down": 1.0, "max_bars": horizon * 3}
                     symbol_params[str(horizon)] = {
