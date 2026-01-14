@@ -51,101 +51,120 @@ def run_initial_labeling(
         labels_dir = config.run_data_dir / "labels"
         labels_dir.mkdir(parents=True, exist_ok=True)
 
+        # Get effective output timeframes (supports multi-TF mode)
+        output_timeframes = config.effective_output_timeframes
+        is_multi_tf = len(output_timeframes) > 1
+
+        logger.info(f"Output timeframes: {output_timeframes}")
+        logger.info(f"Multi-TF mode: {is_multi_tf}")
+
         artifacts = []
         label_stats: dict[str, dict[str, Any]] = {}
 
-        target_timeframe = config.target_timeframe
+        # Get barrier overrides from config (if specified)
+        barrier_overrides = getattr(config, "barrier_overrides", None) or {}
 
         for symbol in config.symbols:
-            # Load features data
-            features_path = config.features_dir / f"{symbol}_{target_timeframe}_features.parquet"
-            if not features_path.exists():
-                raise FileNotFoundError(f"Features file not found: {features_path}")
+            label_stats[symbol] = {}
 
-            logger.info(f"\nProcessing {symbol}...")
-            df = pd.read_parquet(features_path)
-            logger.info(f"  Loaded {len(df):,} rows")
+            # Process each output timeframe
+            for tf in output_timeframes:
+                # Load features data for this timeframe
+                features_path = config.features_dir / f"{symbol}_{tf}_features.parquet"
+                if not features_path.exists():
+                    logger.warning(f"Features file not found for {symbol} @ {tf}: {features_path}")
+                    continue
 
-            # Check for ATR column
-            atr_col = "atr_14"
-            if atr_col not in df.columns:
-                raise ValueError(f"ATR column '{atr_col}' not found in features")
+                logger.info(f"\nProcessing {symbol} @ {tf}...")
+                df = pd.read_parquet(features_path)
+                logger.info(f"  Loaded {len(df):,} rows")
 
-            symbol_stats = {}
+                # Check for ATR column
+                atr_col = "atr_14"
+                if atr_col not in df.columns:
+                    raise ValueError(f"ATR column '{atr_col}' not found in features for {symbol} @ {tf}")
 
-            # Get barrier overrides from config (if specified)
-            barrier_overrides = getattr(config, "barrier_overrides", None) or {}
+                tf_stats = {}
 
-            # Apply initial labeling with default parameters for each horizon
-            for horizon in config.label_horizons:
-                # Use barrier_overrides if specified, otherwise use defaults
-                # Defaults will be optimized by GA in later stages
-                k_up = barrier_overrides.get("k_up", 2.0)
-                k_down = barrier_overrides.get("k_down", 1.0)
-                max_bars = barrier_overrides.get("max_bars", horizon * 3)
+                # Apply initial labeling with default parameters for each horizon
+                for horizon in config.label_horizons:
+                    # Use barrier_overrides if specified, otherwise use defaults
+                    # Defaults will be optimized by GA in later stages
+                    k_up = barrier_overrides.get("k_up", 2.0)
+                    k_down = barrier_overrides.get("k_down", 1.0)
+                    max_bars = barrier_overrides.get("max_bars", horizon * 3)
 
-                logger.info(
-                    f"  Horizon {horizon}: k_up={k_up}, k_down={k_down}, max_bars={max_bars}"
+                    logger.info(
+                        f"  Horizon {horizon}: k_up={k_up}, k_down={k_down}, max_bars={max_bars}"
+                    )
+
+                    labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
+                        df["close"].values,
+                        df["high"].values,
+                        df["low"].values,
+                        df["open"].values,
+                        df[atr_col].values,
+                        k_up,
+                        k_down,
+                        max_bars,
+                    )
+
+                    # Add columns
+                    df[f"label_h{horizon}"] = labels
+                    df[f"bars_to_hit_h{horizon}"] = bars_to_hit
+                    df[f"mae_h{horizon}"] = mae
+                    df[f"mfe_h{horizon}"] = mfe
+
+                    # Calculate distribution
+                    n_long = (labels == 1).sum()
+                    n_short = (labels == -1).sum()
+                    n_neutral = (labels == 0).sum()
+                    total = len(labels)
+
+                    tf_stats[horizon] = {
+                        "long": int(n_long),
+                        "short": int(n_short),
+                        "neutral": int(n_neutral),
+                        "long_pct": n_long / total * 100,
+                        "short_pct": n_short / total * 100,
+                        "neutral_pct": n_neutral / total * 100,
+                    }
+
+                    logger.info(
+                        f"    Distribution: L={n_long/total*100:.1f}% "
+                        f"S={n_short/total*100:.1f}% N={n_neutral/total*100:.1f}%"
+                    )
+
+                # Save to labels directory for GA input (with timeframe in filename)
+                output_path = labels_dir / f"{symbol}_{tf}_labels_init.parquet"
+                df.to_parquet(output_path, index=False)
+                artifacts.append(output_path)
+
+                label_stats[symbol][tf] = tf_stats
+
+                manifest.add_artifact(
+                    name=f"initial_labels_{symbol}_{tf}",
+                    file_path=output_path,
+                    stage="initial_labeling",
+                    metadata={
+                        "symbol": symbol,
+                        "timeframe": tf,
+                        "horizons": config.label_horizons,
+                    },
                 )
 
-                labels, bars_to_hit, mae, mfe, touch_type = triple_barrier_numba(
-                    df["close"].values,
-                    df["high"].values,
-                    df["low"].values,
-                    df["open"].values,
-                    df[atr_col].values,
-                    k_up,
-                    k_down,
-                    max_bars,
-                )
-
-                # Add columns
-                df[f"label_h{horizon}"] = labels
-                df[f"bars_to_hit_h{horizon}"] = bars_to_hit
-                df[f"mae_h{horizon}"] = mae
-                df[f"mfe_h{horizon}"] = mfe
-
-                # Calculate distribution
-                n_long = (labels == 1).sum()
-                n_short = (labels == -1).sum()
-                n_neutral = (labels == 0).sum()
-                total = len(labels)
-
-                symbol_stats[horizon] = {
-                    "long": int(n_long),
-                    "short": int(n_short),
-                    "neutral": int(n_neutral),
-                    "long_pct": n_long / total * 100,
-                    "short_pct": n_short / total * 100,
-                    "neutral_pct": n_neutral / total * 100,
-                }
-
-                logger.info(
-                    f"    Distribution: L={n_long/total*100:.1f}% "
-                    f"S={n_short/total*100:.1f}% N={n_neutral/total*100:.1f}%"
-                )
-
-            # Save to labels directory for GA input
-            output_path = labels_dir / f"{symbol}_labels_init.parquet"
-            df.to_parquet(output_path, index=False)
-            artifacts.append(output_path)
-
-            label_stats[symbol] = symbol_stats
-
-            manifest.add_artifact(
-                name=f"initial_labels_{symbol}",
-                file_path=output_path,
-                stage="initial_labeling",
-                metadata={"symbol": symbol, "horizons": config.label_horizons},
-            )
-
-            logger.info(f"  Saved initial labels to {output_path}")
+                logger.info(f"  Saved initial labels to {output_path}")
 
         return create_stage_result(
             stage_name="initial_labeling",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={"horizons": config.label_horizons, "label_stats": label_stats},
+            metadata={
+                "horizons": config.label_horizons,
+                "label_stats": label_stats,
+                "output_timeframes": output_timeframes,
+                "multi_tf_mode": is_multi_tf,
+            },
         )
 
     except Exception as e:

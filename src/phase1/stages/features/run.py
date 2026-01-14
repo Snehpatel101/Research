@@ -59,7 +59,12 @@ def run_feature_engineering(
     logger.info("=" * 70)
 
     try:
-        target_timeframe = config.target_timeframe
+        # Get effective output timeframes (supports multi-TF mode)
+        output_timeframes = config.effective_output_timeframes
+        is_multi_tf = len(output_timeframes) > 1
+
+        logger.info(f"Output timeframes: {output_timeframes}")
+        logger.info(f"Multi-TF mode: {is_multi_tf}")
 
         # Determine MTF include flags based on config.mtf_mode
         # mtf_mode: 'bars' -> only OHLCV, 'indicators' -> only indicators, 'both' -> both
@@ -77,90 +82,108 @@ def run_feature_engineering(
         enable_volume_features = feature_toggles.get("volume", True)
         enable_volatility_features = feature_toggles.get("volatility", True)
 
-        # Initialize FeatureEngineer from modular implementation
-        # MTF settings come from PipelineConfig, not global MTF_CONFIG
-        engineer = FeatureEngineer(
-            input_dir=config.clean_data_dir,
-            output_dir=config.features_dir,
-            timeframe=target_timeframe,
-            enable_mtf=bool(mtf_timeframes),  # Enable if any MTF timeframes specified
-            mtf_timeframes=mtf_timeframes,
-            mtf_include_ohlcv=mtf_include_ohlcv,
-            mtf_include_indicators=mtf_include_indicators,
-            base_timeframe=target_timeframe,  # Use run's target timeframe, not hardcoded '5min'
-            enable_wavelets=enable_wavelets,  # Wire feature toggle from config
-            enable_microstructure=enable_microstructure,  # Wire feature toggle from config
-            enable_volume_features=enable_volume_features,  # Wire feature toggle from config
-            enable_volatility_features=enable_volatility_features,  # Wire feature toggle from config
-        )
-
         # Process each symbol independently (no cross-symbol correlation)
         artifacts = []
         feature_metadata = {}
 
+        # OHLCV columns to exclude from feature count
+        ohlcv_cols = {
+            "datetime",
+            "symbol",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "timeframe",
+            "session_id",
+            "missing_bar",
+            "roll_event",
+            "roll_window",
+            "filled",
+        }
+
         for symbol in config.symbols:
-            input_file = config.clean_data_dir / f"{symbol}_{target_timeframe}_clean.parquet"
-            if not input_file.exists():
-                logger.warning(f"No cleaned data found for {symbol}")
-                continue
+            feature_metadata[symbol] = {}
 
-            df = pd.read_parquet(input_file)
-            logger.info(f"Loaded {symbol}: {len(df):,} rows")
+            # Process each output timeframe
+            for tf in output_timeframes:
+                input_file = config.clean_data_dir / f"{symbol}_{tf}_clean.parquet"
+                if not input_file.exists():
+                    logger.warning(f"No cleaned data found for {symbol} @ {tf}")
+                    continue
 
-            output_file = config.features_dir / f"{symbol}_{target_timeframe}_features.parquet"
-            logger.info(f"Processing {symbol} (symbol-isolated, no cross-correlation)...")
+                df = pd.read_parquet(input_file)
+                logger.info(f"Loaded {symbol} @ {tf}: {len(df):,} rows")
 
-            # Engineer features (each symbol processed independently)
-            df_features, feature_info = engineer.engineer_features(df, symbol)
+                # Filter MTF timeframes to only those > current TF (for enrichment)
+                from src.common.timeframes import timeframe_to_minutes
+                current_minutes = timeframe_to_minutes(tf)
+                valid_mtf = [
+                    mtf for mtf in mtf_timeframes
+                    if timeframe_to_minutes(mtf) > current_minutes
+                ]
 
-            # Save features
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            df_features.to_parquet(output_file, index=False)
+                # Initialize FeatureEngineer for this timeframe
+                engineer = FeatureEngineer(
+                    input_dir=config.clean_data_dir,
+                    output_dir=config.features_dir,
+                    timeframe=tf,
+                    enable_mtf=bool(valid_mtf),  # Enable if any valid MTF timeframes
+                    mtf_timeframes=valid_mtf,
+                    mtf_include_ohlcv=mtf_include_ohlcv,
+                    mtf_include_indicators=mtf_include_indicators,
+                    base_timeframe=tf,  # Use current timeframe as base
+                    enable_wavelets=enable_wavelets,
+                    enable_microstructure=enable_microstructure,
+                    enable_volume_features=enable_volume_features,
+                    enable_volatility_features=enable_volatility_features,
+                )
 
-            artifacts.append(output_file)
+                output_file = config.features_dir / f"{symbol}_{tf}_features.parquet"
+                logger.info(f"Processing {symbol} @ {tf} (symbol-isolated, no cross-correlation)...")
 
-            # Count feature columns
-            ohlcv_cols = {
-                "datetime",
-                "symbol",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "timeframe",
-                "session_id",
-                "missing_bar",
-                "roll_event",
-                "roll_window",
-                "filled",
-            }
-            feature_cols = [c for c in df_features.columns if c not in ohlcv_cols]
+                # Engineer features (each symbol processed independently)
+                df_features, feature_info = engineer.engineer_features(df, symbol)
 
-            feature_metadata[symbol] = {
-                "total_rows": len(df_features),
-                "feature_count": len(feature_cols),
-                "feature_columns": feature_cols[:20],  # First 20 for reference
-            }
+                # Save features
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                df_features.to_parquet(output_file, index=False)
 
-            manifest.add_artifact(
-                name=f"features_{symbol}",
-                file_path=output_file,
-                stage="feature_engineering",
-                metadata={
-                    "symbol": symbol,
+                artifacts.append(output_file)
+
+                # Count feature columns
+                feature_cols = [c for c in df_features.columns if c not in ohlcv_cols]
+
+                feature_metadata[symbol][tf] = {
+                    "total_rows": len(df_features),
                     "feature_count": len(feature_cols),
-                    "row_count": len(df_features),
-                },
-            )
+                    "feature_columns": feature_cols[:20],  # First 20 for reference
+                }
 
-            logger.info(f"  {symbol}: {len(df_features):,} rows, {len(feature_cols)} features")
+                manifest.add_artifact(
+                    name=f"features_{symbol}_{tf}",
+                    file_path=output_file,
+                    stage="feature_engineering",
+                    metadata={
+                        "symbol": symbol,
+                        "timeframe": tf,
+                        "feature_count": len(feature_cols),
+                        "row_count": len(df_features),
+                    },
+                )
+
+                logger.info(f"  {symbol} @ {tf}: {len(df_features):,} rows, {len(feature_cols)} features")
 
         return create_stage_result(
             stage_name="feature_engineering",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={"feature_results": feature_metadata},
+            metadata={
+                "feature_results": feature_metadata,
+                "output_timeframes": output_timeframes,
+                "multi_tf_mode": is_multi_tf,
+            },
         )
 
     except Exception as e:

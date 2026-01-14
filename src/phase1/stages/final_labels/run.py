@@ -81,11 +81,16 @@ def run_final_labels(
         # GA results directory (run-scoped for reproducibility)
         ga_results_dir = config.run_artifacts_dir / "ga_results"
 
-        artifacts = []
-        all_dfs = {}
-        label_params: dict[str, dict[str, dict[str, Any]]] = {}
+        # Get effective output timeframes (supports multi-TF mode)
+        output_timeframes = config.effective_output_timeframes
+        is_multi_tf = len(output_timeframes) > 1
 
-        target_timeframe = config.target_timeframe
+        logger.info(f"Output timeframes: {output_timeframes}")
+        logger.info(f"Multi-TF mode: {is_multi_tf}")
+
+        artifacts = []
+        all_dfs: dict[str, dict[str, pd.DataFrame]] = {}
+        label_params: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
 
         # Get CLI barrier overrides (these take precedence over GA results)
         barrier_overrides = getattr(config, "barrier_overrides", None) or {}
@@ -95,103 +100,113 @@ def run_final_labels(
             logger.info("CLI overrides take precedence over GA-optimized parameters")
 
         for symbol in config.symbols:
-            logger.info(f"\n{'='*50}")
-            logger.info(f"Processing {symbol}")
-            logger.info(f"{'='*50}")
+            all_dfs[symbol] = {}
+            label_params[symbol] = {}
 
-            # Load features data (original, without initial labels)
-            features_path = config.features_dir / f"{symbol}_{target_timeframe}_features.parquet"
-            if not features_path.exists():
-                raise FileNotFoundError(f"Features file not found: {features_path}")
+            for tf in output_timeframes:
+                logger.info(f"\n{'='*50}")
+                logger.info(f"Processing {symbol} @ {tf}")
+                logger.info(f"{'='*50}")
 
-            df = pd.read_parquet(features_path)
-            logger.info(f"Loaded {len(df):,} rows from features")
+                # Load features data (original, without initial labels)
+                features_path = config.features_dir / f"{symbol}_{tf}_features.parquet"
+                if not features_path.exists():
+                    logger.warning(f"Features file not found for {symbol} @ {tf}: {features_path}")
+                    continue
 
-            symbol_params: dict[str, dict[str, Any]] = {}
+                df = pd.read_parquet(features_path)
+                logger.info(f"Loaded {len(df):,} rows from features")
 
-            # Apply optimized labels for each horizon
-            # Priority: CLI overrides > GA results > defaults
-            for horizon in config.label_horizons:
-                results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
+                tf_params: dict[str, dict[str, Any]] = {}
 
-                # Priority 1: CLI barrier overrides (highest precedence)
-                if has_cli_overrides:
-                    # Use CLI overrides, with defaults for any missing keys
-                    best_params = {
-                        "k_up": barrier_overrides.get("k_up", 2.0),
-                        "k_down": barrier_overrides.get("k_down", 1.0),
-                        "max_bars": int(barrier_overrides.get("max_bars", horizon * 3)),
-                    }
-                    symbol_params[str(horizon)] = {
-                        "k_up": best_params["k_up"],
-                        "k_down": best_params["k_down"],
-                        "max_bars": best_params["max_bars"],
-                        "source": "cli_override",
-                        "ga_results_path": None,
-                    }
-                    logger.info(f"\n  Horizon {horizon}: Using CLI-override params")
-                    logger.info(
-                        f"    k_up={best_params['k_up']:.3f}, "
-                        f"k_down={best_params['k_down']:.3f}, "
-                        f"max_bars={best_params['max_bars']}"
+                # Apply optimized labels for each horizon
+                # Priority: CLI overrides > GA results > defaults
+                for horizon in config.label_horizons:
+                    # Use timeframe-specific GA results path
+                    results_path = ga_results_dir / f"{symbol}_{tf}_ga_h{horizon}_best.json"
+
+                    # Priority 1: CLI barrier overrides (highest precedence)
+                    if has_cli_overrides:
+                        # Use CLI overrides, with defaults for any missing keys
+                        best_params = {
+                            "k_up": barrier_overrides.get("k_up", 2.0),
+                            "k_down": barrier_overrides.get("k_down", 1.0),
+                            "max_bars": int(barrier_overrides.get("max_bars", horizon * 3)),
+                        }
+                        tf_params[str(horizon)] = {
+                            "k_up": best_params["k_up"],
+                            "k_down": best_params["k_down"],
+                            "max_bars": best_params["max_bars"],
+                            "source": "cli_override",
+                            "ga_results_path": None,
+                        }
+                        logger.info(f"\n  Horizon {horizon}: Using CLI-override params")
+                        logger.info(
+                            f"    k_up={best_params['k_up']:.3f}, "
+                            f"k_down={best_params['k_down']:.3f}, "
+                            f"max_bars={best_params['max_bars']}"
+                        )
+                    # Priority 2: GA-optimized results
+                    elif results_path.exists():
+                        with open(results_path) as f:
+                            results = json.load(f)
+                        best_params = {
+                            "k_up": results["best_k_up"],
+                            "k_down": results["best_k_down"],
+                            "max_bars": results["best_max_bars"],
+                        }
+                        tf_params[str(horizon)] = {
+                            "k_up": best_params["k_up"],
+                            "k_down": best_params["k_down"],
+                            "max_bars": best_params["max_bars"],
+                            "source": "ga",
+                            "ga_results_path": str(results_path),
+                            "best_fitness": results.get("best_fitness"),
+                            "population_size": results.get("population_size"),
+                            "generations": results.get("generations"),
+                        }
+                        logger.info(f"\n  Horizon {horizon}: Using GA-optimized params")
+                        logger.info(
+                            f"    k_up={best_params['k_up']:.3f}, "
+                            f"k_down={best_params['k_down']:.3f}, "
+                            f"max_bars={best_params['max_bars']}"
+                        )
+                    # Priority 3: Default fallback
+                    else:
+                        logger.warning(f"  Horizon {horizon}: No GA results found, using defaults")
+                        best_params = {"k_up": 2.0, "k_down": 1.0, "max_bars": horizon * 3}
+                        tf_params[str(horizon)] = {
+                            "k_up": best_params["k_up"],
+                            "k_down": best_params["k_down"],
+                            "max_bars": best_params["max_bars"],
+                            "source": "default",
+                            "ga_results_path": None,
+                        }
+
+                    # Apply optimized labeling with quality scores
+                    df = apply_optimized_labels(
+                        df, horizon, best_params, symbol=symbol, atr_column="atr_14"
                     )
-                # Priority 2: GA-optimized results
-                elif results_path.exists():
-                    with open(results_path) as f:
-                        results = json.load(f)
-                    best_params = {
-                        "k_up": results["best_k_up"],
-                        "k_down": results["best_k_down"],
-                        "max_bars": results["best_max_bars"],
-                    }
-                    symbol_params[str(horizon)] = {
-                        "k_up": best_params["k_up"],
-                        "k_down": best_params["k_down"],
-                        "max_bars": best_params["max_bars"],
-                        "source": "ga",
-                        "ga_results_path": str(results_path),
-                        "best_fitness": results.get("best_fitness"),
-                        "population_size": results.get("population_size"),
-                        "generations": results.get("generations"),
-                    }
-                    logger.info(f"\n  Horizon {horizon}: Using GA-optimized params")
-                    logger.info(
-                        f"    k_up={best_params['k_up']:.3f}, "
-                        f"k_down={best_params['k_down']:.3f}, "
-                        f"max_bars={best_params['max_bars']}"
-                    )
-                # Priority 3: Default fallback
-                else:
-                    logger.warning(f"  Horizon {horizon}: No GA results found, using defaults")
-                    best_params = {"k_up": 2.0, "k_down": 1.0, "max_bars": horizon * 3}
-                    symbol_params[str(horizon)] = {
-                        "k_up": best_params["k_up"],
-                        "k_down": best_params["k_down"],
-                        "max_bars": best_params["max_bars"],
-                        "source": "default",
-                        "ga_results_path": None,
-                    }
 
-                # Apply optimized labeling with quality scores
-                df = apply_optimized_labels(
-                    df, horizon, best_params, symbol=symbol, atr_column="atr_14"
+                # Save final labeled data (include timeframe in filename)
+                output_path = config.final_data_dir / f"{symbol}_{tf}_labeled.parquet"
+                df.to_parquet(output_path, index=False)
+                artifacts.append(output_path)
+
+                manifest.add_artifact(
+                    name=f"final_labeled_{symbol}_{tf}",
+                    file_path=output_path,
+                    stage="final_labels",
+                    metadata={
+                        "symbol": symbol,
+                        "timeframe": tf,
+                        "horizons": config.label_horizons,
+                    },
                 )
 
-            # Save final labeled data
-            output_path = config.final_data_dir / f"{symbol}_labeled.parquet"
-            df.to_parquet(output_path, index=False)
-            artifacts.append(output_path)
-
-            manifest.add_artifact(
-                name=f"final_labeled_{symbol}",
-                file_path=output_path,
-                stage="final_labels",
-                metadata={"symbol": symbol, "horizons": config.label_horizons},
-            )
-
-            all_dfs[symbol] = df
-            label_params[symbol] = symbol_params
-            logger.info(f"\n  Saved final labels to {output_path}")
+                all_dfs[symbol][tf] = df
+                label_params[symbol][tf] = tf_params
+                logger.info(f"\n  Saved final labels to {output_path}")
 
         # Create label manifest
         label_manifest_path = config.run_artifacts_dir / "label_manifest.json"
@@ -201,7 +216,8 @@ def run_final_labels(
             "created_at": datetime.now().isoformat(),
             "labeling_stage": "final_labels",
             "labeling_strategy": "triple_barrier",
-            "target_timeframe": config.target_timeframe,
+            "output_timeframes": output_timeframes,
+            "multi_tf_mode": is_multi_tf,
             "symbols": config.symbols,
             "horizons": config.label_horizons,
             "transaction_costs": {
@@ -240,13 +256,23 @@ def run_final_labels(
             name="label_manifest",
             file_path=label_manifest_path,
             stage="final_labels",
-            metadata={"symbols": config.symbols, "horizons": config.label_horizons},
+            metadata={
+                "symbols": config.symbols,
+                "horizons": config.label_horizons,
+                "output_timeframes": output_timeframes,
+            },
         )
 
         # Generate labeling report (run-scoped)
-        if all_dfs:
+        # Flatten all_dfs for report generation (combine all timeframes)
+        flat_dfs = {}
+        for symbol, tf_dfs in all_dfs.items():
+            for tf, df in tf_dfs.items():
+                flat_dfs[f"{symbol}_{tf}"] = df
+
+        if flat_dfs:
             report_path = generate_labeling_report(
-                all_dfs,
+                flat_dfs,
                 config.run_artifacts_dir,
                 config.label_horizons,
             )
@@ -260,6 +286,8 @@ def run_final_labels(
             metadata={
                 "symbols": config.symbols,
                 "horizons": config.label_horizons,
+                "output_timeframes": output_timeframes,
+                "multi_tf_mode": is_multi_tf,
                 "label_manifest_path": str(label_manifest_path),
             },
         )

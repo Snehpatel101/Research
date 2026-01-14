@@ -60,8 +60,15 @@ def run_ga_optimization_stage(
         plots_dir = config.run_artifacts_dir / "ga_plots"
         plots_dir.mkdir(parents=True, exist_ok=True)
 
+        # Get effective output timeframes (supports multi-TF mode)
+        output_timeframes = config.effective_output_timeframes
+        is_multi_tf = len(output_timeframes) > 1
+
+        logger.info(f"Output timeframes: {output_timeframes}")
+        logger.info(f"Multi-TF mode: {is_multi_tf}")
+
         artifacts = []
-        all_results: dict[str, dict[int, dict[str, Any]]] = {}
+        all_results: dict[str, dict[str, dict[int, dict[str, Any]]]] = {}
 
         # GA configuration
         population_size = config.ga_population_size
@@ -73,198 +80,207 @@ def run_ga_optimization_stage(
         logger.info(f"Horizons: {config.label_horizons}")
 
         for symbol in config.symbols:
-            logger.info(f"\n{'='*50}")
-            logger.info(f"Optimizing {symbol}")
-            logger.info(f"{'='*50}")
+            all_results[symbol] = {}
 
-            # Load labels data (run-scoped)
-            labels_dir = config.run_data_dir / "labels"
-            labels_path = labels_dir / f"{symbol}_labels_init.parquet"
+            for tf in output_timeframes:
+                logger.info(f"\n{'='*50}")
+                logger.info(f"Optimizing {symbol} @ {tf}")
+                logger.info(f"{'='*50}")
 
-            if not labels_path.exists():
-                raise FileNotFoundError(f"Labels file not found: {labels_path}")
+                # Load labels data (run-scoped, with timeframe in filename)
+                labels_dir = config.run_data_dir / "labels"
+                labels_path = labels_dir / f"{symbol}_{tf}_labels_init.parquet"
 
-            df = pd.read_parquet(labels_path)
-            logger.info(f"Loaded {len(df):,} rows")
+                if not labels_path.exists():
+                    logger.warning(f"Labels file not found for {symbol} @ {tf}: {labels_path}")
+                    continue
 
-            symbol_results: dict[int, dict[str, Any]] = {}
+                df = pd.read_parquet(labels_path)
+                logger.info(f"Loaded {len(df):,} rows")
 
-            for horizon in config.label_horizons:
-                # Check if already optimized (skip if results exist AND are valid)
-                results_path = ga_results_dir / f"{symbol}_ga_h{horizon}_best.json"
+                tf_results: dict[int, dict[str, Any]] = {}
 
-                # Minimum fitness threshold - results below this are INVALID
-                # The fitness function returns -10000 for hard constraint violations
-                # Valid fitness range is approximately -10 to +16, so -100 catches only catastrophic failures
-                MIN_VALID_FITNESS = -100.0
+                for horizon in config.label_horizons:
+                    # Check if already optimized (skip if results exist AND are valid)
+                    # Include timeframe in filename for multi-TF support
+                    results_path = ga_results_dir / f"{symbol}_{tf}_ga_h{horizon}_best.json"
 
-                if results_path.exists():
-                    with open(results_path) as f:
-                        cached_results = json.load(f)
+                    # Minimum fitness threshold - results below this are INVALID
+                    # The fitness function returns -10000 for hard constraint violations
+                    # Valid fitness range is approximately -10 to +16, so -100 catches only catastrophic failures
+                    MIN_VALID_FITNESS = -100.0
 
-                    cached_fitness = cached_results.get("best_fitness", float("-inf"))
+                    if results_path.exists():
+                        with open(results_path) as f:
+                            cached_results = json.load(f)
 
-                    # CRITICAL: Reject cached results with negative fitness
-                    # Negative fitness indicates constraint violations (e.g., <10% neutral)
-                    if cached_fitness >= MIN_VALID_FITNESS:
+                        cached_fitness = cached_results.get("best_fitness", float("-inf"))
+
+                        # CRITICAL: Reject cached results with negative fitness
+                        # Negative fitness indicates constraint violations (e.g., <10% neutral)
+                        if cached_fitness >= MIN_VALID_FITNESS:
+                            logger.info(
+                                f"\n  Horizon {horizon}: Loading existing VALID results from {results_path.name}"
+                            )
+                            results = cached_results
+                            tf_results[horizon] = results
+                            artifacts.append(results_path)
+                            logger.info(
+                                f"    k_up={results['best_k_up']:.3f}, "
+                                f"k_down={results['best_k_down']:.3f}, "
+                                f"max_bars={results['best_max_bars']}, "
+                                f"fitness={results['best_fitness']:.4f}"
+                            )
+                            continue
+                        else:
+                            # Cached results are INVALID - re-run optimization
+                            logger.warning(
+                                f"\n  Horizon {horizon}: Cached results INVALID (fitness={cached_fitness:.2f} < {MIN_VALID_FITNESS})"
+                            )
+                            logger.warning(
+                                "    Negative fitness indicates constraint violation (e.g., <10% neutral)"
+                            )
+                            logger.warning("    Re-running optimization with stricter constraints...")
+                            # Remove invalid cached file
+                            results_path.unlink()
+
+                    # Run Optuna TPE optimization
+                    # Check if safe mode is enabled (prevents test data leakage)
+                    safe_mode = getattr(config, "ga_safe_mode", True)  # Default to safe
+
+                    if safe_mode:
+                        logger.info(f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization...")
                         logger.info(
-                            f"\n  Horizon {horizon}: Loading existing VALID results from {results_path.name}"
+                            "    (Safe mode: using only training portion to prevent test data leakage)"
                         )
-                        results = cached_results
-                        symbol_results[horizon] = results
-                        artifacts.append(results_path)
-                        logger.info(
-                            f"    k_up={results['best_k_up']:.3f}, "
-                            f"k_down={results['best_k_down']:.3f}, "
-                            f"max_bars={results['best_max_bars']}, "
-                            f"fitness={results['best_fitness']:.4f}"
+                        results, logbook = run_ga_optimization_safe(
+                            df,
+                            horizon,
+                            symbol=symbol,
+                            train_ratio=config.train_ratio,  # Use config's train ratio
+                            population_size=population_size,
+                            generations=min(generations, 30),  # Cap at 30 for performance
+                            subset_fraction=0.3,
+                            atr_column="atr_14",
+                            seed=config.random_seed,
                         )
-                        continue
                     else:
-                        # Cached results are INVALID - re-run optimization
                         logger.warning(
-                            f"\n  Horizon {horizon}: Cached results INVALID (fitness={cached_fitness:.2f} < {MIN_VALID_FITNESS})"
+                            f"\n  Horizon {horizon}: Running UNSAFE Optuna TPE optimization..."
                         )
                         logger.warning(
-                            "    Negative fitness indicates constraint violation (e.g., <10% neutral)"
+                            "    WARNING: Safe mode disabled - test data may influence optimization!"
                         )
-                        logger.warning("    Re-running optimization with stricter constraints...")
-                        # Remove invalid cached file
-                        results_path.unlink()
+                        logger.warning(
+                            "    Only use this for research when you understand the implications."
+                        )
+                        results, logbook = run_ga_optimization(
+                            df,
+                            horizon,
+                            symbol=symbol,
+                            population_size=population_size,
+                            generations=min(generations, 30),  # Cap at 30 for performance
+                            subset_fraction=0.3,
+                            atr_column="atr_14",
+                            seed=config.random_seed,
+                        )
 
-                # Run Optuna TPE optimization
-                # Check if safe mode is enabled (prevents test data leakage)
-                safe_mode = getattr(config, "ga_safe_mode", True)  # Default to safe
+                    # CRITICAL: Validate new results before saving
+                    new_fitness = results.get("best_fitness", float("-inf"))
+                    if new_fitness < MIN_VALID_FITNESS:
+                        # Optimization FAILED to find valid parameters
+                        # Fall back to symbol-specific defaults from barriers_config.py
+                        logger.error(
+                            f"\n  Horizon {horizon}: Optimization FAILED (fitness={new_fitness:.2f})"
+                        )
+                        logger.error(
+                            "    Could not find parameters satisfying constraints (neutral >= 10%, etc.)"
+                        )
+                        logger.warning("    Falling back to default barrier parameters...")
 
-                if safe_mode:
-                    logger.info(f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization...")
+                        # Import defaults
+                        from src.phase1.config import get_barrier_params
+
+                        default_params = get_barrier_params(symbol, horizon)
+
+                        results = {
+                            "horizon": horizon,
+                            "best_k_up": default_params["k_up"],
+                            "best_k_down": default_params["k_down"],
+                            "best_max_bars": default_params["max_bars"],
+                            "best_fitness": 0.0,  # Indicate not optimized
+                            "optimizer": "default_fallback",
+                            "n_trials": 0,
+                            "warning": "Optimization failed - using default parameters",
+                            "original_fitness": new_fitness,
+                        }
+                        logger.warning(
+                            f"    Using defaults: k_up={results['best_k_up']:.3f}, "
+                            f"k_down={results['best_k_down']:.3f}, "
+                            f"max_bars={results['best_max_bars']}"
+                        )
+
+                    tf_results[horizon] = results
+
+                    # Save results
+                    with open(results_path, "w") as f:
+                        json.dump(results, f, indent=2)
+                    artifacts.append(results_path)
+
                     logger.info(
-                        "    (Safe mode: using only training portion to prevent test data leakage)"
-                    )
-                    results, logbook = run_ga_optimization_safe(
-                        df,
-                        horizon,
-                        symbol=symbol,
-                        train_ratio=config.train_ratio,  # Use config's train ratio
-                        population_size=population_size,
-                        generations=min(generations, 30),  # Cap at 30 for performance
-                        subset_fraction=0.3,
-                        atr_column="atr_14",
-                        seed=config.random_seed,
-                    )
-                else:
-                    logger.warning(
-                        f"\n  Horizon {horizon}: Running UNSAFE Optuna TPE optimization..."
-                    )
-                    logger.warning(
-                        "    WARNING: Safe mode disabled - test data may influence optimization!"
-                    )
-                    logger.warning(
-                        "    Only use this for research when you understand the implications."
-                    )
-                    results, logbook = run_ga_optimization(
-                        df,
-                        horizon,
-                        symbol=symbol,
-                        population_size=population_size,
-                        generations=min(generations, 30),  # Cap at 30 for performance
-                        subset_fraction=0.3,
-                        atr_column="atr_14",
-                        seed=config.random_seed,
-                    )
-
-                # CRITICAL: Validate new results before saving
-                new_fitness = results.get("best_fitness", float("-inf"))
-                if new_fitness < MIN_VALID_FITNESS:
-                    # Optimization FAILED to find valid parameters
-                    # Fall back to symbol-specific defaults from barriers_config.py
-                    logger.error(
-                        f"\n  Horizon {horizon}: Optimization FAILED (fitness={new_fitness:.2f})"
-                    )
-                    logger.error(
-                        "    Could not find parameters satisfying constraints (neutral >= 10%, etc.)"
-                    )
-                    logger.warning("    Falling back to default barrier parameters...")
-
-                    # Import defaults
-                    from src.phase1.config import get_barrier_params
-
-                    default_params = get_barrier_params(symbol, horizon)
-
-                    results = {
-                        "horizon": horizon,
-                        "best_k_up": default_params["k_up"],
-                        "best_k_down": default_params["k_down"],
-                        "best_max_bars": default_params["max_bars"],
-                        "best_fitness": 0.0,  # Indicate not optimized
-                        "optimizer": "default_fallback",
-                        "n_trials": 0,
-                        "warning": "Optimization failed - using default parameters",
-                        "original_fitness": new_fitness,
-                    }
-                    logger.warning(
-                        f"    Using defaults: k_up={results['best_k_up']:.3f}, "
+                        f"    Best: k_up={results['best_k_up']:.3f}, "
                         f"k_down={results['best_k_down']:.3f}, "
-                        f"max_bars={results['best_max_bars']}"
+                        f"max_bars={results['best_max_bars']}, "
+                        f"fitness={results['best_fitness']:.4f}"
                     )
 
-                symbol_results[horizon] = results
+                    # Check signal rate
+                    val = results.get("validation", {})
+                    signal_rate = val.get("signal_rate", 0)
+                    if signal_rate < 0.40:
+                        logger.warning(
+                            f"    WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!"
+                        )
 
-                # Save results
-                with open(results_path, "w") as f:
-                    json.dump(results, f, indent=2)
-                artifacts.append(results_path)
+                    # Plot convergence (include timeframe in filename)
+                    plot_path = plots_dir / f"{symbol}_{tf}_ga_h{horizon}_convergence.png"
+                    try:
+                        plot_convergence(results, plot_path)
+                        artifacts.append(plot_path)
+                    except Exception as plot_err:
+                        logger.warning(f"Failed to generate convergence plot: {plot_err}")
 
-                logger.info(
-                    f"    Best: k_up={results['best_k_up']:.3f}, "
-                    f"k_down={results['best_k_down']:.3f}, "
-                    f"max_bars={results['best_max_bars']}, "
-                    f"fitness={results['best_fitness']:.4f}"
-                )
-
-                # Check signal rate
-                val = results.get("validation", {})
-                signal_rate = val.get("signal_rate", 0)
-                if signal_rate < 0.40:
-                    logger.warning(
-                        f"    WARNING: Signal rate {signal_rate*100:.1f}% below 40% threshold!"
+                    manifest.add_artifact(
+                        name=f"ga_results_{symbol}_{tf}_h{horizon}",
+                        file_path=results_path,
+                        stage="ga_optimize",
+                        metadata={
+                            "symbol": symbol,
+                            "timeframe": tf,
+                            "horizon": horizon,
+                            "best_fitness": results["best_fitness"],
+                            "signal_rate": signal_rate,
+                        },
                     )
 
-                # Plot convergence
-                plot_path = plots_dir / f"{symbol}_ga_h{horizon}_convergence.png"
-                try:
-                    plot_convergence(results, plot_path)
-                    artifacts.append(plot_path)
-                except Exception as plot_err:
-                    logger.warning(f"Failed to generate convergence plot: {plot_err}")
+                # Store timeframe results
+                all_results[symbol][tf] = tf_results
 
-                manifest.add_artifact(
-                    name=f"ga_results_{symbol}_h{horizon}",
-                    file_path=results_path,
-                    stage="ga_optimize",
-                    metadata={
-                        "symbol": symbol,
-                        "horizon": horizon,
-                        "best_fitness": results["best_fitness"],
-                        "signal_rate": signal_rate,
-                    },
-                )
-
-            all_results[symbol] = symbol_results
-
-        # Save combined summary
-        summary: dict[str, dict[str, dict[str, Any]]] = {}
-        for symbol, symbol_results in all_results.items():
-            summary[symbol] = {
-                str(h): {
-                    "k_up": res["best_k_up"],
-                    "k_down": res["best_k_down"],
-                    "max_bars": res["best_max_bars"],
-                    "fitness": res["best_fitness"],
-                    "signal_rate": res.get("validation", {}).get("signal_rate", None),
+        # Save combined summary (nested by symbol -> timeframe -> horizon)
+        summary: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
+        for symbol, symbol_tf_results in all_results.items():
+            summary[symbol] = {}
+            for tf, tf_results in symbol_tf_results.items():
+                summary[symbol][tf] = {
+                    str(h): {
+                        "k_up": res["best_k_up"],
+                        "k_down": res["best_k_down"],
+                        "max_bars": res["best_max_bars"],
+                        "fitness": res["best_fitness"],
+                        "signal_rate": res.get("validation", {}).get("signal_rate", None),
+                    }
+                    for h, res in tf_results.items()
                 }
-                for h, res in symbol_results.items()
-            }
 
         summary_path = ga_results_dir / "optimization_summary.json"
         with open(summary_path, "w") as f:
@@ -277,7 +293,11 @@ def run_ga_optimization_stage(
             stage_name="ga_optimize",
             start_time=start_time,
             artifacts=artifacts,
-            metadata={"all_results": summary},
+            metadata={
+                "all_results": summary,
+                "output_timeframes": output_timeframes,
+                "multi_tf_mode": is_multi_tf,
+            },
         )
 
     except Exception as e:
