@@ -25,7 +25,7 @@ Three MTF strategies based on model family:
 | Strategy | Models | Data Type | Status |
 |----------|--------|-----------|--------|
 | **Strategy 1: Single-TF** | All (baselines) | One timeframe, no MTF | Not implemented |
-| **Strategy 2: MTF Indicators** | Tabular (6) | Indicators from 9 TFs | Partial (5 TFs) |
+| **Strategy 2: MTF Indicators** | Tabular (6) | Indicators from 9 TFs | ✅ Complete (9 TFs) |
 | **Strategy 3: MTF Ingestion** | Sequence (13) | Raw OHLCV from 9 TFs | Not implemented |
 
 When adding a new model, document its **intended data requirements** even if the current pipeline cannot fulfill them.
@@ -57,7 +57,7 @@ The ML factory uses a **plugin architecture** where models register themselves a
 - **Easy extensibility:** Add new models without rewriting core infrastructure
 - **Ensemble support:** Mix any models that share input shape requirements
 
-**Current model count:** 13 models across 4 families (boosting, neural, classical, ensemble)
+**Current model count:** 22 models across 6 families (boosting, neural, classical, cnn, advanced transformers, ensemble)
 
 **Note:** Current pipeline serves all models the same data. This is temporary - see `docs/ARCHITECTURE.md` for the goal state where tabular models get MTF indicators and sequence models get raw multi-resolution OHLCV bars.
 
@@ -767,7 +767,7 @@ X_val, y_val, weights_val = container.get_sklearn_arrays(split='val')
 ### 3D Input: Sequence Models (Strategy 3 - Not Implemented)
 
 **Shape:** `(n_samples, seq_len, n_features)`
-**Models:** LSTM, GRU, TCN, Transformer (4 implemented) + InceptionTime, ResNet, PatchTST, iTransformer, TFT, N-BEATS (6 planned) = 13 models
+**Models:** LSTM, GRU, TCN, Transformer, InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS (all 10 sequence models implemented)
 **Intended Data:** Raw multi-resolution OHLCV bars from 9 timeframes
 **Current Data:** Same ~180 indicator features (windowed) - **SUBOPTIMAL**
 **Status:** Current approach works but is suboptimal for temporal learning

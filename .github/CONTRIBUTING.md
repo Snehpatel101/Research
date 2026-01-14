@@ -136,7 +136,7 @@ See [Feature Engineering Guide](../docs/guides/FEATURE_ENGINEERING.md).
 ```
 src/
 ├── phase1/         → Data pipeline (14 stages)
-├── models/         → Model implementations (13 models)
+├── models/         → Model implementations (22 models)
 ├── cross_validation/ → CV and OOF generation
 └── utils/          → Shared utilities
 ```

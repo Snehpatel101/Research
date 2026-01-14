@@ -574,7 +574,7 @@ success_criteria:
 
 ### Full Benchmark (`experiments/full_benchmark.yaml`)
 
-Comprehensive benchmark across all 13 models.
+Comprehensive benchmark across all 22 models.
 
 ```yaml
 experiment:

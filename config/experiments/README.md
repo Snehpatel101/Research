@@ -7,7 +7,7 @@ Pre-configured experiment templates for common research workflows.
 | Template | Type | Models | Runtime | Purpose |
 |----------|------|--------|---------|---------|
 | [Baseline Experiment](baseline_experiment.yaml) | Single model | XGBoost | ~15 min | Quick validation |
-| [Full Benchmark](full_benchmark.yaml) | Multi-model | All 13 models | ~12 hours | Comprehensive comparison |
+| [Full Benchmark](full_benchmark.yaml) | Multi-model | All 22 models | ~12 hours | Comprehensive comparison |
 
 ## Template Structure
 

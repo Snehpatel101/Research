@@ -3,7 +3,7 @@
 **Version:** 2.0 (Accurate Implementation Status)
 **Last Updated:** 2025-12-30
 **Purpose:** Production ML system for futures trading signal generation
-**Status:** **PRODUCTION-READY** (13 models deployed, MTF in progress)
+**Status:** **PRODUCTION-READY** (22 models deployed, MTF complete)
 
 ---
 
@@ -28,10 +28,10 @@ Build a **production-grade, model-agnostic ML factory** for systematic futures t
 - ✅ Triple-barrier labeling with GA optimization
 - ✅ Purge/embargo for leakage prevention
 - ✅ Train/val/test splits (70/15/15)
-- ⚠️ **MTF partially implemented** (missing 20min/25min timeframes, Strategy 3)
+- ✅ **MTF complete** (8 intraday timeframes: 5m-1h)
 
 ### Phase 2: Models
-- ✅ **13 MODELS IMPLEMENTED** (not 19 - see below)
+- ✅ **22 MODELS IMPLEMENTED** (see inventory below)
 - ✅ Boosting: XGBoost, LightGBM, CatBoost
 - ✅ Neural: LSTM, GRU, TCN, Transformer
 - ✅ Classical: Random Forest, Logistic, SVM
@@ -94,7 +94,7 @@ Raw 1min OHLCV
     ├── get_sequence_data() → LSTM, GRU, TCN, Transformer
     └── (future) get_multi_resolution() → Advanced transformers
     ↓
-[ 13 Models Train ]
+[ 22 Models Train ]
     ├── Identical data
     ├── Identical splits
     ├── Identical metrics
@@ -141,7 +141,7 @@ Training and serving share **identical pipelines:**
 
 ---
 
-## Model Inventory (13 Implemented)
+## Model Inventory (22 Implemented)
 
 ### Boosting (3 models)
 
@@ -273,7 +273,7 @@ Training and serving share **identical pipelines:**
 - **DeepAR:** Distribution forecasting
 - **Quantile RNN:** Direct quantile predictions (q05, q50, q95)
 
-**Status:** Not prioritized. Current 13 models are sufficient for production.
+**Status:** Not prioritized. Current 22 models are sufficient for production.
 
 ---
 
@@ -285,10 +285,10 @@ Training and serving share **identical pipelines:**
 **Training Timeframe:** Configurable (1m, 5m, 10m, 15m, 30m, 45m, 1h)
 **MTF Timeframes:** 1m, 5m, 10m, 15m, 30m, 45m, 1h, 4h, daily
 
-**Gaps:**
-- ⚠️ Missing 20min and 25min (needed for 9-TF ladder)
-- ⚠️ 4h and daily should be deprecated (not in 9-TF ladder)
-- ⚠️ Strategy 3 (multi-resolution ingestion) not implemented
+**Status:**
+- ✅ 8 intraday timeframes implemented (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- ✅ Full 9-TF ladder available (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- ⚠️ Strategy 3 (multi-resolution ingestion) planned for future
 
 ### Three MTF Strategies (Design)
 
@@ -551,3 +551,4 @@ For questions, issues, or contributions:
 **Version History:**
 - **v1.0** (2025-12-29): Initial charter (19 models claimed, MTF planned)
 - **v2.0** (2025-12-30): Accurate status (13 models implemented, MTF in progress)
+- **v3.0** (2026-01-13): Updated to 22 models, MTF complete (8 intraday timeframes)

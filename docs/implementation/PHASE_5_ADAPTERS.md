@@ -404,7 +404,7 @@ class DatasetBuilder:
 ### Task 5.4: Model Family Router with Per-Model MTF Strategy Selection
 **File:** `src/models/trainer.py`
 
-**Status:** ⚠️ Partial (no per-model MTF strategy selection yet)
+**Status:** ⚠️ Partial (per-model MTF strategy selection planned; 9-TF ladder complete)
 
 **Implementation:**
 ```python

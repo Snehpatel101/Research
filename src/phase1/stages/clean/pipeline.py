@@ -298,8 +298,8 @@ def clean_symbol_data_multi_timeframe(
             df_resampled = add_session_id(df_resampled)
         df_resampled = validate_ohlc(df_resampled)
 
-        # Save
-        output_path = output_dir / f"{symbol}_{tf}.parquet"
+        # Save with consistent naming pattern for downstream stages
+        output_path = output_dir / f"{symbol}_{tf}_clean.parquet"
         df_resampled.to_parquet(output_path, index=False)
         logger.info(f"Saved {len(df_resampled):,} {tf} bars to {output_path}")
 

@@ -51,7 +51,8 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     end_date: str | None = None  # YYYY-MM-DD format
 
     # Timeframe configuration
-    target_timeframe: str = "5min"
+    target_timeframe: str = "5min"  # Primary training timeframe (backward compat)
+    output_timeframes: list[str] | None = None  # If set, produce multiple clean datasets
     bar_resolution: str = field(default=None)  # Legacy alias
 
     # Feature engineering
@@ -134,6 +135,14 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
         # Validate target_timeframe
         validate_timeframe(self.target_timeframe)
 
+        # Validate output_timeframes if provided
+        if self.output_timeframes is not None:
+            for tf in self.output_timeframes:
+                validate_timeframe(tf)
+            # Ensure target_timeframe is in output_timeframes
+            if self.target_timeframe not in self.output_timeframes:
+                self.output_timeframes = [self.target_timeframe] + list(self.output_timeframes)
+
         # Validate feature set
         feature_set_issues = validate_feature_set_config(self.feature_set)
         if feature_set_issues:
@@ -215,6 +224,17 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
         config_dict = asdict(self)
         config_dict["project_root"] = str(self.project_root)
         return config_dict
+
+    @property
+    def effective_output_timeframes(self) -> list[str]:
+        """Return list of timeframes to produce in Stage 2.
+
+        If output_timeframes is set, return that list.
+        Otherwise, return [target_timeframe] for backward compatibility.
+        """
+        if self.output_timeframes:
+            return list(self.output_timeframes)
+        return [self.target_timeframe]
 
 
 # Re-export create_default_config for backward compatibility

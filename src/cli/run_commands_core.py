@@ -75,6 +75,8 @@ def _create_config_from_args(
     mtf_mode: str | None,
     mtf_timeframes: str | None,
     mtf_enable: bool | None,
+    # Output timeframes (multi-TF support)
+    output_timeframes: str | None,
     # Feature toggles
     enable_wavelets: bool | None,
     enable_microstructure: bool | None,
@@ -259,6 +261,17 @@ def _create_config_from_args(
         if not mtf_enable:
             config_kwargs["mtf_timeframes"] = []
             config_kwargs["mtf_mode"] = "bars"  # Minimal mode when disabled
+
+    # Output timeframes (multi-TF support for Stage 2 cleaning)
+    if output_timeframes is not None:
+        if output_timeframes.lower() == "9tf":
+            # Full 9-TF ladder: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
+            config_kwargs["output_timeframes"] = [
+                "1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"
+            ]
+            show_info("Using full 9-TF ladder for output timeframes")
+        else:
+            config_kwargs["output_timeframes"] = [tf.strip() for tf in output_timeframes.split(",")]
 
     # Feature toggles - stored for use by feature engineering stage
     feature_toggles = {}

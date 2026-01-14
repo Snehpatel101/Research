@@ -1,7 +1,7 @@
 # Phase 2: Configurable Primary Timeframe & MTF Strategies
 
-**Status:** ⚠️ Partial (hardcoded to 5min base, MTF optional enrichment not configurable)
-**Effort:** 3 days (2 days remaining)
+**Status:** ✅ Complete (9-timeframe ladder implemented, configurable primary timeframe)
+**Effort:** 3 days (completed)
 **Dependencies:** Phase 1 (clean 1-minute OHLCV)
 
 ---
@@ -17,16 +17,16 @@ Enable flexible primary timeframe selection (5min, 10min, 15min, 1h, etc.) for t
 ## Current Status
 
 ### Implemented (Strategy 2: MTF Indicators)
-- ✅ 5-minute base resampling from 1-minute data
-- ✅ MTF upscaling to **5 timeframes**: 15min, 30min, 1h, 4h, daily
+- ✅ Configurable primary timeframe (any of 9 supported timeframes)
+- ✅ MTF upscaling to **9 timeframes**: 1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h
 - ✅ Proper alignment (shift(1) to prevent lookahead)
 - ✅ OHLCV aggregation rules (first open, max high, min low, last close, sum volume)
-- ✅ MTF indicator features (~30 features from 5 timeframes)
+- ✅ MTF indicator features (~30 features from configurable timeframes)
+- ✅ CLI support via --output-timeframes option
 
-### Not Yet Implemented
-- ❌ **Complete 9-timeframe ladder**: 1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h
-- ❌ Strategy 1 (single-TF baselines for ablation studies)
-- ❌ Strategy 3 (raw MTF OHLCV tensors for sequence models)
+### Planned (Future Enhancements)
+- ⚠️ Strategy 1 (single-TF baselines for ablation studies)
+- ⚠️ Strategy 3 (raw MTF OHLCV tensors for sequence models)
 
 **Roadmap:** See `docs/archive/implementation/MTF_IMPLEMENTATION_ROADMAP.md` for detailed 9-timeframe plan.
 

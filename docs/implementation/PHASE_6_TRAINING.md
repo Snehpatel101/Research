@@ -8,7 +8,7 @@
 
 ## ⚠️ CRITICAL DOCUMENTATION ERROR
 
-**DOCUMENTED:** 13 models across 4 families
+**DOCUMENTED:** 22 models across 6 families
 **ACTUAL:** 22+ models across 5 families (including 4 meta-learners and 6 "planned" advanced models already implemented!)
 
 ---
@@ -188,7 +188,7 @@ training:
 
 ### Gap 4: Documentation Severely Undercounts Model Inventory (0.5 days)
 **Status:** ❌ Docs Wrong
-**Impact:** Users think only 13 models available, miss 10+ models
+**Impact:** Users should know all 22 models are available
 **Required Changes:**
 1. Update Phase 6 summary table (DONE in this edit)
 2. Update `docs/models/MODEL_CATALOG.md` with all 22+ models
@@ -243,7 +243,7 @@ class BaseModel(ABC):
         pass
 ```
 
-**All 13 models implement this interface.**
+**All 22 models implement this interface.**
 
 ---
 
@@ -825,7 +825,7 @@ Done.
 3. ➡️ Trained models can be used for inference (Phase 8 - future)
 
 **Validation Checklist:**
-- [ ] All 13 models train without errors
+- [ ] All 22 models train without errors
 - [ ] Early stopping works (boosting, neural)
 - [ ] Sample weights applied correctly
 - [ ] GPU acceleration enabled (neural models)

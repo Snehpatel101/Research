@@ -6,7 +6,7 @@ This directory contains all configuration files for the ML Model Factory.
 
 | Directory | Description | Files |
 |-----------|-------------|-------|
-| [models/](models/) | Model-specific configurations | 13 model configs (XGBoost, LSTM, etc.) |
+| [models/](models/) | Model-specific configurations | 22 model configs (XGBoost, LSTM, etc.) |
 | [pipeline/](pipeline/) | Pipeline and training settings | training.yaml, cv.yaml, scaling_stats.json |
 | [ensembles/](ensembles/) | Ensemble configurations | boosting_trio.yaml, temporal_stack.yaml |
 | [experiments/](experiments/) | Experiment templates | baseline_experiment.yaml, full_benchmark.yaml |
@@ -20,7 +20,7 @@ config/
 ├── README.md                           # This file
 ├── INDEX.md                            # Comprehensive configuration guide
 │
-├── models/                             # Model configurations (13 models)
+├── models/                             # Model configurations (22 models)
 │   ├── xgboost.yaml
 │   ├── lightgbm.yaml
 │   ├── catboost.yaml
@@ -46,7 +46,7 @@ config/
 │
 ├── experiments/                        # Experiment templates
 │   ├── baseline_experiment.yaml        # Quick baseline validation
-│   └── full_benchmark.yaml             # Full 13-model benchmark
+│   └── full_benchmark.yaml             # Full 22-model benchmark
 │
 ├── optimization/                       # Optimization artifacts
 │   └── ga_results/                     # GA optimization results

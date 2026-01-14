@@ -76,6 +76,12 @@ def run_command(
     mtf_disable: bool = typer.Option(
         False, "--mtf-disable", help="Disable MTF feature generation entirely"
     ),
+    # Output timeframes (multi-TF support)
+    output_timeframes: str | None = typer.Option(
+        None,
+        "--output-timeframes",
+        help="Comma-separated output timeframes (e.g., '5min,15min,1h') or '9tf' for full 9-TF ladder",
+    ),
     # Feature toggles
     enable_wavelets: bool | None = typer.Option(
         None,
@@ -184,6 +190,8 @@ def run_command(
             mtf_mode=mtf_mode,
             mtf_timeframes=mtf_timeframes,
             mtf_enable=not mtf_disable if mtf_disable else None,
+            # Output timeframes (multi-TF support)
+            output_timeframes=output_timeframes,
             # Feature toggles
             enable_wavelets=enable_wavelets,
             enable_microstructure=enable_microstructure,
