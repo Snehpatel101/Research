@@ -4,6 +4,69 @@ Cross-Validation Runner.
 Orchestrates cross-validation for all models and horizons,
 optionally including hyperparameter tuning with Optuna.
 Generates OOF predictions and stacking datasets for Phase 4.
+
+CV + Feature Selection Interaction (LBL-006)
+============================================
+
+This module provides configurable feature selection behavior during cross-validation.
+Understanding how feature selection interacts with CV is critical to avoid data leakage.
+
+**Default Behavior (feature_selection_inside_fold=True):**
+    Feature selection is performed INSIDE each CV fold using only training data.
+    This is the recommended approach as it prevents validation data from influencing
+    which features are selected, eliminating feature selection leakage.
+
+    For each fold:
+    1. Features are ranked using mutual information on TRAINING data only
+    2. Top N features are selected (default: n_features_to_select=50)
+    3. Model is trained on selected features
+    4. Predictions are made on validation fold using same features
+
+    The final "stable features" are those appearing in >= 60% of folds.
+
+**Hyperparameter Tuning Trade-offs:**
+    When both feature selection and hyperparameter tuning are enabled, there are
+    two strategies controlled by the `tune_per_fold` parameter:
+
+    1. tune_per_fold=False (default): FASTER but potentially suboptimal
+       - Hyperparameters are tuned ONCE on the FULL feature set before CV
+       - Each fold then uses its own selected features with shared HPs
+       - Good when feature selection is stable across folds
+       - Risk: HPs may not be optimal for reduced feature subsets
+
+    2. tune_per_fold=True: More ACCURATE but significantly slower
+       - For each fold, after feature selection, HPs are tuned on selected features
+       - Ensures HPs match the actual feature subset used
+       - n_folds * n_trials evaluations (e.g., 5 folds * 50 trials = 250 evaluations)
+       - Recommended when feature selection varies significantly between folds
+
+**Configuration Examples:**
+    # Fast: Tune once on all features, select features per-fold
+    runner = CrossValidationRunner(
+        cv=cv, models=["xgboost"], horizons=[20],
+        tune_hyperparams=True,
+        select_features=True,
+        tune_per_fold=False,  # default
+    )
+
+    # Accurate: Tune inside each fold after feature selection
+    runner = CrossValidationRunner(
+        cv=cv, models=["xgboost"], horizons=[20],
+        tune_hyperparams=True,
+        select_features=True,
+        tune_per_fold=True,  # slower but more accurate
+    )
+
+    # No feature selection (use all features)
+    runner = CrossValidationRunner(
+        cv=cv, models=["xgboost"], horizons=[20],
+        select_features=False,
+    )
+
+**Legacy Behavior (NOT RECOMMENDED):**
+    Setting feature_selection_inside_fold=False triggers legacy behavior where
+    feature selection is performed BEFORE CV using all data. This causes data
+    leakage and should be avoided. A warning is logged if this option is used.
 """
 
 from __future__ import annotations
@@ -359,17 +422,33 @@ class CrossValidationRunner:
             cv: PurgedKFold cross-validator
             models: List of model names to train
             horizons: List of horizons to process
-            tune_hyperparams: Whether to run Optuna tuning
-            select_features: Whether to run walk-forward feature selection
-            n_features_to_select: Number of features to select
-            tuning_trials: Number of Optuna trials per model
+            tune_hyperparams: Whether to run Optuna tuning. Default True.
+            select_features: Whether to run walk-forward feature selection. Default True.
+                When True, uses mutual information to rank and select top features.
+            n_features_to_select: Number of features to select per fold. Default 50.
+                Only used when select_features=True.
+            tuning_trials: Number of Optuna trials per model. Default 50.
             feature_selection_inside_fold: If True (default), feature selection is
                 performed inside each fold using only training data, preventing leakage.
                 If False, uses legacy behavior (NOT RECOMMENDED - causes leakage).
-            tune_per_fold: If True, hyperparameters are tuned inside each fold
-                AFTER feature selection. More accurate but significantly slower
-                (n_folds * n_trials evaluations). Default False tunes once on
-                full feature set for efficiency.
+            tune_per_fold: Controls when hyperparameters are tuned relative to feature
+                selection. Only relevant when both tune_hyperparams=True and
+                select_features=True. Default False.
+
+                - False (default): Tune HPs once on FULL feature set BEFORE CV.
+                  Faster (n_trials evaluations), but HPs may not be optimal for
+                  the reduced feature subsets used in each fold.
+
+                - True: Tune HPs inside each fold AFTER feature selection.
+                  More accurate (HPs match actual features used), but slower
+                  (n_folds * n_trials evaluations, e.g., 5*50=250).
+
+        Notes:
+            Default behavior summary:
+            1. tune_hyperparams=True: Tune once on all features (tune_per_fold=False)
+            2. select_features=True: Select features per-fold using only training data
+            3. Feature selection uses mutual information for ranking
+            4. "Stable features" are those appearing in >= 60% of folds
         """
         self.cv = cv
         self.models = models

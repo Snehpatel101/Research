@@ -50,21 +50,12 @@ LABEL_HORIZONS = ACTIVE_HORIZONS  # Alias for trainer validation
 # =============================================================================
 # TIMEFRAME CONFIGURATION
 # =============================================================================
-# Timeframe duration in minutes for horizon scaling.
-# When resampling data to different timeframes, horizons must scale accordingly.
-# Example: 5 bars at 5min (25 minutes) = ~2 bars at 15min (~30 minutes)
-# The formula is: new_horizon = old_horizon * (source_minutes / target_minutes)
-HORIZON_TIMEFRAME_MINUTES = {
-    "1min": 1,
-    "5min": 5,
-    "10min": 10,
-    "15min": 15,
-    "20min": 20,
-    "30min": 30,
-    "45min": 45,
-    "60min": 60,
-    "1h": 60,  # Alias for 60min
-}
+# Import timeframe definitions from the canonical source of truth.
+# NOTE: Use get_timeframe_minutes() for parsing timeframe strings.
+from src.common.timeframes import (
+    TIMEFRAME_TO_MINUTES as HORIZON_TIMEFRAME_MINUTES,
+    get_timeframe_minutes as _get_timeframe_minutes,
+)
 
 # Legacy alias for backward compatibility
 HORIZON_TIMEFRAME_SCALING = HORIZON_TIMEFRAME_MINUTES
@@ -189,19 +180,9 @@ def get_scaled_horizons(horizons: list[int], source_tf: str, target_tf: str) -> 
     >>> get_scaled_horizons([5, 20], '5min', '1min')
     [25, 100]  # 5 bars @ 5min (25min) = 25 bars @ 1min
     """
-    if source_tf not in HORIZON_TIMEFRAME_MINUTES:
-        raise ValueError(
-            f"Unknown source timeframe: '{source_tf}'. "
-            f"Supported: {list(HORIZON_TIMEFRAME_MINUTES.keys())}"
-        )
-    if target_tf not in HORIZON_TIMEFRAME_MINUTES:
-        raise ValueError(
-            f"Unknown target timeframe: '{target_tf}'. "
-            f"Supported: {list(HORIZON_TIMEFRAME_MINUTES.keys())}"
-        )
-
-    source_minutes = HORIZON_TIMEFRAME_MINUTES[source_tf]
-    target_minutes = HORIZON_TIMEFRAME_MINUTES[target_tf]
+    # Use centralized timeframe parsing from common module
+    source_minutes = _get_timeframe_minutes(source_tf)
+    target_minutes = _get_timeframe_minutes(target_tf)
 
     # Scale factor: how many target bars equal one source bar in real time
     # new_horizon = old_horizon * (source_minutes / target_minutes)
@@ -264,27 +245,8 @@ def compute_embargo_bars(
     if embargo_time_minutes <= 0:
         raise ValueError(f"embargo_time_minutes must be positive, got {embargo_time_minutes}")
 
-    # Get timeframe in minutes
-    if timeframe in HORIZON_TIMEFRAME_MINUTES:
-        tf_minutes = HORIZON_TIMEFRAME_MINUTES[timeframe]
-    else:
-        # Try to parse common formats
-        tf_lower = timeframe.lower()
-        if tf_lower.endswith("min"):
-            try:
-                tf_minutes = int(tf_lower[:-3])
-            except ValueError:
-                raise ValueError(f"Cannot parse timeframe '{timeframe}'")
-        elif tf_lower.endswith("h"):
-            try:
-                tf_minutes = int(tf_lower[:-1]) * 60
-            except ValueError:
-                raise ValueError(f"Cannot parse timeframe '{timeframe}'")
-        else:
-            raise ValueError(
-                f"Unknown timeframe: '{timeframe}'. "
-                f"Supported: {list(HORIZON_TIMEFRAME_MINUTES.keys())} or formats like '15min', '1h'"
-            )
+    # Use centralized timeframe parsing from common module
+    tf_minutes = _get_timeframe_minutes(timeframe)
 
     # Convert time to bars: embargo_bars = embargo_time_minutes / timeframe_minutes
     embargo_bars = int(embargo_time_minutes / tf_minutes)

@@ -8,15 +8,73 @@
 
 ## Table of Contents
 
-1. [Feature Engineering Philosophy](#feature-engineering-philosophy)
-2. [Feature Sets by Model Family](#feature-sets-by-model-family)
-3. [MTF Feature Construction](#mtf-feature-construction)
-4. [Feature Selection Strategies](#feature-selection-strategies)
-5. [Feature Validation](#feature-validation)
-6. [Feature Scaling](#feature-scaling)
-7. [Adding New Feature Groups](#adding-new-feature-groups)
-8. [Performance Considerations](#performance-considerations)
-9. [Code Examples](#code-examples)
+1. [Feature Set Selection](#feature-set-selection) **(Start here!)**
+2. [Feature Engineering Philosophy](#feature-engineering-philosophy)
+3. [Feature Sets by Model Family](#feature-sets-by-model-family)
+4. [MTF Feature Construction](#mtf-feature-construction)
+5. [Feature Selection Strategies](#feature-selection-strategies)
+6. [Feature Validation](#feature-validation)
+7. [Feature Scaling](#feature-scaling)
+8. [Adding New Feature Groups](#adding-new-feature-groups)
+9. [Performance Considerations](#performance-considerations)
+10. [Code Examples](#code-examples)
+
+---
+
+## Feature Set Selection
+
+> **Authoritative Source:** `src/phase1/config/feature_sets.py`
+
+The pipeline supports multiple pre-defined feature sets optimized for different model families. Select the appropriate feature set based on your model architecture.
+
+### Quick Reference Table
+
+| Feature Set | Use Case | Model Families | Feature Count | MTF |
+|-------------|----------|----------------|---------------|-----|
+| `core_min` | Minimal baseline | All | ~40 | No |
+| `core_full` | All base features | All | ~80 | No |
+| `mtf_plus` | Full with MTF | Tabular, Sequential | ~150 | Yes |
+| `boosting_optimal` | Gradient boosting | XGBoost, LightGBM, CatBoost | 50-100 | No |
+| `neural_optimal` | RNN/CNN sequence models | LSTM, GRU, TCN, InceptionTime, ResNet1D, TFT | 40-60 | No |
+| `transformer_raw` | Attention models | Transformer, PatchTST, iTransformer | 10-15 | No |
+| `ensemble_base` | Ensemble diversity | Stacking, Blending, Voting | 60-80 | Yes |
+
+### Model-Specific Feature Sets
+
+| Feature Set | Target Model | Key Characteristics |
+|-------------|--------------|---------------------|
+| `tcn_optimal` | TCN | Longer sequences (120), local pattern features |
+| `patchtst_optimal` | PatchTST | Minimal features, long sequences (256) |
+| `nbeats_optimal` | N-BEATS | Near-univariate (2-3 features) |
+| `inceptiontime_optimal` | InceptionTime | Multi-scale wavelets (55 features) |
+| `resnet1d_optimal` | ResNet1D | Wavelets + residual-friendly (48 features) |
+| `itransformer_optimal` | iTransformer | Grouped features for cross-attention (25-40) |
+| `tft_optimal` | TFT | Rich features for variable selection (60-80) |
+
+### Usage
+
+```python
+from src.phase1.config.feature_sets import (
+    FEATURE_SET_DEFINITIONS,
+    resolve_feature_set_name,
+    get_feature_set_columns,
+)
+
+# Resolve alias to canonical name
+canonical = resolve_feature_set_name("lstm")  # Returns "neural_optimal"
+
+# Get columns matching a feature set
+columns = get_feature_set_columns(df.columns.tolist(), "boosting_optimal")
+```
+
+### Selection Guidelines
+
+1. **Boosting models (XGBoost, LightGBM, CatBoost):** Use `boosting_optimal` - handles many features well
+2. **RNN models (LSTM, GRU):** Use `neural_optimal` - bounded oscillators, normalized ratios
+3. **Transformer models (PatchTST, iTransformer):** Use `transformer_raw` or model-specific sets
+4. **CNN models (InceptionTime, ResNet1D):** Use model-specific sets with wavelets
+5. **N-BEATS:** Use `nbeats_optimal` - minimal features for decomposition
+6. **Ensembles:** Use `ensemble_base` for diversity or match base model feature sets
 
 ---
 

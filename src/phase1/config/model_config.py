@@ -13,13 +13,20 @@ from enum import Enum
 
 
 class ModelFamily(str, Enum):
-    """Model family classification."""
+    """
+    Model family classification.
+
+    NOTE: The canonical source of truth for model families is the @register decorator
+    in each model class (see src/models/registry.py). This enum should match those values.
+    The registry determines runtime behavior; this config is for data preparation planning.
+    """
 
     BOOSTING = "boosting"
     NEURAL = "neural"
-    TRANSFORMER = "transformer"
+    TRANSFORMER = "transformer"  # Note: Registry uses "neural" for transformers too
     CLASSICAL = "classical"
     ENSEMBLE = "ensemble"
+    META_LEARNER = "meta_learner"
 
 
 class ScalerType(str, Enum):
@@ -170,6 +177,20 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
     # -------------------------------------------------------------------------
     # TRANSFORMER MODELS (attention-based)
     # -------------------------------------------------------------------------
+    # FEATURE SET SELECTION RATIONALE:
+    # - transformer_raw: Minimal features (~10-15) for models designed to learn
+    #   patterns from raw data. Use when model has strong representation learning.
+    # - neural_optimal: Pre-computed features (~40-60) for models that benefit
+    #   from engineered signals. Use when you want faster convergence.
+    #
+    # Current recommendations are based on empirical testing:
+    # - transformer: Uses transformer_raw (vanilla attention learns features well)
+    # - patchtst: Uses neural_optimal (patch-based benefits from pre-computed)
+    # - itransformer: Uses neural_optimal (channel attention on features)
+    # - tft: Uses neural_optimal (variable selection works with rich features)
+    #
+    # Override via model YAML config if needed. See feature_sets.py for details.
+    # -------------------------------------------------------------------------
     "transformer": ModelDataRequirements(
         model_name="transformer",
         family=ModelFamily.TRANSFORMER,
@@ -185,29 +206,84 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
     ),
     "patchtst": ModelDataRequirements(
         model_name="patchtst",
-        family=ModelFamily.TRANSFORMER,
-        feature_set="transformer_raw",
+        family=ModelFamily.NEURAL,  # Registry uses "neural" for all neural models
+        feature_set="neural_optimal",  # Matches patchtst.yaml (was transformer_raw - MOD-002 fix)
         requires_scaling=True,
         scaler_type=ScalerType.STANDARD,
         requires_sequences=True,
-        sequence_length=256,
-        max_features=30,
+        sequence_length=60,  # Default from YAML; can be overridden via config
+        max_features=80,
         supports_categorical=False,
         supports_missing=False,
         description="PatchTST Transformer. Patches input sequences for efficiency.",
     ),
-    "informer": ModelDataRequirements(
-        model_name="informer",
-        family=ModelFamily.TRANSFORMER,
-        feature_set="transformer_raw",
+    # -------------------------------------------------------------------------
+    # ADDITIONAL NEURAL MODELS (MOD-001: added missing models)
+    # -------------------------------------------------------------------------
+    "itransformer": ModelDataRequirements(
+        model_name="itransformer",
+        family=ModelFamily.NEURAL,
+        feature_set="neural_optimal",  # Matches itransformer.yaml
         requires_scaling=True,
-        scaler_type=ScalerType.STANDARD,
+        scaler_type=ScalerType.ROBUST,
         requires_sequences=True,
-        sequence_length=192,
-        max_features=40,
+        sequence_length=60,  # Default from YAML; can be overridden via config
+        max_features=80,
         supports_categorical=False,
         supports_missing=False,
-        description="Informer model. ProbSparse attention for long sequences.",
+        description="iTransformer. Channel-wise attention for multivariate time series.",
+    ),
+    "tft": ModelDataRequirements(
+        model_name="tft",
+        family=ModelFamily.NEURAL,
+        feature_set="neural_optimal",  # Matches tft.yaml
+        requires_scaling=True,
+        scaler_type=ScalerType.ROBUST,
+        requires_sequences=True,
+        sequence_length=60,  # Default from YAML; can be overridden via config
+        max_features=80,
+        supports_categorical=False,
+        supports_missing=False,
+        description="Temporal Fusion Transformer. Interpretable attention and variable selection.",
+    ),
+    "nbeats": ModelDataRequirements(
+        model_name="nbeats",
+        family=ModelFamily.NEURAL,
+        feature_set="neural_optimal",  # Matches nbeats.yaml
+        requires_scaling=True,
+        scaler_type=ScalerType.ROBUST,
+        requires_sequences=True,
+        sequence_length=60,  # Default from YAML; can be overridden via config
+        max_features=80,
+        supports_categorical=False,
+        supports_missing=False,
+        description="N-BEATS. Interpretable trend and seasonality decomposition.",
+    ),
+    "inceptiontime": ModelDataRequirements(
+        model_name="inceptiontime",
+        family=ModelFamily.NEURAL,
+        feature_set="neural_optimal",  # Matches inceptiontime.yaml
+        requires_scaling=True,
+        scaler_type=ScalerType.ROBUST,
+        requires_sequences=True,
+        sequence_length=60,  # Default from YAML; can be overridden via config
+        max_features=80,
+        supports_categorical=False,
+        supports_missing=False,
+        description="InceptionTime CNN. Multi-scale temporal convolutions with residual connections.",
+    ),
+    "resnet1d": ModelDataRequirements(
+        model_name="resnet1d",
+        family=ModelFamily.NEURAL,
+        feature_set="neural_optimal",  # Matches resnet1d.yaml
+        requires_scaling=True,
+        scaler_type=ScalerType.ROBUST,
+        requires_sequences=True,
+        sequence_length=60,  # Default from YAML; can be overridden via config
+        max_features=80,
+        supports_categorical=False,
+        supports_missing=False,
+        description="ResNet1D. 1D residual network for deep temporal feature extraction.",
     ),
     # -------------------------------------------------------------------------
     # CLASSICAL ML MODELS
@@ -248,6 +324,98 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_missing=False,
         description="Support Vector Machine. Kernel-based classification.",
     ),
+    # -------------------------------------------------------------------------
+    # ENSEMBLE MODELS (MOD-001: added missing models)
+    # Note: Ensemble feature_set depends on base models; defaults to boosting_optimal
+    # -------------------------------------------------------------------------
+    "voting": ModelDataRequirements(
+        model_name="voting",
+        family=ModelFamily.ENSEMBLE,
+        feature_set="boosting_optimal",  # Matches voting.yaml; depends on base models
+        requires_scaling=False,  # Depends on base models
+        scaler_type=ScalerType.NONE,
+        requires_sequences=False,  # Depends on base models
+        max_features=None,  # No limit; depends on base models
+        supports_categorical=True,  # Depends on base models
+        supports_missing=True,  # Depends on base models
+        description="Voting ensemble. Combines predictions via majority vote or averaging.",
+    ),
+    "stacking": ModelDataRequirements(
+        model_name="stacking",
+        family=ModelFamily.ENSEMBLE,
+        feature_set="boosting_optimal",  # Matches stacking.yaml; depends on base models
+        requires_scaling=False,  # Depends on base models
+        scaler_type=ScalerType.NONE,
+        requires_sequences=False,  # Meta-learner receives 2D OOF predictions
+        max_features=None,  # No limit; depends on base models
+        supports_categorical=True,  # Depends on base models
+        supports_missing=True,  # Depends on base models
+        description="Stacking ensemble. OOF predictions feed meta-learner.",
+    ),
+    "blending": ModelDataRequirements(
+        model_name="blending",
+        family=ModelFamily.ENSEMBLE,
+        feature_set="boosting_optimal",  # Matches blending.yaml; depends on base models
+        requires_scaling=False,  # Depends on base models
+        scaler_type=ScalerType.NONE,
+        requires_sequences=False,  # Meta-learner receives 2D holdout predictions
+        max_features=None,  # No limit; depends on base models
+        supports_categorical=True,  # Depends on base models
+        supports_missing=True,  # Depends on base models
+        description="Blending ensemble. Holdout predictions feed meta-learner.",
+    ),
+    # -------------------------------------------------------------------------
+    # META-LEARNER MODELS (MOD-001: added missing models)
+    # Meta-learners receive 2D OOF predictions: (n_samples, n_base_models * n_classes)
+    # -------------------------------------------------------------------------
+    "ridge_meta": ModelDataRequirements(
+        model_name="ridge_meta",
+        family=ModelFamily.META_LEARNER,
+        feature_set="meta_learner",  # Special feature set: OOF predictions
+        requires_scaling=False,  # OOF predictions are already probability-like
+        scaler_type=ScalerType.NONE,
+        requires_sequences=False,  # Always receives 2D OOF predictions
+        max_features=None,  # Depends on number of base models
+        supports_categorical=False,
+        supports_missing=False,
+        description="Ridge meta-learner. L2-regularized linear stacking.",
+    ),
+    "mlp_meta": ModelDataRequirements(
+        model_name="mlp_meta",
+        family=ModelFamily.META_LEARNER,
+        feature_set="meta_learner",  # Special feature set: OOF predictions
+        requires_scaling=True,  # MLPs benefit from scaled inputs
+        scaler_type=ScalerType.STANDARD,
+        requires_sequences=False,  # Always receives 2D OOF predictions
+        max_features=None,  # Depends on number of base models
+        supports_categorical=False,
+        supports_missing=False,
+        description="MLP meta-learner. Non-linear neural network stacking.",
+    ),
+    "calibrated_meta": ModelDataRequirements(
+        model_name="calibrated_meta",
+        family=ModelFamily.META_LEARNER,
+        feature_set="meta_learner",  # Special feature set: OOF predictions
+        requires_scaling=False,  # Calibration handles probability scaling
+        scaler_type=ScalerType.NONE,
+        requires_sequences=False,  # Always receives 2D OOF predictions
+        max_features=None,  # Depends on number of base models
+        supports_categorical=False,
+        supports_missing=False,
+        description="Calibrated meta-learner. Isotonic/Platt calibration for stacking.",
+    ),
+    "xgboost_meta": ModelDataRequirements(
+        model_name="xgboost_meta",
+        family=ModelFamily.META_LEARNER,
+        feature_set="meta_learner",  # Special feature set: OOF predictions
+        requires_scaling=False,  # XGBoost handles raw features well
+        scaler_type=ScalerType.NONE,
+        requires_sequences=False,  # Always receives 2D OOF predictions
+        max_features=None,  # Depends on number of base models
+        supports_categorical=False,
+        supports_missing=True,  # XGBoost handles missing values
+        description="XGBoost meta-learner. Gradient boosting for non-linear stacking.",
+    ),
 }
 
 
@@ -286,7 +454,7 @@ ENSEMBLE_CONFIGS: dict[str, EnsembleConfig] = {
     "transformer_ensemble": EnsembleConfig(
         name="transformer_ensemble",
         description="Ensemble of transformer-based models",
-        base_models=["transformer", "patchtst", "informer"],
+        base_models=["transformer", "patchtst", "itransformer"],  # informer removed (not in registry)
         meta_learner="logistic",
         stacking_method="soft",
     ),

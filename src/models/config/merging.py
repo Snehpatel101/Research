@@ -1,12 +1,62 @@
-"""Configuration merging and building functions."""
+"""
+Configuration merging and building functions.
+
+Configuration Precedence (Highest to Lowest)
+============================================
+
+When building model configuration, values are merged in this order,
+with higher-precedence sources overriding lower ones:
+
+1. **CLI Arguments** (Highest Priority)
+   - Explicit user intent via command-line flags
+   - Example: `--batch-size 128`, `--max-epochs 50`
+   - None values are ignored (don't override)
+
+2. **Explicit Config File** (if provided via --config)
+   - User-provided YAML file path
+   - FAIL HARD on errors (user explicitly requested this file)
+   - Example: `--config my_experiment.yaml`
+
+3. **Environment-Specific Overrides**
+   - From config/training.yaml `environments:` section
+   - Auto-detected based on execution environment:
+     * colab: Google Colab environment
+     * local_gpu: Local machine with CUDA available
+     * local_cpu: Local machine without GPU
+   - Common overrides: batch_size, num_workers, mixed_precision
+
+4. **Model-Specific YAML** (auto-discovered)
+   - Located at config/models/{model_name}.yaml
+   - Contains model-specific hyperparameters and defaults
+   - WARN on errors (not user-requested, auto-discovery)
+
+5. **Provided Defaults** (Lowest Priority)
+   - Built-in defaults passed to build_config()
+   - Fallback values when no other source specifies a key
+
+Example Override Flow:
+----------------------
+```
+defaults = {"batch_size": 64, "max_epochs": 100}
+model.yaml = {"batch_size": 256}  # Overrides default
+environment (GPU) = {"batch_size": 512}  # Overrides model.yaml
+CLI args = {"batch_size": 128}  # Final value: 128
+```
+
+Applied Overrides Tracking:
+---------------------------
+Use `get_applied_overrides()` to retrieve a dictionary showing which
+configuration sources were applied for debugging and reproducibility.
+"""
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .environment import detect_environment
+from .environment import Environment, detect_environment
 from .exceptions import ConfigError
 from .loaders import (
     find_model_config,
@@ -18,6 +68,70 @@ from .loaders import (
 from .trainer_config import TrainerConfig
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AppliedOverrides:
+    """
+    Tracks which configuration sources were applied during config building.
+
+    Used for debugging, reproducibility, and surfacing in training artifacts.
+
+    Attributes:
+        environment: Detected environment (colab, local_gpu, local_cpu)
+        environment_overrides: Keys that came from environment-specific config
+        model_yaml_path: Path to model-specific YAML if loaded
+        model_yaml_keys: Keys that came from model YAML
+        explicit_config_path: Path to explicit config file if provided
+        explicit_config_keys: Keys from explicit config file
+        cli_overrides: Keys that came from CLI arguments
+    """
+
+    environment: str = ""
+    environment_overrides: dict[str, Any] = field(default_factory=dict)
+    model_yaml_path: str | None = None
+    model_yaml_keys: list[str] = field(default_factory=list)
+    explicit_config_path: str | None = None
+    explicit_config_keys: list[str] = field(default_factory=list)
+    cli_overrides: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "environment": self.environment,
+            "environment_overrides": self.environment_overrides,
+            "model_yaml_path": self.model_yaml_path,
+            "model_yaml_keys": self.model_yaml_keys,
+            "explicit_config_path": self.explicit_config_path,
+            "explicit_config_keys": self.explicit_config_keys,
+            "cli_overrides": self.cli_overrides,
+        }
+
+
+# Module-level storage for the last applied overrides
+_last_applied_overrides: AppliedOverrides | None = None
+
+
+def get_applied_overrides() -> dict[str, Any]:
+    """
+    Get information about which configuration overrides were applied.
+
+    Returns a dictionary containing:
+    - environment: Detected execution environment
+    - environment_overrides: Settings that came from environment config
+    - model_yaml_path: Path to model YAML if loaded
+    - model_yaml_keys: Keys from model YAML
+    - explicit_config_path: User-provided config file path
+    - explicit_config_keys: Keys from explicit config
+    - cli_overrides: CLI argument values that were applied
+
+    Returns:
+        Dictionary with override tracking information, or empty dict if
+        build_config() hasn't been called yet.
+    """
+    if _last_applied_overrides is None:
+        return {}
+    return _last_applied_overrides.to_dict()
 
 
 def merge_configs(
@@ -54,6 +168,11 @@ def build_config(
     4. Model-specific YAML (config/models/{model_name}.yaml - warn on errors)
     5. Provided defaults
 
+    See module docstring for detailed precedence documentation.
+
+    After calling this function, use `get_applied_overrides()` to retrieve
+    information about which sources contributed to the final configuration.
+
     Args:
         model_name: Name of the model
         cli_args: Arguments from CLI (highest priority)
@@ -67,6 +186,13 @@ def build_config(
     Raises:
         ConfigError: If config_file is explicitly provided and loading fails
     """
+    global _last_applied_overrides
+
+    # Initialize override tracking
+    applied = AppliedOverrides()
+    env = detect_environment()
+    applied.environment = env.value
+
     # Start with defaults
     config = defaults.copy() if defaults else {}
 
@@ -75,6 +201,8 @@ def build_config(
     if model_config_path:
         try:
             model_yaml = load_model_config(model_name, flatten=True, explicit=False)
+            applied.model_yaml_path = str(model_config_path)
+            applied.model_yaml_keys = list(model_yaml.keys())
             config = merge_configs(config, model_yaml)
             logger.debug(f"Merged config from {model_config_path}")
         except Exception as e:
@@ -95,8 +223,14 @@ def build_config(
                     flat_overrides.update(section_data)
                 else:
                     flat_overrides[section_name] = section_data
+
+            # Track environment overrides
+            applied.environment_overrides = flat_overrides.copy()
             config = merge_configs(config, flat_overrides)
-            logger.debug(f"Applied environment overrides: {detect_environment().value}")
+            logger.info(
+                f"Applied environment overrides for '{env.value}': "
+                f"{list(flat_overrides.keys())}"
+            )
 
     # Load explicit config file if provided (FAIL HARD on errors)
     if config_file:
@@ -105,6 +239,10 @@ def build_config(
             # Flatten if structured
             if any(k in file_config for k in ["model", "defaults", "training", "device"]):
                 file_config = flatten_model_config(file_config)
+
+            # Track explicit config
+            applied.explicit_config_path = str(Path(config_file).absolute())
+            applied.explicit_config_keys = list(file_config.keys())
             config = merge_configs(config, file_config)
             logger.debug(f"Merged config from {config_file}")
         except ConfigError:
@@ -122,8 +260,13 @@ def build_config(
     if cli_args:
         # Filter out None values from CLI args
         cli_config = {k: v for k, v in cli_args.items() if v is not None}
+        # Track CLI overrides
+        applied.cli_overrides = cli_config.copy()
         config = merge_configs(config, cli_config)
         logger.debug(f"Applied {len(cli_config)} CLI overrides")
+
+    # Store applied overrides for later retrieval
+    _last_applied_overrides = applied
 
     return config
 

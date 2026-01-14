@@ -18,14 +18,20 @@ from src.common.horizon_config import (
 )
 from src.common.manifest import ArtifactManifest
 from src.common.timeframes import (
+    ALL_CANONICAL_TIMEFRAMES,
     CANONICAL_TIMEFRAMES,
+    EXTENDED_TIMEFRAMES,
     FULL_9TF_LADDER,
     SUPPORTED_TIMEFRAMES,
     TIMEFRAME_ALIASES,
     TIMEFRAME_TO_FREQ,
     TIMEFRAME_TO_MINUTES,
+    get_canonical_from_suffix,
+    get_timeframe_minutes,
+    get_timeframe_suffix,
     is_valid_timeframe,
     normalize_timeframe,
+    normalize_timeframe_list,
     timeframe_to_minutes,
     validate_timeframe,
 )
@@ -46,14 +52,20 @@ __all__ = [
     "auto_scale_purge_embargo",
     "get_default_barrier_params_for_horizon",
     # timeframes
+    "ALL_CANONICAL_TIMEFRAMES",
     "CANONICAL_TIMEFRAMES",
+    "EXTENDED_TIMEFRAMES",
     "FULL_9TF_LADDER",
     "SUPPORTED_TIMEFRAMES",
     "TIMEFRAME_ALIASES",
     "TIMEFRAME_TO_FREQ",
     "TIMEFRAME_TO_MINUTES",
+    "get_canonical_from_suffix",
+    "get_timeframe_minutes",
+    "get_timeframe_suffix",
     "is_valid_timeframe",
     "normalize_timeframe",
+    "normalize_timeframe_list",
     "timeframe_to_minutes",
     "validate_timeframe",
 ]

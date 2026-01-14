@@ -1,11 +1,22 @@
 """
 Constants for Multi-Timeframe (MTF) Feature Integration.
 
-Supports timeframes from 5min (base) up to daily.
+Supports timeframes from 1min (base) up to daily.
 All timeframes must be integer multiples of the base timeframe.
+
+NOTE: This module imports canonical timeframe definitions from src.common.timeframes.
+Do not redefine timeframe constants here - use the common module instead.
 """
 
 from enum import Enum
+
+# Import canonical timeframe definitions from the single source of truth
+from src.common.timeframes import (
+    CANONICAL_TIMEFRAMES,
+    TIMEFRAME_TO_FREQ as _COMMON_TIMEFRAME_TO_FREQ,
+    TIMEFRAME_TO_MINUTES as _COMMON_TIMEFRAME_TO_MINUTES,
+    normalize_timeframe_list,
+)
 
 
 class MTFMode(str, Enum):
@@ -17,59 +28,29 @@ class MTFMode(str, Enum):
 
 
 # Supported MTF timeframes with their minute equivalents
-# All values must be integer multiples of the base timeframe (1min)
-MTF_TIMEFRAMES = {
-    # Base timeframe
-    "1min": 1,
-    "5min": 5,
-    # Short-term MTF (9-timeframe ladder)
-    "10min": 10,
-    "15min": 15,
-    "20min": 20,  # Added for 9-timeframe ladder
-    "25min": 25,  # Added for 9-timeframe ladder
-    "30min": 30,
-    "45min": 45,
-    # Hourly
-    "60min": 60,
-    "1h": 60,  # Alias for 60min
-    # Multi-hour
-    "4h": 240,  # 4 hours = 240 minutes
-    "240min": 240,  # Alias for 4h
-    # Daily
-    "daily": 1440,  # 24 hours = 1440 minutes
-    "1d": 1440,  # Alias for daily
-    "D": 1440,  # Pandas convention alias
-}
+# Imported from common module - includes all canonical forms and aliases
+MTF_TIMEFRAMES = _COMMON_TIMEFRAME_TO_MINUTES
 
 # Required OHLCV columns
 REQUIRED_OHLCV_COLS = ["open", "high", "low", "close", "volume"]
 
-# Default MTF configuration - 7-timeframe intraday ladder
+# Default MTF configuration - 7-timeframe intraday ladder (canonical forms)
 # Provides comprehensive multi-scale analysis from 10min to 1h
 # Excludes 5min since it's commonly used as base timeframe
 # Daily excluded by default for intraday trading focus
-DEFAULT_MTF_TIMEFRAMES = [
+# NOTE: Using canonical forms ("60min" instead of "1h") for consistency
+DEFAULT_MTF_TIMEFRAMES = normalize_timeframe_list([
     "10min",  # Short-term momentum
     "15min",  # Standard short-term
     "20min",  # Extended short-term
     "25min",  # Medium transition
     "30min",  # Standard medium-term
     "45min",  # Extended medium-term
-    "1h",     # Hourly trend
-]
+    "60min",  # Hourly trend (canonical form)
+])
 
-# Full 9-timeframe ladder including 1min base
-FULL_MTF_TIMEFRAMES = [
-    "1min",   # True base timeframe
-    "5min",   # Scalping
-    "10min",  # Short momentum
-    "15min",  # Short-term
-    "20min",  # Extended short
-    "25min",  # Medium transition
-    "30min",  # Medium-term
-    "45min",  # Extended medium
-    "1h",     # Hourly
-]
+# Full 9-timeframe ladder including 1min base (canonical forms)
+FULL_MTF_TIMEFRAMES = CANONICAL_TIMEFRAMES.copy()
 
 # Default mode is to generate both bars and indicators
 DEFAULT_MTF_MODE = MTFMode.BOTH
@@ -82,21 +63,5 @@ MIN_BASE_BARS = 100  # Minimum base TF bars required
 MIN_MTF_BARS = 30  # Minimum MTF bars required per timeframe
 
 # Pandas frequency aliases for resampling
-# Maps our timeframe strings to pandas frequency strings
-PANDAS_FREQ_MAP = {
-    "1min": "1min",
-    "5min": "5min",
-    "10min": "10min",
-    "15min": "15min",
-    "20min": "20min",  # Extended short-term
-    "25min": "25min",  # Medium transition
-    "30min": "30min",
-    "45min": "45min",
-    "60min": "60min",
-    "1h": "1h",
-    "4h": "4h",
-    "240min": "4h",
-    "daily": "D",
-    "1d": "D",
-    "D": "D",
-}
+# Imported from common module for consistency
+PANDAS_FREQ_MAP = _COMMON_TIMEFRAME_TO_FREQ

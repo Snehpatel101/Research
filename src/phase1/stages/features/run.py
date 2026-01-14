@@ -7,6 +7,7 @@ Generates technical indicators and derived features from cleaned OHLCV data.
 Uses the modular feature engineering implementation from stages.features.
 """
 
+import json
 import logging
 import traceback
 from datetime import datetime
@@ -37,14 +38,21 @@ def run_feature_engineering(
     """
     Stage 3: Feature Engineering.
 
-    Generates 50+ technical features including:
+    Generates 150+ technical features including:
     - Moving averages (SMA, EMA)
     - Momentum indicators (RSI, MACD, Stochastic)
     - Volatility indicators (ATR, Bollinger Bands)
     - Volume-based indicators
     - Price patterns and derived features
     - Temporal and regime indicators
-    - Cross-asset features (MES-MGC correlation, beta, etc.)
+    - Wavelet decomposition features
+    - Microstructure proxy features
+    - Multi-timeframe (MTF) indicator features
+
+    NOTE: Symbol Isolation Policy - Each symbol is processed in complete
+    isolation. There are NO cross-symbol or cross-asset features (no correlation,
+    beta, spread, or relative strength features between symbols). See
+    src/phase1/config/features.py SYMBOL ISOLATION POLICY for details.
 
     Args:
         config: Pipeline configuration
@@ -81,6 +89,19 @@ def run_feature_engineering(
         enable_microstructure = feature_toggles.get("microstructure", True)
         enable_volume_features = feature_toggles.get("volume", True)
         enable_volatility_features = feature_toggles.get("volatility", True)
+
+        # Build effective toggles dict for saving (captures actual runtime values)
+        effective_toggles = {
+            "wavelets_enabled": enable_wavelets,
+            "microstructure_enabled": enable_microstructure,
+            "volume_enabled": enable_volume_features,
+            "volatility_enabled": enable_volatility_features,
+            "mtf_enabled": bool(mtf_timeframes),
+            "mtf_mode": mtf_mode,
+            "mtf_timeframes": mtf_timeframes,
+            "mtf_include_ohlcv": mtf_include_ohlcv,
+            "mtf_include_indicators": mtf_include_indicators,
+        }
 
         # Process each symbol independently (no cross-symbol correlation)
         artifacts = []
@@ -175,6 +196,22 @@ def run_feature_engineering(
 
                 logger.info(f"  {symbol} @ {tf}: {len(df_features):,} rows, {len(feature_cols)} features")
 
+        # Save feature toggles to JSON for reproducibility and downstream stages
+        toggles_file = config.features_dir / "feature_toggles.json"
+        config.features_dir.mkdir(parents=True, exist_ok=True)
+        with open(toggles_file, "w") as f:
+            json.dump(effective_toggles, f, indent=2)
+        artifacts.append(toggles_file)
+        logger.info(f"Saved feature toggles to: {toggles_file}")
+
+        # Add feature toggles to manifest
+        manifest.add_artifact(
+            name="feature_toggles",
+            file_path=toggles_file,
+            stage="feature_engineering",
+            metadata=effective_toggles,
+        )
+
         return create_stage_result(
             stage_name="feature_engineering",
             start_time=start_time,
@@ -183,6 +220,7 @@ def run_feature_engineering(
                 "feature_results": feature_metadata,
                 "output_timeframes": output_timeframes,
                 "multi_tf_mode": is_multi_tf,
+                "feature_toggles": effective_toggles,
             },
         )
 

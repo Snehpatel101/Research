@@ -15,7 +15,13 @@ from .loaders import (
     load_training_config,
     load_yaml_config,
 )
-from .merging import build_config, create_trainer_config, merge_configs
+from .merging import (
+    AppliedOverrides,
+    build_config,
+    create_trainer_config,
+    get_applied_overrides,
+    merge_configs,
+)
 from .paths import CONFIG_DIR, CONFIG_ROOT, CV_CONFIG_PATH, TRAINING_CONFIG_PATH
 from .serialization import save_config, save_config_json
 from .trainer_config import TrainerConfig
@@ -58,6 +64,8 @@ __all__ = [
     "merge_configs",
     "build_config",
     "create_trainer_config",
+    "get_applied_overrides",
+    "AppliedOverrides",
     # Serialization
     "save_config",
     "save_config_json",

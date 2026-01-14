@@ -1,4 +1,10 @@
-I took a deeper pass focused on configuration and structure. Here’s a clearer map of what’s real vs. what looks unused or conflicting, without changing anything.
+# HISTORICAL - Configuration Findings
+
+> **SUPERSEDED:** This document is historical. See `CLAUDE.md` and `docs/planning/PROJECT_CHARTER.md` for current status.
+
+---
+
+I took a deeper pass focused on configuration and structure. Here's a clearer map of what's real vs. what looks unused or conflicting, without changing anything.
 
 Config Map (Source vs. Surface)
 

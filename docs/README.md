@@ -55,7 +55,7 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 | 3 | Features | 180+ indicator features | ✅ Complete | [PHASE_3_FEATURES.md](implementation/PHASE_3_FEATURES.md) |
 | 4 | Labeling | Triple-barrier + Optuna optimization | ✅ Complete | [PHASE_4_LABELING.md](implementation/PHASE_4_LABELING.md) |
 | 5 | Adapters | Model-family data adapters | ✅ Complete | [PHASE_5_ADAPTERS.md](implementation/PHASE_5_ADAPTERS.md) |
-| 6 | Training | 22 models across 6 families | ✅ Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
+| 6 | Training | 23 models across 6 families | ✅ Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
 | 7 | Stacking | Heterogeneous ensemble training | ✅ Complete | [PHASE_7_META_LEARNER_STACKING.md](implementation/PHASE_7_META_LEARNER_STACKING.md) |
 
 ---
@@ -147,14 +147,17 @@ Project notes and refactor summaries live in [notes/](notes/README.md).
 
 | Component | Status | Count |
 |-----------|--------|-------|
-| **Models Implemented** | ✅ Complete | 22 of 22 (CatBoost adds 1 if installed) |
+| **Models Implemented** | ✅ Complete | 23 models (22 if CatBoost unavailable) |
 | **MTF Stage 2** | ✅ Complete | 9 of 9 timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h) |
 | **MTF Stages 3-6** | ⚠️ Partial | Downstream stages process target_timeframe only |
 | **Ensemble Methods** | ✅ Complete | 3 (Voting, Stacking, Blending) |
 | **Meta-Learners** | ✅ Complete | 4 (Ridge, MLP, Calibrated, XGBoost) |
 | **Features** | ✅ Complete | ~180 |
 
-**Models by Family (6 Families, 22 Models):**
+**Models by Family (6 Families, 23 Models):**
+
+> **Note:** Run `python scripts/generate_model_inventory.py` to regenerate this list from the ModelRegistry.
+
 - **Tabular (6):** XGBoost, LightGBM, CatBoost, Random Forest, Logistic, SVM
 - **Neural (10):** LSTM, GRU, TCN, Transformer, InceptionTime, ResNet1D, N-BEATS, PatchTST, iTransformer, TFT
 - **Ensemble (3):** Voting, Stacking, Blending

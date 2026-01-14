@@ -132,15 +132,19 @@ class TestGetScaledHorizons:
         """Unknown source timeframe should raise ValueError."""
         from src.phase1.config import get_scaled_horizons
 
-        with pytest.raises(ValueError, match="Unknown source timeframe"):
-            get_scaled_horizons([5, 20], '3min', '5min')
+        # NOTE: With enhanced timeframe parsing, formats like '3min' are now valid
+        # (parsed dynamically). Test with truly invalid format.
+        with pytest.raises(ValueError, match="Unrecognized timeframe"):
+            get_scaled_horizons([5, 20], 'invalid', '5min')
 
     def test_unknown_target_timeframe_raises(self):
         """Unknown target timeframe should raise ValueError."""
         from src.phase1.config import get_scaled_horizons
 
-        with pytest.raises(ValueError, match="Unknown target timeframe"):
-            get_scaled_horizons([5, 20], '5min', '3min')
+        # NOTE: With enhanced timeframe parsing, formats like '3min' are now valid
+        # (parsed dynamically). Test with truly invalid format.
+        with pytest.raises(ValueError, match="Unrecognized timeframe"):
+            get_scaled_horizons([5, 20], '5min', 'invalid')
 
     def test_1h_alias_works(self):
         """1h should be recognized as alias for 60min."""
@@ -521,11 +525,19 @@ class TestTimeframeScalingConfig:
     """Tests for HORIZON_TIMEFRAME_MINUTES configuration."""
 
     def test_timeframe_scaling_keys(self):
-        """HORIZON_TIMEFRAME_MINUTES should have expected keys."""
+        """HORIZON_TIMEFRAME_MINUTES should include all canonical timeframes."""
         from src.phase1.config import HORIZON_TIMEFRAME_MINUTES
 
-        expected_keys = {'1min', '5min', '10min', '15min', '20min', '30min', '45min', '60min', '1h'}
-        assert set(HORIZON_TIMEFRAME_MINUTES.keys()) == expected_keys
+        # Expected canonical intraday timeframes
+        expected_intraday = {'1min', '5min', '10min', '15min', '20min', '25min', '30min', '45min', '60min'}
+        # The dict may also include aliases and extended timeframes
+        actual_keys = set(HORIZON_TIMEFRAME_MINUTES.keys())
+
+        # Verify all canonical intraday timeframes are present
+        assert expected_intraday.issubset(actual_keys), f"Missing keys: {expected_intraday - actual_keys}"
+
+        # Verify 1h alias is present
+        assert '1h' in actual_keys, "1h alias should be present"
 
     def test_5min_value(self):
         """5min should have value 5 (minutes)."""

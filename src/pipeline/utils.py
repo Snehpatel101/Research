@@ -137,3 +137,125 @@ def log_stage_summary(title: str, items: dict[str, Any], logger: logging.Logger)
     logger.info("-" * 50)
     for key, value in items.items():
         logger.info(f"  {key}: {value}")
+
+
+# =============================================================================
+# CONFIG SNAPSHOT UTILITIES (DATA-004)
+# =============================================================================
+
+# Keys to exclude from config snapshots (secrets, credentials, absolute paths)
+CONFIG_SNAPSHOT_EXCLUDE_KEYS = {
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "credential",
+    "auth",
+}
+
+# Path-related keys to sanitize (convert to relative or basename only)
+CONFIG_SNAPSHOT_PATH_KEYS = {
+    "project_root",
+    "data_dir",
+    "raw_data_dir",
+    "clean_data_dir",
+    "features_dir",
+    "splits_dir",
+    "output_dir",
+    "model_path",
+    "checkpoint_dir",
+}
+
+
+def capture_config_snapshot(config: Any, include_paths: bool = False) -> dict[str, Any]:
+    """
+    Safely serialize a config object to a dictionary for manifest snapshots.
+
+    Excludes sensitive data like secrets/credentials and optionally sanitizes
+    absolute paths to prevent environment-specific information leaking.
+
+    Args:
+        config: Configuration object (dataclass, dict, or object with attributes)
+        include_paths: If True, include path values (as basenames only).
+            If False, path keys are excluded entirely.
+
+    Returns:
+        Dictionary with safe config values for manifest storage.
+
+    Example:
+        >>> from src.pipeline.utils import capture_config_snapshot
+        >>> snapshot = capture_config_snapshot(pipeline_config)
+        >>> manifest.set_config_snapshot(snapshot)
+
+    Note:
+        This function is designed to be defensive - it catches and logs
+        serialization errors rather than failing.
+    """
+    snapshot: dict[str, Any] = {}
+
+    try:
+        # Convert config to dict if needed
+        if hasattr(config, "__dict__"):
+            config_dict = vars(config)
+        elif hasattr(config, "to_dict"):
+            config_dict = config.to_dict()
+        elif isinstance(config, dict):
+            config_dict = config
+        else:
+            logger.warning(f"Unknown config type: {type(config)}, returning empty snapshot")
+            return {}
+
+        for key, value in config_dict.items():
+            # Skip private attributes
+            if key.startswith("_"):
+                continue
+
+            # Skip excluded keys (secrets, credentials)
+            key_lower = key.lower()
+            if any(excluded in key_lower for excluded in CONFIG_SNAPSHOT_EXCLUDE_KEYS):
+                continue
+
+            # Handle path keys
+            if key in CONFIG_SNAPSHOT_PATH_KEYS or key_lower.endswith("_path"):
+                if include_paths and value is not None:
+                    # Include only basename to avoid absolute paths
+                    snapshot[key] = Path(value).name if value else None
+                continue
+
+            # Serialize the value
+            snapshot[key] = _serialize_config_value(value)
+
+    except Exception as e:
+        logger.warning(f"Error capturing config snapshot: {e}")
+        return {"error": str(e)}
+
+    return snapshot
+
+
+def _serialize_config_value(value: Any) -> Any:
+    """
+    Serialize a config value to JSON-compatible format.
+
+    Handles common types: primitives, lists, dicts, Paths, dataclasses.
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, (list, tuple)):
+        return [_serialize_config_value(v) for v in value]
+
+    if isinstance(value, dict):
+        return {k: _serialize_config_value(v) for k, v in value.items()}
+
+    if isinstance(value, Path):
+        return value.name  # Return basename only
+
+    if hasattr(value, "__dict__"):
+        # Recursively serialize objects with __dict__
+        return {k: _serialize_config_value(v) for k, v in vars(value).items() if not k.startswith("_")}
+
+    # Fallback: convert to string
+    return str(value)

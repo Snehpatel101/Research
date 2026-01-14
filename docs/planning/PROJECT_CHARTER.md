@@ -28,7 +28,7 @@ Build a **production-grade, model-agnostic ML factory** for systematic futures t
 - ✅ Triple-barrier labeling with GA optimization
 - ✅ Purge/embargo for leakage prevention
 - ✅ Train/val/test splits (70/15/15)
-- ✅ **MTF complete** (8 intraday timeframes: 5m-1h)
+- ✅ **MTF complete** (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
 ### Phase 2: Models
 - ✅ **22 MODELS IMPLEMENTED** (see inventory below)
@@ -286,8 +286,7 @@ Training and serving share **identical pipelines:**
 **MTF Timeframes:** 1m, 5m, 10m, 15m, 30m, 45m, 1h, 4h, daily
 
 **Status:**
-- ✅ 8 intraday timeframes implemented (5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
-- ✅ Full 9-TF ladder available (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- ✅ 9 intraday timeframes implemented (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - ⚠️ Strategy 3 (multi-resolution ingestion) planned for future
 
 ### Three MTF Strategies (Design)
@@ -551,4 +550,4 @@ For questions, issues, or contributions:
 **Version History:**
 - **v1.0** (2025-12-29): Initial charter (19 models claimed, MTF planned)
 - **v2.0** (2025-12-30): Accurate status (13 models implemented, MTF in progress)
-- **v3.0** (2026-01-13): Updated to 22 models, MTF complete (8 intraday timeframes)
+- **v3.0** (2026-01-13): Updated to 23 models, MTF complete (9 intraday timeframes)

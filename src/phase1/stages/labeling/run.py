@@ -3,10 +3,20 @@ Stage 4: Initial Triple-Barrier Labeling - Pipeline Wrapper.
 
 This module provides the pipeline integration for initial labeling,
 extracting the orchestration logic from pipeline/stages/labeling.py.
+
+Required Input Columns:
+    - close, high, low, open: OHLC price data
+    - atr_14: 14-period Average True Range (computed in feature engineering stage)
+
+The ATR column is required for dynamic barrier calculation. Barriers are set as
+multiples of ATR to adapt to current volatility conditions. Without ATR, the
+triple-barrier labeling cannot compute appropriate profit targets and stop losses.
 """
 
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -18,6 +28,120 @@ if TYPE_CHECKING:
     from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# REQUIRED COLUMNS FOR LABELING
+# =============================================================================
+# ATR is required for dynamic barrier calculation. Barriers are set as multiples
+# of ATR (e.g., k_up * atr_14 for take-profit, k_down * atr_14 for stop-loss).
+# This dependency must be satisfied by the feature engineering stage (Stage 3).
+REQUIRED_LABELING_COLUMNS = ["atr_14"]
+
+# OHLC columns required for triple-barrier calculation
+REQUIRED_OHLC_COLUMNS = ["open", "high", "low", "close"]
+
+
+def validate_labeling_prerequisites(
+    df: pd.DataFrame,
+    required_cols: list[str] | None = None,
+    symbol: str = "",
+    timeframe: str = "",
+) -> None:
+    """
+    Validate that all required columns exist before labeling.
+
+    This function performs early validation of the input DataFrame to ensure
+    all required columns for triple-barrier labeling are present. Failing fast
+    with a clear error message is preferred over cryptic KeyError exceptions
+    during the labeling computation.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame with features and OHLC data
+    required_cols : list[str], optional
+        List of required column names. If None, uses REQUIRED_LABELING_COLUMNS + REQUIRED_OHLC_COLUMNS.
+    symbol : str, optional
+        Symbol name for error message context
+    timeframe : str, optional
+        Timeframe for error message context
+
+    Raises
+    ------
+    ValueError
+        If any required column is missing from the DataFrame
+
+    Examples
+    --------
+    >>> df = pd.DataFrame({"open": [1], "high": [2], "low": [0.5], "close": [1.5]})
+    >>> validate_labeling_prerequisites(df)  # Raises ValueError: missing atr_14
+    ValueError: Labeling prerequisites not met: Missing required columns: ['atr_14']
+
+    >>> df["atr_14"] = 0.1
+    >>> validate_labeling_prerequisites(df)  # OK, no exception raised
+    """
+    if required_cols is None:
+        required_cols = REQUIRED_LABELING_COLUMNS + REQUIRED_OHLC_COLUMNS
+
+    missing_cols = [col for col in required_cols if col not in df.columns]
+
+    if missing_cols:
+        context = ""
+        if symbol or timeframe:
+            context = f" for {symbol} @ {timeframe}" if symbol and timeframe else f" for {symbol or timeframe}"
+
+        raise ValueError(
+            f"Labeling prerequisites not met{context}: "
+            f"Missing required columns: {missing_cols}. "
+            f"Ensure feature engineering (Stage 3) completed successfully and includes ATR calculation. "
+            f"ATR is required for dynamic barrier calculation (barriers are ATR multiples)."
+        )
+
+
+def _validate_horizons_vs_data(
+    horizons: list[int],
+    data_length: int,
+    symbol: str = "",
+    timeframe: str = "",
+) -> None:
+    """
+    Validate that horizons are appropriate for the data length.
+
+    This function checks that horizons are not too large relative to the data size.
+    The rule is: max(horizons) should be < 10% of data_length to ensure at least
+    10 samples per horizon for meaningful label distribution statistics.
+
+    Parameters
+    ----------
+    horizons : list[int]
+        List of horizon values
+    data_length : int
+        Number of rows in the data
+    symbol : str, optional
+        Symbol for context in log messages
+    timeframe : str, optional
+        Timeframe for context in log messages
+
+    Notes
+    -----
+    This function logs warnings but does not raise errors, allowing the pipeline
+    to continue with potentially problematic horizon/data combinations while
+    alerting the user to review their configuration.
+    """
+    if data_length <= 0:
+        logger.warning(f"Invalid data_length={data_length}, skipping horizon validation")
+        return
+
+    max_recommended = data_length // 10
+    context = f" for {symbol} @ {timeframe}" if symbol and timeframe else ""
+
+    for h in horizons:
+        if h >= max_recommended:
+            logger.warning(
+                f"Horizon {h} may be too large{context}: "
+                f"data has {data_length:,} rows, recommended max horizon is {max_recommended}. "
+                f"Consider using smaller horizons or more data for reliable label distributions."
+            )
 
 
 def run_initial_labeling(
@@ -64,8 +188,12 @@ def run_initial_labeling(
         # Get barrier overrides from config (if specified)
         barrier_overrides = getattr(config, "barrier_overrides", None) or {}
 
+        # Track provenance for all labeling operations
+        all_provenance: dict[str, dict[str, Any]] = {}
+
         for symbol in config.symbols:
             label_stats[symbol] = {}
+            all_provenance[symbol] = {}
 
             # Process each output timeframe
             for tf in output_timeframes:
@@ -79,20 +207,38 @@ def run_initial_labeling(
                 df = pd.read_parquet(features_path)
                 logger.info(f"  Loaded {len(df):,} rows")
 
-                # Check for ATR column
-                atr_col = "atr_14"
-                if atr_col not in df.columns:
-                    raise ValueError(f"ATR column '{atr_col}' not found in features for {symbol} @ {tf}")
+                # Validate labeling prerequisites early (LBL-001)
+                # This provides a clear error if ATR or OHLC columns are missing
+                validate_labeling_prerequisites(df, symbol=symbol, timeframe=tf)
+
+                # Validate horizons against data length (LBL-005)
+                # Log warnings if horizons are too large relative to data size
+                _validate_horizons_vs_data(
+                    horizons=config.label_horizons,
+                    data_length=len(df),
+                    symbol=symbol,
+                    timeframe=tf,
+                )
 
                 tf_stats = {}
+                tf_provenance: dict[str, Any] = {}
+                atr_col = "atr_14"  # Required column validated above
 
                 # Apply initial labeling with default parameters for each horizon
                 for horizon in config.label_horizons:
+                    # Determine barrier source and values (LBL-002: provenance tracking)
                     # Use barrier_overrides if specified, otherwise use defaults
                     # Defaults will be optimized by GA in later stages
+                    override_applied = bool(barrier_overrides)
                     k_up = barrier_overrides.get("k_up", 2.0)
                     k_down = barrier_overrides.get("k_down", 1.0)
                     max_bars = barrier_overrides.get("max_bars", horizon * 3)
+
+                    # Determine barrier source for provenance
+                    if override_applied:
+                        barrier_source = "config_override"
+                    else:
+                        barrier_source = "defaults"
 
                     logger.info(
                         f"  Horizon {horizon}: k_up={k_up}, k_down={k_down}, max_bars={max_bars}"
@@ -130,6 +276,16 @@ def run_initial_labeling(
                         "neutral_pct": n_neutral / total * 100,
                     }
 
+                    # Record provenance for this horizon (LBL-002)
+                    tf_provenance[f"h{horizon}"] = {
+                        "barrier_source": barrier_source,
+                        "k_up_value": k_up,
+                        "k_down_value": k_down,
+                        "max_bars_value": max_bars,
+                        "override_applied": override_applied,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+
                     logger.info(
                         f"    Distribution: L={n_long/total*100:.1f}% "
                         f"S={n_short/total*100:.1f}% N={n_neutral/total*100:.1f}%"
@@ -141,6 +297,7 @@ def run_initial_labeling(
                 artifacts.append(output_path)
 
                 label_stats[symbol][tf] = tf_stats
+                all_provenance[symbol][tf] = tf_provenance
 
                 manifest.add_artifact(
                     name=f"initial_labels_{symbol}_{tf}",
@@ -155,6 +312,21 @@ def run_initial_labeling(
 
                 logger.info(f"  Saved initial labels to {output_path}")
 
+        # Save labeling provenance metadata (LBL-002)
+        provenance_path = labels_dir / "labeling_provenance.json"
+        provenance_metadata = {
+            "stage": "initial_labeling",
+            "created_at": datetime.now().isoformat(),
+            "symbols": list(config.symbols),
+            "timeframes": output_timeframes,
+            "horizons": config.label_horizons,
+            "provenance_by_symbol": all_provenance,
+        }
+        with open(provenance_path, "w") as f:
+            json.dump(provenance_metadata, f, indent=2)
+        artifacts.append(provenance_path)
+        logger.info(f"Saved labeling provenance to {provenance_path}")
+
         return create_stage_result(
             stage_name="initial_labeling",
             start_time=start_time,
@@ -164,6 +336,8 @@ def run_initial_labeling(
                 "label_stats": label_stats,
                 "output_timeframes": output_timeframes,
                 "multi_tf_mode": is_multi_tf,
+                "labeling_provenance": all_provenance,
+                "provenance_path": str(provenance_path),
             },
         )
 

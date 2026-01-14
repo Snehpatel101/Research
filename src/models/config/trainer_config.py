@@ -13,7 +13,22 @@ class TrainerConfig:
 
     model_name: str
     horizon: int = 20
-    feature_set: str = "boosting_optimal"
+    # NOTE (CFG-002): TrainerConfig.feature_set controls feature SELECTION during training,
+    # which is different from PipelineConfig.feature_set that controls feature GENERATION.
+    #
+    # - PipelineConfig.feature_set="full" generates ALL ~180 features in Phase 1 pipeline.
+    #   This ensures the complete feature superset is available for any model type.
+    #
+    # - TrainerConfig.feature_set="boosting_optimal" selects a model-appropriate subset
+    #   during Phase 6 training. Each model family gets tailored features:
+    #     * "boosting_optimal" (~50 features): For XGBoost, LightGBM, CatBoost
+    #     * "neural_optimal" (~43 features): For LSTM, GRU, TCN
+    #     * "transformer_raw" (~23 features): For Transformer, PatchTST
+    #     * "full": Use all available features (no selection)
+    #
+    # This intentional separation allows per-model feature selection without
+    # re-running the data pipeline. See src/phase1/config/feature_sets.py for definitions.
+    feature_set: str = "boosting_optimal"  # Controls feature SELECTION, not generation
     sequence_length: int = 60
     batch_size: int = 256
     max_epochs: int = 100

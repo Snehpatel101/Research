@@ -2,91 +2,27 @@
 Feature configuration for the ensemble trading pipeline.
 
 This module contains configuration for:
-- Supported timeframes for resampling
+- Supported timeframes for resampling (imported from common module)
 - Feature selection thresholds (correlation, variance)
-- Cross-asset feature configuration
+- Symbol isolation policy (no cross-asset features)
 - Multi-timeframe (MTF) feature configuration
+
+NOTE: Timeframe definitions are imported from src.common.timeframes.
+Do not redefine timeframe constants here - use the common module instead.
 """
 
 # =============================================================================
 # TIMEFRAME CONFIGURATION
 # =============================================================================
-# Supported timeframes for resampling pipeline.
-# Input data (1min bars) can be resampled to any of these target timeframes.
-# The base timeframe for ML features is typically 5min.
-SUPPORTED_TIMEFRAMES = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min", "1h"]
-
-# Mapping from timeframe string to pandas frequency for resampling
-TIMEFRAME_TO_FREQ = {
-    "1min": "1min",
-    "5min": "5min",
-    "10min": "10min",
-    "15min": "15min",
-    "20min": "20min",
-    "25min": "25min",
-    "30min": "30min",
-    "45min": "45min",
-    "60min": "60min",
-    "1h": "1h",
-}
-
-
-def validate_timeframe(timeframe: str) -> None:
-    """
-    Validate that a timeframe string is supported.
-
-    Parameters
-    ----------
-    timeframe : str
-        Timeframe string to validate (e.g., '5min', '15min')
-
-    Raises
-    ------
-    ValueError
-        If the timeframe is not in SUPPORTED_TIMEFRAMES
-    """
-    if timeframe not in SUPPORTED_TIMEFRAMES:
-        raise ValueError(
-            f"Unsupported timeframe: '{timeframe}'. "
-            f"Supported timeframes: {SUPPORTED_TIMEFRAMES}"
-        )
-
-
-def parse_timeframe_to_minutes(timeframe: str) -> int:
-    """
-    Parse a timeframe string to minutes.
-
-    Parameters
-    ----------
-    timeframe : str
-        Timeframe string (e.g., '5min', '1h')
-
-    Returns
-    -------
-    int
-        Number of minutes
-
-    Raises
-    ------
-    ValueError
-        If the timeframe format is not recognized
-    """
-    timeframe = timeframe.lower().strip()
-
-    if timeframe.endswith("min"):
-        try:
-            return int(timeframe[:-3])
-        except ValueError:
-            raise ValueError(f"Invalid timeframe format: '{timeframe}'")
-    elif timeframe.endswith("h"):
-        try:
-            return int(timeframe[:-1]) * 60
-        except ValueError:
-            raise ValueError(f"Invalid timeframe format: '{timeframe}'")
-    else:
-        raise ValueError(
-            f"Unrecognized timeframe format: '{timeframe}'. " f"Expected format like '5min' or '1h'"
-        )
+# Import canonical timeframe definitions from the single source of truth
+from src.common.timeframes import (
+    SUPPORTED_TIMEFRAMES,
+    TIMEFRAME_TO_FREQ,
+    get_timeframe_minutes as parse_timeframe_to_minutes,
+    is_valid_timeframe,
+    normalize_timeframe_list,
+    validate_timeframe,
+)
 
 
 def auto_scale_purge_embargo(
@@ -109,19 +45,35 @@ def auto_scale_purge_embargo(
     )
 
 
-def validate_horizons(horizons: list) -> list:
+def validate_horizons(horizons: list, data_length: int | None = None) -> list:
     """
-    Validate label horizons.
+    Validate label horizons and optionally check against data length.
 
     Parameters
     ----------
     horizons : list
         List of horizon values
+    data_length : int, optional
+        Length of the dataset. If provided, validates that max(horizons) < data_length / 10
+        to ensure sufficient samples for meaningful model training.
 
     Returns
     -------
     list
         List of validation error messages (empty if valid)
+
+    Notes
+    -----
+    When data_length is provided, this function checks that horizons are not too large
+    relative to the data size. The rule max(horizons) < data_length / 10 ensures at
+    least 10 samples per horizon, which is a minimum requirement for meaningful statistics.
+
+    Examples
+    --------
+    >>> validate_horizons([5, 20])  # Basic validation
+    []
+    >>> validate_horizons([5, 20], data_length=100)  # 20 >= 10, too large
+    ['Horizon 20 may be too large for data length 100 (max recommended: 10)...']
     """
     errors = []
 
@@ -136,6 +88,73 @@ def validate_horizons(horizons: list) -> list:
             errors.append(f"Horizon must be >= 1, got {h}")
         elif h > 100:
             errors.append(f"Horizon {h} is very large (> 100 bars). Consider smaller values.")
+
+    # Validate horizons against data length (LBL-005)
+    if data_length is not None and data_length > 0:
+        max_recommended_horizon = data_length // 10
+        for h in horizons:
+            if isinstance(h, int) and h >= max_recommended_horizon:
+                errors.append(
+                    f"Horizon {h} may be too large for data length {data_length} "
+                    f"(max recommended: {max_recommended_horizon}). "
+                    f"Horizons should be < 10% of data length to ensure sufficient training samples."
+                )
+
+    return errors
+
+
+def validate_horizons_with_data(
+    horizons: list[int],
+    data_length: int,
+    raise_on_error: bool = False,
+) -> list[str]:
+    """
+    Validate horizons against data length with detailed warnings.
+
+    This function provides additional context beyond validate_horizons() by
+    logging warnings and optionally raising errors for horizon/data mismatches.
+
+    Parameters
+    ----------
+    horizons : list[int]
+        List of horizon values to validate
+    data_length : int
+        Number of samples in the dataset
+    raise_on_error : bool, default False
+        If True, raises ValueError for validation failures.
+        If False, logs warnings and returns error list.
+
+    Returns
+    -------
+    list[str]
+        List of validation error/warning messages
+
+    Raises
+    ------
+    ValueError
+        If raise_on_error=True and validation fails
+
+    Examples
+    --------
+    >>> # Warning case - horizons are large relative to data
+    >>> validate_horizons_with_data([5, 20], data_length=150)
+    ['Horizon 20 is >= 10% of data length...']
+
+    >>> # Error case with raise_on_error
+    >>> validate_horizons_with_data([5, 20], data_length=50, raise_on_error=True)
+    ValueError: Horizon validation failed: ...
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    errors = validate_horizons(horizons, data_length=data_length)
+
+    if errors:
+        for err in errors:
+            logger.warning(f"Horizon validation: {err}")
+
+        if raise_on_error:
+            raise ValueError(f"Horizon validation failed: {'; '.join(errors)}")
 
     return errors
 
@@ -239,6 +258,8 @@ MTF_CONFIG = {
     # Master enable/disable for MTF features
     "enabled": True,
     # Base timeframe of the input data
+    # NOTE: This is the default. Use get_mtf_base_timeframe() to derive
+    # the base timeframe from a target timeframe dynamically.
     "base_timeframe": "1min",
     # Higher timeframes to compute features for
     # All TFs must be >= base timeframe (1min) since we resample UP
@@ -276,6 +297,60 @@ MTF_CONFIG = {
 }
 
 
+def get_mtf_base_timeframe(target_tf: str | None = None) -> str:
+    """
+    Get the MTF base timeframe, optionally deriving it from a target timeframe.
+
+    When processing data at a specific timeframe, the MTF base should match
+    that timeframe. This function returns the appropriate base timeframe:
+    - If target_tf is provided and valid, returns target_tf (the base is the current TF)
+    - If target_tf is None or not provided, returns the default from MTF_CONFIG
+
+    Parameters
+    ----------
+    target_tf : str, optional
+        The target/primary timeframe being processed (e.g., "5min", "15min").
+        If provided, MTF features will use this as the base and add features
+        from timeframes strictly greater than this.
+
+    Returns
+    -------
+    str
+        The base timeframe to use for MTF feature computation.
+
+    Examples
+    --------
+    >>> get_mtf_base_timeframe()  # Returns default "1min"
+    '1min'
+    >>> get_mtf_base_timeframe("5min")  # Processing 5min data
+    '5min'
+    >>> get_mtf_base_timeframe("15min")  # Processing 15min data
+    '15min'
+
+    Notes
+    -----
+    When target_tf is specified, MTF features will only include timeframes
+    strictly greater than target_tf. For example, if target_tf="15min",
+    MTF features from ["30min", "45min", "60min"] will be included, but
+    not from ["5min", "10min", "15min"].
+    """
+    if target_tf is None:
+        return MTF_CONFIG["base_timeframe"]
+
+    # Validate the target timeframe using the common module
+    if is_valid_timeframe(target_tf, allow_extended=True):
+        return target_tf
+
+    # If invalid, log warning and return default
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        f"Invalid target_tf '{target_tf}' provided to get_mtf_base_timeframe(). "
+        f"Falling back to default: {MTF_CONFIG['base_timeframe']}"
+    )
+    return MTF_CONFIG["base_timeframe"]
+
+
 def get_mtf_config() -> dict:
     """
     Get the MTF configuration dictionary.
@@ -308,6 +383,8 @@ def validate_mtf_config(config: dict = None) -> list[str]:
     list[str]
         List of validation error messages (empty if valid)
     """
+    from src.common.timeframes import is_valid_timeframe
+
     if config is None:
         config = MTF_CONFIG
 
@@ -321,11 +398,13 @@ def validate_mtf_config(config: dict = None) -> list[str]:
             f"got '{config.get('base_timeframe')}'"
         )
 
-    # Validate MTF timeframes
-    valid_mtf_tfs = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min", "1h"]
+    # Validate MTF timeframes using common module
     for tf in config.get("mtf_timeframes", []):
-        if tf not in valid_mtf_tfs:
-            errors.append(f"MTF timeframe '{tf}' not in valid list {valid_mtf_tfs}")
+        if not is_valid_timeframe(tf, allow_extended=True):
+            errors.append(
+                f"MTF timeframe '{tf}' is not valid. "
+                f"Use canonical forms like '5min', '15min', '60min', etc."
+            )
 
     # Validate minimum bars
     if config.get("min_base_bars", 0) < 100:

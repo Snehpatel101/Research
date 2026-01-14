@@ -52,7 +52,7 @@ class FeatureEngineer:
     Comprehensive feature engineering for financial time series.
 
     This class orchestrates the complete feature engineering pipeline,
-    generating 50+ technical indicators across multiple categories:
+    generating 150+ technical indicators across multiple categories:
     - Price-based features (returns, ratios)
     - Moving averages (SMA, EMA)
     - Momentum indicators (RSI, MACD, Stochastic, etc.)
@@ -61,8 +61,15 @@ class FeatureEngineer:
     - Trend indicators (ADX, Supertrend, etc.)
     - Temporal features (time encoding)
     - Regime indicators (volatility, trend)
-    - Cross-asset features (MES-MGC correlation, beta, etc.)
+    - Wavelet decomposition features (multi-scale frequency analysis)
+    - Microstructure proxy features (liquidity, spread estimates)
     - Multi-timeframe features (MTF - indicators from higher TFs)
+
+    NOTE: Symbol Isolation Policy - Each symbol is processed in complete
+    isolation. There are NO cross-symbol or cross-asset features (no correlation,
+    beta, spread, or relative strength features between symbols). This ensures
+    no data leakage between symbols and enables single-contract training.
+    See src/phase1/config/features.py SYMBOL ISOLATION POLICY for details.
     """
 
     def __init__(
@@ -74,6 +81,7 @@ class FeatureEngineer:
         mtf_timeframes: list | None = None,
         mtf_include_ohlcv: bool = True,
         mtf_include_indicators: bool = True,
+        mtf_min_rows: int = 500,
         scale_periods: bool = True,
         base_timeframe: str = "5min",
         enable_wavelets: bool = True,
@@ -105,6 +113,11 @@ class FeatureEngineer:
             Include OHLCV data from higher TFs
         mtf_include_indicators : bool, default True
             Include indicators computed on higher TFs
+        mtf_min_rows : int, default 500
+            Minimum number of rows required in the DataFrame to compute MTF
+            features. If the DataFrame has fewer rows, MTF features are skipped
+            and a warning is logged. This threshold ensures sufficient data
+            exists for meaningful higher-timeframe aggregation.
         scale_periods : bool, default True
             Whether to scale indicator periods based on timeframe.
             When True, indicator periods are scaled to maintain
@@ -153,6 +166,7 @@ class FeatureEngineer:
         self.mtf_timeframes = mtf_timeframes or ["15min", "60min"]
         self.mtf_include_ohlcv = mtf_include_ohlcv
         self.mtf_include_indicators = mtf_include_indicators
+        self.mtf_min_rows = mtf_min_rows
 
         # Wavelet configuration
         self.enable_wavelets = enable_wavelets and PYWT_AVAILABLE
@@ -332,16 +346,18 @@ class FeatureEngineer:
         # Add Multi-Timeframe (MTF) features
         # Filter MTF timeframes to only include those > base timeframe
         mtf_cols_added = 0
-        if self.enable_mtf and len(df) >= 500:
+        mtf_skipped = False
+        mtf_skip_reason = None
+        if self.enable_mtf and len(df) >= self.mtf_min_rows:
             try:
-                from src.phase1.config.features import parse_timeframe_to_minutes
+                from src.common.timeframes import get_timeframe_minutes, get_timeframe_suffix
 
-                base_minutes = parse_timeframe_to_minutes(self.timeframe)
+                base_minutes = get_timeframe_minutes(self.timeframe)
                 # Filter MTF timeframes to only those strictly greater than base
                 valid_mtf_timeframes = [
                     tf
                     for tf in self.mtf_timeframes
-                    if parse_timeframe_to_minutes(tf) > base_minutes
+                    if get_timeframe_minutes(tf) > base_minutes
                 ]
                 if valid_mtf_timeframes:
                     logger.info(f"Adding MTF features for timeframes: {valid_mtf_timeframes}")
@@ -353,26 +369,29 @@ class FeatureEngineer:
                         include_ohlcv=self.mtf_include_ohlcv,
                         include_indicators=self.mtf_include_indicators,
                     )
-                    # Count MTF columns added (dynamic suffixes based on config)
-                    mtf_suffixes = []
-                    for tf in valid_mtf_timeframes:
-                        if tf.endswith("min"):
-                            mtf_suffixes.append(f"_{tf.replace('min', 'm')}")
-                        elif tf in ["1h", "60min"]:
-                            mtf_suffixes.append("_1h")
+                    # Count MTF columns added using standardized suffix generation
+                    mtf_suffixes = [get_timeframe_suffix(tf) for tf in valid_mtf_timeframes]
                     mtf_cols_added = len(
                         [c for c in df.columns if any(c.endswith(s) for s in mtf_suffixes)]
                     )
                     logger.info(f"Added {mtf_cols_added} MTF feature columns")
                 else:
+                    mtf_skipped = True
+                    mtf_skip_reason = f"no_higher_timeframes_than_{self.timeframe}"
                     logger.info(f"No MTF timeframes > base {self.timeframe}, skipping MTF features")
             except Exception as e:
+                mtf_skipped = True
+                mtf_skip_reason = f"error: {e}"
                 logger.warning(
                     f"MTF feature generation failed: {e}. Continuing without MTF features."
                 )
         elif self.enable_mtf:
+            mtf_skipped = True
+            mtf_skip_reason = f"insufficient_rows_{len(df)}_min_{self.mtf_min_rows}"
             logger.warning(
-                f"Skipping MTF features: insufficient data ({len(df)} rows < 500 required)"
+                f"Skipping MTF features: insufficient data "
+                f"({len(df)} rows < {self.mtf_min_rows} required). "
+                f"Set mtf_min_rows to adjust threshold."
             )
 
         # Audit NaN values and clean problematic columns before row-wise dropna
@@ -381,8 +400,9 @@ class FeatureEngineer:
         rows_dropped = nan_audit["rows_dropped"]
         cols_dropped = nan_audit["cols_dropped"]
 
-        # Get MTF column names
-        mtf_suffixes = ["_15m", "_30m", "_1h"]
+        # Get MTF column names using standardized suffix detection
+        from src.common.timeframes import get_timeframe_suffix
+        mtf_suffixes = [get_timeframe_suffix(tf) for tf in self.mtf_timeframes] if self.enable_mtf else []
         mtf_col_names = [c for c in df.columns if any(c.endswith(s) for s in mtf_suffixes)]
 
         # Get microstructure feature names
@@ -404,6 +424,9 @@ class FeatureEngineer:
             "mtf_feature_count": mtf_cols_added,
             "mtf_timeframes": self.mtf_timeframes if mtf_cols_added > 0 else [],
             "mtf_feature_names": mtf_col_names,
+            "mtf_skipped": mtf_skipped,
+            "mtf_skip_reason": mtf_skip_reason,
+            "mtf_min_rows_threshold": self.mtf_min_rows,
             "wavelet_features": self.enable_wavelets and wavelet_cols_added > 0,
             "wavelet_feature_count": wavelet_cols_added,
             "wavelet_config": (

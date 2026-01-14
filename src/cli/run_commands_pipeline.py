@@ -71,10 +71,21 @@ def run_command(
     mtf_timeframes: str | None = typer.Option(
         None,
         "--mtf-timeframes",
-        help="Comma-separated MTF timeframes (e.g., '15min,30min,1h,4h,daily')",
+        help="Comma-separated MTF timeframes (e.g., '10min,15min,30min,60min')",
     ),
+    # NOTE (CFG-010): The --mtf-disable flag is INVERTED before being passed to config.
+    # CLI uses --mtf-disable (negative flag for user convenience: "disable MTF")
+    # but config uses mtf_enable=True/False (positive flag internally).
+    # Mapping: --mtf-disable -> mtf_enable=not(mtf_disable) -> mtf_enable=False
+    # This inversion happens in the _create_config_from_args() call below.
     mtf_disable: bool = typer.Option(
-        False, "--mtf-disable", help="Disable MTF feature generation entirely"
+        False,
+        "--mtf-disable",
+        help=(
+            "Disable MTF (multi-timeframe) feature generation entirely. "
+            "NOTE: This flag is inverted internally - setting --mtf-disable "
+            "sets mtf_enable=False in config. MTF is enabled by default."
+        ),
     ),
     # Output timeframes (multi-TF support)
     output_timeframes: str | None = typer.Option(
@@ -150,8 +161,8 @@ def run_command(
         # Custom horizons and barriers
         pipeline run --symbols MES --horizons 5,10,20 --k-up 1.5 --k-down 1.0
 
-        # MTF configuration
-        pipeline run --symbols MES --mtf-mode indicators --mtf-timeframes 15min,1h,4h
+        # MTF configuration (use canonical timeframes like 60min instead of 1h)
+        pipeline run --symbols MES --mtf-mode indicators --mtf-timeframes 15min,30min,60min
 
         # Feature toggles
         pipeline run --symbols MES --enable-wavelets --disable-microstructure
@@ -189,6 +200,9 @@ def run_command(
             # MTF settings
             mtf_mode=mtf_mode,
             mtf_timeframes=mtf_timeframes,
+            # CFG-010: Invert --mtf-disable flag to mtf_enable for config
+            # --mtf-disable=True  -> mtf_enable=False (disable MTF)
+            # --mtf-disable=False -> mtf_enable=None  (use default, MTF enabled)
             mtf_enable=not mtf_disable if mtf_disable else None,
             # Output timeframes (multi-TF support)
             output_timeframes=output_timeframes,

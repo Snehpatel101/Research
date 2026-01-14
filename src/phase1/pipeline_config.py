@@ -56,7 +56,19 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     bar_resolution: str = field(default=None)  # Legacy alias
 
     # Feature engineering
-    feature_set: str = "full"  # 'full', 'minimal', 'custom'
+    # NOTE (CFG-002): Pipeline feature_set="full" is intentionally different from
+    # TrainerConfig.feature_set="boosting_optimal". This is by design:
+    #
+    # - Pipeline feature_set="full" means GENERATE all ~180 features during Phase 1.
+    #   The pipeline produces the complete feature superset so any model can use them.
+    #
+    # - TrainerConfig.feature_set="boosting_optimal" means SELECT a model-appropriate
+    #   subset during Phase 6 training. Different models get different feature subsets
+    #   tailored to their inductive biases (e.g., boosting_optimal ~50 features).
+    #
+    # This separation allows per-model feature selection without re-running the pipeline.
+    # See src/models/config/trainer_config.py for training-time feature set selection.
+    feature_set: str = "full"  # 'full', 'minimal', 'custom' - controls feature GENERATION
     sma_periods: list[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
     ema_periods: list[int] = field(default_factory=lambda: [9, 21, 50])
     atr_periods: list[int] = field(default_factory=lambda: [7, 14, 21])

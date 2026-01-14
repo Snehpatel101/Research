@@ -31,11 +31,13 @@ class ArtifactManifest:
         self.project_root = Path(project_root)
         self.run_dir = self.project_root / "runs" / run_id
         self.manifest_path = self.run_dir / "artifacts" / "manifest.json"
+        self.config_snapshot_path = self.run_dir / "artifacts" / "config_snapshot.json"
         self.artifacts: dict[str, dict[str, Any]] = {}
+        self.config_snapshot: dict[str, Any] = {}  # DATA-004: Config snapshot
         self.metadata: dict[str, Any] = {
             "run_id": run_id,
             "created_at": datetime.now().isoformat(),
-            "manifest_version": "1.0",
+            "manifest_version": "1.1",  # Bumped for config_snapshot support
         }
 
     def compute_file_checksum(self, file_path: Path, algorithm: str = "sha256") -> str:
@@ -224,9 +226,51 @@ class ArtifactManifest:
 
         return results
 
+    # =========================================================================
+    # CONFIG SNAPSHOT (DATA-004)
+    # =========================================================================
+
+    def set_config_snapshot(self, config_dict: dict[str, Any]) -> None:
+        """
+        Set the configuration snapshot for this run.
+
+        The config snapshot captures training-relevant parameters while
+        excluding sensitive data like secrets and absolute paths.
+
+        Args:
+            config_dict: Dictionary of configuration parameters.
+                Should exclude secrets, credentials, and paths.
+
+        Example:
+            >>> manifest.set_config_snapshot({
+            ...     "symbols": ["MES"],
+            ...     "target_timeframe": "5min",
+            ...     "label_horizons": [5, 10, 20],
+            ...     "purge_bars": 60,
+            ...     "embargo_bars": 1440,
+            ... })
+        """
+        self.config_snapshot = {
+            "snapshot_created_at": datetime.now().isoformat(),
+            "config": config_dict,
+        }
+        self.metadata["has_config_snapshot"] = True
+        logger.debug(f"Config snapshot set with {len(config_dict)} parameters")
+
+    def get_config_snapshot(self) -> dict[str, Any]:
+        """
+        Get the configuration snapshot.
+
+        Returns:
+            Config snapshot dict, or empty dict if not set.
+        """
+        return self.config_snapshot
+
     def save(self, path: Path | None = None):
         """
         Save manifest to JSON file.
+
+        Also saves config_snapshot.json if a config snapshot was set (DATA-004).
 
         Args:
             path: Path to save manifest (defaults to run_dir/artifacts/manifest.json)
@@ -243,15 +287,34 @@ class ArtifactManifest:
             "saved_at": datetime.now().isoformat(),
         }
 
+        # Include config snapshot reference in manifest if present
+        if self.config_snapshot:
+            manifest_data["config_snapshot_file"] = str(self.config_snapshot_path.name)
+
         with open(path, "w") as f:
             json.dump(manifest_data, f, indent=2)
 
         logger.info(f"Manifest saved to {path}")
 
+        # DATA-004: Save config snapshot as separate file
+        if self.config_snapshot:
+            self._save_config_snapshot()
+
+    def _save_config_snapshot(self) -> None:
+        """Save config snapshot to separate JSON file."""
+        self.config_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(self.config_snapshot_path, "w") as f:
+            json.dump(self.config_snapshot, f, indent=2)
+
+        logger.info(f"Config snapshot saved to {self.config_snapshot_path}")
+
     @classmethod
     def load(cls, run_id: str, project_root: Path) -> "ArtifactManifest":
         """
         Load manifest from disk.
+
+        Also loads config_snapshot.json if present (DATA-004).
 
         Args:
             run_id: Run identifier
@@ -270,6 +333,15 @@ class ArtifactManifest:
 
         manifest.metadata = data.get("metadata", manifest.metadata)
         manifest.artifacts = data.get("artifacts", {})
+
+        # DATA-004: Load config snapshot if present
+        if manifest.config_snapshot_path.exists():
+            try:
+                with open(manifest.config_snapshot_path) as f:
+                    manifest.config_snapshot = json.load(f)
+                logger.debug("Loaded config snapshot from disk")
+            except Exception as e:
+                logger.warning(f"Failed to load config snapshot: {e}")
 
         logger.info(f"Loaded manifest with {len(manifest.artifacts)} artifacts")
         return manifest

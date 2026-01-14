@@ -11,14 +11,141 @@ Supports multi-timeframe output via config.output_timeframes or --output-timefra
 
 import logging
 import traceback
+from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import pandas as pd
 
 if TYPE_CHECKING:
     from manifest import ArtifactManifest
     from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# RAW DATA SCHEMA VALIDATION (DATA-002)
+# =============================================================================
+
+# Required OHLCV columns for raw data
+REQUIRED_OHLCV_COLUMNS = {"open", "high", "low", "close", "volume"}
+
+# Columns that can serve as datetime identifier
+DATETIME_COLUMNS = {"datetime", "timestamp", "date", "time"}
+
+
+@dataclass
+class RawDataValidationResult:
+    """Result of raw data schema validation."""
+
+    is_valid: bool
+    missing_columns: list[str]
+    has_datetime: bool
+    dtype_issues: dict[str, str]
+    row_count: int
+    warnings: list[str]
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for logging/serialization."""
+        return {
+            "is_valid": self.is_valid,
+            "missing_columns": self.missing_columns,
+            "has_datetime": self.has_datetime,
+            "dtype_issues": self.dtype_issues,
+            "row_count": self.row_count,
+            "warnings": self.warnings,
+        }
+
+
+def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValidationResult:
+    """
+    Validate raw data schema for OHLCV requirements.
+
+    Checks:
+    - Required OHLCV columns exist: open, high, low, close, volume
+    - Datetime index or timestamp column exists
+    - Data types are correct (numeric for OHLCV)
+
+    Args:
+        df: DataFrame to validate
+        file_path: Path to the file (for logging)
+
+    Returns:
+        RawDataValidationResult with validation details
+
+    Note:
+        This function does NOT block the pipeline on validation failure.
+        It logs warnings and returns results for visibility.
+    """
+    warnings: list[str] = []
+    dtype_issues: dict[str, str] = {}
+
+    # Normalize column names for case-insensitive check
+    df_columns_lower = {col.lower(): col for col in df.columns}
+
+    # Check for required OHLCV columns
+    missing_columns = []
+    for col in REQUIRED_OHLCV_COLUMNS:
+        if col not in df_columns_lower:
+            missing_columns.append(col)
+
+    # Check for datetime
+    has_datetime = False
+
+    # Check if index is datetime
+    if isinstance(df.index, pd.DatetimeIndex):
+        has_datetime = True
+    else:
+        # Check for datetime columns
+        for dt_col in DATETIME_COLUMNS:
+            if dt_col in df_columns_lower:
+                actual_col = df_columns_lower[dt_col]
+                try:
+                    # Try to convert to datetime to validate
+                    pd.to_datetime(df[actual_col].head(10))
+                    has_datetime = True
+                    break
+                except (ValueError, TypeError):
+                    warnings.append(f"Column '{actual_col}' exists but cannot be parsed as datetime")
+
+    if not has_datetime:
+        warnings.append("No datetime index or valid datetime column found")
+
+    # Validate data types for OHLCV columns
+    numeric_columns = {"open", "high", "low", "close", "volume"}
+    for col in numeric_columns:
+        if col in df_columns_lower:
+            actual_col = df_columns_lower[col]
+            if not pd.api.types.is_numeric_dtype(df[actual_col]):
+                dtype_issues[col] = f"Expected numeric, got {df[actual_col].dtype}"
+
+    # Determine overall validity
+    is_valid = len(missing_columns) == 0 and has_datetime and len(dtype_issues) == 0
+
+    result = RawDataValidationResult(
+        is_valid=is_valid,
+        missing_columns=missing_columns,
+        has_datetime=has_datetime,
+        dtype_issues=dtype_issues,
+        row_count=len(df),
+        warnings=warnings,
+    )
+
+    # Log validation results
+    if is_valid:
+        logger.info(f"Raw data validation PASSED for {file_path.name}: {len(df)} rows")
+    else:
+        logger.warning(
+            f"Raw data validation issues for {file_path.name}: "
+            f"missing_cols={missing_columns}, dtype_issues={dtype_issues}, "
+            f"has_datetime={has_datetime}"
+        )
+        for warn in warnings:
+            logger.warning(f"  - {warn}")
+
+    return result
 
 # Import from local modules
 from . import clean_symbol_data, clean_symbol_data_multi_timeframe
@@ -77,9 +204,12 @@ def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") ->
         for symbol in config.symbols:
             # Look for validated data first, fall back to raw if not found
             input_path = validated_data_dir / f"{symbol}_1m_validated.parquet"
+            using_raw_fallback = False
+
             if not input_path.exists():
                 # Fall back to raw data (for backward compatibility)
                 logger.warning(f"Validated data not found for {symbol}, using raw data")
+                using_raw_fallback = True
                 input_path = config.raw_data_dir / f"{symbol}_1m.parquet"
                 if not input_path.exists():
                     input_path = config.raw_data_dir / f"{symbol}_1m.csv"
@@ -88,6 +218,27 @@ def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") ->
                 raise FileNotFoundError(f"No input data found for {symbol}")
 
             cleaning_metadata[symbol] = {}
+
+            # DATA-002: Validate raw data schema when using fallback
+            if using_raw_fallback:
+                try:
+                    if input_path.suffix == ".parquet":
+                        raw_df = pd.read_parquet(input_path)
+                    else:
+                        raw_df = pd.read_csv(input_path)
+
+                    validation_result = validate_raw_data_schema(raw_df, input_path)
+                    cleaning_metadata[symbol]["raw_data_validation"] = validation_result.to_dict()
+                    cleaning_metadata[symbol]["used_raw_fallback"] = True
+
+                    if not validation_result.is_valid:
+                        logger.warning(
+                            f"Raw data for {symbol} has schema issues but continuing: "
+                            f"{validation_result.to_dict()}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not validate raw data schema for {symbol}: {e}")
+                    cleaning_metadata[symbol]["raw_validation_error"] = str(e)
 
             if is_multi_tf:
                 # Multi-TF path: use clean_symbol_data_multi_timeframe

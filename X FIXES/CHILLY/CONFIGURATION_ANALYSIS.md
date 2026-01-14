@@ -1,7 +1,12 @@
-# Configuration Analysis & Source of Truth
+# HISTORICAL - Configuration Analysis & Source of Truth
 
-**Status:** Draft / Analysis  
-**Date:** 2026-01-13  
+> **SUPERSEDED:** This document is historical. Current authoritative documentation is in:
+> - `CLAUDE.md` - Primary instructions and architecture
+> - `docs/planning/PROJECT_CHARTER.md` - Project status and roadmap
+> - `docs/ARCHITECTURE.md` - System architecture
+
+**Status:** ARCHIVED (Historical Reference Only)
+**Date:** 2026-01-13
 **Based on:** Codebase analysis and `FINDINGS 2.md`
 
 ## 🚨 Core Problem

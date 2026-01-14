@@ -42,8 +42,12 @@ if TYPE_CHECKING:
     from torch.utils.data import Dataset
 
 # Import shared constants from canonical source
-from src.phase1.utils.feature_sets import (
+from src.phase1.utils.constants import (
     METADATA_COLUMNS,
+    METADATA_COLUMNS_VERSION,
+    validate_metadata_columns,
+)
+from src.phase1.utils.feature_sets import (
     _is_label_column,
 )
 
@@ -312,6 +316,19 @@ class TimeSeriesDataContainer:
 
         if not splits:
             raise ValueError(f"No valid split files found in {path}")
+
+        # DATA-003: Validate metadata columns schema
+        if splits:
+            first_split = next(iter(splits.values()))
+            metadata_validation = validate_metadata_columns(first_split.df.columns)
+            metadata["metadata_schema_version"] = METADATA_COLUMNS_VERSION
+            metadata["metadata_validation"] = metadata_validation
+
+            if not metadata_validation["is_valid"]:
+                logger.warning(
+                    f"Metadata column validation found unexpected columns: "
+                    f"{metadata_validation['unexpected_columns']}"
+                )
 
         logger.info(
             f"Loaded TimeSeriesDataContainer: horizon={horizon}, "
