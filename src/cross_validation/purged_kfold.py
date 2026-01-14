@@ -242,23 +242,31 @@ class PurgedKFold:
         indices = np.arange(n_samples)
 
         # Validate n_splits is reasonable for data size
-        min_fold_size = self.config.purge_bars + self.config.embargo_bars + 50  # +50 for meaningful test set
-        max_reasonable_splits = max(2, n_samples // min_fold_size)
+        # In k-fold CV, the worst-case training size occurs for middle folds where
+        # both purge (before test) and embargo (after test) reduce training data
+        # Correct formula: train_size = n_samples - purge - test_size - embargo
+        test_size = n_samples // self.config.n_splits
+        min_train = int(n_samples * self.config.min_train_size)
+        worst_case_train = n_samples - self.config.purge_bars - test_size - self.config.embargo_bars
 
-        if self.config.n_splits > max_reasonable_splits:
+        if worst_case_train < min_train:
+            # Calculate maximum reasonable n_splits given constraints
+            # Derived from: n_samples - purge - (n_samples/n_splits) - embargo >= min_train
+            # => n_samples/n_splits <= n_samples - purge - embargo - min_train
+            # => n_splits <= n_samples / (n_samples - purge - embargo - min_train) [invalid]
+            # Simpler: just report what the problem is
             raise ValueError(
                 f"n_splits={self.config.n_splits} is too large for {n_samples} samples. "
+                f"Worst-case training size ({worst_case_train}) would be below minimum ({min_train}). "
                 f"With purge_bars={self.config.purge_bars} and embargo_bars={self.config.embargo_bars}, "
-                f"maximum reasonable n_splits is {max_reasonable_splits}. "
-                f"Consider reducing n_splits or increasing data size."
+                f"consider reducing n_splits or increasing data size."
             )
 
         # Get timestamps if available (for label-aware purging)
         has_datetime_index = isinstance(X.index, pd.DatetimeIndex)
 
-        # Calculate fold boundaries
-        fold_size = n_samples // self.config.n_splits
-        min_train = int(n_samples * self.config.min_train_size)
+        # Calculate fold boundaries (test_size already calculated in validation above)
+        fold_size = test_size
 
         for fold_idx in range(self.config.n_splits):
             # Test fold boundaries

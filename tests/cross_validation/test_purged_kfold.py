@@ -386,7 +386,7 @@ class TestMinimumTrainingSize:
         cv = PurgedKFold(config)
         X = small_time_series_data["X"]
 
-        with pytest.raises(ValueError, match="Training set too small"):
+        with pytest.raises(ValueError, match="too large|below minimum|too small"):
             list(cv.split(X))
 
     def test_passes_when_train_sufficient(self, time_series_data):
