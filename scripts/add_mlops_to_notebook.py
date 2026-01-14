@@ -1,0 +1,1237 @@
+#!/usr/bin/env python3
+"""
+Add MLOps components to ML_Pipeline.ipynb:
+- Data Quality Gates
+- Drift Detection
+- Performance Monitoring
+- Deployment Gates
+"""
+
+import json
+from pathlib import Path
+
+
+def create_mlops_config_cell():
+    """Create MLOps configuration cell (Task 1)."""
+    return {
+        "cell_type": "code",
+        "metadata": {},
+        "source": [
+            "#@title 1.3 MLOps & Monitoring Configuration { display-mode: \"form\" }\n",
+            "\n",
+            "#@markdown ---\n",
+            "#@markdown ## MLOps & Monitoring Configuration\n",
+            "\n",
+            "#@markdown ### Data Quality Gates\n",
+            "ENABLE_DATA_QUALITY_GATES = True  #@param {type: \"boolean\"}\n",
+            "#@markdown Block pipeline if data quality checks fail\n",
+            "\n",
+            "MIN_DATA_QUALITY_SCORE = 0.8  #@param {type: \"number\"}\n",
+            "#@markdown Minimum data quality score (0-1) to proceed\n",
+            "\n",
+            "#@markdown ### Drift Detection\n",
+            "ENABLE_DRIFT_DETECTION = True  #@param {type: \"boolean\"}\n",
+            "#@markdown Monitor feature drift and covariate shift\n",
+            "\n",
+            "DRIFT_METHOD = \"ks_test\"  #@param [\"ks_test\", \"psi\", \"wasserstein\", \"mmd\"]\n",
+            "#@markdown - **ks_test**: Kolmogorov-Smirnov test (distribution comparison)\n",
+            "#@markdown - **psi**: Population Stability Index\n",
+            "#@markdown - **wasserstein**: Wasserstein distance\n",
+            "#@markdown - **mmd**: Maximum Mean Discrepancy\n",
+            "\n",
+            "DRIFT_THRESHOLD = 0.05  #@param {type: \"number\"}\n",
+            "#@markdown P-value threshold for drift detection (default: 0.05)\n",
+            "\n",
+            "#@markdown ### Performance Monitoring\n",
+            "ENABLE_PERFORMANCE_MONITORING = True  #@param {type: \"boolean\"}\n",
+            "#@markdown Track model performance over time\n",
+            "\n",
+            "PERFORMANCE_WINDOW = 100  #@param {type: \"integer\"}\n",
+            "#@markdown Rolling window size for performance tracking\n",
+            "\n",
+            "ALERT_THRESHOLD_ACCURACY = 0.05  #@param {type: \"number\"}\n",
+            "#@markdown Alert if accuracy drops by this much (default: 5%)\n",
+            "\n",
+            "#@markdown ### Deployment Gates\n",
+            "USE_DEPLOYMENT_GATES = True  #@param {type: \"boolean\"}\n",
+            "#@markdown Automated deployment decision gates\n",
+            "\n",
+            "GATE_MIN_SHARPE = 1.0  #@param {type: \"number\"}\n",
+            "#@markdown Minimum Sharpe ratio to deploy (default: 1.0)\n",
+            "\n",
+            "GATE_MAX_DRAWDOWN = 0.30  #@param {type: \"number\"}\n",
+            "#@markdown Maximum drawdown to deploy (default: 30%)\n",
+            "\n",
+            "GATE_MAX_PBO = 0.50  #@param {type: \"number\"}\n",
+            "#@markdown Maximum PBO to deploy (default: 0.50)\n",
+            "\n",
+            "print(\"MLOps Configuration:\")\n",
+            "print(f\"  Data Quality Gates: {ENABLE_DATA_QUALITY_GATES} (min score: {MIN_DATA_QUALITY_SCORE})\")\n",
+            "print(f\"  Drift Detection: {ENABLE_DRIFT_DETECTION} (method: {DRIFT_METHOD}, threshold: {DRIFT_THRESHOLD})\")\n",
+            "print(f\"  Performance Monitoring: {ENABLE_PERFORMANCE_MONITORING} (window: {PERFORMANCE_WINDOW})\")\n",
+            "print(f\"  Deployment Gates: {USE_DEPLOYMENT_GATES}\")\n",
+            "print(f\"    - Min Sharpe: {GATE_MIN_SHARPE}\")\n",
+            "print(f\"    - Max Drawdown: {GATE_MAX_DRAWDOWN}\")\n",
+            "print(f\"    - Max PBO: {GATE_MAX_PBO}\")\n"
+        ],
+        "execution_count": None,
+        "outputs": []
+    }
+
+
+def create_data_quality_cell():
+    """Create data quality validation cell (Task 2)."""
+    return {
+        "cell_type": "code",
+        "metadata": {},
+        "source": [
+            "#@title 3.6 Data Quality Validation { display-mode: \"form\" }\n",
+            "\n",
+            "import numpy as np\n",
+            "import pandas as pd\n",
+            "import matplotlib.pyplot as plt\n",
+            "import seaborn as sns\n",
+            "from scipy import stats\n",
+            "from datetime import datetime, timedelta\n",
+            "\n",
+            "print(\"=\" * 70)\n",
+            "print(\"DATA QUALITY VALIDATION\")\n",
+            "print(\"=\" * 70)\n",
+            "\n",
+            "if not ENABLE_DATA_QUALITY_GATES:\n",
+            "    print(\"Data Quality Gates disabled. Skipping validation.\")\n",
+            "else:\n",
+            "    # Load processed data\n",
+            "    train_data = CONFIG.train_data\n",
+            "    test_data = CONFIG.test_data\n",
+            "    feature_cols = [c for c in train_data.columns if c not in ['target', 'timestamp', 'quality_score']]\n",
+            "    \n",
+            "    quality_checks = {}\n",
+            "    \n",
+            "    # 1. Missing Values Check\n",
+            "    print(\"\\n1. Missing Values Check\")\n",
+            "    print(\"-\" * 50)\n",
+            "    missing_pct = train_data[feature_cols].isnull().sum() / len(train_data)\n",
+            "    missing_issues = missing_pct[missing_pct > 0.05]\n",
+            "    \n",
+            "    if len(missing_issues) > 0:\n",
+            "        print(f\"  ❌ Found {len(missing_issues)} features with >5% missing:\")\n",
+            "        for feat, pct in missing_issues.items():\n",
+            "            print(f\"     {feat}: {pct*100:.2f}%\")\n",
+            "        quality_checks['missing'] = 0.0\n",
+            "    else:\n",
+            "        print(\"  ✅ No missing value issues (<5% in all features)\")\n",
+            "        quality_checks['missing'] = 1.0\n",
+            "    \n",
+            "    # 2. Outlier Detection\n",
+            "    print(\"\\n2. Outlier Detection (Z-score method, threshold=4)\")\n",
+            "    print(\"-\" * 50)\n",
+            "    outlier_pcts = {}\n",
+            "    for col in feature_cols[:20]:  # Check first 20 features\n",
+            "        z_scores = np.abs(stats.zscore(train_data[col].dropna()))\n",
+            "        outlier_pct = (z_scores > 4).sum() / len(z_scores)\n",
+            "        outlier_pcts[col] = outlier_pct\n",
+            "    \n",
+            "    avg_outlier_pct = np.mean(list(outlier_pcts.values()))\n",
+            "    print(f\"  Average outlier %: {avg_outlier_pct*100:.2f}%\")\n",
+            "    \n",
+            "    if avg_outlier_pct > 0.05:\n",
+            "        print(f\"  ⚠️  High outlier rate detected\")\n",
+            "        quality_checks['outliers'] = max(0.5, 1.0 - avg_outlier_pct)\n",
+            "    else:\n",
+            "        print(\"  ✅ Outlier rate acceptable\")\n",
+            "        quality_checks['outliers'] = 1.0\n",
+            "    \n",
+            "    # 3. Feature Correlation Check\n",
+            "    print(\"\\n3. Feature Correlation Check (multicollinearity)\")\n",
+            "    print(\"-\" * 50)\n",
+            "    corr_matrix = train_data[feature_cols].corr().abs()\n",
+            "    upper_triangle = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))\n",
+            "    high_corr = [col for col in upper_triangle.columns if any(upper_triangle[col] > 0.95)]\n",
+            "    \n",
+            "    if len(high_corr) > 0:\n",
+            "        print(f\"  ⚠️  Found {len(high_corr)} features with correlation > 0.95\")\n",
+            "        print(f\"     Consider dropping redundant features\")\n",
+            "        quality_checks['correlation'] = max(0.7, 1.0 - len(high_corr)/len(feature_cols))\n",
+            "    else:\n",
+            "        print(\"  ✅ No high correlation issues\")\n",
+            "        quality_checks['correlation'] = 1.0\n",
+            "    \n",
+            "    # 4. Label Distribution Check\n",
+            "    print(\"\\n4. Label Distribution Check\")\n",
+            "    print(\"-\" * 50)\n",
+            "    label_dist = train_data['target'].value_counts(normalize=True)\n",
+            "    min_class_pct = label_dist.min()\n",
+            "    \n",
+            "    print(f\"  Class distribution:\")\n",
+            "    for cls, pct in label_dist.items():\n",
+            "        print(f\"    Class {cls}: {pct*100:.2f}%\")\n",
+            "    \n",
+            "    if min_class_pct < 0.20:\n",
+            "        print(f\"  ⚠️  Imbalanced dataset (min class: {min_class_pct*100:.1f}%)\")\n",
+            "        print(f\"     Consider resampling or class weighting\")\n",
+            "        quality_checks['balance'] = min_class_pct / 0.20  # Normalize to [0,1]\n",
+            "    else:\n",
+            "        print(\"  ✅ Classes reasonably balanced\")\n",
+            "        quality_checks['balance'] = 1.0\n",
+            "    \n",
+            "    # 5. Data Freshness Check\n",
+            "    print(\"\\n5. Data Freshness Check\")\n",
+            "    print(\"-\" * 50)\n",
+            "    if 'timestamp' in train_data.columns:\n",
+            "        timestamps = pd.to_datetime(train_data['timestamp'])\n",
+            "        time_gaps = timestamps.diff()\n",
+            "        max_gap = time_gaps.max()\n",
+            "        \n",
+            "        print(f\"  Max time gap: {max_gap}\")\n",
+            "        \n",
+            "        if max_gap > timedelta(weeks=1):\n",
+            "            print(f\"  ⚠️  Large gaps detected (>{max_gap})\")\n",
+            "            quality_checks['freshness'] = 0.7\n",
+            "        else:\n",
+            "            print(\"  ✅ No significant gaps\")\n",
+            "            quality_checks['freshness'] = 1.0\n",
+            "    else:\n",
+            "        print(\"  ⚠️  No timestamp column found\")\n",
+            "        quality_checks['freshness'] = 0.8\n",
+            "    \n",
+            "    # 6. Range Validation\n",
+            "    print(\"\\n6. Range Validation\")\n",
+            "    print(\"-\" * 50)\n",
+            "    range_issues = 0\n",
+            "    \n",
+            "    # Check for volume anomalies (if volume feature exists)\n",
+            "    volume_cols = [c for c in feature_cols if 'volume' in c.lower()]\n",
+            "    if volume_cols:\n",
+            "        for vol_col in volume_cols[:3]:  # Check first 3 volume features\n",
+            "            vol_data = train_data[vol_col].dropna()\n",
+            "            if (vol_data < 0).any():\n",
+            "                print(f\"  ❌ Negative volume detected in {vol_col}\")\n",
+            "                range_issues += 1\n",
+            "            \n",
+            "            vol_mean = vol_data.mean()\n",
+            "            vol_spikes = (vol_data > vol_mean * 10).sum()\n",
+            "            if vol_spikes > len(vol_data) * 0.01:\n",
+            "                print(f\"  ⚠️  Volume spikes >10x mean in {vol_col}: {vol_spikes} instances\")\n",
+            "    \n",
+            "    if range_issues == 0:\n",
+            "        print(\"  ✅ No range validation issues\")\n",
+            "        quality_checks['range'] = 1.0\n",
+            "    else:\n",
+            "        print(f\"  ❌ Found {range_issues} range issues\")\n",
+            "        quality_checks['range'] = max(0.5, 1.0 - range_issues/10)\n",
+            "    \n",
+            "    # Calculate overall quality score\n",
+            "    print(\"\\n\" + \"=\" * 70)\n",
+            "    print(\"OVERALL DATA QUALITY SCORE\")\n",
+            "    print(\"=\" * 70)\n",
+            "    \n",
+            "    quality_score = (\n",
+            "        quality_checks.get('missing', 1.0) * 0.30 +\n",
+            "        quality_checks.get('outliers', 1.0) * 0.20 +\n",
+            "        quality_checks.get('correlation', 1.0) * 0.20 +\n",
+            "        quality_checks.get('balance', 1.0) * 0.15 +\n",
+            "        quality_checks.get('freshness', 1.0) * 0.10 +\n",
+            "        quality_checks.get('range', 1.0) * 0.05\n",
+            "    )\n",
+            "    \n",
+            "    print(f\"\\nQuality Score: {quality_score:.3f}\")\n",
+            "    print(f\"Minimum Required: {MIN_DATA_QUALITY_SCORE:.3f}\")\n",
+            "    \n",
+            "    # Store in CONFIG\n",
+            "    CONFIG.data_quality_score = quality_score\n",
+            "    CONFIG.quality_checks = quality_checks\n",
+            "    \n",
+            "    # Gate decision\n",
+            "    if quality_score < MIN_DATA_QUALITY_SCORE:\n",
+            "        print(f\"\\n❌ [BLOCKED] Data quality too low: {quality_score:.3f} < {MIN_DATA_QUALITY_SCORE}\")\n",
+            "        print(f\"Pipeline execution blocked. Please fix data quality issues.\")\n",
+            "        CONFIG.data_ready = False\n",
+            "    else:\n",
+            "        print(f\"\\n✅ [PASSED] Data quality acceptable: {quality_score:.3f} >= {MIN_DATA_QUALITY_SCORE}\")\n",
+            "        CONFIG.data_ready = True\n",
+            "    \n",
+            "    # Visualization\n",
+            "    fig, axes = plt.subplots(1, 2, figsize=(14, 5))\n",
+            "    \n",
+            "    # Quality component breakdown\n",
+            "    ax1 = axes[0]\n",
+            "    components = list(quality_checks.keys())\n",
+            "    scores = list(quality_checks.values())\n",
+            "    colors = ['green' if s >= 0.8 else 'orange' if s >= 0.6 else 'red' for s in scores]\n",
+            "    \n",
+            "    ax1.barh(components, scores, color=colors, alpha=0.7)\n",
+            "    ax1.axvline(MIN_DATA_QUALITY_SCORE, color='red', linestyle='--', label=f'Min Threshold ({MIN_DATA_QUALITY_SCORE})')\n",
+            "    ax1.set_xlabel('Score')\n",
+            "    ax1.set_title('Data Quality Components')\n",
+            "    ax1.set_xlim(0, 1.0)\n",
+            "    ax1.legend()\n",
+            "    ax1.grid(True, alpha=0.3)\n",
+            "    \n",
+            "    # Missing values heatmap (top 20 features)\n",
+            "    ax2 = axes[1]\n",
+            "    missing_top = missing_pct.nlargest(20)\n",
+            "    if len(missing_top) > 0:\n",
+            "        ax2.barh(range(len(missing_top)), missing_top.values * 100)\n",
+            "        ax2.set_yticks(range(len(missing_top)))\n",
+            "        ax2.set_yticklabels(missing_top.index, fontsize=8)\n",
+            "        ax2.axvline(5.0, color='red', linestyle='--', label='5% threshold')\n",
+            "        ax2.set_xlabel('Missing %')\n",
+            "        ax2.set_title('Missing Values (Top 20 Features)')\n",
+            "        ax2.legend()\n",
+            "        ax2.grid(True, alpha=0.3)\n",
+            "    \n",
+            "    plt.tight_layout()\n",
+            "    plt.show()\n",
+            "    \n",
+            "    print(f\"\\nData quality validation complete.\")\n"
+        ],
+        "execution_count": None,
+        "outputs": []
+    }
+
+
+def create_drift_detection_cell():
+    """Create drift detection cell (Task 3)."""
+    return {
+        "cell_type": "code",
+        "metadata": {},
+        "source": [
+            "#@title 5.6 Feature Drift Detection { display-mode: \"form\" }\n",
+            "\n",
+            "import numpy as np\n",
+            "import pandas as pd\n",
+            "import matplotlib.pyplot as plt\n",
+            "import seaborn as sns\n",
+            "from scipy.stats import ks_2samp, wasserstein_distance\n",
+            "from scipy.spatial.distance import jensenshannon\n",
+            "\n",
+            "print(\"=\" * 70)\n",
+            "print(\"FEATURE DRIFT DETECTION\")\n",
+            "print(\"=\" * 70)\n",
+            "\n",
+            "if not ENABLE_DRIFT_DETECTION:\n",
+            "    print(\"Drift detection disabled. Skipping.\")\n",
+            "else:\n",
+            "    # Load data\n",
+            "    train_data = CONFIG.train_data\n",
+            "    test_data = CONFIG.test_data\n",
+            "    feature_cols = [c for c in train_data.columns if c not in ['target', 'timestamp', 'quality_score']]\n",
+            "    \n",
+            "    print(f\"\\nDrift Method: {DRIFT_METHOD}\")\n",
+            "    print(f\"Threshold: {DRIFT_THRESHOLD}\")\n",
+            "    print(f\"Analyzing {len(feature_cols)} features...\\n\")\n",
+            "    \n",
+            "    drift_results = []\n",
+            "    \n",
+            "    # Helper function: Calculate PSI\n",
+            "    def calculate_psi(expected, actual, bins=10):\n",
+            "        \"\"\"Calculate Population Stability Index.\"\"\"\n",
+            "        # Create histograms\n",
+            "        exp_hist, bin_edges = np.histogram(expected.dropna(), bins=bins)\n",
+            "        act_hist, _ = np.histogram(actual.dropna(), bins=bin_edges)\n",
+            "        \n",
+            "        # Convert to percentages\n",
+            "        exp_pct = exp_hist / len(expected)\n",
+            "        act_pct = act_hist / len(actual)\n",
+            "        \n",
+            "        # Avoid division by zero\n",
+            "        exp_pct = np.where(exp_pct == 0, 0.0001, exp_pct)\n",
+            "        act_pct = np.where(act_pct == 0, 0.0001, act_pct)\n",
+            "        \n",
+            "        # Calculate PSI\n",
+            "        psi = np.sum((act_pct - exp_pct) * np.log(act_pct / exp_pct))\n",
+            "        return psi\n",
+            "    \n",
+            "    # Check drift for each feature\n",
+            "    for feature in feature_cols:\n",
+            "        train_values = train_data[feature].dropna()\n",
+            "        test_values = test_data[feature].dropna()\n",
+            "        \n",
+            "        if len(train_values) == 0 or len(test_values) == 0:\n",
+            "            continue\n",
+            "        \n",
+            "        if DRIFT_METHOD == \"ks_test\":\n",
+            "            # Kolmogorov-Smirnov test\n",
+            "            statistic, p_value = ks_2samp(train_values, test_values)\n",
+            "            metric_value = p_value\n",
+            "            drifted = p_value < DRIFT_THRESHOLD\n",
+            "            \n",
+            "        elif DRIFT_METHOD == \"psi\":\n",
+            "            # Population Stability Index\n",
+            "            psi_value = calculate_psi(train_values, test_values)\n",
+            "            metric_value = psi_value\n",
+            "            # PSI interpretation: <0.1 no drift, 0.1-0.25 moderate, >0.25 significant\n",
+            "            drifted = psi_value > 0.25\n",
+            "            \n",
+            "        elif DRIFT_METHOD == \"wasserstein\":\n",
+            "            # Wasserstein distance\n",
+            "            w_dist = wasserstein_distance(train_values, test_values)\n",
+            "            metric_value = w_dist\n",
+            "            # Normalize by feature range\n",
+            "            feature_range = train_values.max() - train_values.min()\n",
+            "            normalized_dist = w_dist / feature_range if feature_range > 0 else 0\n",
+            "            drifted = normalized_dist > DRIFT_THRESHOLD\n",
+            "            \n",
+            "        else:  # mmd or other\n",
+            "            # For simplicity, fallback to KS test\n",
+            "            statistic, p_value = ks_2samp(train_values, test_values)\n",
+            "            metric_value = p_value\n",
+            "            drifted = p_value < DRIFT_THRESHOLD\n",
+            "        \n",
+            "        drift_results.append({\n",
+            "            'feature': feature,\n",
+            "            'metric_value': metric_value,\n",
+            "            'drifted': drifted\n",
+            "        })\n",
+            "    \n",
+            "    # Convert to DataFrame\n",
+            "    drift_df = pd.DataFrame(drift_results)\n",
+            "    drift_df = drift_df.sort_values('metric_value', ascending=(DRIFT_METHOD == 'ks_test'))\n",
+            "    \n",
+            "    # Summary\n",
+            "    n_drifted = drift_df['drifted'].sum()\n",
+            "    drift_pct = n_drifted / len(drift_df) * 100\n",
+            "    \n",
+            "    print(f\"\\n{'='*70}\")\n",
+            "    print(\"DRIFT DETECTION SUMMARY\")\n",
+            "    print(f\"{'='*70}\")\n",
+            "    print(f\"Total features analyzed: {len(drift_df)}\")\n",
+            "    print(f\"Features with drift: {n_drifted} ({drift_pct:.1f}%)\")\n",
+            "    print(f\"Features without drift: {len(drift_df) - n_drifted} ({100-drift_pct:.1f}%)\")\n",
+            "    \n",
+            "    if n_drifted > 0:\n",
+            "        print(f\"\\n⚠️  DRIFT DETECTED in {n_drifted} features:\")\n",
+            "        drifted_features = drift_df[drift_df['drifted']].head(10)\n",
+            "        for _, row in drifted_features.iterrows():\n",
+            "            print(f\"   {row['feature']}: {row['metric_value']:.4f}\")\n",
+            "        \n",
+            "        if n_drifted > 10:\n",
+            "            print(f\"   ... and {n_drifted - 10} more\")\n",
+            "        \n",
+            "        print(f\"\\nRECOMMENDATION:\")\n",
+            "        if drift_pct > 30:\n",
+            "            print(\"  🔴 HIGH DRIFT: Consider retraining model on recent data\")\n",
+            "        elif drift_pct > 15:\n",
+            "            print(\"  🟡 MODERATE DRIFT: Monitor closely, retrain if performance degrades\")\n",
+            "        else:\n",
+            "            print(\"  🟢 LOW DRIFT: Acceptable, continue monitoring\")\n",
+            "    else:\n",
+            "        print(\"\\n✅ No significant drift detected\")\n",
+            "    \n",
+            "    # Store results\n",
+            "    CONFIG.drift_results = {\n",
+            "        'method': DRIFT_METHOD,\n",
+            "        'threshold': DRIFT_THRESHOLD,\n",
+            "        'n_drifted': n_drifted,\n",
+            "        'drift_pct': drift_pct,\n",
+            "        'drifted_features': drift_df[drift_df['drifted']]['feature'].tolist()\n",
+            "    }\n",
+            "    \n",
+            "    # Visualizations\n",
+            "    fig, axes = plt.subplots(2, 2, figsize=(16, 12))\n",
+            "    \n",
+            "    # 1. Drift score distribution\n",
+            "    ax1 = axes[0, 0]\n",
+            "    colors = ['red' if d else 'green' for d in drift_df['drifted']]\n",
+            "    ax1.scatter(range(len(drift_df)), drift_df['metric_value'], c=colors, alpha=0.6)\n",
+            "    if DRIFT_METHOD == 'ks_test':\n",
+            "        ax1.axhline(DRIFT_THRESHOLD, color='red', linestyle='--', label=f'Threshold ({DRIFT_THRESHOLD})')\n",
+            "        ax1.set_ylabel('P-value')\n",
+            "    elif DRIFT_METHOD == 'psi':\n",
+            "        ax1.axhline(0.25, color='red', linestyle='--', label='Significant Drift (0.25)')\n",
+            "        ax1.axhline(0.1, color='orange', linestyle='--', label='Moderate Drift (0.1)')\n",
+            "        ax1.set_ylabel('PSI Score')\n",
+            "    else:\n",
+            "        ax1.axhline(DRIFT_THRESHOLD, color='red', linestyle='--', label=f'Threshold ({DRIFT_THRESHOLD})')\n",
+            "        ax1.set_ylabel('Drift Metric')\n",
+            "    ax1.set_xlabel('Feature Index')\n",
+            "    ax1.set_title(f'Drift Scores ({DRIFT_METHOD})')\n",
+            "    ax1.legend()\n",
+            "    ax1.grid(True, alpha=0.3)\n",
+            "    \n",
+            "    # 2. Top drifted features\n",
+            "    ax2 = axes[0, 1]\n",
+            "    top_drifted = drift_df.nlargest(15, 'metric_value') if DRIFT_METHOD != 'ks_test' else drift_df.nsmallest(15, 'metric_value')\n",
+            "    ax2.barh(range(len(top_drifted)), top_drifted['metric_value'].values)\n",
+            "    ax2.set_yticks(range(len(top_drifted)))\n",
+            "    ax2.set_yticklabels(top_drifted['feature'].values, fontsize=8)\n",
+            "    ax2.set_xlabel('Drift Score')\n",
+            "    ax2.set_title('Top 15 Features by Drift')\n",
+            "    ax2.grid(True, alpha=0.3)\n",
+            "    \n",
+            "    # 3. Distribution comparison (top drifted feature)\n",
+            "    ax3 = axes[1, 0]\n",
+            "    if n_drifted > 0:\n",
+            "        top_feature = drift_df[drift_df['drifted']].iloc[0]['feature']\n",
+            "        ax3.hist(train_data[top_feature].dropna(), bins=50, alpha=0.5, label='Train', density=True)\n",
+            "        ax3.hist(test_data[top_feature].dropna(), bins=50, alpha=0.5, label='Test', density=True)\n",
+            "        ax3.set_xlabel('Value')\n",
+            "        ax3.set_ylabel('Density')\n",
+            "        ax3.set_title(f'Distribution Comparison: {top_feature}')\n",
+            "        ax3.legend()\n",
+            "        ax3.grid(True, alpha=0.3)\n",
+            "    else:\n",
+            "        ax3.text(0.5, 0.5, 'No drift detected', ha='center', va='center', fontsize=14)\n",
+            "        ax3.axis('off')\n",
+            "    \n",
+            "    # 4. Drift summary pie chart\n",
+            "    ax4 = axes[1, 1]\n",
+            "    sizes = [n_drifted, len(drift_df) - n_drifted]\n",
+            "    labels = [f'Drifted ({n_drifted})', f'No Drift ({len(drift_df) - n_drifted})']\n",
+            "    colors_pie = ['#ff6b6b', '#51cf66']\n",
+            "    ax4.pie(sizes, labels=labels, colors=colors_pie, autopct='%1.1f%%', startangle=90)\n",
+            "    ax4.set_title('Drift Detection Summary')\n",
+            "    \n",
+            "    plt.tight_layout()\n",
+            "    plt.show()\n",
+            "    \n",
+            "    print(f\"\\nDrift detection complete.\")\n"
+        ],
+        "execution_count": None,
+        "outputs": []
+    }
+
+
+def create_performance_monitoring_cell():
+    """Create performance monitoring cell (Task 4)."""
+    return {
+        "cell_type": "code",
+        "metadata": {},
+        "source": [
+            "#@title 4.6 Performance Monitoring (Rolling Window) { display-mode: \"form\" }\n",
+            "\n",
+            "import numpy as np\n",
+            "import pandas as pd\n",
+            "import matplotlib.pyplot as plt\n",
+            "from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score\n",
+            "\n",
+            "print(\"=\" * 70)\n",
+            "print(\"PERFORMANCE MONITORING (Rolling Window Analysis)\")\n",
+            "print(\"=\" * 70)\n",
+            "\n",
+            "if not ENABLE_PERFORMANCE_MONITORING:\n",
+            "    print(\"Performance monitoring disabled. Skipping.\")\n",
+            "else:\n",
+            "    # Get test predictions from best model\n",
+            "    if not hasattr(CONFIG, 'best_model_name') or CONFIG.best_model_name is None:\n",
+            "        print(\"⚠️  No model trained yet. Skipping performance monitoring.\")\n",
+            "    else:\n",
+            "        print(f\"\\nMonitoring model: {CONFIG.best_model_name}\")\n",
+            "        print(f\"Rolling window size: {PERFORMANCE_WINDOW}\")\n",
+            "        print(f\"Alert threshold: {ALERT_THRESHOLD_ACCURACY*100:.1f}% accuracy drop\\n\")\n",
+            "        \n",
+            "        # Load test predictions\n",
+            "        test_data = CONFIG.test_data\n",
+            "        y_test = test_data['target'].values\n",
+            "        \n",
+            "        # Get predictions from best model\n",
+            "        best_model = CONFIG.trained_models.get(CONFIG.best_model_name)\n",
+            "        if best_model is None:\n",
+            "            print(\"⚠️  Best model not found in trained models.\")\n",
+            "        else:\n",
+            "            # Prepare features\n",
+            "            feature_cols = [c for c in test_data.columns if c not in ['target', 'timestamp', 'quality_score']]\n",
+            "            X_test = test_data[feature_cols].values\n",
+            "            \n",
+            "            # Get predictions\n",
+            "            if hasattr(best_model, 'predict'):\n",
+            "                y_pred = best_model.predict(X_test)\n",
+            "            else:\n",
+            "                print(\"⚠️  Model does not have predict method.\")\n",
+            "                y_pred = None\n",
+            "            \n",
+            "            if y_pred is not None:\n",
+            "                # Calculate rolling metrics\n",
+            "                window_size = min(PERFORMANCE_WINDOW, len(y_test) // 10)  # At least 10 windows\n",
+            "                step_size = window_size // 4  # 75% overlap\n",
+            "                \n",
+            "                rolling_metrics = []\n",
+            "                window_indices = []\n",
+            "                \n",
+            "                for i in range(window_size, len(y_test), step_size):\n",
+            "                    window_true = y_test[i-window_size:i]\n",
+            "                    window_pred = y_pred[i-window_size:i]\n",
+            "                    \n",
+            "                    metrics = {\n",
+            "                        'end_idx': i,\n",
+            "                        'accuracy': accuracy_score(window_true, window_pred),\n",
+            "                        'f1': f1_score(window_true, window_pred, average='macro', zero_division=0),\n",
+            "                        'precision': precision_score(window_true, window_pred, average='macro', zero_division=0),\n",
+            "                        'recall': recall_score(window_true, window_pred, average='macro', zero_division=0)\n",
+            "                    }\n",
+            "                    \n",
+            "                    rolling_metrics.append(metrics)\n",
+            "                    window_indices.append(i)\n",
+            "                \n",
+            "                # Convert to DataFrame\n",
+            "                metrics_df = pd.DataFrame(rolling_metrics)\n",
+            "                \n",
+            "                # Detect degradation\n",
+            "                initial_accuracy = metrics_df['accuracy'].iloc[:3].mean()  # First 3 windows\n",
+            "                current_accuracy = metrics_df['accuracy'].iloc[-3:].mean()  # Last 3 windows\n",
+            "                accuracy_drop = initial_accuracy - current_accuracy\n",
+            "                \n",
+            "                print(f\"Initial Accuracy (first 3 windows): {initial_accuracy:.4f}\")\n",
+            "                print(f\"Current Accuracy (last 3 windows): {current_accuracy:.4f}\")\n",
+            "                print(f\"Accuracy Change: {accuracy_drop:+.4f} ({accuracy_drop/initial_accuracy*100:+.2f}%)\")\n",
+            "                \n",
+            "                # Alert if degradation detected\n",
+            "                if accuracy_drop > ALERT_THRESHOLD_ACCURACY:\n",
+            "                    print(f\"\\n🔴 [ALERT] Performance degradation detected!\")\n",
+            "                    print(f\"   Accuracy dropped by {accuracy_drop:.4f} (>{ALERT_THRESHOLD_ACCURACY:.4f} threshold)\")\n",
+            "                    print(f\"   RECOMMENDATION: Consider retraining the model on recent data\")\n",
+            "                    degradation_detected = True\n",
+            "                elif accuracy_drop > ALERT_THRESHOLD_ACCURACY / 2:\n",
+            "                    print(f\"\\n🟡 [WARNING] Minor performance degradation detected\")\n",
+            "                    print(f\"   Accuracy dropped by {accuracy_drop:.4f}\")\n",
+            "                    print(f\"   RECOMMENDATION: Monitor closely\")\n",
+            "                    degradation_detected = False\n",
+            "                else:\n",
+            "                    print(f\"\\n✅ [OK] No significant performance degradation\")\n",
+            "                    degradation_detected = False\n",
+            "                \n",
+            "                # Store results\n",
+            "                CONFIG.performance_monitoring = {\n",
+            "                    'window_size': window_size,\n",
+            "                    'initial_accuracy': initial_accuracy,\n",
+            "                    'current_accuracy': current_accuracy,\n",
+            "                    'accuracy_drop': accuracy_drop,\n",
+            "                    'degradation_detected': degradation_detected,\n",
+            "                    'metrics_history': metrics_df.to_dict('records')\n",
+            "                }\n",
+            "                \n",
+            "                # Visualizations\n",
+            "                fig, axes = plt.subplots(2, 2, figsize=(16, 10))\n",
+            "                \n",
+            "                # 1. Rolling Accuracy\n",
+            "                ax1 = axes[0, 0]\n",
+            "                ax1.plot(window_indices, metrics_df['accuracy'], marker='o', label='Accuracy', linewidth=2)\n",
+            "                ax1.axhline(initial_accuracy, color='green', linestyle='--', alpha=0.5, label='Initial Avg')\n",
+            "                ax1.axhline(initial_accuracy - ALERT_THRESHOLD_ACCURACY, color='red', linestyle='--', \n",
+            "                           alpha=0.5, label='Alert Threshold')\n",
+            "                ax1.fill_between(window_indices, initial_accuracy - ALERT_THRESHOLD_ACCURACY, \n",
+            "                                initial_accuracy, alpha=0.2, color='green')\n",
+            "                ax1.set_xlabel('Test Sample Index')\n",
+            "                ax1.set_ylabel('Accuracy')\n",
+            "                ax1.set_title('Rolling Window Accuracy')\n",
+            "                ax1.legend()\n",
+            "                ax1.grid(True, alpha=0.3)\n",
+            "                \n",
+            "                # 2. Rolling F1 Score\n",
+            "                ax2 = axes[0, 1]\n",
+            "                ax2.plot(window_indices, metrics_df['f1'], marker='s', color='orange', label='F1 Score', linewidth=2)\n",
+            "                ax2.set_xlabel('Test Sample Index')\n",
+            "                ax2.set_ylabel('F1 Score')\n",
+            "                ax2.set_title('Rolling Window F1 Score')\n",
+            "                ax2.legend()\n",
+            "                ax2.grid(True, alpha=0.3)\n",
+            "                \n",
+            "                # 3. All metrics comparison\n",
+            "                ax3 = axes[1, 0]\n",
+            "                ax3.plot(window_indices, metrics_df['accuracy'], marker='o', label='Accuracy')\n",
+            "                ax3.plot(window_indices, metrics_df['f1'], marker='s', label='F1')\n",
+            "                ax3.plot(window_indices, metrics_df['precision'], marker='^', label='Precision')\n",
+            "                ax3.plot(window_indices, metrics_df['recall'], marker='v', label='Recall')\n",
+            "                ax3.set_xlabel('Test Sample Index')\n",
+            "                ax3.set_ylabel('Score')\n",
+            "                ax3.set_title('All Metrics Over Time')\n",
+            "                ax3.legend()\n",
+            "                ax3.grid(True, alpha=0.3)\n",
+            "                \n",
+            "                # 4. Degradation timeline\n",
+            "                ax4 = axes[1, 1]\n",
+            "                accuracy_change = metrics_df['accuracy'] - initial_accuracy\n",
+            "                colors = ['red' if x < -ALERT_THRESHOLD_ACCURACY else 'orange' if x < -ALERT_THRESHOLD_ACCURACY/2 else 'green' \n",
+            "                         for x in accuracy_change]\n",
+            "                ax4.bar(window_indices, accuracy_change, color=colors, alpha=0.7)\n",
+            "                ax4.axhline(0, color='black', linestyle='-', linewidth=0.5)\n",
+            "                ax4.axhline(-ALERT_THRESHOLD_ACCURACY, color='red', linestyle='--', label='Alert Threshold')\n",
+            "                ax4.set_xlabel('Test Sample Index')\n",
+            "                ax4.set_ylabel('Accuracy Change from Initial')\n",
+            "                ax4.set_title('Performance Degradation Timeline')\n",
+            "                ax4.legend()\n",
+            "                ax4.grid(True, alpha=0.3)\n",
+            "                \n",
+            "                plt.tight_layout()\n",
+            "                plt.show()\n",
+            "                \n",
+            "                print(f\"\\nPerformance monitoring complete.\")\n"
+        ],
+        "execution_count": None,
+        "outputs": []
+    }
+
+
+def create_deployment_gate_cell():
+    """Create deployment gate cell (Task 5)."""
+    return {
+        "cell_type": "code",
+        "metadata": {},
+        "source": [
+            "#@title 5.7 Deployment Decision Gate { display-mode: \"form\" }\n",
+            "\n",
+            "import numpy as np\n",
+            "import pandas as pd\n",
+            "import matplotlib.pyplot as plt\n",
+            "\n",
+            "print(\"=\" * 70)\n",
+            "print(\"DEPLOYMENT DECISION GATE\")\n",
+            "print(\"=\" * 70)\n",
+            "\n",
+            "if not USE_DEPLOYMENT_GATES:\n",
+            "    print(\"Deployment gates disabled. Manual deployment decision required.\")\n",
+            "    CONFIG.deployment_gate_passed = None\n",
+            "else:\n",
+            "    print(\"\\nChecking all deployment criteria...\\n\")\n",
+            "    \n",
+            "    # Collect all results\n",
+            "    results = {}\n",
+            "    \n",
+            "    # 1. Trading performance metrics\n",
+            "    if hasattr(CONFIG, 'trading_sim_results'):\n",
+            "        results['sharpe_ratio'] = CONFIG.trading_sim_results.get('sharpe_ratio', 0)\n",
+            "        results['max_drawdown'] = CONFIG.trading_sim_results.get('max_drawdown', 1.0)\n",
+            "    else:\n",
+            "        results['sharpe_ratio'] = 0\n",
+            "        results['max_drawdown'] = 1.0\n",
+            "    \n",
+            "    # 2. PBO score\n",
+            "    if hasattr(CONFIG, 'pbo_result'):\n",
+            "        results['pbo'] = CONFIG.pbo_result.get('pbo', 1.0)\n",
+            "    else:\n",
+            "        results['pbo'] = 1.0\n",
+            "    \n",
+            "    # 3. Data quality score\n",
+            "    results['data_quality_score'] = getattr(CONFIG, 'data_quality_score', 0.0)\n",
+            "    \n",
+            "    # 4. Calibration score (ECE)\n",
+            "    if hasattr(CONFIG, 'calibration_results'):\n",
+            "        results['ece'] = CONFIG.calibration_results.get('ece', 1.0)\n",
+            "    else:\n",
+            "        results['ece'] = 1.0\n",
+            "    \n",
+            "    # 5. Performance degradation\n",
+            "    if hasattr(CONFIG, 'performance_monitoring'):\n",
+            "        results['degradation_detected'] = CONFIG.performance_monitoring.get('degradation_detected', False)\n",
+            "    else:\n",
+            "        results['degradation_detected'] = False\n",
+            "    \n",
+            "    # Define gate checks\n",
+            "    def deployment_gate_check(results):\n",
+            "        \"\"\"Check if model passes all deployment gates.\n",
+            "        \n",
+            "        Returns:\n",
+            "            passed: bool\n",
+            "            checks: dict with details\n",
+            "        \"\"\"\n",
+            "        checks = {}\n",
+            "        \n",
+            "        # Gate 1: Sharpe Ratio\n",
+            "        sharpe = results.get('sharpe_ratio', 0)\n",
+            "        checks['sharpe'] = {\n",
+            "            'name': 'Sharpe Ratio',\n",
+            "            'value': sharpe,\n",
+            "            'threshold': GATE_MIN_SHARPE,\n",
+            "            'operator': '>=',\n",
+            "            'passed': sharpe >= GATE_MIN_SHARPE\n",
+            "        }\n",
+            "        \n",
+            "        # Gate 2: Max Drawdown\n",
+            "        max_dd = results.get('max_drawdown', 1.0)\n",
+            "        checks['max_drawdown'] = {\n",
+            "            'name': 'Max Drawdown',\n",
+            "            'value': max_dd,\n",
+            "            'threshold': GATE_MAX_DRAWDOWN,\n",
+            "            'operator': '<=',\n",
+            "            'passed': max_dd <= GATE_MAX_DRAWDOWN\n",
+            "        }\n",
+            "        \n",
+            "        # Gate 3: PBO\n",
+            "        pbo = results.get('pbo', 1.0)\n",
+            "        checks['pbo'] = {\n",
+            "            'name': 'PBO Score',\n",
+            "            'value': pbo,\n",
+            "            'threshold': GATE_MAX_PBO,\n",
+            "            'operator': '<=',\n",
+            "            'passed': pbo <= GATE_MAX_PBO\n",
+            "        }\n",
+            "        \n",
+            "        # Gate 4: Data Quality\n",
+            "        data_quality = results.get('data_quality_score', 0)\n",
+            "        checks['data_quality'] = {\n",
+            "            'name': 'Data Quality',\n",
+            "            'value': data_quality,\n",
+            "            'threshold': MIN_DATA_QUALITY_SCORE,\n",
+            "            'operator': '>=',\n",
+            "            'passed': data_quality >= MIN_DATA_QUALITY_SCORE\n",
+            "        }\n",
+            "        \n",
+            "        # Gate 5: Calibration (ECE)\n",
+            "        ece = results.get('ece', 1.0)\n",
+            "        checks['calibration'] = {\n",
+            "            'name': 'Calibration (ECE)',\n",
+            "            'value': ece,\n",
+            "            'threshold': 0.10,\n",
+            "            'operator': '<=',\n",
+            "            'passed': ece <= 0.10\n",
+            "        }\n",
+            "        \n",
+            "        # Gate 6: Performance Degradation\n",
+            "        degradation = results.get('degradation_detected', False)\n",
+            "        checks['degradation'] = {\n",
+            "            'name': 'Performance Degradation',\n",
+            "            'value': 'Yes' if degradation else 'No',\n",
+            "            'threshold': 'No',\n",
+            "            'operator': '==',\n",
+            "            'passed': not degradation\n",
+            "        }\n",
+            "        \n",
+            "        all_passed = all(c['passed'] for c in checks.values())\n",
+            "        \n",
+            "        return all_passed, checks\n",
+            "    \n",
+            "    # Run gate check\n",
+            "    passed, gate_report = deployment_gate_check(results)\n",
+            "    \n",
+            "    # Display results\n",
+            "    print(f\"{'Gate Name':<25} {'Value':<15} {'Threshold':<15} {'Status'}\")\n",
+            "    print(\"-\" * 70)\n",
+            "    \n",
+            "    for gate_name, check in gate_report.items():\n",
+            "        value_str = f\"{check['value']:.4f}\" if isinstance(check['value'], (int, float)) else str(check['value'])\n",
+            "        threshold_str = f\"{check['operator']} {check['threshold']:.4f}\" if isinstance(check['threshold'], (int, float)) else f\"{check['operator']} {check['threshold']}\"\n",
+            "        status = \"✅ PASS\" if check['passed'] else \"❌ FAIL\"\n",
+            "        \n",
+            "        print(f\"{check['name']:<25} {value_str:<15} {threshold_str:<15} {status}\")\n",
+            "    \n",
+            "    print(\"\\n\" + \"=\" * 70)\n",
+            "    \n",
+            "    if passed:\n",
+            "        print(\"✅ ALL GATES PASSED - Model approved for deployment\")\n",
+            "        print(\"\\nThe model has met all quality, performance, and risk criteria.\")\n",
+            "        print(\"Recommended action: DEPLOY to production\")\n",
+            "        CONFIG.deployment_gate_passed = True\n",
+            "    else:\n",
+            "        print(\"❌ DEPLOYMENT BLOCKED - Gate failures detected\")\n",
+            "        print(\"\\nFailed gates:\")\n",
+            "        for name, check in gate_report.items():\n",
+            "            if not check['passed']:\n",
+            "                value_str = f\"{check['value']:.4f}\" if isinstance(check['value'], (int, float)) else str(check['value'])\n",
+            "                threshold_str = f\"{check['threshold']:.4f}\" if isinstance(check['threshold'], (int, float)) else str(check['threshold'])\n",
+            "                print(f\"  • {check['name']}: {value_str} (required: {check['operator']} {threshold_str})\")\n",
+            "        \n",
+            "        print(\"\\nRecommended actions:\")\n",
+            "        if not gate_report['sharpe']['passed']:\n",
+            "            print(\"  • Sharpe too low: Tune hyperparameters or add more features\")\n",
+            "        if not gate_report['max_drawdown']['passed']:\n",
+            "            print(\"  • Max drawdown too high: Implement position sizing or risk limits\")\n",
+            "        if not gate_report['pbo']['passed']:\n",
+            "            print(\"  • PBO too high: Model is overfit. Simplify or use walk-forward validation\")\n",
+            "        if not gate_report['data_quality']['passed']:\n",
+            "            print(\"  • Data quality too low: Clean data and re-run pipeline\")\n",
+            "        if not gate_report['calibration']['passed']:\n",
+            "            print(\"  • Poor calibration: Apply calibration methods (Platt scaling, isotonic)\")\n",
+            "        if not gate_report['degradation']['passed']:\n",
+            "            print(\"  • Performance degrading: Retrain on recent data\")\n",
+            "        \n",
+            "        CONFIG.deployment_gate_passed = False\n",
+            "    \n",
+            "    # Store gate report\n",
+            "    CONFIG.deployment_gate_report = gate_report\n",
+            "    \n",
+            "    # Visualization\n",
+            "    fig, axes = plt.subplots(1, 2, figsize=(16, 6))\n",
+            "    \n",
+            "    # 1. Gate status\n",
+            "    ax1 = axes[0]\n",
+            "    gate_names = [check['name'] for check in gate_report.values()]\n",
+            "    gate_status = [1 if check['passed'] else 0 for check in gate_report.values()]\n",
+            "    colors = ['green' if s == 1 else 'red' for s in gate_status]\n",
+            "    \n",
+            "    ax1.barh(gate_names, gate_status, color=colors, alpha=0.7)\n",
+            "    ax1.set_xlim(0, 1.2)\n",
+            "    ax1.set_xlabel('Status (1=Pass, 0=Fail)')\n",
+            "    ax1.set_title('Deployment Gate Results')\n",
+            "    ax1.grid(True, alpha=0.3, axis='x')\n",
+            "    \n",
+            "    # Add pass/fail labels\n",
+            "    for i, (name, status) in enumerate(zip(gate_names, gate_status)):\n",
+            "        label = 'PASS' if status == 1 else 'FAIL'\n",
+            "        ax1.text(status + 0.05, i, label, va='center', fontweight='bold')\n",
+            "    \n",
+            "    # 2. Summary pie chart\n",
+            "    ax2 = axes[1]\n",
+            "    passed_count = sum(gate_status)\n",
+            "    failed_count = len(gate_status) - passed_count\n",
+            "    \n",
+            "    sizes = [passed_count, failed_count]\n",
+            "    labels = [f'Passed ({passed_count})', f'Failed ({failed_count})']\n",
+            "    colors_pie = ['#51cf66', '#ff6b6b']\n",
+            "    \n",
+            "    ax2.pie(sizes, labels=labels, colors=colors_pie, autopct='%1.0f%%', startangle=90, textprops={'fontsize': 12})\n",
+            "    ax2.set_title('Overall Gate Status', fontsize=14, fontweight='bold')\n",
+            "    \n",
+            "    plt.tight_layout()\n",
+            "    plt.show()\n",
+            "    \n",
+            "    print(\"\\nDeployment gate check complete.\")\n"
+        ],
+        "execution_count": None,
+        "outputs": []
+    }
+
+
+def add_mlops_to_notebook(notebook_path):
+    """Add MLOps cells to the notebook."""
+
+    # Read notebook
+    with open(notebook_path, 'r') as f:
+        nb = json.load(f)
+
+    cells = nb['cells']
+
+    # Find insertion points
+    # Task 1: Add after cell 3 (1.2 Trading Simulation Configuration)
+    mlops_config_idx = 4  # After cell 3
+
+    # Task 2: Add after cell 11 (3.3 Verify Processed Data)
+    data_quality_idx = 12  # After cell 11
+
+    # Task 3: Add after cell 25 (5.5 CPCV + PBO)
+    drift_idx = None
+
+    # Task 4: Add after cell 22 (4.5 Realistic Trading Simulation)
+    perf_monitoring_idx = None
+
+    # Task 5: Add after drift detection
+    deployment_gate_idx = None
+
+    # Find exact positions
+    for i, cell in enumerate(cells):
+        if cell['cell_type'] == 'code':
+            source = ''.join(cell['source'])
+
+            # Find 5.5 CPCV + PBO
+            if '5.5 CPCV + PBO' in source:
+                drift_idx = i + 1
+
+            # Find 4.5 Realistic Trading Simulation
+            if '4.5 Realistic Trading Simulation' in source or '4.6 Trading Performance' in source:
+                perf_monitoring_idx = i + 1
+
+    # If we can't find exact positions, use approximations
+    if drift_idx is None:
+        drift_idx = 26  # After cell 25
+    if perf_monitoring_idx is None:
+        perf_monitoring_idx = 23  # After cell 22
+
+    deployment_gate_idx = drift_idx + 1  # Right after drift detection
+
+    print(f"Insertion points:")
+    print(f"  MLOps Config: {mlops_config_idx}")
+    print(f"  Data Quality: {data_quality_idx}")
+    print(f"  Performance Monitoring: {perf_monitoring_idx}")
+    print(f"  Drift Detection: {drift_idx}")
+    print(f"  Deployment Gate: {deployment_gate_idx}")
+
+    # Create new cells
+    new_cells = []
+
+    # Insert cells in reverse order (so indices don't shift)
+    insertions = [
+        (mlops_config_idx, create_mlops_config_cell()),
+        (data_quality_idx, create_data_quality_cell()),
+        (perf_monitoring_idx, create_performance_monitoring_cell()),
+        (drift_idx, create_drift_detection_cell()),
+        (deployment_gate_idx, create_deployment_gate_cell()),
+    ]
+
+    # Sort by index (descending) to avoid index shifting issues
+    insertions.sort(key=lambda x: x[0], reverse=True)
+
+    # Insert cells
+    for idx, new_cell in insertions:
+        cells.insert(idx, new_cell)
+        print(f"✅ Inserted cell at index {idx}")
+
+    # Update notebook
+    nb['cells'] = cells
+
+    # Write back
+    with open(notebook_path, 'w') as f:
+        json.dump(nb, f, indent=1)
+
+    print(f"\n✅ Successfully added {len(insertions)} MLOps cells to notebook")
+    print(f"   Total cells: {len(cells)}")
+
+
+def update_notebook_config():
+    """Update NotebookConfig class to include MLOps fields (Task 6)."""
+
+    config_path = Path('/home/jake/Desktop/Research/notebooks/ML_Pipeline.ipynb')
+
+    with open(config_path, 'r') as f:
+        nb = json.load(f)
+
+    # Find cell 5 (2.1 Initialize Environment)
+    for i, cell in enumerate(nb['cells']):
+        if cell['cell_type'] == 'code':
+            source = ''.join(cell['source'])
+
+            if '2.1 Initialize Environment & CONFIG' in source and '@dataclass' in source:
+                # Add MLOps fields to dataclass
+                lines = source.split('\n')
+
+                # Find the dataclass definition
+                dataclass_start = None
+                for j, line in enumerate(lines):
+                    if 'class NotebookConfig:' in line:
+                        dataclass_start = j
+                        break
+
+                if dataclass_start is not None:
+                    # Find end of existing fields (before any methods)
+                    insert_pos = None
+                    for j in range(dataclass_start, len(lines)):
+                        if 'def ' in lines[j] or lines[j].strip() == '':
+                            # Found first method or empty line after fields
+                            insert_pos = j
+                            break
+
+                    if insert_pos is None:
+                        insert_pos = len(lines)
+
+                    # Insert MLOps fields
+                    mlops_fields = [
+                        '',
+                        '    # MLOps results',
+                        '    data_quality_score: float = 0.0',
+                        '    quality_checks: Dict[str, Any] = field(default_factory=dict)',
+                        '    drift_results: Dict[str, Any] = field(default_factory=dict)',
+                        '    performance_monitoring: Dict[str, Any] = field(default_factory=dict)',
+                        '    deployment_gate_passed: Optional[bool] = None',
+                        '    deployment_gate_report: Dict[str, Any] = field(default_factory=dict)',
+                    ]
+
+                    # Insert before the method/empty line
+                    for field_line in reversed(mlops_fields):
+                        lines.insert(insert_pos, field_line)
+
+                    # Update cell source
+                    cell['source'] = '\n'.join(lines)
+
+                    print(f"✅ Updated NotebookConfig in cell {i}")
+                    break
+
+    # Write back
+    with open(config_path, 'w') as f:
+        json.dump(nb, f, indent=1)
+
+    print("✅ NotebookConfig updated with MLOps fields")
+
+
+def add_helper_functions():
+    """Add MLOps helper functions (Task 7)."""
+
+    config_path = Path('/home/jake/Desktop/Research/notebooks/ML_Pipeline.ipynb')
+
+    with open(config_path, 'r') as f:
+        nb = json.load(f)
+
+    # Find cell 7 (2.3 Checkpoint Utilities) to insert after
+    for i, cell in enumerate(nb['cells']):
+        if cell['cell_type'] == 'code':
+            source = ''.join(cell['source'])
+
+            if '2.3 Checkpoint Utilities' in source:
+                # Create new helper functions cell
+                helper_cell = {
+                    "cell_type": "code",
+                    "metadata": {},
+                    "source": [
+                        "#@title 2.4 MLOps Helper Functions { display-mode: \"form\" }\n",
+                        "\n",
+                        "import numpy as np\n",
+                        "import pandas as pd\n",
+                        "from scipy import stats\n",
+                        "from typing import Dict, Any, Union\n",
+                        "\n",
+                        "def check_missing_values(df: pd.DataFrame, threshold: float = 0.05) -> Dict[str, Any]:\n",
+                        "    \"\"\"Check for missing values in dataframe.\n",
+                        "    \n",
+                        "    Args:\n",
+                        "        df: DataFrame to check\n",
+                        "        threshold: Maximum acceptable missing % (default: 0.05)\n",
+                        "    \n",
+                        "    Returns:\n",
+                        "        Dict with missing_pct, issues, and passed flag\n",
+                        "    \"\"\"\n",
+                        "    missing = df.isnull().sum() / len(df)\n",
+                        "    issues = missing[missing > threshold]\n",
+                        "    return {\n",
+                        "        'missing_pct': missing.to_dict(),\n",
+                        "        'issues': issues.to_dict(),\n",
+                        "        'passed': len(issues) == 0\n",
+                        "    }\n",
+                        "\n",
+                        "\n",
+                        "def detect_outliers(df: pd.DataFrame, method: str = 'zscore', threshold: float = 4) -> Dict[str, float]:\n",
+                        "    \"\"\"Detect outliers using z-score or IQR method.\n",
+                        "    \n",
+                        "    Args:\n",
+                        "        df: DataFrame to check\n",
+                        "        method: 'zscore' or 'iqr'\n",
+                        "        threshold: Z-score threshold (default: 4) or IQR multiplier (default: 3)\n",
+                        "    \n",
+                        "    Returns:\n",
+                        "        Dict mapping column names to outlier percentages\n",
+                        "    \"\"\"\n",
+                        "    outliers = {}\n",
+                        "    \n",
+                        "    for col in df.select_dtypes(include=[np.number]).columns:\n",
+                        "        col_data = df[col].dropna()\n",
+                        "        \n",
+                        "        if len(col_data) == 0:\n",
+                        "            outliers[col] = 0.0\n",
+                        "            continue\n",
+                        "        \n",
+                        "        if method == 'zscore':\n",
+                        "            z_scores = np.abs(stats.zscore(col_data))\n",
+                        "            outlier_mask = z_scores > threshold\n",
+                        "        else:  # IQR\n",
+                        "            Q1 = col_data.quantile(0.25)\n",
+                        "            Q3 = col_data.quantile(0.75)\n",
+                        "            IQR = Q3 - Q1\n",
+                        "            outlier_mask = (col_data < Q1 - threshold*IQR) | (col_data > Q3 + threshold*IQR)\n",
+                        "        \n",
+                        "        outliers[col] = outlier_mask.sum() / len(col_data)\n",
+                        "    \n",
+                        "    return outliers\n",
+                        "\n",
+                        "\n",
+                        "def calculate_psi(expected: Union[pd.Series, pd.DataFrame], \n",
+                        "                 actual: Union[pd.Series, pd.DataFrame], \n",
+                        "                 bins: int = 10) -> Union[float, Dict[str, float]]:\n",
+                        "    \"\"\"Calculate Population Stability Index for drift detection.\n",
+                        "    \n",
+                        "    Args:\n",
+                        "        expected: Expected (training) distribution\n",
+                        "        actual: Actual (test/production) distribution\n",
+                        "        bins: Number of bins for histogram (default: 10)\n",
+                        "    \n",
+                        "    Returns:\n",
+                        "        PSI value (float) or dict of PSI values per column (DataFrame)\n",
+                        "    \n",
+                        "    PSI Interpretation:\n",
+                        "        < 0.1: No significant drift\n",
+                        "        0.1 - 0.25: Moderate drift\n",
+                        "        > 0.25: Significant drift\n",
+                        "    \"\"\"\n",
+                        "    def psi_per_feature(exp: pd.Series, act: pd.Series) -> float:\n",
+                        "        # Create histograms\n",
+                        "        exp_data = exp.dropna()\n",
+                        "        act_data = act.dropna()\n",
+                        "        \n",
+                        "        if len(exp_data) == 0 or len(act_data) == 0:\n",
+                        "            return 0.0\n",
+                        "        \n",
+                        "        exp_hist, bin_edges = np.histogram(exp_data, bins=bins)\n",
+                        "        act_hist, _ = np.histogram(act_data, bins=bin_edges)\n",
+                        "        \n",
+                        "        # Convert to percentages\n",
+                        "        exp_pct = exp_hist / len(exp_data)\n",
+                        "        act_pct = act_hist / len(act_data)\n",
+                        "        \n",
+                        "        # Avoid log(0)\n",
+                        "        exp_pct = np.where(exp_pct == 0, 0.0001, exp_pct)\n",
+                        "        act_pct = np.where(act_pct == 0, 0.0001, act_pct)\n",
+                        "        \n",
+                        "        # Calculate PSI\n",
+                        "        psi = np.sum((act_pct - exp_pct) * np.log(act_pct / exp_pct))\n",
+                        "        return psi\n",
+                        "    \n",
+                        "    if isinstance(expected, pd.DataFrame):\n",
+                        "        psi_values = {}\n",
+                        "        for col in expected.columns:\n",
+                        "            if col in actual.columns:\n",
+                        "                psi_values[col] = psi_per_feature(expected[col], actual[col])\n",
+                        "        return psi_values\n",
+                        "    else:\n",
+                        "        return psi_per_feature(expected, actual)\n",
+                        "\n",
+                        "\n",
+                        "def check_class_balance(y: Union[pd.Series, np.ndarray], min_pct: float = 0.20) -> Dict[str, Any]:\n",
+                        "    \"\"\"Check class balance in labels.\n",
+                        "    \n",
+                        "    Args:\n",
+                        "        y: Target labels\n",
+                        "        min_pct: Minimum acceptable class percentage\n",
+                        "    \n",
+                        "    Returns:\n",
+                        "        Dict with class distribution and balance flag\n",
+                        "    \"\"\"\n",
+                        "    if isinstance(y, np.ndarray):\n",
+                        "        y = pd.Series(y)\n",
+                        "    \n",
+                        "    dist = y.value_counts(normalize=True)\n",
+                        "    min_class_pct = dist.min()\n",
+                        "    \n",
+                        "    return {\n",
+                        "        'distribution': dist.to_dict(),\n",
+                        "        'min_class_pct': min_class_pct,\n",
+                        "        'balanced': min_class_pct >= min_pct,\n",
+                        "        'imbalance_ratio': dist.max() / dist.min()\n",
+                        "    }\n",
+                        "\n",
+                        "\n",
+                        "print(\"MLOps helper functions loaded:\")\n",
+                        "print(\"  - check_missing_values()\")\n",
+                        "print(\"  - detect_outliers()\")\n",
+                        "print(\"  - calculate_psi()\")\n",
+                        "print(\"  - check_class_balance()\")\n"
+                    ],
+                    "execution_count": None,
+                    "outputs": []
+                }
+
+                # Insert after current cell
+                nb['cells'].insert(i + 1, helper_cell)
+                print(f"✅ Inserted helper functions cell at index {i + 1}")
+                break
+
+    # Write back
+    with open(config_path, 'w') as f:
+        json.dump(nb, f, indent=1)
+
+    print("✅ MLOps helper functions added")
+
+
+if __name__ == "__main__":
+    notebook_path = Path('/home/jake/Desktop/Research/notebooks/ML_Pipeline.ipynb')
+
+    print("Adding MLOps components to ML_Pipeline.ipynb...")
+    print("=" * 70)
+
+    # Step 1: Add main MLOps cells
+    add_mlops_to_notebook(notebook_path)
+
+    # Step 2: Update NotebookConfig
+    print("\n" + "=" * 70)
+    update_notebook_config()
+
+    # Step 3: Add helper functions
+    print("\n" + "=" * 70)
+    add_helper_functions()
+
+    print("\n" + "=" * 70)
+    print("✅ MLOps integration complete!")
+    print("\nAdded components:")
+    print("  1. MLOps Configuration (Cell 1.3)")
+    print("  2. Data Quality Validation (Cell 3.6)")
+    print("  3. MLOps Helper Functions (Cell 2.4)")
+    print("  4. Performance Monitoring (Cell 4.6)")
+    print("  5. Drift Detection (Cell 5.6)")
+    print("  6. Deployment Gate (Cell 5.7)")
+    print("\nUpdated:")
+    print("  - NotebookConfig with MLOps fields")
