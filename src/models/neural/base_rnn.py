@@ -513,6 +513,7 @@ class BaseRNNModel(BaseModel):
                 "config": self._config,
                 "n_features": self._n_features,
                 "n_classes": self._n_classes,
+                "seq_len": getattr(self, "_seq_len", None),  # N-BEATS needs this
             },
             path / "model.pt",
         )
@@ -532,6 +533,9 @@ class BaseRNNModel(BaseModel):
         self._config = checkpoint["config"]
         self._n_features = checkpoint["n_features"]
         self._n_classes = checkpoint["n_classes"]
+        # Restore seq_len for N-BEATS (and other models that need it)
+        if "seq_len" in checkpoint:
+            self._seq_len = checkpoint["seq_len"]
 
         # Recreate and load model
         self._model = self._create_network(self._n_features)
