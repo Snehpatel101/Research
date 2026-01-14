@@ -14,7 +14,7 @@ This module contains configuration for:
 # Supported timeframes for resampling pipeline.
 # Input data (1min bars) can be resampled to any of these target timeframes.
 # The base timeframe for ML features is typically 5min.
-SUPPORTED_TIMEFRAMES = ["1min", "5min", "10min", "15min", "20min", "30min", "45min", "60min"]
+SUPPORTED_TIMEFRAMES = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"]
 
 # Mapping from timeframe string to pandas frequency for resampling
 TIMEFRAME_TO_FREQ = {
@@ -23,6 +23,7 @@ TIMEFRAME_TO_FREQ = {
     "10min": "10min",
     "15min": "15min",
     "20min": "20min",
+    "25min": "25min",
     "30min": "30min",
     "45min": "45min",
     "60min": "60min",
@@ -321,7 +322,7 @@ def validate_mtf_config(config: dict = None) -> list[str]:
         )
 
     # Validate MTF timeframes
-    valid_mtf_tfs = ["1min", "5min", "10min", "15min", "30min", "45min", "60min", "1h"]
+    valid_mtf_tfs = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min", "1h"]
     for tf in config.get("mtf_timeframes", []):
         if tf not in valid_mtf_tfs:
             errors.append(f"MTF timeframe '{tf}' not in valid list {valid_mtf_tfs}")

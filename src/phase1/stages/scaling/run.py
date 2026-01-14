@@ -6,6 +6,7 @@ Pipeline wrapper for train-only feature scaling.
 
 import json
 import logging
+import shutil
 import traceback
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -138,8 +139,10 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
         if len(feature_cols) > 10:
             logger.info(f"  ... and {len(feature_cols) - 10} more")
 
+        # Use scaler_type from config (defaults to "robust" if not specified)
+        scaler_type = getattr(config, "scaler_type", "robust") or "robust"
         scaler_config = ScalerConfig(
-            scaler_type="robust", clip_outliers=True, clip_range=(-5.0, 5.0)
+            scaler_type=scaler_type, clip_outliers=True, clip_range=(-5.0, 5.0)
         )
 
         scaler = FeatureScaler(config=scaler_config)
@@ -195,7 +198,7 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
         scaling_metadata = {
             "run_id": config.run_id,
             "timestamp": datetime.now().isoformat(),
-            "scaler_type": "robust",
+            "scaler_type": scaler_type,
             "clip_outliers": True,
             "clip_range": [-5.0, 5.0],
             "n_features_scaled": len(feature_cols),
@@ -227,7 +230,7 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
         logger.info("SCALING SUMMARY")
         logger.info("-" * 50)
         logger.info(f"Features scaled: {len(feature_cols)}")
-        logger.info("Scaler type: robust")
+        logger.info(f"Scaler type: {scaler_type}")
         logger.info("Outlier clipping: [-5.0, 5.0]")
         logger.info(
             f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'WARNINGS'}"
@@ -249,6 +252,18 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
                 stage="feature_scaling",
                 metadata=scaling_metadata,
             )
+
+        # Copy scaled data to global location for training script compatibility
+        # Pipeline outputs to runs/{run_id}/data/splits/scaled/
+        # Training scripts default to data/splits/scaled/
+        global_scaled_dir = config.project_root / "data" / "splits" / "scaled"
+        global_scaled_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"\nCopying scaled data to global location: {global_scaled_dir}")
+        for src_file in [train_scaled_path, val_scaled_path, test_scaled_path, scaler_path, metadata_path]:
+            dst_file = global_scaled_dir / src_file.name
+            shutil.copy2(src_file, dst_file)
+            logger.info(f"  Copied: {src_file.name}")
 
         logger.info("\n" + "=" * 70)
         logger.info("STAGE 7.5 COMPLETE: Feature Scaling")

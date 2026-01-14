@@ -70,6 +70,10 @@ def run_feature_engineering(
         # Use MTF timeframes from PipelineConfig (respects CLI overrides)
         mtf_timeframes = getattr(config, "mtf_timeframes", ["15min", "60min"])
 
+        # Get feature toggles from config (if specified)
+        feature_toggles = getattr(config, "feature_toggles", None) or {}
+        enable_wavelets = feature_toggles.get("wavelets", True)
+
         # Initialize FeatureEngineer from modular implementation
         # MTF settings come from PipelineConfig, not global MTF_CONFIG
         engineer = FeatureEngineer(
@@ -81,6 +85,7 @@ def run_feature_engineering(
             mtf_include_ohlcv=mtf_include_ohlcv,
             mtf_include_indicators=mtf_include_indicators,
             base_timeframe=target_timeframe,  # Use run's target timeframe, not hardcoded '5min'
+            enable_wavelets=enable_wavelets,  # Wire feature toggle from config
         )
 
         # Process each symbol independently (no cross-symbol correlation)

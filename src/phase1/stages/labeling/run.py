@@ -73,12 +73,16 @@ def run_initial_labeling(
 
             symbol_stats = {}
 
+            # Get barrier overrides from config (if specified)
+            barrier_overrides = getattr(config, "barrier_overrides", None) or {}
+
             # Apply initial labeling with default parameters for each horizon
             for horizon in config.label_horizons:
-                # Default parameters (will be optimized by GA)
-                k_up = 2.0
-                k_down = 1.0
-                max_bars = horizon * 3
+                # Use barrier_overrides if specified, otherwise use defaults
+                # Defaults will be optimized by GA in later stages
+                k_up = barrier_overrides.get("k_up", 2.0)
+                k_down = barrier_overrides.get("k_down", 1.0)
+                max_bars = barrier_overrides.get("max_bars", horizon * 3)
 
                 logger.info(
                     f"  Horizon {horizon}: k_up={k_up}, k_down={k_down}, max_bars={max_bars}"

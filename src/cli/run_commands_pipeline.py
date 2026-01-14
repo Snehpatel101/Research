@@ -282,7 +282,7 @@ def run_command(
             console.print(f"  Config: {config.run_config_dir / 'config.json'}")
             console.print(f"  Manifest: {runner.manifest.manifest_path}")
             console.print(
-                f"\nView results with: [bold cyan]pipeline status --run-id {config.run_id}[/bold cyan]"
+                f"\nView results with: [bold cyan]pipeline status {config.run_id}[/bold cyan]"
             )
         else:
             show_error(f"Pipeline failed. Check logs at {runner.log_file}")
