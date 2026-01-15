@@ -37,7 +37,18 @@ from src.cross_validation.cpcv import (
     CPCVResult,
     create_cpcv,
 )
-from src.cross_validation.cv_runner import CrossValidationRunner, CVResult, FoldMetrics
+from src.cross_validation.cv_dataclasses import CVResult, FoldMetrics
+from src.cross_validation.cv_feature_selection import (
+    compute_feature_stability,
+    run_cv_with_per_fold_feature_selection,
+)
+from src.cross_validation.cv_runner import CrossValidationRunner
+from src.cross_validation.cv_stacking import (
+    analyze_cv_stability,
+    build_stacking_datasets_from_cv_results,
+    validate_stacking_consistency,
+)
+from src.cross_validation.cv_tuner import TimeSeriesOptunaTuner
 from src.cross_validation.feature_selector import WalkForwardFeatureSelector
 from src.cross_validation.oof_core import OOFPrediction
 from src.cross_validation.oof_generator import OOFGenerator, StackingDataset
@@ -82,6 +93,15 @@ __all__ = [
     "CVResult",
     "FoldMetrics",
     "PARAM_SPACES",
+    # CV Tuner
+    "TimeSeriesOptunaTuner",
+    # CV Feature Selection
+    "run_cv_with_per_fold_feature_selection",
+    "compute_feature_stability",
+    # CV Stacking
+    "validate_stacking_consistency",
+    "build_stacking_datasets_from_cv_results",
+    "analyze_cv_stability",
     # Walk-forward
     "WalkForwardConfig",
     "WalkForwardEvaluator",

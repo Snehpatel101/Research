@@ -38,11 +38,13 @@ Example:
 """
 
 from .base_rnn import BaseRNNModel, RNNNetwork
-from .cnn import (
+from .inceptiontime_model import (
     InceptionBlock,
     InceptionModule,
     InceptionTimeModel,
     InceptionTimeNetwork,
+)
+from .resnet1d_model import (
     ResidualBlock1D,
     ResidualBlock1DBottleneck,
     ResNet1DModel,
