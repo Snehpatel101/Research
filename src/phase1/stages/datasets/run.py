@@ -304,7 +304,7 @@ def run_build_datasets(config: "PipelineConfig", manifest: "ArtifactManifest") -
         logger.info(f"Output timeframes: {output_timeframes}")
         logger.info(f"Multi-TF mode: {is_multi_tf}")
 
-        feature_set_names = resolve_feature_set_names(config.feature_set)
+        feature_set_names = resolve_feature_set_names(config.feature_generation)
         definitions = get_feature_set_definitions()
 
         all_artifacts: list[Path] = []

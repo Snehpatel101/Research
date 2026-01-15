@@ -121,11 +121,12 @@ class TestConfigTimeframe:
     def test_validate_timeframe_invalid(self):
         """Test validation rejects invalid timeframes."""
         from src.phase1.config import validate_timeframe
+        # Use truly unparseable strings - the validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
-            validate_timeframe('2min')
+            validate_timeframe('badtimeframe')
 
         with pytest.raises(ValueError, match="Unsupported timeframe"):
-            validate_timeframe('invalid')
+            validate_timeframe('xyz_invalid')
 
     def test_parse_timeframe_to_minutes(self):
         """Test parsing timeframe strings to minutes."""
@@ -255,8 +256,9 @@ class TestResampleOHLCV:
         """Test that invalid timeframe raises error."""
         from src.phase1.stages.clean import resample_ohlcv
 
+        # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
-            resample_ohlcv(sample_1min_ohlcv, '3min')
+            resample_ohlcv(sample_1min_ohlcv, 'badtimeframe')
 
     def test_resample_missing_columns(self, sample_1min_ohlcv):
         """Test that missing columns raises error."""
@@ -337,11 +339,12 @@ class TestDataCleanerMTF:
         """Test that DataCleaner rejects invalid target_timeframe."""
         from src.phase1.stages.clean import DataCleaner
 
+        # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             DataCleaner(
                 input_dir=temp_dir,
                 output_dir=temp_dir / "output",
-                target_timeframe='3min'
+                target_timeframe='badtimeframe'
             )
 
     def test_datacleaner_resample_data_method(self, temp_dir, sample_1min_ohlcv):
@@ -461,12 +464,13 @@ class TestCleanSymbolDataMTF:
         output_path = temp_dir / "MES_clean.parquet"
         sample_1min_ohlcv_300_rows.to_parquet(input_path, index=False)
 
+        # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             clean_symbol_data(
                 input_path,
                 output_path,
                 'MES',
-                target_timeframe='7min'
+                target_timeframe='badtimeframe'
             )
 
 
@@ -540,8 +544,9 @@ class TestMultiTimeframePipeline:
             timeframes=['5min', '15min']
         )
 
-        assert (output_dir / "MES_5min.parquet").exists()
-        assert (output_dir / "MES_15min.parquet").exists()
+        # Files are saved with _clean suffix: {symbol}_{tf}_clean.parquet
+        assert (output_dir / "MES_5min_clean.parquet").exists()
+        assert (output_dir / "MES_15min_clean.parquet").exists()
 
 
 # =============================================================================
@@ -587,11 +592,12 @@ class TestPipelineConfigMTF:
     """Tests for PipelineConfig with target_timeframe."""
 
     def test_pipeline_config_default_timeframe(self):
-        """Test PipelineConfig defaults to 5min."""
+        """Test PipelineConfig defaults to 1min (canonical source)."""
         from src.phase1.pipeline_config import PipelineConfig
 
         config = PipelineConfig(symbols=['MES'])
-        assert config.target_timeframe == '5min'
+        # Default is 1min as the canonical source timeframe
+        assert config.target_timeframe == '1min'
 
     def test_pipeline_config_custom_timeframe(self):
         """Test PipelineConfig with custom target_timeframe."""
@@ -613,8 +619,9 @@ class TestPipelineConfigMTF:
         """Test PipelineConfig rejects invalid timeframe."""
         from src.phase1.pipeline_config import PipelineConfig
 
+        # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
-            PipelineConfig(symbols=['MES'], target_timeframe='7min')
+            PipelineConfig(symbols=['MES'], target_timeframe='badtimeframe')
 
     def test_pipeline_config_validate_timeframe(self):
         """Test PipelineConfig.validate() includes timeframe check."""

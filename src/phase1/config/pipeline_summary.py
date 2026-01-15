@@ -22,7 +22,7 @@ Data Parameters:
   - Target Timeframe: {config.target_timeframe}
 
 Features:
-  - Feature Set: {config.feature_set}
+  - Feature Generation: {config.feature_generation}
   - SMA Periods: {config.sma_periods}
   - EMA Periods: {config.ema_periods}
   - ATR Periods: {config.atr_periods}

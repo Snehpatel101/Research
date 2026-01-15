@@ -73,10 +73,11 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     process_all_timeframes: bool = False
 
     # Feature engineering
-    # NOTE (CFG-002a): Pipeline feature_set="full" is intentionally different from
-    # TrainerConfig.feature_set="boosting_optimal". This is by design:
+    # CONFIG-003: Renamed from feature_set to feature_generation to avoid collision with
+    # TrainerConfig.feature_set which controls feature SELECTION. The old name remains
+    # as a deprecated alias.
     #
-    # - Pipeline feature_set="full" means GENERATE all ~180 features during Phase 1.
+    # - feature_generation="full" means GENERATE all ~180 features during Phase 1.
     #   The pipeline produces the complete feature superset so any model can use them.
     #
     # - TrainerConfig.feature_set="boosting_optimal" means SELECT a model-appropriate
@@ -85,7 +86,7 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     #
     # This separation allows per-model feature selection without re-running the pipeline.
     # See src/models/config/trainer_config.py (CFG-002b) for training-time feature set selection.
-    feature_set: str = "full"  # 'full', 'minimal', 'custom' - controls feature GENERATION
+    feature_generation: str = "full"  # 'full', 'minimal', 'custom' - controls feature GENERATION
     sma_periods: list[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
     ema_periods: list[int] = field(default_factory=lambda: [9, 21, 50])
     atr_periods: list[int] = field(default_factory=lambda: [7, 14, 21])
@@ -172,10 +173,10 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
             if self.target_timeframe not in self.output_timeframes:
                 self.output_timeframes = [self.target_timeframe] + list(self.output_timeframes)
 
-        # Validate feature set
-        feature_set_issues = validate_feature_set_config(self.feature_set)
+        # Validate feature generation mode
+        feature_set_issues = validate_feature_set_config(self.feature_generation)
         if feature_set_issues:
-            raise ValueError(f"Feature set validation failed: {feature_set_issues}")
+            raise ValueError(f"Feature generation validation failed: {feature_set_issues}")
 
         # Validate MTF configuration
         # CFG-007: Use unified validation from src.common.timeframes
@@ -260,6 +261,35 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     def summary(self) -> str:
         """Generate a human-readable summary of the configuration."""
         return generate_pipeline_summary(self)
+
+    @property
+    def feature_set(self) -> str:
+        """Deprecated: Use feature_generation instead.
+
+        CONFIG-003: This property provides backward compatibility.
+        The name was changed from feature_set to feature_generation to avoid
+        collision with TrainerConfig.feature_set (which controls feature SELECTION).
+        """
+        import warnings
+
+        warnings.warn(
+            "PipelineConfig.feature_set is deprecated. Use feature_generation instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.feature_generation
+
+    @feature_set.setter
+    def feature_set(self, value: str) -> None:
+        """Deprecated: Use feature_generation instead."""
+        import warnings
+
+        warnings.warn(
+            "PipelineConfig.feature_set is deprecated. Use feature_generation instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        object.__setattr__(self, "feature_generation", value)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""

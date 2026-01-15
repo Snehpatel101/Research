@@ -91,7 +91,7 @@ def run_scaled_validation(config: "PipelineConfig", manifest: "ArtifactManifest"
         test_df = pd.read_parquet(test_path)
 
         definitions = get_feature_set_definitions()
-        feature_set_names = resolve_feature_set_names(config.feature_set)
+        feature_set_names = resolve_feature_set_names(config.feature_generation)
 
         drift_report: dict[str, dict] = {
             "run_id": config.run_id,

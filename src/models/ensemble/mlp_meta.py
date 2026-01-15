@@ -1,5 +1,5 @@
 """
-Ridge regression meta-learner for stacking ensembles.
+Multi-layer perceptron meta-learner for stacking ensembles.
 """
 
 from __future__ import annotations
@@ -11,50 +11,55 @@ from typing import Any
 
 import joblib
 import numpy as np
-from sklearn.linear_model import RidgeClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 
-from ...base import BaseModel, PredictionOutput, TrainingMetrics
-from ...common import map_classes_to_labels, map_labels_to_classes
-from ...registry import register
-from .base import softmax
+from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..common import map_classes_to_labels, map_labels_to_classes
+from ..registry import register
 
 logger = logging.getLogger(__name__)
 
 
 @register(
-    name="ridge_meta",
+    name="mlp_meta",
     family="ensemble",
-    description="Ridge regression meta-learner for combining OOF predictions",
-    aliases=["ridge_meta_learner", "ridge_stacking"],
+    description="Multi-layer perceptron meta-learner for non-linear combinations",
+    aliases=["mlp_meta_learner", "mlp_stacking", "nn_meta"],
 )
-class RidgeMetaLearner(BaseModel):
+class MLPMetaLearner(BaseModel):
     """
-    Ridge regression meta-learner for stacking ensembles.
+    Multi-layer perceptron meta-learner for stacking ensembles.
 
-    Uses Ridge regularization (L2) to combine base model OOF predictions
-    into final class predictions. Effective for linear combination of
-    well-calibrated base models.
+    Uses a shallow neural network to learn non-linear combinations of
+    base model predictions. Effective when base models have complementary
+    error patterns that can be exploited through non-linear transformation.
 
     Input shape: (n_samples, n_base_models * n_classes) for probability inputs
-                 or (n_samples, n_base_models) for class predictions
 
     Advantages:
-    - Fast training, closed-form solution
-    - Robust to multicollinearity in base model predictions
-    - Interpretable weights show relative model contribution
-    - Effective when base models are well-calibrated
+    - Captures non-linear interactions between base model predictions
+    - Automatic feature learning from prediction patterns
+    - Dropout regularization prevents overfitting
+
+    Disadvantages:
+    - More hyperparameters to tune than linear methods
+    - Longer training time than Ridge
+    - May overfit on small stacking datasets
 
     Example:
-        meta = RidgeMetaLearner(config={"alpha": 1.0})
+        meta = MLPMetaLearner(config={
+            "hidden_layer_sizes": (32, 16),
+            "alpha": 0.01,
+        })
         meta.fit(oof_features, y_train, oof_val, y_val)
         output = meta.predict(stacking_features)
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._model: RidgeClassifier | None = None
+        self._model: MLPClassifier | None = None
         self._scaler: StandardScaler | None = None
         self._feature_names: list[str] | None = None
         self._n_classes: int = 3
@@ -65,8 +70,7 @@ class RidgeMetaLearner(BaseModel):
 
     @property
     def requires_scaling(self) -> bool:
-        # Internal scaling is handled
-        return False
+        return False  # Internal scaling
 
     @property
     def requires_sequences(self) -> bool:
@@ -74,13 +78,24 @@ class RidgeMetaLearner(BaseModel):
 
     def get_default_config(self) -> dict[str, Any]:
         return {
-            "alpha": 1.0,  # Regularization strength
-            "fit_intercept": True,
-            "class_weight": "balanced",
+            # Network architecture (shallow for meta-learning)
+            "hidden_layer_sizes": (32, 16),
+            "activation": "relu",
+            # Regularization
+            "alpha": 0.01,  # L2 penalty
+            "early_stopping": True,
+            "validation_fraction": 0.1,
+            "n_iter_no_change": 10,
+            # Training
+            "learning_rate_init": 0.001,
+            "max_iter": 200,
+            "batch_size": "auto",
+            "solver": "adam",
+            # Reproducibility
             "random_state": 42,
-            "tol": 1e-4,
-            "solver": "auto",  # 'auto', 'svd', 'cholesky', 'lsqr', etc.
-            "scale_features": True,  # Scale input features internally
+            "verbose": False,
+            # Feature scaling
+            "scale_features": True,
         }
 
     def fit(
@@ -93,15 +108,10 @@ class RidgeMetaLearner(BaseModel):
         config: dict[str, Any] | None = None,
     ) -> TrainingMetrics:
         """
-        Train Ridge meta-learner on OOF predictions.
+        Train MLP meta-learner on OOF predictions.
 
-        Args:
-            X_train: OOF predictions, shape (n_samples, n_features)
-            y_train: True labels (-1, 0, 1)
-            X_val: Validation OOF predictions
-            y_val: Validation labels
-            sample_weights: Optional sample weights
-            config: Optional config overrides
+        Note: sample_weights are not directly supported by MLPClassifier.
+        If provided, they will be used for metric computation only.
         """
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
@@ -111,11 +121,17 @@ class RidgeMetaLearner(BaseModel):
         if config:
             train_config.update(config)
 
+        if sample_weights is not None:
+            logger.warning(
+                "MLPMetaLearner does not support sample_weights during training. "
+                "Weights will be ignored."
+            )
+
         # Convert labels: -1,0,1 -> 0,1,2
         y_train_sk = map_labels_to_classes(y_train)
         y_val_sk = map_labels_to_classes(y_val)
 
-        # Optional feature scaling
+        # Feature scaling (important for neural networks)
         X_train_scaled = X_train
         X_val_scaled = X_val
         if train_config.get("scale_features", True):
@@ -123,38 +139,57 @@ class RidgeMetaLearner(BaseModel):
             X_train_scaled = self._scaler.fit_transform(X_train)
             X_val_scaled = self._scaler.transform(X_val)
 
-        # Build Ridge classifier
-        self._model = RidgeClassifier(
-            alpha=train_config.get("alpha", 1.0),
-            fit_intercept=train_config.get("fit_intercept", True),
-            class_weight=train_config.get("class_weight", "balanced"),
+        # Combine train and validation for early stopping
+        # MLPClassifier uses validation_fraction from training data
+        X_combined = np.vstack([X_train_scaled, X_val_scaled])
+        y_combined = np.hstack([y_train_sk, y_val_sk])
+
+        # Build MLP classifier
+        self._model = MLPClassifier(
+            hidden_layer_sizes=train_config.get("hidden_layer_sizes", (32, 16)),
+            activation=train_config.get("activation", "relu"),
+            alpha=train_config.get("alpha", 0.01),
+            early_stopping=train_config.get("early_stopping", True),
+            validation_fraction=train_config.get("validation_fraction", 0.1),
+            n_iter_no_change=train_config.get("n_iter_no_change", 10),
+            learning_rate_init=train_config.get("learning_rate_init", 0.001),
+            max_iter=train_config.get("max_iter", 200),
+            batch_size=train_config.get("batch_size", "auto"),
+            solver=train_config.get("solver", "adam"),
             random_state=train_config.get("random_state", 42),
-            tol=train_config.get("tol", 1e-4),
-            solver=train_config.get("solver", "auto"),
+            verbose=train_config.get("verbose", False),
         )
 
+        hidden_layers = train_config.get("hidden_layer_sizes", (32, 16))
         logger.info(
-            f"Training RidgeMetaLearner: alpha={train_config.get('alpha', 1.0)}, "
-            f"n_features={X_train.shape[1]}"
+            f"Training MLPMetaLearner: layers={hidden_layers}, "
+            f"alpha={train_config.get('alpha', 0.01)}, n_features={X_train.shape[1]}"
         )
 
         # Train model
-        self._model.fit(X_train_scaled, y_train_sk, sample_weight=sample_weights)
+        self._model.fit(X_combined, y_combined)
 
         training_time = time.time() - start_time
 
-        # Compute metrics
+        # Compute metrics on original splits
         train_metrics = self._compute_metrics(X_train_scaled, y_train)
         val_metrics = self._compute_metrics(X_val_scaled, y_val)
 
-        # Compute pseudo-loss using decision function distance
-        train_loss = self._compute_loss(X_train_scaled, y_train_sk)
-        val_loss = self._compute_loss(X_val_scaled, y_val_sk)
+        # Compute loss
+        train_proba = self._model.predict_proba(X_train_scaled)
+        val_proba = self._model.predict_proba(X_val_scaled)
+        train_loss = float(log_loss(y_train_sk, train_proba))
+        val_loss = float(log_loss(y_val_sk, val_proba))
 
         self._is_fitted = True
 
+        # Get training history
+        n_iter = getattr(self._model, "n_iter_", 0)
+        best_loss = getattr(self._model, "best_loss_", None)
+
         logger.info(
-            f"Training complete: val_f1={val_metrics['f1']:.4f}, " f"time={training_time:.1f}s"
+            f"Training complete: iterations={n_iter}, val_f1={val_metrics['f1']:.4f}, "
+            f"time={training_time:.1f}s"
         )
 
         return TrainingMetrics(
@@ -164,17 +199,23 @@ class RidgeMetaLearner(BaseModel):
             val_accuracy=val_metrics["accuracy"],
             train_f1=train_metrics["f1"],
             val_f1=val_metrics["f1"],
-            epochs_trained=1,
+            epochs_trained=n_iter,
             training_time_seconds=training_time,
-            early_stopped=False,
+            early_stopped=n_iter < train_config.get("max_iter", 200),
             best_epoch=None,
-            history={},
+            history={
+                "loss_curve": (
+                    list(self._model.loss_curve_) if hasattr(self._model, "loss_curve_") else []
+                )
+            },
             metadata={
-                "meta_learner": "ridge",
+                "meta_learner": "mlp",
                 "n_features": X_train.shape[1],
                 "n_train_samples": len(X_train),
                 "n_val_samples": len(X_val),
-                "alpha": train_config.get("alpha", 1.0),
+                "hidden_layers": hidden_layers,
+                "n_iterations": n_iter,
+                "best_loss": best_loss,
             },
         )
 
@@ -183,16 +224,11 @@ class RidgeMetaLearner(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
-        # Scale if scaler was used during training
         X_scaled = X
         if self._scaler is not None:
             X_scaled = self._scaler.transform(X)
 
-        # Get decision function and convert to pseudo-probabilities
-        decision = self._model.decision_function(X_scaled)
-
-        # Convert decision function to probabilities using softmax
-        probabilities = softmax(decision)
+        probabilities = self._model.predict_proba(X_scaled)
         class_predictions_sk = np.argmax(probabilities, axis=1)
         class_predictions = map_classes_to_labels(class_predictions_sk)
         confidence = np.max(probabilities, axis=1)
@@ -201,11 +237,11 @@ class RidgeMetaLearner(BaseModel):
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,
-            metadata={"meta_learner": "ridge"},
+            metadata={"meta_learner": "mlp"},
         )
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """Return pseudo-probabilities from decision function."""
+        """Return class probabilities."""
         output = self.predict(X)
         return output.class_probabilities
 
@@ -226,7 +262,7 @@ class RidgeMetaLearner(BaseModel):
         }
         joblib.dump(metadata, path / "metadata.joblib")
 
-        logger.info(f"Saved RidgeMetaLearner to {path}")
+        logger.info(f"Saved MLPMetaLearner to {path}")
 
     def load(self, path: Path) -> None:
         """Load model from directory."""
@@ -249,29 +285,25 @@ class RidgeMetaLearner(BaseModel):
             self._n_classes = metadata.get("n_classes", 3)
 
         self._is_fitted = True
-        logger.info(f"Loaded RidgeMetaLearner from {path}")
+        logger.info(f"Loaded MLPMetaLearner from {path}")
 
     def get_feature_importance(self) -> dict[str, float] | None:
-        """Return coefficient magnitudes as feature importance."""
+        """Return input layer weight magnitudes as feature importance."""
         if not self._is_fitted:
             return None
 
-        # Average absolute coefficients across classes
-        coefs = np.abs(self._model.coef_).mean(axis=0)
-        feature_names = self._feature_names or [f"f{i}" for i in range(len(coefs))]
+        # Get first layer weights: shape (n_features, hidden_size)
+        first_layer_weights = self._model.coefs_[0]
+        # Sum absolute weights for each input feature
+        importance = np.abs(first_layer_weights).sum(axis=1)
 
-        return dict(zip(feature_names, coefs.tolist(), strict=False))
+        feature_names = self._feature_names or [f"f{i}" for i in range(len(importance))]
+
+        return dict(zip(feature_names, importance.tolist(), strict=False))
 
     def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
         self._feature_names = names
-
-    def _compute_loss(self, X: np.ndarray, y: np.ndarray) -> float:
-        """Compute hinge-like loss from decision function."""
-        decision = self._model.decision_function(X)
-        # Use negative log softmax as loss proxy
-        probs = softmax(decision)
-        return float(log_loss(y, probs))
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
@@ -284,4 +316,4 @@ class RidgeMetaLearner(BaseModel):
         }
 
 
-__all__ = ["RidgeMetaLearner"]
+__all__ = ["MLPMetaLearner"]

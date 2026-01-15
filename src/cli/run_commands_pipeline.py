@@ -254,7 +254,7 @@ def run_command(
     table.add_row("Timeframe", config.target_timeframe)
     table.add_row("Date Range", f"{config.start_date or 'N/A'} to {config.end_date or 'N/A'}")
     table.add_row("Label Horizons", ", ".join(map(str, config.label_horizons)))
-    table.add_row("Feature Set", config.feature_set)
+    table.add_row("Feature Generation", config.feature_generation)
     table.add_row(
         "Train/Val/Test",
         f"{config.train_ratio:.0%} / {config.val_ratio:.0%} / {config.test_ratio:.0%}",

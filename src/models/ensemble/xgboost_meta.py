@@ -12,9 +12,9 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-from ...base import BaseModel, PredictionOutput, TrainingMetrics
-from ...common import map_classes_to_labels, map_labels_to_classes
-from ...registry import register
+from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..common import map_classes_to_labels, map_labels_to_classes
+from ..registry import register
 
 logger = logging.getLogger(__name__)
 

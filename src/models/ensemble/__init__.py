@@ -100,12 +100,11 @@ from .diversity import (
     compute_pairwise_correlation_matrix,
     compute_q_statistic,
 )
-from .meta_learners import (
-    CalibratedMetaLearner,
-    MLPMetaLearner,
-    RidgeMetaLearner,
-    XGBoostMeta,
-)
+# REORG-003: Meta-learners now at top level (flattened from meta_learners/)
+from .calibrated_meta import CalibratedMetaLearner
+from .mlp_meta import MLPMetaLearner
+from .ridge_meta import RidgeMetaLearner
+from .xgboost_meta import XGBoostMeta
 from .stacking import StackingEnsemble
 from .validator import (
     HETEROGENEOUS_ENSEMBLE_TYPES,

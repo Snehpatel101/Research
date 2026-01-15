@@ -228,7 +228,7 @@ def validate_pipeline_config(config: "PipelineConfig") -> list[str]:
     )
     issues.extend(validate_mtf_config(config.mtf_mode, config.mtf_timeframes))
     issues.extend(validate_scaler_type(config.scaler_type))
-    issues.extend(validate_feature_set_config(config.feature_set))
+    issues.extend(validate_feature_set_config(config.feature_generation))
     issues.extend(validate_feature_toggles(config.feature_toggles))
     issues.extend(validate_barrier_overrides(config.barrier_overrides))
     issues.extend(validate_model_config_dict(config.model_config))

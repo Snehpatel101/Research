@@ -37,7 +37,7 @@ def test_run_build_datasets(tmp_path):
         run_id="test_run",
         symbols=["MES"],
         label_horizons=[5],
-        feature_set="core_full",
+        feature_generation="core_full",  # CONFIG-003: renamed from feature_set
     )
     config.create_directories()
 

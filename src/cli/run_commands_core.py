@@ -223,7 +223,8 @@ def _create_config_from_args(
         config_kwargs["label_horizons"] = [int(h.strip()) for h in horizons.split(",")]
 
     if feature_set is not None:
-        config_kwargs["feature_set"] = feature_set
+        # CONFIG-003: feature_set CLI arg maps to feature_generation field
+        config_kwargs["feature_generation"] = feature_set
 
     # Date range
     if start is not None:
