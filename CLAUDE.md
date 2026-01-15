@@ -505,17 +505,27 @@ Plugin-based model training system with **23 models across 4 families** (22 if C
 src/models/
 ├── registry.py         → ModelRegistry plugin system (23 models registered)
 ├── base.py             → BaseModel interface, TrainingMetrics, PredictionOutput
+├── trainer.py          → Backward-compat re-export (uses training/ package)
+├── training/           → Training orchestration package (split from trainer.py)
+│   ├── trainer.py      → Core Trainer class
+│   ├── features.py     → TrainerFeaturesMixin (feature set resolution)
+│   ├── evaluation.py   → TrainerEvaluationMixin (test set evaluation)
+│   └── artifacts.py    → TrainerArtifactsMixin (save methods)
 ├── config/             → Configuration package (modular)
-│   ├── trainer_config.py  → TrainerConfig dataclass
-│   ├── loaders.py         → YAML config loading
-│   ├── paths.py           → Config file paths
-│   └── environment.py     → Environment detection
-├── trainer.py          → Unified training orchestration (supports heterogeneous stacking)
+│   ├── trainer_config.py    → TrainerConfig dataclass
+│   ├── data_requirements.py → MODEL_DATA_REQUIREMENTS, ModelFamily (moved from phase1)
+│   ├── loaders.py           → YAML config loading
+│   ├── merging.py           → Config merging utilities
+│   ├── paths.py             → Config file paths
+│   └── environment.py       → Environment detection
 ├── metrics.py          → Metric calculation utilities
 ├── data_preparation.py → Dataset preparation utilities
 ├── device.py           → GPU detection, memory estimation
 ├── boosting/           → XGBoost, LightGBM, CatBoost (3 models)
 ├── neural/             → LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D (10 models)
+│   ├── *_model.py      → Each model in separate file (consistent naming)
+│   ├── cnn_base.py     → Shared CNN utilities
+│   └── base_rnn.py     → Shared RNN base class
 ├── classical/          → Random Forest, Logistic, SVM (3 models)
 └── ensemble/           → Voting, Stacking, Blending + Meta-learners (7 models)
 ```
@@ -536,19 +546,88 @@ Time-series aware cross-validation with purge/embargo:
 
 ```
 src/cross_validation/
-├── purged_kfold.py     → PurgedKFold with configurable purge/embargo
-├── feature_selector.py → Walk-forward MDA/MDI feature selection
-├── oof_generator.py    → Unified OOF generator interface
-├── oof_core.py         → Core tabular OOF generation
-├── oof_sequence.py     → Sequence model OOF generation
-├── oof_stacking.py     → Stacking dataset builder
-├── oof_validation.py   → Coverage and correlation validation
-├── oof_io.py           → Save/load OOF datasets
-├── cv_runner.py        → CrossValidationRunner, Optuna tuning
-└── param_spaces.py     → Hyperparameter search spaces
+├── purged_kfold.py         → PurgedKFold with configurable purge/embargo
+├── feature_selector.py     → Backward-compat re-export (uses src/feature_selection)
+├── cv_runner.py            → CrossValidationRunner (core orchestration)
+├── cv_dataclasses.py       → FoldMetrics, CVResult dataclasses
+├── cv_tuner.py             → TimeSeriesOptunaTuner (Optuna integration)
+├── cv_feature_selection.py → Per-fold feature selection helpers
+├── cv_stacking.py          → Stacking dataset building utilities
+├── oof_generator.py        → Unified OOF generator interface
+├── oof_core.py             → Core tabular OOF generation
+├── oof_sequence.py         → Sequence model OOF generation
+├── oof_stacking.py         → Stacking dataset builder
+├── oof_validation.py       → Coverage and correlation validation
+├── oof_io.py               → Save/load OOF datasets
+└── param_spaces.py         → Hyperparameter search spaces
 ```
 
 **Output:** CV results, OOF predictions, stacking datasets
+
+---
+
+## Feature Selection (Consolidated)
+
+All feature selection code consolidated into a single canonical package:
+
+```
+src/feature_selection/
+├── __init__.py         → Unified exports with lazy loading
+├── result.py           → FeatureSelectionResult, PersistedFeatureSelection
+├── config.py           → FeatureSelectionConfig, ModelFamilyDefaults
+├── walk_forward.py     → WalkForwardFeatureSelector (from cross_validation)
+├── manager.py          → FeatureSelectionManager (from models)
+├── filtering.py        → filter_low_variance, filter_correlated (from phase1)
+├── priority.py         → FEATURE_PRIORITY dict
+├── ohlcv_selector.py   → OHLCVFeatureSelector
+└── purged_selector.py  → PurgedFeatureSelector
+```
+
+**Usage:**
+```python
+# Canonical imports (recommended)
+from src.feature_selection import (
+    FeatureSelectionResult,
+    WalkForwardFeatureSelector,
+    FeatureSelectionManager,
+    FeatureSelectionConfig,
+)
+
+# Old imports still work with deprecation warnings
+from src.cross_validation.feature_selector import WalkForwardFeatureSelector  # warns
+from src.models.feature_selection import FeatureSelectionManager  # warns
+```
+
+---
+
+## Centralized Configuration (Facade)
+
+Unified config access via `src/config/` facade (re-exports from existing locations):
+
+```
+src/config/
+├── __init__.py         → Top-level exports (TrainerConfig, CANONICAL_TIMEFRAMES, etc.)
+├── constants/          → Re-exports from src/common/
+│   └── __init__.py     → CANONICAL_TIMEFRAMES, DEFAULT_SPLIT_RATIOS, etc.
+├── models/             → Re-exports from src/models/config/
+│   └── __init__.py     → TrainerConfig, detect_environment, etc.
+└── pipeline/           → Re-exports from src/phase1/config/
+    └── __init__.py     → MODEL_DATA_REQUIREMENTS, ModelFamily, etc.
+```
+
+**Usage:**
+```python
+# Unified imports (recommended for new code)
+from src.config import TrainerConfig, CANONICAL_TIMEFRAMES, MODEL_DATA_REQUIREMENTS
+from src.config.constants import DEFAULT_SPLIT_RATIOS
+from src.config.models import detect_environment
+from src.config.pipeline import ModelFamily
+
+# Original imports still work (100% backward compatible)
+from src.common.timeframes import CANONICAL_TIMEFRAMES
+from src.models.config import TrainerConfig
+from src.phase1.config import MODEL_DATA_REQUIREMENTS
+```
 
 ---
 
