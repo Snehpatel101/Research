@@ -136,15 +136,22 @@ from .trend import (
 from .volatility import (
     add_atr,
     add_bollinger_bands,
+    add_garch_features,
     add_garman_klass_volatility,
+    add_higher_moments,
     add_historical_volatility,
     add_keltner_channels,
     add_parkinson_volatility,
+    add_rogers_satchell_volatility,
+    add_yang_zhang_volatility,
+    ARCH_AVAILABLE,
 )
 
 # Feature functions - Volume
 from .volume import (
+    add_dollar_volume,
     add_obv,
+    add_twap_features,
     add_volume_features,
     add_vwap,
 )
@@ -168,12 +175,18 @@ from .entropy import (
     DEFAULT_APEN_M,
     DEFAULT_APEN_R,
     DEFAULT_APEN_WINDOWS,
+    DEFAULT_HURST_WINDOWS,
     DEFAULT_LZ_WINDOWS,
+    DEFAULT_SAMPLE_ENTROPY_M,
+    DEFAULT_SAMPLE_ENTROPY_R,
+    DEFAULT_SAMPLE_ENTROPY_WINDOWS,
     DEFAULT_SHANNON_BINS,
     DEFAULT_SHANNON_WINDOWS,
     add_approximate_entropy,
     add_entropy_features,
+    add_hurst_features,
     add_lempel_ziv_complexity,
+    add_sample_entropy,
     add_shannon_entropy,
 )
 
@@ -220,10 +233,17 @@ __all__ = [
     "add_historical_volatility",
     "add_parkinson_volatility",
     "add_garman_klass_volatility",
+    "add_rogers_satchell_volatility",
+    "add_yang_zhang_volatility",
+    "add_higher_moments",
+    "add_garch_features",
+    "ARCH_AVAILABLE",
     # Volume
     "add_volume_features",
     "add_vwap",
     "add_obv",
+    "add_dollar_volume",
+    "add_twap_features",
     # Trend
     "add_adx",
     "add_supertrend",
@@ -275,10 +295,16 @@ __all__ = [
     "add_shannon_entropy",
     "add_lempel_ziv_complexity",
     "add_approximate_entropy",
+    "add_sample_entropy",
+    "add_hurst_features",
     "DEFAULT_SHANNON_WINDOWS",
     "DEFAULT_SHANNON_BINS",
     "DEFAULT_LZ_WINDOWS",
     "DEFAULT_APEN_WINDOWS",
     "DEFAULT_APEN_M",
     "DEFAULT_APEN_R",
+    "DEFAULT_SAMPLE_ENTROPY_WINDOWS",
+    "DEFAULT_SAMPLE_ENTROPY_M",
+    "DEFAULT_SAMPLE_ENTROPY_R",
+    "DEFAULT_HURST_WINDOWS",
 ]

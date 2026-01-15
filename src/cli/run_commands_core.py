@@ -77,6 +77,8 @@ def _create_config_from_args(
     mtf_enable: bool | None,
     # Output timeframes (multi-TF support)
     output_timeframes: str | None,
+    # MTF-P1-002: Process all 9 canonical timeframes
+    process_all_timeframes: bool | None,
     # Feature toggles
     enable_wavelets: bool | None,
     enable_microstructure: bool | None,
@@ -272,6 +274,12 @@ def _create_config_from_args(
             show_info("Using full 9-TF ladder for output timeframes")
         else:
             config_kwargs["output_timeframes"] = [tf.strip() for tf in output_timeframes.split(",")]
+
+    # MTF-P1-002: Process all 9 canonical timeframes through pipeline
+    # This enables heterogeneous ensembles where each base model trains on its preferred TF
+    if process_all_timeframes is not None and process_all_timeframes:
+        config_kwargs["process_all_timeframes"] = True
+        show_info("Enabling multi-TF processing for all 9 canonical timeframes (1m-1h)")
 
     # Feature toggles - stored for use by feature engineering stage
     feature_toggles = {}

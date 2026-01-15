@@ -38,6 +38,7 @@ Example:
 """
 
 from .base_rnn import BaseRNNModel, RNNNetwork
+from .lr_finder import LRFinder, LRFinderResult, find_lr_for_model
 from .inceptiontime_model import (
     InceptionBlock,
     InceptionModule,
@@ -88,6 +89,10 @@ __all__ = [
     # Base classes
     "BaseRNNModel",
     "RNNNetwork",
+    # LR Finder
+    "LRFinder",
+    "LRFinderResult",
+    "find_lr_for_model",
     # LSTM
     "LSTMModel",
     "LSTMNetwork",

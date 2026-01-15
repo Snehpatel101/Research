@@ -212,9 +212,84 @@ def add_dollar_volume(
     return df
 
 
+def add_twap_features(
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
+) -> pd.DataFrame:
+    """
+    Add Time-Weighted Average Price (TWAP) features.
+
+    TWAP is the average of OHLC prices per bar, then optionally smoothed with
+    rolling averages. Unlike VWAP which weights by volume, TWAP treats all time
+    periods equally, making it useful for:
+    - Benchmark price for execution algorithms
+    - Fair value estimation independent of volume
+    - Detecting volume-independent price trends
+
+    Features added:
+    - twap: Raw TWAP for current bar (typical price)
+    - twap_{period}: Rolling TWAP over specified periods
+    - price_to_twap_{period}: Close price ratio to rolling TWAP
+    - twap_slope_{period}: Rate of change of TWAP (momentum)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with OHLC columns (open, high, low, close)
+    feature_metadata : dict[str, str]
+        Dictionary to store feature descriptions
+    periods : list[int], optional
+        Periods for rolling TWAP calculation. Default: [10, 20]
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with TWAP features added
+
+    Notes
+    -----
+    Anti-lookahead: All rolling features use .shift(1) to ensure features
+    at bar[t] use data only up to bar[t-1]. The raw twap column is NOT shifted
+    as it represents the current bar's typical price (which is known at bar close).
+    """
+    if periods is None:
+        periods = [10, 20]
+
+    logger.info(f"Adding TWAP features with periods: {periods}")
+
+    # TWAP = typical price = (open + high + low + close) / 4
+    # This is known at bar close, so raw value does not need shift
+    df["twap"] = (df["open"] + df["high"] + df["low"] + df["close"]) / 4
+    feature_metadata["twap"] = "Time-Weighted Average Price (typical price)"
+
+    for period in periods:
+        # Rolling TWAP - ANTI-LOOKAHEAD: shift(1)
+        twap_col = f"twap_{period}"
+        df[twap_col] = df["twap"].rolling(window=period).mean().shift(1)
+        feature_metadata[twap_col] = f"Rolling TWAP ({period}-period, lagged)"
+
+        # Price to TWAP ratio - compare lagged close to lagged TWAP
+        ratio_col = f"price_to_twap_{period}"
+        close_lagged = df["close"].shift(1)
+        df[ratio_col] = _safe_divide(close_lagged, df[twap_col])
+        feature_metadata[ratio_col] = f"Close/TWAP ratio ({period}-period, lagged)"
+
+        # TWAP slope (momentum) - ANTI-LOOKAHEAD: shift(1)
+        # Use 5-bar lookback for slope calculation
+        slope_lookback = min(5, period // 2) if period > 2 else 1
+        slope_col = f"twap_slope_{period}"
+        twap_rolling = df["twap"].rolling(window=period).mean()
+        df[slope_col] = twap_rolling.pct_change(slope_lookback).shift(1)
+        feature_metadata[slope_col] = (
+            f"TWAP slope ({period}-period, {slope_lookback}-bar change, lagged)"
+        )
+
+    return df
+
+
 __all__ = [
     "add_volume_features",
     "add_vwap",
     "add_obv",
     "add_dollar_volume",
+    "add_twap_features",
 ]

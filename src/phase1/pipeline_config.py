@@ -29,6 +29,7 @@ from src.phase1.config.pipeline_validation import validate_pipeline_config
 from src.phase1.stages.mtf.constants import (
     DEFAULT_MTF_MODE,
     DEFAULT_MTF_TIMEFRAMES,
+    FULL_MTF_TIMEFRAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,9 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     target_timeframe: str = "1min"  # Primary training timeframe (canonical source)
     output_timeframes: list[str] | None = None  # If set, produce multiple clean datasets
     bar_resolution: str = field(default=None)  # Legacy alias
+    # MTF-P1-002: When True, process all 9 canonical timeframes (1m-1h) through pipeline
+    # This enables heterogeneous ensembles where each base model trains on its preferred TF
+    process_all_timeframes: bool = False
 
     # Feature engineering
     # NOTE (CFG-002a): Pipeline feature_set="full" is intentionally different from
@@ -265,13 +269,34 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
     @property
     def effective_output_timeframes(self) -> list[str]:
-        """Return list of timeframes to produce in Stage 2.
+        """Return list of timeframes to produce in pipeline stages 2-6.
 
-        If output_timeframes is set, return that list.
-        Otherwise, return [target_timeframe] for backward compatibility.
+        Priority order:
+        1. If output_timeframes is explicitly set, use that list
+        2. If process_all_timeframes=True, use full 9-TF ladder (FULL_MTF_TIMEFRAMES)
+        3. Otherwise, return [target_timeframe] for backward compatibility
+
+        MTF-P1-002: When process_all_timeframes=True, all downstream stages (3-6)
+        will iterate over all 9 canonical timeframes, producing per-TF outputs:
+        - Stage 3: features_{tf}.parquet for each TF
+        - Stage 4: labels_{tf}.parquet for each TF
+        - Stage 5: GA optimization for each TF
+        - Stage 6: final_labeled_{tf}.parquet for each TF
+        - Stage 7: splits per TF
+        - Stage 7.5: scaling per TF
+
+        This enables heterogeneous ensembles where each base model can independently
+        choose its training timeframe (e.g., CatBoost->15min, TCN->5min, PatchTST->1min).
         """
+        # Priority 1: Explicitly set output_timeframes
         if self.output_timeframes:
             return list(self.output_timeframes)
+
+        # Priority 2: process_all_timeframes flag enables full 9-TF ladder
+        if self.process_all_timeframes:
+            return list(FULL_MTF_TIMEFRAMES)
+
+        # Priority 3: Default to single target_timeframe (backward compat)
         return [self.target_timeframe]
 
     def __deepcopy__(self, memo: dict) -> "PipelineConfig":

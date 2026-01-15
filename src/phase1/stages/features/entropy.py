@@ -632,6 +632,454 @@ def add_approximate_entropy(
     return df
 
 
+# =============================================================================
+# HURST EXPONENT
+# =============================================================================
+
+DEFAULT_HURST_WINDOWS = [50, 100, 200]
+
+
+def _calculate_hurst_rs(prices: np.ndarray) -> float:
+    """
+    Calculate Hurst exponent using Rescaled Range (R/S) analysis.
+
+    The R/S method measures the ratio of the range of cumulative deviations
+    to the standard deviation, scaled by the series length.
+
+    Parameters
+    ----------
+    prices : np.ndarray
+        Array of price values (not returns)
+
+    Returns
+    -------
+    float
+        Hurst exponent estimate (0-1 range typically)
+        H < 0.5: Mean-reverting
+        H = 0.5: Random walk
+        H > 0.5: Trending
+    """
+    n = len(prices)
+    if n < 20:
+        return np.nan
+
+    # Calculate log returns
+    log_returns = np.log(prices[1:] / prices[:-1])
+
+    # Remove NaN returns
+    log_returns = log_returns[~np.isnan(log_returns)]
+    if len(log_returns) < 20:
+        return np.nan
+
+    # Use multiple sub-series lengths for R/S regression
+    min_size = 10
+    max_size = len(log_returns) // 2
+
+    if max_size < min_size:
+        return np.nan
+
+    # Generate log-spaced sizes for sub-series
+    sizes = np.unique(np.logspace(np.log10(min_size), np.log10(max_size), num=10).astype(int))
+    sizes = sizes[sizes >= min_size]
+
+    if len(sizes) < 3:
+        return np.nan
+
+    rs_values = []
+    for size in sizes:
+        # Number of non-overlapping subseries
+        n_subseries = len(log_returns) // size
+
+        if n_subseries == 0:
+            continue
+
+        rs_sum = 0
+        valid_count = 0
+
+        for i in range(n_subseries):
+            subseries = log_returns[i * size : (i + 1) * size]
+
+            # Mean-centered cumulative sum
+            mean_ret = np.mean(subseries)
+            cumsum = np.cumsum(subseries - mean_ret)
+
+            # Range of cumulative sum
+            r = np.max(cumsum) - np.min(cumsum)
+
+            # Standard deviation
+            s = np.std(subseries, ddof=1)
+
+            if s > 0:
+                rs_sum += r / s
+                valid_count += 1
+
+        if valid_count > 0:
+            rs_values.append((size, rs_sum / valid_count))
+
+    if len(rs_values) < 3:
+        return np.nan
+
+    # Linear regression of log(R/S) vs log(n) to estimate Hurst
+    sizes_arr = np.array([x[0] for x in rs_values])
+    rs_arr = np.array([x[1] for x in rs_values])
+
+    # Filter out invalid values
+    valid_mask = (rs_arr > 0) & np.isfinite(rs_arr)
+    if valid_mask.sum() < 3:
+        return np.nan
+
+    log_sizes = np.log(sizes_arr[valid_mask])
+    log_rs = np.log(rs_arr[valid_mask])
+
+    # Simple linear regression: slope = Hurst exponent
+    try:
+        coeffs = np.polyfit(log_sizes, log_rs, 1)
+        hurst = coeffs[0]
+
+        # Clip to reasonable range
+        hurst = np.clip(hurst, 0.0, 1.0)
+        return hurst
+    except Exception:
+        return np.nan
+
+
+def _rolling_hurst(prices: np.ndarray, window: int) -> np.ndarray:
+    """
+    Calculate rolling Hurst exponent.
+
+    Parameters
+    ----------
+    prices : np.ndarray
+        Array of price values
+    window : int
+        Rolling window size
+
+    Returns
+    -------
+    np.ndarray
+        Rolling Hurst exponent values
+    """
+    n = len(prices)
+    hurst = np.full(n, np.nan)
+
+    for i in range(window - 1, n):
+        window_prices = prices[i - window + 1 : i + 1]
+
+        # Skip if too many NaNs
+        if np.isnan(window_prices).sum() > window // 4:
+            continue
+
+        # Use non-NaN prices
+        valid_prices = window_prices[~np.isnan(window_prices)]
+        if len(valid_prices) >= 20:
+            hurst[i] = _calculate_hurst_rs(valid_prices)
+
+    return hurst
+
+
+def add_hurst_features(
+    df: pd.DataFrame,
+    feature_metadata: dict[str, str],
+    price_col: str = "close",
+    windows: Optional[list[int]] = None,
+) -> pd.DataFrame:
+    """
+    Add Hurst exponent features for mean-reversion vs trending detection.
+
+    The Hurst exponent (H) measures the long-term memory of a time series:
+    - H < 0.5: Mean-reverting (anti-persistent) - price tends to reverse
+    - H = 0.5: Random walk - unpredictable
+    - H > 0.5: Trending (persistent) - price tends to continue
+
+    This is valuable for:
+    - Strategy selection (mean-reversion vs trend-following)
+    - Regime detection and adaptive trading
+    - Market efficiency analysis
+
+    Academic Reference:
+        Hurst, H.E. (1951) "Long-term Storage Capacity of Reservoirs"
+        Transactions of the American Society of Civil Engineers, 116, 770-808.
+
+        Peters, E.E. (1994) "Fractal Market Analysis"
+        John Wiley & Sons. ISBN 978-0471585244.
+
+    Features added:
+    - hurst_{window}: Hurst exponent over specified window
+    - hurst_regime: Categorical regime indicator (mean_reverting, random, trending)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with price column
+    feature_metadata : dict[str, str]
+        Dictionary to store feature descriptions
+    price_col : str, default 'close'
+        Column to compute Hurst exponent on
+    windows : list[int], optional
+        Rolling window sizes. Default: [50, 100, 200]
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with Hurst exponent features added
+
+    Notes
+    -----
+    Anti-lookahead: All features use .shift(1) to ensure features at bar[t]
+    use data only up to bar[t-1].
+    """
+    if windows is None:
+        windows = DEFAULT_HURST_WINDOWS.copy()
+
+    logger.info(f"Adding Hurst exponent features with windows: {windows}")
+
+    prices = df[price_col].values
+
+    for window in windows:
+        col_name = f"hurst_{window}"
+
+        hurst = _rolling_hurst(prices, window)
+
+        # ANTI-LOOKAHEAD: shift(1) ensures feature at bar[t] uses data up to bar[t-1]
+        df[col_name] = pd.Series(hurst, index=df.index).shift(1)
+
+        feature_metadata[col_name] = (
+            f"Hurst exponent ({window}-period R/S method, lagged)"
+        )
+
+    # Add regime classification based on primary window (middle window)
+    primary_window = windows[len(windows) // 2] if len(windows) > 0 else 100
+    primary_col = f"hurst_{primary_window}"
+
+    if primary_col in df.columns:
+        # Classify regime: <0.45 = mean_reverting, 0.45-0.55 = random, >0.55 = trending
+        conditions = [
+            df[primary_col] < 0.45,
+            (df[primary_col] >= 0.45) & (df[primary_col] <= 0.55),
+            df[primary_col] > 0.55,
+        ]
+        choices = [0, 1, 2]  # 0=mean_reverting, 1=random, 2=trending
+
+        df["hurst_regime"] = np.select(conditions, choices, default=np.nan)
+        feature_metadata["hurst_regime"] = (
+            f"Hurst regime from {primary_window}-period (0=mean_reverting, 1=random, 2=trending, lagged)"
+        )
+
+    return df
+
+
+# =============================================================================
+# SAMPLE ENTROPY
+# =============================================================================
+
+DEFAULT_SAMPLE_ENTROPY_WINDOWS = [20, 50]
+DEFAULT_SAMPLE_ENTROPY_M = 2
+DEFAULT_SAMPLE_ENTROPY_R = 0.2
+
+
+def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
+    """
+    Calculate Sample Entropy (SampEn).
+
+    Sample entropy is an improvement over Approximate Entropy that:
+    - Does not count self-matches (reduces bias)
+    - Is less dependent on data length
+    - Provides more consistent results
+
+    SampEn = -ln(A/B) where:
+    - B = count of template matches for dimension m
+    - A = count of template matches for dimension m+1
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Time series data
+    m : int
+        Embedding dimension (template length)
+    r : float
+        Tolerance as fraction of standard deviation
+
+    Returns
+    -------
+    float
+        Sample entropy value (lower = more regular, higher = more complex)
+    """
+    n = len(data)
+    if n < m + 2:
+        return np.nan
+
+    # Calculate tolerance from data std
+    std = np.std(data)
+    if std == 0:
+        return np.nan
+
+    tolerance = r * std
+
+    # Count matches for dimension m
+    def count_matches(dim: int) -> int:
+        """Count template matches for given embedding dimension."""
+        n_templates = n - dim
+        if n_templates <= 1:
+            return 0
+
+        count = 0
+        templates = np.array([data[i : i + dim] for i in range(n_templates)])
+
+        for i in range(n_templates):
+            for j in range(i + 1, n_templates):  # Exclude self-match
+                # Check if max absolute difference is within tolerance
+                if np.max(np.abs(templates[i] - templates[j])) <= tolerance:
+                    count += 1
+
+        return count
+
+    # Count matches for m and m+1 dimensions
+    B = count_matches(m)      # Matches for dimension m
+    A = count_matches(m + 1)  # Matches for dimension m+1
+
+    # Avoid division by zero
+    if B == 0:
+        return np.nan
+
+    # Sample entropy: -ln(A/B)
+    # Handle case where A = 0 (maximum entropy/randomness)
+    if A == 0:
+        return np.inf  # Will be clipped to a large value
+
+    return -np.log(A / B)
+
+
+def _rolling_sample_entropy(
+    data: np.ndarray, window: int, m: int, r: float
+) -> np.ndarray:
+    """
+    Calculate rolling Sample Entropy.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Time series data (typically returns)
+    window : int
+        Rolling window size
+    m : int
+        Embedding dimension
+    r : float
+        Tolerance fraction
+
+    Returns
+    -------
+    np.ndarray
+        Rolling sample entropy values
+    """
+    n = len(data)
+    sampen = np.full(n, np.nan)
+
+    # Minimum data points needed for meaningful SampEn
+    min_data = max(m + 10, 15)
+
+    for i in range(window - 1, n):
+        window_data = data[i - window + 1 : i + 1]
+
+        # Remove NaNs
+        valid_data = window_data[~np.isnan(window_data)]
+
+        if len(valid_data) < min_data:
+            continue
+
+        se = _calculate_sample_entropy(valid_data, m, r)
+
+        # Clip infinite values to a large but finite number
+        if np.isinf(se):
+            se = 10.0  # Cap at 10 (very high entropy)
+
+        sampen[i] = se
+
+    return sampen
+
+
+def add_sample_entropy(
+    df: pd.DataFrame,
+    feature_metadata: dict[str, str],
+    price_col: str = "close",
+    windows: Optional[list[int]] = None,
+    m: int = DEFAULT_SAMPLE_ENTROPY_M,
+    r: float = DEFAULT_SAMPLE_ENTROPY_R,
+) -> pd.DataFrame:
+    """
+    Add Sample Entropy (SampEn) features measuring pattern regularity.
+
+    Sample entropy is an improvement over Approximate Entropy (ApEn) that
+    is less biased and more consistent. It measures the complexity/regularity
+    of the time series without counting self-matches.
+
+    Lower SampEn = more regular/predictable patterns
+    Higher SampEn = more irregular/random
+
+    This is valuable for:
+    - Regime detection (predictable vs unpredictable market)
+    - Signal reliability estimation
+    - Model gating (avoid trading in high-entropy periods)
+
+    Academic Reference:
+        Richman, J.S. & Moorman, J.R. (2000) "Physiological time-series analysis
+        using approximate entropy and sample entropy"
+        American Journal of Physiology, 278(6), H2039-H2049.
+
+    Features added:
+    - sample_entropy_{window}: Sample entropy over specified window
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with price column
+    feature_metadata : dict[str, str]
+        Dictionary to store feature descriptions
+    price_col : str, default 'close'
+        Column to compute sample entropy on
+    windows : list[int], optional
+        Rolling window sizes. Default: [20, 50]
+    m : int, default 2
+        Embedding dimension (template length)
+    r : float, default 0.2
+        Tolerance as fraction of standard deviation
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with sample entropy features added
+
+    Notes
+    -----
+    Anti-lookahead: All features use .shift(1) to ensure features at bar[t]
+    use data only up to bar[t-1].
+
+    Sample entropy is O(n^2) per window, so larger windows are slower.
+    """
+    if windows is None:
+        windows = DEFAULT_SAMPLE_ENTROPY_WINDOWS.copy()
+
+    logger.info(f"Adding Sample Entropy with windows: {windows}, m={m}, r={r}")
+
+    # Calculate log returns (SampEn on returns is more meaningful than prices)
+    prices = df[price_col].values
+    returns = np.log(prices[1:] / prices[:-1])
+    returns = np.concatenate([[np.nan], returns])
+
+    for window in windows:
+        col_name = f"sample_entropy_{window}"
+
+        sampen = _rolling_sample_entropy(returns, window, m, r)
+
+        # ANTI-LOOKAHEAD: shift(1) ensures feature at bar[t] uses data up to bar[t-1]
+        df[col_name] = pd.Series(sampen, index=df.index).shift(1)
+
+        feature_metadata[col_name] = (
+            f"Sample entropy (m={m}, r={r}, {window}-period, lagged)"
+        )
+
+    return df
+
+
 def add_entropy_features(
     df: pd.DataFrame,
     feature_metadata: Optional[dict[str, str]] = None,
@@ -639,12 +1087,18 @@ def add_entropy_features(
     include_shannon: bool = True,
     include_lempel_ziv: bool = True,
     include_approximate: bool = True,
+    include_sample: bool = True,
+    include_hurst: bool = True,
     shannon_windows: Optional[list[int]] = None,
     shannon_bins: int = DEFAULT_SHANNON_BINS,
     lz_windows: Optional[list[int]] = None,
     apen_windows: Optional[list[int]] = None,
     apen_m: int = DEFAULT_APEN_M,
     apen_r: float = DEFAULT_APEN_R,
+    sampen_windows: Optional[list[int]] = None,
+    sampen_m: int = DEFAULT_SAMPLE_ENTROPY_M,
+    sampen_r: float = DEFAULT_SAMPLE_ENTROPY_R,
+    hurst_windows: Optional[list[int]] = None,
 ) -> pd.DataFrame:
     """
     Add all information-theoretic entropy features from OHLCV data.
@@ -657,6 +1111,8 @@ def add_entropy_features(
     - Shannon entropy (randomness of discretized returns)
     - Lempel-Ziv complexity (pattern complexity of binary price changes)
     - Approximate entropy (template-matching regularity)
+    - Sample entropy (improved ApEn, less biased)
+    - Hurst exponent (mean-reversion vs trending detection)
 
     All features are lagged by 1 bar to prevent lookahead bias.
 
@@ -674,6 +1130,10 @@ def add_entropy_features(
         Include Lempel-Ziv complexity features
     include_approximate : bool, default True
         Include Approximate entropy features
+    include_sample : bool, default True
+        Include Sample entropy features
+    include_hurst : bool, default True
+        Include Hurst exponent features
     shannon_windows : list[int], optional
         Windows for Shannon entropy. Default: [10, 20, 50]
     shannon_bins : int, default 10
@@ -686,6 +1146,14 @@ def add_entropy_features(
         Embedding dimension for ApEn
     apen_r : float, default 0.2
         Tolerance fraction for ApEn
+    sampen_windows : list[int], optional
+        Windows for Sample entropy. Default: [20, 50]
+    sampen_m : int, default 2
+        Embedding dimension for SampEn
+    sampen_r : float, default 0.2
+        Tolerance fraction for SampEn
+    hurst_windows : list[int], optional
+        Windows for Hurst exponent. Default: [50, 100, 200]
 
     Returns
     -------
@@ -737,6 +1205,26 @@ def add_entropy_features(
             r=apen_r,
         )
 
+    # Sample entropy (improved ApEn)
+    if include_sample:
+        df = add_sample_entropy(
+            df,
+            feature_metadata,
+            price_col=price_col,
+            windows=sampen_windows,
+            m=sampen_m,
+            r=sampen_r,
+        )
+
+    # Hurst exponent (mean-reversion vs trending)
+    if include_hurst:
+        df = add_hurst_features(
+            df,
+            feature_metadata,
+            price_col=price_col,
+            windows=hurst_windows,
+        )
+
     added_cols = len(df.columns) - initial_cols
     logger.info(f"Added {added_cols} entropy features")
 
@@ -750,11 +1238,21 @@ __all__ = [
     "add_shannon_entropy",
     "add_lempel_ziv_complexity",
     "add_approximate_entropy",
-    # Default parameters
+    "add_sample_entropy",
+    "add_hurst_features",
+    # Default parameters - Shannon
     "DEFAULT_SHANNON_WINDOWS",
     "DEFAULT_SHANNON_BINS",
+    # Default parameters - Lempel-Ziv
     "DEFAULT_LZ_WINDOWS",
+    # Default parameters - Approximate Entropy
     "DEFAULT_APEN_WINDOWS",
     "DEFAULT_APEN_M",
     "DEFAULT_APEN_R",
+    # Default parameters - Sample Entropy
+    "DEFAULT_SAMPLE_ENTROPY_WINDOWS",
+    "DEFAULT_SAMPLE_ENTROPY_M",
+    "DEFAULT_SAMPLE_ENTROPY_R",
+    # Default parameters - Hurst
+    "DEFAULT_HURST_WINDOWS",
 ]

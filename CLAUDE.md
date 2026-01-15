@@ -60,7 +60,7 @@ Standardized Artifacts (models, predictions, metrics)
 - Phases 1-6: Complete (18 base models + 4 meta-learners = 22 models across 6 families)
 - Phase 7: ✅ Complete (heterogeneous stacking in trainer.py implemented)
 - MTF Stage 2: ✅ Complete (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
-- MTF Stages 3-6: ⚠️ Partial (downstream stages process target_timeframe only; multi-TF iteration pending)
+- MTF Stages 3-6: ✅ Complete (all stages iterate over effective_output_timeframes; multi-TF enabled via --process-all-timeframes)
 
 **Documentation:** See `docs/ARCHITECTURE.md` and `docs/implementation/` for comprehensive guides.
 
@@ -636,6 +636,14 @@ from src.phase1.config import MODEL_DATA_REQUIREMENTS
 ```bash
 # Run data pipeline (Phase 1)
 ./pipeline run --symbols MGC
+
+# Run pipeline with all 9 timeframes (MTF-P1-002: enables heterogeneous ensembles)
+./pipeline run --symbols MGC --process-all-timeframes
+# Produces: features_{tf}.parquet, labels_{tf}.parquet, scaled/{tf}/ for each TF
+
+# Run pipeline with specific output timeframes
+./pipeline run --symbols MGC --output-timeframes 5min,15min,60min
+./pipeline run --symbols MGC --output-timeframes 9tf  # Same as --process-all-timeframes
 
 # Train specific model (Phase 6)
 python scripts/train_model.py --model xgboost --horizon 20

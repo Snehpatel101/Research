@@ -21,6 +21,7 @@ from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
+from .diversity import DiversityAnalyzer, DiversityMetrics
 from .validator import (
     classify_base_models,
     is_heterogeneous_ensemble,
@@ -72,6 +73,9 @@ class StackingEnsemble(BaseModel):
         self._sequence_models: set[str] = set()
         self._X_train_seq: np.ndarray | None = None  # Cached sequence data
         self._X_val_seq: np.ndarray | None = None
+        # Diversity analysis
+        self._diversity_metrics: DiversityMetrics | None = None
+        self._diversity_analyzer: DiversityAnalyzer | None = None
 
     @property
     def model_family(self) -> str:
@@ -167,6 +171,11 @@ class StackingEnsemble(BaseModel):
             "embargo_bars": 1440,  # Break serial correlation (5 days at 5min)
             # CRITICAL: Use default configs for OOF to prevent leakage
             "use_default_configs_for_oof": True,
+            # Diversity analysis settings
+            "analyze_diversity": True,  # Enable diversity analysis
+            "min_diversity_threshold": 0.3,  # Minimum acceptable diversity score
+            "correlation_threshold": 0.8,  # Max correlation before warning
+            "reject_low_diversity": False,  # If True, reject ensembles below threshold
         }
 
     def fit(
@@ -324,7 +333,7 @@ class StackingEnsemble(BaseModel):
         # Step 1: Generate OOF predictions with PurgedKFold (prevents label leakage)
         # IMPORTANT: Uses oof_base_configs (defaults) not base_model_configs (tuned)
         # For heterogeneous ensembles, pass both 2D and 3D data
-        oof_predictions, fold_models = self._generate_oof_predictions(
+        oof_predictions, fold_models, oof_per_model = self._generate_oof_predictions(
             X_train=X_train,
             y_train=y_train,
             base_model_names=self._base_model_names,
@@ -336,6 +345,29 @@ class StackingEnsemble(BaseModel):
             embargo_bars=embargo_bars,
             X_train_seq=X_train_seq,  # For sequence models in heterogeneous ensembles
         )
+
+        # Step 1.5: Analyze diversity of base model predictions
+        analyze_diversity = train_config.get("analyze_diversity", True)
+        min_diversity_threshold = train_config.get("min_diversity_threshold", 0.3)
+        correlation_threshold = train_config.get("correlation_threshold", 0.8)
+        reject_low_diversity = train_config.get("reject_low_diversity", False)
+
+        if analyze_diversity:
+            self._diversity_metrics = self._analyze_oof_diversity(
+                oof_per_model=oof_per_model,
+                y_train=y_train,
+                min_diversity_threshold=min_diversity_threshold,
+                correlation_threshold=correlation_threshold,
+            )
+
+            # Reject ensemble if diversity is too low and rejection is enabled
+            if reject_low_diversity:
+                if self._diversity_metrics.diversity_score < min_diversity_threshold:
+                    raise ValueError(
+                        f"Ensemble diversity too low: {self._diversity_metrics.diversity_score:.3f} "
+                        f"< {min_diversity_threshold}. Recommendations: "
+                        f"{self._diversity_metrics.recommendations}"
+                    )
 
         # Step 2: Train meta-learner on OOF predictions
         # MOD-001 FIX: When passthrough=True, X_train must be trimmed to match
@@ -431,6 +463,7 @@ class StackingEnsemble(BaseModel):
                 "is_heterogeneous": self._is_heterogeneous,
                 "tabular_models": list(self._tabular_models) if self._is_heterogeneous else [],
                 "sequence_models": list(self._sequence_models) if self._is_heterogeneous else [],
+                "diversity_analysis": self._diversity_metrics.to_dict() if self._diversity_metrics else None,
             },
         )
 
@@ -446,7 +479,7 @@ class StackingEnsemble(BaseModel):
         purge_bars: int = 60,
         embargo_bars: int = 1440,
         X_train_seq: np.ndarray | None = None,
-    ) -> tuple[np.ndarray, list[list[BaseModel]]]:
+    ) -> tuple[np.ndarray, list[list[BaseModel]], dict[str, dict[str, np.ndarray]]]:
         """
         Generate out-of-fold predictions for all base models.
 
@@ -470,7 +503,10 @@ class StackingEnsemble(BaseModel):
             X_train_seq: Training sequences (3D) for sequence models in heterogeneous ensembles
 
         Returns:
-            Tuple of (oof_predictions, fold_models)
+            Tuple of (oof_predictions, fold_models, oof_per_model)
+            - oof_predictions: Stacked OOF predictions for meta-learner
+            - fold_models: Trained models per fold
+            - oof_per_model: Dict mapping model_name -> {"predictions": array, "probabilities": array}
         """
         n_samples = X_train.shape[0]
         n_classes = 3
@@ -485,6 +521,14 @@ class StackingEnsemble(BaseModel):
 
         oof_predictions = np.zeros((n_samples, n_features))
         fold_models: list[list[BaseModel]] = [[] for _ in base_model_names]
+
+        # Per-model OOF storage for diversity analysis
+        oof_per_model: dict[str, dict[str, np.ndarray]] = {}
+        for model_name in base_model_names:
+            oof_per_model[model_name] = {
+                "predictions": np.zeros(n_samples, dtype=np.int64),
+                "probabilities": np.zeros((n_samples, n_classes)),
+            }
 
         # Create PurgedKFold splitter to prevent label leakage
         purged_kfold_config = PurgedKFoldConfig(
@@ -618,9 +662,13 @@ class StackingEnsemble(BaseModel):
                 else:
                     oof_predictions[oof_val_idx, model_idx] = output.class_predictions
 
+                # Store per-model predictions for diversity analysis
+                oof_per_model[model_name]["predictions"][oof_val_idx] = output.class_predictions
+                oof_per_model[model_name]["probabilities"][oof_val_idx] = output.class_probabilities
+
                 fold_models[model_idx].append(model)
 
-        return oof_predictions, fold_models
+        return oof_predictions, fold_models, oof_per_model
 
     def _generate_base_predictions(
         self,
@@ -913,6 +961,125 @@ class StackingEnsemble(BaseModel):
             "accuracy": float(accuracy_score(y_true, y_pred)),
             "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
         }
+
+    def _analyze_oof_diversity(
+        self,
+        oof_per_model: dict[str, dict[str, np.ndarray]],
+        y_train: np.ndarray,
+        min_diversity_threshold: float = 0.3,
+        correlation_threshold: float = 0.8,
+    ) -> DiversityMetrics:
+        """
+        Analyze diversity of OOF predictions from base models.
+
+        Args:
+            oof_per_model: Dict mapping model_name -> {"predictions": array, "probabilities": array}
+            y_train: Ground truth labels
+            min_diversity_threshold: Minimum acceptable diversity score
+            correlation_threshold: Maximum acceptable pairwise correlation
+
+        Returns:
+            DiversityMetrics with comprehensive diversity analysis
+        """
+        self._diversity_analyzer = DiversityAnalyzer(
+            min_diversity_threshold=min_diversity_threshold,
+            correlation_threshold=correlation_threshold,
+            n_classes=3,
+        )
+
+        # Extract predictions and probabilities for diversity analysis
+        base_predictions = {name: data["predictions"] for name, data in oof_per_model.items()}
+        base_probabilities = {name: data["probabilities"] for name, data in oof_per_model.items()}
+
+        metrics = self._diversity_analyzer.analyze(
+            base_predictions=base_predictions,
+            base_probabilities=base_probabilities,
+            y_true=y_train,
+        )
+
+        # Log diversity analysis results
+        logger.info(
+            f"Diversity analysis: score={metrics.diversity_score:.3f}, "
+            f"correlation={metrics.pairwise_correlation:.3f}, "
+            f"disagreement={metrics.disagreement:.3f}, "
+            f"q_statistic={metrics.q_statistic:.3f}"
+        )
+
+        if metrics.recommendations:
+            for rec in metrics.recommendations[:3]:  # Limit to top 3 recommendations
+                logger.warning(f"Diversity recommendation: {rec}")
+
+        return metrics
+
+    def get_diversity_metrics(self) -> DiversityMetrics | None:
+        """
+        Get the diversity metrics computed during training.
+
+        Returns:
+            DiversityMetrics if diversity analysis was performed, None otherwise
+        """
+        return self._diversity_metrics
+
+    def suggest_model_removal(
+        self,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        X_val_seq: np.ndarray | None = None,
+    ) -> list[str]:
+        """
+        Suggest base models to remove due to redundancy.
+
+        Uses validation set predictions to identify models that provide
+        similar predictions and could be removed without losing diversity.
+
+        Args:
+            X_val: Validation features (2D)
+            y_val: Validation labels
+            X_val_seq: Validation sequences (3D) for heterogeneous ensembles
+
+        Returns:
+            List of model names that are redundant and could be removed
+        """
+        self._validate_fitted()
+
+        if self._diversity_analyzer is None:
+            self._diversity_analyzer = DiversityAnalyzer()
+
+        # Generate predictions from each base model
+        use_probabilities = self._config.get("use_probabilities", True)
+        base_predictions: dict[str, np.ndarray] = {}
+
+        for model_idx, model_name in enumerate(self._base_model_names):
+            # Select appropriate data format
+            if self._is_heterogeneous and model_name in self._sequence_models:
+                model_X = X_val_seq if X_val_seq is not None else X_val
+            else:
+                model_X = X_val
+
+            # Average predictions across folds
+            all_preds = []
+            for model in self._base_models[model_idx]:
+                output = model.predict(model_X)
+                all_preds.append(output.class_predictions)
+
+            # Mode across folds for final prediction
+            all_preds = np.array(all_preds)
+            from scipy import stats as sp_stats
+
+            mode_result = sp_stats.mode(all_preds, axis=0, keepdims=False)
+            base_predictions[model_name] = mode_result.mode
+
+        # Align y_val with predictions if needed
+        n_samples = len(next(iter(base_predictions.values())))
+        y_val_aligned = y_val
+        if n_samples < len(y_val):
+            offset = len(y_val) - n_samples
+            y_val_aligned = y_val[offset:]
+
+        return self._diversity_analyzer.suggest_model_removal(
+            base_predictions=base_predictions,
+            y_true=y_val_aligned,
+        )
 
 
 __all__ = ["StackingEnsemble"]

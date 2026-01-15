@@ -83,6 +83,23 @@ Example:
 """
 
 from .blending import BlendingEnsemble
+from .diversity import (
+    DiversityAnalyzer,
+    DiversityMetrics,
+    compute_average_disagreement,
+    compute_average_double_fault,
+    compute_average_kl_divergence,
+    compute_average_q_statistic,
+    compute_disagreement,
+    compute_diversity_score,
+    compute_double_fault,
+    compute_entropy_of_votes,
+    compute_kl_divergence,
+    compute_kl_diversity_penalty,
+    compute_pairwise_correlation,
+    compute_pairwise_correlation_matrix,
+    compute_q_statistic,
+)
 from .meta_learners import (
     CalibratedMetaLearner,
     MLPMetaLearner,
@@ -112,6 +129,22 @@ __all__ = [
     "MLPMetaLearner",
     "CalibratedMetaLearner",
     "XGBoostMeta",
+    # Diversity analysis
+    "DiversityAnalyzer",
+    "DiversityMetrics",
+    "compute_pairwise_correlation",
+    "compute_pairwise_correlation_matrix",
+    "compute_q_statistic",
+    "compute_average_q_statistic",
+    "compute_disagreement",
+    "compute_average_disagreement",
+    "compute_double_fault",
+    "compute_average_double_fault",
+    "compute_entropy_of_votes",
+    "compute_kl_divergence",
+    "compute_average_kl_divergence",
+    "compute_diversity_score",
+    "compute_kl_diversity_penalty",
     # Validators
     "validate_ensemble_config",
     "validate_base_model_compatibility",

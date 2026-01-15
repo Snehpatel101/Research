@@ -9,6 +9,7 @@ Contains methods for:
 - Saving trained model
 - Saving feature selection results
 - Saving probability calibrator
+- Generating artifact checksums for integrity verification
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ import numpy as np
 
 from ..base import PredictionOutput, TrainingMetrics
 from ..config import detect_environment, get_applied_overrides, save_config_json
+from .checksums import ArtifactIntegrityManager
 
 # Import MODEL_DATA_REQUIREMENTS for model requirements saving (MOD-008)
 # Canonical location: src.models.config.data_requirements
@@ -251,3 +253,22 @@ class TrainerArtifactsMixin:
         calibrator_path = self.output_path / "checkpoints" / "calibrator.pkl"
         self.calibrator.save(calibrator_path)
         logger.info(f"Saved calibrator to {calibrator_path}")
+
+    def _save_checksums(self) -> None:
+        """
+        Generate and save checksums for all model artifacts.
+
+        Creates checksums.json in the output directory with SHA256 hashes
+        for all model files (.pt, .pkl, .json, etc.). Enables integrity
+        verification when loading models later.
+        """
+        integrity_manager = ArtifactIntegrityManager(self.output_path)
+
+        # Register all artifacts
+        checksums = integrity_manager.register_all()
+
+        if checksums:
+            integrity_manager.save_checksums()
+            logger.info(f"Generated checksums for {len(checksums)} artifacts")
+        else:
+            logger.debug("No artifacts found to checksum")

@@ -471,6 +471,8 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             self._save_feature_selection()
             if self.calibrator is not None:
                 self._save_calibrator()
+            # Generate checksums for all artifacts (must be last)
+            self._save_checksums()
 
         total_time = time.time() - start_time
 

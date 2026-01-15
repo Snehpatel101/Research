@@ -93,6 +93,15 @@ def run_command(
         "--output-timeframes",
         help="Comma-separated output timeframes (e.g., '5min,15min,1h') or '9tf' for full 9-TF ladder",
     ),
+    # MTF-P1-002: Process all 9 canonical timeframes through pipeline
+    process_all_timeframes: bool = typer.Option(
+        False,
+        "--process-all-timeframes",
+        help=(
+            "Process all 9 canonical timeframes (1m-1h) through pipeline stages 2-6. "
+            "Enables heterogeneous ensembles where each base model trains on its preferred TF."
+        ),
+    ),
     # Feature toggles
     enable_wavelets: bool | None = typer.Option(
         None,
@@ -206,6 +215,8 @@ def run_command(
             mtf_enable=not mtf_disable if mtf_disable else None,
             # Output timeframes (multi-TF support)
             output_timeframes=output_timeframes,
+            # MTF-P1-002: Process all 9 canonical timeframes
+            process_all_timeframes=process_all_timeframes if process_all_timeframes else None,
             # Feature toggles
             enable_wavelets=enable_wavelets,
             enable_microstructure=enable_microstructure,
@@ -255,6 +266,12 @@ def run_command(
     table.add_row(
         "MTF Timeframes", ", ".join(config.mtf_timeframes) if config.mtf_timeframes else "disabled"
     )
+
+    # Output timeframes / Multi-TF processing
+    effective_tfs = config.effective_output_timeframes
+    if len(effective_tfs) > 1:
+        table.add_row("Output Timeframes", f"{len(effective_tfs)} TFs: {', '.join(effective_tfs[:5])}{'...' if len(effective_tfs) > 5 else ''}")
+        table.add_row("Process All TFs", "Yes" if getattr(config, "process_all_timeframes", False) else "No")
 
     # Model settings if specified
     if hasattr(config, "model_config") and config.model_config:

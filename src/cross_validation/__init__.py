@@ -37,6 +37,11 @@ from src.cross_validation.cpcv import (
     CPCVResult,
     create_cpcv,
 )
+from src.cross_validation.oof_cache import (
+    OOFCache,
+    OOFCacheEntry,
+    compute_data_hash,
+)
 from src.cross_validation.cv_dataclasses import CVResult, FoldMetrics
 from src.cross_validation.cv_feature_selection import (
     compute_feature_stability,
@@ -131,4 +136,8 @@ __all__ = [
     # Stacking
     "StackingDatasetBuilder",
     "find_valid_samples_mask",
+    # OOF Cache
+    "OOFCache",
+    "OOFCacheEntry",
+    "compute_data_hash",
 ]

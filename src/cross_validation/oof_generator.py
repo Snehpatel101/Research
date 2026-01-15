@@ -24,6 +24,7 @@ from typing import Any
 import pandas as pd
 
 # Import from specialized modules
+from src.cross_validation.oof_cache import OOFCache, compute_data_hash
 from src.cross_validation.oof_core import (
     CoreOOFGenerator,
     OOFPrediction,
@@ -62,20 +63,32 @@ class OOFGenerator:
     - StackingDatasetBuilder: Stacking dataset construction
     - OOFValidator: Coverage and correlation validation
     - OOFDatasetIO: Save/load operations
+    - OOFCache: Caching of OOF predictions (optional)
 
     Example:
         >>> oof_gen = OOFGenerator(cv)
         >>> model_configs = {"xgboost": {"max_depth": 6}}
         >>> oof_predictions = oof_gen.generate_oof_predictions(X, y, model_configs)
         >>> stacking_ds = oof_gen.build_stacking_dataset(oof_predictions, y, horizon=20)
+
+    Example with caching:
+        >>> oof_gen = OOFGenerator(cv, cache_dir=Path("cache/oof"))
+        >>> oof_predictions = oof_gen.generate_oof_predictions(
+        ...     X, y, model_configs, use_cache=True
+        ... )
     """
 
-    def __init__(self, cv: PurgedKFold) -> None:
+    def __init__(
+        self,
+        cv: PurgedKFold,
+        cache_dir: Path | None = None,
+    ) -> None:
         """
         Initialize OOFGenerator.
 
         Args:
             cv: PurgedKFold cross-validator
+            cache_dir: Directory for OOF prediction caching. If None, caching disabled.
         """
         self.cv = cv
         self._core_generator = CoreOOFGenerator(cv)
@@ -83,6 +96,12 @@ class OOFGenerator:
         self._stacking_builder = StackingDatasetBuilder()
         self._validator = OOFValidator()
         self._io = OOFDatasetIO()
+
+        # Initialize cache if directory provided
+        self._cache: OOFCache | None = None
+        if cache_dir is not None:
+            self._cache = OOFCache(cache_dir)
+            logger.info(f"OOF caching enabled: {cache_dir}")
 
     def generate_oof_predictions(
         self,
@@ -94,6 +113,7 @@ class OOFGenerator:
         calibrate: bool = False,
         calibration_method: str = "auto",
         label_end_times: pd.Series | None = None,
+        use_cache: bool = False,
     ) -> dict[str, OOFPrediction]:
         """
         Generate OOF predictions for all models.
@@ -108,6 +128,8 @@ class OOFGenerator:
             calibration_method: Calibration method ("auto", "isotonic", "sigmoid")
             label_end_times: Optional Series of datetime when each label is resolved.
                 If provided, enables proper purging of overlapping labels in CV.
+            use_cache: Whether to use cached OOF predictions if available.
+                Requires cache_dir to be set in __init__.
 
         Returns:
             Dict mapping model_name to OOFPrediction
@@ -124,7 +146,46 @@ class OOFGenerator:
         if feature_subset:
             X = X[feature_subset]
 
+        # Compute data hash for caching (once for all models)
+        data_hash: str | None = None
+        if use_cache and self._cache is not None:
+            data_hash = compute_data_hash(X, y)
+            logger.debug(f"Data hash for caching: {data_hash}")
+
+        # Get CV config for cache key
+        cv_config = {
+            "n_splits": self.cv.config.n_splits,
+            "purge_bars": self.cv.config.purge_bars,
+            "embargo_bars": self.cv.config.embargo_bars,
+        }
+
         for model_name, config in model_configs.items():
+            # Try cache first if enabled
+            if use_cache and self._cache is not None and data_hash is not None:
+                cache_key = self._cache.compute_cache_key(
+                    model_name=model_name,
+                    model_config=config,
+                    data_hash=data_hash,
+                    cv_config=cv_config,
+                )
+
+                if self._cache.has_oof(cache_key):
+                    logger.info(f"Loading cached OOF predictions for {model_name}...")
+                    cached = self._cache.get_oof(cache_key)
+                    oof_pred = OOFPrediction(
+                        model_name=model_name,
+                        predictions=cached["predictions"],
+                        fold_info=cached["fold_info"],
+                        coverage=cached["metadata"].coverage,
+                    )
+                    oof_results[model_name] = oof_pred
+                    logger.info(
+                        f"  {model_name} (cached): {oof_pred.predictions.shape[0]} predictions, "
+                        f"coverage={oof_pred.coverage:.2%}"
+                    )
+                    continue
+
+            # Generate OOF predictions
             logger.info(f"Generating OOF predictions for {model_name}...")
 
             oof_pred = self._generate_single_model_oof(
@@ -141,6 +202,25 @@ class OOFGenerator:
                 f"  {model_name}: {oof_pred.predictions.shape[0]} predictions, "
                 f"coverage={oof_pred.coverage:.2%}"
             )
+
+            # Store in cache if enabled
+            if use_cache and self._cache is not None and data_hash is not None:
+                cache_key = self._cache.compute_cache_key(
+                    model_name=model_name,
+                    model_config=config,
+                    data_hash=data_hash,
+                    cv_config=cv_config,
+                )
+                self._cache.put_oof(
+                    cache_key=cache_key,
+                    predictions=oof_pred.predictions,
+                    fold_info=oof_pred.fold_info,
+                    model_name=model_name,
+                    model_config=config,
+                    data_hash=data_hash,
+                    cv_config=cv_config,
+                    coverage=oof_pred.coverage,
+                )
 
         # Apply calibration if requested (leakage-safe: OOF predictions are out-of-sample)
         if calibrate:

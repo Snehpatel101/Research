@@ -17,6 +17,7 @@ Example:
 """
 
 from .artifacts import TrainerArtifactsMixin
+from .checksums import ArtifactChecksum, ArtifactIntegrityManager, compute_file_checksum
 from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
 from .trainer import Trainer
@@ -28,4 +29,8 @@ __all__ = [
     "TrainerArtifactsMixin",
     "INVALID_LABEL_SENTINEL",
     "_validate_labels",
+    # Checksums
+    "ArtifactChecksum",
+    "ArtifactIntegrityManager",
+    "compute_file_checksum",
 ]

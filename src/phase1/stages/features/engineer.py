@@ -39,7 +39,8 @@ from .volatility import (
 )
 
 # Re-import here for wrapper methods
-from .volume import add_dollar_volume, add_volume_features, add_vwap
+from .volume import add_dollar_volume, add_twap_features, add_volume_features, add_vwap
+from .volatility import add_garch_features, ARCH_AVAILABLE
 from .wavelets import PYWT_AVAILABLE, add_wavelet_features
 
 # Configure logging
@@ -280,6 +281,11 @@ class FeatureEngineer:
                 df, self.feature_metadata, period=pc.get("rs_vol", [20])[0]
             )
             df = add_yang_zhang_volatility(df, self.feature_metadata, period=pc.get("yz_vol", [20])[0])
+            # Add GARCH volatility forecast features (optional - requires arch library)
+            if ARCH_AVAILABLE:
+                df = add_garch_features(
+                    df, self.feature_metadata, timeframe=self.timeframe
+                )
         else:
             logger.info("Volatility features disabled via config")
 
@@ -288,6 +294,7 @@ class FeatureEngineer:
             df = add_volume_features(df, self.feature_metadata, period=pc.get("volume_sma", [20])[0])
             df = add_vwap(df, self.feature_metadata)
             df = add_dollar_volume(df, self.feature_metadata)
+            df = add_twap_features(df, self.feature_metadata)
         else:
             logger.info("Volume features disabled via config")
         df = add_adx(df, self.feature_metadata, period=pc.get("adx", [14])[0])

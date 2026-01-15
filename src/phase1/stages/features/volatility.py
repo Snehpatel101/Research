@@ -495,6 +495,221 @@ def add_yang_zhang_volatility(
     return df
 
 
+# =============================================================================
+# GARCH VOLATILITY FORECASTING
+# =============================================================================
+
+# Try to import arch library for GARCH models
+try:
+    from arch import arch_model
+
+    ARCH_AVAILABLE = True
+except ImportError:
+    ARCH_AVAILABLE = False
+    arch_model = None
+
+
+def _fit_garch_rolling(
+    returns: np.ndarray,
+    window: int,
+    p: int = 1,
+    q: int = 1,
+    forecast_horizon: int = 1,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Fit rolling GARCH(p,q) models and generate volatility forecasts.
+
+    Uses expanding window for more stable estimation, with minimum 100 observations.
+
+    Parameters
+    ----------
+    returns : np.ndarray
+        Array of log returns (scaled to percentage for numerical stability)
+    window : int
+        Minimum window size for initial estimation
+    p : int, default 1
+        GARCH lag order for conditional variance
+    q : int, default 1
+        ARCH lag order for squared residuals
+    forecast_horizon : int, default 1
+        Number of steps ahead to forecast
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        (1-step forecasts, h-step forecasts)
+    """
+    n = len(returns)
+    vol_forecast_1 = np.full(n, np.nan)
+    vol_forecast_h = np.full(n, np.nan)
+
+    # Minimum observations for stable GARCH estimation
+    min_obs = max(100, window)
+
+    # Use expanding window for more stable estimates
+    for i in range(min_obs, n):
+        try:
+            # Use data up to but not including current bar (anti-lookahead)
+            sample = returns[:i]
+
+            # Skip if too many NaNs
+            valid_sample = sample[~np.isnan(sample)]
+            if len(valid_sample) < min_obs:
+                continue
+
+            # Fit GARCH model with minimal output
+            model = arch_model(
+                valid_sample * 100,  # Scale for numerical stability
+                vol="Garch",
+                p=p,
+                q=q,
+                rescale=False,
+            )
+
+            # Suppress convergence warnings
+            with np.errstate(all="ignore"):
+                result = model.fit(disp="off", show_warning=False)
+
+            # Generate forecasts
+            forecast = result.forecast(horizon=max(1, forecast_horizon))
+
+            # 1-step ahead variance forecast (convert back from percentage)
+            vol_forecast_1[i] = np.sqrt(forecast.variance.values[-1, 0]) / 100
+
+            # h-step ahead forecast
+            if forecast_horizon > 1:
+                vol_forecast_h[i] = np.sqrt(forecast.variance.values[-1, -1]) / 100
+            else:
+                vol_forecast_h[i] = vol_forecast_1[i]
+
+        except Exception:
+            # GARCH estimation can fail for various reasons (non-convergence, etc.)
+            # Just skip this observation
+            continue
+
+    return vol_forecast_1, vol_forecast_h
+
+
+def add_garch_features(
+    df: pd.DataFrame,
+    feature_metadata: dict[str, str],
+    p: int = 1,
+    q: int = 1,
+    forecast_horizon: int = 5,
+    window: int = 100,
+    timeframe: str = "5min",
+) -> pd.DataFrame:
+    """
+    Add GARCH(p,q) volatility forecast features.
+
+    GARCH (Generalized Autoregressive Conditional Heteroskedasticity) models
+    capture volatility clustering - the tendency of large price moves to be
+    followed by large moves. This is valuable for:
+    - Forecasting future volatility
+    - Risk management and position sizing
+    - Option pricing and hedging
+    - Regime detection (high vs low volatility states)
+
+    Academic Reference:
+        Bollerslev, T. (1986) "Generalized Autoregressive Conditional Heteroskedasticity"
+        Journal of Econometrics, 31(3), 307-327.
+
+    Features added:
+    - garch_vol_forecast: 1-step ahead volatility forecast
+    - garch_vol_forecast_{h}: h-step ahead volatility forecast
+    - garch_vol_ratio: Ratio of forecast to realized volatility
+    - garch_vol_zscore: Z-score of forecast relative to rolling mean
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with 'close' column
+    feature_metadata : dict[str, str]
+        Dictionary to store feature descriptions
+    p : int, default 1
+        GARCH lag order for conditional variance
+    q : int, default 1
+        ARCH lag order for squared residuals
+    forecast_horizon : int, default 5
+        Number of steps ahead for longer-term forecast
+    window : int, default 100
+        Minimum window for GARCH estimation
+    timeframe : str, default '5min'
+        Bar timeframe for annualization
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with GARCH features added
+
+    Notes
+    -----
+    - Requires the `arch` library: pip install arch
+    - If arch is not available, logs a warning and returns df unchanged
+    - Computationally intensive - uses expanding window for stability
+    - Anti-lookahead: All forecasts use data strictly before current bar
+    """
+    if not ARCH_AVAILABLE:
+        logger.warning(
+            "GARCH features skipped: 'arch' library not installed. "
+            "Install with: pip install arch"
+        )
+        return df
+
+    logger.info(f"Adding GARCH({p},{q}) volatility features with forecast horizon: {forecast_horizon}")
+
+    # Calculate log returns
+    log_returns = np.log(df["close"] / df["close"].shift(1)).values
+
+    # Get annualization factor
+    ann_factor = get_annualization_factor(timeframe)
+
+    # Fit rolling GARCH and get forecasts
+    vol_1, vol_h = _fit_garch_rolling(
+        log_returns, window=window, p=p, q=q, forecast_horizon=forecast_horizon
+    )
+
+    # 1-step ahead forecast (already anti-lookahead from rolling estimation)
+    df["garch_vol_forecast"] = vol_1 * ann_factor
+    feature_metadata["garch_vol_forecast"] = (
+        f"GARCH({p},{q}) 1-step volatility forecast (annualized, lagged)"
+    )
+
+    # h-step ahead forecast
+    if forecast_horizon > 1:
+        col_h = f"garch_vol_forecast_{forecast_horizon}"
+        df[col_h] = vol_h * ann_factor
+        feature_metadata[col_h] = (
+            f"GARCH({p},{q}) {forecast_horizon}-step volatility forecast (annualized, lagged)"
+        )
+
+    # Ratio of forecast to realized volatility
+    # Use rolling realized vol from previous bars
+    realized_vol = (
+        np.log(df["close"] / df["close"].shift(1))
+        .rolling(window=20)
+        .std()
+        .shift(1)  # ANTI-LOOKAHEAD
+        * ann_factor
+    )
+    df["garch_vol_ratio"] = df["garch_vol_forecast"] / realized_vol.replace(0, np.nan)
+    feature_metadata["garch_vol_ratio"] = (
+        "GARCH forecast / realized volatility ratio (lagged)"
+    )
+
+    # Z-score of forecast relative to its rolling mean
+    forecast_mean = df["garch_vol_forecast"].rolling(window=50).mean()
+    forecast_std = df["garch_vol_forecast"].rolling(window=50).std()
+    df["garch_vol_zscore"] = (df["garch_vol_forecast"] - forecast_mean) / forecast_std.replace(
+        0, np.nan
+    )
+    feature_metadata["garch_vol_zscore"] = (
+        "GARCH forecast z-score (50-period rolling, lagged)"
+    )
+
+    return df
+
+
 __all__ = [
     "add_atr",
     "add_bollinger_bands",
@@ -505,4 +720,6 @@ __all__ = [
     "add_higher_moments",
     "add_rogers_satchell_volatility",
     "add_yang_zhang_volatility",
+    "add_garch_features",
+    "ARCH_AVAILABLE",
 ]
