@@ -51,6 +51,24 @@ class TrainerConfig:
     feature_selection_n_features: int = 50  # Number of features to select (0 = auto)
     feature_selection_method: str = "mda"  # "mda", "mdi", "hybrid"
     feature_selection_cv_splits: int = 5  # CV splits for stability analysis
+    # Reproducibility settings
+    deterministic_mode: bool = False  # Enable deterministic CUDA operations (slower)
+    # Numerical stability settings
+    nan_check_raise_error: bool = True  # Raise error on NaN/Inf during training
+    # Checkpoint settings
+    checkpoint_interval: int = 10  # Save checkpoint every N epochs
+    keep_n_checkpoints: int = 3  # Number of checkpoints to keep
+    checkpoint_dir: str | None = None  # Directory for checkpoints (None = disabled)
+    # Experiment tracking settings
+    tracking_enabled: bool = True  # Enable experiment tracking
+    tracking_backend: str = "local"  # "local", "mlflow", "disabled"
+    tracking_uri: str | None = None  # MLflow tracking URI (if using MLflow backend)
+    tracking_tags: dict[str, str] = field(default_factory=dict)  # Additional run tags
+    # OOM recovery settings
+    oom_recovery_enabled: bool = True  # Enable OOM recovery
+    oom_max_retries: int = 3  # Max retry attempts on OOM
+    oom_batch_reduction_factor: float = 0.5  # Reduce batch by this factor on OOM
+    oom_min_batch_size: int = 8  # Minimum batch size after reduction
 
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""
@@ -93,6 +111,19 @@ class TrainerConfig:
             "feature_selection_n_features": self.feature_selection_n_features,
             "feature_selection_method": self.feature_selection_method,
             "feature_selection_cv_splits": self.feature_selection_cv_splits,
+            "deterministic_mode": self.deterministic_mode,
+            "nan_check_raise_error": self.nan_check_raise_error,
+            "checkpoint_interval": self.checkpoint_interval,
+            "keep_n_checkpoints": self.keep_n_checkpoints,
+            "checkpoint_dir": self.checkpoint_dir,
+            "tracking_enabled": self.tracking_enabled,
+            "tracking_backend": self.tracking_backend,
+            "tracking_uri": self.tracking_uri,
+            "tracking_tags": self.tracking_tags,
+            "oom_recovery_enabled": self.oom_recovery_enabled,
+            "oom_max_retries": self.oom_max_retries,
+            "oom_batch_reduction_factor": self.oom_batch_reduction_factor,
+            "oom_min_batch_size": self.oom_min_batch_size,
         }
 
     @classmethod

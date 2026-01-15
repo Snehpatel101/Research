@@ -123,6 +123,17 @@ from .metrics import (
     compute_regime_metrics,
     compute_metrics_with_regime_breakdown,
 )
+from .tracking import (
+    ExperimentTracker,
+    LocalTracker,
+    TrackerConfig,
+    get_tracker,
+)
+from .trained_registry import (
+    ModelQuery,
+    TrainedModelEntry,
+    TrainedModelRegistry,
+)
 
 # Version
 __version__ = "0.1.0"
@@ -188,4 +199,13 @@ __all__ = [
     "get_training_device_config",
     "print_gpu_info",
     "DeviceManager",
+    # Experiment Tracking
+    "ExperimentTracker",
+    "TrackerConfig",
+    "LocalTracker",
+    "get_tracker",
+    # Trained Model Registry
+    "TrainedModelRegistry",
+    "TrainedModelEntry",
+    "ModelQuery",
 ]

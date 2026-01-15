@@ -27,6 +27,14 @@ from src.core.paths import (
     RUNS_DIR,
     TRAINING_CONFIG_PATH,
 )
+from src.core.reproducibility import (
+    ReproducibilityConfig,
+    ReproducibilityInfo,
+    ensure_reproducibility,
+    get_reproducibility_info,
+    get_worker_init_fn,
+    set_all_seeds,
+)
 
 __all__ = [
     # Paths
@@ -47,4 +55,11 @@ __all__ = [
     "GlobalDefaults",
     "get_default",
     "as_dict",
+    # Reproducibility
+    "ReproducibilityConfig",
+    "ReproducibilityInfo",
+    "set_all_seeds",
+    "get_reproducibility_info",
+    "ensure_reproducibility",
+    "get_worker_init_fn",
 ]

@@ -41,6 +41,8 @@ from ..config import TrainerConfig
 from ..data_preparation import prepare_training_data
 from ..metrics import compute_classification_metrics, compute_trading_metrics
 from ..registry import ModelRegistry
+from ..tracking import TrackerConfig, get_tracker
+from ..tracking.base import ExperimentTracker
 from .artifacts import TrainerArtifactsMixin
 from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
@@ -103,6 +105,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Calibrator (set during run() if calibration is enabled)
         self.calibrator: ProbabilityCalibrator | None = None
 
+        # Initialize experiment tracker
+        self.tracker: ExperimentTracker = self._setup_tracker()
+
         # Validate feature_set against model recommendations (MOD-005)
         self._validate_feature_set()
 
@@ -126,6 +131,29 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Add 4-character random suffix for collision prevention
         random_suffix = secrets.token_hex(2)  # 2 bytes = 4 hex chars
         return f"{self.config.model_name}_h{self.config.horizon}_{timestamp}_{random_suffix}"
+
+    def _setup_tracker(self) -> ExperimentTracker:
+        """
+        Initialize experiment tracker based on configuration.
+
+        Returns:
+            Configured ExperimentTracker instance
+        """
+        tracker_config = TrackerConfig(
+            enabled=self.config.tracking_enabled,
+            backend=self.config.tracking_backend,
+            experiment_name=self.config.experiment_name or f"model_{self.config.model_name}",
+            run_name=self.run_id,
+            tracking_uri=self.config.tracking_uri,
+            output_dir=self.config.output_dir / "tracking",
+            log_artifacts=True,
+            tags={
+                "model_name": self.config.model_name,
+                "horizon": str(self.config.horizon),
+                **self.config.tracking_tags,
+            },
+        )
+        return get_tracker(config=tracker_config)
 
     def _setup_output_dir(self) -> None:
         """Create output directory structure."""
@@ -191,6 +219,19 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Setup
         self._setup_output_dir()
         self._save_config()
+
+        # Start experiment tracking
+        tracking_run_id = self.tracker.start_run(
+            run_name=self.run_id,
+            tags={
+                "model_family": self.model.model_family,
+                "feature_set": self.config.feature_set,
+            },
+        )
+        logger.info(f"Started experiment tracking run: {tracking_run_id}")
+
+        # Log training configuration as parameters
+        self.tracker.log_params(self.config.to_dict())
 
         # Load data - get DataFrames for feature selection
         logger.info("Loading data from container...")
@@ -458,6 +499,23 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             )
             eval_metrics["calibration"] = calibration_metrics.to_dict()
 
+        # Log evaluation metrics to tracker
+        flat_metrics = {
+            "val_accuracy": eval_metrics["accuracy"],
+            "val_macro_f1": eval_metrics["macro_f1"],
+            "val_precision": eval_metrics["precision"],
+            "val_recall": eval_metrics["recall"],
+        }
+        if "trading" in eval_metrics:
+            flat_metrics["val_win_rate"] = eval_metrics["trading"].get("win_rate", 0)
+            flat_metrics["val_profit_factor"] = eval_metrics["trading"].get(
+                "profit_factor", 0
+            )
+        if test_metrics:
+            flat_metrics["test_accuracy"] = test_metrics.get("accuracy", 0)
+            flat_metrics["test_macro_f1"] = test_metrics.get("macro_f1", 0)
+        self.tracker.log_metrics(flat_metrics)
+
         # Save artifacts
         if not skip_save:
             self._save_artifacts(
@@ -473,6 +531,11 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 self._save_calibrator()
             # Generate checksums for all artifacts (must be last)
             self._save_checksums()
+
+            # Log artifacts to tracker
+            self.tracker.log_artifact(self.output_path / "config", "config")
+            self.tracker.log_artifact(self.output_path / "metrics", "metrics")
+            self.tracker.log_artifact(self.output_path / "checkpoints", "model")
 
         total_time = time.time() - start_time
 
@@ -500,5 +563,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             f"val_accuracy={eval_metrics['accuracy']:.4f}, "
             f"time={total_time:.1f}s"
         )
+
+        # Log final metrics and end tracking run
+        self.tracker.log_metrics({"total_time_seconds": total_time})
+        self.tracker.end_run(status="FINISHED")
 
         return results

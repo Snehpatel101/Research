@@ -24,9 +24,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
+from src.core.reproducibility import set_all_seeds
+
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
+from .checkpointing import CheckpointConfig, CheckpointManager
+from .numerical_stability import NumericalInstabilityError, NumericalValidator, validate_training_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -316,12 +320,21 @@ class BaseRNNModel(BaseModel):
         """Train the RNN model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
+
+        # Validate inputs for NaN/Inf before training
+        validate_training_inputs(X_train, y_train, X_val, y_val, sample_weights)
+
         start_time = time.time()
 
         # Merge config
         train_config = self._config.copy()
         if config:
             train_config.update(config)
+
+        # Set seeds for reproducibility
+        random_seed = train_config.get("random_seed", 42)
+        deterministic = train_config.get("deterministic_mode", False)
+        set_all_seeds(random_seed, deterministic=deterministic)
 
         # Extract dimensions
         n_samples, seq_len, n_features = X_train.shape
@@ -379,7 +392,31 @@ class BaseRNNModel(BaseModel):
             "val_loss": [],
             "train_acc": [],
             "val_acc": [],
+            "gradient_norms": [],  # Track gradient norms for debugging
         }
+
+        # Numerical stability validator for training loop
+        self._numerical_validator = NumericalValidator(
+            raise_on_error=train_config.get("nan_check_raise_error", True),
+            log_warnings=True,
+        )
+
+        # Checkpoint manager for periodic saving and best model tracking
+        checkpoint_interval = train_config.get("checkpoint_interval", 10)
+        checkpoint_dir = train_config.get("checkpoint_dir", None)
+        if checkpoint_dir:
+            ckpt_config = CheckpointConfig(
+                checkpoint_dir=Path(checkpoint_dir),
+                interval_epochs=checkpoint_interval,
+                keep_n_best=train_config.get("keep_n_checkpoints", 3),
+                save_optimizer=True,
+                save_scheduler=True,
+                metric_name="val_loss",
+                metric_mode="min",
+            )
+            self._checkpoint_manager = CheckpointManager(ckpt_config)
+        else:
+            self._checkpoint_manager = None
 
         max_epochs = train_config.get("max_epochs", 100)
         patience = train_config.get("early_stopping_patience", 15)
@@ -394,30 +431,50 @@ class BaseRNNModel(BaseModel):
         )
 
         for epoch in range(max_epochs):
-            # Training phase
-            train_loss, train_acc = self._train_epoch(
+            # Training phase (now returns gradient norm as third value)
+            train_loss, train_acc, avg_grad_norm = self._train_epoch(
                 train_loader, optimizer, criterion, scheduler, scaler, amp_dtype, grad_clip
             )
             history["train_loss"].append(train_loss)
             history["train_acc"].append(train_acc)
+            history["gradient_norms"].append(avg_grad_norm)
 
             # Validation phase
             val_loss, val_acc = self._validate_epoch(val_loader, criterion, amp_dtype)
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc)
 
-            # Logging
+            # Logging (include gradient norm for debugging)
             if (epoch + 1) % 10 == 0 or epoch == 0:
                 logger.info(
                     f"Epoch {epoch + 1}/{max_epochs} - "
                     f"train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f}, "
-                    f"train_acc: {train_acc:.4f}, val_acc: {val_acc:.4f}"
+                    f"train_acc: {train_acc:.4f}, val_acc: {val_acc:.4f}, "
+                    f"grad_norm: {avg_grad_norm:.4f}"
                 )
 
             # Early stopping check
             if early_stopping.check(val_loss, epoch, self._model, patience, min_delta):
                 logger.info(f"Early stopping at epoch {epoch + 1}")
                 break
+
+            # Periodic checkpoint save
+            if self._checkpoint_manager is not None:
+                epoch_metrics = {
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "train_acc": train_acc,
+                    "val_acc": val_acc,
+                    "grad_norm": avg_grad_norm,
+                }
+                self._checkpoint_manager.maybe_save_checkpoint(
+                    self._model,
+                    optimizer,
+                    scheduler,
+                    epoch,
+                    epoch_metrics,
+                    model_config=train_config,
+                )
 
         # Restore best model
         if early_stopping.best_state_dict is not None:
@@ -612,12 +669,17 @@ class BaseRNNModel(BaseModel):
         scaler: torch.amp.GradScaler | None,
         amp_dtype: torch.dtype,
         grad_clip: float,
-    ) -> tuple[float, float]:
-        """Run one training epoch."""
+    ) -> tuple[float, float, float]:
+        """Run one training epoch.
+
+        Returns:
+            Tuple of (avg_loss, accuracy, avg_gradient_norm)
+        """
         self._model.train()
         total_loss = 0.0
         correct = 0
         total = 0
+        gradient_norms: list[float] = []
 
         for batch in loader:
             if len(batch) == 3:
@@ -636,6 +698,11 @@ class BaseRNNModel(BaseModel):
             # Forward pass with mixed precision
             with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                 logits = self._model(X_batch)
+
+                # NaN/Inf check on forward pass output
+                if hasattr(self, "_numerical_validator"):
+                    self._numerical_validator.check_tensor(logits, "logits", raise_on_error=True)
+
                 if weights is not None:
                     # Use reduction='none' to get per-sample losses for weighting
                     criterion_unreduced = nn.CrossEntropyLoss(reduction="none")
@@ -644,17 +711,30 @@ class BaseRNNModel(BaseModel):
                 else:
                     loss = criterion(logits, y_batch)
 
+                # NaN/Inf check on loss
+                if hasattr(self, "_numerical_validator"):
+                    self._numerical_validator.check_loss(loss, raise_on_error=True)
+
             # Backward pass
             if scaler is not None:
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(self._model.parameters(), grad_clip)
+                # Capture gradient norm before clipping for logging
+                pre_clip_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(), grad_clip)
                 scaler.step(optimizer)
                 scaler.update()
             else:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self._model.parameters(), grad_clip)
+                # Capture gradient norm before clipping for logging
+                pre_clip_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(), grad_clip)
                 optimizer.step()
+
+            # Track gradient norm (convert to float for storage)
+            if hasattr(pre_clip_norm, "item"):
+                batch_grad_norm = pre_clip_norm.item()
+            else:
+                batch_grad_norm = float(pre_clip_norm)
+            gradient_norms.append(batch_grad_norm)
 
             scheduler.step()
 
@@ -665,8 +745,9 @@ class BaseRNNModel(BaseModel):
             total += len(y_batch)
 
         if total == 0:
-            return 0.0, 0.0
-        return total_loss / total, correct / total
+            return 0.0, 0.0, 0.0
+        avg_grad_norm = sum(gradient_norms) / len(gradient_norms) if gradient_norms else 0.0
+        return total_loss / total, correct / total, avg_grad_norm
 
     def _validate_epoch(
         self,

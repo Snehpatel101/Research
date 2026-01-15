@@ -38,7 +38,15 @@ Example:
 """
 
 from .base_rnn import BaseRNNModel, RNNNetwork
+from .checkpointing import CheckpointConfig, CheckpointManager, CheckpointMetadata
 from .lr_finder import LRFinder, LRFinderResult, find_lr_for_model
+from .numerical_stability import (
+    NumericalCheckResult,
+    NumericalInstabilityError,
+    NumericalValidator,
+    validate_training_inputs,
+)
+from .oom_recovery import OOMConfig, OOMContext, OOMEvent, OOMRecoveryManager, create_oom_manager
 from .inceptiontime_model import (
     InceptionBlock,
     InceptionModule,
@@ -89,6 +97,21 @@ __all__ = [
     # Base classes
     "BaseRNNModel",
     "RNNNetwork",
+    # Checkpointing
+    "CheckpointConfig",
+    "CheckpointManager",
+    "CheckpointMetadata",
+    # Numerical Stability
+    "NumericalInstabilityError",
+    "NumericalCheckResult",
+    "NumericalValidator",
+    "validate_training_inputs",
+    # OOM Recovery
+    "OOMConfig",
+    "OOMEvent",
+    "OOMRecoveryManager",
+    "OOMContext",
+    "create_oom_manager",
     # LR Finder
     "LRFinder",
     "LRFinderResult",
