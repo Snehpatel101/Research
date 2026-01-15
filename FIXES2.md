@@ -716,7 +716,7 @@ After implementing fixes, verify:
 
 ---
 
-## Implementation Status (Updated 2026-01-14)
+## Implementation Status (Updated 2026-01-15)
 
 **Phase 1 & 2 COMPLETE:**
 - ✅ CLEANUP-001: Deleted `src/stages/` (~600 lines dead code)
@@ -726,16 +726,33 @@ After implementing fixes, verify:
 - ✅ NAMING-002: Removed stale "feature_scaler.py" comments
 - ℹ️ CLEANUP-005: `drift_detector.py` kept (actively used for backward compat)
 
-**Changes made:**
-- Refactored `labeling/run.py`, `final_labels/run.py`, `ga_optimize/run.py` to import helpers directly
-- Updated `pipeline/runner.py` to import directly from `src.phase1.stages`
-- Updated docstring imports to use correct paths
-- All tests passing, no regressions
+**Phase 3: Structure Improvements COMPLETE:**
+- ✅ REORG-001: Created unified `src/core/` package
+- ✅ CONFIG-001: Created `src/core/paths.py` - single source of truth for paths
+- ✅ CONFIG-002: Created `src/core/defaults.py` - centralized GlobalDefaults registry
 
-**Remaining (Phases 3-5):**
-- REORG-001 through CONFIG-004: Structure improvements
-- FLOW-001 through FLOW-004: Data flow clarity
-- File splitting for overgrown modules
+**Phase 4: File Organization COMPLETE:**
+- ✅ REORG-003: Flattened `meta_learners/` directory into `ensemble/`
+- ℹ️ REORG-002: File splitting deferred (trainer.py, cv_runner.py within limits)
+
+**Phase 5: Config & Data Flow PARTIAL:**
+- ✅ CONFIG-003: Renamed `PipelineConfig.feature_set` to `feature_generation`
+  - Added backward-compatible property with deprecation warning
+  - Updated CLI, pipeline stages, and tests
+- ⏳ FLOW-001 to FLOW-004: Data flow improvements deferred (lower priority)
+
+**Changes made (Phase 3-5):**
+- Created `src/core/` package with paths.py, defaults.py
+- Moved 4 meta-learner files from `ensemble/meta_learners/` to `ensemble/`
+- Renamed feature_set field and updated all usages
+- Fixed 42 test failures from MTF and feature_set changes
+- All 1280+ tests passing, 13 expected skips
+
+**Remaining (Lower Priority):**
+- FLOW-001: Create FeatureSetResolver class
+- FLOW-002: Split TimeSeriesDataContainer responsibilities
+- FLOW-003: Consolidate OOF data structures
+- FLOW-004: Create HeterogeneousDataBundle
 
 ---
 
@@ -1216,10 +1233,18 @@ CONFIG-003: Rename feature_set collision
 - [x] All tests still pass after deletions ✓
 - [x] Import paths simplified (runner.py imports directly from phase1) ✓
 
-**Pending (Phase 3-5):**
-- [ ] No circular import workarounds needed
-- [ ] Single `src/core/` package for utilities
-- [ ] Single defaults registry in use
-- [ ] Feature set naming collision resolved
+**Completed (Phase 3-5):**
+- [x] Single `src/core/` package for utilities (REORG-001) ✓
+- [x] Unified paths module in `src/core/paths.py` (CONFIG-001) ✓
+- [x] Single defaults registry in `src/core/defaults.py` (CONFIG-002) ✓
+- [x] Feature set naming collision resolved - renamed to `feature_generation` (CONFIG-003) ✓
+- [x] Meta-learners flattened into ensemble/ directory (REORG-003) ✓
+- [x] All 1280+ tests passing ✓
+
+**Deferred (Lower Priority):**
+- [ ] FLOW-001: FeatureSetResolver class
+- [ ] FLOW-002: Split TimeSeriesDataContainer
+- [ ] FLOW-003: Consolidate OOF structures
+- [ ] FLOW-004: HeterogeneousDataBundle
 
 **Note:** CLEANUP-005 (drift_detector.py) - kept as backward compatibility layer is actively used.
