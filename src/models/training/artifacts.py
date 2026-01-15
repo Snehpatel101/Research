@@ -24,8 +24,9 @@ from ..base import PredictionOutput, TrainingMetrics
 from ..config import detect_environment, get_applied_overrides, save_config_json
 
 # Import MODEL_DATA_REQUIREMENTS for model requirements saving (MOD-008)
+# Canonical location: src.models.config.data_requirements
 try:
-    from src.phase1.config.model_config import MODEL_DATA_REQUIREMENTS
+    from src.models.config import MODEL_DATA_REQUIREMENTS
 except ImportError:
     MODEL_DATA_REQUIREMENTS = None
 

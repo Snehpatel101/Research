@@ -10,9 +10,9 @@ Usage:
 """
 
 # =============================================================================
-# MODEL CONFIG
+# MODEL CONFIG (canonical location: src.models.config.data_requirements)
 # =============================================================================
-from src.phase1.config.model_config import (
+from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     EnsembleConfig,

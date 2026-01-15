@@ -52,7 +52,7 @@ from .resnet1d_model import (
 )
 from .gru_model import GRUModel, GRUNetwork
 from .lstm_model import LSTMModel, LSTMNetwork
-from .nbeats import (
+from .nbeats_model import (
     GenericBasis,
     NBEATSBlock,
     NBEATSModel,

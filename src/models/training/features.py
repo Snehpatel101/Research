@@ -20,8 +20,9 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 # Import MODEL_DATA_REQUIREMENTS for feature_set validation (MOD-005)
+# Canonical location: src.models.config.data_requirements
 try:
-    from src.phase1.config.model_config import MODEL_DATA_REQUIREMENTS
+    from src.models.config import MODEL_DATA_REQUIREMENTS
 except ImportError:
     MODEL_DATA_REQUIREMENTS = None
 

@@ -78,7 +78,8 @@ from src.phase1.config.labels import (
     get_required_label_columns,
     is_label_column,
 )
-from src.phase1.config.model_config import (
+# Model config - canonical location: src.models.config.data_requirements
+from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     EnsembleConfig,
