@@ -13,11 +13,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.cross_validation.feature_selector import (
-    WalkForwardFeatureSelector,
-    FeatureSelectorConfig,
-    FeatureSelectionResult,
+from src.feature_selection import (
     CVIntegratedFeatureSelector,
+    FeatureSelectionResult,
+    FeatureSelectorConfig,
+    WalkForwardFeatureSelector,
 )
 
 

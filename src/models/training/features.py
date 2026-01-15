@@ -76,7 +76,8 @@ class TrainerFeaturesMixin:
 
     def _setup_feature_selection(self) -> None:
         """Initialize feature selection manager based on model family and config."""
-        from ..feature_selection import FeatureSelectionConfig, FeatureSelectionManager
+        # Late import to avoid circular dependency
+        from src.feature_selection import FeatureSelectionConfig, FeatureSelectionManager
 
         if not self.config.use_feature_selection:
             self.feature_selector = FeatureSelectionManager.disabled()
@@ -111,7 +112,7 @@ class TrainerFeaturesMixin:
 
         # Override n_features if explicitly set to 0 (use family default)
         if self.config.feature_selection_n_features == 0:
-            from ..feature_selection.config import ModelFamilyDefaults
+            from src.feature_selection import ModelFamilyDefaults
 
             defaults = ModelFamilyDefaults.get_defaults(self.model.model_family)
             fs_config.n_features = defaults.get("n_features", 50)

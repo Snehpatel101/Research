@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.feature_selection import (
+from src.feature_selection import (
     FeatureSelectionConfig,
     FeatureSelectionManager,
     ModelFamilyDefaults,

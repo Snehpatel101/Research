@@ -3,11 +3,10 @@
 Provides feature selection and feature set resolution utilities.
 """
 
-from src.cross_validation.feature_selector import FeatureSelectionResult
-from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
-from src.phase1.utils.feature_selection import (
+from src.feature_selection import (
     DEFAULT_PRIORITY,
     FEATURE_PRIORITY,
+    FeatureSelectionResult,
     apply_feature_selection,
     filter_correlated_features,
     filter_low_variance,
@@ -16,6 +15,7 @@ from src.phase1.utils.feature_selection import (
     save_feature_selection_report,
     select_features,
 )
+from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 from src.phase1.utils.feature_sets import (
     build_feature_set_manifest,
     resolve_feature_set,

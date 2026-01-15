@@ -1,37 +1,52 @@
 """
 Feature Selection Integration for Model Training.
 
-This module provides feature selection integration for the model training pipeline.
-It wraps the existing WalkForwardFeatureSelector and provides:
-- Per-model family feature selection configuration
-- Integration with the training pipeline
-- Persistence of selected features with model artifacts
-- Application of feature selection at inference time
+DEPRECATED: This module has been moved to src.feature_selection.
+Please update your imports:
 
-Usage:
+    # Old (deprecated):
     from src.models.feature_selection import FeatureSelectionManager
 
-    # Create manager with config
-    manager = FeatureSelectionManager(
-        n_features=50,
-        method="mda",
-        model_family="boosting"
-    )
+    # New (preferred):
+    from src.feature_selection import FeatureSelectionManager
 
-    # Run feature selection
-    result = manager.select_features(X_train, y_train, sample_weights)
-
-    # Apply to data
-    X_train_selected = manager.apply_selection(X_train)
-
-    # Save/load with model artifacts
-    manager.save(path)
-    manager.load(path)
+This module will be removed in a future version.
 """
 
-from .config import FeatureSelectionConfig, ModelFamilyDefaults
-from .manager import FeatureSelectionManager
-from .result import PersistedFeatureSelection
+from __future__ import annotations
+
+
+def __getattr__(name):
+    """Lazy import to avoid circular dependency."""
+    import warnings
+
+    warnings.warn(
+        "Importing from src.models.feature_selection is deprecated. "
+        "Use src.feature_selection instead. "
+        "Example: from src.feature_selection import FeatureSelectionManager",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+    # Import from canonical location
+    from src.feature_selection import (
+        FeatureSelectionConfig,
+        FeatureSelectionManager,
+        ModelFamilyDefaults,
+        PersistedFeatureSelection,
+    )
+
+    _exports = {
+        "FeatureSelectionConfig": FeatureSelectionConfig,
+        "FeatureSelectionManager": FeatureSelectionManager,
+        "ModelFamilyDefaults": ModelFamilyDefaults,
+        "PersistedFeatureSelection": PersistedFeatureSelection,
+    }
+
+    if name in _exports:
+        return _exports[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "FeatureSelectionConfig",

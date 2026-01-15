@@ -39,7 +39,6 @@ from ..base import PredictionOutput, TrainingMetrics
 from ..calibration import CalibrationConfig, ProbabilityCalibrator
 from ..config import TrainerConfig
 from ..data_preparation import prepare_training_data
-from ..feature_selection import FeatureSelectionManager
 from ..metrics import compute_classification_metrics, compute_trading_metrics
 from ..registry import ModelRegistry
 from .artifacts import TrainerArtifactsMixin
@@ -47,6 +46,7 @@ from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validat
 from .features import TrainerFeaturesMixin
 
 if TYPE_CHECKING:
+    from src.feature_selection import FeatureSelectionManager
     from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
