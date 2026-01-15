@@ -2,7 +2,7 @@ import pandas as pd
 
 from src.common.manifest import ArtifactManifest
 from src.phase1.pipeline_config import PipelineConfig
-from src.pipeline.stages.datasets import run_build_datasets
+from src.phase1.stages.datasets.run import run_build_datasets
 
 
 def _write_scaled_splits(config):
