@@ -547,16 +547,16 @@ class TestRegressionPrevention:
         from src.phase1.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
-        # Pipeline feature_set controls GENERATION
-        pipeline = PipelineConfig(symbols=["MES"], feature_set="full")
-        assert pipeline.feature_set == "full"
+        # Pipeline feature_generation controls GENERATION (renamed from feature_set)
+        pipeline = PipelineConfig(symbols=["MES"], feature_generation="full")
+        assert pipeline.feature_generation == "full"
 
         # Trainer feature_set controls SELECTION
         trainer = TrainerConfig(model_name="xgboost", feature_set="boosting_optimal")
         assert trainer.feature_set == "boosting_optimal"
 
         # Different values are intentional and correct
-        assert pipeline.feature_set != trainer.feature_set
+        assert pipeline.feature_generation != trainer.feature_set
 
     def test_horizon_range_validation(self):
         """

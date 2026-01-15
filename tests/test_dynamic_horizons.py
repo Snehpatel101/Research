@@ -417,7 +417,12 @@ class TestPipelineConfigHorizonIntegration:
         """PipelineConfig should auto-scale purge/embargo on init."""
         from src.phase1.pipeline_config import PipelineConfig
 
-        config = PipelineConfig(symbols=['MES'], label_horizons=[5, 20, 60])
+        # Explicitly set target_timeframe to test timeframe-aware scaling
+        config = PipelineConfig(
+            symbols=['MES'],
+            label_horizons=[5, 20, 60],
+            target_timeframe='5min'  # Explicit timeframe for predictable embargo
+        )
 
         # max_horizon = 60
         # purge = 60 * 3 = 180
