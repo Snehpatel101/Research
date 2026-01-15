@@ -6,7 +6,6 @@ for the feature scaling infrastructure.
 
 Author: ML Pipeline
 Created: 2025-12-20
-Updated: 2025-12-20 - Extracted from feature_scaler.py
 Updated: 2025-12-24 - Added model-family scaling documentation
 
 # =============================================================================

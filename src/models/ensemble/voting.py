@@ -116,6 +116,48 @@ class VotingEnsemble(BaseModel):
                     return True
         return False
 
+    def _validate_input_shape(self, X: np.ndarray, context: str = "input") -> None:
+        """
+        Validate input array shape for voting ensemble.
+
+        MOD-002 FIX: VotingEnsemble needs its own validation method because
+        the parent class's method relies on requires_sequences which may not
+        be correctly determined before base models are instantiated.
+
+        VotingEnsemble only supports homogeneous base models (all tabular or
+        all sequence), so we check based on configured base_model_names.
+
+        Args:
+            X: Input array to validate
+            context: Context for error messages
+
+        Raises:
+            ValueError: If shape is invalid
+        """
+        if X.ndim == 1:
+            raise ValueError(f"{context} must be 2D or 3D, got 1D array with shape {X.shape}")
+
+        # Check configured models to determine expected shape
+        base_model_names = self._config.get("base_model_names", [])
+        expects_sequences = self._check_configured_models_require_sequences(base_model_names)
+
+        # Also check instantiated base models if available
+        if self._base_models:
+            expects_sequences = any(m.requires_sequences for m in self._base_models)
+
+        if expects_sequences:
+            if X.ndim != 3:
+                raise ValueError(
+                    f"{context} must be 3D (n_samples, seq_len, n_features) "
+                    f"for sequence models, got shape {X.shape}"
+                )
+        else:
+            if X.ndim != 2:
+                raise ValueError(
+                    f"{context} must be 2D (n_samples, n_features) "
+                    f"for tabular models, got shape {X.shape}"
+                )
+
     def get_default_config(self) -> dict[str, Any]:
         return {
             "voting": "soft",  # "hard" or "soft"

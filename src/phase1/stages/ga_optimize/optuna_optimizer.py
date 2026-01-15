@@ -20,6 +20,7 @@ import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 
+from src.common.split_ratios import DEFAULT_TRAIN_RATIO
 from src.phase1.stages.labeling import triple_barrier_numba
 
 from .fitness import calculate_fitness
@@ -472,7 +473,7 @@ def run_optuna_optimization_safe(
     df: pd.DataFrame,
     horizon: int,
     symbol: str = "MES",
-    train_ratio: float = 0.70,
+    train_ratio: float = DEFAULT_TRAIN_RATIO,
     n_trials: int = 100,
     subset_fraction: float = 0.3,
     atr_column: str = "atr_14",

@@ -44,13 +44,13 @@ With PurgedKFold:
 Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 """
 
+from src.cross_validation.feature_selector import FeatureSelectionResult
 from src.feature_selection.ohlcv_selector import (
     # Category utilities
     FEATURE_CATEGORIES,
-    # Result classes
-    FeatureSelectionResult,
     # Main class
     OHLCVFeatureSelector,
+    # Result classes (StabilityMetrics only; FeatureSelectionResult is canonical from cross_validation)
     StabilityMetrics,
     categorize_feature,
     # Factory

@@ -21,8 +21,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
+from src.cross_validation.feature_selector import FeatureSelectionResult
 from src.feature_selection.ohlcv_selector import (
-    FeatureSelectionResult,
     OHLCVFeatureSelector,
     get_feature_categories,
 )
@@ -172,15 +172,15 @@ class PurgedFeatureSelector:
                 weights_series,
             )
 
-        # Build result
+        # Build result (using canonical field names)
         result = FeatureSelectionResult(
             selected_features=selected_features,
             feature_importances={f: aggregated_importance.get(f, 0) for f in selected_features},
             stability_scores={f: stability_scores.get(f, 0) for f in selected_features},
-            correlation_clusters=correlation_clusters,
+            correlation_groups=correlation_clusters,  # canonical name (correlation_clusters is alias)
             regime_importances=regime_importances,
-            n_original=n_features,
-            n_selected=len(selected_features),
+            original_count=n_features,  # canonical name (n_original is alias)
+            final_count=len(selected_features),  # canonical name (n_selected is alias)
             selection_metadata={
                 "n_splits": self._get_n_splits(),
                 "purge_bars": self._get_purge_bars(),

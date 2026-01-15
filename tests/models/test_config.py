@@ -242,30 +242,35 @@ class TestBuildConfig:
 
     def test_build_from_model_yaml(self) -> None:
         """Should build config from model YAML file."""
-        config = build_config("xgboost")
+        result = build_config("xgboost")
 
-        assert config["model_name"] == "xgboost"
-        assert config["model_family"] == "boosting"
-        assert "n_estimators" in config
+        # build_config now returns ConfigBuildResult
+        assert result.config["model_name"] == "xgboost"
+        assert result.config["model_family"] == "boosting"
+        assert "n_estimators" in result.config
+        # Also verify applied_overrides tracking
+        assert result.applied_overrides.environment in ["local_cpu", "local_gpu", "colab"]
 
     def test_build_with_cli_override(self) -> None:
         """CLI args should override YAML values."""
         cli_args = {"n_estimators": 1000, "learning_rate": 0.01}
 
-        config = build_config("xgboost", cli_args=cli_args)
+        result = build_config("xgboost", cli_args=cli_args)
 
-        assert config["n_estimators"] == 1000
-        assert config["learning_rate"] == 0.01
+        assert result.config["n_estimators"] == 1000
+        assert result.config["learning_rate"] == 0.01
+        # Verify CLI overrides are tracked
+        assert "n_estimators" in result.applied_overrides.cli_overrides
 
     def test_build_ignores_none_cli_args(self) -> None:
         """CLI args with None values should be ignored."""
         cli_args = {"n_estimators": None, "learning_rate": 0.01}
 
-        config = build_config("xgboost", cli_args=cli_args)
+        result = build_config("xgboost", cli_args=cli_args)
 
         # n_estimators should be from YAML, not None
-        assert config["n_estimators"] == 500
-        assert config["learning_rate"] == 0.01
+        assert result.config["n_estimators"] == 500
+        assert result.config["learning_rate"] == 0.01
 
 
 # =============================================================================

@@ -10,6 +10,11 @@ from pathlib import Path
 import numpy as np
 
 from src.common.horizon_config import HORIZONS, auto_scale_purge_embargo
+from src.common.split_ratios import (
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+)
 from src.phase1.config.barriers_config import BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
 from src.phase1.config.features import parse_timeframe_to_minutes
 
@@ -52,9 +57,10 @@ def detect_available_symbols(raw_dir: Path = None) -> list[str]:
 SYMBOLS = detect_available_symbols()
 TARGET_TIMEFRAME = "1min"
 
-TRAIN_RATIO = 0.70
-VAL_RATIO = 0.15
-TEST_RATIO = 0.15
+# CFG-010: Import default split ratios from common module (single source of truth)
+TRAIN_RATIO = DEFAULT_TRAIN_RATIO
+VAL_RATIO = DEFAULT_VAL_RATIO
+TEST_RATIO = DEFAULT_TEST_RATIO
 
 RANDOM_SEED = 42
 

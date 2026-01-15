@@ -17,6 +17,7 @@ from .loaders import (
 )
 from .merging import (
     AppliedOverrides,
+    ConfigBuildResult,
     build_config,
     create_trainer_config,
     get_applied_overrides,
@@ -66,6 +67,7 @@ __all__ = [
     "create_trainer_config",
     "get_applied_overrides",
     "AppliedOverrides",
+    "ConfigBuildResult",
     # Serialization
     "save_config",
     "save_config_json",

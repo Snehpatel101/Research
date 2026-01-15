@@ -5,7 +5,6 @@ This module provides high-level convenience functions for common scaling tasks.
 
 Author: ML Pipeline
 Created: 2025-12-20
-Updated: 2025-12-20 - Extracted from feature_scaler.py
 """
 
 import logging

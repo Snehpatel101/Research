@@ -338,9 +338,25 @@ class StackingEnsemble(BaseModel):
         )
 
         # Step 2: Train meta-learner on OOF predictions
+        # MOD-001 FIX: When passthrough=True, X_train must be trimmed to match
+        # oof_predictions size (sequence models produce fewer samples due to lookback)
         meta_features_train = oof_predictions
+        y_train_meta = y_train
+        sample_weights_meta = sample_weights
         if passthrough:
-            meta_features_train = np.hstack([X_train, oof_predictions])
+            if oof_predictions.shape[0] < X_train.shape[0]:
+                offset = X_train.shape[0] - oof_predictions.shape[0]
+                X_train_trimmed = X_train[offset:]
+                y_train_meta = y_train[offset:]
+                if sample_weights is not None:
+                    sample_weights_meta = sample_weights[offset:]
+                logger.info(
+                    f"Passthrough mode: trimmed X_train from {X_train.shape[0]} to "
+                    f"{X_train_trimmed.shape[0]} samples to match OOF predictions"
+                )
+                meta_features_train = np.hstack([X_train_trimmed, oof_predictions])
+            else:
+                meta_features_train = np.hstack([X_train, oof_predictions])
 
         logger.info(f"Training meta-learner on {meta_features_train.shape[1]} features")
 
@@ -369,10 +385,10 @@ class StackingEnsemble(BaseModel):
 
         meta_metrics = self._meta_learner.fit(
             X_train=meta_features_train,
-            y_train=y_train,
+            y_train=y_train_meta,
             X_val=meta_features_val,
             y_val=y_val_aligned,
-            sample_weights=sample_weights,
+            sample_weights=sample_weights_meta,
         )
 
         # Step 3: Keep fold models for inference (use average of folds)
@@ -515,6 +531,25 @@ class StackingEnsemble(BaseModel):
                 # and adjust by subtracting offset
                 seq_train_idx = train_idx[train_idx >= seq_offset] - seq_offset
                 seq_val_idx = val_idx[val_idx >= seq_offset] - seq_offset
+
+                # MOD-003: Validate that we have valid samples after filtering
+                if len(seq_train_idx) == 0:
+                    raise ValueError(
+                        f"No valid sequence training samples in fold {fold_idx + 1} "
+                        f"(all {len(train_idx)} train indices < seq_offset={seq_offset}). "
+                        f"This indicates insufficient data for sequence models with the "
+                        f"current lookback window. Consider reducing sequence_length or "
+                        f"using more training data."
+                    )
+                if len(seq_val_idx) == 0:
+                    raise ValueError(
+                        f"No valid sequence validation samples in fold {fold_idx + 1} "
+                        f"(all {len(val_idx)} val indices < seq_offset={seq_offset}). "
+                        f"This indicates insufficient data for sequence models with the "
+                        f"current lookback window. Consider reducing sequence_length or "
+                        f"using more training data."
+                    )
+
                 X_seq_fold_train_cache = X_train_seq[seq_train_idx]
                 X_seq_fold_val_cache = X_train_seq[seq_val_idx]
                 # Also need aligned labels for sequence models
@@ -617,9 +652,27 @@ class StackingEnsemble(BaseModel):
         seq_offset = 0
         if self._is_heterogeneous and X_seq is not None and X_seq.shape[0] < n_samples:
             seq_offset = n_samples - X_seq.shape[0]
+            original_n_samples = n_samples
             n_samples = X_seq.shape[0]  # Use sequence size as common denominator
+            # MOD-008 FIX: Log warning when trimming occurs
+            logger.warning(
+                f"MOD-008: Trimming tabular data to match sequence data size. "
+                f"Original: {original_n_samples}, After trim: {n_samples}, "
+                f"Offset: {seq_offset} samples removed from start."
+            )
             # Trim tabular data to match
             X = X[seq_offset:]
+            # MOD-008 FIX: Validate shapes after trimming
+            if X.shape[0] != n_samples:
+                raise ValueError(
+                    f"MOD-008: Shape mismatch after trimming - "
+                    f"X.shape[0]={X.shape[0]} != expected n_samples={n_samples}"
+                )
+            if X_seq.shape[0] != n_samples:
+                raise ValueError(
+                    f"MOD-008: Shape mismatch after trimming - "
+                    f"X_seq.shape[0]={X_seq.shape[0]} != expected n_samples={n_samples}"
+                )
 
         if use_probabilities:
             predictions = np.zeros((n_samples, n_models * n_classes))
@@ -694,9 +747,16 @@ class StackingEnsemble(BaseModel):
         )
 
         # Build meta-learner input
+        # MOD-001 FIX: When passthrough=True, X must be trimmed to match
+        # base_predictions size (sequence models produce fewer samples)
         meta_features = base_predictions
         if passthrough:
-            meta_features = np.hstack([X, base_predictions])
+            if base_predictions.shape[0] < X.shape[0]:
+                offset = X.shape[0] - base_predictions.shape[0]
+                X_trimmed = X[offset:]
+                meta_features = np.hstack([X_trimmed, base_predictions])
+            else:
+                meta_features = np.hstack([X, base_predictions])
 
         # Get meta-learner predictions
         output = self._meta_learner.predict(meta_features)

@@ -12,6 +12,11 @@ from typing import Any
 # Import HorizonConfig and active horizons from the dedicated horizon module
 # Re-exported here for backward compatibility
 from src.common.horizon_config import ACTIVE_HORIZONS, HorizonConfig
+from src.common.split_ratios import (
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+)
 from src.phase1.config.pipeline_defaults import create_default_config
 
 # Import extracted modules
@@ -30,18 +35,26 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
+def _generate_run_id() -> str:
+    """Generate a unique run ID with timestamp and random suffix."""
+    import secrets
+
+    return f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{secrets.token_hex(2)}"
+
+
 @dataclass
 class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
-    """Complete configuration for Phase 1 pipeline."""
+    """Complete configuration for Phase 1 pipeline.
+
+    CFG-006: run_id is preserved across deepcopy and pickling operations.
+    The __deepcopy__ and __getstate__/__setstate__ methods ensure the run_id
+    remains stable once generated.
+    """
 
     # Run identification
     # Format: {timestamp_with_ms}_{random_suffix} for collision prevention
     # Example: 20251228_143025_789456_a3f9
-    run_id: str = field(
-        default_factory=lambda: (
-            lambda: f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{__import__('secrets').token_hex(2)}"
-        )()
-    )
+    run_id: str = field(default_factory=_generate_run_id)
     description: str = "Phase 1 pipeline run"
 
     # Data parameters
@@ -51,12 +64,12 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     end_date: str | None = None  # YYYY-MM-DD format
 
     # Timeframe configuration
-    target_timeframe: str = "5min"  # Primary training timeframe (backward compat)
+    target_timeframe: str = "1min"  # Primary training timeframe (canonical source)
     output_timeframes: list[str] | None = None  # If set, produce multiple clean datasets
     bar_resolution: str = field(default=None)  # Legacy alias
 
     # Feature engineering
-    # NOTE (CFG-002): Pipeline feature_set="full" is intentionally different from
+    # NOTE (CFG-002a): Pipeline feature_set="full" is intentionally different from
     # TrainerConfig.feature_set="boosting_optimal". This is by design:
     #
     # - Pipeline feature_set="full" means GENERATE all ~180 features during Phase 1.
@@ -67,7 +80,7 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     #   tailored to their inductive biases (e.g., boosting_optimal ~50 features).
     #
     # This separation allows per-model feature selection without re-running the pipeline.
-    # See src/models/config/trainer_config.py for training-time feature set selection.
+    # See src/models/config/trainer_config.py (CFG-002b) for training-time feature set selection.
     feature_set: str = "full"  # 'full', 'minimal', 'custom' - controls feature GENERATION
     sma_periods: list[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
     ema_periods: list[int] = field(default_factory=lambda: [9, 21, 50])
@@ -90,9 +103,10 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     auto_scale_purge_embargo: bool = True
 
     # Split parameters
-    train_ratio: float = 0.70
-    val_ratio: float = 0.15
-    test_ratio: float = 0.15
+    # CFG-010: Use default split ratios from common module (single source of truth)
+    train_ratio: float = DEFAULT_TRAIN_RATIO
+    val_ratio: float = DEFAULT_VAL_RATIO
+    test_ratio: float = DEFAULT_TEST_RATIO
     purge_bars: int = 60
     embargo_bars: int = 1440
 
@@ -123,13 +137,12 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
     def __post_init__(self):
         """Validate configuration after initialization."""
+        from src.common.timeframes import is_valid_timeframe, validate_timeframe
         from src.phase1.config import (
             SUPPORTED_HORIZONS,
             auto_scale_purge_embargo,
             validate_feature_set_config,
-            validate_timeframe,
         )
-        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
 
         # Set project_root if not provided
         if self.project_root is None:
@@ -161,13 +174,16 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
             raise ValueError(f"Feature set validation failed: {feature_set_issues}")
 
         # Validate MTF configuration
+        # CFG-007: Use unified validation from src.common.timeframes
         valid_mtf_modes = ["bars", "indicators", "both"]
         if self.mtf_mode not in valid_mtf_modes:
             raise ValueError(f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'")
         for tf in self.mtf_timeframes:
-            if tf not in MTF_TIMEFRAMES:
+            if not is_valid_timeframe(tf, allow_extended=True):
+                from src.common.timeframes import SUPPORTED_TIMEFRAMES as SUPPORTED_TF
+
                 raise ValueError(
-                    f"Unsupported MTF timeframe: '{tf}'. Supported: {list(MTF_TIMEFRAMES.keys())}"
+                    f"Unsupported MTF timeframe: '{tf}'. Supported: {SUPPORTED_TF}"
                 )
 
         # Handle horizon configuration
@@ -184,8 +200,18 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
                     logger.warning(f"Horizon {h} not in SUPPORTED_HORIZONS {SUPPORTED_HORIZONS}.")
 
         # Auto-scale purge and embargo bars based on horizons
-        # IMPORTANT: Pass target_timeframe to ensure embargo scales correctly
-        # with bar resolution (e.g., 15min bars need fewer bars than 5min for same time buffer)
+        # IMPORTANT (PIPE-007): Pass target_timeframe to ensure embargo scales correctly
+        # with bar resolution (e.g., 15min bars need fewer bars than 5min for same time buffer).
+        #
+        # Multi-TF Note: When output_timeframes contains multiple TFs, purge/embargo
+        # are calculated from target_timeframe ONLY. This is intentional:
+        # - target_timeframe is the PRIMARY training timeframe (canonical source)
+        # - Other timeframes in output_timeframes are derived for MTF enrichment
+        # - Splits/embargo must be consistent across all TFs for data integrity
+        # - Per-TF purge/embargo would create misaligned splits between timeframes
+        #
+        # If different purge/embargo per TF is needed, run separate pipeline instances
+        # with different target_timeframe settings.
         if self.auto_scale_purge_embargo:
             self.purge_bars, self.embargo_bars = auto_scale_purge_embargo(
                 self.label_horizons,
@@ -247,6 +273,68 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
         if self.output_timeframes:
             return list(self.output_timeframes)
         return [self.target_timeframe]
+
+    def __deepcopy__(self, memo: dict) -> "PipelineConfig":
+        """Create a deep copy that preserves the run_id.
+
+        CFG-006: Ensures run_id is not regenerated during deepcopy operations.
+        All other fields are deep copied normally.
+        """
+        import copy
+
+        # Create a new instance without calling __post_init__ validation
+        # by using object.__new__ and manually copying fields
+        cls = self.__class__
+        result = cls.__new__(cls)
+
+        # Copy all fields, deep copying mutable objects
+        for field_obj in self.__dataclass_fields__.values():
+            field_name = field_obj.name
+            value = getattr(self, field_name)
+            # Use deepcopy for mutable objects, preserving the memo dict
+            if field_name == "run_id":
+                # Preserve run_id exactly as-is
+                setattr(result, field_name, value)
+            elif isinstance(value, (list, dict)):
+                setattr(result, field_name, copy.deepcopy(value, memo))
+            elif isinstance(value, Path):
+                # Path objects are immutable, no need to deepcopy
+                setattr(result, field_name, value)
+            else:
+                setattr(result, field_name, value)
+
+        memo[id(self)] = result
+        return result
+
+    def __getstate__(self) -> dict:
+        """Serialize state for pickling, preserving run_id.
+
+        CFG-006: Ensures run_id is preserved during pickle/unpickle cycles.
+        """
+        state = self.to_dict()
+        # Ensure run_id is explicitly included
+        state["run_id"] = self.run_id
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore state from pickle, preserving run_id.
+
+        CFG-006: Restores run_id exactly as it was before pickling.
+        """
+        # Restore run_id first before any other processing
+        preserved_run_id = state.get("run_id")
+
+        # Convert project_root back to Path
+        if "project_root" in state and isinstance(state["project_root"], str):
+            state["project_root"] = Path(state["project_root"])
+
+        # Set all attributes
+        for key, value in state.items():
+            setattr(self, key, value)
+
+        # Ensure run_id is preserved (override any regeneration)
+        if preserved_run_id:
+            self.run_id = preserved_run_id
 
 
 # Re-export create_default_config for backward compatibility

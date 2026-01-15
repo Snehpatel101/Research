@@ -17,8 +17,7 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -27,6 +26,8 @@ from scipy.spatial.distance import squareform
 from scipy.stats import spearmanr
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
+
+from src.cross_validation.feature_selector import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
 
@@ -236,46 +237,8 @@ def get_feature_categories(feature_names: list[str]) -> dict[str, list[str]]:
 # RESULT DATACLASSES
 # =============================================================================
 
-
-@dataclass
-class FeatureSelectionResult:
-    """
-    Result of OHLCV feature selection process.
-
-    Attributes:
-        selected_features: Final list of selected feature names
-        feature_importances: Dict mapping features to aggregated importance scores
-        stability_scores: Dict mapping features to stability across folds (0-1)
-        correlation_clusters: List of correlated feature groups
-        regime_importances: Optional dict of per-regime importance scores
-        n_original: Number of original features
-        n_selected: Number of selected features
-        selection_metadata: Additional metadata about selection process
-    """
-
-    selected_features: list[str]
-    feature_importances: dict[str, float]
-    stability_scores: dict[str, float]
-    correlation_clusters: list[list[str]]
-    regime_importances: dict[int, dict[str, float]] | None
-    n_original: int
-    n_selected: int
-    selection_metadata: dict[str, Any] = field(default_factory=dict)
-
-    def get_category_breakdown(self) -> dict[str, int]:
-        """Get count of selected features per category."""
-        return {
-            cat: len(feats) for cat, feats in get_feature_categories(self.selected_features).items()
-        }
-
-    def get_top_features(self, n: int = 10) -> list[tuple[str, float]]:
-        """Get top N features by importance."""
-        sorted_features = sorted(
-            self.feature_importances.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        return sorted_features[:n]
+# FeatureSelectionResult is imported from src.cross_validation.feature_selector
+# (canonical location for all feature selection result types)
 
 
 @dataclass
@@ -449,15 +412,15 @@ class OHLCVFeatureSelector:
                 f"Computed regime-conditional importance for {len(regime_importances)} regimes"
             )
 
-        # Build final result
+        # Build final result (using canonical field names)
         result = FeatureSelectionResult(
             selected_features=selected_features,
             feature_importances={f: aggregated_importance.get(f, 0) for f in selected_features},
             stability_scores={f: stability_scores.get(f, 0) for f in selected_features},
-            correlation_clusters=correlation_clusters,
+            correlation_groups=correlation_clusters,  # canonical name (correlation_clusters is alias)
             regime_importances=regime_importances,
-            n_original=n_features,
-            n_selected=len(selected_features),
+            original_count=n_features,  # canonical name (n_original is alias)
+            final_count=len(selected_features),  # canonical name (n_selected is alias)
             selection_metadata={
                 "n_splits": self.n_splits,
                 "min_stability_score": self.min_stability_score,
@@ -801,8 +764,7 @@ def create_ohlcv_selector(
 __all__ = [
     # Main class
     "OHLCVFeatureSelector",
-    # Result classes
-    "FeatureSelectionResult",
+    # Result classes (FeatureSelectionResult imported from cross_validation.feature_selector)
     "StabilityMetrics",
     # Category utilities
     "FEATURE_CATEGORIES",

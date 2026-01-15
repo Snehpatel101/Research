@@ -8,6 +8,12 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
+from src.common.split_ratios import (
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+)
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
@@ -154,9 +160,9 @@ def validate_label_distribution(
 
 def create_chronological_splits(
     df: pd.DataFrame,
-    train_ratio: float = 0.70,
-    val_ratio: float = 0.15,
-    test_ratio: float = 0.15,
+    train_ratio: float = DEFAULT_TRAIN_RATIO,
+    val_ratio: float = DEFAULT_VAL_RATIO,
+    test_ratio: float = DEFAULT_TEST_RATIO,
     purge_bars: int = 60,
     embargo_bars: int = 1440,
     datetime_col: str = "datetime",

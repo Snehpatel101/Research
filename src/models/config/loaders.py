@@ -179,7 +179,10 @@ def load_training_config() -> dict[str, Any]:
     """Load global training configuration."""
     if TRAINING_CONFIG_PATH.exists():
         return load_yaml_config(TRAINING_CONFIG_PATH)
-    logger.warning(f"Training config not found: {TRAINING_CONFIG_PATH}")
+    logger.info(
+        f"Training config not found at {TRAINING_CONFIG_PATH}. "
+        f"Using built-in defaults. To customize, create this file."
+    )
     return {}
 
 
@@ -187,7 +190,10 @@ def load_cv_config() -> dict[str, Any]:
     """Load cross-validation configuration."""
     if CV_CONFIG_PATH.exists():
         return load_yaml_config(CV_CONFIG_PATH)
-    logger.warning(f"CV config not found: {CV_CONFIG_PATH}")
+    logger.info(
+        f"CV config not found at {CV_CONFIG_PATH}. "
+        f"Using built-in defaults. To customize, create this file."
+    )
     return {}
 
 

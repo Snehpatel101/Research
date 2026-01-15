@@ -14,6 +14,7 @@ from typing import Any
 
 import pandas as pd
 
+from src.common.split_ratios import DEFAULT_TRAIN_RATIO
 from src.phase1.config import TRANSACTION_COSTS
 
 from .optuna_optimizer import (
@@ -99,7 +100,7 @@ def run_ga_optimization_safe(
     df: pd.DataFrame,
     horizon: int,
     symbol: str = "MES",
-    train_ratio: float = 0.70,
+    train_ratio: float = DEFAULT_TRAIN_RATIO,
     population_size: int = 50,
     generations: int = 30,
     crossover_prob: float = 0.7,

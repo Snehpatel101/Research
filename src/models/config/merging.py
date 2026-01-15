@@ -108,13 +108,42 @@ class AppliedOverrides:
         }
 
 
-# Module-level storage for the last applied overrides
+@dataclass
+class ConfigBuildResult:
+    """
+    Result of build_config() containing both config and applied overrides.
+
+    This replaces the previous global state pattern (CFG-001 fix).
+
+    Attributes:
+        config: The merged configuration dictionary
+        applied_overrides: Tracking of which sources contributed to the config
+    """
+
+    config: dict[str, Any]
+    applied_overrides: AppliedOverrides
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "config": self.config,
+            "applied_overrides": self.applied_overrides.to_dict(),
+        }
+
+
+# Module-level storage for the last applied overrides (deprecated, kept for backward compatibility)
 _last_applied_overrides: AppliedOverrides | None = None
+_deprecation_warning_shown: bool = False
 
 
 def get_applied_overrides() -> dict[str, Any]:
     """
     Get information about which configuration overrides were applied.
+
+    .. deprecated::
+        This function relies on global state and is deprecated.
+        Use the `applied_overrides` attribute from the `ConfigBuildResult`
+        returned by `build_config()` instead.
 
     Returns a dictionary containing:
     - environment: Detected execution environment
@@ -129,6 +158,18 @@ def get_applied_overrides() -> dict[str, Any]:
         Dictionary with override tracking information, or empty dict if
         build_config() hasn't been called yet.
     """
+    global _deprecation_warning_shown
+    if not _deprecation_warning_shown:
+        import warnings
+
+        warnings.warn(
+            "get_applied_overrides() is deprecated. Use the 'applied_overrides' "
+            "attribute from ConfigBuildResult returned by build_config() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        _deprecation_warning_shown = True
+
     if _last_applied_overrides is None:
         return {}
     return _last_applied_overrides.to_dict()
@@ -157,7 +198,7 @@ def build_config(
     config_file: str | Path | None = None,
     defaults: dict[str, Any] | None = None,
     apply_environment_overrides: bool = True,
-) -> dict[str, Any]:
+) -> ConfigBuildResult:
     """
     Build complete model configuration from multiple sources.
 
@@ -170,8 +211,8 @@ def build_config(
 
     See module docstring for detailed precedence documentation.
 
-    After calling this function, use `get_applied_overrides()` to retrieve
-    information about which sources contributed to the final configuration.
+    The returned ConfigBuildResult contains both the merged configuration
+    and tracking information about which sources contributed to it.
 
     Args:
         model_name: Name of the model
@@ -181,7 +222,9 @@ def build_config(
         apply_environment_overrides: Apply environment-specific settings
 
     Returns:
-        Complete merged configuration
+        ConfigBuildResult containing:
+        - config: The merged configuration dictionary
+        - applied_overrides: AppliedOverrides tracking which sources were used
 
     Raises:
         ConfigError: If config_file is explicitly provided and loading fails
@@ -265,10 +308,10 @@ def build_config(
         config = merge_configs(config, cli_config)
         logger.debug(f"Applied {len(cli_config)} CLI overrides")
 
-    # Store applied overrides for later retrieval
+    # Store applied overrides for backward compatibility (deprecated)
     _last_applied_overrides = applied
 
-    return config
+    return ConfigBuildResult(config=config, applied_overrides=applied)
 
 
 def create_trainer_config(
@@ -293,11 +336,12 @@ def create_trainer_config(
         ConfigError: If config_file is provided and loading fails
     """
     # Build merged model config (will raise ConfigError if config_file is invalid)
-    model_config = build_config(
+    result = build_config(
         model_name=model_name,
         cli_args=cli_args,
         config_file=config_file,
     )
+    model_config = result.config
 
     # Extract trainer-level settings from model config
     trainer_kwargs = {

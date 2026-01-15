@@ -1,6 +1,7 @@
 """Common utilities shared across phases.
 
-Provides artifact manifest management, horizon configuration, and timeframe utilities.
+Provides artifact manifest management, horizon configuration, timeframe utilities,
+and default split ratios.
 """
 
 from src.common.horizon_config import (
@@ -17,6 +18,13 @@ from src.common.horizon_config import (
     validate_horizons,
 )
 from src.common.manifest import ArtifactManifest
+from src.common.split_ratios import (
+    DEFAULT_SPLIT_RATIOS,
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+    validate_split_ratios,
+)
 from src.common.timeframes import (
     ALL_CANONICAL_TIMEFRAMES,
     CANONICAL_TIMEFRAMES,
@@ -51,6 +59,12 @@ __all__ = [
     "get_scaled_horizons",
     "auto_scale_purge_embargo",
     "get_default_barrier_params_for_horizon",
+    # split_ratios (CFG-010)
+    "DEFAULT_TRAIN_RATIO",
+    "DEFAULT_VAL_RATIO",
+    "DEFAULT_TEST_RATIO",
+    "DEFAULT_SPLIT_RATIOS",
+    "validate_split_ratios",
     # timeframes
     "ALL_CANONICAL_TIMEFRAMES",
     "CANONICAL_TIMEFRAMES",

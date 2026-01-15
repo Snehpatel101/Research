@@ -243,13 +243,13 @@ class TestMTFConfigurationPropagation:
         assert loaded.mtf_mode == 'indicators'
 
     def test_target_timeframe_default(self, temp_project_dir: Path) -> None:
-        """Test that default target_timeframe is 5min."""
+        """Test that default target_timeframe is 1min (canonical source)."""
         config = PipelineConfig(
             symbols=['MES'],
             project_root=temp_project_dir
         )
 
-        assert config.target_timeframe == '5min'
+        assert config.target_timeframe == '1min'
 
     def test_custom_target_timeframe(self, temp_project_dir: Path) -> None:
         """Test that custom target_timeframe is accepted."""

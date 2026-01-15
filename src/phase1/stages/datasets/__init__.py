@@ -52,7 +52,11 @@ from src.phase1.stages.datasets.container import (
     TimeSeriesDataContainer,
 )
 from src.phase1.utils.feature_sets import LABEL_PREFIXES
-from src.phase1.stages.datasets.run import run_build_datasets
+from src.phase1.stages.datasets.run import (
+    FeatureSchemaError,
+    run_build_datasets,
+    validate_feature_schema,
+)
 from src.phase1.stages.datasets.sequences import (
     SequenceConfig,
     SequenceDataset,
@@ -89,7 +93,9 @@ __all__ = [
     "create_multi_resolution_dataset",
     # Validation
     "validate_model_ready",
+    "validate_feature_schema",
     "ValidationResult",
+    "FeatureSchemaError",
     # Utility functions
     "build_sequence_indices",
     "find_symbol_boundaries",

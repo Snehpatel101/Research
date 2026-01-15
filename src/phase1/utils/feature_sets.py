@@ -6,25 +6,15 @@ from collections.abc import Sequence
 
 import pandas as pd
 
+from src.common.timeframes import TIMEFRAME_TO_MINUTES
 from src.phase1.config.feature_sets import FeatureSetDefinition
 from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 
-# Import MTF_TIMEFRAMES lazily to avoid circular imports
-_MTF_TIMEFRAMES = None
-
-
-def _get_mtf_timeframes():
-    """Lazy loader for MTF_TIMEFRAMES to avoid circular imports."""
-    global _MTF_TIMEFRAMES
-    if _MTF_TIMEFRAMES is None:
-        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
-        _MTF_TIMEFRAMES = MTF_TIMEFRAMES
-    return _MTF_TIMEFRAMES
-
 
 def _mtf_suffixes() -> list[str]:
+    """Generate MTF column suffixes from canonical timeframe definitions."""
     suffixes = set()
-    for tf in _get_mtf_timeframes().keys():
+    for tf in TIMEFRAME_TO_MINUTES.keys():
         if tf.endswith("min"):
             minutes = tf.replace("min", "")
             suffixes.add(f"_{minutes}m")

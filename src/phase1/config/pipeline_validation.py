@@ -162,18 +162,39 @@ def validate_barrier_overrides(overrides: dict[str, float] | None) -> list[str]:
 
 
 def validate_model_config_dict(model_config: dict[str, Any] | None) -> list[str]:
-    """Validate model configuration dictionary."""
+    """
+    Validate model configuration dictionary.
+
+    This validation is permissive - it validates specific known keys when present
+    but does NOT restrict which keys can be included. This allows model_config to
+    contain any hyperparameters (n_estimators, learning_rate, hidden_size, etc.)
+    without needing to enumerate all valid keys.
+
+    Validated keys:
+    - sequence_length: Must be a positive integer if present
+    - base_models: Must be a non-empty list if present
+    - meta_learner: Must be a non-empty string if present
+    """
     if model_config is None:
         return []
-    valid_keys = {"model_type", "base_models", "meta_learner", "sequence_length"}
     issues = []
-    for key in model_config.keys():
-        if key not in valid_keys:
-            issues.append(f"Unknown model_config key: '{key}'. Valid keys: {valid_keys}")
+
+    # Validate specific keys when present (permissive approach - no key restriction)
     if "sequence_length" in model_config:
         seq = model_config["sequence_length"]
         if not isinstance(seq, int) or seq < 1:
             issues.append(f"model_config['sequence_length'] must be a positive integer, got {seq}")
+
+    if "base_models" in model_config:
+        base_models = model_config["base_models"]
+        if not isinstance(base_models, list) or len(base_models) == 0:
+            issues.append("model_config['base_models'] must be a non-empty list")
+
+    if "meta_learner" in model_config:
+        meta_learner = model_config["meta_learner"]
+        if not isinstance(meta_learner, str) or not meta_learner.strip():
+            issues.append("model_config['meta_learner'] must be a non-empty string")
+
     return issues
 
 

@@ -26,8 +26,9 @@ class FeatureSetDefinition:
             these columns are required; if any are missing, a warning is logged.
             Use this for critical features that should always be included.
         include_mtf: Whether to include multi-timeframe features
-        supported_model_types: Model types that work with this feature set
-        default_sequence_length: Default sequence length for sequential models
+        supported_model_types: Model families that work with this feature set.
+            Must match registry family names: "boosting", "classical", "neural", "ensemble"
+        default_sequence_length: Default sequence length for neural sequence models
         recommended_scaler: Recommended scaler type for this feature set
     """
 
@@ -40,7 +41,7 @@ class FeatureSetDefinition:
     explicit_columns: list[str] = field(default_factory=list)
     include_mtf: bool = False
     supported_model_types: list[str] = field(
-        default_factory=lambda: ["tabular", "sequential", "tree"]
+        default_factory=lambda: ["boosting", "classical", "neural", "ensemble"]
     )
     default_sequence_length: int | None = None
     recommended_scaler: str = "robust"
@@ -111,7 +112,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ],
         include_columns=["price_to_vwap"],
         include_mtf=False,
-        supported_model_types=["tabular", "tree", "sequential"],
+        supported_model_types=["boosting", "classical", "neural"],
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
@@ -120,7 +121,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         description="All base-timeframe features (no MTF). Single symbol only.",
         include_prefixes=[],
         include_mtf=False,
-        supported_model_types=["tabular", "tree", "sequential"],
+        supported_model_types=["boosting", "classical", "neural"],
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
@@ -129,7 +130,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         description="All base-timeframe features plus MTF features. Single symbol only.",
         include_prefixes=[],
         include_mtf=True,
-        supported_model_types=["tabular", "tree", "sequential"],
+        supported_model_types=["boosting", "classical", "neural"],
         default_sequence_length=120,
         recommended_scaler="robust",
     ),
@@ -187,7 +188,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ],
         include_columns=["is_rth", "trend_regime", "volatility_regime"],
         include_mtf=False,
-        supported_model_types=["tree"],
+        supported_model_types=["boosting"],
         default_sequence_length=None,  # Not applicable for tabular
         recommended_scaler="none",  # Boosting handles raw features
     ),
@@ -273,7 +274,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "close_",
         ],
         include_mtf=False,
-        supported_model_types=["sequential"],
+        supported_model_types=["neural"],
         default_sequence_length=60,
         recommended_scaler="robust",  # RobustScaler handles outliers well for NNs
     ),
@@ -304,7 +305,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "is_rth",
         ],
         include_mtf=False,
-        supported_model_types=["sequential", "transformer"],
+        supported_model_types=["neural"],
         default_sequence_length=128,  # Longer sequences for transformers
         recommended_scaler="standard",  # Standard scaling for transformers
     ),
@@ -344,7 +345,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "is_rth",
         ],
         include_mtf=True,  # MTF adds diversity
-        supported_model_types=["tabular", "tree", "sequential"],
+        supported_model_types=["boosting", "classical", "neural", "ensemble"],
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
@@ -405,7 +406,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "close_",
         ],
         include_mtf=False,
-        supported_model_types=["sequential"],
+        supported_model_types=["neural"],
         default_sequence_length=120,  # Longer sequences for TCN
         recommended_scaler="robust",
     ),
@@ -431,7 +432,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "is_rth",
         ],
         include_mtf=False,
-        supported_model_types=["transformer"],
+        supported_model_types=["neural"],
         default_sequence_length=256,  # Long sequences for patch attention
         recommended_scaler="standard",
     ),
@@ -466,7 +467,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "range_pct",
         ],
         include_mtf=True,  # MTF volatility useful
-        supported_model_types=["tabular", "tree", "sequential"],
+        supported_model_types=["boosting", "classical", "neural"],
         default_sequence_length=60,
         recommended_scaler="robust",
     ),
@@ -496,7 +497,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "volume_ratio_20",
         ],
         include_mtf=False,
-        supported_model_types=["sequential"],
+        supported_model_types=["neural"],
         default_sequence_length=128,  # N-BEATS uses longer lookback
         recommended_scaler="standard",
     ),
@@ -556,7 +557,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "micro_vol_ratio",
         ],
         include_mtf=False,
-        supported_model_types=["sequential"],
+        supported_model_types=["neural"],
         default_sequence_length=100,  # InceptionTime works well with medium sequences
         recommended_scaler="robust",
     ),
@@ -616,7 +617,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "volatility_regime",
         ],
         include_mtf=False,
-        supported_model_types=["sequential"],
+        supported_model_types=["neural"],
         default_sequence_length=80,
         recommended_scaler="robust",
     ),
@@ -683,7 +684,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "return_autocorr_",
         ],
         include_mtf=False,
-        supported_model_types=["sequential", "transformer"],
+        supported_model_types=["neural"],
         default_sequence_length=60,
         recommended_scaler="standard",  # Standard for transformer stability
     ),
@@ -763,7 +764,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
             "close_",
         ],
         include_mtf=False,  # Can enable for even richer set
-        supported_model_types=["sequential", "transformer"],
+        supported_model_types=["neural"],
         default_sequence_length=60,
         recommended_scaler="robust",  # Robust for diverse feature types
     ),

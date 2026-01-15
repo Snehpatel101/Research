@@ -170,8 +170,9 @@ class TestConfigMerging:
                 defaults=defaults,
             )
 
-        assert result["param1"] == 100
-        assert result["param2"] == 2
+        # build_config now returns ConfigBuildResult
+        assert result.config["param1"] == 100
+        assert result.config["param2"] == 2
 
     def test_build_config_filters_none(self):
         """Should filter out None values from CLI args."""
@@ -185,8 +186,9 @@ class TestConfigMerging:
                 defaults=defaults,
             )
 
-        assert result["param1"] == 1  # Not overridden (was None)
-        assert result["param2"] == 20
+        # build_config now returns ConfigBuildResult
+        assert result.config["param1"] == 1  # Not overridden (was None)
+        assert result.config["param2"] == 20
 
 
 # =============================================================================

@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from src.pipeline.utils import create_failed_result, create_stage_result
+
 from .core import apply_optimized_labels, generate_labeling_report
 
 if TYPE_CHECKING:
@@ -47,8 +49,6 @@ def _get_git_commit_hash(project_root: Path) -> str | None:
 def run_final_labels(
     config: "PipelineConfig",
     manifest: "ArtifactManifest",
-    create_stage_result,
-    create_failed_result,
 ) -> "StageResult":
     """
     Stage 6: Apply optimized labels with quality scores and sample weights.
@@ -58,8 +58,6 @@ def run_final_labels(
     Args:
         config: Pipeline configuration
         manifest: Artifact manifest for tracking outputs
-        create_stage_result: Factory function for success results
-        create_failed_result: Factory function for failure results
 
     Returns:
         StageResult with status and artifacts
@@ -111,8 +109,19 @@ def run_final_labels(
                 # Load features data (original, without initial labels)
                 features_path = config.features_dir / f"{symbol}_{tf}_features.parquet"
                 if not features_path.exists():
-                    logger.warning(f"Features file not found for {symbol} @ {tf}: {features_path}")
-                    continue
+                    # PIPE-006: In multi-TF mode, missing files are errors (not warnings)
+                    # All configured timeframes must have their feature files generated
+                    # by upstream stages. Silent skipping hides pipeline failures.
+                    if is_multi_tf:
+                        raise FileNotFoundError(
+                            f"Features file not found for {symbol} @ {tf}: {features_path}. "
+                            f"In multi-TF mode, all output_timeframes must have feature files. "
+                            f"Check that Stage 3 (feature_engineering) completed for all timeframes."
+                        )
+                    else:
+                        # Single-TF mode: warn and skip (backward compatible)
+                        logger.warning(f"Features file not found for {symbol} @ {tf}: {features_path}")
+                        continue
 
                 df = pd.read_parquet(features_path)
                 logger.info(f"Loaded {len(df):,} rows from features")

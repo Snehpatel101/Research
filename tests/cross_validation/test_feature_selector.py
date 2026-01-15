@@ -425,18 +425,20 @@ class TestFeatureSelectionResult:
     def test_n_folds_auto_computed(self):
         """Test that n_folds is auto-computed if not provided."""
         result = FeatureSelectionResult(
-            stable_features=["a", "b"],
+            selected_features=["a", "b"],  # Use canonical field name
             feature_counts={"a": 3, "b": 2},
             per_fold_selections=[{"a", "b"}, {"a"}, {"a", "b"}],
             importance_history=[],
         )
 
         assert result.n_folds == 3
+        # Also verify alias works
+        assert result.stable_features == ["a", "b"]
 
     def test_get_stability_scores_empty(self):
         """Test get_stability_scores with empty result."""
         result = FeatureSelectionResult(
-            stable_features=[],
+            selected_features=[],  # Use canonical field name
             feature_counts={},
             per_fold_selections=[],
             importance_history=[],

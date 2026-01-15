@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from src.pipeline.utils import create_failed_result, create_stage_result
+
 from .optimization import run_ga_optimization, run_ga_optimization_safe
 from .plotting import plot_convergence
 
@@ -25,11 +27,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def run_ga_optimization_stage(
+def run_ga_optimization(
     config: "PipelineConfig",
     manifest: "ArtifactManifest",
-    create_stage_result,
-    create_failed_result,
 ) -> "StageResult":
     """
     Stage 5: Barrier Optimization using Optuna TPE.
@@ -40,8 +40,6 @@ def run_ga_optimization_stage(
     Args:
         config: Pipeline configuration
         manifest: Artifact manifest for tracking outputs
-        create_stage_result: Factory function for success results
-        create_failed_result: Factory function for failure results
 
     Returns:
         StageResult with status and artifacts

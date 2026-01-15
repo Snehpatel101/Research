@@ -314,20 +314,47 @@ class ModelRegistry:
             available = sorted(cls._models.keys())
             raise ValueError(f"Unknown model '{name}'. Available models: {available}")
 
-        # Create a temporary instance to access properties
-        model_class = cls._models[name_lower]
-        instance = model_class()
-
         metadata = cls.get_metadata(name_lower)
 
-        return {
-            "name": metadata["name"],
-            "family": instance.model_family,
-            "description": metadata.get("description", ""),
-            "requires_scaling": instance.requires_scaling,
-            "requires_sequences": instance.requires_sequences,
-            "default_config": instance.get_default_config(),
-        }
+        # MOD-004: Wrap instantiation in try/except and return safe defaults on failure
+        # Create a temporary instance to access properties
+        model_class = cls._models[name_lower]
+        try:
+            instance = model_class()
+            return {
+                "name": metadata["name"],
+                "family": instance.model_family,
+                "description": metadata.get("description", ""),
+                "requires_scaling": instance.requires_scaling,
+                "requires_sequences": instance.requires_sequences,
+                "default_config": instance.get_default_config(),
+            }
+        except ImportError as e:
+            # Dependency not available (e.g., CatBoost not installed)
+            logger.warning(f"Model '{name}' dependencies not available: {e}")
+            return {
+                "name": metadata["name"],
+                "family": metadata.get("family", "unknown"),
+                "description": metadata.get("description", ""),
+                "requires_scaling": True,  # Safe default
+                "requires_sequences": False,  # Safe default
+                "default_config": {},
+                "available": False,
+                "error": str(e),
+            }
+        except Exception as e:
+            # Other instantiation errors (config issues, etc.)
+            logger.warning(f"Model '{name}' instantiation failed: {e}")
+            return {
+                "name": metadata["name"],
+                "family": metadata.get("family", "unknown"),
+                "description": metadata.get("description", ""),
+                "requires_scaling": True,  # Safe default
+                "requires_sequences": False,  # Safe default
+                "default_config": {},
+                "available": False,
+                "error": str(e),
+            }
 
     @classmethod
     def is_registered(cls, name: str) -> bool:
@@ -397,10 +424,13 @@ class ModelRegistry:
             instance = model_class()
             return True
         except ImportError:
+            # Dependency not available (e.g., CatBoost not installed)
             return False
-        except Exception:
-            # Other errors might indicate configuration issues, not availability
-            return True
+        except Exception as e:
+            # MOD-004/MOD-007: Return False for unexpected exceptions
+            # If a model fails to instantiate for any reason, it's not available
+            logger.debug(f"Model '{name}' instantiation failed in is_available(): {e}")
+            return False
 
 
 # Convenience function for cleaner imports

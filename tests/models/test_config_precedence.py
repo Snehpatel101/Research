@@ -99,36 +99,36 @@ class TestCLIPrecedence:
         """CLI args should override model YAML defaults."""
         cli_args = {"n_estimators": 1000, "learning_rate": 0.05}
 
-        config = build_config("xgboost", cli_args=cli_args)
+        result = build_config("xgboost", cli_args=cli_args)
 
         # CLI values should override YAML
-        assert config["n_estimators"] == 1000
-        assert config["learning_rate"] == 0.05
+        assert result.config["n_estimators"] == 1000
+        assert result.config["learning_rate"] == 0.05
 
     def test_cli_none_values_ignored(self) -> None:
         """CLI args with None values should not override."""
         cli_args = {"n_estimators": None, "learning_rate": 0.05}
 
-        config = build_config("xgboost", cli_args=cli_args)
+        result = build_config("xgboost", cli_args=cli_args)
 
         # n_estimators should come from YAML, not be None
-        assert config["n_estimators"] != None  # noqa: E711
-        assert config["learning_rate"] == 0.05
+        assert result.config["n_estimators"] != None  # noqa: E711
+        assert result.config["learning_rate"] == 0.05
 
     def test_cli_adds_new_keys(self) -> None:
         """CLI args can add keys not in YAML."""
         cli_args = {"custom_param": "custom_value"}
 
-        config = build_config("xgboost", cli_args=cli_args)
+        result = build_config("xgboost", cli_args=cli_args)
 
-        assert config.get("custom_param") == "custom_value"
+        assert result.config.get("custom_param") == "custom_value"
 
     def test_empty_cli_args_uses_yaml(self) -> None:
         """Empty CLI args should use YAML values."""
-        config = build_config("xgboost", cli_args={})
+        result = build_config("xgboost", cli_args={})
 
         # Should have model name from YAML
-        assert config.get("model_name") == "xgboost"
+        assert result.config.get("model_name") == "xgboost"
 
 
 # =============================================================================
@@ -149,10 +149,10 @@ class TestExplicitConfigFile:
             config_path = Path(f.name)
 
         try:
-            config = build_config("xgboost", config_file=config_path)
+            result = build_config("xgboost", config_file=config_path)
 
-            assert config["n_estimators"] == 999
-            assert config["learning_rate"] == 0.123
+            assert result.config["n_estimators"] == 999
+            assert result.config["learning_rate"] == 0.123
         finally:
             config_path.unlink()
 
@@ -167,12 +167,12 @@ class TestExplicitConfigFile:
 
         try:
             cli_args = {"n_estimators": 2000}
-            config = build_config("xgboost", cli_args=cli_args, config_file=config_path)
+            result = build_config("xgboost", cli_args=cli_args, config_file=config_path)
 
             # CLI overrides explicit config
-            assert config["n_estimators"] == 2000
+            assert result.config["n_estimators"] == 2000
             # Explicit config value preserved where CLI doesn't override
-            assert config["learning_rate"] == 0.123
+            assert result.config["learning_rate"] == 0.123
         finally:
             config_path.unlink()
 
@@ -205,11 +205,11 @@ class TestEnvironmentOverrides:
             "training": {"batch_size": 512, "mixed_precision": True}
         }
 
-        config = build_config("xgboost", apply_environment_overrides=True)
+        result = build_config("xgboost", apply_environment_overrides=True)
 
         # Environment overrides applied
-        assert config.get("batch_size") == 512
-        assert config.get("mixed_precision") is True
+        assert result.config.get("batch_size") == 512
+        assert result.config.get("mixed_precision") is True
 
     @patch("src.models.config.merging.get_environment_overrides")
     @patch("src.models.config.merging.detect_environment")
@@ -225,10 +225,10 @@ class TestEnvironmentOverrides:
         }
 
         cli_args = {"batch_size": 128}
-        config = build_config("xgboost", cli_args=cli_args)
+        result = build_config("xgboost", cli_args=cli_args)
 
         # CLI takes precedence over environment
-        assert config["batch_size"] == 128
+        assert result.config["batch_size"] == 128
 
     @patch("src.models.config.merging.get_environment_overrides")
     def test_env_overrides_disabled(
@@ -240,7 +240,7 @@ class TestEnvironmentOverrides:
             "training": {"batch_size": 512}
         }
 
-        config = build_config("xgboost", apply_environment_overrides=False)
+        result = build_config("xgboost", apply_environment_overrides=False)
 
         # Environment overrides NOT applied when disabled
         # batch_size should come from model YAML or defaults
@@ -259,27 +259,27 @@ class TestDefaults:
         """Defaults should be used when no other source provides value."""
         defaults = {"custom_default": "default_value"}
 
-        config = build_config("xgboost", defaults=defaults)
+        result = build_config("xgboost", defaults=defaults)
 
-        assert config.get("custom_default") == "default_value"
+        assert result.config.get("custom_default") == "default_value"
 
     def test_yaml_overrides_defaults(self) -> None:
         """Model YAML should override defaults."""
         # xgboost.yaml defines model_family = "boosting"
         defaults = {"model_family": "should_be_overridden"}
 
-        config = build_config("xgboost", defaults=defaults)
+        result = build_config("xgboost", defaults=defaults)
 
-        assert config["model_family"] == "boosting"
+        assert result.config["model_family"] == "boosting"
 
     def test_cli_overrides_defaults(self) -> None:
         """CLI args should override defaults."""
         defaults = {"custom_param": "default_value"}
         cli_args = {"custom_param": "cli_value"}
 
-        config = build_config("xgboost", cli_args=cli_args, defaults=defaults)
+        result = build_config("xgboost", cli_args=cli_args, defaults=defaults)
 
-        assert config["custom_param"] == "cli_value"
+        assert result.config["custom_param"] == "cli_value"
 
 
 # =============================================================================
@@ -328,7 +328,7 @@ class TestFullPrecedenceChain:
                 "param_cli_explicit": "from_cli",
             }
 
-            config = build_config(
+            result = build_config(
                 "xgboost",
                 cli_args=cli_args,
                 config_file=config_path,
@@ -337,18 +337,18 @@ class TestFullPrecedenceChain:
             )
 
             # CLI takes precedence
-            assert config["param_cli"] == "from_cli"
-            assert config["param_cli_default"] == "from_cli"
-            assert config["param_cli_explicit"] == "from_cli"
+            assert result.config["param_cli"] == "from_cli"
+            assert result.config["param_cli_default"] == "from_cli"
+            assert result.config["param_cli_explicit"] == "from_cli"
 
             # Explicit config preserved where CLI doesn't override
-            assert config["param_explicit"] == "from_explicit"
+            assert result.config["param_explicit"] == "from_explicit"
 
             # Environment preserved where explicit/CLI don't override
-            assert config["param_env"] == "from_env"
+            assert result.config["param_env"] == "from_env"
 
             # Defaults preserved where nothing else overrides
-            assert config["param_default"] == "from_default"
+            assert result.config["param_default"] == "from_default"
 
         finally:
             config_path.unlink()

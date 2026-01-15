@@ -37,6 +37,21 @@ def get_stage_definitions() -> list[dict]:
 
     Returns:
         List of stage definition dictionaries
+
+    Note on Validation Order (PIPE-005):
+        Stage 8 (validate) runs AFTER splits and scaling. This is intentional:
+
+        1. Some validations require scaled data (e.g., distribution checks on final features)
+        2. Split validation (train/val/test label distribution) requires splits to exist
+        3. Drift validation (validate_scaled at 7.7) checks post-scaling data quality
+
+        This ordering is correct for comprehensive data quality validation.
+        Earlier stages have their own inline validation (e.g., feature_engineering
+        validates feature counts, labeling validates label distributions).
+
+        If pre-split validation is needed, add checks within the relevant stage
+        or create a dedicated validation stage between feature_engineering and
+        initial_labeling (stage 3.5).
     """
     return [
         {

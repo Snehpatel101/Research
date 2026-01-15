@@ -31,21 +31,20 @@ class NumpyEncoder(json.JSONEncoder):
 
 from .stage_registry import PipelineStage, get_stage_definitions
 
-# Import stage execution functions
-from .stages import (
-    run_build_datasets,
-    run_create_splits,
-    run_data_cleaning,
-    run_data_generation,
-    run_feature_engineering,
-    run_feature_scaling,
-    run_final_labels,
-    run_ga_optimization,
-    run_generate_report,
-    run_initial_labeling,
-    run_scaled_validation,
-    run_validation,
-)
+# Import stage execution functions directly from phase1 (no wrapper layer)
+from src.phase1.stages.clean.run import run_data_cleaning
+from src.phase1.stages.datasets.run import run_build_datasets
+from src.phase1.stages.features.run import run_feature_engineering
+from src.phase1.stages.final_labels.run import run_final_labels
+from src.phase1.stages.ga_optimize.run import run_ga_optimization
+from src.phase1.stages.ingest.run import run_data_generation
+from src.phase1.stages.labeling.run import run_initial_labeling
+from src.phase1.stages.reporting.run import run_generate_report
+from src.phase1.stages.scaled_validation.run import run_scaled_validation
+from src.phase1.stages.scaling.run import run_feature_scaling
+from src.phase1.stages.splits.run import run_create_splits
+from src.phase1.stages.validation.run import run_validation
+
 from .utils import StageResult, StageStatus
 
 

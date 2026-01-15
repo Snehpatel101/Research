@@ -13,8 +13,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.cross_validation.feature_selector import FeatureSelectionResult
 from src.phase1.utils.feature_selection import (
-    FeatureSelectionResult,
     save_feature_selection_report,
     select_features,
 )

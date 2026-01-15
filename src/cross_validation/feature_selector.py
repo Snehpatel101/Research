@@ -71,31 +71,169 @@ class FeatureSelectorConfig:
 @dataclass
 class FeatureSelectionResult:
     """
-    Results from walk-forward feature selection.
+    Canonical result container for all feature selection operations.
+
+    This class unifies three previous implementations to provide a single
+    consistent interface for feature selection results across the codebase:
+    - Walk-forward feature selection (cross_validation)
+    - Correlation/variance filtering (phase1/utils)
+    - OHLCV-specific selection with stability/regime analysis (feature_selection)
 
     Attributes:
-        stable_features: Features appearing in >= min_frequency folds
-        feature_counts: How many folds each feature was selected in
+        # === Core Fields (always populated) ===
+        selected_features: Final list of selected feature names (alias: stable_features)
+
+        # === Walk-Forward Selection Fields ===
+        feature_counts: How many folds each feature was selected in (walk-forward)
         per_fold_selections: List of feature sets selected in each fold
-        importance_history: Per-fold importance scores
-        n_folds: Total number of folds
+        importance_history: Per-fold importance scores from walk-forward selection
+        n_folds: Total number of CV folds used
+
+        # === Correlation/Variance Filtering Fields ===
+        removed_features: Dict mapping removed feature name to removal reason
+        original_count: Number of features before selection (alias: n_original)
+        final_count: Number of features after selection (alias: n_selected)
+        correlation_groups: Groups of correlated features (lists, not sets for JSON)
+        low_variance_features: Features removed due to low variance
+
+        # === OHLCV/Stability Analysis Fields ===
+        feature_importances: Dict mapping features to aggregated importance scores
+        stability_scores: Dict mapping features to stability across folds (0-1)
+        correlation_clusters: Alias for correlation_groups (OHLCV naming)
+        regime_importances: Per-regime importance scores (regime-conditional selection)
+        selection_metadata: Additional metadata about selection process
     """
 
-    stable_features: list[str]
-    feature_counts: dict[str, int]
-    per_fold_selections: list[set[str]]
-    importance_history: list[dict[str, Any]]
-    n_folds: int = field(default=0)
+    # === Core Field (required) ===
+    selected_features: list[str]
+
+    # === Walk-Forward Selection Fields (optional) ===
+    feature_counts: dict[str, int] = field(default_factory=dict)
+    per_fold_selections: list[set[str]] = field(default_factory=list)
+    importance_history: list[dict[str, Any]] = field(default_factory=list)
+    n_folds: int = 0
+
+    # === Correlation/Variance Filtering Fields (optional) ===
+    removed_features: dict[str, str] = field(default_factory=dict)
+    original_count: int = 0
+    final_count: int = 0
+    correlation_groups: list[list[str]] = field(default_factory=list)
+    low_variance_features: list[str] = field(default_factory=list)
+
+    # === OHLCV/Stability Analysis Fields (optional) ===
+    feature_importances: dict[str, float] = field(default_factory=dict)
+    stability_scores: dict[str, float] = field(default_factory=dict)
+    regime_importances: dict[int, dict[str, float]] | None = None
+    selection_metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.n_folds == 0:
+        """Auto-compute derived fields if not set."""
+        # Auto-set n_folds from per_fold_selections if not provided
+        if self.n_folds == 0 and self.per_fold_selections:
             self.n_folds = len(self.per_fold_selections)
 
+        # Auto-set final_count from selected_features if not provided
+        if self.final_count == 0 and self.selected_features:
+            self.final_count = len(self.selected_features)
+
+    # === Compatibility Properties ===
+
+    @property
+    def stable_features(self) -> list[str]:
+        """Alias for selected_features (walk-forward naming convention)."""
+        return self.selected_features
+
+    @property
+    def n_original(self) -> int:
+        """Alias for original_count (OHLCV naming convention)."""
+        return self.original_count
+
+    @property
+    def n_selected(self) -> int:
+        """Alias for final_count (OHLCV naming convention)."""
+        return self.final_count
+
+    @property
+    def correlation_clusters(self) -> list[list[str]]:
+        """Alias for correlation_groups (OHLCV naming convention)."""
+        return self.correlation_groups
+
+    # === Walk-Forward Methods ===
+
     def get_stability_scores(self) -> dict[str, float]:
-        """Return stability score (fraction of folds selected) for each feature."""
+        """
+        Return stability score (fraction of folds selected) for each feature.
+
+        Used by walk-forward feature selection to measure consistency.
+        """
         if self.n_folds == 0:
-            return {}
+            return self.stability_scores if self.stability_scores else {}
         return {f: count / self.n_folds for f, count in self.feature_counts.items()}
+
+    # === Correlation/Variance Filtering Methods ===
+
+    def to_dict(self) -> dict:
+        """
+        Convert to dictionary for JSON serialization.
+
+        Used by phase1 validation pipeline for reporting.
+        """
+        result = {
+            "selected_features": self.selected_features,
+            "removed_features": self.removed_features,
+            "original_count": self.original_count,
+            "final_count": self.final_count,
+            "reduction_pct": (
+                round((1 - self.final_count / self.original_count) * 100, 1)
+                if self.original_count > 0
+                else 0
+            ),
+            "correlation_groups": self.correlation_groups,
+            "low_variance_features": self.low_variance_features,
+        }
+
+        # Include additional fields if populated
+        if self.feature_importances:
+            result["feature_importances"] = self.feature_importances
+        if self.stability_scores:
+            result["stability_scores"] = self.stability_scores
+        if self.regime_importances:
+            result["regime_importances"] = self.regime_importances
+        if self.selection_metadata:
+            result["selection_metadata"] = self.selection_metadata
+        if self.n_folds > 0:
+            result["n_folds"] = self.n_folds
+
+        return result
+
+    # === OHLCV/Stability Analysis Methods ===
+
+    def get_category_breakdown(self) -> dict[str, int]:
+        """
+        Get count of selected features per category.
+
+        Requires OHLCV category utilities from feature_selection package.
+        """
+        try:
+            from src.feature_selection.ohlcv_selector import get_feature_categories
+
+            return {
+                cat: len(feats)
+                for cat, feats in get_feature_categories(self.selected_features).items()
+            }
+        except ImportError:
+            return {}
+
+    def get_top_features(self, n: int = 10) -> list[tuple[str, float]]:
+        """Get top N features by importance."""
+        if not self.feature_importances:
+            return []
+        sorted_features = sorted(
+            self.feature_importances.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        return sorted_features[:n]
 
 
 # =============================================================================
@@ -223,7 +361,7 @@ class WalkForwardFeatureSelector:
         )
 
         return FeatureSelectionResult(
-            stable_features=stable_features,
+            selected_features=stable_features,
             feature_counts=feature_counts,
             per_fold_selections=feature_selections,
             importance_history=importance_history,

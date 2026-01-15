@@ -609,17 +609,51 @@ class Trainer:
                     break  # Use first sequence model's feature set
 
             # Sequence data for sequence-based base models (with feature filtering)
-            X_train_seq, _, _, X_val_seq, _ = prepare_training_data(
+            X_train_seq, y_train_seq, _, X_val_seq, y_val_seq = prepare_training_data(
                 container,
                 requires_sequences=True,
                 sequence_length=self.config.sequence_length,
                 feature_columns=seq_feature_columns,
             )
 
+            # MOD-009 FIX: Alignment validation for heterogeneous ensemble data flow
+            # Sequence data has fewer samples due to windowing (loses seq_len-1)
+            tabular_train_samples = X_train.shape[0]
+            seq_train_samples = X_train_seq.shape[0]
+            expected_offset = tabular_train_samples - seq_train_samples
+
             logger.info(
                 f"Heterogeneous data prepared: "
                 f"tabular={X_train.shape}, sequence={X_train_seq.shape}"
             )
+            logger.info(
+                f"MOD-009: Data alignment check - "
+                f"tabular_train={tabular_train_samples}, seq_train={seq_train_samples}, "
+                f"offset={expected_offset} (expected: seq_len-1={self.config.sequence_length - 1})"
+            )
+
+            # Validate alignment consistency
+            if expected_offset < 0:
+                raise ValueError(
+                    f"MOD-009: Invalid data alignment - sequence data ({seq_train_samples}) "
+                    f"has more samples than tabular data ({tabular_train_samples}). "
+                    f"This indicates a data preparation error."
+                )
+
+            # Validate labels are consistent between tabular and sequence views
+            # After accounting for offset, labels should match
+            y_train_trimmed = y_train[expected_offset:] if expected_offset > 0 else y_train
+            if len(y_train_trimmed) != len(y_train_seq):
+                logger.warning(
+                    f"MOD-009: Label length mismatch after offset adjustment - "
+                    f"y_train_trimmed={len(y_train_trimmed)}, y_train_seq={len(y_train_seq)}. "
+                    f"Proceeding but results may be misaligned."
+                )
+            elif not np.array_equal(y_train_trimmed, y_train_seq):
+                logger.warning(
+                    f"MOD-009: Labels differ between tabular and sequence views after alignment. "
+                    f"This may indicate different data sources or processing paths."
+                )
 
         elif self.model.requires_sequences:
             # Pure sequence model - get model-specific feature columns
@@ -692,11 +726,20 @@ class Trainer:
         else:
             val_predictions = self.model.predict(X_val)
 
-        # Align y_val with predictions (may be trimmed for heterogeneous ensembles)
+        # MOD-005 FIX: Align y_val with predictions (may be trimmed for heterogeneous ensembles)
+        # Also trim X_val if passthrough is enabled since it will be concatenated with OOF preds
         y_val_aligned = y_val
+        X_val_aligned = X_val
         if len(val_predictions.class_predictions) < len(y_val):
             offset = len(y_val) - len(val_predictions.class_predictions)
             y_val_aligned = y_val[offset:]
+            X_val_aligned = X_val[offset:]
+            logger.info(
+                f"Aligned validation data: trimmed {offset} samples from start "
+                f"(y_val: {len(y_val)} -> {len(y_val_aligned)}, "
+                f"X_val: {X_val.shape[0]} -> {X_val_aligned.shape[0]}) "
+                f"to match prediction count {len(val_predictions.class_predictions)}"
+            )
 
         eval_metrics = compute_classification_metrics(
             y_true=y_val_aligned,
@@ -862,8 +905,18 @@ class Trainer:
             # Ensure we have a DataFrame for feature operations
             X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
 
-            # Apply feature set filtering (must happen before feature selection)
+            # MOD-006 FIX: Validate and apply feature set filtering (must happen before feature selection)
             if self._feature_set_columns is not None:
+                # Validate that required feature columns exist in test data
+                missing_features = set(self._feature_set_columns) - set(X_test_df.columns)
+                if missing_features:
+                    available_features = set(X_test_df.columns) & set(self._feature_set_columns)
+                    raise ValueError(
+                        f"MOD-006: Test data missing {len(missing_features)} required feature columns. "
+                        f"Missing: {sorted(missing_features)[:10]}{'...' if len(missing_features) > 10 else ''}. "
+                        f"Available: {len(available_features)}/{len(self._feature_set_columns)} features. "
+                        f"Ensure test data was processed with the same pipeline as training data."
+                    )
                 X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
                 logger.debug(
                     f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
@@ -924,8 +977,18 @@ class Trainer:
             # Ensure we have a DataFrame for feature operations
             X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
 
-            # Apply feature set filtering (must happen before feature selection)
+            # MOD-006 FIX: Validate and apply feature set filtering (must happen before feature selection)
             if self._feature_set_columns is not None:
+                # Validate that required feature columns exist in test data
+                missing_features = set(self._feature_set_columns) - set(X_test_df.columns)
+                if missing_features:
+                    available_features = set(X_test_df.columns) & set(self._feature_set_columns)
+                    raise ValueError(
+                        f"MOD-006: Test data missing {len(missing_features)} required feature columns. "
+                        f"Missing: {sorted(missing_features)[:10]}{'...' if len(missing_features) > 10 else ''}. "
+                        f"Available: {len(available_features)}/{len(self._feature_set_columns)} features. "
+                        f"Ensure test data was processed with the same pipeline as training data."
+                    )
                 X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
                 logger.debug(
                     f"Applied feature set filter to test set: {X_test_df.shape[1]} features"

@@ -6,7 +6,6 @@ feature transformation.
 
 Author: ML Pipeline
 Created: 2025-12-20
-Updated: 2025-12-20 - Extracted from feature_scaler.py
 """
 
 import logging

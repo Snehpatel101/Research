@@ -12,44 +12,16 @@ Created: 2025-12-19
 
 import json
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from src.cross_validation.feature_selector import FeatureSelectionResult
 from src.phase1.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-@dataclass
-class FeatureSelectionResult:
-    """Container for feature selection results."""
-
-    selected_features: list[str]
-    removed_features: dict[str, str]  # feature -> reason
-    original_count: int
-    final_count: int
-    correlation_groups: list[list[str]]
-    low_variance_features: list[str]
-
-    def to_dict(self) -> dict:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "selected_features": self.selected_features,
-            "removed_features": self.removed_features,
-            "original_count": self.original_count,
-            "final_count": self.final_count,
-            "reduction_pct": (
-                round((1 - self.final_count / self.original_count) * 100, 1)
-                if self.original_count > 0
-                else 0
-            ),
-            "correlation_groups": self.correlation_groups,
-            "low_variance_features": self.low_variance_features,
-        }
 
 
 # Feature interpretability ranking - higher is more interpretable/fundamental

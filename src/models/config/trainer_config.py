@@ -13,10 +13,10 @@ class TrainerConfig:
 
     model_name: str
     horizon: int = 20
-    # NOTE (CFG-002): TrainerConfig.feature_set controls feature SELECTION during training,
+    # NOTE (CFG-002b): TrainerConfig.feature_set controls feature SELECTION during training,
     # which is different from PipelineConfig.feature_set that controls feature GENERATION.
     #
-    # - PipelineConfig.feature_set="full" generates ALL ~180 features in Phase 1 pipeline.
+    # - PipelineConfig.feature_set="full" (CFG-002a) generates ALL ~180 features in Phase 1.
     #   This ensures the complete feature superset is available for any model type.
     #
     # - TrainerConfig.feature_set="boosting_optimal" selects a model-appropriate subset

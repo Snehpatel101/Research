@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from src.pipeline.utils import create_failed_result, create_stage_result
+
 from .triple_barrier import triple_barrier_numba
 
 if TYPE_CHECKING:
@@ -147,8 +149,6 @@ def _validate_horizons_vs_data(
 def run_initial_labeling(
     config: "PipelineConfig",
     manifest: "ArtifactManifest",
-    create_stage_result,
-    create_failed_result,
 ) -> "StageResult":
     """
     Stage 4: Initial Triple-Barrier Labeling.
@@ -159,8 +159,6 @@ def run_initial_labeling(
     Args:
         config: Pipeline configuration
         manifest: Artifact manifest for tracking outputs
-        create_stage_result: Factory function for success results
-        create_failed_result: Factory function for failure results
 
     Returns:
         StageResult with status and artifacts

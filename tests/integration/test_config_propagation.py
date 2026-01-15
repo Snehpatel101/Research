@@ -218,12 +218,12 @@ class TestFeatureSetPropagation:
         assert "lstm" in FEATURE_SET_ALIASES
         assert "patchtst" in FEATURE_SET_ALIASES
 
-        # Verify they map to appropriate feature sets
+        # Verify they map to appropriate feature sets (CFG-005: uses registry family names)
         boosting_set = FEATURE_SET_DEFINITIONS["boosting_optimal"]
-        assert "tree" in boosting_set.supported_model_types
+        assert "boosting" in boosting_set.supported_model_types
 
         neural_set = FEATURE_SET_DEFINITIONS["neural_optimal"]
-        assert "sequential" in neural_set.supported_model_types
+        assert "neural" in neural_set.supported_model_types
 
     def test_feature_set_validation_rejects_invalid(self):
         """
