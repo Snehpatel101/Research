@@ -329,9 +329,10 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
             adj_k_down = adjusted["k_down"]
             adj_max_bars = adjusted["max_bars"]
 
-            # Skip if ATR is invalid
+            # Skip if ATR is invalid - mark as -99 (invalid) not 0 (timeout)
+            # Invalid ATR samples should be excluded from training, not treated as neutral
             if np.isnan(entry_atr) or entry_atr <= 0:
-                labels[i] = 0
+                labels[i] = -99  # Invalid: cannot compute barriers without valid ATR
                 bars_to_hit[i] = adj_max_bars
                 continue
 

@@ -36,6 +36,7 @@ def compute_classification_metrics(
         accuracy_score,
         confusion_matrix,
         f1_score,
+        matthews_corrcoef,
         precision_score,
         recall_score,
     )
@@ -46,6 +47,11 @@ def compute_classification_metrics(
     weighted_f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
     precision = precision_score(y_true, y_pred, average="macro", zero_division=0)
     recall = recall_score(y_true, y_pred, average="macro", zero_division=0)
+
+    # Matthews Correlation Coefficient - gold standard for imbalanced classification
+    # MCC ranges from -1 (total disagreement) to +1 (perfect prediction)
+    # MCC = 0 indicates random prediction
+    mcc = matthews_corrcoef(y_true, y_pred)
 
     # Per-class F1
     classes = sorted(np.unique(np.concatenate([y_true, y_pred])))
@@ -63,6 +69,7 @@ def compute_classification_metrics(
         "weighted_f1": float(weighted_f1),
         "precision": float(precision),
         "recall": float(recall),
+        "mcc": float(mcc),  # Matthews Correlation Coefficient
         "per_class_f1": {
             class_names.get(c, str(c)): float(f1)
             for c, f1 in zip(classes, per_class_f1, strict=False)

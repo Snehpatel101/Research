@@ -31,6 +31,7 @@ from ..common import map_classes_to_labels, map_labels_to_classes
 from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
 from .checkpointing import CheckpointConfig, CheckpointManager
 from .numerical_stability import NumericalInstabilityError, NumericalValidator, validate_training_inputs
+from .oom_recovery import OOMConfig, OOMRecoveryManager
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +419,16 @@ class BaseRNNModel(BaseModel):
         else:
             self._checkpoint_manager = None
 
+        # OOM recovery manager for graceful batch size reduction on CUDA OOM
+        oom_config = OOMConfig(
+            enabled=train_config.get("oom_recovery_enabled", True),
+            max_retries=train_config.get("oom_max_retries", 3),
+            batch_reduction_factor=train_config.get("oom_batch_reduction_factor", 0.5),
+            min_batch_size=train_config.get("oom_min_batch_size", 8),
+        )
+        self._oom_manager = OOMRecoveryManager(oom_config)
+        current_batch_size = train_config.get("batch_size", 64)
+
         max_epochs = train_config.get("max_epochs", 100)
         patience = train_config.get("early_stopping_patience", 15)
         min_delta = train_config.get("min_delta", 0.0001)
@@ -425,56 +436,97 @@ class BaseRNNModel(BaseModel):
 
         logger.info(
             f"Training {self._get_model_type().upper()}: "
-            f"epochs={max_epochs}, batch_size={train_config.get('batch_size')}, "
+            f"epochs={max_epochs}, batch_size={current_batch_size}, "
             f"hidden={train_config.get('hidden_size')}, layers={train_config.get('num_layers')}, "
             f"mixed_precision={'on' if self._use_amp else 'off'}"
         )
 
-        for epoch in range(max_epochs):
-            # Training phase (now returns gradient norm as third value)
-            train_loss, train_acc, avg_grad_norm = self._train_epoch(
-                train_loader, optimizer, criterion, scheduler, scaler, amp_dtype, grad_clip
-            )
-            history["train_loss"].append(train_loss)
-            history["train_acc"].append(train_acc)
-            history["gradient_norms"].append(avg_grad_norm)
-
-            # Validation phase
-            val_loss, val_acc = self._validate_epoch(val_loader, criterion, amp_dtype)
-            history["val_loss"].append(val_loss)
-            history["val_acc"].append(val_acc)
-
-            # Logging (include gradient norm for debugging)
-            if (epoch + 1) % 10 == 0 or epoch == 0:
-                logger.info(
-                    f"Epoch {epoch + 1}/{max_epochs} - "
-                    f"train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f}, "
-                    f"train_acc: {train_acc:.4f}, val_acc: {val_acc:.4f}, "
-                    f"grad_norm: {avg_grad_norm:.4f}"
+        # Training loop with OOM recovery
+        epoch = 0
+        while epoch < max_epochs:
+            try:
+                # Training phase (now returns gradient norm as third value)
+                train_loss, train_acc, avg_grad_norm = self._train_epoch(
+                    train_loader, optimizer, criterion, scheduler, scaler, amp_dtype, grad_clip
                 )
+                history["train_loss"].append(train_loss)
+                history["train_acc"].append(train_acc)
+                history["gradient_norms"].append(avg_grad_norm)
 
-            # Early stopping check
-            if early_stopping.check(val_loss, epoch, self._model, patience, min_delta):
-                logger.info(f"Early stopping at epoch {epoch + 1}")
-                break
+                # Validation phase
+                val_loss, val_acc = self._validate_epoch(val_loader, criterion, amp_dtype)
+                history["val_loss"].append(val_loss)
+                history["val_acc"].append(val_acc)
 
-            # Periodic checkpoint save
-            if self._checkpoint_manager is not None:
-                epoch_metrics = {
-                    "train_loss": train_loss,
-                    "val_loss": val_loss,
-                    "train_acc": train_acc,
-                    "val_acc": val_acc,
-                    "grad_norm": avg_grad_norm,
-                }
-                self._checkpoint_manager.maybe_save_checkpoint(
-                    self._model,
-                    optimizer,
-                    scheduler,
-                    epoch,
-                    epoch_metrics,
-                    model_config=train_config,
-                )
+                # Mark OOM recovery as successful if we had any OOM events
+                if self._oom_manager.total_oom_count > 0:
+                    self._oom_manager.mark_success()
+
+                # Logging (include gradient norm for debugging)
+                if (epoch + 1) % 10 == 0 or epoch == 0:
+                    logger.info(
+                        f"Epoch {epoch + 1}/{max_epochs} - "
+                        f"train_loss: {train_loss:.4f}, val_loss: {val_loss:.4f}, "
+                        f"train_acc: {train_acc:.4f}, val_acc: {val_acc:.4f}, "
+                        f"grad_norm: {avg_grad_norm:.4f}"
+                    )
+
+                # Early stopping check
+                if early_stopping.check(val_loss, epoch, self._model, patience, min_delta):
+                    logger.info(f"Early stopping at epoch {epoch + 1}")
+                    break
+
+                # Periodic checkpoint save
+                if self._checkpoint_manager is not None:
+                    epoch_metrics = {
+                        "train_loss": train_loss,
+                        "val_loss": val_loss,
+                        "train_acc": train_acc,
+                        "val_acc": val_acc,
+                        "grad_norm": avg_grad_norm,
+                    }
+                    self._checkpoint_manager.maybe_save_checkpoint(
+                        self._model,
+                        optimizer,
+                        scheduler,
+                        epoch,
+                        epoch_metrics,
+                        model_config=train_config,
+                    )
+
+                # Increment epoch only on successful completion
+                epoch += 1
+
+            except RuntimeError as e:
+                # Handle CUDA OOM errors with automatic batch size reduction
+                if self._oom_manager.is_oom_error(e):
+                    new_batch_size = self._oom_manager.handle_oom(current_batch_size)
+                    if new_batch_size is None:
+                        # Recovery failed - re-raise the error
+                        raise RuntimeError(
+                            f"OOM recovery failed after {self._oom_manager.config.max_retries} retries. "
+                            f"Final batch size: {current_batch_size}. Consider reducing model size or sequence length."
+                        ) from e
+
+                    # Update batch size and recreate data loaders
+                    current_batch_size = new_batch_size
+                    train_config["batch_size"] = current_batch_size
+                    logger.info(f"Recreating data loaders with batch_size={current_batch_size}")
+
+                    # Recreate data loaders with reduced batch size
+                    train_loader = self._create_dataloader(
+                        X_train, y_train, sample_weights, train_config, shuffle=True
+                    )
+                    val_loader = self._create_dataloader(X_val, y_val, None, train_config, shuffle=False)
+
+                    # Reset scheduler steps for new data loader size
+                    scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
+
+                    # Don't increment epoch - retry the same epoch with smaller batch
+                    continue
+                else:
+                    # Not an OOM error - re-raise
+                    raise
 
         # Restore best model
         if early_stopping.best_state_dict is not None:
