@@ -4,9 +4,38 @@ Validation utilities for ML pipeline.
 Provides lookahead bias detection, data quality checks,
 cross-validation integrity verification, selection bias correction,
 statistical model comparison, bootstrap confidence intervals,
-and feature-label leakage detection.
+feature-label leakage detection, ensemble diversity analysis,
+and regime-conditional evaluation.
 """
 
+from src.models.ensemble.diversity import (
+    DiversityAnalyzer,
+    DiversityMetrics,
+    compute_average_disagreement,
+    compute_average_double_fault,
+    compute_average_kl_divergence,
+    compute_average_q_statistic,
+    compute_disagreement,
+    compute_diversity_score,
+    compute_double_fault,
+    compute_entropy_of_votes,
+    compute_kl_divergence,
+    compute_kl_diversity_penalty,
+    compute_pairwise_correlation,
+    compute_pairwise_correlation_matrix,
+    compute_q_statistic,
+)
+from src.models.regime_evaluation import (
+    RegimeClassifier,
+    RegimeEvaluationResult,
+    RegimeEvaluator,
+    RegimeMetrics,
+    TimeOfDay,
+    TrendRegime,
+    VolatilityRegime,
+    evaluate_regime_performance,
+    get_regime_summary,
+)
 from src.validation.bootstrap import (
     BootstrapResult,
     bootstrap_accuracy,
@@ -88,4 +117,30 @@ __all__ = [
     "check_temporal_leakage",
     "check_information_leakage",
     "comprehensive_leakage_check",
+    # Ensemble diversity (Phase 3)
+    "DiversityAnalyzer",
+    "DiversityMetrics",
+    "compute_pairwise_correlation",
+    "compute_pairwise_correlation_matrix",
+    "compute_q_statistic",
+    "compute_average_q_statistic",
+    "compute_disagreement",
+    "compute_average_disagreement",
+    "compute_double_fault",
+    "compute_average_double_fault",
+    "compute_entropy_of_votes",
+    "compute_kl_divergence",
+    "compute_average_kl_divergence",
+    "compute_diversity_score",
+    "compute_kl_diversity_penalty",
+    # Regime-conditional evaluation (Phase 3)
+    "VolatilityRegime",
+    "TrendRegime",
+    "TimeOfDay",
+    "RegimeMetrics",
+    "RegimeEvaluationResult",
+    "RegimeClassifier",
+    "RegimeEvaluator",
+    "evaluate_regime_performance",
+    "get_regime_summary",
 ]
