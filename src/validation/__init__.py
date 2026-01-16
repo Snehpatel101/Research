@@ -6,7 +6,7 @@ cross-validation integrity verification, selection bias correction,
 statistical model comparison, bootstrap confidence intervals,
 feature-label leakage detection, ensemble diversity analysis,
 regime-conditional evaluation, production backtesting,
-and walk-forward validation.
+walk-forward validation, CPCV, PBO, and feature store.
 """
 
 from src.backtesting import (
@@ -111,6 +111,47 @@ from src.validation.statistical_tests import (
     wilcoxon_test,
 )
 
+# Phase 5: CPCV (Combinatorial Purged Cross-Validation)
+from src.cross_validation.cpcv import (
+    CombinatorialPurgedCV,
+    CPCVConfig,
+    CPCVPathResult,
+    CPCVResult,
+    create_cpcv,
+)
+
+# Phase 5: PBO (Probability of Backtest Overfitting)
+from src.cross_validation.pbo import (
+    PBOConfig,
+    PBOResult,
+    analyze_overfitting_risk,
+    compute_pbo,
+    compute_pbo_from_returns,
+    pbo_gate,
+)
+
+# Phase 5: Feature Store
+from src.feature_store import (
+    CacheMetadata,
+    DataSource,
+    FeatureCache,
+    FeatureIntegrityError,
+    FeatureLineage,
+    FeatureNotFoundError,
+    FeatureStore,
+    FeatureStoreError,
+    LineageTracker,
+    SemanticVersion,
+    Transformation,
+    TransformationType,
+    VersionInfo,
+    VersionManager,
+    compute_config_hash,
+    compute_dataframe_checksum,
+    compute_file_checksum,
+    compute_schema_hash,
+)
+
 __all__ = [
     # Lookahead audit
     "LookaheadAuditor",
@@ -204,4 +245,36 @@ __all__ = [
     "WalkForwardResult",
     "WindowMetrics",
     "create_walk_forward_evaluator",
+    # CPCV - Combinatorial Purged Cross-Validation (Phase 5)
+    "CombinatorialPurgedCV",
+    "CPCVConfig",
+    "CPCVPathResult",
+    "CPCVResult",
+    "create_cpcv",
+    # PBO - Probability of Backtest Overfitting (Phase 5)
+    "PBOConfig",
+    "PBOResult",
+    "compute_pbo",
+    "compute_pbo_from_returns",
+    "pbo_gate",
+    "analyze_overfitting_risk",
+    # Feature Store (Phase 5)
+    "FeatureStore",
+    "FeatureStoreError",
+    "FeatureNotFoundError",
+    "FeatureIntegrityError",
+    "FeatureCache",
+    "CacheMetadata",
+    "LineageTracker",
+    "FeatureLineage",
+    "DataSource",
+    "Transformation",
+    "TransformationType",
+    "SemanticVersion",
+    "VersionInfo",
+    "VersionManager",
+    "compute_file_checksum",
+    "compute_dataframe_checksum",
+    "compute_schema_hash",
+    "compute_config_hash",
 ]

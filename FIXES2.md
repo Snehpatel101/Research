@@ -1248,3 +1248,97 @@ CONFIG-003: Rename feature_set collision
 - [ ] FLOW-004: HeterogeneousDataBundle
 
 **Note:** CLEANUP-005 (drift_detector.py) - kept as backward compatibility layer is actively used.
+
+---
+
+# PART 3: Validation Module Phase 5 Completion
+
+**Updated:** 2026-01-15
+**Focus:** Unified validation module exports for CPCV, PBO, and Feature Store
+
+## Phase 5: Advanced Cross-Validation Infrastructure
+
+Added unified exports to `src/validation/__init__.py` for:
+
+### CPCV (Combinatorial Purged Cross-Validation)
+- `CombinatorialPurgedCV` - Main CPCV class with purge/embargo support
+- `CPCVConfig` - Configuration for n_groups, n_test_groups, max_combinations
+- `CPCVPathResult`, `CPCVResult` - Result dataclasses
+- `create_cpcv()` - Factory function
+
+### PBO (Probability of Backtest Overfitting)
+- `PBOConfig` - Configuration for warn/block thresholds
+- `PBOResult` - Result with PBO value, risk level, distributions
+- `compute_pbo()` - Main PBO computation from performance matrix
+- `compute_pbo_from_returns()` - Convenience wrapper for returns
+- `pbo_gate()` - Gate function for deployment decisions
+- `analyze_overfitting_risk()` - Comprehensive overfitting analysis
+
+### Feature Store
+- `FeatureStore` - Main feature storage and retrieval class
+- `FeatureCache` - Parquet caching with checksum validation
+- `SemanticVersion`, `VersionInfo`, `VersionManager` - Semantic versioning
+- `LineageTracker`, `FeatureLineage`, `DataSource`, `Transformation` - Lineage tracking
+- `compute_*_checksum()`, `compute_*_hash()` - Checksum utilities
+- Error classes: `FeatureStoreError`, `FeatureNotFoundError`, `FeatureIntegrityError`
+
+## Test Coverage
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| Feature Store (versioning) | 38 tests | ✅ Passed |
+| Feature Store (cache) | 25 tests | ✅ Passed |
+| Feature Store (lineage) | 34 tests | ✅ Passed |
+| Feature Store (main) | 32 tests | ✅ Passed |
+| CPCV | 27 tests | ✅ Passed |
+| PBO | 30 tests | ✅ Passed |
+
+**Total Phase 5 Tests:** 186 tests passing
+
+## Files Created/Modified
+
+**Modified:**
+- `src/validation/__init__.py` - Added Phase 5 exports (CPCV, PBO, Feature Store)
+
+**Created:**
+- `tests/feature_store/__init__.py`
+- `tests/feature_store/test_versioning.py` (38 tests)
+- `tests/feature_store/test_cache.py` (25 tests)
+- `tests/feature_store/test_lineage.py` (34 tests)
+- `tests/feature_store/test_feature_store.py` (32 tests + validation integration)
+
+## Usage Example
+
+```python
+from src.validation import (
+    # CPCV
+    CombinatorialPurgedCV, CPCVConfig, create_cpcv,
+    # PBO
+    compute_pbo, pbo_gate, PBOResult,
+    # Feature Store
+    FeatureStore, SemanticVersion, LineageTracker,
+)
+
+# CPCV with 6 groups, 2 test groups
+cpcv = create_cpcv(n_groups=6, n_test_groups=2, purge_pct=0.01)
+for train_idx, test_idx, path_id in cpcv.split(X):
+    # Train and evaluate on each path
+    pass
+
+# PBO analysis
+result = compute_pbo(performance_matrix)
+should_deploy, reason = pbo_gate(result, strict=True)
+
+# Feature Store
+store = FeatureStore(cache_dir="data/features")
+store.put_features(df, symbol="MES", feature_set="core")
+features = store.get_features(symbol="MES", feature_set="core")
+```
+
+## Verification
+
+- [x] All Phase 5 exports work from `src.validation`
+- [x] 186 tests passing for Phase 5 modules
+- [x] 223 total validation module tests passing
+- [x] 63 backtesting tests passing
+- [x] No import errors or circular dependencies
