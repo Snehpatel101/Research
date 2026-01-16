@@ -448,14 +448,19 @@ class MetaLabelGenerator:
         logger.info("Meta-labeling summary:")
         logger.info(f"  Total samples:   {metrics['n_total']:.0f}")
         logger.info(f"  Valid samples:   {metrics['n_valid']:.0f} ({metrics['valid_rate']:.1%})")
-        logger.info(f"  Correct:         {metrics['n_correct']:.0f}")
-        logger.info(f"  Incorrect:       {metrics['n_incorrect']:.0f}")
-        logger.info(f"  Primary accuracy: {metrics['primary_accuracy']:.2%}")
 
-        if metrics.get("n_long_signals", 0) > 0:
-            logger.info(f"  Long accuracy:   {metrics['long_accuracy']:.2%}")
-        if metrics.get("n_short_signals", 0) > 0:
-            logger.info(f"  Short accuracy:  {metrics['short_accuracy']:.2%}")
+        # These keys only exist when n_valid > 0
+        if metrics.get("n_valid", 0) > 0:
+            logger.info(f"  Correct:         {metrics.get('n_correct', 0):.0f}")
+            logger.info(f"  Incorrect:       {metrics.get('n_incorrect', 0):.0f}")
+            logger.info(f"  Primary accuracy: {metrics.get('primary_accuracy', 0):.2%}")
+
+            if metrics.get("n_long_signals", 0) > 0:
+                logger.info(f"  Long accuracy:   {metrics['long_accuracy']:.2%}")
+            if metrics.get("n_short_signals", 0) > 0:
+                logger.info(f"  Short accuracy:  {metrics['short_accuracy']:.2%}")
+        else:
+            logger.info("  No valid samples (all signals were neutral or invalid)")
 
 
 # =============================================================================

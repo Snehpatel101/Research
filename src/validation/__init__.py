@@ -152,6 +152,32 @@ from src.feature_store import (
     compute_schema_hash,
 )
 
+# Phase 6: Meta-Labeling (Lopez de Prado AFML approach)
+from src.phase1.stages.meta_labeling import (
+    # Primary classifier for high-recall direction prediction
+    PrimaryClassifier,
+    PrimaryModelConfig,
+    RecallOptimizer,
+    # Meta-label generation (1=correct, 0=incorrect)
+    MetaLabelGenerator,
+    MetaLabelingConfig,
+    MetaLabelResult,
+    # Bet sizing (Kelly, volatility-scaled, etc.)
+    BetSizer,
+    BetSizingMethod,
+    KellyCriterion as MetaKellyCriterion,  # Renamed to avoid conflict with backtesting
+    VolatilityScaler,
+    # Pipeline integration
+    run_meta_labeling,
+    add_meta_labels_standalone,
+)
+
+# Phase 6: Alternative MetaLabeler from labeling module
+from src.phase1.stages.labeling import (
+    MetaLabeler,
+    BetSizeMethod,
+)
+
 __all__ = [
     # Lookahead audit
     "LookaheadAuditor",
@@ -277,4 +303,23 @@ __all__ = [
     "compute_dataframe_checksum",
     "compute_schema_hash",
     "compute_config_hash",
+    # Meta-Labeling - Primary Classifier (Phase 6)
+    "PrimaryClassifier",
+    "PrimaryModelConfig",
+    "RecallOptimizer",
+    # Meta-Labeling - Meta Label Generation (Phase 6)
+    "MetaLabelGenerator",
+    "MetaLabelingConfig",
+    "MetaLabelResult",
+    # Meta-Labeling - Bet Sizing (Phase 6)
+    "BetSizer",
+    "BetSizingMethod",
+    "MetaKellyCriterion",
+    "VolatilityScaler",
+    # Meta-Labeling - Pipeline Integration (Phase 6)
+    "run_meta_labeling",
+    "add_meta_labels_standalone",
+    # Meta-Labeling - Alternative Labeler (Phase 6)
+    "MetaLabeler",
+    "BetSizeMethod",
 ]

@@ -1342,3 +1342,114 @@ features = store.get_features(symbol="MES", feature_set="core")
 - [x] 223 total validation module tests passing
 - [x] 63 backtesting tests passing
 - [x] No import errors or circular dependencies
+
+---
+
+# PART 4: Phase 6 Meta-Labeling Completion
+
+**Updated:** 2026-01-15
+**Focus:** Lopez de Prado Meta-Labeling framework exports and comprehensive tests
+
+## Phase 6: Meta-Labeling Infrastructure
+
+Added unified exports to `src/validation/__init__.py` for the complete meta-labeling pipeline:
+
+### Primary Classifier (High-Recall Direction Prediction)
+- `PrimaryClassifier` - Sklearn-compatible classifier optimized for high recall
+- `PrimaryModelConfig` - Configuration for recall_target, min_recall, base_model, cv_folds
+- `RecallOptimizer` - Threshold optimization to achieve target recall
+- Supports base models: logistic, lightgbm, xgboost, random_forest
+
+### Meta-Label Generation
+- `MetaLabelGenerator` - Creates binary meta-labels (1=correct, 0=incorrect, -99=invalid)
+- `MetaLabelingConfig` - Configuration for neutral_threshold, require_returns
+- `MetaLabelResult` - Result dataclass with meta_labels, quality_metrics, correctness_margin
+- Constants: `META_LABEL_CORRECT=1`, `META_LABEL_INCORRECT=0`, `META_LABEL_INVALID=-99`
+
+### Bet Sizing (Position Sizing from Confidence)
+- `BetSizer` - Converts meta-model probabilities to position sizes
+- `BetSizingMethod` - Enum: LINEAR, KELLY, VOLATILITY_SCALED, RISK_PARITY, CONSTANT
+- `MetaKellyCriterion` (renamed from KellyCriterion) - f* = (bp - q) / b formula
+- `VolatilityScaler` - Rolling volatility-based position scaling
+- `BetSizingResult` - Result with position_sizes, method, diagnostics
+
+### Pipeline Integration
+- `run_meta_labeling()` - Full pipeline: primary → meta-labels → bet sizing
+- `add_meta_labels_standalone()` - Add meta-labels to existing DataFrame
+
+### Alternative MetaLabeler
+- `MetaLabeler` - Alternative implementation from labeling module
+- `BetSizeMethod` - Enum for bet sizing methods
+
+## Bug Fix
+
+**Fixed:** KeyError in `_log_summary()` when all labels are invalid
+
+**Location:** `src/phase1/stages/meta_labeling/meta_labeler.py:444-463`
+
+**Problem:** When `n_valid == 0` (all neutral primary signals), `_compute_quality_metrics` returns early without setting `n_correct`, `n_incorrect`, or `primary_accuracy`, but `_log_summary` accessed these unconditionally.
+
+**Fix:** Made `_log_summary` handle the edge case with `.get()` defaults and a clear "No valid samples" message.
+
+## Test Coverage
+
+| Module | Tests | Status |
+|--------|-------|--------|
+| PrimaryClassifier | 22 tests | ✅ Passed |
+| BetSizer | 30 tests | ✅ Passed |
+| MetaLabelGenerator | 26 tests | ✅ Passed |
+| ValidationModuleIntegration | 32 tests | ✅ Passed |
+
+**Total Phase 6 Tests:** 110 tests passing
+
+## Files Created/Modified
+
+**Modified:**
+- `src/validation/__init__.py` - Added Phase 6 meta-labeling exports
+- `src/phase1/stages/meta_labeling/meta_labeler.py` - Fixed `_log_summary` edge case
+
+**Created:**
+- `tests/phase_1_tests/stages/meta_labeling/__init__.py`
+- `tests/phase_1_tests/stages/meta_labeling/test_primary_model.py` (22 tests)
+- `tests/phase_1_tests/stages/meta_labeling/test_bet_sizer.py` (30 tests)
+- `tests/phase_1_tests/stages/meta_labeling/test_meta_labeler.py` (26 tests)
+
+## Usage Example
+
+```python
+from src.validation import (
+    # Primary Classifier
+    PrimaryClassifier, PrimaryModelConfig, RecallOptimizer,
+    # Meta-Labeling
+    MetaLabelGenerator, MetaLabelingConfig, MetaLabelResult,
+    # Bet Sizing
+    BetSizer, BetSizingMethod, MetaKellyCriterion, VolatilityScaler,
+    # Pipeline
+    run_meta_labeling, add_meta_labels_standalone,
+)
+
+# 1. Train primary classifier for high recall
+primary = PrimaryClassifier(recall_target=0.95, base_model="logistic")
+primary.fit(X_train, y_train)
+y_primary = primary.predict(X_test)
+
+# 2. Generate meta-labels
+generator = MetaLabelGenerator(neutral_threshold=0.001)
+result = generator.generate(y_true=y_test, y_primary=y_primary, returns=returns)
+# result.meta_labels: {1=correct, 0=incorrect, -99=invalid}
+
+# 3. Convert confidence to position sizes
+sizer = BetSizer(method=BetSizingMethod.KELLY)
+sizes = sizer.compute_sizes(
+    meta_probabilities=meta_model_proba,
+    directions=y_primary,
+)
+```
+
+## Verification
+
+- [x] All Phase 6 exports work from `src.validation`
+- [x] 110 tests passing for Phase 6 meta-labeling modules
+- [x] Bug fixed: `_log_summary` handles all-invalid labels gracefully
+- [x] No import errors or circular dependencies
+- [x] KellyCriterion renamed to MetaKellyCriterion to avoid conflict with backtesting module
