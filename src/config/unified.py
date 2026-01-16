@@ -438,6 +438,57 @@ class OOMRecoverySection:
         )
 
 
+@dataclass
+class ModelConfigSection:
+    """
+    Per-model configuration section (Phase 1 SNwH).
+
+    This section provides family-level defaults and per-model overrides
+    for timeframe, MTF mode, and feature mode settings.
+    """
+
+    # Default configurations by family
+    # NOTE: primary_timeframe, mtf_mode, feature_mode are NOT included here
+    # because they are model-specific and should come from ModelContract.
+    # This section is for settings that genuinely vary by family.
+    defaults: dict[str, dict[str, Any]] = field(default_factory=lambda: {
+        "boosting": {},
+        "neural": {},
+        "transformer": {},
+        "classical": {},
+        "ensemble": {},
+        "meta_learner": {},
+    })
+
+    # Per-model overrides (model_name -> config dict)
+    overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def get_model_config(self, model_name: str, model_family: str) -> dict[str, Any]:
+        """
+        Get merged configuration for a model.
+
+        Priority: override > family default
+
+        Args:
+            model_name: Name of the model
+            model_family: Family of the model
+
+        Returns:
+            Merged configuration dictionary
+        """
+        config = dict(self.defaults.get(model_family, {}))
+        if model_name in self.overrides:
+            config.update(self.overrides[model_name])
+        return config
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "ModelConfigSection":
+        return cls(
+            defaults=data.get("defaults", cls.__dataclass_fields__["defaults"].default_factory()),
+            overrides=data.get("overrides", {}),
+        )
+
+
 # =============================================================================
 # UNIFIED CONFIG
 # =============================================================================
@@ -486,6 +537,9 @@ class UnifiedConfig:
     scaler: ScalerSection = field(default_factory=ScalerSection)
     tracking: TrackingSection = field(default_factory=TrackingSection)
     oom_recovery: OOMRecoverySection = field(default_factory=OOMRecoverySection)
+
+    # Phase 1 SNwH: Per-model configuration
+    model_config: ModelConfigSection = field(default_factory=ModelConfigSection)
 
     # Paths
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
@@ -554,6 +608,7 @@ class UnifiedConfig:
             scaler=ScalerSection.from_dict(data.get("scaler", {})),
             tracking=TrackingSection.from_dict(data.get("tracking", {})),
             oom_recovery=OOMRecoverySection.from_dict(data.get("oom_recovery", {})),
+            model_config=ModelConfigSection.from_dict(data.get("model_config", {})),
             output_dir=Path(data.get("output_dir", "experiments/runs")),
             data_dir=Path(data.get("data_dir", "data")),
         )
@@ -707,6 +762,10 @@ class UnifiedConfig:
                 "batch_reduction_factor": self.oom_recovery.batch_reduction_factor,
                 "min_batch_size": self.oom_recovery.min_batch_size,
             },
+            "model_config": {
+                "defaults": self.model_config.defaults,
+                "overrides": self.model_config.overrides,
+            },
             "output_dir": str(self.output_dir),
             "data_dir": str(self.data_dir),
         }
@@ -790,6 +849,80 @@ class UnifiedConfig:
             oom_batch_reduction_factor=self.oom_recovery.batch_reduction_factor,
             oom_min_batch_size=self.oom_recovery.min_batch_size,
             **overrides,
+        )
+
+    def get_trainer_config_for_model(
+        self,
+        model_name: str,
+        horizon: int | None = None,
+        **overrides: Any,
+    ) -> Any:
+        """
+        Get TrainerConfig for a specific model using contract-based defaults.
+
+        This is the SNwH-compatible way to create TrainerConfig. It uses the
+        model's contract to set appropriate defaults for timeframe, MTF mode,
+        and other settings.
+
+        Args:
+            model_name: Name of the model (e.g., "xgboost", "lstm", "patchtst")
+            horizon: Training horizon (defaults to max active horizon)
+            **overrides: Additional overrides for any TrainerConfig field
+
+        Returns:
+            TrainerConfig with contract-based defaults
+
+        Example:
+            config = unified_config.get_trainer_config_for_model("lstm", horizon=20)
+        """
+        from src.models.config.trainer_config import TrainerConfig
+        from src.contracts import get_model_contract
+
+        horizon = horizon or self.horizons.max_horizon
+        contract = get_model_contract(model_name)
+
+        # Get family-level and model-level overrides from model_config section
+        model_overrides = self.model_config.get_model_config(
+            model_name, contract.model_family
+        )
+
+        # Merge: contract defaults -> model_config overrides -> user overrides
+        merged_overrides = {
+            # Base settings from UnifiedConfig
+            "batch_size": self.training.batch_size,
+            "max_epochs": self.training.max_epochs,
+            "early_stopping_patience": self.training.early_stopping_patience,
+            "random_seed": self.random_seed,
+            "output_dir": self.output_dir,
+            "device": self.training.device,
+            "mixed_precision": self.training.mixed_precision,
+            "num_workers": self.training.num_workers,
+            "pin_memory": self.training.pin_memory,
+            "use_calibration": self.calibration.enabled,
+            "calibration_method": self.calibration.method,
+            "use_feature_selection": self.features.selection.enabled,
+            "feature_selection_method": self.features.selection.method,
+            "feature_selection_cv_splits": self.features.selection.cv_splits,
+            "tracking_enabled": self.tracking.enabled,
+            "tracking_backend": self.tracking.backend,
+            "tracking_uri": self.tracking.uri,
+            "tracking_tags": self.tracking.tags,
+            "oom_recovery_enabled": self.oom_recovery.enabled,
+            "oom_max_retries": self.oom_recovery.max_retries,
+            "oom_batch_reduction_factor": self.oom_recovery.batch_reduction_factor,
+            "oom_min_batch_size": self.oom_recovery.min_batch_size,
+        }
+
+        # Apply model_config section overrides
+        merged_overrides.update(model_overrides)
+
+        # Apply user-provided overrides
+        merged_overrides.update(overrides)
+
+        return TrainerConfig.from_model_contract(
+            model_name=model_name,
+            horizon=horizon,
+            **merged_overrides,
         )
 
     def to_pipeline_config(self, **overrides: Any) -> Any:
@@ -975,6 +1108,7 @@ __all__ = [
     "ScalerSection",
     "TrackingSection",
     "OOMRecoverySection",
+    "ModelConfigSection",  # Phase 1 SNwH
     # Singleton functions
     "get_unified_config",
     "set_unified_config",

@@ -66,6 +66,14 @@ class ModelDataRequirements:
         feature_selection_method: Method for feature selection ("mda", "mdi", "hybrid", "none")
         feature_selection_n_features: Number of features to select (0 = use max_features)
         description: Human-readable description
+
+        # Phase 1 SNwH fields:
+        input_rank: Input dimensionality (2=tabular, 3=sequence, 4=multi-TF)
+        feature_mode: Feature mode ("engineered", "raw", "hybrid")
+        mtf_mode: Multi-timeframe mode ("none", "indicators", "multi_stream")
+        primary_timeframe: Default primary training timeframe
+        mtf_timeframes: Additional timeframes for multi_stream mode
+        min_features: Minimum features required
     """
 
     model_name: str
@@ -81,6 +89,25 @@ class ModelDataRequirements:
     feature_selection_method: str = "mda"
     feature_selection_n_features: int = 0
     description: str = ""
+
+    # Phase 1 SNwH: Per-model configuration fields
+    input_rank: int = 2  # 2D (tabular), 3D (sequence), or 4D (multi-TF)
+    feature_mode: str = "engineered"  # engineered, raw, hybrid
+    mtf_mode: str = "none"  # none, indicators, multi_stream
+    primary_timeframe: str = "5min"  # Default primary TF
+    mtf_timeframes: tuple[str, ...] = ()  # Additional TFs for multi_stream
+    min_features: int = 4  # Minimum features required
+
+    @property
+    def adapter_id(self) -> str:
+        """Get adapter ID based on input_rank."""
+        if self.input_rank == 2:
+            return "tabular"
+        elif self.input_rank == 3:
+            return "sequence"
+        elif self.input_rank == 4:
+            return "multi_stream"
+        return "tabular"
 
 
 # =============================================================================
@@ -104,6 +131,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=True,
         supports_missing=True,
         description="XGBoost gradient boosting. Handles raw features, missing values, and high correlation.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="15min",
+        min_features=40,
     ),
     "lightgbm": ModelDataRequirements(
         model_name="lightgbm",
@@ -116,6 +149,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=True,
         supports_missing=True,
         description="LightGBM gradient boosting. Fast training with leaf-wise growth.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="15min",
+        min_features=40,
     ),
     "catboost": ModelDataRequirements(
         model_name="catboost",
@@ -128,6 +167,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=True,
         supports_missing=True,
         description="CatBoost gradient boosting. Excellent categorical feature handling.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="15min",
+        min_features=40,
     ),
     # -------------------------------------------------------------------------
     # NEURAL NETWORK MODELS (sequential/recurrent)
@@ -144,6 +189,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="LSTM recurrent network. Captures long-term dependencies in sequences.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     "gru": ModelDataRequirements(
         model_name="gru",
@@ -157,6 +208,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="GRU recurrent network. Simpler than LSTM, often similar performance.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     "tcn": ModelDataRequirements(
         model_name="tcn",
@@ -170,6 +227,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Temporal Convolutional Network. Dilated convolutions for long-range dependencies.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     "mlp": ModelDataRequirements(
         model_name="mlp",
@@ -182,6 +245,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Multi-Layer Perceptron. Simple feedforward network for tabular data.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     # -------------------------------------------------------------------------
     # TRANSFORMER MODELS (attention-based)
@@ -212,6 +281,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Vanilla Transformer encoder. Self-attention for time series.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="5min",
+        min_features=20,
     ),
     "patchtst": ModelDataRequirements(
         model_name="patchtst",
@@ -225,6 +300,13 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="PatchTST Transformer. Patches input sequences for efficiency.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="raw",
+        mtf_mode="multi_stream",
+        primary_timeframe="1min",
+        mtf_timeframes=("5min", "15min"),
+        min_features=4,
     ),
     # -------------------------------------------------------------------------
     # ADDITIONAL NEURAL MODELS (MOD-001: added missing models)
@@ -241,6 +323,13 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="iTransformer. Channel-wise attention for multivariate time series.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="raw",
+        mtf_mode="multi_stream",
+        primary_timeframe="1min",
+        mtf_timeframes=("5min", "15min"),
+        min_features=4,
     ),
     "tft": ModelDataRequirements(
         model_name="tft",
@@ -254,6 +343,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Temporal Fusion Transformer. Interpretable attention and variable selection.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     "nbeats": ModelDataRequirements(
         model_name="nbeats",
@@ -267,6 +362,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="N-BEATS. Interpretable trend and seasonality decomposition.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     "inceptiontime": ModelDataRequirements(
         model_name="inceptiontime",
@@ -280,6 +381,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="InceptionTime CNN. Multi-scale temporal convolutions with residual connections.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     "resnet1d": ModelDataRequirements(
         model_name="resnet1d",
@@ -293,6 +400,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="ResNet1D. 1D residual network for deep temporal feature extraction.",
+        # Phase 1 SNwH fields
+        input_rank=3,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=30,
     ),
     # -------------------------------------------------------------------------
     # CLASSICAL ML MODELS
@@ -308,6 +421,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Random Forest ensemble. Robust baseline with feature importance.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="indicators",
+        primary_timeframe="10min",
+        min_features=30,
     ),
     "logistic": ModelDataRequirements(
         model_name="logistic",
@@ -320,6 +439,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Logistic Regression. Simple interpretable baseline.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="15min",
+        min_features=20,
     ),
     "svm": ModelDataRequirements(
         model_name="svm",
@@ -332,6 +457,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Support Vector Machine. Kernel-based classification.",
+        # Phase 1 SNwH fields
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="15min",
+        min_features=20,
     ),
     # -------------------------------------------------------------------------
     # ENSEMBLE MODELS (MOD-001: added missing models)
@@ -348,6 +479,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=True,  # Depends on base models
         supports_missing=True,  # Depends on base models
         description="Voting ensemble. Combines predictions via majority vote or averaging.",
+        # Phase 1 SNwH fields (ensemble inherits from base models)
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=4,
     ),
     "stacking": ModelDataRequirements(
         model_name="stacking",
@@ -360,6 +497,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=True,  # Depends on base models
         supports_missing=True,  # Depends on base models
         description="Stacking ensemble. OOF predictions feed meta-learner.",
+        # Phase 1 SNwH fields (ensemble inherits from base models)
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=4,
     ),
     "blending": ModelDataRequirements(
         model_name="blending",
@@ -372,6 +515,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=True,  # Depends on base models
         supports_missing=True,  # Depends on base models
         description="Blending ensemble. Holdout predictions feed meta-learner.",
+        # Phase 1 SNwH fields (ensemble inherits from base models)
+        input_rank=2,
+        feature_mode="engineered",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=4,
     ),
     # -------------------------------------------------------------------------
     # META-LEARNER MODELS (MOD-001: added missing models)
@@ -388,6 +537,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Ridge meta-learner. L2-regularized linear stacking.",
+        # Phase 1 SNwH fields (meta-learners receive OOF predictions)
+        input_rank=2,
+        feature_mode="oof_probs",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=2,
     ),
     "mlp_meta": ModelDataRequirements(
         model_name="mlp_meta",
@@ -400,6 +555,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="MLP meta-learner. Non-linear neural network stacking.",
+        # Phase 1 SNwH fields (meta-learners receive OOF predictions)
+        input_rank=2,
+        feature_mode="oof_probs",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=2,
     ),
     "calibrated_meta": ModelDataRequirements(
         model_name="calibrated_meta",
@@ -412,6 +573,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=False,
         description="Calibrated meta-learner. Isotonic/Platt calibration for stacking.",
+        # Phase 1 SNwH fields (meta-learners receive OOF predictions)
+        input_rank=2,
+        feature_mode="oof_probs",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=2,
     ),
     "xgboost_meta": ModelDataRequirements(
         model_name="xgboost_meta",
@@ -424,6 +591,12 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_categorical=False,
         supports_missing=True,  # XGBoost handles missing values
         description="XGBoost meta-learner. Gradient boosting for non-linear stacking.",
+        # Phase 1 SNwH fields (meta-learners receive OOF predictions)
+        input_rank=2,
+        feature_mode="oof_probs",
+        mtf_mode="none",
+        primary_timeframe="5min",
+        min_features=2,
     ),
 }
 

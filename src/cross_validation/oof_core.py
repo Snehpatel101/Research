@@ -36,6 +36,9 @@ class OOFPrediction:
         predictions: DataFrame with OOF predictions
         fold_info: Per-fold training information
         coverage: Fraction of samples with predictions
+        original_indices: Indices that have valid predictions (for alignment)
+        sequence_length: Sequence length if sequence model
+        n_total_samples: Total samples in source data
     """
 
     def __init__(
@@ -44,11 +47,40 @@ class OOFPrediction:
         predictions: pd.DataFrame,
         fold_info: list[dict[str, Any]],
         coverage: float = 1.0,
+        # Phase 4 SNwH: Alignment metadata for heterogeneous stacking
+        original_indices: np.ndarray | None = None,
+        sequence_length: int | None = None,
+        n_total_samples: int | None = None,
     ):
         self.model_name = model_name
         self.predictions = predictions
         self.fold_info = fold_info
         self.coverage = coverage
+        # Phase 4 alignment metadata
+        self.original_indices = original_indices
+        self.sequence_length = sequence_length
+        self.n_total_samples = n_total_samples
+
+    @property
+    def n_valid(self) -> int:
+        """Number of samples with valid predictions."""
+        if self.original_indices is not None:
+            return len(self.original_indices)
+        return len(self.predictions)
+
+    @property
+    def alignment_offset(self) -> int:
+        """
+        Offset from start of dataset to first valid prediction.
+
+        For tabular models: 0
+        For sequence models: seq_len - 1
+        """
+        if self.original_indices is not None and len(self.original_indices) > 0:
+            return int(self.original_indices.min())
+        if self.sequence_length:
+            return self.sequence_length - 1
+        return 0
 
     def get_probabilities(self) -> np.ndarray:
         """Get probability matrix (n_samples, 3)."""
@@ -63,6 +95,39 @@ class OOFPrediction:
     def get_class_predictions(self) -> np.ndarray:
         """Get predicted classes (-1, 0, 1)."""
         return self.predictions[f"{self.model_name}_pred"].values
+
+    def get_aligned_probabilities(
+        self,
+        start_idx: int,
+        n_samples: int,
+    ) -> np.ndarray:
+        """
+        Get probability array aligned to specified range.
+
+        Args:
+            start_idx: Start index in original dataset
+            n_samples: Number of samples to extract
+
+        Returns:
+            Aligned probability array
+
+        Raises:
+            ValueError: If requested range exceeds valid range
+        """
+        probs = self.get_probabilities()
+
+        # Adjust for alignment offset
+        local_start = start_idx - self.alignment_offset
+        local_end = local_start + n_samples
+
+        if local_start < 0 or local_end > len(probs):
+            raise ValueError(
+                f"Requested range [{start_idx}, {start_idx + n_samples}) "
+                f"exceeds valid range [{self.alignment_offset}, "
+                f"{self.alignment_offset + len(probs)})"
+            )
+
+        return probs[local_start:local_end]
 
 
 # =============================================================================

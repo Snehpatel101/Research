@@ -67,6 +67,12 @@ from src.cross_validation.timestamp_alignment import (
     get_datetime_alignment_report,
     validate_datetime_alignment,
 )
+from src.cross_validation.oof_alignment import (
+    OOFAlignmentResult,
+    OOFAlignmentValidator,
+    compute_oof_coverage,
+    validate_oof_for_stacking,
+)
 from src.cross_validation.param_spaces import PARAM_SPACES
 from src.cross_validation.pbo import (
     PBOConfig,
@@ -149,4 +155,9 @@ __all__ = [
     "OOFCache",
     "OOFCacheEntry",
     "compute_data_hash",
+    # OOF Alignment
+    "OOFAlignmentResult",
+    "OOFAlignmentValidator",
+    "compute_oof_coverage",
+    "validate_oof_for_stacking",
 ]

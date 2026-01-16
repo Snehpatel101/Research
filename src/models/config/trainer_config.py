@@ -101,6 +101,22 @@ class TrainerConfig:
         default_factory=lambda: _get_global_or_default("oom_recovery.min_batch_size", 8)
     )
 
+    # =========================================================================
+    # Phase 1 SNwH: Per-model configuration fields
+    # =========================================================================
+    primary_timeframe: str = field(
+        default_factory=lambda: _get_global_or_default("timeframes.default_primary", "5min")
+    )
+    mtf_mode: str = field(default="indicators")  # none, indicators, multi_stream
+    mtf_timeframes: list[str] = field(default_factory=list)  # Additional TFs for multi_stream
+    feature_mode: str = field(default="engineered")  # engineered, raw, hybrid
+    adapter_id: str | None = field(default=None)  # tabular, sequence, multi_stream (auto-resolved)
+
+    # Contract fields (resolved at runtime from ModelContract)
+    input_rank: int = field(default=2)  # 2, 3, or 4
+    min_features: int = field(default=4)
+    max_features: int = field(default=200)
+
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""
         if self.horizon <= 0:
@@ -116,6 +132,37 @@ class TrainerConfig:
             )
         if isinstance(self.output_dir, str):
             self.output_dir = Path(self.output_dir)
+
+        # Phase 1 SNwH: Validate new fields
+        valid_mtf_modes = {"none", "indicators", "multi_stream"}
+        if self.mtf_mode not in valid_mtf_modes:
+            raise ValueError(
+                f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'"
+            )
+
+        valid_feature_modes = {"engineered", "raw", "hybrid", "oof_probs"}
+        if self.feature_mode not in valid_feature_modes:
+            raise ValueError(
+                f"feature_mode must be one of {valid_feature_modes}, got '{self.feature_mode}'"
+            )
+
+        if self.input_rank not in {2, 3, 4}:
+            raise ValueError(f"input_rank must be 2, 3, or 4, got {self.input_rank}")
+
+        # Auto-resolve adapter_id if not set
+        if self.adapter_id is None:
+            self.adapter_id = self._resolve_adapter_id()
+
+    def _resolve_adapter_id(self) -> str:
+        """Resolve adapter ID from input_rank."""
+        if self.input_rank == 2:
+            return "tabular"
+        elif self.input_rank == 3:
+            return "sequence"
+        elif self.input_rank == 4:
+            return "multi_stream"
+        else:
+            return "tabular"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -155,6 +202,15 @@ class TrainerConfig:
             "oom_max_retries": self.oom_max_retries,
             "oom_batch_reduction_factor": self.oom_batch_reduction_factor,
             "oom_min_batch_size": self.oom_min_batch_size,
+            # Phase 1 SNwH fields
+            "primary_timeframe": self.primary_timeframe,
+            "mtf_mode": self.mtf_mode,
+            "mtf_timeframes": self.mtf_timeframes,
+            "feature_mode": self.feature_mode,
+            "adapter_id": self.adapter_id,
+            "input_rank": self.input_rank,
+            "min_features": self.min_features,
+            "max_features": self.max_features,
         }
 
     @classmethod
@@ -162,6 +218,114 @@ class TrainerConfig:
         """Create TrainerConfig from dictionary."""
         return cls(**data)
 
+    @classmethod
+    def from_model_contract(
+        cls,
+        model_name: str,
+        horizon: int,
+        **overrides: Any,
+    ) -> "TrainerConfig":
+        """
+        Create TrainerConfig from a ModelContract.
+
+        This is the preferred way to create TrainerConfig for SNwH-compatible
+        configuration. It automatically populates timeframe, MTF mode, and
+        other settings from the model's contract.
+
+        Args:
+            model_name: Name of the model (e.g., "xgboost", "lstm", "patchtst")
+            horizon: Training horizon (e.g., 20)
+            **overrides: Additional overrides for any TrainerConfig field
+
+        Returns:
+            TrainerConfig with contract-based defaults
+
+        Example:
+            # Create config for LSTM with contract defaults
+            config = TrainerConfig.from_model_contract("lstm", horizon=20)
+
+            # Override specific settings
+            config = TrainerConfig.from_model_contract(
+                "xgboost",
+                horizon=20,
+                batch_size=512,
+                max_epochs=200,
+            )
+        """
+        from src.contracts import get_model_contract
+
+        contract = get_model_contract(model_name)
+
+        # Build kwargs from contract (normalize model_name to lowercase)
+        contract_kwargs = {
+            "model_name": model_name.lower().strip(),
+            "horizon": horizon,
+            "primary_timeframe": contract.primary_timeframe,
+            "mtf_mode": contract.mtf_mode.value,
+            "mtf_timeframes": list(contract.mtf_timeframes),
+            "feature_mode": contract.feature_mode.value,
+            "adapter_id": contract.adapter_id,
+            "input_rank": contract.input_rank.value,
+            "min_features": contract.min_features,
+            "max_features": contract.max_features,
+            "sequence_length": contract.sequence_length,
+        }
+
+        # Apply overrides (user values take precedence)
+        contract_kwargs.update(overrides)
+
+        return cls(**contract_kwargs)
+
     def get_resolved_device(self) -> str:
         """Get the resolved device (auto -> cuda/cpu)."""
         return resolve_device(self.device)
+
+    # =========================================================================
+    # Phase 5 SNwH: Feature Strategy Integration
+    # =========================================================================
+
+    def get_feature_strategy(self) -> "ModelFeatureStrategy":
+        """
+        Get the feature strategy for this model.
+
+        Returns:
+            ModelFeatureStrategy for the configured model
+        """
+        from src.features.strategies import get_strategy_for_model, ModelFeatureStrategy
+
+        return get_strategy_for_model(self.model_name)
+
+    def get_baseline_features(self) -> list[str]:
+        """
+        Get baseline feature list from strategy.
+
+        Returns:
+            List of baseline feature names
+        """
+        strategy = self.get_feature_strategy()
+        return strategy.baseline_features.copy()
+
+    def resolve_features(
+        self,
+        available_features: list[str],
+        strict: bool = True,
+    ) -> list[str]:
+        """
+        Resolve features based on strategy and availability.
+
+        Args:
+            available_features: Features available in the data
+            strict: Raise error if insufficient features
+
+        Returns:
+            List of resolved feature names
+        """
+        from src.features.strategy_manager import FeatureStrategyManager
+
+        manager = FeatureStrategyManager(available_features=available_features)
+        resolved = manager.get_features_for_model(self.model_name, strict=strict)
+
+        # Store resolution result for logging
+        self._resolved_features = resolved
+
+        return resolved.feature_columns

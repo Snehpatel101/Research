@@ -15,8 +15,15 @@ from .strategies import (
 
 from .optimization import (
     OptimizationResult,
+    FeatureOptimizer,
     optimize_features_for_model,
     suggest_features,
+)
+
+from .strategy_manager import (
+    ResolvedFeatureSet,
+    FeatureStrategyManager,
+    get_features_for_model,
 )
 
 __all__ = [
@@ -30,6 +37,10 @@ __all__ = [
     "get_strategy_for_model",
     "get_baseline_features",
     "OptimizationResult",
+    "FeatureOptimizer",
     "optimize_features_for_model",
     "suggest_features",
+    "ResolvedFeatureSet",
+    "FeatureStrategyManager",
+    "get_features_for_model",
 ]

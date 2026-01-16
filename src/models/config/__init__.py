@@ -23,6 +23,7 @@ from .data_requirements import (
     get_models_by_family,
     validate_model_config,
 )
+from .per_model_config import EnsemblePlan, PerModelConfig
 from .environment import Environment, detect_environment, is_colab, resolve_device
 from .exceptions import ConfigError, ConfigValidationError
 from .loaders import (
@@ -82,6 +83,9 @@ __all__ = [
     "validate_model_config",
     "get_all_model_names",
     "get_all_ensemble_names",
+    # Phase 1 SNwH: Per-model configuration
+    "PerModelConfig",
+    "EnsemblePlan",
     # Validation
     "validate_model_config_structure",
     "validate_config",

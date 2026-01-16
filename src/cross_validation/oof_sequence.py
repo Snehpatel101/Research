@@ -61,6 +61,7 @@ class SequenceOOFGenerator:
         sample_weights: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
         symbol_column: str | None = "symbol",
+        strict_validation: bool = True,  # Phase 4 SNwH: strict coverage validation
     ) -> OOFPrediction:
         """
         Generate OOF predictions for a sequence model (LSTM, GRU, TCN, etc.).
@@ -79,15 +80,20 @@ class SequenceOOFGenerator:
             sample_weights: Optional sample weights
             label_end_times: Optional label end times for purging
             symbol_column: Column name for symbol isolation (None to use datetime gaps)
+            strict_validation: If True, raise error on coverage issues (default True).
+                             Set to False to proceed with warning for heterogeneous stacking.
 
         Returns:
-            OOFPrediction with mapped predictions
+            OOFPrediction with mapped predictions and alignment metadata
 
         Note:
             Coverage < 100% is EXPECTED for sequence models due to lookback requirements.
             Each segment (separated by symbol boundaries or time gaps) loses seq_len
             samples at the start. Expected coverage ≈ 1 - (n_segments * seq_len / n_samples).
             Warnings only appear if coverage is significantly below expected (>5% below).
+
+        Raises:
+            ValueError: If strict_validation=True and coverage is unacceptably low
         """
         n_samples = len(X)
         n_classes = 3  # short, neutral, long
@@ -208,18 +214,31 @@ class SequenceOOFGenerator:
         coverage_shortfall = expected_coverage - coverage
 
         if coverage_shortfall > COVERAGE_WARNING_THRESHOLD:
-            logger.warning(
-                f"{model_name}: Coverage {coverage:.2%} is UNEXPECTEDLY LOW "
-                f"(expected ~{expected_coverage:.1%} for seq_len={seq_len}, {n_segments} segments). "
-                f"Missing {n_missing} samples ({coverage_shortfall:.1%} below expected). "
-                f"Investigate: possible data issues or excessive gaps."
-            )
+            # Phase 4 SNwH: Strict validation for heterogeneous stacking
+            if strict_validation:
+                raise ValueError(
+                    f"{model_name}: OOF coverage {coverage:.1%} is unacceptably low "
+                    f"(expected ~{expected_coverage:.1%}). "
+                    f"Missing {n_missing} samples. "
+                    f"This will cause stacking alignment issues. "
+                    f"Set strict_validation=False to proceed with warning."
+                )
+            else:
+                logger.warning(
+                    f"{model_name}: Coverage {coverage:.2%} is UNEXPECTEDLY LOW "
+                    f"(expected ~{expected_coverage:.1%} for seq_len={seq_len}, {n_segments} segments). "
+                    f"Missing {n_missing} samples ({coverage_shortfall:.1%} below expected). "
+                    f"Proceeding anyway (strict_validation=False)."
+                )
         else:
             logger.info(
                 f"{model_name}: Coverage {coverage:.2%} ({n_missing} samples missing) - "
                 f"EXPECTED for seq_len={seq_len} with {n_segments} segments. "
                 f"Expected coverage: ~{expected_coverage:.1%}, actual is within normal range."
             )
+
+        # Phase 4 SNwH: Store original indices for alignment
+        valid_indices = np.where(~np.isnan(oof_preds))[0]
 
         # Build result DataFrame
         oof_df = pd.DataFrame(
@@ -238,6 +257,10 @@ class SequenceOOFGenerator:
             predictions=oof_df,
             fold_info=fold_info,
             coverage=coverage,
+            # Phase 4 SNwH: Alignment metadata for heterogeneous stacking
+            original_indices=valid_indices,
+            sequence_length=seq_len,
+            n_total_samples=n_samples,
         )
 
 

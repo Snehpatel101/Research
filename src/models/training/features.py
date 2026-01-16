@@ -140,6 +140,134 @@ class TrainerFeaturesMixin:
         """Check if feature selection is enabled for this trainer."""
         return self.feature_selector is not None and self.feature_selector.is_enabled
 
+    # =========================================================================
+    # Phase 5 SNwH: Strategy-Based Feature Selection
+    # =========================================================================
+
+    def _get_feature_columns(
+        self,
+        df: pd.DataFrame,
+        use_strategy: bool = True,
+    ) -> list[str]:
+        """
+        Get feature columns for training.
+
+        Args:
+            df: DataFrame to extract features from
+            use_strategy: Whether to use model's feature strategy
+
+        Returns:
+            List of feature column names
+        """
+        if use_strategy:
+            return self._get_strategy_features(df)
+        else:
+            return self._get_all_features(df)
+
+    def _get_strategy_features(self, df: pd.DataFrame) -> list[str]:
+        """
+        Get features based on model's declared strategy.
+
+        This is the SNwH-aware feature selection that ensures
+        each model gets features tailored to its inductive biases.
+
+        Args:
+            df: DataFrame with available features
+
+        Returns:
+            List of feature column names
+        """
+        from src.features.strategy_manager import FeatureStrategyManager
+
+        manager = FeatureStrategyManager(df=df)
+
+        try:
+            resolved = manager.get_features_for_model(
+                self.config.model_name,
+                strict=True,
+            )
+
+            logger.info(
+                f"Using strategy features for {self.config.model_name}: "
+                f"{resolved.n_features} features "
+                f"({resolved.baseline_available}/{resolved.baseline_requested} baseline available)"
+            )
+
+            return resolved.feature_columns
+
+        except ValueError as e:
+            logger.warning(
+                f"Strategy feature resolution failed: {e}. "
+                f"Falling back to all available features."
+            )
+            return self._get_all_features(df)
+
+    def _get_all_features(self, df: pd.DataFrame) -> list[str]:
+        """
+        Get all available feature columns (legacy behavior).
+
+        Args:
+            df: DataFrame to extract features from
+
+        Returns:
+            List of all feature column names
+        """
+        from src.phase1.utils.constants import METADATA_COLUMNS
+        from src.phase1.utils.feature_sets import _is_label_column
+
+        return [
+            col for col in df.columns
+            if col not in METADATA_COLUMNS and not _is_label_column(col)
+        ]
+
+    def _validate_features_for_model(
+        self,
+        feature_columns: list[str],
+    ) -> tuple[bool, list[str]]:
+        """
+        Validate feature set against model requirements.
+
+        Args:
+            feature_columns: List of feature column names
+
+        Returns:
+            (is_valid, list_of_warnings)
+        """
+        from src.features.strategies import get_strategy_for_model
+        from src.contracts import get_model_contract
+
+        warnings = []
+        strategy = get_strategy_for_model(self.config.model_name)
+
+        n_features = len(feature_columns)
+
+        # Check strategy bounds
+        if n_features < strategy.min_features:
+            warnings.append(
+                f"Feature count ({n_features}) below strategy minimum ({strategy.min_features})"
+            )
+
+        if n_features > strategy.max_features:
+            warnings.append(
+                f"Feature count ({n_features}) above strategy maximum ({strategy.max_features})"
+            )
+
+        # Check contract bounds
+        try:
+            contract = get_model_contract(self.config.model_name)
+            if n_features < contract.min_features:
+                warnings.append(
+                    f"Feature count ({n_features}) below contract minimum ({contract.min_features})"
+                )
+            if n_features > contract.max_features:
+                warnings.append(
+                    f"Feature count ({n_features}) above contract maximum ({contract.max_features})"
+                )
+        except ValueError:
+            pass  # No contract available, skip contract validation
+
+        return len(warnings) == 0, warnings
+
     def _resolve_feature_set_columns(self, df: pd.DataFrame) -> list[str] | None:
         """
         Resolve feature set columns based on config.feature_set.

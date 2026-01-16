@@ -48,6 +48,7 @@ from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validat
 from .features import TrainerFeaturesMixin
 
 if TYPE_CHECKING:
+    from src.coordination import TimeframeCoordinator
     from src.feature_selection import FeatureSelectionManager
     from src.phase1.stages.datasets.container import TimeSeriesDataContainer
 
@@ -249,6 +250,141 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         base_models = self.config.model_config.get("base_model_names", [])
         return is_heterogeneous_ensemble(base_models)
+
+    def _get_coordinator(self) -> "TimeframeCoordinator":
+        """
+        Get or create a TimeframeCoordinator for multi-timeframe data loading.
+
+        Returns:
+            TimeframeCoordinator instance configured for this trainer's data directory
+
+        Note:
+            This is a Phase 3 SNwH method for heterogeneous ensemble support.
+        """
+        from src.coordination import TimeframeCoordinator
+
+        # Determine data directory from config
+        # Try output_dir parent structure or fall back to standard path
+        data_dir = self.config.output_dir.parent.parent / "data" / "splits" / "scaled"
+        if not data_dir.exists():
+            # Fall back to current working directory structure
+            from pathlib import Path
+            data_dir = Path("data/splits/scaled")
+
+        return TimeframeCoordinator(
+            data_dir=data_dir,
+            split="train",
+            horizon=self.config.horizon,
+        )
+
+    def _load_data_for_model(
+        self,
+        container: "TimeSeriesDataContainer",
+        model_name: str | None = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Load data for a specific model based on its contract's primary timeframe.
+
+        This method supports Phase 3 SNwH where different models train on different
+        timeframes. If the model's primary timeframe matches the container's timeframe,
+        data is loaded directly. Otherwise, the TimeframeCoordinator loads from the
+        appropriate timeframe-specific files.
+
+        Args:
+            container: TimeSeriesDataContainer with data
+            model_name: Model name (defaults to self.config.model_name)
+
+        Returns:
+            (train_df, val_df) DataFrames for the model's primary timeframe
+        """
+        from src.contracts import get_model_contract
+
+        model_name = model_name or self.config.model_name
+        contract = get_model_contract(model_name)
+        primary_tf = contract.primary_timeframe
+        current_tf = self.config.primary_timeframe
+
+        # If same timeframe, use container directly
+        if primary_tf == current_tf:
+            train_split = container.get_split("train")
+            val_split = container.get_split("val")
+            return train_split.df, val_split.df
+
+        # Otherwise, need to load from correct timeframe via coordinator
+        logger.info(
+            f"Model {model_name} requires {primary_tf} but container has {current_tf}. "
+            f"Loading from timeframe-specific data."
+        )
+
+        # Use coordinator to load correct timeframe
+        coordinator = self._get_coordinator()
+        coordinator.load_timeframes([primary_tf])
+
+        # Get train data
+        train_df = coordinator.get_timeframe_data(primary_tf).df
+
+        # Load val data separately
+        from src.coordination import TimeframeCoordinator
+        coordinator_val = TimeframeCoordinator(
+            data_dir=coordinator.data_dir,
+            split="val",
+            horizon=self.config.horizon,
+        )
+        coordinator_val.load_timeframes([primary_tf])
+        val_df = coordinator_val.get_timeframe_data(primary_tf).df
+
+        return train_df, val_df
+
+    def _load_heterogeneous_data(
+        self,
+        container: "TimeSeriesDataContainer",
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Load data for heterogeneous ensemble with multiple timeframes.
+
+        Each base model may need a different timeframe, so we load all required
+        timeframes and return the anchor (smallest) timeframe as the primary data.
+
+        Args:
+            container: TimeSeriesDataContainer with data
+
+        Returns:
+            (train_df, val_df) for anchor timeframe
+        """
+        from src.contracts import get_model_contract
+        from src.coordination import TimeframeCoordinator
+
+        base_models = self.config.model_config.get("base_model_names", [])
+
+        # Get all required timeframes
+        required_tfs = set()
+        for model_name in base_models:
+            contract = get_model_contract(model_name)
+            required_tfs.add(contract.primary_timeframe)
+            required_tfs.update(contract.mtf_timeframes)
+
+        logger.info(
+            f"Heterogeneous ensemble requires timeframes: {sorted(required_tfs)}"
+        )
+
+        # Load all timeframes
+        coordinator = self._get_coordinator()
+        coordinator.load_timeframes(list(required_tfs))
+
+        # Return anchor timeframe data (smallest)
+        anchor_tf = coordinator.anchor_timeframe
+        train_df = coordinator.get_timeframe_data(anchor_tf).df
+
+        # Load val data
+        coordinator_val = TimeframeCoordinator(
+            data_dir=coordinator.data_dir,
+            split="val",
+            horizon=self.config.horizon,
+        )
+        coordinator_val.load_timeframes(list(required_tfs))
+        val_df = coordinator_val.get_timeframe_data(anchor_tf).df
+
+        return train_df, val_df
 
     def run(
         self,

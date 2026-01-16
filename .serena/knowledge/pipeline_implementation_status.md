@@ -2,6 +2,20 @@
 
 ## Current State (What Works)
 
+### SNwH Phase 0: Canonical Contracts ✅ NEW
+- **Status:** Complete (81 tests passing)
+- **Implemented:** 2026-01-16
+- **Files Created:**
+  - `src/contracts/data_contract.py` - DataContract, DataRank, FeatureMode, MTFMode
+  - `src/contracts/model_contract.py` - ModelContract, MODEL_CONTRACTS (23 models)
+  - `src/contracts/artifact_manifest.py` - ArtifactManifest for reproducibility
+- **Key Features:**
+  - All 23 models have contracts with input_rank, primary_timeframe, mtf_mode
+  - DataContract validates arrays and DataFrames
+  - Schema hash for reproducibility
+  - Artifact manifest for lineage tracking
+- **See:** `.serena/knowledge/phase0_contracts_implementation.md` for details
+
 ### Phase 1: Canonical OHLCV Ingestion ✅
 - Schema validation (OHLCV columns, data types)
 - Duplicate removal (keep last)
