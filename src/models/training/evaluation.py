@@ -137,7 +137,18 @@ class TrainerEvaluationMixin:
                         f"Available: {len(available_features)}/{len(self._feature_set_columns)} features. "
                         f"Ensure test data was processed with the same pipeline as training data."
                     )
+                n_features_before = X_test_df.shape[1]
                 X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
+
+                # MOD-004: Post-filter shape validation for heterogeneous test data
+                expected_n_features = len([c for c in self._feature_set_columns if c in X_test_df.columns])
+                if X_test_df.shape[1] == 0:
+                    raise ValueError(
+                        f"MOD-004: No features remain after filtering test data for heterogeneous ensemble. "
+                        f"Had {n_features_before} features before, 0 after. "
+                        f"Check that feature_set_columns matches test data columns."
+                    )
+
                 logger.debug(
                     f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
                 )
@@ -209,7 +220,17 @@ class TrainerEvaluationMixin:
                         f"Available: {len(available_features)}/{len(self._feature_set_columns)} features. "
                         f"Ensure test data was processed with the same pipeline as training data."
                     )
+                n_features_before = X_test_df.shape[1]
                 X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
+
+                # MOD-004: Post-filter shape validation for tabular test data
+                if X_test_df.shape[1] == 0:
+                    raise ValueError(
+                        f"MOD-004: No features remain after filtering test data for tabular model. "
+                        f"Had {n_features_before} features before, 0 after. "
+                        f"Check that feature_set_columns matches test data columns."
+                    )
+
                 logger.debug(
                     f"Applied feature set filter to test set: {X_test_df.shape[1]} features"
                 )

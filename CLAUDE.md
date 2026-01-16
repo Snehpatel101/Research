@@ -35,11 +35,16 @@ Model-Family Adapters
   └─ Neural (3D/4D): LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
   ↓
 Training (single models + heterogeneous ensembles via meta-learner stacking)
+  ├─ Walk-forward validation (expanding/sliding windows)
+  ├─ Regime-aware training (volatility/trend/composite regimes)
+  └─ Meta-labeling (Lopez de Prado methodology)
   ↓
 Standardized Artifacts (models, predictions, metrics)
 ```
 
 **Key Architectural Points:**
+- **UnifiedConfig:** Single source of truth for all configuration (consolidates GlobalConfig, MLConfig, TrainerConfig, PipelineConfig)
+- **Phase Registry:** Automatic dependency tracking between pipeline phases with state management
 - **ONE Canonical Source:** Single 1-min OHLCV dataset → ✅ 9 intraday timeframes implemented
 - **Per-Model Timeframe Configuration:** EACH base model independently chooses its primary training timeframe:
   - CatBoost trains on 15min (derived from 1-min canonical)
@@ -55,12 +60,15 @@ Standardized Artifacts (models, predictions, metrics)
 - **All Derived from 1-min:** Every timeframe (5m, 10m, 15m, 1h) is resampled from the canonical 1-min OHLCV
 - **Heterogeneous Ensembles:** 3-4 base families (different TFs, different features) → 1 meta-learner
 - **Direct Stacking:** Meta-learner trained on OOF predictions from heterogeneous bases
+- **Memory Management:** Automatic caching, cleanup, and OOM recovery for large datasets
 
 **Implementation Status:**
 - Phases 1-6: Complete (19 base models + 4 meta-learners = 23 models across 6 families)
 - Phase 7: ✅ Complete (heterogeneous stacking in trainer.py implemented)
 - MTF Stage 2: ✅ Complete (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - MTF Stages 3-6: ✅ Complete (all stages iterate over effective_output_timeframes; multi-TF enabled via --process-all-timeframes)
+- Training Modes: ✅ Complete (walk-forward, regime-aware, meta-labeling)
+- State Management: ✅ Complete (robust phase tracking with versioning and rollback)
 
 **Documentation:** See `docs/ARCHITECTURE.md` and `docs/implementation/` for comprehensive guides.
 
@@ -600,12 +608,13 @@ from src.models.feature_selection import FeatureSelectionManager  # warns
 
 ---
 
-## Centralized Configuration (Facade)
+## Centralized Configuration
 
-Unified config access via `src/config/` facade (re-exports from existing locations):
+Unified config access via `src/config/` package with UnifiedConfig as single source of truth:
 
 ```
 src/config/
+├── unified.py          → UnifiedConfig (single source of truth for all configuration)
 ├── __init__.py         → Top-level exports (TrainerConfig, CANONICAL_TIMEFRAMES, etc.)
 ├── constants/          → Re-exports from src/common/
 │   └── __init__.py     → CANONICAL_TIMEFRAMES, DEFAULT_SPLIT_RATIOS, etc.
@@ -615,9 +624,58 @@ src/config/
     └── __init__.py     → MODEL_DATA_REQUIREMENTS, ModelFamily, etc.
 ```
 
-**Usage:**
+**UnifiedConfig (New - Single Source of Truth):**
 ```python
-# Unified imports (recommended for new code)
+from src.config.unified import UnifiedConfig
+
+# Load from YAML
+config = UnifiedConfig.from_yaml("config/global.yaml")
+
+# Or create with overrides
+config = UnifiedConfig(
+    symbol="MES",
+    horizons=HorizonsSection(active=[5, 10, 15, 20]),
+    training=TrainingSection(batch_size=512, max_epochs=100),
+)
+
+# Access nested configuration
+batch_size = config.training.batch_size
+active_horizons = config.horizons.active
+primary_tf = config.timeframes.default_primary
+
+# Convert to legacy configs (backward compatibility)
+trainer_config = config.to_trainer_config(model_name="xgboost")
+pipeline_config = config.to_pipeline_config()
+ml_config = config.to_ml_config(models=["xgboost", "lstm"])
+
+# Save configuration
+config.save_yaml("experiments/runs/{run_id}/config.yaml")
+
+# Validate configuration
+errors = config.validate()
+if not errors.is_valid:
+    print(f"Config errors: {errors.errors}")
+```
+
+**UnifiedConfig Sections:**
+- `timeframes` - Default primary TF, canonical ladder (9 TFs), extended TFs
+- `splits` - Train/val/test ratios (70/15/15)
+- `purge_embargo` - Purge multiplier, embargo time, min embargo bars
+- `horizons` - Supported, active, default horizons
+- `features` - Feature engineering params (SMA/EMA periods, RSI, MACD, Bollinger)
+- `mtf` - Multi-timeframe mode and timeframes
+- `training` - Batch size, epochs, early stopping, device, mixed precision
+- `calibration` - Calibration enabled/method
+- `optimization` - GA and Optuna hyperparameter tuning
+- `cross_validation` - CV splits, purge/embargo
+- `processing` - N jobs, batch symbols allowed
+- `scaler` - Default scaler type (robust, standard, minmax)
+- `tracking` - Experiment tracking (local, mlflow, wandb)
+- `oom_recovery` - Out-of-memory recovery settings
+
+**Legacy Config Access (Backward Compatible):**
+```python
+# Facade imports (recommended for new code)
 from src.config import TrainerConfig, CANONICAL_TIMEFRAMES, MODEL_DATA_REQUIREMENTS
 from src.config.constants import DEFAULT_SPLIT_RATIOS
 from src.config.models import detect_environment
@@ -627,6 +685,498 @@ from src.config.pipeline import ModelFamily
 from src.common.timeframes import CANONICAL_TIMEFRAMES
 from src.models.config import TrainerConfig
 from src.phase1.config import MODEL_DATA_REQUIREMENTS
+```
+
+**Benefits:**
+- **Single source of truth** - All configuration in one place
+- **Schema validation** - Type checking and validation
+- **Backward compatibility** - Legacy configs still work via delegation
+- **Version control** - Save/load config with git-friendly YAML
+- **Config drift detection** - Hash tracking alerts changes
+
+---
+
+## State Management
+
+The pipeline implements robust state tracking with versioning, validation, and rollback capabilities:
+
+```
+src/ml_pipeline/state.py
+├── PipelineState       → Core state management class
+├── PhaseState          → Enum: NOT_STARTED, IN_PROGRESS, COMPLETED, FAILED, SKIPPED
+├── PhaseResult         → Detailed phase execution results with metrics
+├── StateVersion        → Schema versioning (V1 legacy, V2 current)
+└── compute_config_hash → Config drift detection
+```
+
+**Features:**
+- **Thread-safe state updates** - RLock ensures concurrent safety
+- **Schema versioning** - Forward/backward compatibility (V1 legacy, V2 current)
+- **Config hash tracking** - Detects configuration drift across runs
+- **Detailed phase tracking** - Status, timing, metrics, artifacts, checkpoints
+- **Rollback capability** - Restore to previous phase state (20 snapshots kept)
+- **State comparison** - Diff two states for debugging with StateDiff
+- **Validation** - Comprehensive checks for state consistency
+
+**Phase States:**
+```python
+class PhaseState(Enum):
+    NOT_STARTED = "not_started"  # Phase not yet executed
+    IN_PROGRESS = "in_progress"  # Currently executing
+    COMPLETED = "completed"      # Successfully finished
+    FAILED = "failed"            # Execution failed with error
+    SKIPPED = "skipped"          # Intentionally skipped
+```
+
+**Usage:**
+```python
+from src.ml_pipeline.state import PipelineState, PhaseState
+
+# Create new state
+state = PipelineState(run_id="20260116_120000_abc123", config_hash="abc123def456")
+
+# Start a phase
+state.start_phase("data_generation")
+
+# Complete with metrics
+state.complete_phase("data_generation", metrics={"rows": 10000, "features": 180})
+
+# Check dependencies before starting
+if state.can_start_phase("feature_engineering", dependencies=["data_generation"]):
+    state.start_phase("feature_engineering")
+
+# Handle failure
+try:
+    run_phase()
+except Exception as e:
+    state.fail_phase("feature_engineering", error=str(e))
+
+# Skip a phase
+state.skip_phase("optional_validation", reason="Disabled in config")
+
+# Save and load
+state.save()  # Saves to experiments/runs/{run_id}/pipeline_state.json
+loaded = PipelineState.load("20260116_120000_abc123")
+
+# Validate state consistency
+errors = state.validate()
+if errors:
+    print(f"State validation failed: {errors}")
+
+# Rollback to previous phase
+state.rollback_to_phase("feature_engineering")
+
+# Compare states for debugging
+diff = state.diff(other_state)
+print(diff.to_summary())
+```
+
+**State File Format (V2):**
+```json
+{
+  "__version__": "v2",
+  "run_id": "20260116_120000_abc123",
+  "created_at": "2026-01-16T12:00:00",
+  "updated_at": "2026-01-16T12:15:30",
+  "config_hash": "abc123def456",
+  "current_phase": "training",
+  "phases": {
+    "data_generation": {
+      "__type__": "PhaseResult",
+      "status": "completed",
+      "started_at": "2026-01-16T12:00:00",
+      "completed_at": "2026-01-16T12:05:00",
+      "duration_seconds": 300.0,
+      "metrics": {"rows": 10000},
+      "artifacts": ["features_5min.parquet"]
+    },
+    "training": {
+      "__type__": "PhaseResult",
+      "status": "in_progress",
+      "started_at": "2026-01-16T12:10:00"
+    }
+  },
+  "metadata": {"symbol": "MES", "horizon": 20}
+}
+```
+
+**Benefits:**
+- **Resumable pipelines** - Restart from last completed phase
+- **Debugging** - Full audit trail with timing and metrics
+- **Config drift detection** - Hash comparison alerts configuration changes
+- **Robustness** - Validation prevents invalid state transitions
+- **Compatibility** - V1 legacy state automatically upgraded to V2
+
+---
+
+## Training Modes
+
+The factory supports three specialized training strategies beyond standard single-shot training:
+
+### Walk-Forward Validation
+
+Time-series aware validation with expanding or sliding windows:
+
+```python
+from src.training.modes import WalkForwardTrainer, WalkForwardTrainerConfig
+
+config = WalkForwardTrainerConfig(
+    n_windows=5,                    # Number of train/test windows
+    window_type="expanding",        # "expanding" or "sliding"
+    test_size_bars=1000,            # Size of each test window
+    min_train_size_bars=5000,       # Minimum training data required
+    purge_bars=60,                  # Purge between train/test
+    embargo_bars=1440,              # Embargo after each test window
+)
+
+wf_trainer = WalkForwardTrainer(experiment_config, config)
+results = wf_trainer.run(container)
+```
+
+**Features:**
+- **Expanding windows** - Training set grows, test set slides forward (more data over time)
+- **Sliding windows** - Fixed-size training window slides forward (stationary assumption)
+- **Proper purge/embargo** - Prevents leakage between windows
+- **Aggregate metrics** - Combined performance across all windows
+
+**Use Cases:**
+- Simulate live trading deployment (realistic out-of-sample testing)
+- Detect model degradation over time
+- Validate strategy robustness across market regimes
+
+### Regime-Aware Training
+
+Train models specific to market regimes (volatility, trend, or composite):
+
+```python
+from src.training.modes import RegimeAwareTrainer, RegimeAwareConfig
+
+config = RegimeAwareConfig(
+    regime_type="composite",         # "volatility", "trend", or "composite"
+    train_separate_models=True,      # Train one model per regime vs. single model with regime features
+    regime_features_mode="indicators", # "indicators" or "labels_only"
+)
+
+regime_trainer = RegimeAwareTrainer(experiment_config, config)
+results = regime_trainer.run(container)
+```
+
+**Regime Types:**
+- **Volatility regimes:** Low, Medium, High (based on rolling volatility percentiles)
+- **Trend regimes:** Downtrend, Sideways, Uptrend (based on trend strength)
+- **Composite regimes:** 9 combinations (e.g., "low_vol_uptrend", "high_vol_downtrend")
+
+**Training Strategies:**
+- `train_separate_models=True` - Train N separate models (one per regime), select at inference based on current regime
+- `train_separate_models=False` - Single model with regime indicator features
+
+**Use Cases:**
+- Capture regime-specific patterns (e.g., mean reversion in low volatility, momentum in high volatility)
+- Improve robustness by specializing models
+- Analyze per-regime performance
+
+### Meta-Labeling
+
+Lopez de Prado's meta-labeling methodology - use ML to size bets, not just predict direction:
+
+```python
+from src.training.modes import MetaLabelingTrainer, MetaLabelingConfig
+
+config = MetaLabelingConfig(
+    primary_model="xgboost",         # Base model for directional predictions
+    meta_model="logistic",           # Meta-model for bet sizing
+    meta_label_type="bet_size",      # "bet_size" or "directional"
+    confidence_threshold=0.55,       # Only bet when primary model confident
+)
+
+meta_trainer = MetaLabelingTrainer(experiment_config, config)
+results = meta_trainer.run(container)
+```
+
+**Workflow:**
+1. **Primary model** predicts direction (long/short/neutral)
+2. **Meta-model** predicts bet size (0 to 1) based on:
+   - Primary model's predicted probability
+   - Feature quality metrics
+   - Historical accuracy in similar conditions
+3. **Final position** = direction × bet_size
+
+**Meta-Label Types:**
+- **bet_size:** Continuous [0, 1] - how much to bet given primary prediction
+- **directional:** Binary - whether to take the primary model's bet or not
+
+**Use Cases:**
+- Reduce false positives (meta-model filters low-confidence predictions)
+- Dynamic position sizing based on conviction
+- Separate "what to predict" from "how much to bet"
+
+**CLI Usage:**
+```bash
+# Walk-forward validation
+python scripts/train_model.py --model xgboost --horizon 20 \
+  --training-mode walk_forward --n-windows 5 --window-type expanding
+
+# Regime-aware training
+python scripts/train_model.py --model lstm --horizon 20 \
+  --training-mode regime_aware --regime-type composite --train-separate-models
+
+# Meta-labeling
+python scripts/train_model.py --horizon 20 \
+  --training-mode meta_labeling --primary-model xgboost --meta-model logistic
+```
+
+---
+
+## Memory Management
+
+The pipeline includes comprehensive memory management to handle large datasets and prevent OOM errors:
+
+```
+src/utils/
+├── memory.py    → MemoryManager, MemoryInfo, memory tracking utilities
+└── cache.py     → DataCache, intelligent caching with automatic invalidation
+```
+
+**Features:**
+
+### MemoryManager
+```python
+from src.utils.memory import MemoryManager, get_memory_info, check_available_memory
+
+# Get current memory status
+info = get_memory_info()
+print(f"Available: {info.available_gb:.2f} GB / {info.total_gb:.2f} GB")
+print(f"Used: {info.percent_used:.1f}%")
+
+# Check if operation is safe
+if check_available_memory(required_gb=4.0):
+    # Proceed with operation requiring 4GB
+    pass
+else:
+    # Fall back to smaller batch size
+    pass
+
+# Estimate array memory usage
+from src.utils.memory import estimate_array_size
+size_bytes = estimate_array_size(large_array)
+print(f"Array size: {size_bytes / 1024**3:.2f} GB")
+```
+
+### DataCache
+```python
+from src.utils.cache import DataCache
+
+cache = DataCache()
+
+# Cache features with source file tracking
+features = cache.get_or_compute(
+    key="features_5min_MES",
+    compute_fn=lambda: expensive_feature_computation(),
+    source_files=["data/raw/MES_1m.parquet"],
+)
+
+# Cache automatically invalidates if source files change
+# Cache falls back to disk for large items (>500MB)
+
+# Clear cache manually
+cache.clear()
+```
+
+**Cache Features:**
+- **Automatic invalidation** - Based on source file modification times
+- **Disk fallback** - Large datasets (>500MB) automatically cached to disk
+- **Memory limits** - Configurable max memory (default 2GB)
+- **Thread-safe** - Safe for concurrent access
+- **TTL support** - Optional time-to-live for cache entries
+
+### OOM Recovery
+```python
+from src.models.config import TrainerConfig
+
+config = TrainerConfig(
+    model_name="lstm",
+    batch_size=512,
+    oom_recovery_enabled=True,      # Enable automatic OOM recovery
+    oom_max_retries=3,              # Retry up to 3 times
+    oom_batch_reduction_factor=0.5, # Halve batch size on OOM
+    oom_min_batch_size=8,           # Don't go below 8
+)
+
+# If OOM occurs during training:
+# 1. Catches torch.cuda.OutOfMemoryError
+# 2. Reduces batch_size = 512 * 0.5 = 256
+# 3. Clears CUDA cache and retries
+# 4. If OOM again: batch_size = 256 * 0.5 = 128
+# 5. Repeats until success or min_batch_size reached
+```
+
+**Ensemble Memory Cleanup:**
+```python
+from src.models.ensemble.stacking import StackingEnsemble
+
+ensemble = StackingEnsemble(...)
+ensemble.fit(X_train, y_train, X_val, y_val)
+
+# Automatic memory cleanup after training
+# - Deletes base model OOF predictions
+# - Clears intermediate feature matrices
+# - Triggers garbage collection
+```
+
+**Memory Utilities:**
+- `estimate_array_size()` - Estimate NumPy array memory usage
+- `estimate_object_size()` - Estimate arbitrary Python object size
+- `clear_cache()` - Manual cache clearing
+- `@memory_tracked` - Decorator to log memory usage of functions
+- `check_available_memory(required_gb)` - Safety check before large allocations
+
+**Benefits:**
+- **Prevents OOM crashes** - Automatic batch size reduction and retry
+- **Faster iteration** - Intelligent caching avoids recomputation
+- **Disk overflow** - Large datasets automatically spill to disk
+- **Debugging** - Memory tracking helps identify bottlenecks
+
+---
+
+## Unified Training System (2026-01-16)
+
+**NEW: Notebook-first "build-a-bear" interface for ML experimentation**
+
+### Overview
+
+The unified training system provides a simple, powerful interface for training models with:
+- **Per-model feature strategies** - Each model gets baseline features tailored to its inductive biases
+- **Per-model feature optimization** - Optuna-based pruning from baseline to optimal subset
+- **Per-model timeframe selection** - Different models train on different timeframes (all from same 1-min source)
+- **Heterogeneous ensembles** - Combine models with different features and timeframes
+
+### Quick Start (Notebook)
+
+```python
+from src.training import TrainingOrchestrator, ExperimentConfig, ModelConfig
+
+config = ExperimentConfig(
+    symbol="MES",
+    horizons=[20],
+    models=[
+        ModelConfig(name="xgboost", timeframe="15min", optimize_features=True, feature_opt_trials=30),
+        ModelConfig(name="lstm", timeframe="5min", optimize_features=True, sequence_length=60),
+        ModelConfig(name="patchtst", timeframe="1min"),  # Raw OHLCV only
+    ],
+    build_ensemble=True,
+    meta_learner="ridge_meta",
+)
+
+orchestrator = TrainingOrchestrator(config)
+results = orchestrator.run()
+orchestrator.display_results()
+```
+
+**Output:**
+- XGBoost trains on optimized 15min features (~60 from ~100 baseline)
+- LSTM trains on optimized 5min features (~50 from ~80 baseline)
+- PatchTST uses raw 1min OHLCV (5 features, no optimization)
+- Meta-learner stacks all 3 predictions
+
+**All from same 1-min canonical OHLCV source!**
+
+### Feature Strategy System
+
+Each of 23 models has a tailored baseline feature strategy:
+
+**Location:** `src/features/strategies.py`
+
+```python
+from src.features.strategies import MODEL_FEATURE_STRATEGIES
+
+# XGBoost strategy
+strategy = MODEL_FEATURE_STRATEGIES["xgboost"]
+# {
+#   "baseline_features": ["momentum", "volatility", "volume", "microstructure", "mtf"],  # ~100 features
+#   "preferred_families": ["boosting"],
+#   "mtf_mode": "indicators",
+#   "min_features": 20,
+#   "max_features": 120,
+# }
+
+# LSTM strategy
+strategy = MODEL_FEATURE_STRATEGIES["lstm"]
+# {
+#   "baseline_features": ["momentum", "volatility", "wavelets", "mtf"],  # ~80 features
+#   "preferred_families": ["neural"],
+#   "mtf_mode": "indicators",
+#   "min_features": 30,
+#   "max_features": 100,
+# }
+
+# PatchTST strategy
+strategy = MODEL_FEATURE_STRATEGIES["patchtst"]
+# {
+#   "baseline_features": ["raw_ohlcv"],  # 5 features only (Open, High, Low, Close, Volume)
+#   "preferred_families": ["transformer"],
+#   "mtf_mode": "multi_stream",  # Uses multi-TF ingestion
+#   "min_features": 4,
+#   "max_features": 5,
+# }
+```
+
+### Feature Optimization Flow
+
+```
+1. Pipeline generates ~180 total features
+   ↓
+2. Model-specific baseline strategy selects subset
+   - XGBoost: ~100 features (momentum + volatility + volume + microstructure + MTF)
+   - LSTM: ~80 features (momentum + volatility + wavelets + MTF)
+   - PatchTST: 5 features (raw OHLCV only)
+   ↓
+3. IF optimize_features=True, run Optuna
+   - Prune from baseline to optimal subset
+   - Example: XGBoost 100 → 60 features
+   ↓
+4. Train model on optimized (or baseline) features
+```
+
+### Architecture Files
+
+**Configuration:**
+- `src/training/config.py` - ExperimentConfig, ModelConfig dataclasses
+- `src/features/strategies.py` - MODEL_FEATURE_STRATEGIES for 23 models
+- `src/features/optimization.py` - Optuna-based feature pruning
+
+**Orchestration:**
+- `src/training/orchestrator.py` - TrainingOrchestrator (main controller)
+- `src/training/__init__.py` - Exports ExperimentConfig, ModelConfig
+
+**Documentation:**
+- `docs/implementation/UNIFIED_TRAINING_SYSTEM.md` - Complete architecture guide
+- `docs/implementation/ORCHESTRATOR_COMPLETION_PLAN.md` - Implementation details
+- `notebooks/unified_training_colab.ipynb` - Working notebook example
+
+### Key Design Decisions
+
+1. **Keep ALL ~180 features** - All features ARE important, just intelligently allocated
+2. **Per-model strategies** - Different models get different baseline features
+3. **Optuna optimization** - Prune from baseline to optimal subset per model
+4. **Per-model timeframes** - Different models train on different TFs from same 1-min source
+5. **Backward compatible** - Old dict-based config still works
+
+### Feature Family Names
+
+When specifying baseline features in strategies, use these family names:
+
+```python
+FEATURE_FAMILIES = {
+    "momentum": ["rsi", "macd", "stoch", "cci", ...],           # ~40 features
+    "volatility": ["atr", "bbands", "keltner", ...],            # ~25 features
+    "volume": ["obv", "vwap", "adl", "mfi", ...],               # ~20 features
+    "microstructure": ["spread", "imbalance", "vpin", ...],     # ~30 features
+    "wavelets": ["cwt_*", "dwt_*", ...],                        # ~25 features
+    "mtf": ["*_1m", "*_5m", "*_15m", "*_1h", ...],             # ~30 MTF indicators
+    "regime": ["regime_*", "volatility_regime", ...],           # ~10 features
+    "temporal": ["hour", "day_of_week", ...],                   # ~5 features
+    "raw_ohlcv": ["open", "high", "low", "close", "volume"],   # 5 features
+}
 ```
 
 ---
@@ -657,6 +1207,18 @@ python scripts/train_model.py --model stacking --horizon 20 --base-models lstm,g
 # Heterogeneous ensemble training (Phase 7 - now supported!)
 python scripts/train_model.py --model stacking --horizon 20 \
   --base-models xgboost,lstm,patchtst --meta-learner ridge_meta
+
+# Walk-forward validation training
+python scripts/train_model.py --model xgboost --horizon 20 \
+  --training-mode walk_forward --n-windows 5 --window-type expanding
+
+# Regime-aware training
+python scripts/train_model.py --model lstm --horizon 20 \
+  --training-mode regime_aware --regime-type composite --train-separate-models
+
+# Meta-labeling training
+python scripts/train_model.py --horizon 20 \
+  --training-mode meta_labeling --primary-model xgboost --meta-model logistic
 
 # Run cross-validation (Phase 3)
 python scripts/run_cv.py --models xgboost --horizons 20 --n-splits 5

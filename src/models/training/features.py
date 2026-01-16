@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 import pandas as pd
 
@@ -28,8 +28,19 @@ except ImportError:
 
 if TYPE_CHECKING:
     from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.models.config.trainer_config import TrainerConfig
+    from src.models.base import BaseModel
+    from src.feature_selection import FeatureSelectionManager
 
 logger = logging.getLogger(__name__)
+
+
+class _HasTrainerAttributes(Protocol):
+    """Protocol for classes that use TrainerFeaturesMixin."""
+
+    config: TrainerConfig
+    model: BaseModel | None
+    feature_selector: FeatureSelectionManager | None
 
 
 class TrainerFeaturesMixin:
@@ -41,6 +52,11 @@ class TrainerFeaturesMixin:
     - self.model: Instantiated model from registry
     - self.feature_selector: FeatureSelectionManager instance
     """
+
+    # Type stubs for mixin - actual values provided by composing class
+    config: Any
+    model: Any
+    feature_selector: Any
 
     def _validate_feature_set(self) -> None:
         """
@@ -209,6 +225,9 @@ class TrainerFeaturesMixin:
 
         Returns:
             Filtered DataFrame
+
+        Raises:
+            ValueError: If no features remain after filtering (MOD-004)
         """
         if feature_columns is None:
             return X_df
@@ -223,7 +242,27 @@ class TrainerFeaturesMixin:
                 f"but {len(missing_cols)} are missing from data: {list(missing_cols)[:5]}..."
             )
 
-        return X_df[available_cols]
+        # MOD-004: Validate that we have features after filtering
+        if len(available_cols) == 0:
+            raise ValueError(
+                f"MOD-004: No features remain after filtering. "
+                f"Requested {len(feature_columns)} features but none exist in data. "
+                f"Available columns: {list(X_df.columns)[:10]}{'...' if len(X_df.columns) > 10 else ''}"
+            )
+
+        X_filtered = X_df[available_cols]
+
+        # MOD-004: Post-filter shape validation
+        expected_n_features = len(available_cols)
+        actual_n_features = X_filtered.shape[1]
+        if actual_n_features != expected_n_features:
+            raise ValueError(
+                f"MOD-004: Shape mismatch after feature filtering - "
+                f"expected {expected_n_features} features but got {actual_n_features}. "
+                f"This indicates a bug in the filtering logic."
+            )
+
+        return X_filtered
 
     def _get_sequence_model_feature_columns(
         self,

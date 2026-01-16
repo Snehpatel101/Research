@@ -18,6 +18,7 @@ import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
 from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+from src.utils.memory import estimate_array_size
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
@@ -29,6 +30,9 @@ from .validator import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Memory warning threshold: warn if cached sequence data exceeds this size
+_CACHE_SIZE_WARNING_THRESHOLD_BYTES = 1024 * 1024 * 1024  # 1GB
 
 
 @register(
@@ -71,8 +75,11 @@ class StackingEnsemble(BaseModel):
         self._is_heterogeneous: bool = False
         self._tabular_models: set[str] = set()
         self._sequence_models: set[str] = set()
-        self._X_train_seq: np.ndarray | None = None  # Cached sequence data
+        # Cached sequence data for heterogeneous ensembles (MOD-007)
+        # These are cleared after training via clear_cache() to free memory
+        self._X_train_seq: np.ndarray | None = None
         self._X_val_seq: np.ndarray | None = None
+        self._seq_cache_size_bytes: int = 0  # Track cached data size
         # Diversity analysis
         self._diversity_metrics: DiversityMetrics | None = None
         self._diversity_analyzer: DiversityAnalyzer | None = None
@@ -286,9 +293,29 @@ class StackingEnsemble(BaseModel):
             self._validate_input_shape(X_train, "X_train")
             self._validate_input_shape(X_val, "X_val")
 
-        # Store sequence data for heterogeneous ensembles
+        # Store sequence data for heterogeneous ensembles (MOD-007)
+        # Cache with memory size tracking and warnings
         self._X_train_seq = X_train_seq
         self._X_val_seq = X_val_seq
+        self._seq_cache_size_bytes = 0
+
+        if X_train_seq is not None or X_val_seq is not None:
+            train_size = estimate_array_size(X_train_seq)
+            val_size = estimate_array_size(X_val_seq)
+            self._seq_cache_size_bytes = train_size + val_size
+
+            # Warn if cached data exceeds threshold (MOD-007)
+            if self._seq_cache_size_bytes > _CACHE_SIZE_WARNING_THRESHOLD_BYTES:
+                logger.warning(
+                    f"MOD-007: Caching large sequence data for heterogeneous ensemble: "
+                    f"{self._seq_cache_size_bytes / 1024**3:.2f}GB "
+                    f"(train={train_size / 1024**2:.1f}MB, val={val_size / 1024**2:.1f}MB). "
+                    f"Consider calling clear_cache() after training to free memory."
+                )
+            else:
+                logger.debug(
+                    f"MOD-007: Caching sequence data: {self._seq_cache_size_bytes / 1024**2:.1f}MB"
+                )
 
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         self._n_folds = train_config.get("n_folds", 5)
@@ -378,13 +405,39 @@ class StackingEnsemble(BaseModel):
         if passthrough:
             if oof_predictions.shape[0] < X_train.shape[0]:
                 offset = X_train.shape[0] - oof_predictions.shape[0]
+
+                # MOD-001: Validate offset is reasonable (should match seq_len-1 for sequence models)
+                # If offset exceeds 50% of training data, something is wrong
+                max_reasonable_offset = X_train.shape[0] // 2
+                if offset > max_reasonable_offset:
+                    raise ValueError(
+                        f"MOD-001: Passthrough offset {offset} exceeds 50% of training data "
+                        f"({X_train.shape[0]} samples). This indicates a severe data alignment issue. "
+                        f"Expected offset should match sequence_length-1 for sequence models."
+                    )
+
                 X_train_trimmed = X_train[offset:]
                 y_train_meta = y_train[offset:]
                 if sample_weights is not None:
                     sample_weights_meta = sample_weights[offset:]
+
+                # MOD-001: Validate shapes after trimming
+                if X_train_trimmed.shape[0] != oof_predictions.shape[0]:
+                    raise ValueError(
+                        f"MOD-001: Shape mismatch after passthrough trimming - "
+                        f"X_train_trimmed.shape[0]={X_train_trimmed.shape[0]} != "
+                        f"oof_predictions.shape[0]={oof_predictions.shape[0]}"
+                    )
+                if len(y_train_meta) != oof_predictions.shape[0]:
+                    raise ValueError(
+                        f"MOD-001: Label alignment error after passthrough trimming - "
+                        f"len(y_train_meta)={len(y_train_meta)} != "
+                        f"oof_predictions.shape[0]={oof_predictions.shape[0]}"
+                    )
+
                 logger.info(
-                    f"Passthrough mode: trimmed X_train from {X_train.shape[0]} to "
-                    f"{X_train_trimmed.shape[0]} samples to match OOF predictions"
+                    f"MOD-001: Passthrough mode - trimmed X_train from {X_train.shape[0]} to "
+                    f"{X_train_trimmed.shape[0]} samples (offset={offset}) to match OOF predictions"
                 )
                 meta_features_train = np.hstack([X_train_trimmed, oof_predictions])
             else:
@@ -552,8 +605,27 @@ class StackingEnsemble(BaseModel):
         seq_offset = 0
         if self._is_heterogeneous and X_train_seq is not None:
             seq_offset = n_samples - X_train_seq.shape[0]
-            logger.debug(
-                f"Heterogeneous data alignment: tabular={n_samples}, "
+
+            # MOD-002: Validate seq_offset is reasonable
+            # If offset exceeds 50% of data, sequence models will have insufficient samples
+            max_reasonable_offset = n_samples // 2
+            if seq_offset > max_reasonable_offset:
+                raise ValueError(
+                    f"MOD-002: Sequence offset {seq_offset} exceeds 50% of training data "
+                    f"({n_samples} samples). Sequence data has only {X_train_seq.shape[0]} samples. "
+                    f"This indicates the sequence_length is too large for the dataset size. "
+                    f"Consider reducing sequence_length or using more training data."
+                )
+
+            if seq_offset < 0:
+                raise ValueError(
+                    f"MOD-002: Invalid negative sequence offset {seq_offset}. "
+                    f"Sequence data ({X_train_seq.shape[0]}) has more samples than tabular data ({n_samples}). "
+                    f"This indicates a data preparation error."
+                )
+
+            logger.info(
+                f"MOD-002: Heterogeneous data alignment - tabular={n_samples}, "
                 f"sequence={X_train_seq.shape[0]}, offset={seq_offset}"
             )
 
@@ -568,6 +640,12 @@ class StackingEnsemble(BaseModel):
             X_fold_val = X_train[val_idx]
             y_fold_val = y_train[val_idx]
 
+            # Initialize sequence fold variables (may be set below if heterogeneous)
+            X_seq_fold_train_cache: np.ndarray | None = None
+            X_seq_fold_val_cache: np.ndarray | None = None
+            y_seq_fold_train: np.ndarray | None = None
+            y_seq_fold_val: np.ndarray | None = None
+
             # Sequence data slicing (only if heterogeneous and seq data provided)
             # Must adjust indices by offset since sequence data is shorter
             if self._is_heterogeneous and X_train_seq is not None:
@@ -576,10 +654,40 @@ class StackingEnsemble(BaseModel):
                 seq_train_idx = train_idx[train_idx >= seq_offset] - seq_offset
                 seq_val_idx = val_idx[val_idx >= seq_offset] - seq_offset
 
+                # MOD-002: Validate minimum fold size for sequence models
+                # If seq_offset removes more than 50% of a fold's samples, raise error
+                original_train_size = len(train_idx)
+                filtered_train_size = len(seq_train_idx)
+                if original_train_size > 0:
+                    train_retention_ratio = filtered_train_size / original_train_size
+                    if train_retention_ratio < 0.5:
+                        raise ValueError(
+                            f"MOD-002: Fold {fold_idx + 1} sequence data retention too low. "
+                            f"Original train samples: {original_train_size}, "
+                            f"after seq_offset filter: {filtered_train_size} "
+                            f"(retention: {train_retention_ratio:.1%}). "
+                            f"Minimum required: 50%. seq_offset={seq_offset}. "
+                            f"Consider reducing sequence_length or using more training data."
+                        )
+
+                original_val_size = len(val_idx)
+                filtered_val_size = len(seq_val_idx)
+                if original_val_size > 0:
+                    val_retention_ratio = filtered_val_size / original_val_size
+                    if val_retention_ratio < 0.5:
+                        raise ValueError(
+                            f"MOD-002: Fold {fold_idx + 1} sequence validation data retention too low. "
+                            f"Original val samples: {original_val_size}, "
+                            f"after seq_offset filter: {filtered_val_size} "
+                            f"(retention: {val_retention_ratio:.1%}). "
+                            f"Minimum required: 50%. seq_offset={seq_offset}. "
+                            f"Consider reducing sequence_length or using more training data."
+                        )
+
                 # MOD-003: Validate that we have valid samples after filtering
                 if len(seq_train_idx) == 0:
                     raise ValueError(
-                        f"No valid sequence training samples in fold {fold_idx + 1} "
+                        f"MOD-003: No valid sequence training samples in fold {fold_idx + 1} "
                         f"(all {len(train_idx)} train indices < seq_offset={seq_offset}). "
                         f"This indicates insufficient data for sequence models with the "
                         f"current lookback window. Consider reducing sequence_length or "
@@ -587,7 +695,7 @@ class StackingEnsemble(BaseModel):
                     )
                 if len(seq_val_idx) == 0:
                     raise ValueError(
-                        f"No valid sequence validation samples in fold {fold_idx + 1} "
+                        f"MOD-003: No valid sequence validation samples in fold {fold_idx + 1} "
                         f"(all {len(val_idx)} val indices < seq_offset={seq_offset}). "
                         f"This indicates insufficient data for sequence models with the "
                         f"current lookback window. Consider reducing sequence_length or "
@@ -614,19 +722,37 @@ class StackingEnsemble(BaseModel):
                 is_seq_model = self._is_heterogeneous and model_name in self._sequence_models
                 if is_seq_model:
                     if X_seq_fold_train_cache is not None:
+                        # These are always set together in the if block above
+                        assert X_seq_fold_val_cache is not None
+                        assert y_seq_fold_train is not None
+                        assert y_seq_fold_val is not None
                         model_X_train = X_seq_fold_train_cache
                         model_X_val = X_seq_fold_val_cache
                         model_y_train = y_seq_fold_train
                         model_y_val = y_seq_fold_val
                         # Sequence models use filtered val_idx for OOF storage
                         oof_val_idx = val_idx[val_idx >= seq_offset]
+
+                        # MOD-003: Validate data dimensions for sequence models
+                        if model_X_train.ndim != 3:
+                            raise ValueError(
+                                f"MOD-003: Sequence model '{model_name}' requires 3D data "
+                                f"(n_samples, seq_len, n_features) but received {model_X_train.ndim}D "
+                                f"data with shape {model_X_train.shape}. "
+                                f"Ensure X_train_seq is properly prepared with sequence windows."
+                            )
                     else:
-                        # Fallback to tabular data (will likely fail but warn was issued)
-                        model_X_train = X_fold_train
-                        model_X_val = X_fold_val
-                        model_y_train = y_fold_train
-                        model_y_val = y_fold_val
-                        oof_val_idx = val_idx
+                        # MOD-003 FIX: Raise error instead of silently falling back to wrong data type
+                        # The original code logged a warning but proceeded with 2D tabular data,
+                        # which would cause the sequence model to fail or produce incorrect results
+                        raise ValueError(
+                            f"MOD-003: Sequence model '{model_name}' requires 3D data but "
+                            f"no sequence data (X_train_seq) was provided for fold {fold_idx + 1}. "
+                            f"Heterogeneous stacking ensembles with sequence models require both "
+                            f"2D tabular data (X_train) and 3D sequence data (X_train_seq). "
+                            f"Provide X_train_seq parameter to fit() or remove sequence models "
+                            f"from base_model_names."
+                        )
                 else:
                     # Tabular model or homogeneous ensemble
                     model_X_train = X_fold_train
@@ -767,6 +893,7 @@ class StackingEnsemble(BaseModel):
         self,
         X: np.ndarray,
         X_seq: np.ndarray | None = None,
+        use_cache: bool = True,
     ) -> PredictionOutput:
         """
         Generate stacking ensemble predictions.
@@ -775,6 +902,9 @@ class StackingEnsemble(BaseModel):
             X: Tabular features (2D) for tabular models
             X_seq: Sequence features (3D) for sequence models in heterogeneous ensembles.
                 If None and ensemble is heterogeneous, uses stored X_val_seq or falls back to X.
+            use_cache: If True (default), fall back to cached X_val_seq when X_seq is None.
+                If False, do not use cached data - X_seq must be provided for heterogeneous
+                ensembles with sequence models, otherwise an error is raised. (MOD-007)
 
         Returns:
             PredictionOutput with class predictions, probabilities, and confidence
@@ -785,8 +915,26 @@ class StackingEnsemble(BaseModel):
         use_probabilities = self._config.get("use_probabilities", True)
         passthrough = self._config.get("passthrough", False)
 
-        # For heterogeneous ensembles, use provided X_seq or fallback
-        predict_X_seq = X_seq if X_seq is not None else self._X_val_seq
+        # For heterogeneous ensembles, determine sequence data to use (MOD-007)
+        predict_X_seq: np.ndarray | None
+        if X_seq is not None:
+            predict_X_seq = X_seq
+        elif use_cache:
+            predict_X_seq = self._X_val_seq
+            if predict_X_seq is not None:
+                logger.debug(
+                    "MOD-007: Using cached X_val_seq for prediction "
+                    f"({estimate_array_size(predict_X_seq) / 1024**2:.1f}MB)"
+                )
+        else:
+            # use_cache=False and X_seq not provided
+            predict_X_seq = None
+            if self._is_heterogeneous and self._sequence_models:
+                raise ValueError(
+                    "MOD-007: Heterogeneous ensemble has sequence models but X_seq not provided "
+                    "and use_cache=False. Either provide X_seq or set use_cache=True to use "
+                    "cached validation sequence data."
+                )
 
         # Generate base model predictions
         # For heterogeneous ensembles, each model gets appropriate data format
@@ -807,6 +955,8 @@ class StackingEnsemble(BaseModel):
                 meta_features = np.hstack([X, base_predictions])
 
         # Get meta-learner predictions
+        if self._meta_learner is None:
+            raise ValueError("Cannot predict: meta-learner not fitted")
         output = self._meta_learner.predict(meta_features)
 
         return PredictionOutput(
@@ -858,6 +1008,8 @@ class StackingEnsemble(BaseModel):
 
         # Save meta-learner
         meta_dir = path / "meta_learner"
+        if self._meta_learner is None:
+            raise ValueError("Cannot save ensemble: meta-learner not fitted")
         self._meta_learner.save(meta_dir)
 
         # Save ensemble metadata
@@ -891,8 +1043,10 @@ class StackingEnsemble(BaseModel):
         self._is_heterogeneous = metadata.get("is_heterogeneous", False)
         self._tabular_models = set(metadata.get("tabular_models", []))
         self._sequence_models = set(metadata.get("sequence_models", []))
-        self._X_train_seq = None  # Not stored (data too large)
+        # MOD-007: Sequence data not stored (too large), cache cleared on load
+        self._X_train_seq = None
         self._X_val_seq = None
+        self._seq_cache_size_bytes = 0
 
         # Load base models
         base_models_dir = path / "base_models"
@@ -919,6 +1073,44 @@ class StackingEnsemble(BaseModel):
         self._is_fitted = True
         logger.info(f"Loaded StackingEnsemble from {path}")
 
+    def clear_cache(self) -> int:
+        """
+        Clear cached sequence data to free memory (MOD-007).
+
+        Call this after training is complete if you don't need the cached
+        X_train_seq and X_val_seq data for subsequent predictions.
+        After calling this method, predict() will require X_seq to be
+        provided explicitly when use_cache=True (otherwise will fall back to None).
+
+        Returns:
+            Number of bytes freed
+        """
+        freed_bytes = self._seq_cache_size_bytes
+
+        if freed_bytes > 0:
+            logger.info(
+                f"MOD-007: Clearing cached sequence data: {freed_bytes / 1024**2:.1f}MB"
+            )
+
+        self._X_train_seq = None
+        self._X_val_seq = None
+        self._seq_cache_size_bytes = 0
+
+        # Trigger garbage collection to actually free memory
+        import gc
+        gc.collect()
+
+        return freed_bytes
+
+    def get_cache_size(self) -> int:
+        """
+        Get size of cached sequence data in bytes (MOD-007).
+
+        Returns:
+            Size of cached data in bytes, or 0 if nothing is cached
+        """
+        return self._seq_cache_size_bytes
+
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return meta-learner feature importances."""
         if not self._is_fitted or self._meta_learner is None:
@@ -932,8 +1124,9 @@ class StackingEnsemble(BaseModel):
         self._feature_names = names
         for fold_models in self._base_models:
             for model in fold_models:
-                if hasattr(model, "set_feature_names"):
-                    model.set_feature_names(names)
+                set_fn = getattr(model, "set_feature_names", None)
+                if set_fn is not None:
+                    set_fn(names)
 
     def _compute_metrics(
         self,
@@ -959,7 +1152,8 @@ class StackingEnsemble(BaseModel):
 
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),
-            "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+            # sklearn accepts 0, 1, or "warn" for zero_division, but type stubs are outdated
+            "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),  # pyright: ignore[reportArgumentType]
         }
 
     def _analyze_oof_diversity(
@@ -1046,7 +1240,7 @@ class StackingEnsemble(BaseModel):
             self._diversity_analyzer = DiversityAnalyzer()
 
         # Generate predictions from each base model
-        use_probabilities = self._config.get("use_probabilities", True)
+        _use_probabilities = self._config.get("use_probabilities", True)  # Reserved for future use
         base_predictions: dict[str, np.ndarray] = {}
 
         for model_idx, model_name in enumerate(self._base_model_names):

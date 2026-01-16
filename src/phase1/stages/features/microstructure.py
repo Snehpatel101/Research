@@ -503,6 +503,7 @@ def add_microstructure_features(
     include_trade_intensity: bool = True,
     include_efficiency: bool = True,
     include_vol_ratio: bool = True,
+    include_2024_features: bool = True,
 ) -> pd.DataFrame:
     """
     Add all market microstructure proxy features from OHLCV data.
@@ -521,6 +522,11 @@ def add_microstructure_features(
     - Trade intensity (volume vs average)
     - Price efficiency ratio (trending vs choppy)
     - Realized volatility ratio (vol clustering)
+    - [NEW 2024] Edge spread (Ardia et al. JFE 2024)
+    - [NEW 2024] Timing features (arXiv:2509.16137)
+    - [NEW 2024] VPIN (Easley et al. 2024)
+    - [NEW 2024] Volume profile features
+    - [NEW 2024] Bar structure features
 
     All features are lagged by 1 bar to prevent lookahead bias.
 
@@ -532,6 +538,8 @@ def add_microstructure_features(
         Dictionary to store feature descriptions
     include_* : bool
         Flags to include/exclude specific feature groups
+    include_2024_features : bool
+        Include 2024 research-backed features (Edge spread, timing, VPIN, etc.)
 
     Returns
     -------
@@ -545,7 +553,6 @@ def add_microstructure_features(
 
     initial_cols = len(df.columns)
 
-    # Add each feature group if enabled
     if include_amihud:
         df = add_amihud_illiquidity(df, feature_metadata)
 
@@ -572,6 +579,16 @@ def add_microstructure_features(
 
     if include_vol_ratio:
         df = add_realized_volatility_ratio(df, feature_metadata)
+
+    if include_2024_features:
+        from .microstructure_proxies import compute_all_microstructure_features
+
+        logger.info("Adding 2024 research-backed microstructure features...")
+        new_features = compute_all_microstructure_features(df)
+
+        for col in new_features.columns:
+            df[col] = new_features[col]
+            feature_metadata[col] = f"Microstructure 2024: {col}"
 
     added_cols = len(df.columns) - initial_cols
     logger.info(f"Added {added_cols} microstructure features")

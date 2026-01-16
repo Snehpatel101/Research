@@ -424,19 +424,28 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                     f"This indicates a data preparation error."
                 )
 
+            # MOD-009 FIX: Change warnings to errors per "fail fast, fail hard" principle
             # Validate labels are consistent between tabular and sequence views
-            # After accounting for offset, labels should match
+            # After accounting for offset, labels should match exactly
             y_train_trimmed = y_train[expected_offset:] if expected_offset > 0 else y_train
             if len(y_train_trimmed) != len(y_train_seq):
-                logger.warning(
-                    f"MOD-009: Label length mismatch after offset adjustment - "
+                raise ValueError(
+                    f"MOD-009: CRITICAL - Label length mismatch after offset adjustment. "
                     f"y_train_trimmed={len(y_train_trimmed)}, y_train_seq={len(y_train_seq)}. "
-                    f"Proceeding but results may be misaligned."
+                    f"Expected offset={expected_offset} (seq_len-1={self.config.sequence_length - 1}). "
+                    f"This indicates a data alignment bug that would cause misaligned training. "
+                    f"Check that tabular and sequence data were prepared from the same source."
                 )
             elif not np.array_equal(y_train_trimmed, y_train_seq):
-                logger.warning(
-                    f"MOD-009: Labels differ between tabular and sequence views after alignment. "
-                    f"This may indicate different data sources or processing paths."
+                # Calculate how many labels differ for diagnostic purposes
+                n_different = int(np.sum(y_train_trimmed != y_train_seq))
+                pct_different = 100.0 * n_different / len(y_train_seq)
+                raise ValueError(
+                    f"MOD-009: CRITICAL - Labels differ between tabular and sequence views after alignment. "
+                    f"{n_different} labels ({pct_different:.1f}%) do not match. "
+                    f"This indicates different data sources or processing paths were used. "
+                    f"Training with misaligned labels would produce invalid models. "
+                    f"Ensure both tabular and sequence data come from the same TimeSeriesDataContainer."
                 )
 
         elif self.model.requires_sequences:

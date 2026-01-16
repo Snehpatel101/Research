@@ -2,9 +2,16 @@
 Utility modules for the ML Model Factory.
 
 This package provides helper functions for notebooks, visualization,
-configuration validation, and common operations.
+configuration validation, memory management, caching, and common operations.
 """
 
+from src.utils.cache import (
+    CacheMetadata,
+    DataCache,
+    DataCacheConfig,
+    cached_result,
+    get_global_data_cache,
+)
 from src.utils.checkpoint_manager import CheckpointManager
 from src.utils.colab_setup import (
     ensure_data_in_workspace,
@@ -24,6 +31,22 @@ from src.utils.config_validator import (
     validate_ensemble_config,
     validate_pipeline_config,
     validate_trainer_config,
+)
+from src.utils.memory import (
+    CacheConfig,
+    CacheEntry,
+    CacheManager,
+    CacheStats,
+    MemoryInfo,
+    PSUTIL_AVAILABLE,
+    check_available_memory,
+    check_memory_sufficient,
+    estimate_array_size,
+    estimate_object_size,
+    get_global_cache,
+    get_memory_info,
+    log_memory_usage,
+    memory_logged,
 )
 from src.utils.notebook import (
     create_progress_callback,
@@ -49,6 +72,27 @@ __all__ = [
     "ensure_data_in_workspace",
     # Checkpoint management
     "CheckpointManager",
+    # Memory management (MOD-007)
+    "MemoryInfo",
+    "CacheEntry",
+    "CacheStats",
+    "CacheConfig",
+    "CacheManager",
+    "estimate_array_size",
+    "estimate_object_size",
+    "get_memory_info",
+    "check_available_memory",
+    "check_memory_sufficient",
+    "log_memory_usage",
+    "memory_logged",
+    "get_global_cache",
+    "PSUTIL_AVAILABLE",
+    # Data caching (MOD-007)
+    "CacheMetadata",
+    "DataCacheConfig",
+    "DataCache",
+    "cached_result",
+    "get_global_data_cache",
     # Notebook utilities
     "setup_notebook",
     "install_dependencies",
