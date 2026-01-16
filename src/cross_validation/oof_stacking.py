@@ -18,6 +18,11 @@ import numpy as np
 import pandas as pd
 
 from src.cross_validation.oof_core import OOFPrediction
+from src.cross_validation.timestamp_alignment import (
+    align_predictions_on_datetime,
+    get_datetime_alignment_report,
+    validate_datetime_alignment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +181,18 @@ class StackingDatasetBuilder:
         """
         model_names = list(oof_predictions.keys())
         n_original = len(y_true)
+
+        is_aligned, alignment_issues = validate_datetime_alignment(oof_predictions, strict=False)
+        if not is_aligned:
+            logger.warning(
+                f"Datetime alignment issues detected ({len(alignment_issues)} issues). "
+                "Aligning predictions on common timestamps..."
+            )
+            alignment_report = get_datetime_alignment_report(oof_predictions)
+            logger.info(
+                f"Alignment report: {alignment_report['common_coverage']:.1%} common coverage"
+            )
+            oof_predictions = align_predictions_on_datetime(oof_predictions, method="inner")
 
         # Find valid samples (no NaN in any model's predictions)
         valid_mask, nan_counts = find_valid_samples_mask(oof_predictions)

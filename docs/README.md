@@ -18,54 +18,8 @@ The factory processes one futures contract at a time through a unified 7-phase p
 
 | Resource | Description |
 |----------|-------------|
-| [Quick Reference](QUICK_REFERENCE.md) | Command cheatsheet for common tasks |
-| [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter/Colab setup |
-
----
-
-## Architecture
-
-The factory implements a single-pipeline architecture with 7 implementation phases:
-
-```
-Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
-                                                              |
-                                              +---------------+---------------+
-                                              |               |               |
-                                          Tabular(2D)    Sequence(3D)    Multi-Res(4D)
-                                              |               |               |
-                                          Boosting       Neural          Advanced
-                                          Classical      CNN/MLP         Transformers
-                                              |               |               |
-                                              +-------+-------+---------------+
-                                                      |
-                                              [Ensembles] -> [Meta-Learners]
-```
-
-**Comprehensive Reference:** [ARCHITECTURE.md](ARCHITECTURE.md)
-
----
-
-## Implementation Phases
-
-| Phase | Name | Description | Status | Doc |
-|:-----:|------|-------------|:------:|-----|
-| 1 | Ingestion | Load and validate raw OHLCV data | ✅ Complete | [PHASE_1_INGESTION.md](implementation/PHASE_1_INGESTION.md) |
-| 2 | MTF Upscaling | Multi-timeframe resampling (9 TFs) | ✅ Complete | [PHASE_2_MTF_UPSCALING.md](implementation/PHASE_2_MTF_UPSCALING.md) |
-| 3 | Features | 180+ indicator features | ✅ Complete | [PHASE_3_FEATURES.md](implementation/PHASE_3_FEATURES.md) |
-| 4 | Labeling | Triple-barrier + Optuna optimization | ✅ Complete | [PHASE_4_LABELING.md](implementation/PHASE_4_LABELING.md) |
-| 5 | Adapters | Model-family data adapters | ✅ Complete | [PHASE_5_ADAPTERS.md](implementation/PHASE_5_ADAPTERS.md) |
-| 6 | Training | 23 models across 6 families | ✅ Complete | [PHASE_6_TRAINING.md](implementation/PHASE_6_TRAINING.md) |
-| 7 | Stacking | Heterogeneous ensemble training | ✅ Complete | [PHASE_7_META_LEARNER_STACKING.md](implementation/PHASE_7_META_LEARNER_STACKING.md) |
-
----
-
-## User Guides
-
-### Getting Started
-
-| Guide | Purpose |
-|-------|---------|
+| [Main README](../README.md) | Project overview and quick commands |
+| [CLAUDE.md](../CLAUDE.md) | Instructions for AI assistants |
 | [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter and Colab setup |
 | [Quick Reference](QUICK_REFERENCE.md) | Command cheatsheet |
 
@@ -93,7 +47,6 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 | Doc | Purpose |
 |-----|---------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Complete system architecture |
-| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Command cheatsheet |
 | [Models Reference](reference/MODELS.md) | All 23 models (22 if CatBoost unavailable) |
 
 ### Technical Reference
@@ -112,13 +65,21 @@ Raw OHLCV -> [MTF Upscaling] -> [Features] -> [Labels] -> [Adapters]
 
 ---
 
+## Recent Improvements (2026-01-15)
+
+| Doc | Purpose |
+|-----|---------|
+| [Config & P0 Improvements Summary](implementation/CONFIG_AND_P0_IMPROVEMENTS_SUMMARY.md) | Complete refactoring summary (13 tasks) |
+| [Configuration Refactor](implementation/CONFIG_REFACTOR_SUMMARY_2026_01_15.md) | Centralized config system |
+| [Lineage Tracking](implementation/LINEAGE_TRACKING_IMPLEMENTATION.md) | Dataset provenance validation |
+| [Timestamp Alignment](implementation/TIMESTAMP_ALIGNMENT_IMPLEMENTATION.md) | Heterogeneous stacking validation |
+
 ## Project Planning
 
 | Doc | Purpose |
 |-----|---------|
 | [Project Charter](planning/PROJECT_CHARTER.md) | Goals, scope, status |
-| [Advanced Models Roadmap](implementation/ADVANCED_MODELS_ROADMAP.md) | 6 planned models |
-| [MTF Implementation Roadmap](implementation/MTF_IMPLEMENTATION_ROADMAP.md) | 9-timeframe ladder |
+| [Advanced Models Roadmap](implementation/ADVANCED_MODELS_ROADMAP.md) | Implementation history of 6 advanced neural models |
 
 ---
 
@@ -149,7 +110,7 @@ Project notes and refactor summaries live in [notes/](notes/README.md).
 |-----------|--------|-------|
 | **Models Implemented** | ✅ Complete | 23 models (22 if CatBoost unavailable) |
 | **MTF Stage 2** | ✅ Complete | 9 of 9 timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h) |
-| **MTF Stages 3-6** | ⚠️ Partial | Downstream stages process target_timeframe only |
+| **MTF Stages 3-6** | ✅ Complete | All stages support multi-TF via `--process-all-timeframes` |
 | **Ensemble Methods** | ✅ Complete | 3 (Voting, Stacking, Blending) |
 | **Meta-Learners** | ✅ Complete | 4 (Ridge, MLP, Calibrated, XGBoost) |
 | **Features** | ✅ Complete | ~180 |
@@ -176,4 +137,4 @@ Project notes and refactor summaries live in [notes/](notes/README.md).
 
 ---
 
-*Last Updated: 2026-01-13*
+*Last Updated: 2026-01-15*

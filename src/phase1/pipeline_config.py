@@ -7,7 +7,10 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.config.global_config import GlobalConfig
 
 # Import HorizonConfig and active horizons from the dedicated horizon module
 # Re-exported here for backward compatibility
@@ -37,10 +40,23 @@ logger.addHandler(logging.NullHandler())
 
 
 def _generate_run_id() -> str:
-    """Generate a unique run ID with timestamp and random suffix."""
     import secrets
 
     return f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{secrets.token_hex(2)}"
+
+
+def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
+    try:
+        from src.config.global_config import get_global_config
+
+        config = get_global_config()
+        parts = attr_path.split(".")
+        value = config
+        for part in parts:
+            value = getattr(value, part)
+        return value
+    except Exception:
+        return fallback
 
 
 @dataclass
@@ -65,9 +81,11 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     end_date: str | None = None  # YYYY-MM-DD format
 
     # Timeframe configuration
-    target_timeframe: str = "1min"  # Primary training timeframe (canonical source)
-    output_timeframes: list[str] | None = None  # If set, produce multiple clean datasets
-    bar_resolution: str = field(default=None)  # Legacy alias
+    target_timeframe: str = field(
+        default_factory=lambda: _get_global_or_default("timeframes.default_primary", "5min")
+    )
+    output_timeframes: list[str] | None = None
+    bar_resolution: str = field(default=None)
     # MTF-P1-002: When True, process all 9 canonical timeframes (1m-1h) through pipeline
     # This enables heterogeneous ensembles where each base model trains on its preferred TF
     process_all_timeframes: bool = False
@@ -86,16 +104,34 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     #
     # This separation allows per-model feature selection without re-running the pipeline.
     # See src/models/config/trainer_config.py (CFG-002b) for training-time feature set selection.
-    feature_generation: str = "full"  # 'full', 'minimal', 'custom' - controls feature GENERATION
-    sma_periods: list[int] = field(default_factory=lambda: [10, 20, 50, 100, 200])
-    ema_periods: list[int] = field(default_factory=lambda: [9, 21, 50])
-    atr_periods: list[int] = field(default_factory=lambda: [7, 14, 21])
-    rsi_period: int = 14
-    macd_params: dict[str, int] = field(
-        default_factory=lambda: {"fast": 12, "slow": 26, "signal": 9}
+    feature_generation: str = field(
+        default_factory=lambda: _get_global_or_default("features.generation.default", "full")
     )
-    bb_period: int = 20
-    bb_std: float = 2.0
+    sma_periods: list[int] = field(
+        default_factory=lambda: _get_global_or_default(
+            "features.sma_periods", [10, 20, 50, 100, 200]
+        )
+    )
+    ema_periods: list[int] = field(
+        default_factory=lambda: _get_global_or_default("features.ema_periods", [9, 21, 50])
+    )
+    atr_periods: list[int] = field(
+        default_factory=lambda: _get_global_or_default("features.atr_periods", [7, 14, 21])
+    )
+    rsi_period: int = field(
+        default_factory=lambda: _get_global_or_default("features.rsi_period", 14)
+    )
+    macd_params: dict[str, int] = field(
+        default_factory=lambda: _get_global_or_default(
+            "features.macd", {"fast": 12, "slow": 26, "signal": 9}
+        )
+    )
+    bb_period: int = field(
+        default_factory=lambda: _get_global_or_default("features.bollinger.period", 20)
+    )
+    bb_std: float = field(
+        default_factory=lambda: _get_global_or_default("features.bollinger.std", 2.0)
+    )
 
     # Multi-Timeframe (MTF) configuration
     mtf_timeframes: list[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
@@ -108,33 +144,51 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
     auto_scale_purge_embargo: bool = True
 
     # Split parameters
-    # CFG-010: Use default split ratios from common module (single source of truth)
-    train_ratio: float = DEFAULT_TRAIN_RATIO
-    val_ratio: float = DEFAULT_VAL_RATIO
-    test_ratio: float = DEFAULT_TEST_RATIO
+    train_ratio: float = field(
+        default_factory=lambda: _get_global_or_default("splits.train", DEFAULT_TRAIN_RATIO)
+    )
+    val_ratio: float = field(
+        default_factory=lambda: _get_global_or_default("splits.val", DEFAULT_VAL_RATIO)
+    )
+    test_ratio: float = field(
+        default_factory=lambda: _get_global_or_default("splits.test", DEFAULT_TEST_RATIO)
+    )
     purge_bars: int = 60
     embargo_bars: int = 1440
 
     # Genetic Algorithm / Optuna settings (for Phase 2)
-    ga_population_size: int = 50
-    ga_generations: int = 100
-    ga_crossover_rate: float = 0.8
-    ga_mutation_rate: float = 0.1
-    ga_elite_size: int = 5
-    # CRITICAL: Safe mode prevents test data leakage in barrier optimization
-    # When True, optimization only uses training data (first train_ratio% of data)
-    # Set to False ONLY for research purposes when you understand the implications
-    ga_safe_mode: bool = True
+    ga_population_size: int = field(
+        default_factory=lambda: _get_global_or_default("optimization.ga.population_size", 50)
+    )
+    ga_generations: int = field(
+        default_factory=lambda: _get_global_or_default("optimization.ga.generations", 100)
+    )
+    ga_crossover_rate: float = field(
+        default_factory=lambda: _get_global_or_default("optimization.ga.crossover_rate", 0.8)
+    )
+    ga_mutation_rate: float = field(
+        default_factory=lambda: _get_global_or_default("optimization.ga.mutation_rate", 0.1)
+    )
+    ga_elite_size: int = field(
+        default_factory=lambda: _get_global_or_default("optimization.ga.elite_size", 5)
+    )
+    ga_safe_mode: bool = field(
+        default_factory=lambda: _get_global_or_default("optimization.ga.safe_mode", True)
+    )
 
     # Processing options
-    n_jobs: int = -1  # -1 for all cores
-    random_seed: int = 42
-    allow_batch_symbols: bool = False
+    n_jobs: int = field(default_factory=lambda: _get_global_or_default("processing.n_jobs", -1))
+    random_seed: int = field(default_factory=lambda: _get_global_or_default("random_seed", 42))
+    allow_batch_symbols: bool = field(
+        default_factory=lambda: _get_global_or_default("processing.allow_batch_symbols", False)
+    )
 
     # Optional configurations
     feature_toggles: dict[str, bool] | None = None
     barrier_overrides: dict[str, float] | None = None
-    scaler_type: str = "robust"
+    scaler_type: str = field(
+        default_factory=lambda: _get_global_or_default("scaler.default", "robust")
+    )
     model_config: dict[str, Any] | None = None
 
     # Paths (auto-generated from run_id)
@@ -187,9 +241,7 @@ class PipelineConfig(PipelinePathMixin, PipelinePersistenceMixin):
             if not is_valid_timeframe(tf, allow_extended=True):
                 from src.common.timeframes import SUPPORTED_TIMEFRAMES as SUPPORTED_TF
 
-                raise ValueError(
-                    f"Unsupported MTF timeframe: '{tf}'. Supported: {SUPPORTED_TF}"
-                )
+                raise ValueError(f"Unsupported MTF timeframe: '{tf}'. Supported: {SUPPORTED_TF}")
 
         # Handle horizon configuration
         if self.horizon_config is not None:

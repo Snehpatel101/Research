@@ -135,7 +135,9 @@ class TrainerArtifactsMixin:
                 "family": req.family.value if hasattr(req.family, "value") else str(req.family),
                 "feature_set_recommended": req.feature_set,
                 "requires_scaling": req.requires_scaling,
-                "scaler_type": req.scaler_type.value if hasattr(req.scaler_type, "value") else str(req.scaler_type),
+                "scaler_type": req.scaler_type.value
+                if hasattr(req.scaler_type, "value")
+                else str(req.scaler_type),
                 "requires_sequences": req.requires_sequences,
                 "sequence_length_default": req.sequence_length,
                 "max_features": req.max_features,
@@ -149,7 +151,8 @@ class TrainerArtifactsMixin:
                 "feature_set": {
                     "recommended": req.feature_set,
                     "configured": self.config.feature_set or "(auto-resolved)",
-                    "match": (not self.config.feature_set) or (self.config.feature_set == req.feature_set),
+                    "match": (not self.config.feature_set)
+                    or (self.config.feature_set == req.feature_set),
                 },
                 "sequence_length": {
                     "default": req.sequence_length,
@@ -182,6 +185,8 @@ class TrainerArtifactsMixin:
         predictions: PredictionOutput,
         test_metrics: dict[str, Any] | None = None,
         test_predictions: PredictionOutput | None = None,
+        lineage_validated: bool = False,
+        lineage_issues: list[str] | None = None,
     ) -> None:
         """Save training artifacts."""
         # Training metrics
@@ -189,10 +194,19 @@ class TrainerArtifactsMixin:
         with open(metrics_path, "w") as f:
             json.dump(training_metrics.to_dict(), f, indent=2)
 
+        # Add lineage validation results to eval metrics
+        if lineage_issues is None:
+            lineage_issues = []
+        eval_metrics_with_lineage = {
+            **eval_metrics,
+            "lineage_validated": lineage_validated,
+            "lineage_issues": lineage_issues,
+        }
+
         # Evaluation metrics (validation)
         eval_path = self.output_path / "metrics" / "evaluation_metrics.json"
         with open(eval_path, "w") as f:
-            json.dump(eval_metrics, f, indent=2)
+            json.dump(eval_metrics_with_lineage, f, indent=2)
 
         # Validation predictions
         pred_path = self.output_path / "predictions" / "val_predictions.npz"

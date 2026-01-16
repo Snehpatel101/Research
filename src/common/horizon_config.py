@@ -28,23 +28,38 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.config.global_config import GlobalConfig
+
+
+def _get_global_or_default(attr_path: str, fallback):
+    try:
+        from src.config.global_config import get_global_config
+
+        config = get_global_config()
+        parts = attr_path.split(".")
+        value = config
+        for part in parts:
+            value = getattr(value, part)
+        return value if value is not None else fallback
+    except Exception:
+        return fallback
+
 
 # =============================================================================
 # SUPPORTED AND ACTIVE HORIZONS
 # =============================================================================
-# All supported horizons for triple-barrier labeling.
-# These represent the number of bars to look ahead for label calculation.
-SUPPORTED_HORIZONS = [1, 5, 10, 15, 20, 30, 60, 120]
-
-# Active horizons for model training (subset of SUPPORTED_HORIZONS).
-# H1 is excluded by default because transaction costs exceed expected profit.
-# Modify this list to enable/disable specific horizons.
-HORIZONS = [5, 10, 15, 20]  # Default active horizons (configurable)
+SUPPORTED_HORIZONS: list[int] = list(
+    _get_global_or_default("horizons.supported", [1, 5, 10, 15, 20, 30, 60, 120])
+)
+HORIZONS: list[int] = list(_get_global_or_default("horizons.active", [5, 10, 15, 20]))
 
 # Legacy aliases for backward compatibility
-LOOKBACK_HORIZONS = [1, 5, 20]  # For labeling (includes H1)
-ACTIVE_HORIZONS = [5, 10, 15, 20]  # For training (excludes H1)
-LABEL_HORIZONS = ACTIVE_HORIZONS  # Alias for trainer validation
+LOOKBACK_HORIZONS: list[int] = [1, 5, 20]
+ACTIVE_HORIZONS: list[int] = list(_get_global_or_default("horizons.active", [5, 10, 15, 20]))
+LABEL_HORIZONS: list[int] = ACTIVE_HORIZONS
 
 
 # =============================================================================

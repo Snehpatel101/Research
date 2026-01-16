@@ -116,19 +116,17 @@ Guidelines for code editing, refactoring, and file organization.
 
 ### Current Implementation Status
 - **Phase 1 (Ingestion):** ✅ Complete
-- **Phase 2 (MTF):** ⚠️ 5 of 9 timeframes
+- **Phase 2 (MTF):** ✅ Complete (9 intraday timeframes: 1m-1h)
 - **Phase 3 (Features):** ✅ Complete (~180 features)
 - **Phase 4 (Labeling):** ✅ Complete
-- **Phase 5 (Adapters):** ⚠️ 2D/3D done, 4D missing
-- **Phase 6 (Models):** ⚠️ 13 of 19 models
-- **Phase 7 (Cross-Val):** ✅ Complete
-- **Phase 8 (Meta-Learners):** ❌ Not started
+- **Phase 5 (Adapters):** ✅ Complete (2D/3D adapters, 4D not needed)
+- **Phase 6 (Models):** ✅ Complete (23 models: 6 tabular + 10 neural + 3 ensemble + 4 meta)
+- **Phase 7 (Stacking):** ✅ Complete (heterogeneous ensemble support)
 
-### Priority Tasks (Next 4-5 weeks)
-1. Complete 9-timeframe MTF ladder (1-2 days)
-2. Implement multi-resolution adapter (3 days)
-3. Add advanced models (14-18 days)
-4. Build meta-learners (5-7 days)
+### P0 Architecture Improvements (From Oracle Review)
+1. Lineage unification (pipeline→training artifacts) - 1-2 days
+2. Timestamp alignment checks for heterogeneous stacking - 1-2 days
+3. Standardize evaluation reports (JSON + markdown) - 4 hours
 
 ---
 
@@ -140,4 +138,4 @@ All knowledge base files align with:
 - `docs/archive/roadmaps/` - Implementation roadmaps
 - `CLAUDE.md` - Project instructions for Claude Code
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-15

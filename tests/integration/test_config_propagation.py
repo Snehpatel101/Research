@@ -83,9 +83,11 @@ class TestPipelineToTrainerConfig:
 
         # The CFG-002 note in TrainerConfig explains this intentional difference
         # by reading the docstring we verify the design is documented
-        assert "feature SELECTION" in TrainerConfig.feature_set.__doc__ or \
-               "CFG-002" in str(TrainerConfig.__dataclass_fields__['feature_set'].metadata) or \
-               True  # The docstring is in the class itself
+        assert (
+            "feature SELECTION" in TrainerConfig.feature_set.__doc__
+            or "CFG-002" in str(TrainerConfig.__dataclass_fields__["feature_set"].metadata)
+            or True
+        )  # The docstring is in the class itself
 
     def test_purge_embargo_auto_scaling(self):
         """
@@ -411,9 +413,9 @@ class TestCrossModuleConsistency:
         # Project root should NOT end with 'src'
         assert not str(config.project_root).endswith("src")
 
-        # Should end with 'research' (the repo root)
-        assert str(config.project_root).endswith("research") or \
-               "research" in str(config.project_root)
+        # Should end with 'research' or 'Research' (the repo root)
+        project_root_str = str(config.project_root).lower()
+        assert project_root_str.endswith("research") or "research" in project_root_str
 
     def test_model_registry_has_expected_models(self):
         """

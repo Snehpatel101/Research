@@ -4,12 +4,12 @@ Ensemble ML pipeline for financial price prediction using triple-barrier labelin
 
 ## Overview
 
-This project implements a **model factory** for training, evaluating, and comparing ML models on OHLCV bar data. The factory supports 22 models across 6 families with a unified pipeline architecture.
+This project implements a **model factory** for training, evaluating, and comparing ML models on OHLCV bar data. The factory supports **23 models** across 6 families with a unified pipeline architecture.
 
 ### Key Features
 
 - **Plugin-Based Model Registry**: Add new model types without rewriting pipelines
-- **22 Models Across 6 Families**: Boosting, Neural, Classical, CNN, Transformers, Ensemble
+- **23 Models Across 6 Families**: Boosting, Neural, Classical, Advanced Transformers, Ensemble, Meta-Learners
 - **Triple-Barrier Labeling**: ATR-based dynamic barriers with Optuna optimization
 - **Multi-Timeframe Support**: 9-timeframe ladder (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - **Leakage Prevention**: 5 layers including purge/embargo, train-only scaling, OOF for stacking
@@ -103,21 +103,39 @@ research/
 
 ## Configuration
 
-Key parameters can be set via CLI or config files:
+**Centralized Configuration (2026-01-15):** All defaults now managed in `config/global.yaml`
 
-```python
-# Default parameters
-LABEL_HORIZONS = [5, 10, 15, 20]
-TRAIN/VAL/TEST = 70/15/15
-PURGE_BARS = 60      # Prevents label leakage
-EMBARGO_BARS = 1440  # ~5 days at 5-min
+```yaml
+# config/global.yaml - Single source of truth
+random_seed: 42
+train_ratio: 0.70
+val_ratio: 0.15
+test_ratio: 0.15
+purge_bars: 60       # Prevents label leakage
+embargo_bars: 1440   # ~5 days at 5-min
+label_horizons: [5, 10, 15, 20]
 ```
+
+Override via CLI args or environment-specific configs. See [Config Refactoring Summary](docs/implementation/CONFIG_REFACTOR_SUMMARY_2026_01_15.md).
+
+## Recent Improvements (2026-01-15)
+
+**Configuration & P0 Architecture Improvements - All Complete:**
+
+- ✅ **Centralized Configuration** - Single YAML source of truth (`config/global.yaml`)
+- ✅ **Pipeline Lineage Tracking** - Dataset provenance validation with checksums
+- ✅ **Timestamp Alignment** - Heterogeneous stacking validation
+- ✅ **Standardized Reports** - JSON + Markdown evaluation outputs
+- ✅ **Feature Optimization** - Optuna-based subset optimization
+
+See [Complete Summary](docs/implementation/CONFIG_AND_P0_IMPROVEMENTS_SUMMARY.md) for details (13 tasks, 100% complete).
 
 ## Documentation
 
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Phase Implementation Guides](docs/phases/)
-- [Advanced Models Roadmap](docs/roadmaps/ADVANCED_MODELS_ROADMAP.md)
+- **[Documentation Hub](docs/README.md)** - Complete documentation index
+- [Architecture Overview](docs/ARCHITECTURE.md) - System design
+- [CLAUDE.md](CLAUDE.md) - AI assistant instructions
+- [Recent Improvements](docs/implementation/CONFIG_AND_P0_IMPROVEMENTS_SUMMARY.md) - 2026-01-15 refactoring
 
 ## License
 

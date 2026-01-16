@@ -38,6 +38,16 @@ Original imports continue to work:
 """
 
 # =============================================================================
+# GLOBAL CONFIGURATION (NEW - single source of truth)
+# =============================================================================
+from src.config.global_config import (
+    GlobalConfig,
+    load_global_config,
+    get_global_config,
+    set_global_config,
+)
+
+# =============================================================================
 # COMMONLY USED CONSTANTS (from src.config.constants)
 # =============================================================================
 from src.config.constants import (
@@ -87,6 +97,11 @@ from src.config.pipeline import (
 )
 
 __all__ = [
+    # Global config
+    "GlobalConfig",
+    "load_global_config",
+    "get_global_config",
+    "set_global_config",
     # Timeframes
     "CANONICAL_TIMEFRAMES",
     "SUPPORTED_TIMEFRAMES",

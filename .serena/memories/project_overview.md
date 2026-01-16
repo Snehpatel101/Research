@@ -155,4 +155,4 @@ MTF_TIMEFRAMES = [1, 5, 10, 15, 20, 25, 30, 45, 60]  # All 9 timeframes (minutes
 - MTF strategies: `docs/implementation/MTF_IMPLEMENTATION_ROADMAP.md`
 - Models catalog: `docs/reference/MODELS.md`
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-15

@@ -244,7 +244,7 @@ pytest tests/ -v --tb=short
 
 ---
 
-Last Updated: 2026-01-02
+Last Updated: 2026-01-15
 
 ---
 

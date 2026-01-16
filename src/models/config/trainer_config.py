@@ -2,9 +2,26 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.config.global_config import GlobalConfig
 
 from .environment import resolve_device
+
+
+def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
+    try:
+        from src.config.global_config import get_global_config
+
+        config = get_global_config()
+        parts = attr_path.split(".")
+        value = config
+        for part in parts:
+            value = getattr(value, part)
+        return value
+    except Exception:
+        return fallback
 
 
 @dataclass
@@ -13,62 +30,76 @@ class TrainerConfig:
 
     model_name: str
     horizon: int = 20
-    # NOTE (CFG-002b): TrainerConfig.feature_set controls feature SELECTION during training,
-    # which is different from PipelineConfig.feature_set that controls feature GENERATION.
-    #
-    # - PipelineConfig.feature_set="full" (CFG-002a) generates ALL ~180 features in Phase 1.
-    #   This ensures the complete feature superset is available for any model type.
-    #
-    # - TrainerConfig.feature_set="boosting_optimal" selects a model-appropriate subset
-    #   during Phase 6 training. Each model family gets tailored features:
-    #     * "boosting_optimal" (~50 features): For XGBoost, LightGBM, CatBoost
-    #     * "neural_optimal" (~43 features): For LSTM, GRU, TCN
-    #     * "transformer_raw" (~23 features): For Transformer, PatchTST
-    #     * "full": Use all available features (no selection)
-    #
-    # This intentional separation allows per-model feature selection without
-    # re-running the data pipeline. See src/phase1/config/feature_sets.py for definitions.
-    feature_set: str = "boosting_optimal"  # Controls feature SELECTION, not generation
-    sequence_length: int = 60
-    batch_size: int = 256
-    max_epochs: int = 100
-    early_stopping_patience: int = 15
-    random_seed: int = 42
+    feature_set: str = "boosting_optimal"
+    pipeline_run_id: str | None = None
+    sequence_length: int = field(
+        default_factory=lambda: _get_global_or_default("training.sequence_length", 60)
+    )
+    batch_size: int = field(
+        default_factory=lambda: _get_global_or_default("training.batch_size", 256)
+    )
+    max_epochs: int = field(
+        default_factory=lambda: _get_global_or_default("training.max_epochs", 100)
+    )
+    early_stopping_patience: int = field(
+        default_factory=lambda: _get_global_or_default("training.early_stopping_patience", 15)
+    )
+    random_seed: int = field(default_factory=lambda: _get_global_or_default("random_seed", 42))
     experiment_name: str | None = None
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
     model_config: dict[str, Any] = field(default_factory=dict)
-    device: str = "auto"
-    mixed_precision: bool = True
-    num_workers: int = 4
-    pin_memory: bool = True
-    # Calibration settings
-    use_calibration: bool = True
-    calibration_method: str = "auto"  # "auto", "isotonic", "sigmoid"
-    # Test set evaluation (default True, but marked as one-shot)
+    device: str = field(default_factory=lambda: _get_global_or_default("training.device", "auto"))
+    mixed_precision: bool = field(
+        default_factory=lambda: _get_global_or_default("training.mixed_precision", True)
+    )
+    num_workers: int = field(
+        default_factory=lambda: _get_global_or_default("training.num_workers", 4)
+    )
+    pin_memory: bool = field(
+        default_factory=lambda: _get_global_or_default("training.pin_memory", True)
+    )
+    use_calibration: bool = field(
+        default_factory=lambda: _get_global_or_default("calibration.enabled", True)
+    )
+    calibration_method: str = field(
+        default_factory=lambda: _get_global_or_default("calibration.method", "auto")
+    )
     evaluate_test_set: bool = True
-    # Feature selection settings
-    use_feature_selection: bool = True  # Enable per-model feature selection
-    feature_selection_n_features: int = 50  # Number of features to select (0 = auto)
-    feature_selection_method: str = "mda"  # "mda", "mdi", "hybrid"
-    feature_selection_cv_splits: int = 5  # CV splits for stability analysis
-    # Reproducibility settings
-    deterministic_mode: bool = False  # Enable deterministic CUDA operations (slower)
-    # Numerical stability settings
-    nan_check_raise_error: bool = True  # Raise error on NaN/Inf during training
-    # Checkpoint settings
-    checkpoint_interval: int = 10  # Save checkpoint every N epochs
-    keep_n_checkpoints: int = 3  # Number of checkpoints to keep
-    checkpoint_dir: str | None = None  # Directory for checkpoints (None = disabled)
-    # Experiment tracking settings
-    tracking_enabled: bool = True  # Enable experiment tracking
-    tracking_backend: str = "local"  # "local", "mlflow", "disabled"
-    tracking_uri: str | None = None  # MLflow tracking URI (if using MLflow backend)
-    tracking_tags: dict[str, str] = field(default_factory=dict)  # Additional run tags
-    # OOM recovery settings
-    oom_recovery_enabled: bool = True  # Enable OOM recovery
-    oom_max_retries: int = 3  # Max retry attempts on OOM
-    oom_batch_reduction_factor: float = 0.5  # Reduce batch by this factor on OOM
-    oom_min_batch_size: int = 8  # Minimum batch size after reduction
+    use_feature_selection: bool = field(
+        default_factory=lambda: _get_global_or_default("features.selection.enabled", True)
+    )
+    feature_selection_n_features: int = 50
+    feature_selection_method: str = field(
+        default_factory=lambda: _get_global_or_default("features.selection.method", "mda")
+    )
+    feature_selection_cv_splits: int = field(
+        default_factory=lambda: _get_global_or_default("features.selection.cv_splits", 5)
+    )
+    deterministic_mode: bool = False
+    nan_check_raise_error: bool = True
+    checkpoint_interval: int = 10
+    keep_n_checkpoints: int = 3
+    checkpoint_dir: str | None = None
+    tracking_enabled: bool = field(
+        default_factory=lambda: _get_global_or_default("tracking.enabled", True)
+    )
+    tracking_backend: str = field(
+        default_factory=lambda: _get_global_or_default("tracking.backend", "local")
+    )
+    tracking_uri: str | None = None
+    tracking_tags: dict[str, str] = field(default_factory=dict)
+    oom_recovery_enabled: bool = field(
+        default_factory=lambda: _get_global_or_default("oom_recovery.enabled", True)
+    )
+    oom_max_retries: int = field(
+        default_factory=lambda: _get_global_or_default("oom_recovery.max_retries", 3)
+    )
+    oom_batch_reduction_factor: float = field(
+        default_factory=lambda: _get_global_or_default("oom_recovery.batch_reduction_factor", 0.5)
+    )
+    oom_min_batch_size: int = field(
+        default_factory=lambda: _get_global_or_default("oom_recovery.min_batch_size", 8)
+    )
 
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""

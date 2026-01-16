@@ -125,6 +125,12 @@ from src.feature_selection.filtering import (
     select_from_correlated_group,
 )
 
+# Optimization
+from src.feature_selection.optimization import (
+    FeatureOptimizer,
+    optimize_feature_subset_simple,
+)
+
 # Lazy import for FeatureSelectionManager to avoid circular dependency
 # (it imports from src.cross_validation which can trigger src.models imports)
 _FeatureSelectionManager = None
@@ -182,4 +188,7 @@ __all__ = [
     "DEFAULT_PRIORITY",
     "FEATURE_PRIORITY",
     "get_feature_priority",
+    # Optimization
+    "FeatureOptimizer",
+    "optimize_feature_subset_simple",
 ]

@@ -57,7 +57,7 @@ Standardized Artifacts (models, predictions, metrics)
 - **Direct Stacking:** Meta-learner trained on OOF predictions from heterogeneous bases
 
 **Implementation Status:**
-- Phases 1-6: Complete (18 base models + 4 meta-learners = 22 models across 6 families)
+- Phases 1-6: Complete (19 base models + 4 meta-learners = 23 models across 6 families)
 - Phase 7: ✅ Complete (heterogeneous stacking in trainer.py implemented)
 - MTF Stage 2: ✅ Complete (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - MTF Stages 3-6: ✅ Complete (all stages iterate over effective_output_timeframes; multi-TF enabled via --process-all-timeframes)
@@ -151,7 +151,7 @@ Raw OHLCV → [ Data Pipeline ] → Standardized Datasets
 | 3 | Features | 180+ indicator features | ✅ Complete |
 | 4 | Labeling | Triple-barrier + Optuna | ✅ Complete |
 | 5 | Adapters | Model-family data preparation (2D, 3D, 4D) | ✅ Complete |
-| 6 | Training | 22 models, 6 families | ✅ Complete |
+| 6 | Training | 23 models, 6 families | ✅ Complete |
 | 7 | Stacking | Heterogeneous ensemble training | ✅ Complete |
 
 **Data Shapes by Model Family:**
@@ -286,7 +286,7 @@ python scripts/train_model.py --model voting --horizon 20 --base-models lstm,gru
 | **Calibrated Meta** | Isotonic/Platt calibration | Calibrated probability scaling |
 | **XGBoost Meta** | Gradient boosted meta-learner | Non-linear feature interactions |
 
-**See:** `docs/roadmaps/ADVANCED_MODELS_ROADMAP.md` for 6 planned models (14-18 days implementation)
+**See:** `docs/roadmaps/ADVANCED_MODELS_ROADMAP.md` for implementation history of the 6 advanced neural models
 
 **Registry:** Models register via the `@register(...)` decorator for automatic discovery.
 

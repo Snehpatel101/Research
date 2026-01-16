@@ -132,6 +132,71 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         random_suffix = secrets.token_hex(2)  # 2 bytes = 4 hex chars
         return f"{self.config.model_name}_h{self.config.horizon}_{timestamp}_{random_suffix}"
 
+    def _validate_pipeline_lineage(self) -> tuple[bool, list[str]]:
+        """
+        Validate dataset integrity against pipeline lineage metadata.
+
+        Returns:
+            Tuple of (is_valid, issues_list)
+        """
+        from pathlib import Path
+
+        from src.phase1.lineage import PipelineLineage, validate_dataset_checksum
+
+        if not self.config.pipeline_run_id:
+            return True, []
+
+        lineage_path = (
+            Path(self.config.project_root)
+            / "data"
+            / "lineage"
+            / f"{self.config.pipeline_run_id}.json"
+        )
+
+        if not lineage_path.exists():
+            logger.warning(f"Pipeline lineage file not found: {lineage_path}")
+            return False, [f"Lineage file not found: {lineage_path}"]
+
+        try:
+            lineage = PipelineLineage.load(lineage_path)
+        except Exception as e:
+            logger.error(f"Failed to load pipeline lineage: {e}")
+            return False, [f"Failed to load lineage: {e}"]
+
+        all_valid = True
+        all_issues = []
+
+        for name, expected_checksum in lineage.dataset_checksums.items():
+            dataset_path = Path(expected_checksum.file_path)
+
+            if not dataset_path.exists():
+                logger.warning(f"Dataset file not found: {dataset_path}")
+                all_valid = False
+                all_issues.append(f"Dataset not found: {dataset_path}")
+                continue
+
+            is_valid, issues = validate_dataset_checksum(
+                dataset_path, expected_checksum, strict=False
+            )
+
+            if not is_valid:
+                logger.warning(f"Dataset validation failed for {name}: {issues}")
+                all_valid = False
+                all_issues.extend(issues)
+            else:
+                logger.info(f"Dataset validation passed for {name}")
+
+        if all_valid:
+            logger.info(
+                f"Pipeline lineage validation successful for run_id={self.config.pipeline_run_id}"
+            )
+        else:
+            logger.warning(
+                f"Pipeline lineage validation issues found: {len(all_issues)} issues for run_id={self.config.pipeline_run_id}"
+            )
+
+        return all_valid, all_issues
+
     def _setup_tracker(self) -> ExperimentTracker:
         """
         Initialize experiment tracker based on configuration.
@@ -233,6 +298,12 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Log training configuration as parameters
         self.tracker.log_params(self.config.to_dict())
 
+        # Validate pipeline lineage if pipeline_run_id is specified
+        lineage_validated = True
+        lineage_issues = []
+        if self.config.pipeline_run_id:
+            lineage_validated, lineage_issues = self._validate_pipeline_lineage()
+
         # Load data - get DataFrames for feature selection
         logger.info("Loading data from container...")
 
@@ -299,9 +370,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         if self._is_heterogeneous_ensemble():
             # Heterogeneous stacking: load BOTH tabular and sequence data
-            logger.info(
-                "Heterogeneous stacking detected: preparing both tabular and sequence data"
-            )
+            logger.info("Heterogeneous stacking detected: preparing both tabular and sequence data")
 
             # Tabular data (already loaded as DataFrames)
             # Use np.asarray for type-safe conversion (handles both DataFrame and ndarray)
@@ -508,9 +577,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         }
         if "trading" in eval_metrics:
             flat_metrics["val_win_rate"] = eval_metrics["trading"].get("win_rate", 0)
-            flat_metrics["val_profit_factor"] = eval_metrics["trading"].get(
-                "profit_factor", 0
-            )
+            flat_metrics["val_profit_factor"] = eval_metrics["trading"].get("profit_factor", 0)
         if test_metrics:
             flat_metrics["test_accuracy"] = test_metrics.get("accuracy", 0)
             flat_metrics["test_macro_f1"] = test_metrics.get("macro_f1", 0)
@@ -524,6 +591,8 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 val_predictions,
                 test_metrics=test_metrics,
                 test_predictions=test_predictions,
+                lineage_validated=lineage_validated,
+                lineage_issues=lineage_issues,
             )
             self._save_model()
             self._save_feature_selection()

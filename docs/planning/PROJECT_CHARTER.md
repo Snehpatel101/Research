@@ -1,9 +1,9 @@
 # ML Trading Model Factory - Project Charter
 
 **Version:** 2.0 (Accurate Implementation Status)
-**Last Updated:** 2025-12-30
+**Last Updated:** 2026-01-15
 **Purpose:** Production ML system for futures trading signal generation
-**Status:** **PRODUCTION-READY** (22 models deployed, MTF complete)
+**Status:** **PRODUCTION-READY** (23 models deployed, MTF complete, 9 TFs)
 
 ---
 
@@ -31,9 +31,9 @@ Build a **production-grade, model-agnostic ML factory** for systematic futures t
 - ✅ **MTF complete** (9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
 ### Phase 2: Models
-- ✅ **22 MODELS IMPLEMENTED** (see inventory below)
+- ✅ **23 MODELS IMPLEMENTED** (see inventory below)
 - ✅ Boosting: XGBoost, LightGBM, CatBoost
-- ✅ Neural: LSTM, GRU, TCN, Transformer
+- ✅ Neural: LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
 - ✅ Classical: Random Forest, Logistic, SVM
 - ✅ Ensemble: Voting, Stacking, Blending
 
@@ -47,7 +47,8 @@ Build a **production-grade, model-agnostic ML factory** for systematic futures t
 ### Phase 4: Ensemble
 - ✅ **COMPLETE** - OOF-based stacking
 - ✅ Voting ensembles
-- ✅ Compatibility validation (same-family only)
+- ✅ Heterogeneous stacking support (mixed tabular + sequence)
+- ✅ 4 meta-learners: Ridge, MLP, Calibrated, XGBoost
 
 ### Phase 5: Inference
 - ✅ **COMPLETE** - Production serving
@@ -94,7 +95,7 @@ Raw 1min OHLCV
     ├── get_sequence_data() → LSTM, GRU, TCN, Transformer
     └── (future) get_multi_resolution() → Advanced transformers
     ↓
-[ 22 Models Train ]
+[ 23 Models Train ]
     ├── Identical data
     ├── Identical splits
     ├── Identical metrics
@@ -141,139 +142,87 @@ Training and serving share **identical pipelines:**
 
 ---
 
-## Model Inventory (22 Implemented)
+## Model Inventory (23 Implemented)
 
-### Boosting (3 models)
+### Boosting (3 models) - Tabular 2D
 
-1. **XGBoost**
-   - Use case: Stable benchmark, SHAP interpretability
-   - Input: 2D (n_samples, 150 features)
-   - Training: 2-5 min (CPU)
-   - Inference: <1ms
-   - Status: ✅ Production-ready
+| # | Model | Use Case | Training | Status |
+|---|-------|----------|----------|--------|
+| 1 | **XGBoost** | Stable benchmark, SHAP interpretability | 2-5 min (CPU/GPU) | ✅ |
+| 2 | **LightGBM** | Fastest training, lowest memory | 1-3 min (CPU/GPU) | ✅ |
+| 3 | **CatBoost** | Categorical features, ordered boosting | 3-7 min (CPU/GPU) | ✅ (optional) |
 
-2. **LightGBM**
-   - Use case: Fastest training, lowest memory
-   - Input: 2D (n_samples, 150 features)
-   - Training: 1-3 min (CPU)
-   - Inference: <1ms
-   - Status: ✅ Production-ready
+### Classical (3 models) - Tabular 2D
 
-3. **CatBoost**
-   - Use case: Handles categorical features, robust to overfitting
-   - Input: 2D (n_samples, 150 features)
-   - Training: 3-7 min (CPU)
-   - Inference: <1ms
-   - Status: ✅ Production-ready
+| # | Model | Use Case | Training | Status |
+|---|-------|----------|----------|--------|
+| 4 | **Random Forest** | Robust baseline, feature importance | 2-5 min (CPU) | ✅ |
+| 5 | **Logistic Regression** | Fast baseline, meta-learner | 10-30s (CPU) | ✅ |
+| 6 | **SVM** | Non-linear boundaries (RBF kernel) | 5-15 min (CPU) | ✅ |
 
-### Neural Sequence (4 models)
+### Neural Sequence (10 models) - 3D/4D
 
-4. **LSTM**
-   - Use case: Long-term dependencies, recurrent baseline
-   - Input: 3D (n_samples, 60 timesteps, 25 features)
-   - Training: 20-40 min (GPU)
-   - Inference: 5-10ms (GPU)
-   - Status: ✅ Production-ready
-
-5. **GRU**
-   - Use case: Faster than LSTM, simpler gating
-   - Input: 3D (n_samples, 60 timesteps, 25 features)
-   - Training: 15-30 min (GPU)
-   - Inference: 5-10ms (GPU)
-   - Status: ✅ Production-ready
-
-6. **TCN (Temporal Convolutional Network)**
-   - Use case: Causal dilations, parallelizable
-   - Input: 3D (n_samples, 60 timesteps, 25 features)
-   - Training: 25-45 min (GPU)
-   - Inference: 5-10ms (GPU)
-   - Status: ✅ Production-ready
-
-7. **Transformer (basic)**
-   - Use case: Self-attention for temporal patterns
-   - Input: 3D (n_samples, 60 timesteps, 25 features)
-   - Training: 30-60 min (GPU)
-   - Inference: 10-20ms (GPU)
-   - Status: ✅ Production-ready
-   - Note: Causal masks prevent lookahead
-
-### Classical (3 models)
-
-8. **Random Forest**
-   - Use case: Robust baseline, feature importance
-   - Input: 2D (n_samples, 150 features)
-   - Training: 2-5 min (CPU)
-   - Inference: <1ms
-   - Status: ✅ Production-ready
-
-9. **Logistic Regression**
-   - Use case: Fast baseline, meta-learner for stacking
-   - Input: 2D (n_samples, 150 features)
-   - Training: 10-30s (CPU)
-   - Inference: <0.5ms
-   - Status: ✅ Production-ready
-
-10. **SVM (Support Vector Machine)**
-    - Use case: Non-linear decision boundaries (RBF kernel)
-    - Input: 2D (n_samples, 150 features)
-    - Training: 5-15 min (CPU)
-    - Inference: <1ms
-    - Status: ✅ Production-ready
+| # | Model | Use Case | Training | Status |
+|---|-------|----------|----------|--------|
+| 7 | **LSTM** | Long-term dependencies | 20-40 min (GPU) | ✅ |
+| 8 | **GRU** | Faster than LSTM, simpler | 15-30 min (GPU) | ✅ |
+| 9 | **TCN** | Causal dilations, parallelizable | 25-45 min (GPU) | ✅ |
+| 10 | **Transformer** | Self-attention for patterns | 30-60 min (GPU) | ✅ |
+| 11 | **PatchTST** | SOTA long-term forecasting | 30-45 min (GPU) | ✅ |
+| 12 | **iTransformer** | Multivariate correlations | 30-45 min (GPU) | ✅ |
+| 13 | **TFT** | Interpretable, variable selection | 40-60 min (GPU) | ✅ |
+| 14 | **N-BEATS** | Trend + seasonal decomposition | 25-40 min (GPU) | ✅ |
+| 15 | **InceptionTime** | Multi-scale kernels | 30-50 min (GPU) | ✅ |
+| 16 | **ResNet1D** | Deep residual learning | 25-40 min (GPU) | ✅ |
 
 ### Ensemble (3 models)
 
-11. **Voting Ensemble**
-    - Use case: Simple weighted averaging, fast
-    - Input: Base model predictions
-    - Training: Sum of base models
-    - Inference: Sum of base latencies + <1ms
-    - Status: ✅ Production-ready
+| # | Model | Use Case | Training | Status |
+|---|-------|----------|----------|--------|
+| 17 | **Voting** | Simple weighted averaging | Sum of bases | ✅ |
+| 18 | **Stacking** | OOF-based meta-learning | Sum + 5 min | ✅ |
+| 19 | **Blending** | Holdout-based meta-learning | Sum + 3 min | ✅ |
 
-12. **Stacking Ensemble**
-    - Use case: OOF-based meta-learning, best performance
-    - Architecture: PurgedKFold OOF + Logistic/LightGBM meta-learner
-    - Input: OOF predictions + optional regime features
-    - Training: Sum of base models + 5 min (meta)
-    - Status: ✅ Production-ready
+### Meta-Learners (4 models)
 
-13. **Blending Ensemble**
-    - Use case: Holdout-based meta-learning
-    - Input: Holdout predictions
-    - Training: Sum of base models + 3 min (meta)
-    - Status: ✅ Production-ready
+| # | Model | Use Case | Training | Status |
+|---|-------|----------|----------|--------|
+| 20 | **Ridge Meta** | L2-regularized linear stacking | <1 min | ✅ |
+| 21 | **MLP Meta** | Non-linear learned blending | 1-2 min | ✅ |
+| 22 | **Calibrated Meta** | Probability calibration | <1 min | ✅ |
+| 23 | **XGBoost Meta** | Non-linear feature interactions | 1-2 min | ✅ |
+
+**Note:** CatBoost has conditional registration. If unavailable, total = 22 models.
 
 ---
 
-## Planned Future Models (Not Yet Implemented)
+## ✅ Implemented Advanced Models (Now Part of 23 Total)
 
-### Advanced Transformers (3 models)
-
+### Advanced Transformers (3 models) - ✅ COMPLETE
 - **PatchTST:** SOTA long-term forecasting (patch-based attention)
 - **iTransformer:** Multivariate correlations (features as tokens)
 - **TFT (Temporal Fusion Transformer):** Interpretable + variable selection
 
-### CNN Models (2 models)
+### CNN Models (2 models) - ✅ COMPLETE
+- **InceptionTime:** Multi-scale kernels (10, 20, 40)
+- **ResNet1D:** Residual learning for deep networks
 
-- **InceptionTime:** Multi-scale kernels (3x1, 5x1, 7x1)
-- **1D ResNet:** Residual learning for deep networks
-
-### MLP Baselines (3 models)
-
+### N-BEATS (1 model) - ✅ COMPLETE
 - **N-BEATS:** Interpretable decomposition (trend + seasonal)
+
+## Potential Future Models (Not Prioritized)
+
+### Foundation Models (Zero-Shot)
+- **Chronos-Bolt:** Zero-shot pre-trained transformer (Amazon)
+- **TimesFM 2.5:** Zero-shot probabilistic forecasts (Google)
+
+### Other Candidates
 - **N-HiTS:** Hierarchical N-BEATS (2x faster)
 - **DLinear:** Ultra-fast linear baseline
-
-### Foundation Models (2 models)
-
-- **Chronos-Bolt:** Zero-shot pre-trained transformer (Amazon, 200M params)
-- **TimesFM 2.5:** Zero-shot probabilistic forecasts (Google, 200M params)
-
-### Probabilistic (2 models)
-
 - **DeepAR:** Distribution forecasting
-- **Quantile RNN:** Direct quantile predictions (q05, q50, q95)
+- **TimesNet:** Multi-periodic pattern extraction
 
-**Status:** Not prioritized. Current 22 models are sufficient for production.
+**Status:** Current 23 models are sufficient for production. Foundation models may be added for zero-shot baseline comparisons.
 
 ---
 
@@ -551,3 +500,4 @@ For questions, issues, or contributions:
 - **v1.0** (2025-12-29): Initial charter (19 models claimed, MTF planned)
 - **v2.0** (2025-12-30): Accurate status (13 models implemented, MTF in progress)
 - **v3.0** (2026-01-13): Updated to 23 models, MTF complete (9 intraday timeframes)
+- **v3.1** (2026-01-15): Comprehensive update - 23 models verified, all advanced neural models implemented, heterogeneous stacking complete

@@ -39,19 +39,19 @@
 - **Output:** `TimeSeriesDataContainer` (in-memory)
 
 ### Phase 6: Model Training ✅
-- **Implemented:** 17 models across 5 families
+- **Implemented:** 23 models across 6 families (22 if CatBoost unavailable)
   - Boosting (3): XGBoost, LightGBM, CatBoost
-  - Neural (4): LSTM, GRU, TCN, Transformer
+  - Neural (10): LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
   - Classical (3): Random Forest, Logistic, SVM
   - Ensemble (3): Voting, Stacking, Blending
   - Meta-learners (4): Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
 - Training with early stopping, sample weighting
 - Output: `experiments/runs/{run_id}/models/`
 
-### Phase 7: Heterogeneous Ensemble Training ⚠️ PLANNED
-- **Status:** Meta-learners implemented, training script not yet created
-- **Missing:** scripts/train_ensemble.py for automated heterogeneous stacking
-- **Workaround:** Manual training of base models + meta-learner
+### Phase 7: Heterogeneous Ensemble Training ✅
+- **Status:** Complete - heterogeneous stacking implemented in trainer.py
+- **Features:** Dual data loading for mixed tabular/sequence bases
+- **Usage:** `scripts/train_model.py --model stacking --base-models xgboost,lstm,patchtst --meta-learner ridge_meta`
 
 ### Cross-Validation (Phase 3) ✅
 - PurgedKFold with purge/embargo
@@ -83,131 +83,16 @@
 
 ---
 
-### 2. MTF as Optional Enrichment
-**Missing:** MTF is always-on, cannot run single-TF training
+### 2. Phase 2 - MTF Upscaling ✅ COMPLETE
+**Status:** All 9 intraday timeframes implemented (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
-**Current:** MTF indicators always computed and added
+**Implemented:**
+- Full 9-TF ladder from 1-min canonical source
+- Configurable via `--process-all-timeframes` or `--output-timeframes`
+- Per-model primary TF selection (CatBoost→15min, TCN→5min, PatchTST→1min)
+- All stages iterate over `effective_output_timeframes`
 
-**Intended:** Three MTF strategies
-- Strategy 1: Single-TF (no MTF)
-- Strategy 2: MTF Indicators (optional enrichment for tabular)
-- Strategy 3: MTF Ingestion (raw OHLCV for sequence models)
-
-**Impact:**
-- Cannot build single-TF baselines
-- Cannot compare MTF vs. single-TF performance
-
-**Effort:** 1-2 days
-
-**Files to modify:**
-- `config/pipeline.yaml` (add mtf.enabled flag)
-- `src/phase1/stages/mtf/` (make MTF stages conditional)
-
----
-
-### 3. Phase 2 - MTF Upscaling (Incomplete)
-**Missing:** 4 timeframes (5min, 10min, 20min, 25min, 45min)
-
-**Current:** Only 15min, 30min, 1h, 4h, daily implemented
-
-**Intended:** 9-timeframe ladder
-- 1min (base)
-- 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h
-
-**Impact:**
-- Advanced models (PatchTST, iTransformer, TFT) require 9 timeframes
-- Incomplete MTF feature set
-- Strategy 3 (multi-resolution raw OHLCV) blocked
-
-**Effort:** 1-2 days
-
-**Files to modify:**
-- `src/phase1/stages/mtf/mtf_scaler.py`
-- `config/pipeline.yaml` (add missing timeframes)
-- `src/phase1/stages/features/mtf_features.py` (add MTF features for new TFs)
-
----
-
-### 4. Phase 5 - Multi-Resolution Adapter (Not Started)
-**Missing:** Multi-resolution adapter for 4D tensors
-
-**Current:** Only 2D (tabular) and 3D (sequence) adapters exist
-
-**Intended:** 4D multi-resolution adapter
-- Shape: `(N, 9, T, 4)` where:
-  - N: samples
-  - 9: timeframes
-  - T: lookback window (varies by timeframe)
-  - 4: OHLC features
-
-**Impact:**
-- Advanced models (PatchTST, iTransformer, TFT, N-BEATS) cannot be trained
-- Strategy 3 (multi-resolution raw OHLCV) blocked
-
-**Effort:** 3 days
-
-**Files to create:**
-- `src/phase1/stages/datasets/multi_resolution_adapter.py`
-- Update `src/phase1/stages/datasets/dataset_builder.py` to support 4D
-- Add multi-resolution loader to `TimeSeriesDataContainer`
-
----
-
-### 5. Phase 6 - Advanced Models (Not Started)
-**Missing:** 6 models across 3 families
-
-**CNN (2 models):**
-- InceptionTime (multi-scale pattern detection)
-- 1D ResNet (deep residual learning)
-- Input: 3D sequences `(N, seq_len, 180)` OR 4D multi-res `(N, 9, T, 4)`
-
-**Advanced Transformers (3 models):**
-- PatchTST (patch-based transformer)
-- iTransformer (inverted transformer)
-- TFT (Temporal Fusion Transformer)
-- Input: 4D multi-res `(N, 9, T, 4)` (requires multi-res adapter)
-
-**MLP (1 model):**
-- N-BEATS (neural basis expansion)
-- Input: 3D sequences `(N, seq_len, 180)` OR 4D multi-res `(N, 9, T, 4)`
-
-**Impact:**
-- Missing SOTA time-series models
-- Cannot leverage multi-resolution temporal learning
-
-**Effort:** 14-18 days (see `docs/archive/roadmaps/ADVANCED_MODELS_ROADMAP.md`)
-
-**Files to create:**
-- `src/models/cnn/inception_time.py`
-- `src/models/cnn/resnet_1d.py`
-- `src/models/advanced/patch_tst.py`
-- `src/models/advanced/itransformer.py`
-- `src/models/advanced/tft.py`
-- `src/models/mlp/nbeats.py`
-- `config/models/{model_name}.yaml` (6 files)
-
----
-
-### 6. Heterogeneous Ensemble Support (Partially Implemented)
-**Status:** Phase 7 meta-learner stacking implemented, but heterogeneous base model support needs enhancement
-
-**Current:** Ensemble methods (Voting/Stacking/Blending) exist but assume same-family bases
-
-**Intended:** Full heterogeneous ensemble support
-- Select 1 model per family (3-4 total)
-- Generate OOF predictions from heterogeneous bases
-- Stack via meta-learner (Logistic/Ridge/MLP)
-
-**Impact:**
-- Cannot fully leverage diversity of different model families
-- Missing heterogeneous ensemble training script
-
-**Effort:** 2-3 days
-
-**Files to create/modify:**
-- `src/ensemble/heterogeneous_stacker.py`
-- `scripts/train_ensemble.py` (heterogeneous training)
-- `config/ensemble.yaml` (meta-learner configs)
+**Resolved:** No longer blocking advanced model training or heterogeneous ensembles
 
 ---
 
@@ -228,126 +113,94 @@ Raw OHLCV → Configurable TF → Features → Labels → Adapters → Training 
 1. **Configurable primary timeframe:** ⚠️ Planned - currently hardcoded to 5min
 2. **Optional MTF enrichment:** Single-TF, MTF indicators, or MTF ingestion
 3. **Model-family adapters:** Transform canonical data to model-specific formats (2D, 3D, 4D)
-4. **Plugin-based models:** 23 total models (17 implemented + 6 planned)
-   - 10 base models (boosting, neural, classical)
+4. **Plugin-based models:** 23 total models (22 if CatBoost unavailable)
+   - 6 tabular models (boosting + classical)
+   - 10 neural models (LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D)
    - 3 ensemble models (voting, stacking, blending)
    - 4 meta-learners (ridge, mlp, calibrated, xgboost)
-   - 6 planned advanced (CNN, transformers, MLP)
-5. **Heterogeneous ensembles:** ⚠️ Planned - meta-learners exist, training script not yet created
+5. **Heterogeneous ensembles:** ✅ Complete - dual data loading in trainer.py supports mixed tabular/sequence bases
 
 **Result:** Reproducible, deterministic, storage-efficient ML factory.
 
 ---
 
-## Priority Tasks
+## Priority Tasks (P0 Architecture Improvements)
 
-### 1. Complete 9-Timeframe MTF Ladder (1-2 days)
-**Goal:** Add missing timeframes to Phase 2
+### 1. Lineage Unification (1-2 days)
+**Goal:** Link training runs to pipeline artifacts via metadata + checksums
 
 **Tasks:**
-- Add 5min, 10min, 20min, 25min, 45min to `config/pipeline.yaml`
-- Update `src/phase1/stages/mtf/mtf_scaler.py` to generate all 9 TFs
-- Add MTF features for new timeframes in `src/phase1/stages/features/mtf_features.py`
-- Update tests in `tests/phase1/stages/mtf/`
+- Add `pipeline_run_id` to TrainerConfig
+- Compute checksums for scaled datasets at pipeline completion
+- Store checksums in pipeline artifacts
+- Validate checksums at training time
+- Add lineage validation to Trainer
 
-**Deliverable:** 9 MTF views (1min → 1h)
+**Deliverable:** Reproducible artifact lineage from pipeline → training
 
 ---
 
-### 2. Implement Multi-Resolution Adapter (3 days)
-**Goal:** Enable 4D tensor input for advanced models
+### 2. Timestamp Alignment Checks (1-2 days)
+**Goal:** Ensure datetime alignment (not just index) for heterogeneous stacking
 
 **Tasks:**
-- Create `src/phase1/stages/datasets/multi_resolution_adapter.py`
-- Build 4D tensor loader: `(N, 9, T, 4)` from raw MTF OHLCV
-- Update `TimeSeriesDataContainer` to support 4D data
-- Add adapter tests in `tests/phase1/stages/datasets/`
-- Update `scripts/train_model.py` to support 4D models
+- Add datetime alignment validation in stacking dataset builder
+- Validate timestamp consistency across base model predictions
+- Add tests for timestamp alignment edge cases
+- Update stacking logic to enforce datetime matching
 
-**Deliverable:** Multi-resolution adapter ready for advanced models
+**Deliverable:** Robust heterogeneous ensemble alignment
 
 ---
 
-### 3. Add Advanced Models (14-18 days)
-**Goal:** Implement 6 advanced models (CNN, transformers, MLP)
-
-**Phased approach:**
-- **Week 1:** InceptionTime + 1D ResNet (CNN family, 3D input)
-- **Week 2:** PatchTST + iTransformer (4D input, requires multi-res adapter)
-- **Week 3:** TFT + N-BEATS (4D input)
-
-**Tasks per model:**
-- Create model class in `src/models/{family}/`
-- Register model with `@register` decorator
-- Create config file in `config/models/`
-- Add tests in `tests/models/{family}/`
-- Update documentation
-
-**Deliverable:** 19 total models (13 existing + 6 new)
-
----
-
-### 4. Build Meta-Learner Training (5-7 days)
-**Goal:** Adaptive ensemble selection
+### 3. Standardize Evaluation Reports (4 hours)
+**Goal:** Unified JSON + markdown artifacts per model run
 
 **Tasks:**
-- Implement regime-aware weighting (cluster market states, weight by regime)
-- Implement confidence-based selection (weight by prediction confidence)
-- Implement adaptive tracking (weight by recent performance)
-- Create meta-learner training script
-- Add tests for meta-learner logic
+- Create evaluation report schema (JSON format)
+- Generate markdown summary from JSON
+- Save reports to `experiments/runs/{run_id}/reports/`
+- Add report generation to Trainer
+- Update tests for report validation
 
-**Deliverable:** Meta-learner layer for adaptive ensemble selection
+**Deliverable:** Consistent evaluation artifacts across all models
 
 ---
 
 ## Implementation Sequence
 
-**Critical Path:**
-1. Complete 9-TF MTF ladder (blocks Strategy 3)
-2. Implement multi-res adapter (blocks advanced models)
-3. Add CNN models (validate 3D/4D pipeline)
-4. Add advanced transformer models (PatchTST, iTransformer, TFT)
-5. Add N-BEATS (MLP family)
-6. Build meta-learners (adaptive ensemble selection)
+**Current Status:** Phases 1-7 complete (23 models implemented)
 
-**Total Timeline:** 4-5 weeks
+**Next Steps (P0 Architecture Improvements):**
+1. Lineage unification (1-2 days)
+2. Timestamp alignment checks (1-2 days)
+3. Standardize evaluation reports (4 hours)
 
-**Milestones:**
-- Week 1: 9-TF MTF + multi-res adapter
-- Week 2-3: CNN + advanced transformers
-- Week 4: N-BEATS + meta-learners
-- Week 5: Testing, documentation, validation
+**Total Timeline:** 2-3 days
+
+**Optional Future Work:**
+- Phase 8: Advanced meta-learners (regime-aware, adaptive)
+- Phase 9: Real-time inference pipeline
 
 ---
 
 ## Success Criteria
 
-### Phase 2 Complete
-- [ ] 9 MTF views generated (1min → 1h)
-- [ ] MTF features computed for all 9 timeframes
-- [ ] Tests pass for all MTF stages
-- [ ] Documentation updated
+### Phase 1-7: ✅ Complete
+- [x] Canonical OHLCV ingestion pipeline
+- [x] 9 intraday MTF timeframes (1m-1h)
+- [x] ~180 engineered features
+- [x] Triple-barrier labeling with Optuna optimization
+- [x] 2D/3D adapters for tabular/sequence models
+- [x] 23 models across 6 families (22 if CatBoost unavailable)
+- [x] Heterogeneous ensemble stacking support
+- [x] 3442 tests passing
 
-### Phase 5 Complete
-- [ ] Multi-resolution adapter implemented
-- [ ] 4D tensor loader working
-- [ ] TimeSeriesDataContainer supports 4D
-- [ ] Tests pass for multi-res adapter
-
-### Phase 6 Complete
-- [ ] 19 models implemented (13 + 6)
-- [ ] All models register correctly
-- [ ] Training works for all families (tabular, sequence, multi-res)
-- [ ] Tests pass for all models
-- [ ] Documentation updated
-
-### Phase 8 Complete
-- [ ] Meta-learners implemented (regime-aware, confidence-based, adaptive)
-- [ ] Training script supports meta-learners
-- [ ] Tests pass for meta-learner logic
-- [ ] Documentation updated
+### P0 Architecture Improvements: ⏳ Pending
+- [ ] Lineage unification (pipeline→training artifacts)
+- [ ] Timestamp alignment checks for stacking
+- [ ] Standardized evaluation reports (JSON + markdown)
 
 ---
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-15

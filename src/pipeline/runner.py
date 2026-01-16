@@ -213,6 +213,10 @@ class PipelineRunner:
         self.manifest.save()
         self.logger.info(f"\nManifest saved to {self.manifest.manifest_path}")
 
+        # Save lineage metadata if pipeline completed successfully
+        if all_success:
+            self._save_lineage()
+
         # Final summary
         pipeline_end = datetime.now()
         total_duration = (pipeline_end - pipeline_start).total_seconds()
@@ -306,3 +310,54 @@ class PipelineRunner:
     def get_stage_result(self, stage_name: str) -> StageResult | None:
         """Get the result of a specific stage."""
         return self.stage_results.get(stage_name)
+
+    def _save_lineage(self) -> None:
+        """Save pipeline lineage metadata for dataset validation."""
+        from datetime import datetime
+
+        from src.phase1.lineage import PipelineLineage, create_dataset_checksum
+
+        lineage_dir = self.config.project_root / "data" / "lineage"
+        lineage_dir.mkdir(parents=True, exist_ok=True)
+
+        dataset_checksums = {}
+
+        for tf in getattr(self.config, "output_timeframes", [self.config.target_timeframe]):
+            tf_suffix = f"_{tf}" if len(getattr(self.config, "output_timeframes", [])) > 1 else ""
+            scaled_dir = self.config.data_splits_dir / "scaled" / (tf if tf_suffix else "")
+
+            dataset_files = {
+                f"train{tf_suffix}": scaled_dir / "train_scaled.parquet",
+                f"val{tf_suffix}": scaled_dir / "val_scaled.parquet",
+                f"test{tf_suffix}": scaled_dir / "test_scaled.parquet",
+            }
+
+            for name, path in dataset_files.items():
+                if path.exists():
+                    try:
+                        dataset_checksums[name] = create_dataset_checksum(path, name)
+                    except Exception as e:
+                        self.logger.warning(f"Failed to create checksum for {name}: {e}")
+
+        lineage = PipelineLineage(
+            pipeline_run_id=self.config.run_id,
+            target_timeframe=self.config.target_timeframe,
+            output_timeframes=getattr(
+                self.config, "output_timeframes", [self.config.target_timeframe]
+            ),
+            symbols=self.config.symbols,
+            feature_generation=self.config.feature_generation,
+            label_horizons=self.config.label_horizons,
+            train_ratio=self.config.train_ratio,
+            val_ratio=self.config.val_ratio,
+            test_ratio=self.config.test_ratio,
+            purge_bars=self.config.purge_bars,
+            embargo_bars=self.config.embargo_bars,
+            random_seed=self.config.random_seed,
+            dataset_checksums=dataset_checksums,
+            created_at=datetime.now().isoformat(),
+        )
+
+        lineage_path = lineage_dir / f"{self.config.run_id}.json"
+        lineage.save(lineage_path)
+        self.logger.info(f"Pipeline lineage saved to {lineage_path}")
