@@ -159,6 +159,29 @@ from src.config.global_config import (
 )
 
 # =============================================================================
+# ML FOR DUMMIES: SIMPLE API
+# =============================================================================
+from src.config.smart_config import (
+    # Core API
+    train,
+    SmartConfig,
+    ResolvedModelConfig,
+    # Configuration data
+    MODEL_DEFAULTS,
+    FEATURE_SETS,
+    OPTIMIZATION_DEFAULTS,
+    # Resolution
+    resolve_model_config,
+    resolve_config,
+    # Helpers
+    list_models,
+    describe_model,
+    show_defaults,
+    preview_config,
+    quick_compare,
+)
+
+# =============================================================================
 # COMMONLY USED CONSTANTS (from src.config.constants)
 # =============================================================================
 from src.config.constants import (
@@ -315,6 +338,22 @@ __all__ = [
     "EnsembleConfig",
     "BARRIER_PARAMS",
     "get_barrier_params",
+    # ==========================================================================
+    # ML FOR DUMMIES: SIMPLE API
+    # ==========================================================================
+    "train",
+    "SmartConfig",
+    "ResolvedModelConfig",
+    "MODEL_DEFAULTS",
+    "FEATURE_SETS",
+    "OPTIMIZATION_DEFAULTS",
+    "resolve_model_config",
+    "resolve_config",
+    "list_models",
+    "describe_model",
+    "show_defaults",
+    "preview_config",
+    "quick_compare",
     # ==========================================================================
     # DEPRECATED (for migration)
     # ==========================================================================

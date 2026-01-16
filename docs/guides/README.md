@@ -2,6 +2,10 @@
 
 Practical, task-focused guides for using and extending the ML Model Factory.
 
+## Getting Started
+
+- [Quickstart](QUICKSTART.md) - Get started in 5 minutes
+
 ## Core Guides
 
 - [Notebook Setup](NOTEBOOK_SETUP.md) - Running the unified notebook (Jupyter/Colab)
@@ -9,4 +13,3 @@ Practical, task-focused guides for using and extending the ML Model Factory.
 - [Meta-Learner Stacking](META_LEARNER_STACKING.md) - Heterogeneous ensemble training
 - [Feature Engineering](FEATURE_ENGINEERING.md) - Feature design and implementation patterns
 - [Hyperparameter Tuning](HYPERPARAMETER_TUNING.md) - Optuna tuning workflows and tips
-

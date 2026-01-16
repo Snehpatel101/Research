@@ -4,13 +4,17 @@ from pathlib import Path
 
 @dataclass
 class ModelConfig:
+    """Configuration for a single model in the training pipeline."""
+
     name: str
     timeframe: str | None = None
+    features: str | None = None  # Feature set: "full", "standard", "sequence", "raw", etc.
     optimize_features: bool = False
     feature_opt_trials: int = 50
     optimize_hyperparams: bool = False
     hyperparam_opt_trials: int = 100
     sequence_length: int | None = None
+    batch_size: int | None = None
 
 
 @dataclass
@@ -41,12 +45,14 @@ class ExperimentConfig:
         if isinstance(self.output_dir, str):
             self.output_dir = Path(self.output_dir)
 
+        # Convert string model names to ModelConfig objects
         if self.models and isinstance(self.models[0], str):
+            str_models: list[str] = self.models  # type: ignore[assignment]
             self.models = [
                 ModelConfig(
-                    name=m,
+                    name=name,
                     optimize_features=self.global_feature_optimization,
                     optimize_hyperparams=self.global_hyperparam_optimization,
                 )
-                for m in self.models
+                for name in str_models
             ]

@@ -100,6 +100,13 @@ class TrainingOrchestrator:
                 timeframe = model_cfg.timeframe or "5min"
                 container = self._load_data_for_timeframe(horizon, timeframe)
 
+                # Apply feature set filtering if specified (from smart_config)
+                if model_cfg.features:
+                    logger.info(f"  Applying feature set: {model_cfg.features}")
+                    container = self._filter_container_by_feature_mode(
+                        container, model_cfg.features, horizon
+                    )
+
                 if model_cfg.optimize_features:
                     from src.features.optimization import optimize_features_for_model
 
@@ -146,6 +153,37 @@ class TrainingOrchestrator:
         logger.info(f"{'='*60}\n")
 
         return self.results
+
+    def _filter_container_by_feature_mode(
+        self,
+        container: TimeSeriesDataContainer,
+        feature_mode: str,
+        horizon: int,
+    ) -> TimeSeriesDataContainer:
+        """
+        Filter container based on smart_config feature mode.
+
+        Args:
+            container: Original container with all features
+            feature_mode: Feature mode from MODEL_DEFAULTS ("full", "standard", "sequence", "raw", etc.)
+            horizon: Label horizon
+
+        Returns:
+            New container with filtered features
+        """
+        X_train_df, y_train, w_train = container.get_sklearn_arrays("train", return_df=True)
+
+        # Use feature selector to filter
+        X_train_filtered = self.feature_selector.select_features(X_train_df, mode=feature_mode)
+        feature_list = list(X_train_filtered.columns)
+
+        if len(feature_list) == len(X_train_df.columns):
+            logger.info(f"  Feature mode '{feature_mode}': using all {len(feature_list)} features")
+            return container
+
+        logger.info(f"  Feature mode '{feature_mode}': {len(feature_list)} features (from {len(X_train_df.columns)})")
+
+        return self._filter_container_to_features(container, feature_list, horizon)
 
     def _filter_container_to_features(
         self,

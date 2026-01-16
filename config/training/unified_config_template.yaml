@@ -1,0 +1,59 @@
+# Unified Training Configuration Template
+# This is the master config for the "Build-a-Bear for ML Models" system
+
+experiment:
+  name: "MES Baseline Experiment"
+  description: "Train multiple models with 2024 microstructure features"
+
+data:
+  symbol: "MES"
+  horizons: [5, 10, 20]
+  timeframe: "5min"
+  data_dir: "data/splits/scaled"
+
+features:
+  mode: "full"
+  optimize: false
+  optimization:
+    n_trials: 50
+    target_metric: "f1"
+  mtf_strategy: "indicators"
+  mtf_timeframes: ["1min", "15min", "60min"]
+
+models:
+  train_multiple: true
+  model_list:
+    - name: "xgboost"
+      optimize_hyperparams: true
+      optimization:
+        n_trials: 100
+    - name: "lightgbm"
+      optimize_hyperparams: false
+    - name: "lstm"
+      optimize_hyperparams: false
+      seq_len: 60
+
+ensemble:
+  enabled: true
+  method: "stacking"
+  meta_learner: "ridge_meta"
+  base_models: ["xgboost", "lightgbm", "lstm"]
+
+advanced:
+  regime_aware: false
+  meta_labeling: false
+  cross_validation:
+    enabled: true
+    n_splits: 5
+
+optimization:
+  features:
+    n_trials: 50
+  hyperparams:
+    n_trials: 100
+
+output:
+  save_dir: "experiments/unified"
+  save_predictions: true
+  save_feature_importance: true
+  generate_report: true

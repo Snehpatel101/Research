@@ -30,11 +30,33 @@ class FeatureSelector:
         """Default feature configuration if file missing."""
         return {
             "modes": {
+                # Legacy modes
                 "full": {"groups": ["all"]},
                 "hft_only": {"groups": ["microstructure_2024"]},
                 "classical": {"groups": ["momentum", "volatility", "volume", "trend"]},
                 "minimal": {"groups": ["momentum", "volatility"]},
                 "research_2024": {"groups": ["microstructure_2024", "momentum", "volatility"]},
+                # Smart config modes (from MODEL_DEFAULTS)
+                "standard": {
+                    "groups": ["momentum", "volatility", "volume", "trend"],
+                    "description": "~70 core technical indicators",
+                },
+                "sequence": {
+                    "groups": ["momentum", "volatility", "wavelets", "mtf_indicators"],
+                    "description": "~80 indicators + wavelets for RNN/CNN models",
+                },
+                "raw": {
+                    "groups": ["raw_ohlcv"],
+                    "description": "Raw OHLCV only (5 features) for transformers",
+                },
+                "minimal_raw": {
+                    "groups": ["raw_close_volume"],
+                    "description": "Just close + volume (2 features) for N-BEATS",
+                },
+                "tft": {
+                    "groups": ["raw_ohlcv", "momentum", "volatility"],
+                    "description": "~20 features: raw OHLCV + core indicators for TFT",
+                },
             }
         }
 
@@ -91,6 +113,9 @@ class FeatureSelector:
 
     def _select_columns_by_groups(self, df: pd.DataFrame, groups: list[str]) -> list[str]:
         """Select columns matching feature groups."""
+        # Raw OHLCV columns (exact match for transformers)
+        RAW_OHLCV = ["open", "high", "low", "close", "volume"]
+
         group_patterns = {
             "microstructure_2024": [
                 "edge_spread",
@@ -135,16 +160,30 @@ class FeatureSelector:
             "mtf_indicators": ["mtf_"],
             "regime": ["regime_"],
             "temporal": ["hour_", "minute_", "day_of_week"],
+            # Smart config groups
+            "raw_ohlcv": RAW_OHLCV,  # Exact match for OHLCV
+            "raw_close_volume": ["close", "volume"],  # Just close and volume for N-BEATS
         }
 
         selected = []
 
+        # Groups that use exact column name matching (not pattern matching)
+        exact_match_groups = {"raw_ohlcv", "raw_close_volume"}
+
         for group in groups:
             if group in group_patterns:
                 patterns = group_patterns[group]
-                for col in df.columns:
-                    if any(pattern in col.lower() for pattern in patterns):
-                        selected.append(col)
+
+                if group in exact_match_groups:
+                    # Exact match: column name must be in patterns list
+                    for col in df.columns:
+                        if col.lower() in [p.lower() for p in patterns]:
+                            selected.append(col)
+                else:
+                    # Pattern match: column name contains pattern
+                    for col in df.columns:
+                        if any(pattern in col.lower() for pattern in patterns):
+                            selected.append(col)
 
         return selected
 
