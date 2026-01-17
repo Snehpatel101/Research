@@ -143,7 +143,27 @@ class PipelineConfig:
     labeling_method: str = "triple_barrier"
     # Options: "triple_barrier", "adaptive_barrier", "directional"
 
-    optimize_labels: bool = True         # Optuna optimization
+    # ═══════════════════════════════════════════════════════════
+    # OPTUNA OPTIMIZATION CONFIGURATION
+    # ═══════════════════════════════════════════════════════════
+
+    # Label optimization (triple-barrier parameters)
+    optimize_labels: bool = True
+    label_optimization_trials: int = 100
+    target_class_distribution: dict = None  # Default: balanced
+
+    # Feature optimization
+    optimize_features: bool = True
+    feature_selection_trials: int = 100
+    feature_pruning_trials: int = 50
+    min_features: int = 20
+
+    # Hyperparameter optimization
+    optimize_hyperparams: bool = True
+    hyperparam_trials: int = 100
+
+    # Optuna settings
+    optuna_random_state: int = 42
 
     # ═══════════════════════════════════════════════════════════
     # OUTPUT CONFIGURATION
@@ -184,10 +204,21 @@ pipeline.run()
      │
      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│ STAGE 4: LABELING                                              │
-│   Apply config.labeling_method                                 │
-│   Optuna optimization if config.optimize_labels=True           │
+│ STAGE 4: LABELING (with Optuna)                                │
+│   Apply config.labeling_method (triple_barrier)                │
+│   Optuna optimization of barrier params if optimize_labels     │
+│   - upper_mult, lower_mult, horizon, atr_period                │
+│   - Objective: class balance + predictability                  │
 │   Generate labels for each horizon                             │
+└────────────────────────────────────────────────────────────────┘
+     │
+     ▼
+┌────────────────────────────────────────────────────────────────┐
+│ STAGE 4B: FEATURE OPTIMIZATION (with Optuna)                   │
+│   If config.optimize_features=True:                            │
+│   - Feature selection: binary include/exclude per feature      │
+│   - Feature pruning: remove low-importance features            │
+│   - Correlation pruning: remove redundant features             │
 └────────────────────────────────────────────────────────────────┘
      │
      ▼
@@ -205,9 +236,10 @@ pipeline.run()
 │   FOR model IN config.models:                                  │
 │     1. Auto-select adapter (2D/3D/4D based on model)           │
 │     2. Auto-select features (based on model family)            │
-│     3. Train with config.cv_method                             │
-│     4. Generate OOF predictions                                │
-│     5. Compute metrics                                         │
+│     3. Optuna hyperparameter optimization (if enabled)         │
+│     4. Train with config.cv_method                             │
+│     5. Generate OOF predictions                                │
+│     6. Compute metrics                                         │
 └────────────────────────────────────────────────────────────────┘
      │
      ▼
@@ -318,6 +350,10 @@ results = pipeline.run()
 | MTF resampling (9 timeframes) | None |
 | Data adaptation (2D/3D/4D) | None - auto per model |
 | Feature selection per model | None - auto per family |
+| **Triple-barrier label optimization (Optuna)** | None |
+| **Feature selection optimization (Optuna)** | None |
+| **Feature pruning (Optuna)** | None |
+| **Hyperparameter optimization (Optuna)** | None |
 | CV with purge/embargo | None |
 | OOF generation | None |
 | OOF alignment (heterogeneous) | None |

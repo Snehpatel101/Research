@@ -615,3 +615,24 @@ class FeatureOptimizer:
 
 **+ MTF**: ~240 features (30 per TF x 8 higher TFs)
 **Grand Total**: ~400 features available
+
+---
+
+## Next Phase
+
+After feature computation, proceed to **PHASE_1B: LABELING & OPTIMIZATION** for:
+- Triple-barrier label generation with Optuna optimization
+- Feature selection optimization with Optuna
+- Feature pruning with Optuna
+- Hyperparameter optimization with Optuna
+
+---
+
+## Document Metadata
+
+| Field | Value |
+|-------|-------|
+| Version | 1.0 |
+| Created | 2026-01-16 |
+| Purpose | Unified feature engineering |
+| Related Docs | PHASE_0_FOUNDATION.md, PHASE_1B_LABELING_OPTIMIZATION.md |

@@ -533,3 +533,14 @@ Raw 1-min OHLCV
 - [ ] All imports resolve
 - [ ] No circular dependencies
 - [ ] All `__all__` exports work
+
+---
+
+## Document Metadata
+
+| Field | Value |
+|-------|-------|
+| Version | 1.0 |
+| Created | 2026-01-16 |
+| Purpose | Foundation interfaces, types, constants |
+| Related Docs | PHASE_1_UNIFIED_FEATURES.md, PHASE_1B_LABELING_OPTIMIZATION.md |

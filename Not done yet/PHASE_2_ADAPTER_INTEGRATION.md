@@ -520,3 +520,15 @@ DataFrame (features)
        ▼
      Model.fit(X, y)
 ```
+
+---
+
+## Document Metadata
+
+| Field | Value |
+|-------|-------|
+| Version | 1.0 |
+| Created | 2026-01-16 |
+| Purpose | Adapter integration - no bypass paths |
+| Related Docs | PHASE_1_UNIFIED_FEATURES.md, PHASE_3_TRAINING_ORCHESTRATION.md |
+```
