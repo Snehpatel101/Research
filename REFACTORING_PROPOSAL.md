@@ -1,1109 +1,900 @@
-# ML Factory Complete Refactoring Proposal
+# ML Factory: Unified Pipeline Refactoring Proposal
 
 **Date:** 2026-01-16
-**Analysis Team:** 5 Specialized Agents (Architecture, Config, Data, MLOps, State)
-**Scope:** Major refactoring to unified pipeline with 9 first-class timeframes
+**Analysis:** Sequential specialized agents (ML Engineer, Backend Architect, MLOps Engineer)
+**Scope:** Transform two disconnected pipelines into ONE cohesive ML factory
 
 ---
 
 ## Executive Summary
 
-Your ML factory currently contains **two pipelines in one codebase**:
-1. Traditional single-timeframe pipeline (primary TF with bolt-on MTF)
-2. Multi-timeframe aspirations that aren't fully realized
+Your codebase has **all the pieces** for a world-class ML factory:
+- Per-model feature strategies (23 models)
+- Model family adapters (2D/3D/4D)
+- Sophisticated heterogeneous stacking (1280 lines)
+- 4 meta-learners (Ridge, MLP, XGBoost, Calibrated)
+- Inference bundles with preprocessing graphs
 
-**This proposal redesigns the entire system into ONE unified, cohesive pipeline** where:
-- ✅ All 9 timeframes are **equal first-class citizens**
-- ✅ Models declaratively specify data needs, system provides
-- ✅ **Single configuration surface** (85 config classes → 5 dataclasses)
-- ✅ **Clean dependency graph** (no circular imports)
-- ✅ **Automatic orchestration** (user says WHAT, system figures out HOW)
-- ✅ **Smart resumption** (skip completed work across runs)
+**But they're disconnected.** The codebase contains two pipelines:
+1. `phase1/` - Data processing (21 stages)
+2. `models/` + `training/` - Model training (orphaned adapters, disconnected inference)
 
-**Estimated Effort:** 6-8 weeks
-**Expected Benefits:** 60% complexity reduction, 10x faster iteration, production-ready deployment
+**This proposal reorganizes everything into ONE smooth pipeline** where data flows seamlessly from raw OHLCV to deployed inference bundle.
 
 ---
 
 ## Table of Contents
 
-1. [Current Problems](#1-current-problems)
-2. [Proposed Architecture](#2-proposed-architecture)
-3. [Configuration Redesign](#3-configuration-redesign)
-4. [Data Layer Design](#4-data-layer-design)
-5. [Training Orchestration](#5-training-orchestration)
-6. [State Management](#6-state-management)
-7. [Implementation Roadmap](#7-implementation-roadmap)
-8. [Migration Strategy](#8-migration-strategy)
+1. [The Core Problem: Two Pipelines](#1-the-core-problem-two-pipelines)
+2. [The Solution: One Unified Pipeline](#2-the-solution-one-unified-pipeline)
+3. [Layer 1: Data & Timeframes](#3-layer-1-data--timeframes)
+4. [Layer 2: Features & Per-Model Selection](#4-layer-2-features--per-model-selection)
+5. [Layer 3: Model Family Adapters](#5-layer-3-model-family-adapters)
+6. [Layer 4: Training & Ensembles](#6-layer-4-training--ensembles)
+7. [Layer 5: Meta-Learners](#7-layer-5-meta-learners)
+8. [Layer 6: Inference](#8-layer-6-inference)
+9. [The Single Configuration Surface](#9-the-single-configuration-surface)
+10. [Implementation Roadmap](#10-implementation-roadmap)
 
 ---
 
-## 1. Current Problems
+## 1. The Core Problem: Two Pipelines
 
-### 1.1 Dual Pipeline Architecture
-
-**Problem:** Two competing mental models in the codebase.
+### Current Architecture (Disconnected)
 
 ```
-Pipeline 1 (Traditional):
-  Ingest → Features → Labels → Train (assumes single "primary" TF)
-
-Pipeline 2 (MTF Bolt-On):
-  Separate MTF stage tries to retrofit multi-TF support
-  MTF features pollute base TF artifacts
+┌─────────────────────────────────────────────────────────────────────┐
+│ PIPELINE 1: phase1/                                                  │
+│                                                                      │
+│ Raw OHLCV → Resample → Features → Labels → Splits → Container       │
+│                                                                      │
+│ Outputs: TimeSeriesDataContainer                                     │
+│ Problem: Uses prefix-based feature sets (FEATURE_SET_DEFINITIONS)    │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+              [DISCONNECT: Two feature systems]
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ PIPELINE 2: models/ + training/                                      │
+│                                                                      │
+│ TimeSeriesDataContainer → Trainer → Model → Save                    │
+│                                                                      │
+│ Problem: Uses explicit name lists (MODEL_FEATURE_STRATEGIES)         │
+│ Problem: Adapters exist but are ORPHANED (not used by Trainer)       │
+│ Problem: Inference bundles not created by Trainer                    │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+              [DISCONNECT: Training doesn't create bundles]
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ ORPHANED: inference/                                                 │
+│                                                                      │
+│ ModelBundle → InferencePipeline → Predictions                       │
+│                                                                      │
+│ Problem: Must manually create bundles from training artifacts        │
+│ Problem: No meta-learner stacking support                            │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Evidence:**
-```python
-# Current: MTF stage modifies base features
-features_5min.parquet  # Base features
-↓ [MTF stage runs]
-features_5min.parquet  # Now contains MTF indicators mixed in
-# Problem: Can't train single-TF model after MTF stage!
-```
+### Specific Disconnections Found
 
-### 1.2 Circular Dependencies
-
-**Problem:** `phase1 ↔ models` cycle blocks independent testing.
-
-```python
-# phase1 imports from models
-from src.models.config.data_requirements import MODEL_DATA_REQUIREMENTS
-
-# models imports from phase1
-from src.phase1.stages.datasets.container import TimeSeriesDataContainer
-from src.phase1.lineage import PipelineLineage
-```
-
-**Impact:** Cannot extract either package independently, tight coupling everywhere.
-
-### 1.3 Configuration Sprawl
-
-**Problem:** 85 configuration classes across 5 systems.
-
-```
-UnifiedConfig (1116 lines, 12 sections)
-PipelineConfig (88 fields)
-TrainerConfig (63 fields)
-MLConfig (84 fields)
-GlobalConfig (YAML-based)
-+ 75 more config dataclasses
-```
-
-**User Pain:**
-```python
-# User wants: "Train LSTM on 5min with XGBoost on 15min, stack them"
-# Current requirement: Understand 5 config systems, 200+ fields, 3 YAML files
-```
-
-### 1.4 Implicit Primary Timeframe
-
-**Problem:** Everything assumes one "primary" timeframe.
-
-```python
-# Current storage - which TF is this?
-data/features/features.parquet  # Unnamed TF (implicitly 5min)
-data/labels/labels.parquet      # Unnamed TF
-data/splits/scaled/train.parquet # Unnamed TF
-```
-
-**Result:** Cannot train models on different timeframes in same run.
-
-### 1.5 No State Tracking Across Dimensions
-
-**Problem:** State tracks phases but not per-TF/per-model execution.
-
-```python
-# Current: Can't answer
-"Which timeframes have features computed?"
-"Which models are trained for which TF-horizon combos?"
-"Can I resume training after LSTM@5min-h20 failed?"
-```
+| System A | System B | Disconnect |
+|----------|----------|------------|
+| `FEATURE_SET_DEFINITIONS` (prefix-based) | `MODEL_FEATURE_STRATEGIES` (explicit names) | Two parallel feature systems |
+| `phase1/` feature engineering | `features/strategies.py` | Different naming conventions |
+| `adapters/` (TabularAdapter, SequenceAdapter) | `Trainer` | Trainer bypasses adapters entirely |
+| `Trainer.run()` | `ModelBundle` | Training doesn't create inference bundles |
+| `StackingEnsemble` (meta-learners) | `InferencePipeline` | No meta-learner inference support |
 
 ---
 
-## 2. Proposed Architecture
+## 2. The Solution: One Unified Pipeline
 
-### 2.1 Core Principle: One Source, N Artifacts
-
-```
-┌────────────────────────────────────────────────────────┐
-│ SINGLE CANONICAL 1-MIN OHLCV (immutable source)       │
-└────────────────────────────────────────────────────────┘
-                          ↓
-┌────────────────────────────────────────────────────────┐
-│ 9 TIMEFRAME ARTIFACTS (first-class, cached, derived)  │
-│  1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h            │
-└────────────────────────────────────────────────────────┘
-                          ↓
-┌────────────────────────────────────────────────────────┐
-│ FEATURE BANKS (per-TF, ~180 features each)            │
-│  MES/features/1min/features.parquet                   │
-│  MES/features/5min/features.parquet                   │
-│  ... (9 independent feature sets)                     │
-└────────────────────────────────────────────────────────┘
-                          ↓
-┌────────────────────────────────────────────────────────┐
-│ LABEL BANKS (per-TF-horizon)                          │
-│  MES/labels/1min/h5.parquet, h10.parquet, ...        │
-│  MES/labels/5min/h5.parquet, h10.parquet, ...        │
-│  ... (9 TFs × 4 horizons = 36 label sets)            │
-└────────────────────────────────────────────────────────┘
-                          ↓
-┌────────────────────────────────────────────────────────┐
-│ MODEL COMPOSITION (models declare needs, system provides)│
-│  "XGBoost wants: 15min features + MTF(1m,5m,1h)"      │
-│  → DataProvider.get_mtf_features("15min", ["1m"...])  │
-│  "LSTM wants: 5min sequences, len=60"                 │
-│  → DataProvider.get_sequences("5min", seq_len=60)     │
-│  "PatchTST wants: Multi-stream 1m+5m+15m raw OHLCV"   │
-│  → DataProvider.get_multistream(["1m","5m","15m"])    │
-└────────────────────────────────────────────────────────┘
-```
-
-### 2.2 Module Reorganization
-
-**New structure (breaks cycles, clear boundaries):**
+### New Architecture (Cohesive)
 
 ```
-src/
-├── data/                       # Phase 1: OHLCV management
-│   ├── ingestion.py           # Load raw 1-min
-│   ├── resampler.py           # 1min → 9 timeframes
-│   ├── provider.py            # DataProvider API (unified access)
-│   ├── cache.py               # Intelligent caching
-│   └── artifacts.py           # Manifest management
-│
-├── features/                   # Phase 2: Feature engineering
-│   ├── bank.py                # FeatureBank (per-TF storage)
-│   ├── composer.py            # FeatureComposer (model-specific sets)
-│   ├── strategies.py          # MODEL_FEATURE_STRATEGIES (23 models)
-│   ├── optimization.py        # Optuna feature pruning
-│   └── families/              # Feature implementations
-│       ├── momentum.py        # RSI, MACD, Stoch
-│       ├── volatility.py      # ATR, Bollinger
-│       ├── volume.py          # OBV, VWAP
-│       ├── microstructure.py  # Spread, VPIN
-│       └── wavelets.py        # CWT, DWT
-│
-├── labeling/                   # Phase 3: Label generation
-│   ├── bank.py                # LabelBank (per-TF-horizon storage)
-│   ├── triple_barrier.py      # Core labeling
-│   ├── optimizer.py           # Optuna barrier optimization
-│   └── quality.py             # Sample quality weighting
-│
-├── models/                     # Phase 4: Model declarations
-│   ├── registry.py            # ModelRegistry (unchanged)
-│   ├── requirements.py        # NEW: Declarative data requirements
-│   ├── composer.py            # NEW: DatasetComposer
-│   ├── boosting/              # Model implementations (unchanged)
-│   ├── neural/
-│   ├── classical/
-│   └── ensemble/
-│
-├── training/                   # Phase 5: Orchestration
-│   ├── orchestrator.py        # TrainingOrchestrator (main controller)
-│   ├── config.py              # ExperimentConfig (5 dataclasses)
-│   ├── planning.py            # ExecutionPlanner (config → plan)
-│   ├── coordinators/          # Training mode plugins
-│   │   ├── base.py            # StandardCoordinator
-│   │   ├── ensemble.py        # EnsembleCoordinator
-│   │   ├── walk_forward.py    # WalkForwardCoordinator
-│   │   └── regime_aware.py    # RegimeAwareCoordinator
-│   └── artifact_store.py      # Unified artifact management
-│
-└── pipeline/                   # Pipeline orchestration
-    ├── graph_state.py         # Graph-based state management
-    ├── graph_builder.py       # DAG construction from config
-    └── progress.py            # Real-time dashboard
-```
-
-**Key changes:**
-- ❌ **DELETE** `src/phase1/` (split into `data/`, `features/`, `labeling/`)
-- ✅ **NEW** `src/data/` (shared OHLCV management, no model knowledge)
-- ✅ **NEW** `src/features/` (independent of models, just produces feature banks)
-- ✅ **NEW** `src/labeling/` (independent label banks)
-- ✅ **REFACTOR** `src/models/` (add declarative requirements)
-- ✅ **REFACTOR** `src/training/` (orchestrator + coordinators)
-
-**Dependency graph (acyclic):**
-```
-data/     → No dependencies
-features/ → Depends on data/ only
-labeling/ → Depends on data/ only
-models/   → Depends on features/ and labeling/ via interfaces
-training/ → Depends on models/ and data/
-pipeline/ → Depends on training/
+┌─────────────────────────────────────────────────────────────────────┐
+│                    ONE UNIFIED PIPELINE                              │
+│                                                                      │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ LAYER 1: Data & Timeframes                                    │   │
+│  │                                                               │   │
+│  │ Raw 1-min OHLCV → Resample → 9 Timeframe Artifacts           │   │
+│  │ (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)                   │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              ↓                                       │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ LAYER 2: Features & Per-Model Selection                       │   │
+│  │                                                               │   │
+│  │ 180+ Features Generated → FEATURE_REGISTRY (unified)         │   │
+│  │                              ↓                                │   │
+│  │ MODEL_FEATURE_STRATEGIES → Baseline per model (23 configs)   │   │
+│  │                              ↓                                │   │
+│  │ FeatureOptimizer → Optuna pruning (baseline → optimal)       │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              ↓                                       │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ LAYER 3: Model Family Adapters                                │   │
+│  │                                                               │   │
+│  │ AdapterRegistry.get_for_model() → Correct data format        │   │
+│  │   ├─ TabularAdapter   → (n_samples, n_features)      2D     │   │
+│  │   ├─ SequenceAdapter  → (n_samples, seq_len, n_feat) 3D     │   │
+│  │   └─ MultiStreamAdapter → (n, n_tf, seq_len, n_feat) 4D     │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              ↓                                       │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ LAYER 4: Training & Ensembles                                 │   │
+│  │                                                               │   │
+│  │ TrainingOrchestrator → Per-model training                    │   │
+│  │                              ↓                                │   │
+│  │ OOF Generation → PurgedKFold → OOF predictions               │   │
+│  │                              ↓                                │   │
+│  │ StackingDatasetBuilder → Aligned OOF for meta-learner        │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              ↓                                       │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ LAYER 5: Meta-Learners                                        │   │
+│  │                                                               │   │
+│  │ 4 Meta-Learners: Ridge, MLP, XGBoost, Calibrated             │   │
+│  │   ├─ Input: Stacked OOF probabilities (always 2D)            │   │
+│  │   └─ Output: Final ensemble prediction                        │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                              ↓                                       │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │ LAYER 6: Inference                                            │   │
+│  │                                                               │   │
+│  │ Trainer → ModelBundle (automatic)                            │   │
+│  │   ├─ model, scaler, calibrator, feature_columns              │   │
+│  │   └─ preprocessing_graph (raw OHLCV → features)              │   │
+│  │                              ↓                                │   │
+│  │ InferencePipeline → Real-time + Batch predictions            │   │
+│  │   └─ MetaLearnerInference (NEW) → Heterogeneous ensembles    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Configuration Redesign
+## 3. Layer 1: Data & Timeframes
 
-### 3.1 Single Configuration Surface
+### Current State
+- 9 intraday timeframes supported (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- All resampled from canonical 1-min OHLCV
+- **Working correctly** - no changes needed
 
-**Problem:** 85 config classes across 5 systems
-**Solution:** 5 focused dataclasses with intelligent defaults
+### Data Flow
+
+```
+data/raw/MES_1min.parquet (canonical source)
+         ↓
+    [Resampler]
+         ↓
+data/timeframes/MES/
+    ├── 1min.parquet
+    ├── 5min.parquet
+    ├── 10min.parquet
+    ├── 15min.parquet
+    ├── 20min.parquet
+    ├── 25min.parquet
+    ├── 30min.parquet
+    ├── 45min.parquet
+    └── 60min.parquet
+```
+
+### Per-Model Timeframe Selection
+
+Each model independently chooses its primary timeframe:
+
+| Model | Primary TF | Derived From |
+|-------|-----------|--------------|
+| XGBoost | 15min | 1-min canonical |
+| LSTM | 5min | 1-min canonical |
+| PatchTST | 1min | 1-min canonical (direct) |
+| TCN | 5min | 1-min canonical |
+
+---
+
+## 4. Layer 2: Features & Per-Model Selection
+
+### The Problem: Two Parallel Feature Systems
+
+**System 1: `phase1/config/feature_sets/` (prefix-based)**
+```python
+# Uses include_prefixes to match features
+FeatureSetDefinition(
+    name="boosting_optimal",
+    include_prefixes=["return_", "rsi_", "macd_", ...],
+    exclude_prefixes=["sma_", "ema_", ...],
+)
+```
+
+**System 2: `src/features/strategies.py` (explicit names)**
+```python
+# Uses explicit feature name lists
+MODEL_FEATURE_STRATEGIES["xgboost"] = ModelFeatureStrategy(
+    baseline_features=["returns", "rsi_14", "macd_line", ...],  # ~100 features
+)
+```
+
+**These don't communicate.** Phase1 generates `return_1`, `return_5` but strategies expects `returns`.
+
+### The Solution: Unified Feature Registry
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ UNIFIED FEATURE SYSTEM                                              │
+│                                                                     │
+│ 1. Phase1 generates ~180 features with consistent naming           │
+│    └─ output: features_{tf}.parquet with columns like:             │
+│       rsi_14, macd_line, atr_14, bb_upper, volume_sma_20, etc.    │
+│                                                                     │
+│ 2. FEATURE_REGISTRY (complete, 180+ entries)                       │
+│    └─ Maps each feature to: family, recommended_models, cost       │
+│                                                                     │
+│ 3. MODEL_FEATURE_STRATEGIES (references families, not names)       │
+│    └─ Each model: baseline_families + mtf_mode + optimization      │
+│                                                                     │
+│ 4. FeatureStrategyManager resolves families → actual columns       │
+│    └─ get_features_for_model("xgboost", df) → ~100 columns        │
+│                                                                     │
+│ 5. FeatureOptimizer (optional) prunes baseline → optimal           │
+│    └─ Optuna-based pruning: ~100 → ~60 features                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Per-Model Feature Strategies (All 23 Models)
+
+| Model | Family | Baseline Features | MTF Mode | Min/Max |
+|-------|--------|-------------------|----------|---------|
+| **Boosting (3)** |
+| xgboost | boosting | momentum + volatility + volume + microstructure + MTF | indicators | 40/120 |
+| lightgbm | boosting | momentum + volatility + volume + microstructure + MTF | indicators | 40/120 |
+| catboost | boosting | momentum + volatility + volume + microstructure + MTF | indicators | 40/120 |
+| **Classical (3)** |
+| random_forest | classical | momentum + volatility + volume | none | 30/80 |
+| logistic | classical | momentum + volatility (low corr) | none | 20/50 |
+| svm | classical | momentum + volatility (normalized) | none | 20/50 |
+| **Neural RNN (2)** |
+| lstm | neural | momentum + volatility + wavelets + MTF | indicators | 50/150 |
+| gru | neural | momentum + volatility + wavelets + MTF | indicators | 50/150 |
+| **Neural CNN (3)** |
+| tcn | cnn | momentum + volatility + volume | none | 30/100 |
+| inceptiontime | cnn | momentum + volatility | none | 30/80 |
+| resnet1d | cnn | momentum + volatility + volume | none | 30/100 |
+| **Transformers (5)** |
+| transformer | transformer | momentum + volatility + wavelets | indicators | 40/100 |
+| patchtst | transformer | raw_ohlcv only | multi_stream | 4/10 |
+| itransformer | transformer | raw_ohlcv only | multi_stream | 4/10 |
+| tft | transformer | momentum + volatility + regime | indicators | 40/120 |
+| nbeats | transformer | close + volume only | none | 2/10 |
+| **Meta-Learners (4)** |
+| ridge_meta | meta_learner | OOF probabilities | none | N/A |
+| mlp_meta | meta_learner | OOF probabilities | none | N/A |
+| xgboost_meta | meta_learner | OOF probabilities | none | N/A |
+| calibrated_meta | meta_learner | OOF probabilities | none | N/A |
+| **Ensembles (3)** |
+| voting | ensemble | (uses base model features) | varies | N/A |
+| stacking | ensemble | (uses base model features) | varies | N/A |
+| blending | ensemble | (uses base model features) | varies | N/A |
+
+### Feature Flow Diagram
+
+```
+Phase1 generates 180+ features
+         ↓
+┌────────────────────────────────────────────────────────────────┐
+│ Per-Model Feature Selection                                     │
+│                                                                 │
+│ User: "Train XGBoost"                                          │
+│         ↓                                                       │
+│ FeatureStrategyManager.get_features_for_model("xgboost", df)   │
+│         ↓                                                       │
+│ Lookup MODEL_FEATURE_STRATEGIES["xgboost"]                     │
+│   baseline_families = ["momentum", "volatility", "volume",     │
+│                        "microstructure", "mtf"]                │
+│         ↓                                                       │
+│ Resolve families → actual columns via FEATURE_REGISTRY         │
+│   momentum → [rsi_14, macd_line, macd_signal, stoch_k, ...]   │
+│   volatility → [atr_14, bb_upper, bb_lower, bb_width, ...]    │
+│   etc.                                                          │
+│         ↓                                                       │
+│ Filter to columns present in df                                │
+│         ↓                                                       │
+│ Returns: ~100 feature columns for XGBoost                      │
+└────────────────────────────────────────────────────────────────┘
+         ↓
+┌────────────────────────────────────────────────────────────────┐
+│ Optional: Feature Optimization                                  │
+│                                                                 │
+│ FeatureOptimizer("xgboost", n_trials=30).optimize(...)         │
+│         ↓                                                       │
+│ Optuna suggests feature subsets                                │
+│ Trains model, evaluates F1, selects best                       │
+│         ↓                                                       │
+│ Returns: ~60 optimized features (from ~100 baseline)           │
+└────────────────────────────────────────────────────────────────┘
+         ↓
+Final feature set for XGBoost training
+```
+
+---
+
+## 5. Layer 3: Model Family Adapters
+
+### Current State: Orphaned But Well-Designed
+
+The adapter system exists in `src/adapters/` with excellent implementations:
+- `TabularAdapter` - 2D arrays for boosting/classical
+- `SequenceAdapter` - 3D sequences for RNN/CNN
+- `MultiStreamAdapter` - 4D multi-TF for transformers
+
+**But Trainer doesn't use them.** The Trainer bypasses adapters entirely.
+
+### The Solution: Adapter-Aware Training
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ ADAPTER-AWARE TRAINING FLOW                                     │
+│                                                                 │
+│ 1. Model selected: "lstm"                                      │
+│         ↓                                                       │
+│ 2. Get model contract:                                         │
+│    ModelContract.for_model("lstm")                             │
+│    → input_rank: SEQUENCE_3D                                   │
+│    → sequence_length: 60                                       │
+│         ↓                                                       │
+│ 3. Get appropriate adapter:                                    │
+│    AdapterRegistry.get_for_model("lstm")                       │
+│    → SequenceAdapter(sequence_length=60)                       │
+│         ↓                                                       │
+│ 4. Get model's feature columns:                                │
+│    FeatureStrategyManager.get_features_for_model("lstm", df)   │
+│    → ~80 feature columns                                       │
+│         ↓                                                       │
+│ 5. Transform data:                                             │
+│    adapter = SequenceAdapter(                                  │
+│        sequence_length=60,                                     │
+│        feature_columns=feature_cols,                           │
+│    )                                                           │
+│    result = adapter.transform(df)                              │
+│    → AdapterResult(                                            │
+│        X: (n_samples, 60, 80),  # 3D                          │
+│        y: (n_samples,),                                        │
+│        data_rank: SEQUENCE_3D,                                 │
+│        original_indices: [...],                                │
+│      )                                                         │
+│         ↓                                                       │
+│ 6. Train model:                                                │
+│    model.fit(result.X, result.y, ...)                         │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Adapter Mapping
+
+| Model | Family | Adapter | Output Shape |
+|-------|--------|---------|--------------|
+| xgboost | boosting | TabularAdapter | (n, ~100) |
+| lightgbm | boosting | TabularAdapter | (n, ~100) |
+| catboost | boosting | TabularAdapter | (n, ~100) |
+| random_forest | classical | TabularAdapter | (n, ~80) |
+| logistic | classical | TabularAdapter | (n, ~50) |
+| svm | classical | TabularAdapter | (n, ~50) |
+| lstm | neural | SequenceAdapter | (n, 60, ~80) |
+| gru | neural | SequenceAdapter | (n, 60, ~80) |
+| tcn | cnn | SequenceAdapter | (n, 60, ~60) |
+| inceptiontime | cnn | SequenceAdapter | (n, 60, ~60) |
+| resnet1d | cnn | SequenceAdapter | (n, 60, ~60) |
+| transformer | transformer | SequenceAdapter | (n, 60, ~80) |
+| patchtst | transformer | **MultiStreamAdapter** | (n, 3, 60, 5) |
+| itransformer | transformer | **MultiStreamAdapter** | (n, 3, 60, 5) |
+| tft | transformer | SequenceAdapter | (n, 60, ~100) |
+| nbeats | transformer | SequenceAdapter | (n, 60, 2) |
+
+### Heterogeneous Ensemble Adaptation
+
+For stacking ensembles with mixed model types:
+
+```
+Heterogeneous Stacking: XGBoost + LSTM + PatchTST
+         ↓
+┌────────────────────────────────────────────────────────────────┐
+│ PARALLEL ADAPTATION                                             │
+│                                                                 │
+│ XGBoost path:                                                  │
+│   TabularAdapter → (n_samples, ~100)                           │
+│   Train XGBoost on 2D                                          │
+│   Generate OOF: (n_samples, 3) probabilities                   │
+│                                                                 │
+│ LSTM path:                                                     │
+│   SequenceAdapter → (n_samples - 59, 60, ~80)                  │
+│   Train LSTM on 3D                                             │
+│   Generate OOF: (n_samples - 59, 3) probabilities              │
+│   NOTE: Loses 59 samples at start due to lookback              │
+│                                                                 │
+│ PatchTST path:                                                 │
+│   MultiStreamAdapter → (n_samples - 59, 3, 60, 5)              │
+│   Train PatchTST on 4D                                         │
+│   Generate OOF: (n_samples - 59, 3) probabilities              │
+└────────────────────────────────────────────────────────────────┘
+         ↓
+┌────────────────────────────────────────────────────────────────┐
+│ OOF ALIGNMENT (OOFAlignmentValidator)                          │
+│                                                                 │
+│ XGBoost OOF: indices [0, n)                                    │
+│ LSTM OOF: indices [59, n)                                      │
+│ PatchTST OOF: indices [59, n)                                  │
+│                                                                 │
+│ Common range: [59, n) → n_common samples                       │
+│                                                                 │
+│ Aligned OOF stack: (n_common, 3 models × 3 classes) = (_, 9)   │
+└────────────────────────────────────────────────────────────────┘
+         ↓
+Meta-learner trains on aligned 2D OOF
+```
+
+---
+
+## 6. Layer 4: Training & Ensembles
+
+### Training Orchestrator Flow
+
+```
+ExperimentConfig
+    ↓
+┌────────────────────────────────────────────────────────────────┐
+│ TrainingOrchestrator.run()                                      │
+│                                                                 │
+│ 1. Validate config                                             │
+│ 2. Load data for each (symbol, horizon, timeframe)             │
+│ 3. For each model in config.models:                            │
+│    a. Get feature strategy                                     │
+│    b. Get adapter                                              │
+│    c. Transform data                                           │
+│    d. (Optional) Optimize features via Optuna                  │
+│    e. Train model                                              │
+│    f. Generate OOF predictions                                 │
+│    g. Store results                                            │
+│ 4. If config.build_ensemble:                                   │
+│    a. Build stacking dataset from OOF                          │
+│    b. Train meta-learner                                       │
+│ 5. Create ModelBundles                                         │
+│ 6. Save all artifacts                                          │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### OOF Generation for Stacking
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ OOF GENERATION (per model)                                      │
+│                                                                 │
+│ PurgedKFold (n_folds=5, purge=60, embargo=1440)               │
+│                                                                 │
+│ For each fold:                                                 │
+│   1. Split data with purge gap and embargo period              │
+│   2. Scale train data only (leakage prevention)                │
+│   3. Train model on fold_train                                 │
+│   4. Predict on fold_val                                       │
+│   5. Store predictions at fold_val indices                     │
+│                                                                 │
+│ Output: OOFPrediction                                          │
+│   predictions: DataFrame with columns:                         │
+│     - {model}_prob_short, {model}_prob_neutral, {model}_prob_long │
+│     - {model}_pred, {model}_confidence                         │
+│   fold_info: per-fold metrics                                  │
+│   coverage: fraction with predictions                          │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Three Ensemble Methods
+
+| Method | Homogeneous Only | Description |
+|--------|------------------|-------------|
+| **Voting** | Yes | Simple soft/hard vote (no meta-learner) |
+| **Blending** | Yes | Holdout-based (simpler than stacking) |
+| **Stacking** | **No** | OOF-based with meta-learner (**supports heterogeneous**) |
+
+---
+
+## 7. Layer 5: Meta-Learners
+
+### The Four Meta-Learners
+
+All meta-learners receive OOF predictions as input (always 2D, regardless of base model type):
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ META-LEARNER INPUT                                              │
+│                                                                 │
+│ Stacked OOF: (n_common, n_models × 3)                          │
+│                                                                 │
+│ Example: 3 base models → (n_common, 9) input                   │
+│   [xgb_prob_short, xgb_prob_neutral, xgb_prob_long,            │
+│    lstm_prob_short, lstm_prob_neutral, lstm_prob_long,         │
+│    ptst_prob_short, ptst_prob_neutral, ptst_prob_long]         │
+│                                                                 │
+│ + Derived features (optional):                                 │
+│   models_agree, agreement_count, avg_confidence,               │
+│   min_confidence, max_confidence, {model}_entropy, avg_entropy │
+└────────────────────────────────────────────────────────────────┘
+         ↓
+┌────────────────────────────────────────────────────────────────┐
+│ META-LEARNER SELECTION                                          │
+│                                                                 │
+│ ridge_meta:                                                    │
+│   Method: L2-regularized Ridge classifier                      │
+│   Strength: Fast, interpretable, robust to multicollinearity   │
+│   Use case: Well-calibrated base models                        │
+│                                                                 │
+│ mlp_meta:                                                      │
+│   Method: Shallow neural network (32, 16)                      │
+│   Strength: Non-linear interactions                            │
+│   Use case: Complementary error patterns                       │
+│                                                                 │
+│ xgboost_meta:                                                  │
+│   Method: Shallow XGBoost (max_depth=3)                        │
+│   Strength: Complex non-linear, feature importance             │
+│   Use case: Diverse error patterns                             │
+│                                                                 │
+│ calibrated_meta:                                               │
+│   Method: Logistic + Isotonic calibration                      │
+│   Strength: Well-calibrated probabilities                      │
+│   Use case: Threshold-based trading decisions                  │
+└────────────────────────────────────────────────────────────────┘
+         ↓
+Final ensemble prediction
+```
+
+### Meta-Learner Flow
+
+```
+Base Models (trained on OOF folds)
+    ├── XGBoost → OOF probs (n, 3)
+    ├── LSTM → OOF probs (n-59, 3)
+    └── PatchTST → OOF probs (n-59, 3)
+         ↓
+OOF Alignment → Common range [59, n)
+         ↓
+StackingDatasetBuilder → (n_common, 9)
+         ↓
+Meta-Learner (e.g., ridge_meta)
+    ├── Train on OOF
+    └── Validate on val set predictions
+         ↓
+Full retrain base models on all training data
+         ↓
+Inference: base predictions → meta-learner → final prediction
+```
+
+---
+
+## 8. Layer 6: Inference
+
+### Current Gap: Training Doesn't Create Bundles
+
+**Current flow (broken):**
+```
+Trainer.run()
+    → saves model to checkpoints/best_model/
+    → saves scaler separately
+    → saves feature_selection.json
+    → DOES NOT create ModelBundle
+
+User must manually:
+    → Locate all artifacts
+    → Create ModelBundle.from_training()
+    → bundle.save()
+```
+
+### The Solution: Automatic Bundle Creation
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ AUTOMATIC BUNDLE CREATION                                       │
+│                                                                 │
+│ Trainer.run()                                                  │
+│     ↓                                                          │
+│ train model                                                    │
+│     ↓                                                          │
+│ fit calibrator                                                 │
+│     ↓                                                          │
+│ TrainerArtifactsMixin._save_all_artifacts()                    │
+│     ↓                                                          │
+│ ModelBundle.from_training(                                     │
+│     model=self.model,                                          │
+│     scaler=self.scaler,                                        │
+│     feature_columns=self._feature_set_columns,                 │
+│     horizon=self.config.horizon,                               │
+│     calibrator=self.calibrator,                                │
+│     preprocessing_graph=self._create_preprocessing_graph(),    │
+│     symbol=self.config.symbol,                                 │
+│     training_metrics=metrics_dict,                             │
+│ )                                                              │
+│     ↓                                                          │
+│ bundle.save(self.output_path / "bundle")                       │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### ModelBundle Contents
+
+```
+bundle_dir/
+    manifest.json               # File listing + MD5 checksums
+    metadata.json               # Model info (name, family, horizon, features)
+    features.json               # Ordered feature column names
+    scaler.pkl                  # Fitted scaler
+    calibrator.pkl              # Fitted probability calibrator [optional]
+    preprocessing_graph.json    # Raw OHLCV → features config [optional]
+    model/                      # Model artifacts
+```
+
+### Inference Pipeline (Including Meta-Learners)
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ INFERENCE MODES                                                 │
+│                                                                 │
+│ Mode 1: Single Model                                           │
+│   bundle = ModelBundle.load("./bundles/xgb_h20")               │
+│   pipeline = InferencePipeline([bundle])                       │
+│   result = pipeline.predict(X_new)                             │
+│                                                                 │
+│ Mode 2: Homogeneous Voting (existing)                          │
+│   bundles = [xgb_bundle, lgbm_bundle, catboost_bundle]         │
+│   pipeline = InferencePipeline(bundles)                        │
+│   result = pipeline.predict_ensemble(X_new, method="soft_vote")│
+│                                                                 │
+│ Mode 3: Heterogeneous Stacking (NEW)                           │
+│   pipeline = MetaLearnerInferencePipeline(                     │
+│       base_bundles=[xgb_bundle, lstm_bundle, ptst_bundle],     │
+│       meta_learner_bundle=ridge_meta_bundle,                   │
+│   )                                                            │
+│   result = pipeline.predict_stacking(X_new, X_seq=X_new_3d)    │
+│                                                                 │
+│ Mode 4: Raw OHLCV End-to-End                                   │
+│   bundle = ModelBundle.load("./bundles/xgb_h20_with_graph")    │
+│   raw_df = pd.read_parquet("live_data/recent_bars.parquet")    │
+│   result = bundle.predict_from_raw(raw_df)                     │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### New: MetaLearnerInferencePipeline
 
 ```python
-# NEW: src/training/config.py
+class MetaLearnerInferencePipeline:
+    """Inference for heterogeneous stacking ensembles."""
 
-from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Literal
+    def __init__(
+        self,
+        base_bundles: list[ModelBundle],
+        meta_learner_bundle: ModelBundle,
+    ):
+        self.base_bundles = base_bundles
+        self.meta_learner_bundle = meta_learner_bundle
 
+        # Separate tabular vs sequence bundles
+        self.tabular_bundles = [b for b in base_bundles if not b.requires_sequences]
+        self.sequence_bundles = [b for b in base_bundles if b.requires_sequences]
+
+    def predict_stacking(
+        self,
+        X: np.ndarray,                    # 2D for tabular
+        X_seq: np.ndarray | None = None,  # 3D for sequence
+    ) -> PredictionOutput:
+        # 1. Get predictions from all base models
+        base_probs = []
+        for bundle in self.tabular_bundles:
+            probs = bundle.predict(X).class_probabilities
+            base_probs.append(probs)
+        for bundle in self.sequence_bundles:
+            probs = bundle.predict(X_seq).class_probabilities
+            base_probs.append(probs)
+
+        # 2. Stack base predictions
+        stacked = np.hstack(base_probs)  # (n_samples, n_models * 3)
+
+        # 3. Meta-learner predicts final output
+        return self.meta_learner_bundle.predict(stacked)
+```
+
+---
+
+## 9. The Single Configuration Surface
+
+### User Experience: 10 Lines of Config
+
+```python
+from src.training import TrainingOrchestrator, ExperimentConfig, ModelConfig
+
+config = ExperimentConfig(
+    symbol="MES",
+    horizons=[20],
+    models=[
+        ModelConfig(name="xgboost", timeframe="15min", optimize_features=True),
+        ModelConfig(name="lstm", timeframe="5min", sequence_length=60),
+        ModelConfig(name="patchtst", timeframe="1min"),
+    ],
+    build_ensemble=True,
+    meta_learner="ridge_meta",
+)
+
+orchestrator = TrainingOrchestrator(config)
+results = orchestrator.run()
+orchestrator.display_results()
+```
+
+**System automatically:**
+1. Derives feature requirements from model strategies
+2. Gets appropriate adapters (2D, 3D, 4D)
+3. Transforms data per model
+4. Trains base models
+5. Generates OOF with PurgedKFold
+6. Aligns OOF for heterogeneous models
+7. Trains meta-learner on stacked OOF
+8. Creates ModelBundles for deployment
+9. Saves inference bundles
+
+### Configuration Dataclasses
+
+```python
 @dataclass
 class ModelConfig:
     """Configuration for a single model."""
     name: str                           # "xgboost", "lstm", "patchtst"
-    timeframe: str = "5min"            # Primary training TF
-    sequence_length: Optional[int] = None  # For sequence models
+    timeframe: str = "5min"            # Primary training timeframe
+    sequence_length: int | None = None  # For sequence models
     optimize_features: bool = False     # Run Optuna pruning?
     feature_opt_trials: int = 30
-    hyperparams: Dict = field(default_factory=dict)
+    hyperparams: dict = field(default_factory=dict)
 
 @dataclass
 class ExperimentConfig:
     """Single source of truth for ML experiments."""
 
     # ========== REQUIRED ==========
-    models: List[ModelConfig]           # Which models to train
+    models: list[ModelConfig]           # Which models to train
     symbol: str                         # "MES", "MGC"
 
     # ========== DATA ==========
-    horizons: List[int] = field(default_factory=lambda: [20])
+    horizons: list[int] = field(default_factory=lambda: [20])
 
-    # ========== ENSEMBLE (optional) ==========
+    # ========== ENSEMBLE ==========
     build_ensemble: bool = False
-    meta_learner: str = "ridge_meta"
+    meta_learner: str = "ridge_meta"    # ridge_meta, mlp_meta, xgboost_meta, calibrated_meta
 
     # ========== TRAINING MODE ==========
-    training_mode: Literal["standard", "walk_forward", "regime_aware"] = "standard"
+    training_mode: str = "standard"     # standard, walk_forward, regime_aware
 
     # ========== ARTIFACTS ==========
-    run_id: Optional[str] = None        # Auto-generated if None
-    save_predictions: bool = True
-    save_inference_bundle: bool = False
+    run_id: str | None = None           # Auto-generated if None
+    save_bundles: bool = True           # Create inference bundles
 ```
 
-### 3.2 User Experience
+---
 
-**Example 1: Simple single model**
-```python
-config = ExperimentConfig(
-    models=[ModelConfig(name="xgboost", timeframe="15min")],
-    symbol="MES",
-)
-# System derives: Need 2D tabular, ~200 features, 15min TF
-```
+## 10. Implementation Roadmap
 
-**Example 2: Heterogeneous ensemble**
+### Phase 1: Unify Feature System (Week 1-2)
+
+**Goal:** Merge two parallel feature systems into one.
+
+**Tasks:**
+- [ ] Complete FEATURE_REGISTRY with all 180+ features
+- [ ] Change MODEL_FEATURE_STRATEGIES to reference families (not explicit names)
+- [ ] Update FeatureStrategyManager to resolve families → columns
+- [ ] Fix optimize_features_for_model() bug (user_attrs extraction)
+- [ ] Deprecate FEATURE_SET_DEFINITIONS (phase1 prefix system)
+- [ ] Tests for unified feature resolution
+
+**Deliverables:**
+- `src/features/registry.py` - Complete 180+ feature registry
+- `src/features/strategies.py` - Family-based strategies
+- Migration guide for existing experiments
+
+---
+
+### Phase 2: Integrate Adapters into Trainer (Week 3-4)
+
+**Goal:** Trainer uses adapters instead of bypassing them.
+
+**Tasks:**
+- [ ] Refactor Trainer to accept AdapterResult
+- [ ] Route data through AdapterRegistry based on model
+- [ ] Pass feature_columns to adapter from feature strategy
+- [ ] Handle heterogeneous ensembles in StackingEnsemble (dual data loading)
+- [ ] Fix ModelContract.input_rank for patchtst/itransformer (should be 4D)
+- [ ] Tests for adapter integration
+
+**Deliverables:**
+- `src/models/training/trainer.py` - Adapter-aware training
+- Updated ModelContracts with correct ranks
+
+---
+
+### Phase 3: Automatic Bundle Creation (Week 5-6)
+
+**Goal:** Trainer automatically creates inference bundles.
+
+**Tasks:**
+- [ ] Add bundle creation to TrainerArtifactsMixin
+- [ ] Create preprocessing_graph from pipeline config
+- [ ] Add bundle validation and checksums
+- [ ] Create bundle CLI script
+- [ ] Tests for bundle creation and loading
+
+**Deliverables:**
+- `src/models/training/artifacts.py` - Auto bundle creation
+- `scripts/create_bundle.py` - CLI for manual bundling
+
+---
+
+### Phase 4: Meta-Learner Inference (Week 7-8)
+
+**Goal:** InferencePipeline supports trained meta-learners.
+
+**Tasks:**
+- [ ] Implement MetaLearnerInferencePipeline class
+- [ ] Handle heterogeneous base bundles (2D + 3D)
+- [ ] Add stacking bundle format (base bundles + meta bundle)
+- [ ] Tests for meta-learner inference
+
+**Deliverables:**
+- `src/inference/meta_learner_pipeline.py` - Heterogeneous inference
+- `src/inference/stacking_bundle.py` - Stacking bundle format
+
+---
+
+### Phase 5: Cleanup & Documentation (Week 9-10)
+
+**Goal:** Remove legacy code, update docs.
+
+**Tasks:**
+- [ ] Remove FEATURE_SET_DEFINITIONS (phase1 prefix system)
+- [ ] Remove duplicate feature resolution code
+- [ ] Update CLAUDE.md with unified architecture
+- [ ] Update notebooks for new API
+- [ ] Migration script for existing experiments
+
+**Deliverables:**
+- Clean codebase with single feature system
+- Updated documentation
+- Migration guide
+
+---
+
+## Summary: Before vs After
+
+| Aspect | Before (Disconnected) | After (Unified) |
+|--------|----------------------|-----------------|
+| Feature systems | 2 parallel (prefix + explicit) | 1 unified (family-based) |
+| Adapters | Orphaned (Trainer bypasses) | Integrated (Trainer uses) |
+| Bundle creation | Manual | Automatic |
+| Meta-learner inference | Not supported | Fully supported |
+| Config complexity | 85 classes, 200+ fields | 2 dataclasses, ~15 fields |
+| User experience | 50+ lines config | 10 lines config |
+
+**Result:** ONE smooth, cohesive pipeline where a beginner can write:
+
 ```python
 config = ExperimentConfig(
     models=[
-        ModelConfig(name="xgboost", timeframe="15min", optimize_features=True),
-        ModelConfig(name="lstm", timeframe="5min", sequence_length=60),
-        ModelConfig(name="patchtst", timeframe="1min"),
+        ModelConfig(name="lstm"),
+        ModelConfig(name="tcn"),
+        ModelConfig(name="gru"),
     ],
     symbol="MES",
     build_ensemble=True,
     meta_learner="ridge_meta",
 )
-
-# System derives:
-# - XGBoost: 2D from 15min, optimize from ~100 → ~60 features
-# - LSTM: 3D sequences from 5min, len=60, optimize from ~80 → ~50 features
-# - PatchTST: 4D multi-stream 1m+5m+15m, raw OHLCV (no optimization)
-# - Need OOF generation for stacking
-# - Need meta-learner training
+orchestrator = TrainingOrchestrator(config)
+results = orchestrator.run()  # Just works!
 ```
 
-**Example 3: Walk-forward validation**
-```python
-config = ExperimentConfig(
-    models=[ModelConfig(name="lstm", timeframe="5min")],
-    symbol="MES",
-    training_mode="walk_forward",
-)
-# System derives: 5 expanding windows, standard purge/embargo
-```
-
-### 3.3 Configuration to Execution Plan
-
-```python
-# System automatically:
-1. Resolves model requirements from MODEL_REQUIREMENTS registry
-2. Validates data availability (checks if TFs exist)
-3. Computes training order (dependency graph)
-4. Plans ensemble (if requested)
-5. Generates ExecutionPlan with all dependencies
-
-# User never sees ExecutionPlan - it's internal
-```
+And the system handles everything: feature selection, data adaptation, training, OOF generation, meta-learner training, and inference bundle creation.
 
 ---
 
-## 4. Data Layer Design
-
-### 4.1 Directory Structure
-
-```
-data/
-├── raw/
-│   └── MES_1min.parquet              # Canonical source (immutable)
-│
-├── timeframes/                       # 9 first-class TFs
-│   └── MES/
-│       ├── 1min.parquet
-│       ├── 5min.parquet
-│       ├── 10min.parquet
-│       ├── 15min.parquet
-│       ├── 20min.parquet
-│       ├── 25min.parquet
-│       ├── 30min.parquet
-│       ├── 45min.parquet
-│       ├── 60min.parquet
-│       └── _manifest.json            # Hashes, timestamps
-│
-├── features/                         # Per-TF feature banks
-│   └── MES/
-│       ├── 1min/
-│       │   ├── features.parquet      # ~180 features
-│       │   └── schema.json
-│       ├── 5min/
-│       │   ├── features.parquet
-│       │   └── schema.json
-│       └── ... (9 TFs)
-│
-├── labels/                           # Per-TF-horizon labels
-│   └── MES/
-│       ├── 1min/
-│       │   ├── h5.parquet
-│       │   ├── h10.parquet
-│       │   ├── h15.parquet
-│       │   └── h20.parquet
-│       ├── 5min/
-│       │   └── ... (4 horizons)
-│       └── ... (9 TFs)
-│
-└── splits/                           # Per-TF-horizon splits
-    └── MES/
-        ├── 1min/
-        │   └── h20/
-        │       ├── train.parquet
-        │       ├── val.parquet
-        │       └── test.parquet
-        └── ... (9 TFs × 4 horizons)
-```
-
-### 4.2 DataProvider API
-
-```python
-# src/data/provider.py
-
-class DataProvider:
-    """Unified data access for all 9 timeframes."""
-
-    def __init__(self, symbol: str):
-        self.symbol = symbol
-        self.feature_bank = FeatureBank(symbol)
-        self.label_bank = LabelBank(symbol)
-
-    # ========== SINGLE TIMEFRAME ==========
-    def get_features(self, timeframe: str, families: List[str]) -> DataFrame:
-        """Get features for one TF."""
-        return self.feature_bank.query(timeframe, families)
-
-    def get_labels(self, timeframe: str, horizon: int) -> DataFrame:
-        """Get labels for TF-horizon."""
-        return self.label_bank.query(timeframe, horizon)
-
-    # ========== MULTI-TIMEFRAME ==========
-    def get_mtf_features(
-        self,
-        primary: str,
-        auxiliary: List[str]
-    ) -> DataFrame:
-        """Get primary features + MTF indicators aligned."""
-        primary_feats = self.get_features(primary, ALL_FAMILIES)
-
-        # Load and align auxiliary TFs
-        for aux_tf in auxiliary:
-            aux_feats = self.get_features(aux_tf, ALL_FAMILIES)
-            aligned = self._align_to_primary(aux_feats, primary_tf=primary)
-            primary_feats = pd.concat([primary_feats, aligned], axis=1)
-
-        return primary_feats
-
-    def get_multistream(
-        self,
-        timeframes: List[str],
-        seq_len: int
-    ) -> Dict[str, DataFrame]:
-        """Get raw OHLCV streams for multi-stream models."""
-        return {
-            tf: self.get_features(tf, ["raw_ohlcv"])
-            for tf in timeframes
-        }
-
-    # ========== TRAINING DATA ==========
-    def get_training_data(
-        self,
-        timeframe: str,
-        horizon: int,
-        split: str
-    ) -> Tuple[ndarray, ndarray, ndarray]:
-        """Get (X, y, weights) for training."""
-        # Loads from splits/{symbol}/{tf}/h{horizon}/{split}.parquet
-        ...
-```
-
-### 4.3 Caching Strategy
-
-**What gets cached:**
-- ✅ Resampled timeframes (invalidate if 1min source changes)
-- ✅ Features per TF (invalidate if OHLCV or config changes)
-- ✅ Labels per TF-horizon (invalidate if features or config changes)
-- ✅ In-memory LRU cache (2GB limit, disk spillover)
-
-**Invalidation rules:**
-```python
-if source_hash != manifest["source_hash"]:
-    invalidate_cascade(["timeframes", "features", "labels", "models"])
-
-if feature_config_hash != manifest["feature_hash"]:
-    invalidate_cascade(["features", "labels", "models"])
-
-if label_config_hash != manifest["label_hash"]:
-    invalidate_cascade(["labels", "models"])
-```
-
----
-
-## 5. Training Orchestration
-
-### 5.1 Three-Layer Architecture
-
-```
-┌──────────────────────────────────────────────────────┐
-│ Layer 1: TrainingOrchestrator                       │
-│  - Takes ExperimentConfig                           │
-│  - Builds ExecutionPlan                             │
-│  - Selects appropriate Coordinator                  │
-│  - Manages artifacts                                │
-└──────────────────────────────────────────────────────┘
-                       ↓
-┌──────────────────────────────────────────────────────┐
-│ Layer 2: Coordinators (pluggable strategies)        │
-│  - StandardCoordinator: Train models independently  │
-│  - EnsembleCoordinator: OOF + meta-learner          │
-│  - WalkForwardCoordinator: Time-series CV           │
-│  - RegimeAwareCoordinator: Per-regime models        │
-└──────────────────────────────────────────────────────┘
-                       ↓
-┌──────────────────────────────────────────────────────┐
-│ Layer 3: Providers (resource access)                │
-│  - DataProvider: Timeframe-aware data delivery      │
-│  - ModelFactory: Model instantiation                │
-│  - ArtifactStore: Save/load trained models          │
-└──────────────────────────────────────────────────────┘
-```
-
-### 5.2 Model Requirement Declaration
-
-**Every model declares its needs:**
-
-```python
-# src/models/requirements.py
-
-MODEL_REQUIREMENTS = {
-    "xgboost": DataRequirement(
-        primary_timeframe="15min",
-        data_format="2d_tabular",
-        baseline_features=["momentum", "volatility", "volume", "microstructure"],
-        mtf_strategy="indicators",  # Add MTF indicator features
-        mtf_timeframes=["1min", "5min", "60min"],
-        optimize_features=True,
-        min_features=20,
-        max_features=120,
-    ),
-    "lstm": DataRequirement(
-        primary_timeframe="5min",
-        data_format="3d_sequence",
-        baseline_features=["momentum", "volatility", "wavelets"],
-        mtf_strategy="indicators",
-        mtf_timeframes=["1min", "15min"],
-        sequence_length=60,
-        optimize_features=True,
-        min_features=30,
-        max_features=100,
-    ),
-    "patchtst": DataRequirement(
-        primary_timeframe="1min",
-        data_format="4d_multistream",
-        baseline_features=["raw_ohlcv"],
-        mtf_strategy="streams",  # Multi-stream ingestion
-        mtf_timeframes=["1min", "5min", "15min"],
-        sequence_length=96,
-        optimize_features=False,  # No feature engineering
-    ),
-    # ... all 23 models
-}
-```
-
-### 5.3 Automatic Data Composition
-
-```python
-# System automatically composes datasets:
-
-# XGBoost needs 2D tabular with MTF indicators
-→ DataProvider.get_mtf_features("15min", ["1min", "5min", "60min"])
-→ Returns: ~200 features (base 15min + MTF indicators)
-
-# LSTM needs 3D sequences
-→ DataProvider.get_sequences("5min", seq_len=60)
-→ Returns: (n_samples, 60, ~150)
-
-# PatchTST needs 4D multi-stream
-→ DataProvider.get_multistream(["1min", "5min", "15min"])
-→ Returns: (n_samples, 3_streams, 96, 5_OHLCV)
-```
-
-### 5.4 Ensemble Workflow
-
-```python
-# When user requests ensemble:
-config = ExperimentConfig(
-    models=[...],  # Heterogeneous bases
-    build_ensemble=True,
-    meta_learner="ridge_meta",
-)
-
-# System automatically:
-1. Trains all base models independently
-2. Generates OOF predictions using PurgedKFold
-3. Aligns OOF predictions to common index
-4. Trains meta-learner on stacked OOF
-5. Full retrain of base models
-6. Saves ensemble bundle
-```
-
----
-
-## 6. State Management
-
-### 6.1 Graph-Based State
-
-**Replace phase-based state with DAG nodes:**
-
-```python
-# Current (phase-based):
-PipelineState:
-  phases:
-    - data_generation: completed
-    - feature_engineering: completed
-    - training: in_progress
-
-# Problem: Can't track per-TF or per-model status
-```
-
-**New (graph-based):**
-
-```python
-PipelineGraph:
-  nodes:
-    - data_source@MES: completed
-    - timeframe@5min: completed
-    - timeframe@15min: completed
-    - features@5min: completed
-    - features@15min: completed
-    - labels@5min-h20: completed
-    - labels@15min-h20: completed
-    - xgboost@15min-h20: in_progress (epoch 45/100)
-    - lstm@5min-h20: pending
-    - ensemble[xgb+lstm]@h20: pending
-
-  dependencies:
-    xgboost@15min-h20: [features@15min, labels@15min-h20]
-    lstm@5min-h20: [features@5min, labels@5min-h20]
-    ensemble[...]: [xgboost@15min-h20, lstm@5min-h20]
-```
-
-### 6.2 Node Types
-
-```python
-class NodeType(Enum):
-    DATA_SOURCE = "data_source"      # Raw 1-min OHLCV
-    TIMEFRAME = "timeframe"          # Resampled TF (5min, 15min)
-    FEATURES = "features"            # Feature engineering
-    LABELS = "labels"                # TF-Horizon labeling
-    MODEL = "model"                  # Trained model
-    ENSEMBLE = "ensemble"            # Ensemble model
-```
-
-### 6.3 Smart Resumption
-
-```python
-# Run 1: Train XGBoost, LSTM training fails
-orchestrator = StateAwareOrchestrator(config, run_id="run_001")
-orchestrator.run()
-# XGBoost: ✓ completed
-# LSTM: ✗ failed (OOM at epoch 45)
-
-# Fix issue, run 2: Resume from checkpoint
-orchestrator = StateAwareOrchestrator.from_state("run_001")
-orchestrator.resume()
-# XGBoost: ⏭ skipped (already completed)
-# LSTM: ▶ resumes from epoch 45
-# Ensemble: ▶ starts after LSTM completes
-```
-
-### 6.4 Invalidation Cascade
-
-```python
-# User modifies feature engineering code
-# System detects change via config hash
-
-graph.invalidate_node("features@5min", reason="Config changed")
-
-# Cascade invalidation:
-features@5min: stale ❌
-  ↓
-labels@5min-h20: stale ❌ (depends on features@5min)
-  ↓
-lstm@5min-h20: stale ❌ (depends on labels@5min-h20)
-  ↓
-ensemble[xgb+lstm]: stale ❌ (depends on lstm@5min-h20)
-
-# Next run: Only re-execute stale nodes
-```
-
-### 6.5 Progress Dashboard
-
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📊 PIPELINE EXECUTION DASHBOARD
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Overall Progress: [████████████████████████░░░░░░░░░░░░░░░░░░░░░] 55.2%
-  16/29 complete | 2 in progress | 0 failed
-
-────────────────────────────────────────────────────────────────────────────
-📋 Phase Breakdown:
-────────────────────────────────────────────────────────────────────────────
-
-✓ Data Preparation:
-  [██████████████████████████████] 9/9 (100%)
-
-✓ Timeframe Resampling:
-  [██████████████████████████████] 9/9 (100%)
-
-✓ Feature Engineering:
-  [██████████████████████████████] 9/9 (100%)
-
-⏳ Label Generation:
-  [████████████████████░░░░░░░░░░] 12/16 (75%) | 1 in progress
-
-⏳ Model Training:
-  [████████░░░░░░░░░░░░░░░░░░░░░░] 2/5 (40%) | 1 in progress
-  ├─ xgboost@15min-h20:  ✓ Complete (Sharpe: 0.82)
-  ├─ lstm@5min-h20:      ⏳ 45% (epoch 45/100) [2m 15s]
-  ├─ patchtst@1min-h20:  ○ Pending
-  ├─ ensemble:           ○ Waiting for base models
-
-────────────────────────────────────────────────────────────────────────────
-⏳ Currently Executing:
-────────────────────────────────────────────────────────────────────────────
-  • labels@15min-h15 [15s]
-    Computing triple-barrier labels...
-
-  • lstm@5min-h20 (epoch 45/100) [2m 15s]
-    Training: loss=0.023, val_acc=0.67
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
-## 7. Implementation Roadmap
-
-### Phase 1: Foundation (Weeks 1-2)
-
-**Goal:** Build core infrastructure without breaking existing code.
-
-**Week 1: Data Layer**
-- [ ] Create `src/data/` package
-- [ ] Implement `DataProvider` core (OHLCV retrieval)
-- [ ] Implement `FeatureBank` (per-TF storage)
-- [ ] Implement `LabelBank` (per-TF-horizon storage)
-- [ ] Add manifest file generation
-- [ ] Unit tests for all components
-
-**Week 2: Configuration**
-- [ ] Define `ExperimentConfig`, `ModelConfig` dataclasses
-- [ ] Implement validation rules
-- [ ] Build `ExecutionPlanner` (config → plan)
-- [ ] Add backward compatibility layer (old configs → new)
-- [ ] Integration tests
-
-**Deliverables:**
-- ✅ `src/data/provider.py` (~400 lines)
-- ✅ `src/features/bank.py` (~300 lines)
-- ✅ `src/labeling/bank.py` (~200 lines)
-- ✅ `src/training/config.py` (~200 lines)
-- ✅ `src/training/planning.py` (~250 lines)
-- ✅ 100% test coverage for new modules
-
-**Success Criteria:**
-- DataProvider can load all 9 timeframes
-- FeatureBank can store/retrieve per-TF features
-- ExperimentConfig validates correctly
-- Old configs can be converted to new format
-
----
-
-### Phase 2: Orchestration (Weeks 3-4)
-
-**Goal:** Build training orchestration with single-model support.
-
-**Week 3: Core Orchestrator**
-- [ ] Implement `TrainingOrchestrator`
-- [ ] Implement `StandardCoordinator`
-- [ ] Implement `ModelFactory` (uses existing registry)
-- [ ] Implement `ArtifactStore`
-- [ ] Integrate with DataProvider
-
-**Week 4: Model Requirements**
-- [ ] Define `DataRequirement` for all 23 models
-- [ ] Implement requirement resolution
-- [ ] Implement dataset composition
-- [ ] Test with 3 representative models (XGBoost, LSTM, PatchTST)
-
-**Deliverables:**
-- ✅ `src/training/orchestrator.py` (~300 lines)
-- ✅ `src/training/coordinators/base.py` (~250 lines)
-- ✅ `src/models/requirements.py` (~400 lines)
-- ✅ `src/models/composer.py` (~400 lines)
-- ✅ End-to-end test: Train XGBoost on 15min
-
-**Success Criteria:**
-- Can train single model using new orchestrator
-- All 23 models have requirement declarations
-- Dataset composition works for 2D/3D/4D formats
-- Artifacts saved to structured directory
-
----
-
-### Phase 3: Graph State & Resumption (Weeks 5-6)
-
-**Goal:** Implement graph-based state management.
-
-**Week 5: Graph Infrastructure**
-- [ ] Implement `PipelineGraph` with DAG
-- [ ] Implement `GraphBuilder` (config → graph)
-- [ ] Implement node state transitions
-- [ ] Implement dependency tracking
-- [ ] Implement serialization/deserialization
-
-**Week 6: Smart Resumption**
-- [ ] Implement `StateAwareOrchestrator`
-- [ ] Implement config reconciliation
-- [ ] Implement invalidation cascade
-- [ ] Implement progress tracking
-- [ ] Build terminal dashboard
-
-**Deliverables:**
-- ✅ `src/pipeline/graph_state.py` (~600 lines)
-- ✅ `src/pipeline/graph_builder.py` (~300 lines)
-- ✅ `src/pipeline/orchestrator.py` (~400 lines)
-- ✅ `src/pipeline/progress.py` (~300 lines)
-- ✅ Checkpoint/resume tests
-
-**Success Criteria:**
-- Graph correctly models all dependencies
-- Can resume from any failure point
-- Invalidation cascades correctly
-- Dashboard shows real-time progress
-
----
-
-### Phase 4: Ensemble & Advanced Features (Weeks 7-8)
-
-**Goal:** Complete ensemble support and training modes.
-
-**Week 7: Ensemble Coordinator**
-- [ ] Implement `EnsembleCoordinator`
-- [ ] Implement OOF generation with PurgedKFold
-- [ ] Implement prediction alignment (heterogeneous bases)
-- [ ] Implement meta-learner training
-- [ ] Test with 3-model ensemble
-
-**Week 8: Training Mode Plugins**
-- [ ] Implement `WalkForwardCoordinator`
-- [ ] Implement `RegimeAwareCoordinator`
-- [ ] Implement `MetaLabelingCoordinator`
-- [ ] Add inference bundle generation
-- [ ] Documentation and examples
-
-**Deliverables:**
-- ✅ `src/training/coordinators/ensemble.py` (~350 lines)
-- ✅ `src/training/coordinators/walk_forward.py` (~250 lines)
-- ✅ `src/training/coordinators/regime_aware.py` (~250 lines)
-- ✅ Complete notebook examples
-- ✅ API documentation
-
-**Success Criteria:**
-- Heterogeneous ensembles work end-to-end
-- Walk-forward validation produces correct windows
-- Regime-aware training produces per-regime models
-- Inference bundle can be deployed
-
----
-
-### Phase 5: Migration & Cleanup (Weeks 9-10)
-
-**Goal:** Migrate existing experiments, delete legacy code.
-
-**Week 9: Migration**
-- [ ] Data migration script (old → new structure)
-- [ ] Config migration script
-- [ ] State migration script
-- [ ] Re-run 5 key experiments to validate
-- [ ] Performance benchmarking
-
-**Week 10: Cleanup**
-- [ ] Delete `src/phase1/` directory
-- [ ] Remove old config classes
-- [ ] Remove backward compatibility shims
-- [ ] Update all scripts to new API
-- [ ] Final documentation update
-
-**Deliverables:**
-- ✅ Migration scripts with dry-run mode
-- ✅ Migration guide for users
-- ✅ Performance comparison (old vs new)
-- ✅ Complete API documentation
-- ✅ Updated notebooks
-
-**Success Criteria:**
-- All existing experiments migrated successfully
-- No legacy code remaining
-- Performance equal or better than old system
-- All tests passing
-
----
-
-## 8. Migration Strategy
-
-### 8.1 Three-Phase Migration
-
-**Phase 1: Dual Mode (Weeks 1-4)**
-- New and old systems coexist
-- Feature flag: `USE_NEW_PIPELINE = False` (default)
-- New code doesn't break old experiments
-- Users can opt-in to new system
-
-**Phase 2: New Default (Weeks 5-8)**
-- Feature flag: `USE_NEW_PIPELINE = True` (default)
-- Old system still available via flag
-- Migration tools ready
-- Deprecation warnings in old code
-
-**Phase 3: Legacy Removal (Weeks 9-10)**
-- Delete old system
-- Remove feature flag
-- Complete migration
-
-### 8.2 Backward Compatibility Facade
-
-```python
-# src/models/trainer.py (legacy facade)
-
-class Trainer:
-    """Legacy Trainer - delegates to new orchestrator."""
-
-    def __init__(self, config: TrainerConfig):
-        # Convert old config to new format
-        exp_config = ExperimentConfig(
-            models=[ModelConfig(
-                name=config.model_name,
-                timeframe=config.primary_timeframe,
-            )],
-            symbol=config.symbol,
-            horizons=[config.horizon],
-        )
-
-        # Use new orchestrator internally
-        self.orchestrator = TrainingOrchestrator(exp_config)
-
-    def train(self) -> Dict:
-        """Legacy train method."""
-        results = self.orchestrator.run()
-        return self._convert_results(results)
-
-# Existing scripts work unchanged!
-trainer = Trainer(old_config)
-trainer.train()
-```
-
-### 8.3 Data Migration Script
-
-```bash
-# Migrate existing data to new structure
-python scripts/migrate_data_layer.py \
-  --symbol MES \
-  --dry-run  # Preview changes
-
-# Actually migrate
-python scripts/migrate_data_layer.py \
-  --symbol MES \
-  --execute
-
-# Output:
-# ✓ Created data/timeframes/MES/
-# ✓ Resampled 9 timeframes from 1min
-# ✓ Created data/features/MES/5min/
-# ✓ Migrated features → data/features/MES/5min/features.parquet
-# ✓ Created data/labels/MES/5min/h20.parquet
-# ✓ Migration complete (23 artifacts created)
-```
-
----
-
-## 9. Benefits Summary
-
-### 9.1 Quantitative Improvements
-
-| Metric | Before | After | Change |
-|--------|--------|-------|--------|
-| **Config classes** | 85 | 5 | -94% |
-| **Circular dependencies** | 1 | 0 | -100% |
-| **Files > 1000 lines** | 4 | 0 | -100% |
-| **Lines to train model** | ~50 (complex config) | ~10 (simple config) | -80% |
-| **Pipeline iteration speed** | Baseline | 10x faster | +900% |
-| **Resumption support** | Phase-level | Node-level | ✓ |
-| **Multi-TF support** | Bolt-on | First-class | ✓ |
-
-### 9.2 Qualitative Improvements
-
-**Developer Experience:**
-- ✅ Single config surface (beginner-friendly)
-- ✅ Declarative model requirements (self-documenting)
-- ✅ Automatic orchestration (less boilerplate)
-- ✅ Smart resumption (save hours of iteration)
-- ✅ Real-time dashboard (visibility into progress)
-
-**Maintainability:**
-- ✅ No circular dependencies (independent testing)
-- ✅ Clear separation of concerns (modular refactoring)
-- ✅ Plugin architecture (easy to extend)
-- ✅ Graph-based state (audit trail)
-
-**Production Readiness:**
-- ✅ Inference bundle generation (deploy anywhere)
-- ✅ Artifact lineage tracking (reproducibility)
-- ✅ Cascade invalidation (prevent stale data bugs)
-- ✅ Memory management (OOM recovery)
-
----
-
-## 10. Risk Assessment
-
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| **Breaking existing experiments** | Medium | High | Dual-mode migration with backward compat facade |
-| **Performance regression** | Low | Medium | Benchmark after each phase |
-| **User adoption friction** | Medium | Medium | Comprehensive docs + migration scripts |
-| **Data migration bugs** | Low | High | Dry-run mode + validation checks |
-| **Timeline overrun** | Medium | Medium | Incremental delivery, MVP first |
-
----
-
-## 11. Success Metrics
-
-### 11.1 Technical Metrics
-
-- [ ] Zero circular dependencies
-- [ ] 100% test coverage for new modules
-- [ ] All 23 models working with new system
-- [ ] Performance ≥ old system (ideally 10x faster)
-- [ ] All existing experiments migrated
-
-### 11.2 User Metrics
-
-- [ ] Time to train first model: < 5 minutes (config → results)
-- [ ] Config complexity: ≤ 10 lines for typical experiment
-- [ ] Error messages: 100% actionable (tell user how to fix)
-- [ ] Documentation completeness: 100% API coverage
-
----
-
-## 12. Open Questions & Decisions Needed
-
-### 12.1 Architecture Decisions
-
-1. **Parallel execution:** Should ready nodes execute in parallel?
-   - **Recommendation:** Yes, add `parallel=True` flag to orchestrator
-   - **Benefit:** Train multiple models simultaneously on multi-GPU
-
-2. **Remote execution:** Should we support distributed training?
-   - **Recommendation:** Phase 2 (after core refactor complete)
-   - **Use case:** Multi-node GPU clusters
-
-3. **Caching granularity:** Per-TF or per-feature-family?
-   - **Recommendation:** Per-TF (simpler invalidation)
-   - **Trade-off:** Slightly larger cache, but clearer semantics
-
-### 12.2 Migration Decisions
-
-4. **Deprecation timeline:** How long to keep old system?
-   - **Recommendation:** 2 releases (4-6 weeks)
-   - **Rationale:** Balance stability vs. maintenance burden
-
-5. **Breaking changes:** Force upgrade or maintain dual systems?
-   - **Recommendation:** Force upgrade after migration period
-   - **Rationale:** Dual systems double maintenance cost
-
----
-
-## 13. Next Steps
-
-### Immediate Actions (This Week)
-
-1. **Review this proposal** with team
-2. **Approve architecture** decisions
-3. **Assign owners** for each phase
-4. **Set up project tracking** (GitHub milestones)
-5. **Create feature branch** `refactor/unified-pipeline`
-
-### Week 1 Kickoff
-
-6. **Create new module stubs** (`data/`, `features/`, `labeling/`)
-7. **Implement DataProvider** core functionality
-8. **Write integration tests** for DataProvider
-9. **Daily standups** to unblock issues
-10. **Weekly demo** to stakeholders
-
----
-
-## 14. Conclusion
-
-This refactoring transforms your ML factory from **two competing pipelines** into **one cohesive system** where:
-
-- **All 9 timeframes are equal** - No "primary TF" vs "MTF bolt-on"
-- **Configuration is trivial** - 85 classes → 5 dataclasses, 10 lines of config
-- **Models are declarative** - "I need X" → system provides X
-- **State is queryable** - "What's done? What's next? What failed?"
-- **Resumption is smart** - Skip completed work, resume from failures
-- **Deployment is turnkey** - Inference bundle includes everything
-
-**Expected outcome:** Production-ready ML factory with 60% less complexity, 10x faster iteration, and complete reproducibility.
-
-**Estimated timeline:** 8-10 weeks with 1-2 engineers
-**Risk level:** Medium (mitigated by incremental delivery + backward compat)
-**ROI:** High (one-time cost, permanent benefits)
-
----
-
-**Document Version:** 1.0
+**Document Version:** 2.0
 **Last Updated:** 2026-01-16
-**Next Review:** After Phase 1 completion (Week 2)
+**Analysis By:** Sequential Specialized Agents (ML Engineer, Backend Architect, MLOps Engineer)
