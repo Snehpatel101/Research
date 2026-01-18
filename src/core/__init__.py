@@ -1,17 +1,183 @@
 """
-Core package - unified utilities, paths, and defaults.
+Core package - Foundational interfaces, types, and constants.
 
-REORG-001: This package consolidates:
-- src/utils/ (1,973 lines - 5 files)
-- src/common/ (1,602 lines - 3 files)
-- src/phase1/utils/ (~25KB - 3 files)
+PHASE_0: Clean ML Factory Foundation.
 
-Import patterns:
-    from src.core import DEFAULTS
-    from src.core.paths import PROJECT_ROOT, DATA_DIR
-    from src.core.defaults import DEFAULTS, get_default
+This package is the SINGLE SOURCE OF TRUTH for:
+- Abstract interfaces (ModelContract, AdapterContract, DataContract)
+- Type definitions (DataRank, ModelFamily, FeatureFamily, etc.)
+- Constants (CANONICAL_TIMEFRAMES, MODEL_FAMILIES, etc.)
+- Validation utilities
+- PipelineConfig (centralized configuration)
+
+Usage:
+    from src.core import (
+        # Config
+        PipelineConfig,
+        quick_config,
+        production_config,
+
+        # Types
+        DataRank,
+        ModelFamily,
+        FeatureFamily,
+        TrainingMode,
+        CVMethod,
+
+        # Interfaces
+        ModelContract,
+        AdapterContract,
+        DataContract,
+        AdapterResult,
+        TrainingResult,
+        OOFResult,
+
+        # Constants
+        CANONICAL_TIMEFRAMES,
+        MODEL_FAMILIES,
+        MODEL_DATA_RANKS,
+        ALL_MODELS,
+
+        # Validation
+        ValidationError,
+        validate_input_shape,
+        validate_dataframe,
+    )
 """
 
+# =============================================================================
+# TYPES - Enums and type aliases
+# =============================================================================
+from src.core.types import (
+    DataRank,
+    ModelFamily,
+    FeatureFamily,
+    TrainingMode,
+    CVMethod,
+    AdapterType,
+    LabelingMethod,
+    # Type aliases
+    Features,
+    Labels,
+    ModelType,
+    Array1D,
+    Array2D,
+    Array3D,
+    Array4D,
+    DatetimeIndex,
+    Index,
+)
+
+# =============================================================================
+# CONSTANTS - Canonical values
+# =============================================================================
+from src.core.constants import (
+    # Timeframes
+    CANONICAL_TIMEFRAMES,
+    BASE_TIMEFRAME,
+    DEFAULT_MTF_TIMEFRAMES,
+    # Horizons
+    DEFAULT_HORIZONS,
+    DEFAULT_HORIZON,
+    # Splits
+    DEFAULT_SPLIT_RATIOS,
+    # Purge/Embargo
+    DEFAULT_PURGE_BARS,
+    DEFAULT_EMBARGO_BARS,
+    # Models
+    MODEL_FAMILIES,
+    ALL_MODELS,
+    MODEL_TO_FAMILY,
+    MODEL_DATA_RANKS,
+    MODEL_ADAPTER_MAP,
+    # Features
+    FEATURE_FAMILY_COUNTS,
+    TOTAL_BASE_FEATURES,
+    MTF_FEATURES_PER_TF,
+    MTF_TOTAL_FEATURES,
+    # Sequence defaults
+    DEFAULT_SEQUENCE_LENGTH,
+    DEFAULT_HIDDEN_SIZE,
+    DEFAULT_NUM_LAYERS,
+    DEFAULT_DROPOUT,
+    # Training defaults
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_MAX_EPOCHS,
+    DEFAULT_LEARNING_RATE,
+    DEFAULT_EARLY_STOPPING_PATIENCE,
+    DEFAULT_N_SPLITS,
+    # Optuna defaults
+    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
+    DEFAULT_FEATURE_SELECTION_TRIALS,
+    DEFAULT_FEATURE_PRUNING_TRIALS,
+    DEFAULT_HYPERPARAM_TRIALS,
+    DEFAULT_OPTUNA_RANDOM_STATE,
+    DEFAULT_MIN_FEATURES,
+    # OHLCV
+    OHLCV_COLUMNS,
+    REQUIRED_COLUMNS,
+    # Labels
+    LABEL_CLASSES,
+    N_CLASSES,
+    # Helper functions
+    get_models_for_family,
+    get_models_for_rank,
+    get_adapter_for_model,
+)
+
+# =============================================================================
+# INTERFACES - Abstract contracts
+# =============================================================================
+from src.core.interfaces import (
+    # Result types
+    AdapterResult,
+    PredictionResult,
+    TrainingResult,
+    OOFResult,
+    # Contracts
+    DataContract,
+    ModelContract,
+    AdapterContract,
+)
+
+# =============================================================================
+# VALIDATION - Input validation
+# =============================================================================
+from src.core.validation import (
+    # Exception
+    ValidationError,
+    # Array validation
+    validate_input_shape,
+    validate_labels,
+    validate_probabilities,
+    # Feature validation
+    validate_features,
+    # DataFrame validation
+    validate_dataframe,
+    validate_ohlcv,
+    # Model validation
+    validate_model_name,
+    validate_model_list,
+    # Path validation
+    validate_path_exists,
+    # Timeframe validation
+    validate_timeframe,
+    validate_timeframe_list,
+)
+
+# =============================================================================
+# CONFIG - Centralized pipeline configuration
+# =============================================================================
+from src.core.config import (
+    PipelineConfig,
+    quick_config,
+    production_config,
+    research_config,
+)
+
+# =============================================================================
+# EXISTING EXPORTS (preserved from original)
+# =============================================================================
 from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
 from src.core.paths import (
     CONFIG_DIR,
@@ -36,7 +202,138 @@ from src.core.reproducibility import (
     set_all_seeds,
 )
 
+# =============================================================================
+# ALL EXPORTS
+# =============================================================================
 __all__ = [
+    # =========================================================================
+    # CONFIG (THE main entry point)
+    # =========================================================================
+    "PipelineConfig",
+    "quick_config",
+    "production_config",
+    "research_config",
+
+    # =========================================================================
+    # TYPES - Enums
+    # =========================================================================
+    "DataRank",
+    "ModelFamily",
+    "FeatureFamily",
+    "TrainingMode",
+    "CVMethod",
+    "AdapterType",
+    "LabelingMethod",
+
+    # Type aliases
+    "Features",
+    "Labels",
+    "ModelType",
+    "Array1D",
+    "Array2D",
+    "Array3D",
+    "Array4D",
+    "DatetimeIndex",
+    "Index",
+
+    # =========================================================================
+    # INTERFACES - Contracts
+    # =========================================================================
+    "DataContract",
+    "ModelContract",
+    "AdapterContract",
+
+    # Result types
+    "AdapterResult",
+    "PredictionResult",
+    "TrainingResult",
+    "OOFResult",
+
+    # =========================================================================
+    # CONSTANTS
+    # =========================================================================
+    # Timeframes
+    "CANONICAL_TIMEFRAMES",
+    "BASE_TIMEFRAME",
+    "DEFAULT_MTF_TIMEFRAMES",
+
+    # Horizons
+    "DEFAULT_HORIZONS",
+    "DEFAULT_HORIZON",
+
+    # Splits
+    "DEFAULT_SPLIT_RATIOS",
+
+    # Purge/Embargo
+    "DEFAULT_PURGE_BARS",
+    "DEFAULT_EMBARGO_BARS",
+
+    # Models
+    "MODEL_FAMILIES",
+    "ALL_MODELS",
+    "MODEL_TO_FAMILY",
+    "MODEL_DATA_RANKS",
+    "MODEL_ADAPTER_MAP",
+
+    # Features
+    "FEATURE_FAMILY_COUNTS",
+    "TOTAL_BASE_FEATURES",
+    "MTF_FEATURES_PER_TF",
+    "MTF_TOTAL_FEATURES",
+
+    # Sequence defaults
+    "DEFAULT_SEQUENCE_LENGTH",
+    "DEFAULT_HIDDEN_SIZE",
+    "DEFAULT_NUM_LAYERS",
+    "DEFAULT_DROPOUT",
+
+    # Training defaults
+    "DEFAULT_BATCH_SIZE",
+    "DEFAULT_MAX_EPOCHS",
+    "DEFAULT_LEARNING_RATE",
+    "DEFAULT_EARLY_STOPPING_PATIENCE",
+    "DEFAULT_N_SPLITS",
+
+    # Optuna defaults
+    "DEFAULT_LABEL_OPTIMIZATION_TRIALS",
+    "DEFAULT_FEATURE_SELECTION_TRIALS",
+    "DEFAULT_FEATURE_PRUNING_TRIALS",
+    "DEFAULT_HYPERPARAM_TRIALS",
+    "DEFAULT_OPTUNA_RANDOM_STATE",
+    "DEFAULT_MIN_FEATURES",
+
+    # OHLCV
+    "OHLCV_COLUMNS",
+    "REQUIRED_COLUMNS",
+
+    # Labels
+    "LABEL_CLASSES",
+    "N_CLASSES",
+
+    # Helper functions
+    "get_models_for_family",
+    "get_models_for_rank",
+    "get_adapter_for_model",
+
+    # =========================================================================
+    # VALIDATION
+    # =========================================================================
+    "ValidationError",
+    "validate_input_shape",
+    "validate_labels",
+    "validate_probabilities",
+    "validate_features",
+    "validate_dataframe",
+    "validate_ohlcv",
+    "validate_model_name",
+    "validate_model_list",
+    "validate_path_exists",
+    "validate_timeframe",
+    "validate_timeframe_list",
+
+    # =========================================================================
+    # LEGACY EXPORTS (from original core package)
+    # =========================================================================
     # Paths
     "PROJECT_ROOT",
     "DATA_DIR",
@@ -50,11 +347,13 @@ __all__ = [
     "CONFIG_DIR",
     "TRAINING_CONFIG_PATH",
     "CV_CONFIG_PATH",
+
     # Defaults
     "DEFAULTS",
     "GlobalDefaults",
     "get_default",
     "as_dict",
+
     # Reproducibility
     "ReproducibilityConfig",
     "ReproducibilityInfo",

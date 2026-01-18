@@ -918,3 +918,15 @@ __all__ = ["ModelServer", "ServerConfig", "start_server"]
 - [ ] Create `src/inference/server.py`
 - [ ] `/health`, `/info`, `/predict` endpoints
 - [ ] `start_server()` convenience function
+
+---
+
+## Document Metadata
+
+| Field | Value |
+|-------|-------|
+| Version | 1.0 |
+| Created | 2026-01-17 |
+| Purpose | Model bundling, preprocessing graphs, and production deployment |
+| Related Docs | PHASE_4_META_LEARNERS.md, HIGH_LEVEL_ARCHITECTURE.md |
+| Depends On | PHASE_0_FOUNDATION.md, PHASE_1_UNIFIED_FEATURES.md |

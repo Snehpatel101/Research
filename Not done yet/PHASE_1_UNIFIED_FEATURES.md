@@ -495,6 +495,14 @@ class FeatureOptimizer:
     """Optuna-based feature pruning from baseline to optimal."""
 
     def __init__(self, model_name: str, n_trials: int = 50, metric: str = "f1_weighted"):
+        """
+        Feature optimization using Optuna binary selection.
+
+        Note: n_trials=50 is for feature pruning (importance-based).
+        For full feature selection, see PHASE_1B which uses:
+        - feature_selection_trials: 100 (binary include/exclude)
+        - feature_pruning_trials: 50 (importance-based removal)
+        """
         self.model_name = model_name
         self.n_trials = n_trials
         self.metric = metric

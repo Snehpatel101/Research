@@ -1,8 +1,43 @@
 # ML Factory: Data Flow Reference
 
-**Version:** 1.0
+**Version:** 1.1
 **Purpose:** Complete data transformation guide for AI agent ingestion
 **Scope:** How data flows through the pipeline
+
+---
+
+## 0. THE SINGLE ENTRY POINT
+
+```python
+from src import MLFactory, PipelineConfig
+
+# Configure the pipeline
+config = PipelineConfig(
+    symbol="MES",
+    data_path="./data/mes.parquet",
+    output_dir="./experiments",
+    models=["xgboost", "lightgbm", "lstm"],
+    training_mode="standard",  # or "regime_aware", "meta_labeling"
+    build_ensemble=True,
+    compute_mtf_features=True,
+    optimize_labels=True,
+)
+
+# Run entire pipeline
+factory = MLFactory(config)
+result = factory.run(df)
+
+# Access results
+print(f"Best model: {result.best_model}")
+bundle = result.get_inference_bundle()
+predictions = bundle.predict(new_data)
+```
+
+**Key Files:**
+- `src/factory.py` - MLFactory class
+- `src/core/config.py` - PipelineConfig
+- `src/core/constants.py` - All defaults
+- `src/core/interfaces.py` - All contracts
 
 ---
 
@@ -28,7 +63,7 @@ RAW OHLCV (1-min bars)
          |
          v
 +------------------+
-| 4. FEATURES      |   150+ indicators per timeframe
+| 4. FEATURES      |   162 indicators per timeframe (12 families)
 +------------------+
          |
          v
@@ -37,45 +72,70 @@ RAW OHLCV (1-min bars)
 +------------------+
          |
          v
++========================+
+| 6. LABEL OPTIM   |   Optuna: 100 trials (barrier params)
+| [OPTUNA STAGE 1] |   upper_mult, lower_mult, horizon, atr_period
++========================+
+         |
+         v
++========================+
+| 7. FEATURE SELECT|   Optuna: 100 trials (binary selection)
+| [OPTUNA STAGE 2] |   Include/exclude per feature
++========================+
+         |
+         v
++========================+
+| 8. FEATURE PRUNE |   Optuna: 50 trials (importance-based)
+| [OPTUNA STAGE 3] |   Remove low-value features
++========================+
+         |
+         v
 +------------------+
-| 6. LABELING      |   Triple-barrier with Optuna optimization
+| 9. SPLITTING     |   Train 70% | Val 15% | Test 15%
 +------------------+
          |
          v
 +------------------+
-| 7. SPLITTING     |   Train 70% | Val 15% | Test 15%
+| 10. SCALING      |   RobustScaler fit on train only
 +------------------+
          |
          v
 +------------------+
-| 8. SCALING       |   RobustScaler fit on train only
+| 11. ADAPTATION   |   2D/3D/4D tensor per model type
++------------------+
+         |
+         v
++========================+
+| 12. HYPERPARAM   |   Optuna: 100 trials/model
+| [OPTUNA STAGE 4] |   Per-model search spaces (23 models)
++========================+
+         |
+         v
++------------------+
+| 13. TRAINING     |   PurgedKFold CV, OOF generation
 +------------------+
          |
          v
 +------------------+
-| 9. ADAPTATION    |   2D/3D/4D tensor per model type
+| 14. STACKING     |   OOF alignment, meta-learner
 +------------------+
          |
          v
 +------------------+
-| 10. TRAINING     |   PurgedKFold CV, OOF generation
+| 15. BUNDLING     |   Model + Scaler + Graph -> Artifact
 +------------------+
          |
          v
 +------------------+
-| 11. STACKING     |   OOF alignment, meta-learner
-+------------------+
-         |
-         v
-+------------------+
-| 12. BUNDLING     |   Model + Scaler + Graph -> Artifact
-+------------------+
-         |
-         v
-+------------------+
-| 13. INFERENCE    |   Raw OHLCV -> Prediction
+| 16. INFERENCE    |   Raw OHLCV -> Prediction
 +------------------+
 ```
+
+**Optuna Optimization Stages (Total: 100 + 100 + 50 + 100×N trials)**
+- Stage 6: Label optimization (triple-barrier parameters)
+- Stage 7: Feature selection (binary include/exclude)
+- Stage 8: Feature pruning (importance-based removal)
+- Stage 12: Hyperparameter optimization (per-model, all 23 models)
 
 ---
 
@@ -124,22 +184,24 @@ Aggregation:
 ### 2.4 Feature Engineering
 
 **Input:** OHLCV per timeframe
-**Output:** 150+ feature columns
+**Output:** 162 base feature columns (see PHASE_1_UNIFIED_FEATURES.md)
 
 ```
-12 Feature Families:
-1. Momentum (~23): RSI, MACD, Stochastic, Williams, ROC, CCI, MFI
-2. Moving Avg (~12): SMA, EMA, crossovers, ratios
-3. Volatility (~25): ATR, BB, Keltner, HV, Parkinson, GK, GARCH
-4. Volume (~15): OBV, VWAP, TWAP, dollar volume
-5. Trend (~6): ADX, Supertrend
-6. Price (~8): Returns, ratios, autocorrelation
-7. Microstructure (~15): Amihud, Roll, Kyle Lambda
-8. Entropy (~8): Shannon, LZ, ApEn, SampEn, Hurst
-9. Wavelets (~15): DWT coefficients, energy
-10. Temporal (~7): Hour/day encoding, session progress
-11. Regime (~9): Vol/trend regime flags
+12 Feature Families (162 base features total):
+1. Momentum (23): RSI, MACD, Stochastic, Williams, ROC, CCI, MFI
+2. Moving Avg (16): SMA, EMA, crossovers, ratios
+3. Volatility (25): ATR, BB, Keltner, HV, Parkinson, GK, GARCH
+4. Volume (15): OBV, VWAP, TWAP, dollar volume
+5. Trend (6): ADX, Supertrend
+6. Price (12): Returns, ratios, autocorrelation, CLV
+7. Microstructure (15): Amihud, Roll, Kyle Lambda
+8. Entropy (12): Shannon, LZ, ApEn, SampEn, Hurst
+9. Wavelets (15): DWT coefficients, energy
+10. Temporal (9): Hour/day encoding, session progress, session flags
+11. Regime (9): Vol/trend regime flags
 12. MTF (~30/TF): Higher TF indicators with shift(1)
+
+Total: 162 base + ~240 MTF = ~402 features available
 ```
 
 ### 2.5 Regime Detection
@@ -367,7 +429,9 @@ DEFAULT_SEQUENCE_LENGTH = 60
 
 | Field | Value |
 |-------|-------|
-| Version | 1.0 |
+| Version | 1.1 |
 | Created | 2026-01-17 |
+| Updated | 2026-01-18 |
 | Purpose | Data flow reference for AI agents |
 | Related Docs | HIGH_LEVEL_ARCHITECTURE.md, PHASE_0-5.md |
+| Entry Point | `from src import MLFactory, PipelineConfig` |

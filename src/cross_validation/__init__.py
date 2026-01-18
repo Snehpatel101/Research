@@ -96,6 +96,13 @@ from src.cross_validation.walk_forward import (
     WindowMetrics,
     create_walk_forward_evaluator,
 )
+from src.cross_validation.cv_orchestrator import (
+    CVOrchestrator,
+    CVFoldResult,
+    CVSplitInfo,
+    get_cv_for_model,
+    create_cv_orchestrator,
+)
 
 __all__ = [
     "PurgedKFold",
@@ -160,4 +167,10 @@ __all__ = [
     "OOFAlignmentValidator",
     "compute_oof_coverage",
     "validate_oof_for_stacking",
+    # CV Orchestrator (PHASE_3)
+    "CVOrchestrator",
+    "CVFoldResult",
+    "CVSplitInfo",
+    "get_cv_for_model",
+    "create_cv_orchestrator",
 ]

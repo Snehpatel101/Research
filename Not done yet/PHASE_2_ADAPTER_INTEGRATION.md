@@ -72,7 +72,8 @@ MODEL_ADAPTER_MAP = {
     # Advanced Neural → Multi-Stream (4D)
     "patchtst": "multi_stream",
     "itransformer": "multi_stream",
-    "tft": "multi_stream",
+    # NOTE: TFT uses sequence adapter (3D) - see PHASE_0 for rationale
+    "tft": "sequence",
 
     # Ensemble/Meta → Tabular (2D on OOF)
     "voting": "tabular",

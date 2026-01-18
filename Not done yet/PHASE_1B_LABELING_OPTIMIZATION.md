@@ -824,6 +824,119 @@ HYPERPARAMETER_SPACES = {
         "dropout": ("float", 0.0, 0.3),
         "learning_rate": ("log_float", 1e-5, 1e-3),
     },
+    # ═══════════════════════════════════════════════════════════
+    # ADDITIONAL NEURAL MODELS (Complete 23-model coverage)
+    # ═══════════════════════════════════════════════════════════
+    "gru": {
+        "hidden_size": ("categorical", [32, 64, 128, 256]),
+        "num_layers": ("int", 1, 4),
+        "dropout": ("float", 0.0, 0.5),
+        "bidirectional": ("categorical", [True, False]),
+        "learning_rate": ("log_float", 1e-4, 1e-2),
+        "batch_size": ("categorical", [32, 64, 128, 256]),
+    },
+    "tcn": {
+        "num_channels": ("categorical", [[32, 32], [64, 64], [64, 64, 64], [128, 128]]),
+        "kernel_size": ("int", 2, 7),
+        "dropout": ("float", 0.0, 0.4),
+        "learning_rate": ("log_float", 1e-4, 1e-2),
+        "batch_size": ("categorical", [32, 64, 128]),
+    },
+    "patchtst": {
+        "patch_len": ("categorical", [8, 16, 24, 32]),
+        "stride": ("categorical", [4, 8, 12, 16]),
+        "d_model": ("categorical", [32, 64, 128]),
+        "n_heads": ("categorical", [2, 4, 8]),
+        "n_layers": ("int", 1, 4),
+        "dropout": ("float", 0.0, 0.3),
+        "learning_rate": ("log_float", 1e-5, 1e-3),
+    },
+    "itransformer": {
+        "d_model": ("categorical", [32, 64, 128]),
+        "n_heads": ("categorical", [2, 4, 8]),
+        "n_layers": ("int", 1, 4),
+        "d_ff": ("categorical", [64, 128, 256]),
+        "dropout": ("float", 0.0, 0.3),
+        "learning_rate": ("log_float", 1e-5, 1e-3),
+    },
+    "tft": {
+        "hidden_size": ("categorical", [32, 64, 128]),
+        "attention_heads": ("categorical", [2, 4, 8]),
+        "num_lstm_layers": ("int", 1, 3),
+        "dropout": ("float", 0.0, 0.3),
+        "learning_rate": ("log_float", 1e-5, 1e-3),
+        "batch_size": ("categorical", [32, 64, 128]),
+    },
+    "nbeats": {
+        "num_stacks": ("int", 1, 4),
+        "num_blocks": ("int", 1, 5),
+        "expansion_coefficient_dim": ("int", 3, 8),
+        "num_layers": ("int", 2, 6),
+        "layer_size": ("categorical", [64, 128, 256, 512]),
+        "learning_rate": ("log_float", 1e-5, 1e-2),
+    },
+    "inceptiontime": {
+        "num_blocks": ("int", 1, 4),
+        "num_filters": ("categorical", [16, 32, 64]),
+        "bottleneck_size": ("categorical", [16, 32, 64]),
+        "kernel_sizes": ("categorical", [[10, 20, 40], [5, 10, 20], [20, 40, 80]]),
+        "use_residual": ("categorical", [True, False]),
+        "learning_rate": ("log_float", 1e-4, 1e-2),
+    },
+    "resnet1d": {
+        "num_blocks": ("int", 2, 6),
+        "num_filters": ("categorical", [32, 64, 128]),
+        "kernel_size": ("int", 3, 9),
+        "dropout": ("float", 0.0, 0.3),
+        "learning_rate": ("log_float", 1e-4, 1e-2),
+    },
+    # ═══════════════════════════════════════════════════════════
+    # CLASSICAL MODELS
+    # ═══════════════════════════════════════════════════════════
+    "logistic": {
+        "C": ("log_float", 1e-4, 100.0),
+        "penalty": ("categorical", ["l1", "l2", "elasticnet", None]),
+        "solver": ("categorical", ["lbfgs", "saga"]),
+        "max_iter": ("int", 100, 2000),
+        "l1_ratio": ("float", 0.0, 1.0),  # Only for elasticnet
+    },
+    "svm": {
+        "C": ("log_float", 1e-3, 100.0),
+        "kernel": ("categorical", ["rbf", "poly", "sigmoid"]),
+        "gamma": ("categorical", ["scale", "auto"]),
+        "degree": ("int", 2, 5),  # Only for poly kernel
+        "class_weight": ("categorical", ["balanced", None]),
+    },
+    # ═══════════════════════════════════════════════════════════
+    # META-LEARNERS
+    # ═══════════════════════════════════════════════════════════
+    "ridge_meta": {
+        "alpha": ("log_float", 1e-4, 100.0),
+        "fit_intercept": ("categorical", [True, False]),
+        "normalize": ("categorical", [True, False]),
+    },
+    "mlp_meta": {
+        "hidden_layer_sizes": ("categorical", [(32,), (64,), (64, 32), (128, 64), (128, 64, 32)]),
+        "activation": ("categorical", ["relu", "tanh"]),
+        "alpha": ("log_float", 1e-5, 1e-1),
+        "learning_rate_init": ("log_float", 1e-4, 1e-2),
+        "max_iter": ("int", 200, 1000),
+        "early_stopping": ("categorical", [True]),
+    },
+    "xgboost_meta": {
+        "n_estimators": ("int", 50, 300),
+        "max_depth": ("int", 2, 6),
+        "learning_rate": ("log_float", 0.01, 0.3),
+        "subsample": ("float", 0.6, 1.0),
+        "colsample_bytree": ("float", 0.6, 1.0),
+        "reg_alpha": ("log_float", 1e-8, 1.0),
+        "reg_lambda": ("log_float", 1e-8, 1.0),
+    },
+    "calibrated_meta": {
+        "base_estimator": ("categorical", ["logistic", "ridge"]),
+        "method": ("categorical", ["isotonic", "sigmoid"]),
+        "cv": ("int", 2, 5),
+    },
 }
 
 

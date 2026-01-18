@@ -18,7 +18,9 @@ from sklearn.feature_selection import mutual_info_classif
 from sklearn.metrics import accuracy_score, f1_score
 
 from src.cross_validation.cv_dataclasses import FoldMetrics
-from src.cross_validation.oof_generator import OOFPrediction
+# Import OOFPrediction directly from oof_core (where it's defined)
+# to reduce import chain length and avoid going through oof_generator
+from src.cross_validation.oof_core import OOFPrediction
 from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
 from src.models.registry import ModelRegistry
 

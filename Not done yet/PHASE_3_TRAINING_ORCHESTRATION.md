@@ -507,3 +507,15 @@ results = orchestrator.train(
 - [ ] Standard training end-to-end
 - [ ] Walk-forward training end-to-end
 - [ ] Heterogeneous OOF alignment
+
+---
+
+## Document Metadata
+
+| Field | Value |
+|-------|-------|
+| Version | 1.0 |
+| Created | 2026-01-17 |
+| Purpose | Unified training orchestration for all modes |
+| Related Docs | PHASE_1B_LABELING_OPTIMIZATION.md, PHASE_4_META_LEARNERS.md |
+| Depends On | PHASE_0_FOUNDATION.md, PHASE_2_ADAPTER_INTEGRATION.md |

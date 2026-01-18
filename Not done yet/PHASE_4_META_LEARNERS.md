@@ -675,3 +675,15 @@ def train_heterogeneous_ensemble(
 | XGBoostMeta | Strong with diverse bases |
 | CalibratedMeta | Probability calibration |
 | OOFCache | Efficient OOF re-use |
+
+---
+
+## Document Metadata
+
+| Field | Value |
+|-------|-------|
+| Version | 1.0 |
+| Created | 2026-01-17 |
+| Purpose | Heterogeneous ensemble stacking with OOF alignment |
+| Related Docs | PHASE_3_TRAINING_ORCHESTRATION.md, PHASE_5_INFERENCE.md |
+| Depends On | PHASE_0_FOUNDATION.md, PHASE_3_TRAINING_ORCHESTRATION.md |

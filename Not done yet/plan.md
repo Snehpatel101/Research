@@ -1,6 +1,44 @@
-Build ONE cohesive ML factory from scratch. NO backward compatibility - clean slate approach.                                      
-                                                                                                                                        
-     Goal: Single unified pipeline where data flows seamlessly from raw OHLCV to deployed inference bundle.                             
+Build ONE cohesive ML factory from scratch. NO backward compatibility - clean slate approach.
+
+     Goal: Single unified pipeline where data flows seamlessly from raw OHLCV to deployed inference bundle.
+
+     ---
+     IMPLEMENTATION STATUS: COMPLETE ✓
+
+     THE SINGLE ENTRY POINT:
+     ```python
+     from src import MLFactory, PipelineConfig
+
+     config = PipelineConfig(
+         symbol="MES",
+         data_path="./data/mes.parquet",
+         output_dir="./experiments",
+         models=["xgboost", "lightgbm", "lstm"],
+         training_mode="standard",  # or "regime_aware", "meta_labeling"
+         build_ensemble=True,
+     )
+
+     factory = MLFactory(config)
+     result = factory.run(df)
+     bundle = result.get_inference_bundle()
+     ```
+
+     KEY FILES (Single Source of Truth):
+     - src/factory.py: MLFactory - THE single entry point
+     - src/core/config.py: PipelineConfig - centralized configuration
+     - src/core/interfaces.py: All abstract contracts
+     - src/core/types.py: All enums and type definitions
+     - src/core/constants.py: All constants
+
+     RESOLVED ISSUES:
+     ✓ Circular import (cross_validation → oof_core → models.ensemble → heterogeneous_stacking → oof_core)
+       - Fixed using TYPE_CHECKING pattern in heterogeneous_stacking.py
+       - OOFPredictionProtocol in src/core/interfaces.py breaks the cycle
+     ✓ MTF feature computation - integrated in src/features/compute/mtf.py
+     ✓ Regime-aware training - implemented in src/training/regime_trainer.py
+     ✓ Meta-labeling training - implemented in src/training/unified_orchestrator.py
+
+     ---                             
                                                                                                                                         
      ---                                                                                                                                
      COMPLETE FEATURE INVENTORY (Everything to Preserve)                                                                                
@@ -38,9 +76,9 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      - xgboost_meta - XGBoost meta-learner                                                                                              
      - calibrated_meta - Calibrated meta-learner                                                                                        
                                                                                                                                         
-     150+ Feature Indicators (12 Families)                                                                                              
-                                                                                                                                        
-     Momentum (7 functions, ~23 features):                                                                                              
+     162 Feature Indicators (12 Families) - See PHASE_1_UNIFIED_FEATURES.md for authoritative counts
+
+     Momentum (7 functions, 23 features):                                                                                              
      - RSI (14-period + overbought/oversold flags)                                                                                      
      - MACD (12/26/9 + histogram + crossover signals)                                                                                   
      - Stochastic (%K, %D, smoothed)                                                                                                    
@@ -49,7 +87,7 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      - CCI (commodity channel index)                                                                                                    
      - MFI (money flow index)                                                                                                           
                                                                                                                                         
-     Moving Averages (4 functions, ~12 features):                                                                                       
+     Moving Averages (4 functions, 16 features):                                                                                       
      - SMA (5, 10, 20, 50, 100, 200 periods)                                                                                            
      - EMA (5, 10, 20, 50, 100, 200 periods)                                                                                            
      - SMA crossovers (fast/slow signals)                                                                                               
@@ -79,7 +117,7 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      - ADX (14-period + +DI/-DI + trend strength flag)                                                                                  
      - Supertrend (upper/lower bands + direction)                                                                                       
                                                                                                                                         
-     Price Features (4 functions, ~8 features):                                                                                         
+     Price Features (4 functions, 12 features):                                                                                         
      - Returns (simple + log)                                                                                                           
      - Price Ratios (high/low, close/open)                                                                                              
      - Autocorrelation (multi-lag)                                                                                                      
@@ -96,7 +134,7 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      - Price Efficiency                                                                                                                 
      - Realized Volatility Ratio                                                                                                        
                                                                                                                                         
-     Entropy (5 functions, ~8 features):                                                                                                
+     Entropy (5 functions, 12 features):                                                                                                
      - Shannon Entropy                                                                                                                  
      - Lempel-Ziv Complexity                                                                                                            
      - Approximate Entropy                                                                                                              
@@ -110,7 +148,7 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      - Wavelet Energy                                                                                                                   
      - Wavelet Entropy                                                                                                                  
                                                                                                                                         
-     Temporal (4 functions, ~7 features):                                                                                               
+     Temporal (4 functions, 9 features):                                                                                               
      - Hour of Day (sin/cos encoded)                                                                                                    
      - Day of Week (sin/cos encoded)                                                                                                    
      - Time Since Open                                                                                                                  
@@ -229,23 +267,31 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      - Regression (continuous return targets)                                                                                           
      - Meta-Labeling (confidence labels)                                                                                                
                                                                                                                                         
-     Pipeline Stages (15 total)                                                                                                         
-                                                                                                                                        
-     1. Ingestion - Load raw OHLCV                                                                                                      
-     2. Cleaning - Resample, gap handling                                                                                               
-     3. Sessions - Trading hours filtering                                                                                              
-     4. MTF Upscaling - 9 timeframes from 1-min                                                                                         
-     5. Features - 150+ indicators                                                                                                      
-     6. Regime - Market regime detection                                                                                                
-     7. Labeling - Triple-barrier labels                                                                                                
-     8. GA Optimize - Optuna parameter tuning                                                                                           
-     9. Final Labels - Apply optimized params                                                                                           
-     10. Splits - Train/val/test (70/15/15)                                                                                             
-     11. Scaling - Train-only robust scaling                                                                                            
-     12. Datasets - Model-specific formats                                                                                              
-     13. Scaled Validation - Data quality                                                                                               
-     14. Validation - Feature/label checks                                                                                              
-     15. Reporting - Completion reports                                                                                                 
+     Pipeline Stages (16 total) - See HIGH_LEVEL_DATA_FLOW.md for detailed diagrams
+
+     1. Ingestion - Load raw OHLCV
+     2. Cleaning - Resample, gap handling
+     3. Sessions - Trading hours filtering
+     4. MTF Upscaling - 9 timeframes from 1-min
+     5. Features - 162 indicators
+     6. Regime - Market regime detection
+     7. OPTUNA: Label Optimization - 100 trials (barrier params: upper_mult, lower_mult, horizon, atr_period)
+     8. OPTUNA: Feature Selection - 100 trials (binary include/exclude)
+     9. OPTUNA: Feature Pruning - 50 trials (importance-based removal)
+     10. Splits - Train/val/test (70/15/15)
+     11. Scaling - Train-only robust scaling
+     12. Adaptation - 2D/3D/4D tensor per model type
+     13. OPTUNA: Hyperparameter Optimization - 100 trials per model (23 models)
+     14. Training - PurgedKFold CV, OOF generation
+     15. Stacking - OOF alignment, meta-learner
+     16. Bundling - Model + Scaler + Graph -> Artifact
+
+     Optuna Optimization Summary (PHASE_1B):
+     - Label trials: 100 (triple-barrier params)
+     - Feature selection trials: 100 (binary)
+     - Feature pruning trials: 50 (importance-based)
+     - Hyperparameter trials: 100 per model
+     - Total: ~100 + 100 + 50 + (100 × N_models) trials                                                                                                 
                                                                                                                                         
      ---                                                                                                                                
      Deliverables                                                                                                                       

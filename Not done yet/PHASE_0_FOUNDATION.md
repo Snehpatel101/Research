@@ -369,19 +369,24 @@ MODEL_TO_FAMILY = {
 }
 
 MODEL_DATA_RANKS = {
-    # Boosting - 2D
+    # Boosting - 2D (tabular)
     "xgboost": 2, "lightgbm": 2, "catboost": 2,
-    # Classical - 2D
+    # Classical - 2D (tabular)
     "random_forest": 2, "logistic": 2, "svm": 2,
-    # Neural - 3D
+    # Neural RNN/CNN - 3D (sequence)
     "lstm": 3, "gru": 3, "tcn": 3, "transformer": 3,
-    "nbeats": 3, "inceptiontime": 3, "resnet1d": 3,
-    # Advanced Neural - 4D
-    "patchtst": 4, "itransformer": 4, "tft": 4,
-    # Ensemble/Meta - 2D
+    "nbeats": 3, "inceptiontime": 3, "resnet1d": 3, "tft": 3,
+    # Advanced Neural - 4D (multi-stream/multi-timeframe)
+    "patchtst": 4, "itransformer": 4,
+    # Ensemble/Meta - 2D (OOF probabilities)
     "voting": 2, "stacking": 2, "blending": 2,
     "ridge_meta": 2, "mlp_meta": 2, "xgboost_meta": 2, "calibrated_meta": 2,
 }
+
+# NOTE: TFT (Temporal Fusion Transformer) is classified as 3D sequence model.
+# While TFT can handle multi-timeframe data, the standard implementation
+# uses single-timeframe sequence input with engineered features.
+# PatchTST and iTransformer are the designated 4D multi-stream models.
 ```
 
 ---

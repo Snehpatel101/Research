@@ -105,6 +105,16 @@ from .calibrated_meta import CalibratedMetaLearner
 from .mlp_meta import MLPMetaLearner
 from .ridge_meta import RidgeMetaLearner
 from .xgboost_meta import XGBoostMeta
+# PHASE_4: Meta-learner factory for config-driven creation
+from .meta_factory import (
+    MetaLearnerFactory,
+    MetaLearnerConfig,
+    META_LEARNER_REGISTRY,
+    get_meta_learner,
+    create_meta_learner_from_config,
+    list_meta_learners,
+    register_meta_learner,
+)
 from .stacking import StackingEnsemble
 from .validator import (
     HETEROGENEOUS_ENSEMBLE_TYPES,
@@ -117,6 +127,18 @@ from .validator import (
     validate_ensemble_config,
 )
 from .voting import VotingEnsemble
+# PHASE_4: Heterogeneous stacking dataset builder
+from .heterogeneous_stacking import (
+    HeterogeneousStackingBuilder,
+    StackingFeatures,
+    build_stacking_features,
+)
+# PHASE_4: EnsembleOrchestrator - THE single entry point for ensemble training
+from .orchestrator import (
+    EnsembleOrchestrator,
+    EnsembleResult,
+    build_ensemble,
+)
 
 __all__ = [
     # Ensemble models
@@ -128,6 +150,14 @@ __all__ = [
     "MLPMetaLearner",
     "CalibratedMetaLearner",
     "XGBoostMeta",
+    # Meta-learner factory (PHASE_4)
+    "MetaLearnerFactory",
+    "MetaLearnerConfig",
+    "META_LEARNER_REGISTRY",
+    "get_meta_learner",
+    "create_meta_learner_from_config",
+    "list_meta_learners",
+    "register_meta_learner",
     # Diversity analysis
     "DiversityAnalyzer",
     "DiversityMetrics",
@@ -153,4 +183,12 @@ __all__ = [
     "EnsembleCompatibilityError",
     "HETEROGENEOUS_ENSEMBLE_TYPES",
     "HOMOGENEOUS_ENSEMBLE_TYPES",
+    # Heterogeneous stacking builder (PHASE_4)
+    "HeterogeneousStackingBuilder",
+    "StackingFeatures",
+    "build_stacking_features",
+    # Ensemble orchestrator (PHASE_4)
+    "EnsembleOrchestrator",
+    "EnsembleResult",
+    "build_ensemble",
 ]

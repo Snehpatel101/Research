@@ -9,6 +9,13 @@ into model-specific numpy array formats:
 - SequenceAdapter: 3D arrays (n_samples, seq_len, n_features) for RNN/TCN
 - MultiStreamAdapter: 4D arrays (n_samples, n_tfs, seq_len, n_features) for transformers
 
+PHASE_2 adds:
+- AdapterFactory: Single entry point for adapter creation with PipelineConfig
+- AdapterScaler: Fit-on-train scaling for adapter outputs (handles 2D/3D/4D)
+- UnifiedDataPreparation: Complete data prep pipeline (split + transform + scale)
+
+ALL data preparation MUST go through adapters. No bypass paths.
+
 Usage:
     from src.adapters import get_adapter, AdapterRegistry
 
@@ -25,6 +32,33 @@ Usage:
     # Get adapter by ID directly
     adapter = get_adapter(adapter_id="tabular")
     result = adapter.transform(df)
+
+    # PHASE_2: Use AdapterFactory with PipelineConfig
+    from src.adapters import AdapterFactory, create_adapter_factory
+    from src.core.config import PipelineConfig
+
+    config = PipelineConfig(symbol="MES", data_path="./data", output_dir="./out")
+    factory = AdapterFactory(config)
+
+    # Single model
+    result = factory.prepare_data("xgboost", df)
+
+    # Heterogeneous ensemble
+    results = factory.prepare_heterogeneous(
+        models=["xgboost", "lstm", "patchtst"],
+        df=df,
+        additional_dfs={"5min": df_5min}
+    )
+
+    # PHASE_2: Complete data preparation with splitting and scaling
+    from src.adapters import UnifiedDataPreparation, PreparedData
+
+    prep = UnifiedDataPreparation(config)
+    data = prep.prepare(df, model_name="xgboost")
+    # data.X_train, data.X_val, data.X_test are scaled and ready
+
+    # Or for heterogeneous ensemble
+    all_data = prep.prepare_heterogeneous(df, models=["xgboost", "lstm"])
 """
 
 from .base import AdapterResult, BaseAdapter
@@ -34,6 +68,24 @@ from .registry import AdapterRegistry, get_adapter
 from .tabular import TabularAdapter
 from .sequence import SequenceAdapter
 from .multi_stream import MultiStreamAdapter
+
+# PHASE_2: AdapterFactory for config-driven adapter creation
+from .factory import AdapterFactory, create_adapter_factory
+
+# PHASE_2: Scaling for adapter outputs
+from .scaling import AdapterScaler, ScalerConfig, create_scaler
+
+# PHASE_2: Unified data preparation (split + transform + scale)
+from .preparation import PreparedData, UnifiedDataPreparation, prepare_for_model
+
+# PHASE_2: OOF alignment utilities for heterogeneous ensembles
+from .alignment import (
+    AlignedOOFResult,
+    OOFAligner,
+    align_oof_predictions,
+    compute_coverage_stats,
+    validate_oof_results,
+)
 
 __all__ = [
     # Registry
@@ -46,4 +98,21 @@ __all__ = [
     "TabularAdapter",
     "SequenceAdapter",
     "MultiStreamAdapter",
+    # PHASE_2: Factory
+    "AdapterFactory",
+    "create_adapter_factory",
+    # PHASE_2: Scaling
+    "AdapterScaler",
+    "ScalerConfig",
+    "create_scaler",
+    # PHASE_2: Unified Preparation
+    "PreparedData",
+    "UnifiedDataPreparation",
+    "prepare_for_model",
+    # PHASE_2: OOF Alignment
+    "AlignedOOFResult",
+    "OOFAligner",
+    "align_oof_predictions",
+    "compute_coverage_stats",
+    "validate_oof_results",
 ]
