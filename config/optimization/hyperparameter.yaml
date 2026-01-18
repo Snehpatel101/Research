@@ -1,0 +1,427 @@
+# Hyperparameter Optimization Configuration
+# Per-model hyperparameter tuning with Optuna
+
+optimization:
+  name: hyperparameter_optimization
+  description: Per-model hyperparameter tuning using Optuna
+  framework: optuna
+  n_trials: 100  # Default trials per model
+  timeout: 7200  # 2 hours default per model
+  direction: maximize
+
+# Optuna sampler configuration
+sampler:
+  type: tpe
+  seed: 42
+  n_startup_trials: 10
+  multivariate: true
+  group: true
+  constant_liar: true  # For parallel optimization
+
+# Optuna pruner configuration
+pruner:
+  type: hyperband
+  min_resource: 10
+  max_resource: 100
+  reduction_factor: 3
+
+# Global early stopping configuration
+early_stopping:
+  enabled: true
+  patience: 20
+  min_delta: 0.001
+  monitor: val_f1_macro
+
+# Objective function
+objective:
+  metric: f1_macro
+  direction: maximize
+
+# Cross-validation configuration
+evaluation:
+  cv_type: purged_kfold
+  cv_splits: 5
+  purge_bars: 60
+  embargo_bars: 60
+
+  # Metrics to track per trial
+  metrics:
+    - f1_macro
+    - accuracy
+    - precision_macro
+    - recall_macro
+
+# ============================================================================
+# BOOSTING MODEL SEARCH SPACES
+# ============================================================================
+
+boosting_search_space:
+  n_estimators:
+    type: int
+    low: 100
+    high: 2000
+    step: 100
+  max_depth:
+    type: int
+    low: 3
+    high: 12
+  learning_rate:
+    type: float
+    low: 0.001
+    high: 0.3
+    log: true
+  subsample:
+    type: float
+    low: 0.5
+    high: 1.0
+  colsample_bytree:
+    type: float
+    low: 0.5
+    high: 1.0
+  reg_alpha:
+    type: float
+    low: 1e-8
+    high: 10.0
+    log: true
+  reg_lambda:
+    type: float
+    low: 1e-8
+    high: 10.0
+    log: true
+
+# XGBoost-specific additions
+xgboost_search_space:
+  _inherit: boosting_search_space
+  gamma:
+    type: float
+    low: 0.0
+    high: 5.0
+  min_child_weight:
+    type: int
+    low: 1
+    high: 10
+  tree_method:
+    type: categorical
+    choices: [hist, auto]
+
+# LightGBM-specific additions
+lightgbm_search_space:
+  _inherit: boosting_search_space
+  num_leaves:
+    type: int
+    low: 20
+    high: 300
+  min_child_samples:
+    type: int
+    low: 5
+    high: 100
+  boosting_type:
+    type: categorical
+    choices: [gbdt, dart, goss]
+
+# CatBoost-specific additions
+catboost_search_space:
+  iterations:
+    type: int
+    low: 100
+    high: 2000
+    step: 100
+  depth:
+    type: int
+    low: 4
+    high: 10
+  learning_rate:
+    type: float
+    low: 0.001
+    high: 0.3
+    log: true
+  l2_leaf_reg:
+    type: float
+    low: 1.0
+    high: 10.0
+  bagging_temperature:
+    type: float
+    low: 0.0
+    high: 1.0
+  random_strength:
+    type: float
+    low: 0.0
+    high: 10.0
+  border_count:
+    type: categorical
+    choices: [32, 64, 128, 254]
+
+# ============================================================================
+# NEURAL MODEL SEARCH SPACES
+# ============================================================================
+
+neural_base_search_space:
+  learning_rate:
+    type: float
+    low: 1e-5
+    high: 1e-2
+    log: true
+  batch_size:
+    type: categorical
+    choices: [32, 64, 128, 256]
+  weight_decay:
+    type: float
+    low: 1e-6
+    high: 1e-2
+    log: true
+  dropout:
+    type: float
+    low: 0.0
+    high: 0.5
+
+# LSTM/GRU search space
+rnn_search_space:
+  _inherit: neural_base_search_space
+  hidden_size:
+    type: categorical
+    choices: [64, 128, 256, 512]
+  num_layers:
+    type: int
+    low: 1
+    high: 4
+  bidirectional:
+    type: categorical
+    choices: [true, false]
+  gradient_clip:
+    type: float
+    low: 0.5
+    high: 5.0
+
+# TCN search space
+tcn_search_space:
+  _inherit: neural_base_search_space
+  num_channels:
+    type: categorical
+    choices:
+      - [32, 64]
+      - [64, 128]
+      - [64, 128, 256]
+      - [128, 256, 512]
+  kernel_size:
+    type: int
+    low: 2
+    high: 7
+
+# Transformer search space
+transformer_search_space:
+  _inherit: neural_base_search_space
+  d_model:
+    type: categorical
+    choices: [64, 128, 256, 512]
+  nhead:
+    type: categorical
+    choices: [2, 4, 8]
+  num_layers:
+    type: int
+    low: 2
+    high: 6
+  dim_feedforward:
+    type: categorical
+    choices: [256, 512, 1024, 2048]
+
+# ============================================================================
+# CLASSICAL MODEL SEARCH SPACES
+# ============================================================================
+
+random_forest_search_space:
+  n_estimators:
+    type: int
+    low: 100
+    high: 1000
+    step: 100
+  max_depth:
+    type: int
+    low: 5
+    high: 30
+  min_samples_split:
+    type: int
+    low: 2
+    high: 20
+  min_samples_leaf:
+    type: int
+    low: 1
+    high: 10
+  max_features:
+    type: categorical
+    choices: [sqrt, log2, 0.3, 0.5, 0.7]
+  bootstrap:
+    type: categorical
+    choices: [true, false]
+
+svm_search_space:
+  C:
+    type: float
+    low: 1e-3
+    high: 1e3
+    log: true
+  kernel:
+    type: categorical
+    choices: [rbf, poly, sigmoid]
+  gamma:
+    type: categorical
+    choices: [scale, auto]
+  # Conditional: degree only for poly kernel
+  degree:
+    type: int
+    low: 2
+    high: 5
+    condition: kernel == poly
+
+logistic_search_space:
+  C:
+    type: float
+    low: 1e-4
+    high: 1e2
+    log: true
+  penalty:
+    type: categorical
+    choices: [l1, l2, elasticnet]
+  solver:
+    type: categorical
+    choices: [saga, lbfgs]
+  # Conditional: l1_ratio only for elasticnet
+  l1_ratio:
+    type: float
+    low: 0.0
+    high: 1.0
+    condition: penalty == elasticnet
+
+# ============================================================================
+# PER-MODEL CONFIGURATIONS
+# ============================================================================
+
+models:
+  # Boosting models
+  xgboost:
+    enabled: true
+    n_trials: 100
+    timeout: 7200
+    search_space: xgboost_search_space
+    early_stopping_rounds: 50
+
+  lightgbm:
+    enabled: true
+    n_trials: 100
+    timeout: 7200
+    search_space: lightgbm_search_space
+    early_stopping_rounds: 50
+
+  catboost:
+    enabled: true
+    n_trials: 100
+    timeout: 7200
+    search_space: catboost_search_space
+    early_stopping_rounds: 50
+
+  # Neural models
+  lstm:
+    enabled: true
+    n_trials: 100
+    timeout: 14400  # 4 hours
+    search_space: rnn_search_space
+    max_epochs: 100
+    early_stopping_patience: 20
+
+  gru:
+    enabled: true
+    n_trials: 100
+    timeout: 14400
+    search_space: rnn_search_space
+    max_epochs: 100
+    early_stopping_patience: 20
+
+  tcn:
+    enabled: true
+    n_trials: 100
+    timeout: 14400
+    search_space: tcn_search_space
+    max_epochs: 100
+    early_stopping_patience: 20
+
+  transformer:
+    enabled: true
+    n_trials: 100
+    timeout: 21600  # 6 hours
+    search_space: transformer_search_space
+    max_epochs: 100
+    early_stopping_patience: 20
+
+  # Classical models
+  random_forest:
+    enabled: true
+    n_trials: 50
+    timeout: 3600
+    search_space: random_forest_search_space
+
+  svm:
+    enabled: true
+    n_trials: 50
+    timeout: 3600
+    search_space: svm_search_space
+
+  logistic:
+    enabled: true
+    n_trials: 50
+    timeout: 1800  # 30 min
+    search_space: logistic_search_space
+
+# ============================================================================
+# DATA CONFIGURATION
+# ============================================================================
+
+data:
+  horizons:
+    - 5
+    - 10
+    - 15
+    - 20
+  symbols:
+    - MES
+    - MGC
+  feature_set: boosting_optimal  # Override per model family
+
+# ============================================================================
+# OUTPUT CONFIGURATION
+# ============================================================================
+
+output:
+  # Study storage
+  save_study: true
+  study_name: hyperparameter_optimization_{model}_{horizon}
+  storage: sqlite:///experiments/optuna/hyperparameter.db
+
+  # Save best parameters
+  save_best_params: true
+  best_params_dir: config/optimization/tuned_params/
+
+  # Export formats
+  export_formats:
+    - json
+    - yaml
+
+  # Visualization
+  generate_plots: true
+  plots_dir: experiments/optuna/plots/
+  plot_types:
+    - optimization_history
+    - param_importances
+    - parallel_coordinate
+    - slice
+
+  # Logging
+  log_level: INFO
+  show_progress: true
+  log_to_file: true
+  log_file: experiments/optuna/logs/hyperparameter_{model}.log
+
+# ============================================================================
+# REPRODUCIBILITY
+# ============================================================================
+
+random_seed: 42
+deterministic: true

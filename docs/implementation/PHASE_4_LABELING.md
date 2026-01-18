@@ -1,8 +1,11 @@
 # Phase 4: Triple-Barrier Labeling with Optimization
 
+**Pipeline Stages:** 7 (OPTUNA Label Optimization), 10 (Splits), 11 (Scaling)
 **Status:** ✅ Complete
 **Effort:** 4 days (completed)
-**Dependencies:** Phase 3 (features)
+**Dependencies:** [Phase 3](./PHASE_3_FEATURES.md) (Stages 5-6: features and regime)
+
+> **Cross-Reference:** This phase covers Stage 7 (OPTUNA Label Optimization - 100 trials) of the 16-stage pipeline. After labeling, [Phase 3](./PHASE_3_FEATURES.md) Stages 8-9 run for Feature Selection and Pruning.
 
 ---
 
@@ -228,12 +231,30 @@ class TripleBarrierLabeler:
 
 **Vectorization:** Use `numba` or `np.searchsorted` for performance on large datasets.
 
-### Task 4.2: Optuna Barrier Optimization
+### Task 4.2: Optuna Barrier Optimization (Stage 7)
 **File:** `src/phase1/stages/ga_optimize/barrier_optimizer.py`
 
 **Status:** ✅ Complete
+**Trials:** 100
+**Parameters:** `upper_mult`, `lower_mult`, `horizon`, `atr_period`
 
-**Implementation:**
+---
+
+## Stage 7: OPTUNA Label Optimization (100 trials)
+
+This is a critical optimization stage that uses Optuna to find optimal triple-barrier parameters.
+
+### Search Space
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `upper_mult` | 1.0 - 3.0 | Upper barrier multiplier (profit target) |
+| `lower_mult` | 0.5 - 2.0 | Lower barrier multiplier (stop loss) |
+| `horizon` | 5 - 30 bars | Maximum holding period |
+| `atr_period` | 10 - 30 | ATR calculation period for barrier sizing |
+
+### Implementation
+
 ```python
 class BarrierOptimizer:
     def optimize_barriers(
@@ -241,40 +262,94 @@ class BarrierOptimizer:
         df: pd.DataFrame,
         n_trials: int = 100
     ) -> Dict[str, float]:
-        """Optimize barrier thresholds with Optuna."""
+        """Optimize triple-barrier parameters with Optuna (Stage 7)."""
 
         def objective(trial: optuna.Trial) -> float:
-            # 1. Suggest barrier parameters
-            profit_threshold = trial.suggest_float("profit_threshold", 0.005, 0.03)
-            loss_threshold = trial.suggest_float("loss_threshold", 0.003, 0.02)
+            # Suggest barrier parameters
+            upper_mult = trial.suggest_float("upper_mult", 1.0, 3.0)
+            lower_mult = trial.suggest_float("lower_mult", 0.5, 2.0)
+            horizon = trial.suggest_int("horizon", 5, 30)
+            atr_period = trial.suggest_int("atr_period", 10, 30)
 
-            # 2. Label data with suggested barriers
-            labeled = self.label_data(df, profit_threshold, loss_threshold, horizon)
+            # Calculate ATR-based barriers
+            atr = self.calculate_atr(df, period=atr_period)
+            profit_threshold = atr * upper_mult
+            loss_threshold = atr * lower_mult
 
-            # 3. Calculate objective:
-            #    - Backtest simple strategy (long on label=1, short on label=-1)
-            #    - Calculate returns with transaction costs
-            #    - Objective = Sharpe ratio (or win rate, or custom metric)
-            sharpe = self.calculate_sharpe(labeled, transaction_cost=0.0002)
+            # Label data with suggested barriers
+            labeled = self.label_data(
+                df,
+                profit_threshold=profit_threshold,
+                loss_threshold=loss_threshold,
+                horizon=horizon
+            )
+
+            # Calculate objective: Sharpe ratio with transaction costs
+            sharpe = self.calculate_sharpe(
+                labeled,
+                transaction_cost=0.0002  # 2 basis points
+            )
 
             return sharpe
 
         # Run Optuna study
-        study = optuna.create_study(direction="maximize")
-        study.optimize(objective, n_trials=n_trials)
+        study = optuna.create_study(
+            direction="maximize",
+            sampler=optuna.samplers.TPESampler(seed=42)
+        )
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
 
-        # Return best parameters
+        # Log best trial
+        logger.info(f"Best Sharpe: {study.best_value:.4f}")
+        logger.info(f"Best params: {study.best_params}")
+
         return study.best_params
 ```
 
-**Objective Metrics:**
-- Primary: Sharpe ratio (risk-adjusted returns)
-- Alternative: Win rate, profit factor, max drawdown
+### Optimization Workflow
 
-**Transaction Costs:**
+```
+[Features] -> [Stage 7: Label Optimization] -> [Stage 8: Feature Selection] -> [Stage 9: Feature Pruning]
+  Stage 5-6         100 trials                      100 trials                     50 trials
+                    (barrier params)               (binary selection)           (importance pruning)
+```
+
+### Objective Metrics
+
+- **Primary:** Sharpe ratio (risk-adjusted returns)
+- **Alternative metrics:**
+  - Win rate
+  - Profit factor
+  - Maximum drawdown
+  - Calmar ratio
+
+### Transaction Costs
+
 - Slippage: 1 tick (~$1.25 per contract for MES)
 - Commission: $0.50 per side
 - **Total round-trip cost: ~0.02% for MES**
+
+### Output Artifacts
+
+```json
+// data/optimization/barrier_optimization.json
+{
+  "symbol": "MES",
+  "n_trials": 100,
+  "best_params": {
+    "upper_mult": 2.1,
+    "lower_mult": 1.4,
+    "horizon": 20,
+    "atr_period": 14
+  },
+  "best_sharpe": 1.45,
+  "all_trials": [
+    {"trial": 1, "params": {...}, "sharpe": 0.82},
+    {"trial": 2, "params": {...}, "sharpe": 1.12},
+    ...
+  ]
+}
+```
 
 ### Task 4.3: Quality Weighting
 **File:** `src/phase1/stages/labeling/quality_weighter.py`
@@ -566,12 +641,50 @@ scaling:
 
 **After Phase 4 completion:**
 1. ✅ Labeled, weighted, split, and scaled dataset ready
-2. ➡️ Proceed to **Phase 5: Model-Family Adapters** for model-specific data formatting
-3. ➡️ Training (Phase 6) will consume adapter outputs
+2. ➡️ Return to **[Phase 3](./PHASE_3_FEATURES.md)** for Stage 8 (Feature Selection - 100 trials) and Stage 9 (Feature Pruning - 50 trials)
+3. ➡️ Proceed to **Stage 12: Adaptation** for model-specific data formatting (2D/3D/4D)
+4. ➡️ Then **Stage 13: OPTUNA Hyperparameter Optimization** (100 trials per model)
+5. ➡️ Finally **Stage 14-16: Training, Stacking, Bundling**
+
+---
+
+## Pipeline Stage Summary
+
+This phase implements the following stages from the 16-stage pipeline:
+
+| Stage | Name | Description | Trials | Status |
+|-------|------|-------------|--------|--------|
+| 7 | OPTUNA Label Optimization | Triple-barrier parameter optimization | 100 | ✅ Complete |
+| 10 | Splits | Train/val/test (70/15/15) with purge/embargo | - | ✅ Complete |
+| 11 | Scaling | Train-only robust scaling | - | ✅ Complete |
+
+**Optuna Parameters for Stage 7:**
+- `upper_mult`: Upper barrier multiplier (1.0 - 3.0)
+- `lower_mult`: Lower barrier multiplier (0.5 - 2.0)
+- `horizon`: Maximum holding period (5 - 30 bars)
+- `atr_period`: ATR calculation period (10 - 30)
+
+**Previous Stages:** Stages 5-6 (Features, Regime) in [PHASE_3_FEATURES.md](./PHASE_3_FEATURES.md)
+**Next Stages:** Stages 8-9 (Feature Selection, Feature Pruning) in [PHASE_3_FEATURES.md](./PHASE_3_FEATURES.md)
+
+---
+
+## Complete Optuna Optimization Summary
+
+The pipeline includes **4 Optuna optimization phases**:
+
+| Stage | Name | Trials | Parameters |
+|-------|------|--------|------------|
+| 7 | Label Optimization | 100 | `upper_mult`, `lower_mult`, `horizon`, `atr_period` |
+| 8 | Feature Selection | 100 | Binary include/exclude per feature |
+| 9 | Feature Pruning | 50 | `importance_threshold` |
+| 13 | Hyperparameter Optimization | 100 per model | Model-specific hyperparameters |
+
+**Total Optuna Trials:** ~100 + 100 + 50 + (100 x N_models) where N_models = 23
 
 **Validation Checklist:**
-- [ ] Optuna optimization completed
-- [ ] Barrier parameters saved
+- [ ] Optuna optimization completed (100 trials)
+- [ ] Barrier parameters saved (`upper_mult`, `lower_mult`, `horizon`, `atr_period`)
 - [ ] Labels generated for all horizons
 - [ ] Quality weights calculated
 - [ ] Splits created (70/15/15)

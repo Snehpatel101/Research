@@ -35,50 +35,87 @@ src/
 │   ├── config.py           # MLConfig - unified configuration
 │   ├── state.py            # PipelineState - state management
 │   └── phases/
-│       ├── data.py         # Phase 1-5: Data pipeline
-│       ├── training.py     # Phase 6: Model training
-│       ├── evaluation.py   # Phase 7: CV/Walk-forward/CPCV-PBO
-│       └── deployment.py   # Phase 8: Model serving
+│       ├── data.py         # Stages 1-6: Data pipeline
+│       ├── optimization.py # Stages 7-9: Optuna optimization
+│       ├── training.py     # Stages 10-15: Training pipeline
+│       └── deployment.py   # Stage 16: Bundling & deployment
 ├── models/                 # Model implementations (unchanged)
 ├── features/               # Feature engineering (unchanged)
 └── cli/
     └── unified_cli.py      # Single 'ml' CLI with subcommands
 ```
 
-### Data Flow
+### Complete 16-Stage Data Flow
 
 ```
 MLPipeline(config)
   ↓
-Phase 1-5: Data Pipeline (run_data)
-  - Ingest raw 1-min OHLCV
-  - Multi-timeframe upscaling (9 TFs)
-  - Feature engineering (~180 features)
-  - Triple-barrier labeling
-  - Train/val/test splits + scaling
-  ↓
-  [Checkpoint: data/splits/scaled/{timeframe}/]
-  ↓
-Phase 6: Training (run_training)
-  - Load TimeSeriesDataContainer
-  - Per-model feature selection (strategies + Optuna)
-  - Train base models (single-TF or MTF)
-  - Build ensembles (heterogeneous stacking)
-  ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                    DATA PREPARATION (Stages 1-6)                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 1: Ingestion - Load raw 1-min OHLCV                      │
+│  Stage 2: Cleaning - Resample, gap handling, validation         │
+│  Stage 3: Sessions - Trading hours filtering (RTH/ETH)          │
+│  Stage 4: MTF Upscaling - 9 timeframes from 1-min base          │
+│  Stage 5: Features - 162 indicators (12 families)               │
+│  Stage 6: Regime - Market regime detection (vol + trend)        │
+└────────────────────────┬────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: data/features/{symbol}_features.parquet]
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│               OPTUNA OPTIMIZATION (Stages 7-9)                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 7: OPTUNA Label Optimization - 100 trials                │
+│           (barrier params: upper_mult, lower_mult,              │
+│            horizon, atr_period)                                 │
+│                         ↓                                        │
+│  Stage 8: OPTUNA Feature Selection - 100 trials                 │
+│           (binary include/exclude per feature)                  │
+│                         ↓                                        │
+│  Stage 9: OPTUNA Feature Pruning - 50 trials                    │
+│           (importance-based removal)                            │
+└────────────────────────┬────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: data/optimized/{symbol}_optimized.parquet]
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│               PREPROCESSING (Stages 10-12)                       │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 10: Splits - Train/val/test (70/15/15)                   │
+│            + purge (60 bars) + embargo (1440 bars)              │
+│                         ↓                                        │
+│  Stage 11: Scaling - Train-only robust scaling                  │
+│                         ↓                                        │
+│  Stage 12: Adaptation - 2D/3D/4D tensor per model type          │
+│            (TabularAdapter/SequenceAdapter/MultiStreamAdapter)  │
+└────────────────────────┬────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: data/splits/scaled/{symbol}_{split}.parquet]
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│               TRAINING (Stages 13-15)                            │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 13: OPTUNA Hyperparameter Optimization                   │
+│            100 trials per model (23 models)                     │
+│                         ↓                                        │
+│  Stage 14: Training - PurgedKFold CV, OOF generation            │
+│            (5-fold CV, out-of-fold predictions)                 │
+│                         ↓                                        │
+│  Stage 15: Stacking - OOF alignment, meta-learner               │
+│            (heterogeneous base models → meta-learner)           │
+└────────────────────────┬────────────────────────────────────────┘
+                         ↓
   [Checkpoint: experiments/runs/{run_id}/models/]
-  ↓
-Phase 7: Evaluation (run_evaluation)
-  - Cross-validation (PurgedKFold)
-  - Walk-forward analysis
-  - CPCV-PBO validation
-  - Regime-aware performance
-  ↓
-  [Checkpoint: experiments/runs/{run_id}/evaluation/]
-  ↓
-Phase 8: Deployment (run_deployment)
-  - Model serving API
-  - Real-time inference
-  - Monitoring dashboards
+                         ↓
+┌─────────────────────────────────────────────────────────────────┐
+│               DEPLOYMENT (Stage 16)                              │
+├─────────────────────────────────────────────────────────────────┤
+│  Stage 16: Bundling - Model + Scaler + Graph → Artifact         │
+│            (ModelBundle V1.1.0 with PreprocessingGraph)         │
+└────────────────────────┬────────────────────────────────────────┘
+                         ↓
+  [Output: experiments/runs/{run_id}/bundles/{model}_bundle.pkl]
 ```
 
 ---
@@ -142,6 +179,288 @@ class MLConfig:
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
     data_dir: Path = field(default_factory=lambda: Path("data"))
     run_id: str | None = None  # Auto-generated if None
+
+    # ===== OPTUNA OPTIMIZATION =====
+    optimize_labels: bool = True
+    label_trials: int = 100
+    optimize_features: bool = True
+    feature_selection_trials: int = 100
+    feature_pruning_trials: int = 50
+    optimize_hyperparameters: bool = True
+    hyperparam_trials_per_model: int = 100
+```
+
+---
+
+## Optuna Optimization Stages
+
+The pipeline includes 4 dedicated Optuna optimization stages that systematically tune the ML pipeline for optimal performance.
+
+### Optuna Trial Summary
+
+| Stage | Optimization Target | Trials | Search Space |
+|-------|---------------------|--------|--------------|
+| **Stage 7** | Triple Barrier Labels | 100 | barrier params |
+| **Stage 8** | Feature Selection | 100 | binary include/exclude |
+| **Stage 9** | Feature Pruning | 50 | importance threshold |
+| **Stage 13** | Hyperparameters | 100 per model | model-specific |
+
+**Total Trials:** ~100 + 100 + 50 + (100 x N_models) = 250 + 100N trials
+
+For 23 models: **2,550 total Optuna trials**
+
+---
+
+### Stage 7: Triple Barrier Label Optimization (OPTUNA)
+
+**Configuration:** `config/optimization/label_optimization.yaml`
+**Purpose:** Find optimal barrier parameters that maximize label quality and downstream model performance.
+
+**Search Space (100 trials):**
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `upper_mult` | 1.0 - 4.0 | Upper barrier ATR multiplier |
+| `lower_mult` | 1.0 - 4.0 | Lower barrier ATR multiplier |
+| `horizon` | 5 - 60 | Maximum bars to hold |
+| `atr_period` | 7 - 28 | ATR calculation period |
+
+**Objective Function:**
+```python
+def label_objective(trial: optuna.Trial) -> float:
+    """Maximize label quality via quick model validation."""
+    upper_mult = trial.suggest_float("upper_mult", 1.0, 4.0)
+    lower_mult = trial.suggest_float("lower_mult", 1.0, 4.0)
+    horizon = trial.suggest_int("horizon", 5, 60)
+    atr_period = trial.suggest_int("atr_period", 7, 28)
+
+    # Generate labels with trial params
+    labels = generate_triple_barrier_labels(
+        df, upper_mult, lower_mult, horizon, atr_period
+    )
+
+    # Quick validation with fast model (e.g., LightGBM)
+    score = quick_cv_score(X, labels, n_splits=3)
+
+    return score  # Maximize F1 or balanced accuracy
+```
+
+**Output:**
+- `optimal_barrier_params.json` - Best barrier configuration
+- `label_optimization_history.csv` - All trial results
+- Labeled dataset with optimized triple-barrier targets
+
+---
+
+### Stage 8: Feature Selection Optimization (OPTUNA)
+
+**Configuration:** `config/optimization/feature_selection.yaml`
+**Purpose:** Select optimal feature subset via binary include/exclude decisions.
+
+**Search Space (100 trials):**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `feature_{i}` | bool | Include feature i (0 or 1) |
+| 162 binary params | Categorical | One per feature |
+
+**Strategy:**
+1. Start with all 162 features
+2. Each trial samples a binary mask over features
+3. Train quick model on selected features
+4. Optimize for validation F1 score
+
+**Objective Function:**
+```python
+def feature_selection_objective(trial: optuna.Trial) -> float:
+    """Maximize model performance with feature subset."""
+    feature_mask = []
+    for i, feature_name in enumerate(all_features):
+        include = trial.suggest_categorical(f"feat_{i}", [True, False])
+        feature_mask.append(include)
+
+    # Select features based on mask
+    X_selected = X[:, feature_mask]
+
+    # Ensure minimum feature count
+    if sum(feature_mask) < 10:
+        return 0.0  # Penalize too few features
+
+    # Quick CV evaluation
+    score = quick_cv_score(X_selected, y, n_splits=3)
+
+    return score
+```
+
+**Output:**
+- `optimal_feature_mask.json` - Boolean mask for 162 features
+- `selected_features.txt` - List of selected feature names
+- Reduced feature matrix (typically 60-100 features)
+
+---
+
+### Stage 9: Feature Pruning Optimization (OPTUNA)
+
+**Configuration:** `config/optimization/feature_pruning.yaml`
+**Purpose:** Remove low-importance features based on model-derived importance scores.
+
+**Search Space (50 trials):**
+
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `importance_threshold` | 0.001 - 0.1 | Minimum importance to keep |
+| `top_k_features` | 20 - 100 | Maximum features to keep |
+| `importance_method` | categorical | gain, split, shap |
+
+**Strategy:**
+1. Train model on features from Stage 8
+2. Compute feature importance (gain, split, or SHAP)
+3. Prune features below importance threshold
+4. Optionally limit to top-K most important
+
+**Objective Function:**
+```python
+def feature_pruning_objective(trial: optuna.Trial) -> float:
+    """Maximize performance with importance-based pruning."""
+    threshold = trial.suggest_float("importance_threshold", 0.001, 0.1, log=True)
+    top_k = trial.suggest_int("top_k_features", 20, 100)
+    method = trial.suggest_categorical("importance_method", ["gain", "split", "shap"])
+
+    # Get feature importance from base model
+    importance = compute_importance(model, X, method=method)
+
+    # Prune by threshold and top-K
+    keep_mask = (importance >= threshold)
+    if keep_mask.sum() > top_k:
+        keep_indices = np.argsort(importance)[-top_k:]
+        keep_mask = np.zeros_like(keep_mask)
+        keep_mask[keep_indices] = True
+
+    X_pruned = X[:, keep_mask]
+    score = quick_cv_score(X_pruned, y, n_splits=3)
+
+    return score
+```
+
+**Output:**
+- `pruned_feature_mask.json` - Final feature mask after pruning
+- `feature_importance_ranking.csv` - Full importance scores
+- Final feature matrix (typically 30-60 features)
+
+---
+
+### Stage 13: Hyperparameter Optimization (OPTUNA)
+
+**Configuration:** `config/optimization/hyperparameter.yaml`
+**Purpose:** Tune model-specific hyperparameters for each of 23 models.
+
+**Trial Budget:** 100 trials per model = 2,300 trials total
+
+**Search Spaces by Model Family:**
+
+#### Boosting Models (XGBoost, LightGBM, CatBoost)
+| Parameter | Range | Type |
+|-----------|-------|------|
+| `max_depth` | 3 - 12 | int |
+| `learning_rate` | 0.001 - 0.3 | float (log) |
+| `n_estimators` | 100 - 2000 | int |
+| `min_child_weight` | 1 - 10 | int |
+| `subsample` | 0.5 - 1.0 | float |
+| `colsample_bytree` | 0.5 - 1.0 | float |
+| `reg_alpha` | 1e-8 - 10 | float (log) |
+| `reg_lambda` | 1e-8 - 10 | float (log) |
+
+#### Neural Models (LSTM, GRU, TCN, Transformer)
+| Parameter | Range | Type |
+|-----------|-------|------|
+| `hidden_size` | 32 - 512 | int |
+| `num_layers` | 1 - 4 | int |
+| `dropout` | 0.0 - 0.5 | float |
+| `learning_rate` | 1e-5 - 1e-2 | float (log) |
+| `batch_size` | 32 - 512 | int |
+| `seq_len` | 10 - 100 | int |
+| `weight_decay` | 1e-6 - 1e-2 | float (log) |
+
+#### Advanced Transformers (PatchTST, iTransformer, TFT)
+| Parameter | Range | Type |
+|-----------|-------|------|
+| `d_model` | 32 - 256 | int |
+| `n_heads` | 2 - 8 | int |
+| `n_layers` | 1 - 6 | int |
+| `patch_len` | 4 - 32 | int |
+| `stride` | 2 - 16 | int |
+| `dropout` | 0.0 - 0.3 | float |
+| `learning_rate` | 1e-5 - 1e-3 | float (log) |
+
+#### Classical Models (RF, Logistic, SVM)
+| Parameter | Range | Type |
+|-----------|-------|------|
+| `n_estimators` | 50 - 500 | int (RF) |
+| `max_depth` | 3 - 20 | int (RF) |
+| `C` | 1e-4 - 100 | float (log, SVM/LR) |
+| `kernel` | rbf, linear, poly | categorical (SVM) |
+| `penalty` | l1, l2, elasticnet | categorical (LR) |
+
+**Objective Function:**
+```python
+def hyperparam_objective(trial: optuna.Trial, model_name: str) -> float:
+    """Maximize CV performance for specific model."""
+    # Sample hyperparameters based on model family
+    params = sample_hyperparams(trial, model_name)
+
+    # Build model with trial params
+    model = build_model(model_name, params)
+
+    # PurgedKFold cross-validation
+    scores = []
+    for train_idx, val_idx in purged_kfold.split(X, y):
+        model.fit(X[train_idx], y[train_idx])
+        pred = model.predict(X[val_idx])
+        scores.append(f1_score(y[val_idx], pred, average='macro'))
+
+    return np.mean(scores)
+```
+
+**Output per Model:**
+- `{model}_best_params.json` - Optimal hyperparameters
+- `{model}_optimization_history.csv` - All trial results
+- `{model}_importance_plot.png` - Hyperparameter importance
+
+---
+
+### Optuna Configuration
+
+```python
+@dataclass
+class OptunaConfig:
+    """Configuration for all Optuna optimization stages."""
+
+    # Stage 7: Label Optimization
+    label_trials: int = 100
+    label_sampler: str = "TPE"  # TPE, CMA-ES, Random
+    label_pruner: str = "Hyperband"  # Hyperband, Median, None
+
+    # Stage 8: Feature Selection
+    feature_selection_trials: int = 100
+    feature_selection_sampler: str = "TPE"
+    min_features: int = 10
+    max_features: int = 150
+
+    # Stage 9: Feature Pruning
+    feature_pruning_trials: int = 50
+    importance_methods: list[str] = field(default_factory=lambda: ["gain", "shap"])
+
+    # Stage 13: Hyperparameter Optimization
+    hyperparam_trials_per_model: int = 100
+    hyperparam_sampler: str = "TPE"
+    hyperparam_pruner: str = "Hyperband"
+    cv_folds: int = 5
+
+    # General
+    n_jobs: int = -1  # Parallel trials
+    timeout_per_trial: int = 300  # 5 minutes max per trial
+    storage: str | None = None  # SQLite/PostgreSQL for distributed
+    study_name_prefix: str = "ml_factory"
 ```
 
 ---
@@ -159,22 +478,25 @@ class MLPipeline:
         - dict (backward compat)
         - YAML file path
         """
-    
-    # === PHASE EXECUTION ===
+
+    # === STAGE GROUP EXECUTION ===
     def run(self) -> PipelineResult:
-        """Run all phases: data → training → evaluation"""
-    
+        """Run all 16 stages: data → optimization → training → bundling"""
+
     def run_data(self) -> DataPipelineResult:
-        """Phase 1-5: Raw data → labeled features"""
-    
+        """Stages 1-6: Raw data → features + regime"""
+
+    def run_optimization(self) -> OptimizationResult:
+        """Stages 7-9: Optuna label/feature optimization"""
+
+    def run_preprocessing(self) -> PreprocessingResult:
+        """Stages 10-12: Splits → scaling → adaptation"""
+
     def run_training(self) -> TrainingResult:
-        """Phase 6: Train models"""
-    
-    def run_evaluation(self) -> EvaluationResult:
-        """Phase 7: CV/Walk-forward/CPCV-PBO"""
-    
-    def run_deployment(self) -> DeploymentResult:
-        """Phase 8: Serve model API"""
+        """Stages 13-15: Hyperparameter opt → training → stacking"""
+
+    def run_bundling(self) -> BundlingResult:
+        """Stage 16: Model + Scaler + Graph → Artifact"""
     
     # === STATE MANAGEMENT ===
     def save_state(self) -> None:
@@ -483,52 +805,107 @@ config = MLConfig(
 
 ## Implementation Plan
 
-### Phase 1: Core Architecture (2-3 hours)
-1. Create `src/pipeline/unified.py` - MLPipeline class
-2. Create `src/pipeline/config.py` - MLConfig dataclass
-3. Create `src/pipeline/state.py` - PipelineState class
-4. Wire to existing phase1 pipeline and TrainingOrchestrator
+### Implementation Phase 1: Data Pipeline (Stages 1-6)
+1. Stage 1: Ingestion - Load raw 1-min OHLCV from parquet
+2. Stage 2: Cleaning - Resample, gap handling, validation
+3. Stage 3: Sessions - Trading hours filtering (RTH/ETH)
+4. Stage 4: MTF Upscaling - 9 timeframes from 1-min base
+5. Stage 5: Features - 162 indicators (12 families)
+6. Stage 6: Regime - Market regime detection (vol + trend)
 
-### Phase 2: Training Modes (2-3 hours)
-5. Integrate walk-forward training
-6. Integrate regime-aware training
-7. Integrate meta-labeling
-8. Add training mode dispatcher
+### Implementation Phase 2: Optuna Optimization (Stages 7-9)
+7. Stage 7: Label Optimization - 100 trials (barrier params)
+8. Stage 8: Feature Selection - 100 trials (binary include/exclude)
+9. Stage 9: Feature Pruning - 50 trials (importance-based)
 
-### Phase 3: Evaluation (1-2 hours)
-9. Integrate CV (existing)
-10. Integrate walk-forward evaluation (existing)
-11. Integrate CPCV-PBO (existing)
+### Implementation Phase 3: Preprocessing (Stages 10-12)
+10. Stage 10: Splits - Train/val/test (70/15/15) + purge/embargo
+11. Stage 11: Scaling - Train-only robust scaling
+12. Stage 12: Adaptation - 2D/3D/4D tensor per model type
 
-### Phase 4: CLI (1-2 hours)
-12. Create `src/cli/unified_cli.py`
-13. Consolidate script functionality
-14. Add resume/status commands
+### Implementation Phase 4: Training (Stages 13-15)
+13. Stage 13: Hyperparameter Optimization - 100 trials per model
+14. Stage 14: Training - PurgedKFold CV, OOF generation
+15. Stage 15: Stacking - OOF alignment, meta-learner
 
-### Phase 5: Testing & Documentation (2-3 hours)
-15. Test end-to-end pipeline
-16. Verify model family compatibility
-17. Update notebook
-18. Update CLAUDE.md
+### Implementation Phase 5: Deployment (Stage 16)
+16. Stage 16: Bundling - Model + Scaler + Graph → Artifact
 
-**Total: 8-13 hours**
+### Implementation Phase 6: Integration
+17. Create `src/pipeline/unified.py` - MLPipeline class
+18. Create `src/pipeline/config.py` - MLConfig + OptunaConfig
+19. Create `src/cli/unified_cli.py` - Unified CLI
+20. State management for 16-stage resume
+
+**Total: 16 pipeline stages + 4 integration tasks**
+
+---
+
+## Optuna Trial Budget Summary
+
+| Optimization Stage | Trials | Time Estimate |
+|-------------------|--------|---------------|
+| Stage 7: Label Optimization | 100 | ~10 min |
+| Stage 8: Feature Selection | 100 | ~15 min |
+| Stage 9: Feature Pruning | 50 | ~8 min |
+| Stage 13: Hyperparameter (per model) | 100 | ~20-60 min |
+
+**Per-Model Total:** ~250 trials + 100 hyperparam = 350 trials
+**Full Pipeline (23 models):** 250 + (23 x 100) = **2,550 trials**
+
+### Estimated Runtime (RTX 4090, 64GB RAM)
+
+| Component | Time |
+|-----------|------|
+| Stages 1-6 (Data) | ~3 min |
+| Stages 7-9 (Feature Opt) | ~33 min |
+| Stage 10-12 (Preprocessing) | ~1 min |
+| Stage 13 (Hyperparam, all models) | ~8-23 hours |
+| Stage 14-15 (Training + Stacking) | ~1 hour |
+| Stage 16 (Bundling) | ~5 min |
+
+**Total (Full Pipeline):** ~10-25 hours (parallelizable across models)
 
 ---
 
 ## Success Criteria
 
-✅ **Complete when:**
-1. Single `MLPipeline(config).run()` executes full pipeline
-2. All 23 models work together in heterogeneous ensembles
-3. Walk-forward, regime-aware, meta-labeling integrated
-4. Single CLI with `ml run`, `ml train`, `ml evaluate` subcommands
-5. State management allows resume from any phase
-6. Notebook uses unified interface
-7. Zero LSP errors in core pipeline code
+**Complete when:**
+1. Single `MLPipeline(config).run()` executes all 16 stages
+2. All 4 Optuna optimization stages integrated (label, feature selection, pruning, hyperparameters)
+3. All 23 models work together in heterogeneous ensembles
+4. Walk-forward, regime-aware, meta-labeling training modes integrated
+5. Single CLI with `ml run`, `ml data`, `ml optimize`, `ml train` subcommands
+6. State management allows resume from any of 16 stages
+7. Notebook uses unified interface
+8. Zero LSP errors in core pipeline code
 
-❌ **NOT complete if:**
-- User still needs to run phase1 + training separately
-- Advanced features require separate scripts
+**NOT complete if:**
+- User still needs to run stages separately
+- Optuna optimization stages not automated
 - Model families incompatible for stacking
 - Multiple config formats required
 - No state management/resumption
+
+---
+
+## 16-Stage Pipeline Quick Reference
+
+| # | Stage | Description | Output |
+|---|-------|-------------|--------|
+| 1 | Ingestion | Load raw 1-min OHLCV | `{symbol}_1m.parquet` |
+| 2 | Cleaning | Resample, gap handling | `{symbol}_1m_clean.parquet` |
+| 3 | Sessions | Trading hours filter | Filtered DataFrame |
+| 4 | MTF Upscaling | 9 timeframes | `{symbol}_{tf}.parquet` |
+| 5 | Features | 162 indicators | `{symbol}_features.parquet` |
+| 6 | Regime | Market regime detection | Regime labels |
+| 7 | **OPTUNA: Labels** | 100 trials, barrier params | Optimized labels |
+| 8 | **OPTUNA: Feature Selection** | 100 trials, binary | Feature mask |
+| 9 | **OPTUNA: Feature Pruning** | 50 trials, importance | Pruned features |
+| 10 | Splits | 70/15/15 + purge/embargo | Train/val/test |
+| 11 | Scaling | Train-only robust | Scaled arrays |
+| 12 | Adaptation | 2D/3D/4D tensors | Model-ready data |
+| 13 | **OPTUNA: Hyperparameters** | 100 trials per model | Best params |
+| 14 | Training | PurgedKFold CV, OOF | Trained models |
+| 15 | Stacking | OOF alignment, meta-learner | Ensemble |
+| 16 | Bundling | Model + Scaler + Graph | Inference bundle |

@@ -10,10 +10,11 @@ Comprehensive guide to all configuration files and settings in the ML Model Fact
 4. [Pipeline Configurations](#pipeline-configurations)
 5. [Ensemble Configurations](#ensemble-configurations)
 6. [Experiment Templates](#experiment-templates)
-7. [Configuration Reference](#configuration-reference)
-8. [Validation Guidelines](#validation-guidelines)
-9. [Environment-Specific Configs](#environment-specific-configs)
-10. [Best Practices](#best-practices)
+7. [Optuna Optimization](#optuna-optimization)
+8. [Configuration Reference](#configuration-reference)
+9. [Validation Guidelines](#validation-guidelines)
+10. [Environment-Specific Configs](#environment-specific-configs)
+11. [Best Practices](#best-practices)
 
 ---
 
@@ -65,8 +66,8 @@ config/
 ├── pipeline/            # Global pipeline settings
 ├── ensembles/           # Ensemble templates
 ├── experiments/         # Experiment templates
-├── optimization/        # GA optimization results
-└── features/            # Feature engineering configs (reserved)
+├── optimization/        # Optuna optimization configs
+└── features/            # Feature engineering configs
 ```
 
 ### File Naming Conventions
@@ -574,7 +575,7 @@ success_criteria:
 
 ### Full Benchmark (`experiments/full_benchmark.yaml`)
 
-Comprehensive benchmark across all 22 models.
+Comprehensive benchmark across all 23 models.
 
 ```yaml
 experiment:
@@ -626,6 +627,132 @@ resources:
   min_ram_gb: 32
   recommended_gpu: "RTX 4070 Ti or better"
 ```
+
+---
+
+## Optuna Optimization
+
+The ML Factory uses Optuna for hyperparameter optimization across four key pipeline stages.
+
+### Optimization Types
+
+| Stage | Type | Config File | Trials | Purpose |
+|-------|------|-------------|--------|---------|
+| Stage 7 | Label Optimization | `optimization/label_optimization.yaml` | 100 | Triple barrier parameters |
+| Stage 8 | Feature Selection | `optimization/feature_selection.yaml` | 100 | Binary feature include/exclude |
+| Stage 9 | Feature Pruning | `optimization/feature_pruning.yaml` | 50 | Importance-based pruning |
+| Stage 13 | Hyperparameter Tuning | `optimization/hyperparameter.yaml` | 100/model | Per-model HP optimization |
+
+**Total Optuna Trials:** 100 + 100 + 50 + (100 × 23 models) = **2,550 trials**
+
+See [optimization/README.md](optimization/README.md) for comprehensive documentation of all optimization stages.
+
+### Label Optimization (`optimization/label_optimization.yaml`)
+
+Optimizes triple barrier labeling parameters:
+
+```yaml
+search_space:
+  upper_mult:
+    type: float
+    low: 0.5
+    high: 3.0
+  lower_mult:
+    type: float
+    low: 0.5
+    high: 3.0
+  horizon:
+    type: int
+    low: 5
+    high: 30
+  atr_period:
+    type: int
+    low: 10
+    high: 30
+
+objective:
+  metric: label_quality_score
+  components:
+    - class_balance (40%)
+    - barrier_hit_rate (30%)
+    - model_f1 (30%)
+```
+
+### Feature Selection (`optimization/feature_selection.yaml`)
+
+Binary optimization for feature subset discovery:
+
+```yaml
+search_space:
+  feature_selection_mode: binary
+  # Each feature: suggest_categorical(name, [True, False])
+
+objective:
+  metric: f1_macro
+  direction: maximize
+
+constraints:
+  min_features: 10
+  max_features: 100
+```
+
+### Feature Pruning (`optimization/feature_pruning.yaml`)
+
+Importance-based feature reduction:
+
+```yaml
+search_space:
+  importance_threshold:
+    type: float
+    low: 0.001
+    high: 0.1
+    log: true
+  importance_method:
+    type: categorical
+    choices: [permutation, shap, gain, split]
+
+constraints:
+  min_features_retained: 20
+```
+
+### Hyperparameter Optimization (`optimization/hyperparameter.yaml`)
+
+Per-model hyperparameter tuning:
+
+```yaml
+# Boosting models: 100 trials, 2h timeout
+# Neural models: 100 trials, 4h timeout
+# Classical models: 50 trials, 1h timeout
+
+models:
+  xgboost:
+    n_trials: 100
+    search_space: xgboost_search_space
+    early_stopping_rounds: 50
+
+  lstm:
+    n_trials: 100
+    search_space: rnn_search_space
+    max_epochs: 100
+```
+
+### Running Optimization
+
+```bash
+# Label optimization
+python scripts/optimize_labels.py --config config/optimization/label_optimization.yaml
+
+# Feature selection
+python scripts/optimize_features.py --mode selection --config config/optimization/feature_selection.yaml
+
+# Feature pruning
+python scripts/optimize_features.py --mode pruning --config config/optimization/feature_pruning.yaml
+
+# Hyperparameter optimization
+python scripts/tune_model.py --model xgboost --config config/optimization/hyperparameter.yaml
+```
+
+See [optimization/README.md](optimization/README.md) for comprehensive documentation.
 
 ---
 
@@ -846,5 +973,5 @@ environments:
 
 ---
 
-*Last Updated: 2026-01-13*
-*Configuration Version: 2.0*
+*Last Updated: 2026-01-18*
+*Configuration Version: 2.1*

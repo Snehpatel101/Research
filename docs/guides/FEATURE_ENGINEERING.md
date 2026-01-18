@@ -2,7 +2,7 @@
 
 **Purpose:** Comprehensive guide for engineering features for each model family in the ML factory
 **Audience:** Data engineers, quant analysts, ML engineers
-**Last Updated:** 2025-12-30
+**Last Updated:** 2026-01-18
 
 ---
 
@@ -12,12 +12,14 @@
 2. [Feature Engineering Philosophy](#feature-engineering-philosophy)
 3. [Feature Sets by Model Family](#feature-sets-by-model-family)
 4. [MTF Feature Construction](#mtf-feature-construction)
-5. [Feature Selection Strategies](#feature-selection-strategies)
-6. [Feature Validation](#feature-validation)
-7. [Feature Scaling](#feature-scaling)
-8. [Adding New Feature Groups](#adding-new-feature-groups)
-9. [Performance Considerations](#performance-considerations)
-10. [Code Examples](#code-examples)
+5. [Stage 8: Feature Selection Optimization with Optuna](#stage-8-feature-selection-optimization-with-optuna)
+6. [Stage 9: Feature Pruning Optimization with Optuna](#stage-9-feature-pruning-optimization-with-optuna)
+7. [Feature Selection Strategies (Manual)](#feature-selection-strategies-manual)
+8. [Feature Validation](#feature-validation)
+9. [Feature Scaling](#feature-scaling)
+10. [Adding New Feature Groups](#adding-new-feature-groups)
+11. [Performance Considerations](#performance-considerations)
+12. [Code Examples](#code-examples)
 
 ---
 
@@ -713,7 +715,938 @@ Timestamp (15min) | 1h RSI (no shift) | 1h RSI (shift + ffill)
 
 ---
 
-## Feature Selection Strategies
+## Stage 8: Feature Selection Optimization with Optuna
+
+**COMPREHENSIVE GUIDE:** See `docs/guides/FEATURE_SELECTION_OPTIMIZATION.md` for detailed coverage with examples
+
+### Overview
+
+**Pipeline Stage:** 8 of 16
+**Goal:** Automatically select the optimal subset of features using Optuna-driven binary include/exclude decisions.
+**Trials:** 100 Optuna trials
+
+This stage integrates with the 16-stage ML Factory pipeline, running after feature engineering (Stage 5) and regime detection (Stage 6), but before splits and scaling.
+
+### How Features Feed into Optimization
+
+```
+Stage 5 (Features)     Stage 6 (Regime)     Stage 7 (Label Opt)
+       │                     │                     │
+       ▼                     ▼                     ▼
+   162 indicators  +   regime features   +   optimized labels
+       │                     │                     │
+       └─────────────────────┴─────────────────────┘
+                             │
+                             ▼
+                   ┌─────────────────────┐
+                   │  Stage 8: Feature   │
+                   │  Selection (Optuna) │
+                   │  100 trials         │
+                   │  Binary decisions   │
+                   └─────────┬───────────┘
+                             │
+                             ▼
+                   Selected feature groups
+                             │
+                             ▼
+                   ┌─────────────────────┐
+                   │  Stage 9: Feature   │
+                   │  Pruning (Optuna)   │
+                   │  50 trials          │
+                   │  Importance-based   │
+                   └─────────────────────┘
+```
+
+### Feature Groups for Selection
+
+Features are organized into logical groups to reduce the search space:
+
+```python
+FEATURE_GROUPS = {
+    'momentum': ['rsi_14', 'macd', 'macd_signal', 'macd_hist', 'cci_20', 'stoch_k', 'stoch_d', 'williams_r', 'roc_10', 'mfi_14'],
+    'volatility': ['atr_14', 'bollinger_width', 'keltner_width', 'historical_vol', 'parkinson_vol', 'gk_vol'],
+    'volume': ['volume_ratio', 'obv', 'vwap_distance', 'mfi_14', 'dollar_volume', 'twap'],
+    'trend': ['adx_14', 'aroon_up', 'aroon_down', 'supertrend', 'di_plus', 'di_minus'],
+    'moving_avg': ['sma_20', 'sma_50', 'ema_12', 'ema_26', 'price_to_sma20', 'price_to_sma50'],
+    'microstructure': ['order_flow_imbalance', 'amihud_illiquidity', 'roll_spread', 'corwin_schultz', 'kyle_lambda'],
+    'wavelets': ['wavelet_trend', 'wavelet_detail_1', 'wavelet_detail_2', 'wavelet_detail_3', 'wavelet_energy'],
+    'temporal': ['hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos', 'session_progress'],
+    'regime': ['volatility_regime', 'trend_regime', 'composite_regime'],
+    'entropy': ['shannon_entropy', 'approx_entropy', 'sample_entropy', 'hurst_exponent'],
+}
+```
+
+### Per-Model Feature Selection Strategies
+
+Different model families benefit from different feature subsets:
+
+| Model Family | Recommended Groups | Excluded Groups | Rationale |
+|--------------|-------------------|-----------------|-----------|
+| **Boosting** | All groups | None (handles redundancy) | Tree models handle correlated features well |
+| **LSTM/GRU** | momentum, volatility, wavelets | microstructure, entropy | RNNs learn temporal patterns; avoid noise |
+| **Transformers** | momentum, volume, temporal | wavelets (model learns patterns) | Attention learns cross-feature relationships |
+| **CNN** | wavelets, volatility | microstructure | CNNs excel at multi-scale patterns |
+| **Classical** | momentum, trend, moving_avg | entropy, wavelets | Traditional signals work best |
+
+### Example: Feature Selection Objective
+
+```python
+# src/phase1/stages/feature_select/objective.py
+import optuna
+import numpy as np
+from lightgbm import LGBMClassifier
+from sklearn.model_selection import cross_val_score
+
+def feature_selection_objective(
+    trial: optuna.Trial,
+    X: np.ndarray,
+    y: np.ndarray,
+    feature_names: list[str],
+    model_family: str,
+    config: dict
+) -> float:
+    """
+    Objective function for Stage 8 feature selection.
+
+    Args:
+        trial: Optuna trial
+        X: Full feature matrix (162 features)
+        y: Labels
+        feature_names: List of feature names
+        model_family: Target model family (affects regularization)
+        config: Configuration dict
+
+    Returns:
+        Negative score (Optuna minimizes)
+    """
+    # Binary decisions for each feature group
+    selected_groups = {}
+    for group_name in FEATURE_GROUPS.keys():
+        selected_groups[group_name] = trial.suggest_categorical(
+            f'include_{group_name}',
+            [True, False]
+        )
+
+    # Get selected feature indices
+    selected_features = []
+    for group_name, include in selected_groups.items():
+        if include:
+            selected_features.extend(FEATURE_GROUPS[group_name])
+
+    selected_indices = [
+        i for i, name in enumerate(feature_names)
+        if any(feat in name for feat in selected_features)
+    ]
+
+    if len(selected_indices) == 0:
+        return float('inf')
+
+    X_subset = X[:, selected_indices]
+
+    # Evaluate with cross-validation
+    model = LGBMClassifier(n_estimators=100, max_depth=6, verbose=-1)
+    scores = cross_val_score(model, X_subset, y, cv=3, scoring='balanced_accuracy')
+
+    # Regularization based on model family
+    n_features = len(selected_indices)
+    if model_family in ['lstm', 'gru', 'transformer']:
+        # Neural models prefer fewer features
+        feature_penalty = 0.002 * n_features
+    else:
+        # Tabular models handle more features
+        feature_penalty = 0.0005 * n_features
+
+    return -(np.mean(scores) - feature_penalty)
+```
+
+### Running Feature Selection
+
+```bash
+python -m src.phase1.stages.feature_select.run \
+    --symbol MES \
+    --model-family boosting \
+    --n-trials 100
+```
+
+---
+
+## Stage 9: Feature Pruning Optimization with Optuna
+
+**COMPREHENSIVE GUIDE:** See `docs/guides/FEATURE_SELECTION_OPTIMIZATION.md#stage-9-feature-pruning-with-optuna` for detailed coverage
+
+### Overview
+
+**Pipeline Stage:** 9 of 16
+**Goal:** Fine-tune feature selection by pruning low-importance individual features.
+**Trials:** 50 Optuna trials
+
+After Stage 8 selects feature groups, Stage 9 removes individual features within those groups based on learned importance thresholds.
+
+### Importance-Based Pruning Methods
+
+Stage 9 optimizes three pruning parameters:
+
+1. **Importance Threshold:** Minimum feature importance to retain
+2. **Correlation Threshold:** Maximum correlation allowed between features
+3. **Variance Threshold:** Minimum variance percentile to retain
+
+```python
+# src/phase1/stages/feature_prune/optuna_optimizer.py
+import optuna
+
+def feature_pruning_search_space(trial: optuna.Trial) -> dict:
+    """
+    Search space for importance-based feature pruning.
+    """
+    return {
+        'importance_threshold': trial.suggest_float(
+            'importance_threshold', 0.0001, 0.01, log=True
+        ),
+        'max_correlation': trial.suggest_float(
+            'max_correlation', 0.85, 0.99
+        ),
+        'min_variance_percentile': trial.suggest_float(
+            'min_variance_percentile', 0.01, 0.10
+        ),
+        'importance_method': trial.suggest_categorical(
+            'importance_method', ['gain', 'split', 'permutation']
+        ),
+    }
+```
+
+### Pruning Strategy by Model Family
+
+| Model Family | Importance Method | Correlation Threshold | Variance Threshold |
+|--------------|-------------------|----------------------|-------------------|
+| **Boosting** | gain | 0.95 | 0.01 |
+| **LSTM/GRU** | permutation | 0.85 | 0.05 |
+| **Transformers** | gain | 0.90 | 0.03 |
+| **CNN** | gain | 0.88 | 0.02 |
+| **Classical** | split | 0.90 | 0.03 |
+
+### Example: Feature Pruning Objective
+
+```python
+# src/phase1/stages/feature_prune/objective.py
+import numpy as np
+from lightgbm import LGBMClassifier
+from sklearn.inspection import permutation_importance
+
+def feature_pruning_objective(
+    trial: optuna.Trial,
+    X: np.ndarray,
+    y: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    feature_names: list[str],
+    config: dict
+) -> float:
+    """
+    Objective function for Stage 9 feature pruning.
+    """
+    params = feature_pruning_search_space(trial)
+
+    # Train model to get importances
+    model = LGBMClassifier(n_estimators=200, max_depth=8, verbose=-1)
+    model.fit(X, y)
+
+    # Get feature importances
+    if params['importance_method'] == 'gain':
+        importances = model.booster_.feature_importance(importance_type='gain')
+    elif params['importance_method'] == 'split':
+        importances = model.booster_.feature_importance(importance_type='split')
+    else:
+        result = permutation_importance(model, X_val, y_val, n_repeats=5)
+        importances = result.importances_mean
+
+    # Normalize
+    importances = importances / (importances.sum() + 1e-8)
+
+    # Create pruning mask
+    keep_mask = importances >= params['importance_threshold']
+
+    # Variance filtering
+    variances = np.var(X, axis=0)
+    var_threshold = np.percentile(variances, params['min_variance_percentile'] * 100)
+    keep_mask &= (variances >= var_threshold)
+
+    # Correlation filtering
+    if keep_mask.sum() > 1:
+        corr = np.corrcoef(X[:, keep_mask].T)
+        keep_indices = np.where(keep_mask)[0]
+        for i in range(len(corr)):
+            for j in range(i + 1, len(corr)):
+                if abs(corr[i, j]) > params['max_correlation']:
+                    # Drop feature with lower importance
+                    drop_idx = keep_indices[i] if importances[keep_indices[i]] < importances[keep_indices[j]] else keep_indices[j]
+                    keep_mask[drop_idx] = False
+
+    if keep_mask.sum() == 0:
+        return float('inf')
+
+    # Evaluate pruned feature set
+    X_pruned, X_val_pruned = X[:, keep_mask], X_val[:, keep_mask]
+    model_pruned = LGBMClassifier(n_estimators=200, max_depth=8, verbose=-1)
+    model_pruned.fit(X_pruned, y)
+    val_score = model_pruned.score(X_val_pruned, y_val)
+
+    # Parsimony bonus
+    removed_features = X.shape[1] - keep_mask.sum()
+    parsimony_bonus = 0.0005 * removed_features
+
+    return -(val_score + parsimony_bonus)
+```
+
+### Running Feature Pruning
+
+```bash
+python -m src.phase1.stages.feature_prune.run \
+    --symbol MES \
+    --n-trials 50 \
+    --importance-method gain
+```
+
+### Output Example
+
+```yaml
+# experiments/feature_prune/MES_20260118/pruned_features.yaml
+symbol: MES
+stage: 9_feature_pruning
+pruning_params:
+  importance_threshold: 0.0023
+  max_correlation: 0.92
+  min_variance_percentile: 0.03
+  importance_method: gain
+
+results:
+  features_before: 87
+  features_after: 52
+  features_removed: 35
+  accuracy_before: 0.618
+  accuracy_after: 0.627
+
+removed_features:
+  - wavelet_detail_3
+  - aroon_down
+  - stoch_d
+  - corwin_schultz
+  # ... 31 more
+```
+
+---
+
+## Advanced Feature Selection with Optuna
+
+**COMPREHENSIVE GUIDE:** See `docs/guides/FEATURE_SELECTION_OPTIMIZATION.md` for standalone guide with all strategies
+
+This section provides comprehensive coverage of all Optuna-driven feature selection strategies, including implementation details, best practices, and integration with the unified pipeline.
+
+### Overview of Selection Strategies
+
+The ML Factory supports five primary feature selection strategies, all optimized by Optuna:
+
+| Strategy | Stage | Trials | Search Space | Best For |
+|----------|-------|--------|--------------|----------|
+| **Binary Group Selection** | 8 | 100 | 10 binary decisions | Quick dimensionality reduction |
+| **Binary Individual Selection** | 8 | 100 | ~100 binary decisions | Fine-grained optimization |
+| **Importance-Based Selection** | 8/9 | 50-100 | threshold, method | Model-aware selection |
+| **Recursive Feature Elimination** | 8 | 100 | n_features, step | Optimal subset discovery |
+| **Correlation-Based Selection** | 9 | 50 | max_correlation | Redundancy removal |
+
+### Strategy 1: Recursive Feature Elimination (RFE) with Optuna
+
+**Concept:** RFE iteratively removes the least important features until reaching the optimal subset size.
+
+```python
+# src/phase1/stages/feature_select/rfe_optimizer.py
+import optuna
+import numpy as np
+from sklearn.feature_selection import RFECV, RFE
+from lightgbm import LGBMClassifier
+from typing import List, Tuple
+
+class RFEOptunaOptimizer:
+    """
+    Optuna-optimized Recursive Feature Elimination.
+
+    Optimizes:
+    - n_features_to_select: Number of features to keep
+    - step: Features removed per iteration
+    - estimator: Base model for importance calculation
+    """
+
+    def __init__(self, config: dict):
+        self.config = config
+        self.n_trials = config.get('n_trials', 100)
+
+    def create_objective(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        feature_names: List[str]
+    ):
+        """Create Optuna objective for RFE optimization."""
+
+        def objective(trial: optuna.Trial) -> float:
+            # Sample RFE hyperparameters
+            n_features = trial.suggest_int('n_features_to_select', 20, 80)
+            step = trial.suggest_categorical('step', [1, 5, 10])
+            estimator_name = trial.suggest_categorical(
+                'estimator', ['xgboost', 'lightgbm', 'random_forest']
+            )
+
+            # Create base estimator
+            estimator = self._get_estimator(estimator_name)
+
+            # Run RFE with cross-validation
+            rfe = RFECV(
+                estimator=estimator,
+                step=step,
+                min_features_to_select=n_features,
+                cv=3,
+                scoring='f1_macro',
+                n_jobs=-1
+            )
+
+            rfe.fit(X, y)
+
+            # Get best score and optimal number of features
+            best_score = rfe.cv_results_['mean_test_score'].max()
+            optimal_n_features = rfe.n_features_
+
+            # Slight penalty for more features (prefer parsimony)
+            parsimony_penalty = 0.0005 * optimal_n_features
+
+            return best_score - parsimony_penalty
+
+        return objective
+
+    def _get_estimator(self, name: str):
+        """Get estimator by name."""
+        if name == 'lightgbm':
+            return LGBMClassifier(n_estimators=100, max_depth=6, verbose=-1)
+        elif name == 'xgboost':
+            from xgboost import XGBClassifier
+            return XGBClassifier(n_estimators=100, max_depth=6, verbosity=0)
+        elif name == 'random_forest':
+            from sklearn.ensemble import RandomForestClassifier
+            return RandomForestClassifier(n_estimators=100, max_depth=6, n_jobs=-1)
+
+    def optimize(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        feature_names: List[str]
+    ) -> Tuple[List[str], dict]:
+        """
+        Run RFE optimization with Optuna.
+
+        Returns:
+            Tuple of (selected_feature_names, best_params)
+        """
+        study = optuna.create_study(direction='maximize')
+        objective = self.create_objective(X, y, feature_names)
+
+        study.optimize(objective, n_trials=self.n_trials, show_progress_bar=True)
+
+        # Get best parameters
+        best_params = study.best_params
+
+        # Run final RFE with best params
+        estimator = self._get_estimator(best_params['estimator'])
+        rfe = RFE(
+            estimator=estimator,
+            n_features_to_select=best_params['n_features_to_select'],
+            step=best_params['step']
+        )
+        rfe.fit(X, y)
+
+        # Get selected feature names
+        selected_features = [
+            feature_names[i]
+            for i in range(len(feature_names))
+            if rfe.support_[i]
+        ]
+
+        return selected_features, best_params
+```
+
+### Strategy 2: Importance-Based Selection with Multiple Methods
+
+**Concept:** Select features above an importance threshold, where both the threshold and importance method are optimized by Optuna.
+
+```python
+# src/phase1/stages/feature_select/importance_optimizer.py
+import optuna
+import numpy as np
+from sklearn.inspection import permutation_importance
+from sklearn.feature_selection import mutual_info_classif
+from typing import List, Callable
+
+class ImportanceOptunaOptimizer:
+    """
+    Optuna-optimized importance-based feature selection.
+
+    Supports multiple importance methods:
+    - gain: Tree-based gain importance
+    - split: Tree-based split importance
+    - permutation: Model-agnostic permutation importance
+    - shap: SHAP value magnitudes
+    - mutual_info: Mutual information with target
+    - lasso: LASSO coefficient magnitude
+    """
+
+    IMPORTANCE_METHODS = {
+        'gain': '_compute_gain_importance',
+        'split': '_compute_split_importance',
+        'permutation': '_compute_permutation_importance',
+        'shap': '_compute_shap_importance',
+        'mutual_info': '_compute_mutual_info_importance',
+        'lasso': '_compute_lasso_importance',
+    }
+
+    def __init__(self, config: dict):
+        self.config = config
+
+    def create_objective(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        feature_names: List[str]
+    ):
+        """Create Optuna objective for importance-based selection."""
+
+        def objective(trial: optuna.Trial) -> float:
+            # Sample hyperparameters
+            importance_method = trial.suggest_categorical(
+                'importance_method',
+                ['gain', 'split', 'permutation', 'shap', 'mutual_info']
+            )
+            threshold = trial.suggest_float(
+                'importance_threshold', 0.001, 0.1, log=True
+            )
+            top_k = trial.suggest_int('top_k_features', 20, 100)
+            use_threshold = trial.suggest_categorical('use_threshold', [True, False])
+
+            # Compute feature importance
+            importance_fn = getattr(self, self.IMPORTANCE_METHODS[importance_method])
+            importances = importance_fn(X, y, X_val, y_val)
+
+            # Normalize importances
+            importances = importances / (importances.sum() + 1e-8)
+
+            # Create selection mask
+            if use_threshold:
+                mask = importances >= threshold
+            else:
+                # Top-K selection
+                top_indices = np.argsort(importances)[-top_k:]
+                mask = np.zeros(len(importances), dtype=bool)
+                mask[top_indices] = True
+
+            # Ensure minimum features
+            if mask.sum() < 10:
+                top_indices = np.argsort(importances)[-10:]
+                mask = np.zeros(len(importances), dtype=bool)
+                mask[top_indices] = True
+
+            # Evaluate with selected features
+            from lightgbm import LGBMClassifier
+            from sklearn.model_selection import cross_val_score
+
+            X_selected = X[:, mask]
+            model = LGBMClassifier(n_estimators=100, verbose=-1)
+            scores = cross_val_score(model, X_selected, y, cv=3, scoring='f1_macro')
+
+            return np.mean(scores)
+
+        return objective
+
+    def _compute_gain_importance(
+        self, X: np.ndarray, y: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray
+    ) -> np.ndarray:
+        """Compute tree-based gain importance."""
+        from lightgbm import LGBMClassifier
+
+        model = LGBMClassifier(n_estimators=200, max_depth=8, verbose=-1)
+        model.fit(X, y)
+        return model.booster_.feature_importance(importance_type='gain')
+
+    def _compute_split_importance(
+        self, X: np.ndarray, y: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray
+    ) -> np.ndarray:
+        """Compute tree-based split importance."""
+        from lightgbm import LGBMClassifier
+
+        model = LGBMClassifier(n_estimators=200, max_depth=8, verbose=-1)
+        model.fit(X, y)
+        return model.booster_.feature_importance(importance_type='split')
+
+    def _compute_permutation_importance(
+        self, X: np.ndarray, y: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray
+    ) -> np.ndarray:
+        """Compute permutation importance (model-agnostic)."""
+        from lightgbm import LGBMClassifier
+
+        model = LGBMClassifier(n_estimators=200, max_depth=8, verbose=-1)
+        model.fit(X, y)
+
+        result = permutation_importance(
+            model, X_val, y_val,
+            n_repeats=5,
+            random_state=42,
+            n_jobs=-1
+        )
+        return result.importances_mean
+
+    def _compute_shap_importance(
+        self, X: np.ndarray, y: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray
+    ) -> np.ndarray:
+        """Compute SHAP-based importance."""
+        import shap
+        from lightgbm import LGBMClassifier
+
+        model = LGBMClassifier(n_estimators=200, max_depth=8, verbose=-1)
+        model.fit(X, y)
+
+        # Use TreeSHAP for speed
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_val[:5000])  # Sample for speed
+
+        # Mean absolute SHAP value per feature
+        if isinstance(shap_values, list):
+            # Multi-class: average across classes
+            shap_importance = np.mean([
+                np.abs(sv).mean(axis=0) for sv in shap_values
+            ], axis=0)
+        else:
+            shap_importance = np.abs(shap_values).mean(axis=0)
+
+        return shap_importance
+
+    def _compute_mutual_info_importance(
+        self, X: np.ndarray, y: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray
+    ) -> np.ndarray:
+        """Compute mutual information with target."""
+        return mutual_info_classif(X, y, n_neighbors=5, random_state=42)
+
+    def _compute_lasso_importance(
+        self, X: np.ndarray, y: np.ndarray,
+        X_val: np.ndarray, y_val: np.ndarray
+    ) -> np.ndarray:
+        """Compute LASSO-based importance via coefficient magnitude."""
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.preprocessing import StandardScaler
+
+        # Standardize features for LASSO
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Fit LASSO logistic regression
+        model = LogisticRegression(
+            penalty='l1',
+            solver='saga',
+            C=0.1,
+            max_iter=1000,
+            random_state=42
+        )
+        model.fit(X_scaled, y)
+
+        # Mean absolute coefficient across classes
+        return np.abs(model.coef_).mean(axis=0)
+```
+
+### Strategy 3: Correlation-Based Selection with Optuna
+
+**Concept:** Remove highly correlated features to reduce redundancy while preserving predictive power.
+
+```python
+# src/phase1/stages/feature_select/correlation_optimizer.py
+import optuna
+import numpy as np
+from typing import List, Tuple
+
+class CorrelationOptunaOptimizer:
+    """
+    Optuna-optimized correlation-based feature selection.
+
+    Optimizes:
+    - max_correlation: Maximum allowed correlation between features
+    - correlation_method: pearson, spearman, or kendall
+    - keep_criterion: Which feature to keep when removing correlated pairs
+    """
+
+    def __init__(self, config: dict):
+        self.config = config
+
+    def create_objective(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        feature_names: List[str],
+        base_importances: np.ndarray = None
+    ):
+        """Create Optuna objective for correlation-based selection."""
+
+        def objective(trial: optuna.Trial) -> float:
+            # Sample hyperparameters
+            max_corr = trial.suggest_float('max_correlation', 0.80, 0.99)
+            corr_method = trial.suggest_categorical(
+                'correlation_method', ['pearson', 'spearman']
+            )
+            keep_criterion = trial.suggest_categorical(
+                'keep_criterion',
+                ['higher_importance', 'higher_variance', 'first_in_list']
+            )
+
+            # Compute correlation matrix
+            import pandas as pd
+            df = pd.DataFrame(X, columns=feature_names)
+            corr_matrix = df.corr(method=corr_method).abs()
+
+            # Find correlated pairs and remove one
+            mask = np.ones(len(feature_names), dtype=bool)
+            upper = corr_matrix.where(
+                np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)
+            )
+
+            for i in range(len(corr_matrix.columns)):
+                for j in range(i + 1, len(corr_matrix.columns)):
+                    if upper.iloc[i, j] > max_corr and mask[i] and mask[j]:
+                        # Decide which to remove
+                        if keep_criterion == 'higher_importance':
+                            if base_importances is not None:
+                                remove_idx = i if base_importances[i] < base_importances[j] else j
+                            else:
+                                remove_idx = j  # Default to removing second
+                        elif keep_criterion == 'higher_variance':
+                            var_i = np.var(X[:, i])
+                            var_j = np.var(X[:, j])
+                            remove_idx = i if var_i < var_j else j
+                        else:  # first_in_list
+                            remove_idx = j
+
+                        mask[remove_idx] = False
+
+            # Evaluate with selected features
+            if mask.sum() < 10:
+                return 0.0  # Too few features
+
+            X_selected = X[:, mask]
+
+            from lightgbm import LGBMClassifier
+            from sklearn.model_selection import cross_val_score
+
+            model = LGBMClassifier(n_estimators=100, verbose=-1)
+            scores = cross_val_score(model, X_selected, y, cv=3, scoring='f1_macro')
+
+            # Bonus for removing more correlated features
+            removal_bonus = 0.001 * (len(feature_names) - mask.sum())
+
+            return np.mean(scores) + removal_bonus
+
+        return objective
+```
+
+### Combined Feature Selection Pipeline
+
+**Concept:** Run all selection strategies in sequence, with each stage refining the feature set.
+
+```python
+# src/phase1/stages/feature_select/combined_optimizer.py
+import optuna
+import numpy as np
+from typing import List, Dict, Any
+from dataclasses import dataclass
+
+@dataclass
+class FeatureSelectionResult:
+    """Result from combined feature selection."""
+    selected_features: List[str]
+    selection_mask: np.ndarray
+    best_params: Dict[str, Any]
+    optimization_history: List[Dict]
+    metrics: Dict[str, float]
+
+class CombinedFeatureSelector:
+    """
+    Combined feature selection pipeline using multiple Optuna-optimized strategies.
+
+    Pipeline order:
+    1. Binary group selection (coarse filtering)
+    2. Importance-based selection (model-aware filtering)
+    3. RFE (optimal subset discovery)
+    4. Correlation-based selection (redundancy removal)
+    """
+
+    def __init__(self, config: dict):
+        self.config = config
+        self.rfe_optimizer = RFEOptunaOptimizer(config.get('rfe', {}))
+        self.importance_optimizer = ImportanceOptunaOptimizer(config.get('importance', {}))
+        self.correlation_optimizer = CorrelationOptunaOptimizer(config.get('correlation', {}))
+
+    def run_full_pipeline(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        X_val: np.ndarray,
+        y_val: np.ndarray,
+        feature_names: List[str],
+        model_family: str = 'boosting'
+    ) -> FeatureSelectionResult:
+        """
+        Run full feature selection pipeline.
+
+        Args:
+            X: Training features
+            y: Training labels
+            X_val: Validation features
+            y_val: Validation labels
+            feature_names: List of feature names
+            model_family: Target model family for tailored selection
+
+        Returns:
+            FeatureSelectionResult with selected features and metadata
+        """
+        results = {}
+        current_mask = np.ones(len(feature_names), dtype=bool)
+        current_features = feature_names.copy()
+
+        # Step 1: Binary Group Selection (if enabled)
+        if self.config.get('binary_group_selection', {}).get('enabled', True):
+            group_mask = self._run_group_selection(X, y, feature_names, model_family)
+            current_mask &= group_mask
+            results['group_selection'] = {
+                'features_before': len(feature_names),
+                'features_after': current_mask.sum()
+            }
+
+        # Step 2: Importance-Based Selection
+        if self.config.get('importance_based', {}).get('enabled', True):
+            X_subset = X[:, current_mask]
+            X_val_subset = X_val[:, current_mask]
+            subset_features = [f for f, m in zip(feature_names, current_mask) if m]
+
+            importance_study = optuna.create_study(direction='maximize')
+            importance_obj = self.importance_optimizer.create_objective(
+                X_subset, y, X_val_subset, y_val, subset_features
+            )
+            importance_study.optimize(importance_obj, n_trials=50)
+
+            results['importance_selection'] = importance_study.best_params
+
+        # Step 3: RFE (if enabled)
+        if self.config.get('rfe', {}).get('enabled', True):
+            X_subset = X[:, current_mask]
+            subset_features = [f for f, m in zip(feature_names, current_mask) if m]
+
+            rfe_selected, rfe_params = self.rfe_optimizer.optimize(
+                X_subset, y, subset_features
+            )
+            results['rfe'] = {
+                'params': rfe_params,
+                'features_selected': len(rfe_selected)
+            }
+
+            # Update mask based on RFE results
+            rfe_mask = np.array([f in rfe_selected for f in subset_features])
+            temp_mask = np.zeros(len(feature_names), dtype=bool)
+            temp_mask[current_mask] = rfe_mask
+            current_mask = temp_mask
+
+        # Step 4: Correlation-Based Selection
+        if self.config.get('correlation', {}).get('enabled', True):
+            X_subset = X[:, current_mask]
+            subset_features = [f for f, m in zip(feature_names, current_mask) if m]
+
+            corr_study = optuna.create_study(direction='maximize')
+            corr_obj = self.correlation_optimizer.create_objective(
+                X_subset, y, subset_features
+            )
+            corr_study.optimize(corr_obj, n_trials=30)
+
+            results['correlation_selection'] = corr_study.best_params
+
+        # Final selected features
+        selected_features = [f for f, m in zip(feature_names, current_mask) if m]
+
+        return FeatureSelectionResult(
+            selected_features=selected_features,
+            selection_mask=current_mask,
+            best_params=results,
+            optimization_history=[],
+            metrics={
+                'features_before': len(feature_names),
+                'features_after': len(selected_features),
+                'reduction_ratio': 1 - len(selected_features) / len(feature_names)
+            }
+        )
+
+    def _run_group_selection(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        feature_names: List[str],
+        model_family: str
+    ) -> np.ndarray:
+        """Run binary group selection."""
+        # Model-family-specific group defaults
+        GROUP_DEFAULTS = {
+            'boosting': {
+                'momentum': True, 'volatility': True, 'volume': True,
+                'trend': True, 'microstructure': True, 'wavelets': False,
+                'temporal': True, 'regime': True
+            },
+            'neural': {
+                'momentum': True, 'volatility': True, 'volume': False,
+                'trend': False, 'microstructure': False, 'wavelets': True,
+                'temporal': True, 'regime': True
+            },
+            'transformer': {
+                'momentum': False, 'volatility': True, 'volume': False,
+                'trend': False, 'microstructure': False, 'wavelets': False,
+                'temporal': True, 'regime': True
+            }
+        }
+
+        defaults = GROUP_DEFAULTS.get(model_family, GROUP_DEFAULTS['boosting'])
+
+        # Create mask based on feature groups
+        mask = np.ones(len(feature_names), dtype=bool)
+
+        for group_name, include in defaults.items():
+            if not include:
+                for i, feat in enumerate(feature_names):
+                    if group_name in feat.lower():
+                        mask[i] = False
+
+        return mask
+```
+
+### Per-Model Feature Selection Strategies
+
+Different model families benefit from different selection strategies:
+
+| Model Family | Recommended Strategy | Key Parameters |
+|--------------|---------------------|----------------|
+| **Boosting** (XGBoost, LightGBM, CatBoost) | All strategies, prefer gain importance | max_features: 60-100, correlation: 0.95 |
+| **Neural** (LSTM, GRU) | RFE + importance, fewer features | max_features: 30-50, correlation: 0.85 |
+| **Transformers** (PatchTST, iTransformer) | Minimal selection, raw features preferred | max_features: 20-40, skip engineered |
+| **CNN** (InceptionTime, ResNet1D) | Wavelet emphasis, RFE | max_features: 40-60, wavelets: always |
+| **Classical** (RF, SVM, Logistic) | All strategies, strong regularization | max_features: 30-50, LASSO importance |
+
+---
+
+## Feature Selection Strategies (Manual)
+
+In addition to Optuna-based optimization (Stages 8-9), manual feature selection methods are available for exploration and debugging.
 
 ### Mean Decrease Accuracy (MDA)
 
@@ -1365,19 +2298,50 @@ model.fit(X_train_scaled, y_train, X_test_scaled[:500], y_test[:500])
 | **Transformer** | Multi-res raw | Raw OHLCV × TFs | 20 (5×4) | Low (2s) |
 | **Foundation** | Zero-shot | Raw OHLC only | 4 | Very low (0.5s) |
 
+### Optuna Feature Optimization Summary
+
+| Stage | Optimization | Trials | What It Does |
+|-------|--------------|--------|--------------|
+| **Stage 8** | Feature Selection | 100 | Binary include/exclude per feature group |
+| **Stage 9** | Feature Pruning | 50 | Importance-based individual feature removal |
+
 ### Key Takeaways
 
 1. **Model-specific feature engineering is critical:** Don't use 150 features for LSTM or 5 features for XGBoost
 2. **MTF Strategy determines features:** Strategy 1 (no MTF), Strategy 2 (MTF indicators), Strategy 3 (multi-res tensors)
 3. **Leakage prevention:** Always shift(1) before forward-fill for MTF alignment
-4. **Feature selection helps:** Use MDA/MDI to reduce 200→100 features for tabular models
-5. **Validation is essential:** Check for NaNs, infinities, and extreme correlations
-6. **Scaling matters:** Neural models require scaling; foundation models require per-sample normalization
+4. **Optuna-driven selection:** Stage 8 selects feature groups; Stage 9 prunes individuals
+5. **Per-model selection strategies:** Neural models need fewer features than tabular models
+6. **Validation is essential:** Check for NaNs, infinities, and extreme correlations
+7. **Scaling matters:** Neural models require scaling; foundation models require per-sample normalization
+
+### Pipeline Stage Reference (16 Stages)
+
+```
+Stage 1:  Ingestion - Load raw OHLCV
+Stage 2:  Cleaning - Resample, gap handling
+Stage 3:  Sessions - Trading hours filtering
+Stage 4:  MTF Upscaling - 9 timeframes from 1-min
+Stage 5:  Features - 162 indicators (this guide)
+Stage 6:  Regime - Market regime detection
+Stage 7:  OPTUNA Label Optimization - 100 trials
+Stage 8:  OPTUNA Feature Selection - 100 trials (this guide)
+Stage 9:  OPTUNA Feature Pruning - 50 trials (this guide)
+Stage 10: Splits - Train/val/test (70/15/15)
+Stage 11: Scaling - Train-only robust scaling
+Stage 12: Adaptation - 2D/3D/4D tensor per model type
+Stage 13: OPTUNA Hyperparameter Optimization - 100 trials per model
+Stage 14: Training - PurgedKFold CV, OOF generation
+Stage 15: Stacking - OOF alignment, meta-learner
+Stage 16: Bundling - Model + Scaler + Graph -> Artifact
+```
 
 ### File Paths Reference
 
 - Feature engineering: `src/phase1/stages/features/engineer.py`
 - MTF generation: `src/phase1/stages/mtf/generator.py`
-- Feature selection: `src/cross_validation/feature_selector.py`
+- Feature selection (Optuna): `src/phase1/stages/feature_select/`
+- Feature pruning (Optuna): `src/phase1/stages/feature_prune/`
+- Feature selection (manual): `src/cross_validation/feature_selector.py`
 - Scaling: `src/phase1/stages/scaling/scaler.py`
 - Wavelets: `src/phase1/stages/features/wavelets.py`

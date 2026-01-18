@@ -1,0 +1,440 @@
+# =============================================================================
+# TRIPLE BARRIER LABEL OPTIMIZATION CONFIGURATION
+# =============================================================================
+#
+# This configuration controls Optuna-based optimization of triple barrier
+# labeling parameters for the ML Factory pipeline (Stage 7).
+#
+# TRIPLE BARRIER METHOD OVERVIEW
+# ------------------------------
+# The triple barrier method labels each sample based on which barrier is hit first:
+#
+#   Upper Barrier (Profit Target):
+#     price_upper = close[t] * (1 + ATR * upper_mult)
+#     If price crosses upper first -> Label = LONG (+1)
+#
+#   Lower Barrier (Stop Loss):
+#     price_lower = close[t] * (1 - ATR * lower_mult)
+#     If price crosses lower first -> Label = SHORT (-1)
+#
+#   Time Barrier (Maximum Holding Period):
+#     If neither barrier hit within `horizon` bars -> Label = NEUTRAL (0)
+#
+# WHY OPTIMIZE BARRIER PARAMETERS?
+# ---------------------------------
+# 1. Different symbols have different volatility characteristics
+# 2. Market regimes change (trending vs. ranging)
+# 3. Time horizons require different barrier widths
+# 4. Transaction costs affect optimal barrier placement
+# 5. Class balance impacts model performance
+#
+# OPTIMIZATION OBJECTIVE
+# ----------------------
+# The objective function balances three components:
+#   - Class Balance (40%): Minimize deviation from 33% per class
+#   - Barrier Hit Rate (30%): Maximize profit/loss hits vs timeouts
+#   - Model F1 (30%): Downstream predictability with a fast model
+#
+# PIPELINE INTEGRATION
+# --------------------
+# Stage: 7 (OPTUNA Label Optimization)
+# Input: data/features/{symbol}_features.parquet (Stage 5-6 output)
+# Output: Optimized barrier parameters + labeled dataset
+# Next Stage: Stage 8 (Feature Selection) or Stage 10 (Splits)
+#
+# RELATED FILES
+# -------------
+# - config/labeling.yaml: Static labeling configuration
+# - docs/implementation/PHASE_4_LABELING.md: Implementation details
+# - docs/implementation/UNIFIED_PIPELINE_ARCHITECTURE.md: 16-stage pipeline
+# - src/phase1/stages/ga_optimize/barrier_optimizer.py: Implementation
+#
+# =============================================================================
+
+optimization:
+  name: triple_barrier_optimization
+  description: Optimize triple barrier labeling parameters
+  framework: optuna
+  n_trials: 100
+  timeout: 7200  # 2 hours
+  direction: maximize
+
+# Optuna sampler configuration
+sampler:
+  type: tpe  # Tree-structured Parzen Estimator
+  seed: 42
+  n_startup_trials: 10
+  consider_prior: true
+  prior_weight: 1.0
+  consider_magic_clip: true
+  consider_endpoints: false
+  multivariate: true  # Model parameter dependencies
+
+# Optuna pruner configuration
+pruner:
+  type: median
+  n_startup_trials: 5
+  n_warmup_steps: 10
+  interval_steps: 1
+
+# =============================================================================
+# SEARCH SPACE FOR TRIPLE BARRIER PARAMETERS
+# =============================================================================
+#
+# Optuna explores this search space to find optimal barrier configurations.
+# The search uses TPE (Tree-structured Parzen Estimator) for efficient sampling.
+#
+# Parameter Interactions:
+# - upper_mult and lower_mult define the risk/reward ratio
+# - horizon affects how many samples hit time barrier vs price barriers
+# - atr_period determines barrier volatility sensitivity
+#
+search_space:
+  # ---------------------------------------------------------------------------
+  # UPPER BARRIER MULTIPLIER (Profit Target)
+  # ---------------------------------------------------------------------------
+  # Defines the profit target as: ATR * upper_mult
+  # Higher values = larger profit targets, fewer profit hits, larger gains
+  # Lower values = tighter profit targets, more profit hits, smaller gains
+  #
+  # Typical ranges by market regime:
+  #   - Trending: 2.0 - 3.0 (capture larger moves)
+  #   - Ranging: 1.0 - 2.0 (take smaller profits)
+  #
+  upper_mult:
+    description: Upper barrier ATR multiplier (profit target)
+    type: float
+    low: 0.5
+    high: 4.0
+    log: false
+    # Recommended starting point: 2.0
+
+  # ---------------------------------------------------------------------------
+  # LOWER BARRIER MULTIPLIER (Stop Loss)
+  # ---------------------------------------------------------------------------
+  # Defines the stop loss as: ATR * lower_mult
+  # Higher values = wider stops, fewer loss hits, larger losses when hit
+  # Lower values = tighter stops, more loss hits, smaller losses
+  #
+  # Risk/Reward Considerations:
+  #   - upper_mult > lower_mult: Favorable R:R, fewer winners but larger
+  #   - upper_mult < lower_mult: Unfavorable R:R, more winners but smaller
+  #   - upper_mult = lower_mult: Symmetric barriers
+  #
+  lower_mult:
+    description: Lower barrier ATR multiplier (stop loss)
+    type: float
+    low: 0.5
+    high: 4.0
+    log: false
+    # Recommended starting point: 1.5
+
+  # ---------------------------------------------------------------------------
+  # TIME HORIZON (Maximum Holding Period)
+  # ---------------------------------------------------------------------------
+  # Number of bars until time barrier is hit (neutral label assigned)
+  # Shorter horizons = more time barrier hits, faster signals
+  # Longer horizons = fewer time barrier hits, captures larger moves
+  #
+  # Considerations:
+  #   - Transaction costs favor longer horizons (fewer trades)
+  #   - Market microstructure favors shorter horizons (fresher signals)
+  #   - Typical day trading: 5-30 bars
+  #   - Swing trading: 30-120 bars
+  #
+  horizon:
+    description: Maximum holding period (bars)
+    type: int
+    low: 5
+    high: 60
+    step: 1
+    # Recommended starting point: 20
+
+  # ---------------------------------------------------------------------------
+  # ATR PERIOD (Volatility Lookback)
+  # ---------------------------------------------------------------------------
+  # Period for Average True Range calculation
+  # Shorter periods = more reactive to recent volatility
+  # Longer periods = smoother, more stable barriers
+  #
+  # Standard values:
+  #   - 7 bars: Fast adaptation
+  #   - 14 bars: Classic ATR (Wilder's)
+  #   - 21-28 bars: Slow adaptation
+  #
+  atr_period:
+    description: ATR calculation period for barrier sizing
+    type: int
+    low: 7
+    high: 28
+    step: 1
+    # Recommended starting point: 14
+
+  # ---------------------------------------------------------------------------
+  # OPTIONAL: ASYMMETRY RATIO (Alternative to separate mult)
+  # ---------------------------------------------------------------------------
+  # Can be used instead of separate upper/lower mult
+  # asymmetry_ratio:
+  #   description: Ratio of upper to lower barrier (upper_mult / lower_mult)
+  #   type: float
+  #   low: 0.5
+  #   high: 2.0
+  #   log: false
+  #   # 1.0 = symmetric, >1.0 = wider profit target, <1.0 = wider stop loss
+
+# =============================================================================
+# OBJECTIVE FUNCTION CONFIGURATION
+# =============================================================================
+#
+# The optimization objective is a weighted combination of multiple metrics.
+# This multi-objective approach balances label quality with downstream performance.
+#
+# Formula:
+#   score = w1 * class_balance + w2 * barrier_hit_rate + w3 * model_f1
+#
+# Where:
+#   - class_balance: 1 - max_deviation_from_33%
+#   - barrier_hit_rate: (profit_hits + loss_hits) / total_samples
+#   - model_f1: F1 macro score from quick XGBoost validation
+#
+objective:
+  metric: label_quality_score
+  direction: maximize
+
+  # Composite objective components
+  components:
+    - name: class_balance
+      description: Minimize deviation from balanced classes (33% each)
+      weight: 0.4
+      # Formula: 1.0 - abs(max_class_pct - min_class_pct)
+      # Perfect balance = 1.0, completely imbalanced = 0.0
+
+    - name: barrier_hit_rate
+      description: Maximize rate of hitting upper/lower barriers vs timeout
+      weight: 0.3
+      # Formula: (profit_hits + loss_hits) / total_samples
+      # High hit rate = clear directional signals
+      # Low hit rate = too many neutral (time barrier) labels
+
+    - name: model_f1
+      description: Downstream model F1 score with optimized labels
+      weight: 0.3
+      # Formula: F1 macro score from 3-fold CV with XGBoost
+      # This validates that labels are actually predictable
+
+  # Alternative objectives (can be enabled instead of composite)
+  alternatives:
+    - name: sharpe_ratio
+      description: Risk-adjusted return of simulated trading
+      enabled: false
+      # Formula: mean(returns) / std(returns) * sqrt(252)
+
+    - name: profit_factor
+      description: Gross profit / gross loss ratio
+      enabled: false
+      # Formula: sum(winning_trades) / abs(sum(losing_trades))
+
+    - name: sortino_ratio
+      description: Return / downside deviation
+      enabled: false
+      # Formula: mean(returns) / downside_std(returns)
+
+# Constraints for valid label configurations
+constraints:
+  # Minimum samples per class
+  min_samples_per_class: 1000
+
+  # Maximum class imbalance (deviation from 33%)
+  max_class_imbalance: 0.4
+
+  # Minimum barrier hit rate (non-timeout)
+  min_barrier_hit_rate: 0.3
+
+  # Symmetric barriers constraint (optional)
+  symmetric_barriers: false
+
+# Evaluation settings
+evaluation:
+  # Model for downstream evaluation
+  model: xgboost
+  model_params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+
+  # Cross-validation
+  cv_splits: 3
+  cv_type: purged_kfold
+  purge_bars: 60
+
+  # Metrics to track
+  metrics:
+    - f1_macro
+    - class_distribution
+    - barrier_hit_rate
+
+# Data configuration
+data:
+  # Symbols to optimize for
+  symbols:
+    - MES
+    - MGC
+
+  # Use subset for faster optimization
+  sample_size: 50000
+  sample_method: stratified
+
+# Output configuration
+output:
+  save_study: true
+  study_name: triple_barrier_optimization
+  storage: sqlite:///experiments/optuna/label_optimization.db
+
+  # Save best parameters
+  save_best_params: true
+  best_params_path: config/optimization/ga_results/{symbol}_label_best.json
+
+  # Logging
+  log_level: INFO
+  show_progress: true
+
+# =============================================================================
+# TRANSACTION COST MODELING
+# =============================================================================
+#
+# Transaction costs are critical for realistic label optimization.
+# Labels that appear profitable without costs may be unprofitable after.
+#
+transaction_costs:
+  enabled: true
+
+  # Cost components (per round-trip trade)
+  components:
+    commission: 1.00           # $1.00 round-trip (2 x $0.50)
+    exchange_fee: 0.50         # Exchange/clearing fees
+    slippage_bps: 2.0          # 2 basis points slippage
+
+  # Per-symbol overrides
+  symbol_costs:
+    MES:
+      commission: 1.00
+      slippage_bps: 2.0
+      min_profit_bps: 5.0     # Minimum move to be profitable after costs
+    MGC:
+      commission: 1.00
+      slippage_bps: 3.0
+      min_profit_bps: 7.0
+
+  # Penalty for high-frequency labels (more trades = more costs)
+  trade_frequency_penalty:
+    enabled: true
+    # Penalize if labels change more than threshold per day
+    max_trades_per_day: 10
+    penalty_weight: 0.1
+
+# =============================================================================
+# MULTI-HORIZON OPTIMIZATION
+# =============================================================================
+#
+# Optimize barrier parameters for multiple horizons simultaneously or separately.
+#
+multi_horizon:
+  # Mode: "independent" or "shared"
+  # - independent: Separate optimization for each horizon
+  # - shared: Find parameters that work across all horizons
+  mode: independent
+
+  # Active horizons to optimize
+  horizons: [5, 10, 15, 20]
+
+  # For shared mode: weight per horizon in objective
+  horizon_weights:
+    5: 0.2
+    10: 0.25
+    15: 0.25
+    20: 0.3
+
+# =============================================================================
+# ADVANCED CONFIGURATION
+# =============================================================================
+
+advanced:
+  # Warm starting: Use previous optimization results
+  warm_start:
+    enabled: false
+    previous_study: null  # Path to previous Optuna study
+
+  # Parallel optimization
+  parallel:
+    n_jobs: -1           # -1 = all cores
+    backend: "loky"      # joblib backend
+
+  # Early stopping for optimization
+  early_stopping:
+    enabled: true
+    patience: 30         # Stop if no improvement for 30 trials
+    min_trials: 50       # Minimum trials before early stopping
+
+  # Search space reduction (narrowing based on good trials)
+  adaptive_search:
+    enabled: false
+    narrow_after_trials: 50
+    narrow_factor: 0.5   # Reduce range by 50%
+
+# =============================================================================
+# VISUALIZATION AND REPORTING
+# =============================================================================
+
+reporting:
+  # Generate optimization report
+  generate_report: true
+  report_path: "experiments/optuna/reports/label_optimization_{symbol}.html"
+
+  # Plots to generate
+  plots:
+    - optimization_history
+    - param_importances
+    - parallel_coordinate
+    - slice_plot
+    - contour_plot
+
+  # Export best parameters
+  export_formats:
+    - json
+    - yaml
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+#
+# Command Line:
+#   python scripts/optimize_labels.py --symbol MES --config config/optimization/label_optimization.yaml
+#   python scripts/optimize_labels.py --symbol MGC --n-trials 200 --timeout 14400
+#
+# Python API:
+#   from src.labeling.optimization import TripleBarrierOptimizer
+#
+#   optimizer = TripleBarrierOptimizer(
+#       config_path="config/optimization/label_optimization.yaml",
+#       symbol="MES"
+#   )
+#   best_params = optimizer.optimize(df, n_trials=100)
+#   print(f"Best params: {best_params}")
+#   print(f"Best Sharpe: {optimizer.study.best_value:.4f}")
+#
+# MLPipeline Integration:
+#   from src.pipeline import MLPipeline, MLConfig
+#
+#   config = MLConfig(
+#       symbol="MES",
+#       horizons=[20],
+#       optimize_labels=True,
+#       label_trials=100
+#   )
+#   pipeline = MLPipeline(config)
+#   pipeline.run_optimization()  # Runs Stage 7-9
+#
+# =============================================================================
+
+# Reproducibility
+random_seed: 42

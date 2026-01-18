@@ -2,6 +2,7 @@
 
 **Status:** ✅ COMPLETE
 **Dependencies:** Phase 6 (trained base models) ✅ Complete
+**Pipeline Stage:** Stage 15 (Stacking) in 16-Stage Pipeline
 
 ---
 
@@ -9,12 +10,13 @@
 
 **What's Implemented:**
 - ✅ 4 meta-learner models: Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
-- ✅ Base model implementations (18 base models + 4 meta-learners = 22 total)
+- ✅ Base model implementations (19 base models + 4 meta-learners = **23 total**)
 - ✅ OOF generation for all model families (tabular, sequence, multi-res)
 - ✅ PurgedKFold cross-validation with purge/embargo
 - ✅ Heterogeneous stacking in `trainer.py` with dual data loading
 - ✅ `scripts/train_model.py` supports heterogeneous ensembles via `--base-models` and `--meta-learner` flags
 - ✅ End-to-end training workflow for heterogeneous bases + meta-learner
+- ✅ Optuna integration for meta-learner hyperparameter optimization
 
 **CLI Usage:**
 ```bash
@@ -25,7 +27,42 @@ python scripts/train_model.py --model stacking --horizon 20 \
 # Base models from different families work together
 python scripts/train_model.py --model stacking --horizon 20 \
   --base-models catboost,gru,patchtst --meta-learner xgboost_meta
+
+# With Optuna optimization for meta-learner
+python scripts/train_model.py --model stacking --horizon 20 \
+  --base-models catboost,tcn,patchtst --meta-learner ridge_meta \
+  --optimize-meta-learner --n-trials 50
 ```
+
+---
+
+## Integration with 16-Stage Pipeline
+
+Phase 7 corresponds to **Stage 15: Stacking** in the unified 16-stage pipeline:
+
+```
+Stages 1-6:   Data Ingestion & Preprocessing
+Stage 7:      Triple-Barrier Labeling + Optuna Optimization (100 trials)
+Stage 8:      Feature Selection + Optuna Optimization (100 trials)
+Stage 9:      Feature Pruning + Optuna Optimization (50 trials)
+Stages 10-12: Splits, Scaling, Dataset Building
+Stage 13:     Per-Model Hyperparameter Optimization (100 trials per model)
+Stage 14:     Base Model Training (with optimized hyperparameters)
+Stage 15:     STACKING (this phase) - Meta-learner training + Optuna
+Stage 16:     Final Evaluation & Reporting
+```
+
+### Stage 15 Dependencies
+
+Stage 15 (Stacking) depends on outputs from earlier Optuna optimization stages:
+
+| Earlier Stage | Optuna Output | How Stage 15 Uses It |
+|---------------|---------------|----------------------|
+| Stage 7 (Labeling) | Optimized barrier params | Labels for OOF predictions |
+| Stage 8 (Feature Selection) | Selected feature subset | Features fed to base models |
+| Stage 9 (Feature Pruning) | Pruned feature set | Final features for training |
+| Stage 13 (Hyperparameters) | Per-model best params | Base models use optimized configs |
+| Stage 14 (Base Training) | Trained base models | Generate OOF predictions for stacking |
 
 ---
 
@@ -240,85 +277,146 @@ class HeterogeneousOOFGenerator:
 
 **Status:** ✅ Complete
 
-**Models to Implement:**
+**Implemented Meta-Learners (4 total):**
 
-#### Logistic Regression Meta-Learner
+#### ridge_meta - L2-Regularized Meta-Learner
+**File:** `src/models/ensemble/ridge_meta.py`
+
+**Purpose:** Linear combination of base model predictions with L2 regularization. Fast training, closed-form solution, interpretable weights.
+
 ```python
-@register(name="meta_logistic", family="inference")
-class LogisticMetaLearner(BaseModel):
-    def fit(self, X_train, y_train, X_val, y_val, sample_weights=None, config=None):
-        """Train logistic regression on OOF predictions."""
-        from sklearn.linear_model import LogisticRegression
-
-        self.model = LogisticRegression(
-            C=1.0,
-            solver='lbfgs',
-            multi_class='multinomial',
-            max_iter=1000
-        )
-        self.model.fit(X_train, y_train, sample_weight=sample_weights)
-
-        # Calculate metrics
-        val_preds = self.model.predict(X_val)
-        val_acc = np.mean(val_preds == y_val)
-
-        return TrainingMetrics(val_accuracy=val_acc, ...)
-```
-
-#### Ridge Regression Meta-Learner
-```python
-@register(name="meta_ridge", family="inference")
+@register(name="ridge_meta", family="ensemble")
 class RidgeMetaLearner(BaseModel):
-    def fit(self, X_train, y_train, X_val, y_val, sample_weights=None, config=None):
-        """Train ridge regression on OOF predictions."""
-        from sklearn.linear_model import RidgeClassifier
+    """
+    Ridge regression meta-learner for stacking ensembles.
 
-        self.model = RidgeClassifier(alpha=1.0)
-        self.model.fit(X_train, y_train, sample_weight=sample_weights)
-        ...
+    Uses Ridge regularization (L2) to combine base model OOF predictions
+    into final class predictions. Effective for linear combination of
+    well-calibrated base models.
+
+    Input shape: (n_samples, n_base_models * n_classes)
+    """
+
+    def get_default_config(self) -> dict:
+        return {
+            "alpha": 1.0,  # L2 regularization strength
+            "fit_intercept": True,
+            "class_weight": "balanced",
+            "solver": "auto",
+            "scale_features": True,
+        }
 ```
 
-#### MLP Meta-Learner
+**When to use:**
+- Default choice for most stacking scenarios
+- When base models are well-calibrated
+- When interpretability of weights is important
+- Fast training required (<1 second)
+
+#### mlp_meta - MLP Meta-Learner
+**File:** `src/models/ensemble/mlp_meta.py`
+
+**Purpose:** Non-linear combination of predictions using a small neural network. Captures complex interactions between base model predictions.
+
 ```python
-@register(name="meta_mlp", family="inference")
+@register(name="mlp_meta", family="ensemble")
 class MLPMetaLearner(BaseModel):
-    def fit(self, X_train, y_train, X_val, y_val, sample_weights=None, config=None):
-        """Train small MLP on OOF predictions."""
-        import torch.nn as nn
+    """
+    MLP meta-learner for non-linear prediction combination.
 
-        # Small 2-layer MLP: (n_bases*3) → 32 → 16 → 3
-        self.model = nn.Sequential(
-            nn.Linear(X_train.shape[1], 32),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(16, 3)
-        )
+    Small 2-layer network: (n_bases*3) -> hidden -> 3 classes
+    """
 
-        # Train with cross-entropy loss
-        ...
+    def get_default_config(self) -> dict:
+        return {
+            "hidden_layer_sizes": (32, 16),
+            "activation": "relu",
+            "alpha": 0.01,  # L2 regularization
+            "learning_rate_init": 0.001,
+            "max_iter": 500,
+            "early_stopping": True,
+            "batch_size": 32,
+        }
 ```
 
-#### Calibrated Blender
+**When to use:**
+- Base models have complex interactions
+- Linear combination insufficient
+- More training data available (>10K samples)
+- Willing to trade interpretability for performance
+
+#### xgboost_meta - XGBoost Meta-Learner
+**File:** `src/models/ensemble/xgboost_meta.py`
+
+**Purpose:** Gradient boosting on OOF predictions. Powerful non-linear learner with built-in feature selection.
+
 ```python
-@register(name="meta_calibrated", family="inference")
-class CalibratedBlender(BaseModel):
-    def fit(self, X_train, y_train, X_val, y_val, sample_weights=None, config=None):
-        """Soft voting with probability calibration."""
-        from sklearn.calibration import CalibratedClassifierCV
-        from sklearn.dummy import DummyClassifier
+@register(name="xgboost_meta", family="ensemble")
+class XGBoostMeta(BaseModel):
+    """
+    XGBoost as meta-learner for gradient boosted stacking.
 
-        # Use calibrated voting
-        self.model = CalibratedClassifierCV(
-            DummyClassifier(strategy='prior'),
-            method='isotonic'
-        )
+    Learns complex decision boundaries on base model predictions.
+    """
 
-        # Average base predictions and calibrate
-        ...
+    def get_default_config(self) -> dict:
+        return {
+            "learning_rate": 0.1,
+            "max_depth": 4,
+            "n_estimators": 100,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.0,
+            "reg_lambda": 1.0,
+            "early_stopping_rounds": 20,
+        }
 ```
+
+**When to use:**
+- Maximum predictive power needed
+- Base models have varied quality
+- Implicit feature selection desired
+- GPU available for faster training
+
+#### calibrated_meta - Calibrated Meta-Learner
+**File:** `src/models/ensemble/calibrated_meta.py`
+
+**Purpose:** Probability calibration for well-calibrated confidence scores. Uses isotonic or Platt scaling.
+
+```python
+@register(name="calibrated_meta", family="ensemble")
+class CalibratedMetaLearner(BaseModel):
+    """
+    Calibrated meta-learner using isotonic regression or Platt scaling.
+
+    Ensures output probabilities are well-calibrated for risk management.
+    """
+
+    def get_default_config(self) -> dict:
+        return {
+            "method": "isotonic",  # or "sigmoid"
+            "cv": 3,
+            "base_estimator": "logistic",
+            "base_C": 1.0,
+        }
+```
+
+**When to use:**
+- Probability calibration critical (risk management)
+- Confidence-based position sizing
+- Base model probabilities are poorly calibrated
+- Trading systems using probability thresholds
+
+---
+
+### Meta-Learner Comparison
+
+| Meta-Learner | Training Time | Complexity | Interpretable | Best For |
+|--------------|---------------|------------|---------------|----------|
+| **ridge_meta** | <1 sec | Linear | Yes (weights) | Default, fast, simple |
+| **mlp_meta** | 5-30 sec | Non-linear | No | Complex interactions |
+| **xgboost_meta** | 10-60 sec | Non-linear | Partial (importance) | Maximum power |
+| **calibrated_meta** | 2-5 sec | Linear + calibration | Yes | Probability calibration |
 
 ### Task 7.3: Heterogeneous Ensemble Trainer
 **File:** `src/models/trainer.py` (extended with dual data loading)
@@ -504,7 +602,7 @@ meta_learner:
     optional_4th: null  # OR "nbeats", "ridge"
 
   # Meta-learner selection
-  meta_learner: "meta_logistic"  # OR "meta_ridge", "meta_mlp", "meta_calibrated"
+  meta_learner: "ridge_meta"  # OR "mlp_meta", "xgboost_meta", "calibrated_meta"
 
   # OOF generation
   oof:
@@ -518,9 +616,252 @@ meta_learner:
     val_split: 0.15
     use_oof_for_val: false  # If true, use OOF val preds instead of holding out
 
+  # Optuna optimization for meta-learner
+  optuna:
+    enabled: true
+    n_trials: 50
+    timeout: 1800  # 30 minutes
+    direction: "minimize"  # minimize val_loss
+    pruner: "median"
+
   # Full retrain
   retrain_bases_on_full: true  # Retrain bases on full train after meta-learner trained
 ```
+
+---
+
+## Optuna Optimization for Meta-Learners
+
+Stage 15 includes Optuna optimization for meta-learner hyperparameters and OOF feature selection.
+
+### Meta-Learner Optuna Search Spaces
+
+Each meta-learner type has its own Optuna search space:
+
+#### ridge_meta - L2-Regularized Meta-Learner
+
+```python
+# src/optimization/meta_learner_spaces.py
+
+def ridge_meta_search_space(trial: optuna.Trial) -> dict:
+    """Optuna search space for Ridge meta-learner."""
+    return {
+        'alpha': trial.suggest_float('alpha', 0.001, 100.0, log=True),
+        'fit_intercept': trial.suggest_categorical('fit_intercept', [True, False]),
+        'solver': trial.suggest_categorical('solver', ['auto', 'svd', 'cholesky', 'lsqr']),
+        'class_weight': trial.suggest_categorical('class_weight', ['balanced', None]),
+        'scale_features': trial.suggest_categorical('scale_features', [True, False]),
+    }
+```
+
+**Default hyperparameters:**
+| Parameter | Default | Optuna Range | Description |
+|-----------|---------|--------------|-------------|
+| `alpha` | 1.0 | [0.001, 100] log | L2 regularization strength |
+| `fit_intercept` | True | [True, False] | Whether to fit intercept |
+| `solver` | 'auto' | ['auto', 'svd', 'cholesky', 'lsqr'] | Solver algorithm |
+| `class_weight` | 'balanced' | ['balanced', None] | Class weighting |
+| `scale_features` | True | [True, False] | Internal feature scaling |
+
+#### mlp_meta - MLP Meta-Learner
+
+```python
+def mlp_meta_search_space(trial: optuna.Trial) -> dict:
+    """Optuna search space for MLP meta-learner."""
+    n_layers = trial.suggest_int('n_layers', 1, 3)
+    hidden_sizes = []
+    for i in range(n_layers):
+        hidden_sizes.append(trial.suggest_int(f'hidden_size_{i}', 8, 128, log=True))
+
+    return {
+        'hidden_layer_sizes': tuple(hidden_sizes),
+        'activation': trial.suggest_categorical('activation', ['relu', 'tanh']),
+        'alpha': trial.suggest_float('alpha', 1e-6, 1e-2, log=True),
+        'learning_rate_init': trial.suggest_float('learning_rate_init', 1e-5, 1e-2, log=True),
+        'batch_size': trial.suggest_categorical('batch_size', [16, 32, 64, 128]),
+        'max_iter': trial.suggest_int('max_iter', 100, 500),
+        'early_stopping': True,
+        'validation_fraction': 0.1,
+    }
+```
+
+**Default hyperparameters:**
+| Parameter | Default | Optuna Range | Description |
+|-----------|---------|--------------|-------------|
+| `hidden_layer_sizes` | (32, 16) | 1-3 layers, [8, 128] per layer | Hidden layer architecture |
+| `activation` | 'relu' | ['relu', 'tanh'] | Activation function |
+| `alpha` | 0.01 | [1e-6, 1e-2] log | L2 regularization |
+| `learning_rate_init` | 0.001 | [1e-5, 1e-2] log | Initial learning rate |
+| `batch_size` | 32 | [16, 32, 64, 128] | Mini-batch size |
+| `max_iter` | 500 | [100, 500] | Maximum epochs |
+
+#### xgboost_meta - XGBoost Meta-Learner
+
+```python
+def xgboost_meta_search_space(trial: optuna.Trial) -> dict:
+    """Optuna search space for XGBoost meta-learner."""
+    return {
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+        'max_depth': trial.suggest_int('max_depth', 2, 8),
+        'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+        'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+        'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
+        'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
+        'n_estimators': trial.suggest_int('n_estimators', 50, 300),
+        'early_stopping_rounds': 20,
+    }
+```
+
+**Default hyperparameters:**
+| Parameter | Default | Optuna Range | Description |
+|-----------|---------|--------------|-------------|
+| `learning_rate` | 0.1 | [0.01, 0.3] log | Boosting learning rate |
+| `max_depth` | 4 | [2, 8] | Maximum tree depth |
+| `min_child_weight` | 1 | [1, 10] | Minimum child weight |
+| `subsample` | 0.8 | [0.5, 1.0] | Row subsampling |
+| `colsample_bytree` | 0.8 | [0.5, 1.0] | Column subsampling |
+| `reg_alpha` | 0.0 | [1e-8, 10] log | L1 regularization |
+| `reg_lambda` | 1.0 | [1e-8, 10] log | L2 regularization |
+| `n_estimators` | 100 | [50, 300] | Number of boosting rounds |
+
+#### calibrated_meta - Calibrated Meta-Learner
+
+```python
+def calibrated_meta_search_space(trial: optuna.Trial) -> dict:
+    """Optuna search space for Calibrated meta-learner."""
+    return {
+        'method': trial.suggest_categorical('method', ['isotonic', 'sigmoid']),
+        'cv': trial.suggest_int('cv', 3, 7),
+        # Base estimator params (LogisticRegression)
+        'base_C': trial.suggest_float('base_C', 0.01, 100.0, log=True),
+        'base_solver': trial.suggest_categorical('base_solver', ['lbfgs', 'saga']),
+        'base_max_iter': trial.suggest_int('base_max_iter', 100, 1000),
+    }
+```
+
+**Default hyperparameters:**
+| Parameter | Default | Optuna Range | Description |
+|-----------|---------|--------------|-------------|
+| `method` | 'isotonic' | ['isotonic', 'sigmoid'] | Calibration method |
+| `cv` | 3 | [3, 7] | Cross-validation folds |
+| `base_C` | 1.0 | [0.01, 100] log | Base estimator regularization |
+| `base_solver` | 'lbfgs' | ['lbfgs', 'saga'] | Base estimator solver |
+| `base_max_iter` | 1000 | [100, 1000] | Base estimator max iterations |
+
+---
+
+### OOF Feature Selection Optimization
+
+Stage 15 also optimizes **which base model OOF predictions to include** in the meta-learner:
+
+```python
+def oof_feature_selection_objective(trial: optuna.Trial, available_bases: list[str]) -> float:
+    """Optimize which base models to include in stacking."""
+
+    # Binary selection for each base model's OOF predictions
+    include_mask = {}
+    for base_name in available_bases:
+        include_mask[base_name] = trial.suggest_categorical(
+            f'include_{base_name}', [True, False]
+        )
+
+    # Require at least 2 base models
+    if sum(include_mask.values()) < 2:
+        return float('inf')  # Invalid configuration
+
+    # Build stacking features from selected bases only
+    selected_bases = [b for b, include in include_mask.items() if include]
+    stacked_oof = stack_oof_predictions(selected_bases)
+
+    # Train meta-learner and evaluate
+    meta_learner = RidgeMetaLearner()
+    meta_learner.fit(stacked_oof_train, y_train, stacked_oof_val, y_val)
+    val_loss = meta_learner.evaluate(stacked_oof_val, y_val)['loss']
+
+    return val_loss
+```
+
+**Example Feature Selection Output:**
+```yaml
+# Optuna-optimized base model selection
+oof_feature_selection:
+  best_trial: 42
+  selected_bases:
+    - catboost: true   # Include CatBoost OOF
+    - tcn: true        # Include TCN OOF
+    - patchtst: true   # Include PatchTST OOF
+    - lstm: false      # Exclude LSTM OOF (redundant with TCN)
+    - xgboost: false   # Exclude XGBoost OOF (correlated with CatBoost)
+  validation_improvement: 0.023  # vs including all bases
+```
+
+---
+
+### Combined Meta-Learner Optimization
+
+The full Stage 15 optimization combines:
+1. **Base selection** - Which OOF predictions to include (binary per base)
+2. **Meta-learner hyperparameters** - Ridge/MLP/XGBoost specific params
+
+```python
+def stage_15_meta_learner_optimization(
+    oof_predictions: dict[str, np.ndarray],
+    y_train: np.ndarray,
+    y_val: np.ndarray,
+    meta_learner_type: str = "ridge_meta",
+    n_trials: int = 50
+) -> tuple[dict, dict]:
+    """
+    Complete Stage 15 Optuna optimization.
+
+    Returns:
+        best_params: Optimized meta-learner hyperparameters
+        best_selection: Which base models to include
+    """
+
+    def objective(trial: optuna.Trial) -> float:
+        # 1. Select which bases to include
+        selected_bases = []
+        for base_name in oof_predictions.keys():
+            if trial.suggest_categorical(f'include_{base_name}', [True, False]):
+                selected_bases.append(base_name)
+
+        if len(selected_bases) < 2:
+            return float('inf')
+
+        # 2. Get meta-learner hyperparameters
+        params = get_meta_learner_space(meta_learner_type, trial)
+
+        # 3. Stack selected OOF predictions
+        X_train_meta = np.hstack([oof_predictions[b]['train'] for b in selected_bases])
+        X_val_meta = np.hstack([oof_predictions[b]['val'] for b in selected_bases])
+
+        # 4. Train and evaluate
+        meta = create_meta_learner(meta_learner_type, params)
+        meta.fit(X_train_meta, y_train, X_val_meta, y_val)
+        val_loss = meta.evaluate(X_val_meta, y_val)['loss']
+
+        return val_loss
+
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=n_trials)
+
+    return study.best_params, study.best_trial
+```
+
+---
+
+### Optuna Trial Budget Summary
+
+| Stage | Optimization Target | Trials | Scope |
+|-------|---------------------|--------|-------|
+| Stage 7 | Triple-barrier params | 100 | Per symbol |
+| Stage 8 | Feature selection | 100 | Binary include/exclude |
+| Stage 9 | Feature pruning | 50 | Importance threshold |
+| Stage 13 | Base model hyperparams | 100 | Per model (23 total) |
+| **Stage 15** | **Meta-learner + OOF selection** | **50** | **Per ensemble** |
+| **Total** | | ~2,600 | Full pipeline |
 
 ---
 
@@ -687,5 +1028,5 @@ The script automatically:
 
 ---
 
-**Last Updated:** 2026-01-08
-**Architecture Version:** 3.0 (heterogeneous meta-learner stacking) - COMPLETE
+**Last Updated:** 2026-01-18
+**Architecture Version:** 3.1 (heterogeneous meta-learner stacking + Optuna integration) - COMPLETE

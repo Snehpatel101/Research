@@ -12,115 +12,131 @@ This is a **single-pipeline ML model factory** for training, evaluating, and dep
 
 ---
 
-## Architecture Diagram
+## Architecture Diagram (16-Stage Pipeline)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         RAW DATA INGESTION                          │
+│                    DATA PREPARATION (Stages 1-6)                     │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 1: INGESTION                                                  │
+│  data/raw/{SYMBOL}_1m.parquet  →  [Validate]  →  Load              │
 │                                                                     │
-│  data/raw/{SYMBOL}_1m.parquet  →  [Validate]  →  [Clean]          │
-│  (One contract: MES or MGC)                                        │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
+│  Stage 2: CLEANING                                                  │
+│  [Resample]  →  [Gap Handling]  →  [Validation]                    │
+│                                                                     │
+│  Stage 3: SESSIONS                                                  │
+│  [Trading Hours Filter]  →  RTH/ETH separation                      │
+│                                                                     │
+│  Stage 4: MTF UPSCALING                                             │
+│  1-min OHLCV  →  9 Intraday Timeframes                             │
+│  (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)                        │
+│                                                                     │
+│  Stage 5: FEATURES (162 indicators, 12 families)                    │
+│  Momentum (23) | MA (16) | Volatility (25) | Volume (15) |         │
+│  Trend (6) | Price (12) | Microstructure (15) | Entropy (12) |     │
+│  Wavelets (15) | Temporal (9) | Regime (9) | MTF (30+)             │
+│                                                                     │
+│  Stage 6: REGIME DETECTION                                          │
+│  [Volatility Regime]  +  [Trend Regime]  →  Composite Regime       │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: data/features/{symbol}_features.parquet]
+                         ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    MULTI-TIMEFRAME UPSCALING (COMPLETE)             │
-│                                                                     │
-│  1-min OHLCV (canonical)  →  [Upscale to 9 Intraday Timeframes]    │
-│                                                                     │
-│  ✅ Complete: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h              │
-│     (Full 9-TF intraday ladder implemented)                         │
-│                                                                     │
-│  Then models choose:                                                │
-│  • Primary training TF (configurable per-model)                     │
-│  • MTF strategy (single-TF / MTF indicators / MTF ingestion)        │
-│  • Which TFs to use for enrichment/multi-stream                     │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
+│               OPTUNA OPTIMIZATION (Stages 7-9)                       │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 7: OPTUNA LABEL OPTIMIZATION (100 trials)                    │
+│  Parameters: upper_mult, lower_mult, horizon, atr_period           │
+│  Objective: Maximize label quality via quick CV                     │
+│                         ↓                                            │
+│  Stage 8: OPTUNA FEATURE SELECTION (100 trials)                     │
+│  Search: Binary include/exclude for 162 features                    │
+│  Objective: Maximize F1 with minimal feature set                    │
+│                         ↓                                            │
+│  Stage 9: OPTUNA FEATURE PRUNING (50 trials)                        │
+│  Methods: gain, split, SHAP importance                              │
+│  Objective: Remove low-importance features                          │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: data/optimized/{symbol}_optimized.parquet]
+                         ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      FEATURE ENGINEERING                            │
-│                                                                     │
-│  Base Indicators (~150):  RSI, MACD, ATR, Bollinger, ADX, etc.    │
-│  Wavelets (~30):          Db4/Haar decomposition (3 levels)        │
-│  Microstructure (~20):    Spread proxies, order flow, liquidity    │
-│  MTF Indicators (~30):    Indicators from 5 timeframes             │
-│  ────────────────────────────────────────────────────────────────  │
-│  Total: ~180 features                                              │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
+│               PREPROCESSING (Stages 10-12)                           │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 10: SPLITS                                                    │
+│  Train/Val/Test: 70/15/15 + Purge (60) + Embargo (1440)            │
+│                         ↓                                            │
+│  Stage 11: SCALING                                                   │
+│  Train-only robust scaling → Transform all splits                   │
+│                         ↓                                            │
+│  Stage 12: ADAPTATION (Model-Family Adapters)                       │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐            │
+│  │   Tabular    │   │   Sequence   │   │  MultiStream │            │
+│  │   Adapter    │   │   Adapter    │   │   Adapter    │            │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘            │
+│         ↓                  ↓                  ↓                      │
+│    2D Arrays          3D Windows         4D Tensors                 │
+│    (N, ~60)           (N, T, ~60)        (N, 9, T, 4)               │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: data/splits/scaled/{symbol}_{split}.parquet]
+                         ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    TRIPLE-BARRIER LABELING                          │
-│                                                                     │
-│  [Optuna Optimization]  →  Profit/Loss/Time Barriers               │
-│  [Quality Weighting]    →  0.5x-1.5x based on barrier touches      │
-│  [Splits]               →  70/15/15 train/val/test + purge/embargo │
-│  [Robust Scaling]       →  Train-only fit, transform all splits    │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
+│               TRAINING (Stages 13-15)                                │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 13: OPTUNA HYPERPARAMETER OPTIMIZATION (100 trials/model)    │
+│  23 models × 100 trials = 2,300 hyperparameter trials               │
+│  ├─ Boosting: max_depth, learning_rate, n_estimators, etc.         │
+│  ├─ Neural: hidden_size, num_layers, dropout, batch_size, etc.     │
+│  ├─ Transformer: d_model, n_heads, patch_len, stride, etc.         │
+│  └─ Classical: n_estimators, C, kernel, penalty, etc.              │
+│                         ↓                                            │
+│  Stage 14: TRAINING (PurgedKFold CV, OOF Generation)                │
+│  ├─ Tabular (6): XGBoost, LightGBM, CatBoost, RF, Logistic, SVM   │
+│  ├─ Neural (10): LSTM, GRU, TCN, Transformer, PatchTST,            │
+│  │              iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D│
+│  └─ 5-fold PurgedKFold CV with OOF prediction generation           │
+│                         ↓                                            │
+│  Stage 15: STACKING (OOF Alignment, Meta-Learner)                   │
+│  ├─ Heterogeneous base models (1 per family)                       │
+│  ├─ OOF predictions aligned and validated                          │
+│  └─ Meta-learner: Ridge, MLP, XGBoost, or Calibrated               │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ↓
+  [Checkpoint: experiments/runs/{run_id}/models/]
+                         ↓
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     MODEL-FAMILY ADAPTERS                           │
+│               DEPLOYMENT (Stage 16)                                  │
+├─────────────────────────────────────────────────────────────────────┤
+│  Stage 16: BUNDLING                                                  │
+│  Model + Scaler + PreprocessingGraph  →  ModelBundle (V1.1.0)      │
 │                                                                     │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐           │
-│  │   Tabular    │   │   Sequence   │   │  Multi-Res   │           │
-│  │   Adapter    │   │   Adapter    │   │   Adapter    │           │
-│  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘           │
-│         ↓                  ↓                  ↓                     │
-│    2D Arrays          3D Windows         4D Tensors                │
-│    (N, 180)           (N, T, 180)        (N, 9, T, 4)              │
-│         ↓                  ↓                  ↓                     │
-│   ┌─────────┐        ┌─────────┐        ┌─────────┐               │
-│   │Boosting │        │ Neural  │        │Advanced │               │
-│   │Classical│        │  TCN    │        │PatchTST │               │
-│   └─────────┘        │Transform│        │iTransf. │               │
-│                      └─────────┘        │TFT/NBEATS              │
-│                                         └─────────┘               │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│                      MODEL TRAINING (PHASE 6)                       │
-│                                                                     │
-│  Base Models (19 implemented):                                      │
-│  ├─ Tabular (6):      XGBoost, LightGBM, CatBoost,                 │
-│  │                    Random Forest, Logistic, SVM                 │
-│  ├─ Neural (10):      LSTM, GRU, TCN, Transformer,                 │
-│  │                    PatchTST, iTransformer, TFT, N-BEATS,        │
-│  │                    InceptionTime, ResNet1D                       │
-│  └─ Ensemble (3):     Voting, Stacking, Blending                   │
-│                                                                     │
-│  Meta-Learners (4 implemented):                                     │
-│  └─ Inference:        Ridge Meta, MLP Meta, Calibrated, XGBoost    │
-│                                                                     │
-│  Total: 23 models (19 base + 4 meta-learners)                       │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│       HETEROGENEOUS ENSEMBLE STACKING (PHASE 7 - COMPLETE)         │
-│                                                                     │
-│  ✅ Status: Fully implemented in trainer.py                         │
-│  Features: Heterogeneous base model stacking with dual data loading│
-│  Usage: --base-models xgboost,lstm,patchtst --meta-learner ridge   │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ↓
-┌─────────────────────────────────────────────────────────────────────┐
-│          META-LEARNER STACKING (Planned Workflow)                   │
-│                                                                     │
-│  3-4 Heterogeneous Base Models (1 per family):                     │
-│  ├→ Tabular: CatBoost OR LightGBM (engineered features)           │
-│  ├→ CNN/TCN: TCN (local patterns)                                  │
-│  ├→ Transformer: PatchTST OR TFT (long context)                   │
-│  └→ Optional 4th: N-BEATS OR Ridge (different inductive bias)     │
-│       ↓                                                             │
-│  Generate Out-of-Fold (OOF) Predictions                           │
-│       ↓                                                             │
-│  Meta-Learner (Inference Family):                                  │
-│  ├→ Logistic Regression (stacking)                                 │
-│  ├→ Ridge Regression (stacking)                                    │
-│  ├→ Small MLP (learned blending)                                   │
-│  └→ Calibrated Blender (voting + calibration)                     │
-│       ↓                                                             │
-│  Final Ensemble Predictions                                        │
-│  (Retrain bases on full train, evaluate on test)                  │
-└─────────────────────────────────────────────────────────────────────┘
+│  Bundle Contents:                                                    │
+│  ├─ Trained model weights (.pkl/.pt)                                │
+│  ├─ Fitted scaler (RobustScaler)                                    │
+│  ├─ Feature mask (from optimization)                                │
+│  ├─ Barrier params (from optimization)                              │
+│  ├─ Hyperparameters (from optimization)                             │
+│  └─ PreprocessingGraph (feature lineage)                            │
+└────────────────────────┬────────────────────────────────────────────┘
+                         ↓
+  [Output: experiments/runs/{run_id}/bundles/{model}_bundle.pkl]
 ```
+
+---
+
+## Optuna Optimization Summary
+
+| Stage | Optimization | Config File | Trials | Parameters |
+|-------|--------------|-------------|--------|------------|
+| **7** | Triple Barrier Labels | `config/optimization/label_optimization.yaml` | 100 | upper_mult, lower_mult, horizon, atr_period |
+| **8** | Feature Selection | `config/optimization/feature_selection.yaml` | 100 | binary include/exclude (162 features) |
+| **9** | Feature Pruning | `config/optimization/feature_pruning.yaml` | 50 | importance_threshold, top_k, method |
+| **13** | Hyperparameters | `config/optimization/hyperparameter.yaml` | 100/model | model-specific (23 models) |
+
+**Total Trials:** 100 + 100 + 50 + (100 × 23) = **2,550 trials**
+
+**Configuration:** All optimization configs in `config/optimization/` - see `config/optimization/README.md` for details
 
 ---
 
@@ -215,151 +231,262 @@ class MyModel(BaseModel):
 
 | Mechanism | Purpose | Location |
 |-----------|---------|----------|
-| **MTF shift(1)** | Prevent lookahead in multi-timeframe features | Phase 2 |
-| **Purge (60 bars)** | Remove overlapping labels between splits | Phase 4 |
-| **Embargo (1440 bars)** | Prevent serial correlation leakage | Phase 4 |
-| **Train-only scaling** | Fit scaler on train only, transform all splits | Phase 4 |
-| **OOF predictions** | Stacking meta-learner uses out-of-fold preds | Phase 7 |
+| **MTF shift(1)** | Prevent lookahead in multi-timeframe features | Stage 4 |
+| **Purge (60 bars)** | Remove overlapping labels between splits | Stage 10 |
+| **Embargo (1440 bars)** | Prevent serial correlation leakage | Stage 10 |
+| **Train-only scaling** | Fit scaler on train only, transform all splits | Stage 11 |
+| **OOF predictions** | Stacking meta-learner uses out-of-fold preds | Stage 15 |
 
 **Result:** No information from validation/test leaks into training.
 
 ---
 
-## Data Flow
+## Data Flow (16 Stages)
 
-### Phase 1: Canonical OHLCV Ingestion
+### Stage 1: Ingestion
 **Input:** `data/raw/{symbol}_1m.parquet`
-**Output:** `data/processed/{symbol}_1m_clean.parquet`
+**Output:** Raw OHLCV DataFrame in memory
 
 **Operations:**
 - Schema validation (OHLCV columns, data types)
 - Duplicate removal (keep last)
+
+**Time:** ~1 second
+
+### Stage 2: Cleaning
+**Input:** Raw OHLCV DataFrame
+**Output:** `data/processed/{symbol}_1m_clean.parquet`
+
+**Operations:**
+- Resample to 1-minute if needed
 - Gap detection (preserved, not filled)
-- Session filtering (regular vs extended hours)
+- Data validation and quality checks
 
-**Time:** ~3 seconds (1-year data)
+**Time:** ~2 seconds
 
-### Phase 2: Multi-Timeframe Upscaling
+### Stage 3: Sessions
+**Input:** Cleaned 1-min OHLCV
+**Output:** Session-filtered DataFrame
+
+**Operations:**
+- Trading hours filtering (RTH vs ETH)
+- Session boundary detection
+- Optional extended hours removal
+
+**Time:** ~1 second
+
+### Stage 4: MTF Upscaling
 **Input:** `data/processed/{symbol}_1m_clean.parquet`
-**Output:** `data/processed/{symbol}_{timeframe}.parquet` (9 files: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+**Output:** `data/processed/{symbol}_{timeframe}.parquet` (9 files)
+
+**Timeframes:** 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
 
 **Operations:**
 - Resample to higher timeframes (OHLCV aggregation)
 - Align to base index (forward-fill)
 - Apply shift(1) to prevent lookahead
 
-**Status:** ✅ Complete (9 intraday timeframes)
-
 **Time:** ~4 seconds
 
-### Phase 3: Feature Engineering
+### Stage 5: Features
 **Input:** Base OHLCV + MTF views
-**Output:** Model-specific features based on per-model feature selection
+**Output:** `data/features/{symbol}_features.parquet` (162 features)
 
-**Per-Model Feature Selection:**
-Different model families get different features tailored to their inductive biases:
-
-**Tabular Models (Boosting + Classical):**
-- Base indicators on primary TF: RSI, MACD, ATR, Bollinger, ADX (~60 features)
-- Wavelets on primary TF: Db4/Haar decomposition (~24 features)
-- Microstructure on primary TF: Spread proxies, order flow (~10 features)
-- MTF indicators from other TFs: RSI_1m, MACD_5m, ATR_1h, etc. (~50 features)
-- Price/volume features: Returns, log volume, OHLC ratios (~8 features)
-- Time features: Hour, day_of_week (~2 features)
-- **Total: ~200 engineered features**
-
-**Sequence Models (Neural + CNN):**
-- Base indicators on primary TF: RSI, MACD, ATR, Bollinger (~60 features)
-- Wavelets on primary TF: Db4 decomposition (~24 features)
-- Microstructure on primary TF: Roll spread, volume imbalance (~10 features)
-- Price/volume raw features: Returns, log volume (~8 features)
-- Time features: Hour, day_of_week (~2 features)
-- **Total: ~150 base features (no MTF indicators - model learns from sequence)**
-
-**Advanced Transformers (Planned):**
-- Raw OHLCV bars from multiple timeframes as multi-stream input
-- No pre-engineered indicators (attention learns from raw data)
-- **Input: Multi-stream 1m+5m+15m raw OHLCV (3 streams × 4 OHLC)**
-
-**Why Different Features:**
-- Tabular models excel with rich engineered features and MTF indicators
-- Sequence models have inherent temporal memory (no need for MTF features)
-- Transformers learn multi-scale patterns from raw data via attention
+**Feature Families (12 total, 162 features):**
+- Momentum (23): RSI, MACD, Stochastic, Williams %R, ROC, CCI, MFI
+- Moving Averages (16): SMA, EMA at multiple periods + crossovers
+- Volatility (25): ATR, Bollinger, Keltner, HV, Parkinson, GARCH
+- Volume (15): OBV, VWAP, TWAP, Dollar Volume, Volume Ratio
+- Trend (6): ADX, +DI/-DI, Supertrend
+- Price (12): Returns, ratios, autocorrelation, CLV
+- Microstructure (15): Amihud, Roll, Kyle, spreads, imbalances
+- Entropy (12): Shannon, Lempel-Ziv, ApEn, SampEn, Hurst
+- Wavelets (15): DWT coefficients, energy, entropy
+- Temporal (9): Hour/DOW sin/cos, session progress
+- Regime (9): Volatility regime, trend regime, composite
 
 **Time:** ~16 seconds
 
-### Phase 4: Triple-Barrier Labeling
-**Input:** `data/features/{symbol}_features.parquet`
-**Output:** `data/splits/scaled/{symbol}_{split}.parquet` (train/val/test)
+### Stage 6: Regime Detection
+**Input:** Feature DataFrame
+**Output:** Regime-labeled DataFrame
 
 **Operations:**
-- Optuna barrier optimization (100 trials, ~2 minutes)
-- Triple-barrier labeling (profit/loss/time)
-- Quality weighting (0.5x-1.5x)
-- Time-series splits (70/15/15) with purge (60) + embargo (1440)
-- Robust scaling (train-only fit)
+- Volatility regime (low/normal/high via ATR percentile)
+- Trend regime (downtrend/sideways/uptrend via ADX)
+- Composite regime (9 combinations)
 
-**Time:** ~2.5 minutes
+**Time:** ~2 seconds
 
-### Phase 5: Model-Family Adapters
-**Input:** `data/splits/scaled/` (canonical splits)
-**Output:** `TimeSeriesDataContainer` (in-memory, model-specific shape and features)
+---
 
-**Operations (Per-Model Feature Selection + Shape Adaptation):**
-- **Tabular Adapter:**
-  - Select ~200 engineered features (base indicators + MTF indicators)
-  - Output: 2D arrays `(N, ~200)`
-- **Sequence Adapter:**
-  - Select ~150 base features (indicators + wavelets, no MTF)
-  - Create 3D windows from selected features
-  - Output: 3D windows `(N, seq_len, ~150)`
-- **Multi-Res Adapter (Planned):**
-  - Extract raw OHLCV bars from multiple timeframes
-  - Build multi-stream 4D tensors
-  - Output: 4D tensors `(N, 9, T, 4)` (no engineered features)
+### Stage 7: OPTUNA Label Optimization
+**Input:** Feature DataFrame
+**Output:** Optimized triple-barrier parameters
 
-**Why Adapters Do Both:**
-- **Feature Selection:** Each model gets features tailored to its inductive biases
-- **Shape Transformation:** Features reshaped to model-appropriate format (2D/3D/4D)
+**Trials:** 100
 
-**Time:** <2 seconds
+**Search Space:**
+| Parameter | Range |
+|-----------|-------|
+| `upper_mult` | 1.0 - 4.0 |
+| `lower_mult` | 1.0 - 4.0 |
+| `horizon` | 5 - 60 |
+| `atr_period` | 7 - 28 |
 
-### Phase 6: Model Training
-**Input:** `TimeSeriesDataContainer`
+**Objective:** Maximize label quality via quick CV with LightGBM
+
+**Output Files:**
+- `optimal_barrier_params.json`
+- `label_optimization_history.csv`
+
+**Time:** ~10 minutes
+
+### Stage 8: OPTUNA Feature Selection
+**Input:** Labeled DataFrame with 162 features
+**Output:** Feature selection mask
+
+**Trials:** 100
+
+**Search Space:** Binary include/exclude for each of 162 features
+
+**Objective:** Maximize F1 score with minimal feature subset
+
+**Output Files:**
+- `optimal_feature_mask.json`
+- `selected_features.txt` (~60-100 features)
+
+**Time:** ~15 minutes
+
+### Stage 9: OPTUNA Feature Pruning
+**Input:** Selected features from Stage 8
+**Output:** Final pruned feature set
+
+**Trials:** 50
+
+**Search Space:**
+| Parameter | Range |
+|-----------|-------|
+| `importance_threshold` | 0.001 - 0.1 (log) |
+| `top_k_features` | 20 - 100 |
+| `importance_method` | gain, split, shap |
+
+**Objective:** Remove low-importance features while maintaining performance
+
+**Output Files:**
+- `pruned_feature_mask.json`
+- `feature_importance_ranking.csv` (~30-60 features)
+
+**Time:** ~8 minutes
+
+---
+
+### Stage 10: Splits
+**Input:** Optimized feature DataFrame
+**Output:** Train/val/test DataFrames
+
+**Configuration:**
+- Train: 70%
+- Validation: 15%
+- Test: 15%
+- Purge: 60 bars
+- Embargo: 1440 bars
+
+**Time:** ~1 second
+
+### Stage 11: Scaling
+**Input:** Train/val/test DataFrames
+**Output:** Scaled arrays
+
+**Operations:**
+- Fit RobustScaler on train only
+- Transform all splits with same scaler
+- Save scaler for inference bundle
+
+**Time:** ~1 second
+
+### Stage 12: Adaptation
+**Input:** Scaled arrays
+**Output:** Model-specific tensors
+
+**Adapters:**
+- **TabularAdapter:** 2D arrays `(N, ~60)`
+- **SequenceAdapter:** 3D windows `(N, seq_len, ~60)`
+- **MultiStreamAdapter:** 4D tensors `(N, 9, T, 4)`
+
+**Time:** ~2 seconds
+
+---
+
+### Stage 13: OPTUNA Hyperparameter Optimization
+**Input:** Adapted tensors
+**Output:** Optimal hyperparameters per model
+
+**Trials:** 100 per model (2,300 total for 23 models)
+
+**Model-Specific Search Spaces:**
+- Boosting: max_depth, learning_rate, n_estimators, subsample, etc.
+- Neural: hidden_size, num_layers, dropout, batch_size, seq_len, etc.
+- Transformer: d_model, n_heads, patch_len, stride, etc.
+- Classical: n_estimators (RF), C (SVM/LR), kernel, penalty
+
+**Output Files (per model):**
+- `{model}_best_params.json`
+- `{model}_optimization_history.csv`
+
+**Time:** ~20-60 minutes per model
+
+### Stage 14: Training
+**Input:** Adapted tensors + optimal hyperparameters
 **Output:** Trained models in `experiments/runs/{run_id}/models/`
 
 **Operations:**
-- Instantiate model from registry
+- Instantiate model from registry with optimal hyperparameters
+- 5-fold PurgedKFold cross-validation
+- Generate out-of-fold (OOF) predictions
 - Train with early stopping, sample weighting
 - Evaluate on validation set
 - Save model + performance report
+
+**Models (23 total):**
+- Tabular (6): XGBoost, LightGBM, CatBoost, RF, Logistic, SVM
+- Neural (10): LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
+- Ensemble (3): Voting, Stacking, Blending
+- Meta-Learners (4): Ridge, MLP, XGBoost, Calibrated
 
 **Time:**
 - Boosting: 10-20 seconds
 - Neural: 2-5 minutes (with GPU)
 - Classical: 5-60 seconds
 
-### Phase 7: Ensemble Training
-**Input:** Trained base models (same family)
-**Output:** Ensemble models
+### Stage 15: Stacking
+**Input:** OOF predictions from Stage 14
+**Output:** Stacked ensemble model
 
 **Operations:**
-- **Voting:** Weighted average of predictions
-- **Stacking:** Train meta-learner on OOF predictions
-- **Blending:** Train meta-learner on holdout predictions
+- Align OOF predictions from heterogeneous base models
+- Validate OOF alignment (same indices, no NaN)
+- Train meta-learner on stacked OOF predictions
+- Available meta-learners: Ridge, MLP, XGBoost, Calibrated
 
-**Time:** 1-5 minutes (stacking takes longest)
+**Time:** 1-5 minutes
 
-### Phase 8: Meta-Learners (Planned)
-**Input:** Ensemble models
-**Output:** Adaptive meta-learner
+---
 
-**Operations:**
-- Regime-aware weighting (weight by market regime)
-- Confidence-based selection (weight by prediction confidence)
-- Adaptive performance tracking (weight by recent accuracy)
+### Stage 16: Bundling
+**Input:** Trained models, scaler, optimization artifacts
+**Output:** `experiments/runs/{run_id}/bundles/{model}_bundle.pkl`
 
-**Time:** ~5 minutes (regime clustering + weight optimization)
+**Bundle Contents (ModelBundle V1.1.0):**
+- Trained model weights (.pkl or .pt)
+- Fitted RobustScaler
+- Feature mask (from Stages 8-9)
+- Barrier parameters (from Stage 7)
+- Optimal hyperparameters (from Stage 13)
+- PreprocessingGraph (feature lineage for raw inference)
+- BundleMetadata (version, creation time, etc.)
+
+**Time:** ~5 seconds per model
 
 ---
 
@@ -369,13 +496,13 @@ Different model families get different features tailored to their inductive bias
 
 **Boosting (3 models):**
 - XGBoost, LightGBM, CatBoost
-- **Input:** `(N, 180)` - all features as tabular rows
+- **Input:** `(N, ~60)` - optimized features after Stages 8-9
 - **Strengths:** Fast, interpretable, feature interactions
 - **Training Time:** 10-20 seconds
 
 **Classical (3 models):**
 - Random Forest, Logistic Regression, SVM
-- **Input:** `(N, 180)` - same as boosting
+- **Input:** `(N, ~60)` - same as boosting
 - **Strengths:** Robust baselines, simple, interpretable
 - **Training Time:** 5-60 seconds
 
@@ -383,30 +510,27 @@ Different model families get different features tailored to their inductive bias
 
 **Neural Networks (10 models):**
 - LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D
-- **Input:** `(N, seq_len, 180)` - lookback windows (seq_len = 30-60)
+- **Input:** `(N, seq_len, ~60)` - lookback windows (seq_len = 30-60)
 - **Strengths:** Temporal dependencies, sequential patterns, multi-scale detection
 - **Training Time:** 2-5 minutes (GPU)
-- **Status:** ✅ All 10 implemented
+- **Status:** All 10 implemented
 
 **Model Details:**
 
 **CNN (2 models):**
 - InceptionTime, ResNet1D
-- **Input:** `(N, seq_len, 180)` or multi-resolution `(N, 9, T, 4)`
+- **Input:** `(N, seq_len, ~60)` or multi-resolution `(N, 9, T, 4)`
 - **Strengths:** Multi-scale pattern detection
-- **Status:** ✅ Complete
 
 **Advanced Transformers (3 models):**
 - PatchTST, iTransformer, TFT
 - **Input:** `(N, 9, T, 4)` - raw multi-resolution OHLCV
 - **Strengths:** SOTA long-term forecasting, interpretable attention
-- **Status:** ✅ Complete
 
 **MLP (1 model):**
 - N-BEATS
-- **Input:** `(N, seq_len, 180)` or `(N, 9, T, 4)`
+- **Input:** `(N, seq_len, ~60)` or `(N, 9, T, 4)`
 - **Strengths:** Interpretable decomposition, M4 competition winner
-- **Status:** ✅ Complete
 
 ---
 
@@ -721,19 +845,33 @@ python scripts/train_model.py --list-models
 **Hardware:** NVIDIA RTX 4090, 64GB RAM, AMD Ryzen 9 7950X
 **Dataset:** MES 1-year (~105K 5-min bars, ~73K after splits)
 
-| Phase | Operation | Time | Memory |
+| Stage | Operation | Time | Memory |
 |-------|-----------|------|--------|
-| **Phase 1** | Ingestion + Cleaning | ~3s | 50 MB |
-| **Phase 2** | MTF Upscaling (9 TFs) | ~4s | 80 MB |
-| **Phase 3** | Feature Engineering | ~16s | 150 MB |
-| **Phase 4** | Labeling + Splits + Scaling | ~2.5min | 200 MB |
-| **Phase 5** | Adapters (in-memory) | <2s | +50-150 MB |
-| **Phase 6** | XGBoost Training | ~15s | 500 MB |
-| **Phase 6** | LSTM Training (GPU) | ~3min | 2 GB |
-| **Phase 7** | Stacking (5-fold) | ~5min | +100 MB |
+| **1-3** | Ingestion + Cleaning + Sessions | ~4s | 50 MB |
+| **4** | MTF Upscaling (9 TFs) | ~4s | 80 MB |
+| **5-6** | Features + Regime | ~18s | 150 MB |
+| **7** | OPTUNA Label Optimization (100 trials) | ~10min | 200 MB |
+| **8** | OPTUNA Feature Selection (100 trials) | ~15min | 200 MB |
+| **9** | OPTUNA Feature Pruning (50 trials) | ~8min | 200 MB |
+| **10-12** | Splits + Scaling + Adaptation | ~4s | 100 MB |
+| **13** | OPTUNA Hyperparams (per model) | ~20-60min | 500 MB |
+| **14** | Training (per model, XGBoost) | ~15s | 500 MB |
+| **14** | Training (per model, LSTM GPU) | ~3min | 2 GB |
+| **15** | Stacking (5-fold OOF) | ~5min | 100 MB |
+| **16** | Bundling | ~5s | 50 MB |
 
-**Total Pipeline (Data + Train XGBoost):** ~3 minutes
-**Total Pipeline (Data + Train All 19 Base Models):** ~35 minutes (with GPU)
+**Optuna Trials Summary:**
+| Stage | Trials | Time |
+|-------|--------|------|
+| 7 | 100 | ~10 min |
+| 8 | 100 | ~15 min |
+| 9 | 50 | ~8 min |
+| 13 | 100 x 23 models | ~8-23 hours |
+| **Total** | **2,550** | **~10-25 hours** |
+
+**Total Pipeline (1 model, no Optuna):** ~5 minutes
+**Total Pipeline (1 model, with Optuna):** ~1-2 hours
+**Total Pipeline (23 models, with Optuna):** ~10-25 hours (parallelizable)
 
 ---
 
@@ -864,25 +1002,53 @@ phase2:
 
 ## Future Roadmap
 
-### Completed (All 7 Phases)
-- ✅ 9-timeframe MTF ladder (Phase 2 complete)
-- ✅ Strategy 1, 2, 3 (all MTF strategies complete)
-- ✅ CNN models: InceptionTime, ResNet1D
-- ✅ Advanced transformers: PatchTST, iTransformer, TFT
-- ✅ N-BEATS (MLP-based forecasting)
-- ✅ Heterogeneous stacking with meta-learners (Phase 7 complete)
+### Completed (16-Stage Pipeline)
+- 9-timeframe MTF ladder (Stage 4)
+- 162 features across 12 families (Stage 5)
+- All MTF strategies (single-TF, MTF indicators, MTF ingestion)
+- 23 models: Tabular (6), Neural (10), Ensemble (3), Meta-Learners (4)
+- Heterogeneous stacking with meta-learners (Stage 15)
+- 4 Optuna optimization stages (Stages 7, 8, 9, 13)
 
-### Short-Term (Phase 8)
+### Short-Term
 1. Advanced meta-learners (regime-aware, adaptive weighting)
 2. Multi-horizon meta-learners (train across 5, 10, 15, 20 horizons)
+3. Distributed Optuna with SQLite/PostgreSQL storage
 
-### Medium-Term (Phase 9)
+### Medium-Term
 1. Real-time inference pipeline with streaming predictions
 2. Online learning (update models in production)
+3. Optuna pruning optimization (MedianPruner, Hyperband)
 
 ### Long-Term
 1. Contextual bandits for ensemble selection
 2. Multi-contract correlation models (if needed)
+3. AutoML wrapper for full pipeline optimization
+
+---
+
+## 16-Stage Quick Reference
+
+| # | Stage | Trials | Time |
+|---|-------|--------|------|
+| 1 | Ingestion | - | ~1s |
+| 2 | Cleaning | - | ~2s |
+| 3 | Sessions | - | ~1s |
+| 4 | MTF Upscaling | - | ~4s |
+| 5 | Features (162) | - | ~16s |
+| 6 | Regime | - | ~2s |
+| **7** | **OPTUNA: Labels** | 100 | ~10min |
+| **8** | **OPTUNA: Feature Selection** | 100 | ~15min |
+| **9** | **OPTUNA: Feature Pruning** | 50 | ~8min |
+| 10 | Splits | - | ~1s |
+| 11 | Scaling | - | ~1s |
+| 12 | Adaptation | - | ~2s |
+| **13** | **OPTUNA: Hyperparameters** | 100/model | ~20-60min/model |
+| 14 | Training | - | ~15s-3min/model |
+| 15 | Stacking | - | ~5min |
+| 16 | Bundling | - | ~5s |
+
+**Total Optuna Trials:** 100 + 100 + 50 + (100 x 23) = **2,550**
 
 ---
 
@@ -891,7 +1057,8 @@ phase2:
 **Documentation:**
 - `docs/README.md` - Entry point
 - `docs/QUICK_REFERENCE.md` - Command cheatsheet
-- `docs/implementation/` - Detailed phase implementation guides and roadmaps
+- `docs/implementation/UNIFIED_PIPELINE_ARCHITECTURE.md` - 16-stage pipeline details
+- `docs/implementation/` - Detailed stage implementation guides
 - `docs/guides/` - How-to guides
 - `docs/reference/` - Technical reference documentation
 
@@ -901,14 +1068,17 @@ phase2:
 - "Attention Is All You Need" (Vaswani et al.) - Transformer architecture
 - "N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting" (Oreshkin et al.)
 - "PatchTST: A Time Series is Worth 64 Words" (Nie et al.)
+- "Optuna: A Next-generation Hyperparameter Optimization Framework" (Akiba et al.)
 
 **Codebase:**
-- `src/phase1/` - Data pipeline (Phases 1-5)
-- `src/models/` - Model implementations (Phases 6-8)
-- `src/cross_validation/` - CV and hyperparameter tuning
+- `src/pipeline/` - Unified pipeline (Stages 1-16)
+- `src/features/` - Feature engineering (Stage 5)
+- `src/optimization/` - Optuna optimization (Stages 7-9, 13)
+- `src/models/` - Model implementations (Stages 14-15)
+- `src/bundling/` - Inference bundles (Stage 16)
 - `scripts/` - CLI tools
 
 ---
 
-**Last Updated:** 2026-01-15
-**Architecture Version:** 3.0 (all 7 phases complete)
+**Last Updated:** 2026-01-18
+**Architecture Version:** 4.0 (16-stage pipeline with Optuna optimization)

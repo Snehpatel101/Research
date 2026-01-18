@@ -1,0 +1,363 @@
+# Feature Selection Optimization Configuration
+# Comprehensive feature selection using Optuna with multiple strategies:
+# - Binary include/exclude per feature or feature group
+# - Importance-based selection (gain, split, permutation, SHAP)
+# - Recursive Feature Elimination (RFE)
+# - Correlation-based filtering
+
+optimization:
+  name: feature_selection
+  description: Comprehensive feature selection optimization using Optuna
+  framework: optuna
+  n_trials: 100
+  timeout: 14400  # 4 hours
+  direction: maximize
+
+# Optuna sampler configuration
+sampler:
+  type: tpe
+  seed: 42
+  n_startup_trials: 20
+  multivariate: true
+  group: true  # Group related features together
+
+# Optuna pruner configuration
+pruner:
+  type: hyperband
+  min_resource: 1
+  max_resource: 100
+  reduction_factor: 3
+
+# ============================================================================
+# SELECTION STRATEGIES
+# ============================================================================
+# The optimization can use multiple selection strategies, each optimized by Optuna
+
+selection_strategies:
+  # Strategy 1: Binary Include/Exclude (Group-Level)
+  binary_group_selection:
+    enabled: true
+    description: "Select entire feature groups (momentum, volatility, etc.)"
+    priority: 1  # Run first
+
+  # Strategy 2: Binary Include/Exclude (Individual-Level)
+  binary_individual_selection:
+    enabled: true
+    description: "Fine-grained selection of individual features within groups"
+    priority: 2  # Run after group selection
+
+  # Strategy 3: Importance-Based Selection
+  importance_based_selection:
+    enabled: true
+    description: "Select features above importance threshold"
+    priority: 3
+
+  # Strategy 4: Recursive Feature Elimination (RFE)
+  recursive_feature_elimination:
+    enabled: true
+    description: "Iteratively remove least important features"
+    priority: 4
+
+  # Strategy 5: Correlation-Based Selection
+  correlation_based_selection:
+    enabled: true
+    description: "Remove highly correlated features"
+    priority: 5
+
+# ============================================================================
+# SEARCH SPACE CONFIGURATION
+# ============================================================================
+search_space:
+  # --- Binary Feature Selection Mode ---
+  feature_selection_mode: binary
+  # Each feature becomes: suggest_categorical(feature_name, [True, False])
+
+  # Feature groups (optional - select entire groups)
+  feature_groups:
+    price_features:
+      enabled: true
+      features:
+        - close
+        - high
+        - low
+        - open
+        - vwap
+        - typical_price
+
+    returns_features:
+      enabled: true
+      features:
+        - returns_1
+        - returns_5
+        - returns_10
+        - returns_20
+        - log_returns_1
+        - log_returns_5
+
+    volume_features:
+      enabled: true
+      features:
+        - volume
+        - tick_volume
+        - dollar_volume
+        - volume_ratio
+        - volume_ma_ratio
+
+    momentum_features:
+      enabled: true
+      features:
+        - rsi_14
+        - rsi_7
+        - macd
+        - macd_signal
+        - macd_hist
+        - momentum_10
+        - momentum_20
+        - roc_10
+        - roc_20
+
+    volatility_features:
+      enabled: true
+      features:
+        - atr_14
+        - atr_7
+        - bb_width
+        - bb_position
+        - realized_vol_10
+        - realized_vol_20
+        - parkinson_vol
+
+    trend_features:
+      enabled: true
+      features:
+        - sma_10
+        - sma_20
+        - sma_50
+        - ema_10
+        - ema_20
+        - adx_14
+        - trend_strength
+
+    microstructure_features:
+      enabled: true
+      features:
+        - spread
+        - spread_pct
+        - imbalance
+        - trade_intensity
+        - kyle_lambda
+
+# ============================================================================
+# IMPORTANCE-BASED SELECTION SEARCH SPACE
+# ============================================================================
+importance_based:
+  # Importance calculation method (optimized by Optuna)
+  importance_method:
+    type: categorical
+    choices:
+      - gain           # Tree-based: total gain from splits
+      - split          # Tree-based: number of splits using feature
+      - permutation    # Model-agnostic: performance drop when shuffled
+      - shap           # SHAP values for interpretability
+      - mutual_info    # Mutual information with target
+      - lasso          # LASSO coefficient magnitude
+
+  # Importance threshold (optimized by Optuna)
+  importance_threshold:
+    type: float
+    low: 0.001
+    high: 0.1
+    log: true
+
+  # Top-K features to select (alternative to threshold)
+  top_k_features:
+    type: int
+    low: 20
+    high: 100
+    enabled: false  # Use threshold instead by default
+
+  # Settings for specific methods
+  permutation_settings:
+    n_repeats: 5
+    scoring: f1_macro
+    random_state: 42
+
+  shap_settings:
+    max_samples: 5000
+    check_additivity: false
+    approximate: true  # Use TreeSHAP approximation for speed
+
+  mutual_info_settings:
+    n_neighbors: 5
+    discrete_features: false
+
+  lasso_settings:
+    alpha_range: [0.001, 1.0]
+    max_iter: 1000
+
+# ============================================================================
+# RECURSIVE FEATURE ELIMINATION (RFE) SEARCH SPACE
+# ============================================================================
+recursive_feature_elimination:
+  # Enable/disable RFE optimization
+  enabled: true
+
+  # Number of features to select (optimized by Optuna)
+  n_features_to_select:
+    type: int
+    low: 20
+    high: 80
+
+  # Step size for elimination (features removed per iteration)
+  step:
+    type: categorical
+    choices:
+      - 1       # Remove 1 feature at a time (most accurate, slowest)
+      - 5       # Remove 5 features at a time
+      - 10      # Remove 10 features at a time (faster)
+      - 0.1     # Remove 10% of remaining features (percentage)
+      - 0.2     # Remove 20% of remaining features
+
+  # Base estimator for RFE
+  estimator:
+    type: categorical
+    choices:
+      - xgboost
+      - lightgbm
+      - random_forest
+      - logistic
+
+  # Cross-validation for RFE (RFECV)
+  cv_enabled: true
+  cv_splits: 3
+  scoring: f1_macro
+
+  # Minimum features at which to stop
+  min_features_to_select: 10
+
+# ============================================================================
+# CORRELATION-BASED SELECTION SEARCH SPACE
+# ============================================================================
+correlation_based:
+  # Maximum correlation between features (optimized by Optuna)
+  max_correlation:
+    type: float
+    low: 0.80
+    high: 0.99
+
+  # Method for correlation calculation
+  correlation_method:
+    type: categorical
+    choices:
+      - pearson       # Linear correlation
+      - spearman      # Rank correlation
+      - kendall       # Kendall's tau
+
+  # When removing correlated pairs, keep feature with:
+  keep_criterion:
+    type: categorical
+    choices:
+      - higher_importance   # Keep feature with higher model importance
+      - higher_variance     # Keep feature with higher variance
+      - lower_nan_rate      # Keep feature with fewer NaN values
+      - first_in_list       # Keep feature that appears first
+
+# ============================================================================
+# OBJECTIVE FUNCTION
+# ============================================================================
+objective:
+  metric: f1_macro
+  direction: maximize
+
+  # Regularization for feature count
+  regularization:
+    enabled: true
+    type: l1  # Penalize number of features
+    lambda: 0.001
+
+  # Multi-objective optimization (optional)
+  multi_objective:
+    enabled: false
+    objectives:
+      - name: f1_macro
+        weight: 0.7
+        direction: maximize
+      - name: feature_count
+        weight: 0.3
+        direction: minimize
+
+# Evaluation configuration
+evaluation:
+  # Model for evaluation (fast model recommended)
+  model: xgboost
+  model_params:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    early_stopping_rounds: 20
+
+  # Cross-validation
+  cv_splits: 3
+  cv_type: purged_kfold
+  purge_bars: 60
+  embargo_bars: 60
+
+  # Metrics to track
+  metrics:
+    - f1_macro
+    - accuracy
+    - feature_count
+
+# Constraints
+constraints:
+  # Minimum/maximum features
+  min_features: 10
+  max_features: 100
+
+  # Required features (always included)
+  required_features:
+    - returns_1
+    - volatility_20
+    - volume_ratio
+
+  # Excluded features (never included)
+  excluded_features:
+    - timestamp
+    - symbol
+    - bar_index
+
+# Data configuration
+data:
+  horizons:
+    - 20
+  symbols:
+    - MES
+  sample_size: 30000
+
+# Per-model optimization
+per_model:
+  enabled: true
+  models:
+    - xgboost
+    - lightgbm
+    - lstm
+
+  # Save per-model results
+  save_per_model: true
+
+# Output configuration
+output:
+  save_study: true
+  study_name: feature_selection
+  storage: sqlite:///experiments/optuna/feature_selection.db
+
+  # Save selected features
+  save_features: true
+  features_path: config/features/selected_features.yaml
+
+  # Logging
+  log_level: INFO
+  show_progress: true
+
+# Reproducibility
+random_seed: 42

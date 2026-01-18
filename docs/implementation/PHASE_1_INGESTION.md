@@ -1,8 +1,11 @@
 # Phase 1: Canonical OHLCV Ingestion
 
+**Pipeline Stages:** 1 (Ingestion), 2 (Cleaning), 3 (Sessions)
 **Status:** ✅ Complete
 **Effort:** 2 days (completed)
 **Dependencies:** None (entry point)
+
+> **Cross-Reference:** This phase covers Stages 1-3 of the 16-stage pipeline. See [PHASE_2_MTF_UPSCALING.md](./PHASE_2_MTF_UPSCALING.md) for Stage 4 (MTF Upscaling).
 
 ---
 
@@ -418,8 +421,22 @@ phase1:
 
 **After Phase 1 completion:**
 1. ✅ Clean 1-minute OHLCV dataset ready
-2. ➡️ Proceed to **Phase 2: MTF Upscaling** to create multi-timeframe views
-3. ➡️ Feature engineering will use both 1-minute and MTF data
+2. ➡️ Proceed to **[Phase 2: MTF Upscaling](./PHASE_2_MTF_UPSCALING.md)** (Stage 4) to create multi-timeframe views
+3. ➡️ **[Phase 3: Feature Engineering](./PHASE_3_FEATURES.md)** (Stage 5) will use both 1-minute and MTF data
+
+---
+
+## Pipeline Stage Summary
+
+This phase implements the following stages from the 16-stage pipeline:
+
+| Stage | Name | Description |
+|-------|------|-------------|
+| 1 | Ingestion | Load raw OHLCV data |
+| 2 | Cleaning | Resample, gap handling, duplicate removal |
+| 3 | Sessions | Trading hours filtering |
+
+**Next Stages:** Stage 4 (MTF Upscaling) in [PHASE_2_MTF_UPSCALING.md](./PHASE_2_MTF_UPSCALING.md)
 
 **Validation Checklist:**
 - [ ] Raw data file exists and is readable

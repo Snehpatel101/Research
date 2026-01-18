@@ -275,23 +275,435 @@ Build ONE cohesive ML factory from scratch. NO backward compatibility - clean sl
      4. MTF Upscaling - 9 timeframes from 1-min
      5. Features - 162 indicators
      6. Regime - Market regime detection
-     7. OPTUNA: Label Optimization - 100 trials (barrier params: upper_mult, lower_mult, horizon, atr_period)
-     8. OPTUNA: Feature Selection - 100 trials (binary include/exclude)
-     9. OPTUNA: Feature Pruning - 50 trials (importance-based removal)
+     7. OPTUNA: Label Optimization - Triple Barrier parameter optimization
+     8. OPTUNA: Feature Selection - Binary include/exclude optimization
+     9. OPTUNA: Feature Pruning - Importance-based feature removal
      10. Splits - Train/val/test (70/15/15)
      11. Scaling - Train-only robust scaling
      12. Adaptation - 2D/3D/4D tensor per model type
-     13. OPTUNA: Hyperparameter Optimization - 100 trials per model (23 models)
+     13. OPTUNA: Hyperparameter Optimization - Model-specific hyperparameter tuning
      14. Training - PurgedKFold CV, OOF generation
      15. Stacking - OOF alignment, meta-learner
      16. Bundling - Model + Scaler + Graph -> Artifact
 
+     ---
+     DETAILED OPTUNA OPTIMIZATION STAGES (PHASE_1B)
+
+     **Stage 7: OPTUNA Label Optimization (Triple Barrier)**
+
+     Purpose: Find optimal triple-barrier labeling parameters that maximize risk-adjusted returns.
+
+     Parameters to optimize:
+     - upper_mult: Upper barrier multiplier (0.5 to 3.0 x ATR)
+     - lower_mult: Lower barrier multiplier (0.5 to 3.0 x ATR)
+     - horizon: Maximum holding period in bars (10 to 100 bars)
+     - atr_period: ATR lookback period (7 to 28 bars)
+
+     Optimization settings:
+     - Trials: 100
+     - Objective: Maximize Sharpe ratio with transaction cost penalty
+     - Sampler: TPE (Tree-structured Parzen Estimator)
+     - Pruner: MedianPruner with n_startup_trials=10
+
+     Search space bounds (symbol-dependent):
+     ```python
+     LABEL_SEARCH_SPACE = {
+         "MES": {
+             "upper_mult": (1.0, 2.5),
+             "lower_mult": (1.0, 2.5),
+             "horizon": (20, 60),
+             "atr_period": (10, 21),
+         },
+         "MNQ": {
+             "upper_mult": (1.5, 3.0),
+             "lower_mult": (1.5, 3.0),
+             "horizon": (15, 50),
+             "atr_period": (10, 21),
+         },
+         # Default fallback for other symbols
+         "default": {
+             "upper_mult": (0.5, 3.0),
+             "lower_mult": (0.5, 3.0),
+             "horizon": (10, 100),
+             "atr_period": (7, 28),
+         },
+     }
+     ```
+
+     Code example:
+     ```python
+     import optuna
+     from src.labels import TripleBarrierLabeler
+     from src.validation import compute_sharpe_with_costs
+
+     def label_objective(trial: optuna.Trial, df: pd.DataFrame, symbol: str) -> float:
+         bounds = LABEL_SEARCH_SPACE.get(symbol, LABEL_SEARCH_SPACE["default"])
+
+         upper_mult = trial.suggest_float("upper_mult", *bounds["upper_mult"])
+         lower_mult = trial.suggest_float("lower_mult", *bounds["lower_mult"])
+         horizon = trial.suggest_int("horizon", *bounds["horizon"])
+         atr_period = trial.suggest_int("atr_period", *bounds["atr_period"])
+
+         labeler = TripleBarrierLabeler(
+             upper_mult=upper_mult,
+             lower_mult=lower_mult,
+             horizon=horizon,
+             atr_period=atr_period,
+         )
+         labels = labeler.fit_transform(df)
+
+         # Evaluate label quality via quick model + Sharpe
+         sharpe = compute_sharpe_with_costs(labels, df["close"], cost_bps=2.0)
+         return sharpe
+
+     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+     study.optimize(lambda t: label_objective(t, df, symbol), n_trials=100)
+     best_label_params = study.best_params
+     ```
+
+     ---
+     **Stage 8: OPTUNA Feature Selection Optimization**
+
+     Purpose: Select optimal subset of features via binary include/exclude decisions.
+
+     Optimization approach:
+     - Binary decision for each feature (include=1, exclude=0)
+     - 162 binary parameters (one per feature)
+     - Minimum feature constraint: at least 10 features must be selected
+
+     Optimization settings:
+     - Trials: 100
+     - Objective: Maximize model performance (F1-score or Sharpe ratio)
+     - Sampler: TPE with multivariate=True for feature correlation
+     - Pruner: SuccessiveHalvingPruner
+
+     Features grouped by family for structured selection:
+     ```python
+     FEATURE_GROUPS = {
+         "momentum": ["rsi_14", "macd", "macd_signal", "macd_hist", "stoch_k", "stoch_d", ...],
+         "moving_averages": ["sma_5", "sma_10", "sma_20", "ema_5", "ema_10", ...],
+         "volatility": ["atr_14", "bb_upper", "bb_lower", "bb_width", "keltner_upper", ...],
+         "volume": ["obv", "vwap", "dollar_volume", "volume_ma_20", ...],
+         "trend": ["adx_14", "plus_di", "minus_di", "supertrend", ...],
+         "price": ["returns", "log_returns", "high_low_ratio", "close_open_ratio", ...],
+         "microstructure": ["amihud", "roll_spread", "kyle_lambda", ...],
+         "entropy": ["shannon_entropy", "lz_complexity", "approx_entropy", ...],
+         "wavelets": ["dwt_approx", "dwt_detail_1", "dwt_detail_2", ...],
+         "temporal": ["hour_sin", "hour_cos", "day_sin", "day_cos", ...],
+         "regime": ["vol_regime", "trend_regime", "composite_regime", ...],
+         "mtf": ["mtf_5m_rsi", "mtf_15m_macd", "mtf_1h_atr", ...],
+     }
+     ```
+
+     Code example:
+     ```python
+     import optuna
+     from src.features import FEATURE_REGISTRY
+     from src.training import quick_evaluate_features
+
+     def feature_selection_objective(trial: optuna.Trial, X: pd.DataFrame, y: pd.Series) -> float:
+         selected_features = []
+
+         for feature_name in FEATURE_REGISTRY.keys():
+             include = trial.suggest_categorical(f"include_{feature_name}", [0, 1])
+             if include:
+                 selected_features.append(feature_name)
+
+         # Enforce minimum feature count
+         if len(selected_features) < 10:
+             return float("-inf")
+
+         X_selected = X[selected_features]
+         score = quick_evaluate_features(X_selected, y, model="lightgbm", cv_folds=3)
+         return score
+
+     study = optuna.create_study(
+         direction="maximize",
+         sampler=optuna.samplers.TPESampler(multivariate=True),
+     )
+     study.optimize(lambda t: feature_selection_objective(t, X, y), n_trials=100)
+     selected_features = [f for f in FEATURE_REGISTRY if study.best_params.get(f"include_{f}", 0)]
+     ```
+
+     ---
+     **Stage 9: OPTUNA Feature Pruning Optimization**
+
+     Purpose: Remove low-importance features based on model-derived importance scores.
+
+     Optimization approach:
+     - Train base model to get feature importances
+     - Optimize importance threshold for feature removal
+     - Iteratively prune features below threshold
+     - Reduces feature count from ~162 to optimal subset (typically 40-80 features)
+
+     Optimization settings:
+     - Trials: 50
+     - Objective: Maximize performance while minimizing feature count
+     - Multi-objective: Pareto frontier of performance vs. complexity
+
+     Pruning parameters:
+     ```python
+     PRUNING_SEARCH_SPACE = {
+         "importance_threshold": (0.001, 0.05),  # Minimum importance to keep
+         "cumulative_importance": (0.85, 0.99),   # Keep top N% cumulative importance
+         "max_features": (30, 100),               # Hard cap on feature count
+         "correlation_threshold": (0.85, 0.98),   # Remove correlated features
+     }
+     ```
+
+     Code example:
+     ```python
+     import optuna
+     import lightgbm as lgb
+     from src.features import compute_feature_importance, remove_correlated
+
+     def feature_pruning_objective(trial: optuna.Trial, X: pd.DataFrame, y: pd.Series) -> float:
+         importance_threshold = trial.suggest_float("importance_threshold", 0.001, 0.05)
+         cumulative_target = trial.suggest_float("cumulative_importance", 0.85, 0.99)
+         correlation_threshold = trial.suggest_float("correlation_threshold", 0.85, 0.98)
+
+         # Get feature importances from LightGBM
+         model = lgb.LGBMClassifier(n_estimators=100, verbose=-1)
+         model.fit(X, y)
+         importances = pd.Series(model.feature_importances_, index=X.columns)
+         importances = importances / importances.sum()  # Normalize
+
+         # Prune by importance threshold
+         keep_mask = importances >= importance_threshold
+
+         # Prune by cumulative importance
+         sorted_imp = importances.sort_values(ascending=False)
+         cumsum = sorted_imp.cumsum()
+         keep_by_cumulative = cumsum[cumsum <= cumulative_target].index.tolist()
+
+         # Combine criteria
+         features_to_keep = list(set(importances[keep_mask].index) & set(keep_by_cumulative))
+
+         # Remove highly correlated features
+         X_pruned = remove_correlated(X[features_to_keep], threshold=correlation_threshold)
+
+         # Evaluate pruned feature set
+         score = quick_evaluate_features(X_pruned, y, model="lightgbm", cv_folds=3)
+
+         # Penalize for too many features (complexity penalty)
+         complexity_penalty = len(X_pruned.columns) / 162 * 0.1
+         return score - complexity_penalty
+
+     study = optuna.create_study(direction="maximize")
+     study.optimize(lambda t: feature_pruning_objective(t, X, y), n_trials=50)
+     ```
+
+     ---
+     **Stage 13: OPTUNA Hyperparameter Optimization**
+
+     Purpose: Tune model-specific hyperparameters for all 23 models.
+
+     Optimization settings:
+     - Trials: 100 per model
+     - Total trials: 100 x 23 = 2,300 trials
+     - Objective: Maximize validation F1-score (or Sharpe for trading)
+     - CV: PurgedKFold with 5 folds
+     - Sampler: TPE for most, CMA-ES for neural networks
+
+     Search spaces by model family:
+
+     **Boosting Models (XGBoost, LightGBM, CatBoost):**
+     ```python
+     BOOSTING_SEARCH_SPACE = {
+         "n_estimators": (100, 1000),
+         "max_depth": (3, 12),
+         "learning_rate": (0.01, 0.3, "log"),
+         "min_child_weight": (1, 10),
+         "subsample": (0.6, 1.0),
+         "colsample_bytree": (0.6, 1.0),
+         "reg_alpha": (1e-8, 10.0, "log"),
+         "reg_lambda": (1e-8, 10.0, "log"),
+         "gamma": (0, 5),  # XGBoost only
+         "num_leaves": (20, 150),  # LightGBM only
+         "bagging_fraction": (0.6, 1.0),  # LightGBM only
+     }
+     ```
+
+     Code example (XGBoost):
+     ```python
+     def xgboost_objective(trial: optuna.Trial, X: np.ndarray, y: np.ndarray) -> float:
+         params = {
+             "n_estimators": trial.suggest_int("n_estimators", 100, 1000),
+             "max_depth": trial.suggest_int("max_depth", 3, 12),
+             "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+             "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
+             "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
+             "reg_alpha": trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+             "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+             "gamma": trial.suggest_float("gamma", 0, 5),
+             "tree_method": "hist",
+             "eval_metric": "logloss",
+         }
+
+         model = xgb.XGBClassifier(**params, use_label_encoder=False)
+         scores = cross_val_score(model, X, y, cv=PurgedKFold(n_splits=5), scoring="f1_weighted")
+         return scores.mean()
+     ```
+
+     **Neural Network Models (LSTM, GRU, TCN, Transformer, etc.):**
+     ```python
+     NEURAL_SEARCH_SPACE = {
+         "hidden_size": (32, 256),
+         "num_layers": (1, 4),
+         "dropout": (0.1, 0.5),
+         "learning_rate": (1e-5, 1e-2, "log"),
+         "batch_size": [32, 64, 128, 256],
+         "weight_decay": (1e-6, 1e-2, "log"),
+         "attention_heads": (2, 8),  # Transformer only
+         "kernel_size": (2, 7),  # TCN only
+         "num_blocks": (1, 4),  # N-BEATS only
+         "patch_size": (8, 32),  # PatchTST only
+     }
+     ```
+
+     Code example (LSTM):
+     ```python
+     def lstm_objective(trial: optuna.Trial, X: np.ndarray, y: np.ndarray) -> float:
+         params = {
+             "hidden_size": trial.suggest_int("hidden_size", 32, 256),
+             "num_layers": trial.suggest_int("num_layers", 1, 4),
+             "dropout": trial.suggest_float("dropout", 0.1, 0.5),
+             "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True),
+             "batch_size": trial.suggest_categorical("batch_size", [32, 64, 128, 256]),
+             "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True),
+         }
+
+         model = LSTMClassifier(**params)
+         trainer = NeuralTrainer(model, early_stopping_patience=10)
+         score = trainer.cross_validate(X, y, cv=PurgedKFold(n_splits=5))
+         return score
+     ```
+
+     **Classical Models (Random Forest, Logistic Regression, SVM):**
+     ```python
+     CLASSICAL_SEARCH_SPACE = {
+         # Random Forest
+         "rf_n_estimators": (100, 500),
+         "rf_max_depth": (5, 30),
+         "rf_min_samples_split": (2, 20),
+         "rf_min_samples_leaf": (1, 10),
+         "rf_max_features": ["sqrt", "log2", None],
+
+         # Logistic Regression
+         "lr_C": (1e-4, 100, "log"),
+         "lr_penalty": ["l1", "l2", "elasticnet"],
+         "lr_solver": ["saga", "lbfgs"],
+         "lr_l1_ratio": (0.0, 1.0),  # For elasticnet
+
+         # SVM
+         "svm_C": (1e-3, 100, "log"),
+         "svm_kernel": ["rbf", "poly", "sigmoid"],
+         "svm_gamma": ["scale", "auto"],
+         "svm_degree": (2, 5),  # For poly kernel
+     }
+     ```
+
+     Code example (Random Forest):
+     ```python
+     def rf_objective(trial: optuna.Trial, X: np.ndarray, y: np.ndarray) -> float:
+         params = {
+             "n_estimators": trial.suggest_int("n_estimators", 100, 500),
+             "max_depth": trial.suggest_int("max_depth", 5, 30),
+             "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
+             "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 10),
+             "max_features": trial.suggest_categorical("max_features", ["sqrt", "log2", None]),
+             "n_jobs": -1,
+         }
+
+         model = RandomForestClassifier(**params)
+         scores = cross_val_score(model, X, y, cv=PurgedKFold(n_splits=5), scoring="f1_weighted")
+         return scores.mean()
+     ```
+
+     **Advanced/Ensemble Meta-Learners:**
+     ```python
+     ADVANCED_SEARCH_SPACE = {
+         # Ridge Meta-Learner
+         "ridge_alpha": (1e-4, 100, "log"),
+
+         # MLP Meta-Learner
+         "mlp_hidden_layers": [(64,), (128,), (64, 32), (128, 64), (256, 128, 64)],
+         "mlp_activation": ["relu", "tanh"],
+         "mlp_alpha": (1e-5, 1e-1, "log"),
+
+         # XGBoost Meta-Learner
+         "xgb_meta_n_estimators": (50, 300),
+         "xgb_meta_max_depth": (2, 6),
+         "xgb_meta_learning_rate": (0.01, 0.2, "log"),
+     }
+     ```
+
+     Code example (Calibrated Meta-Learner):
+     ```python
+     def calibrated_meta_objective(trial: optuna.Trial, oof_preds: np.ndarray, y: np.ndarray) -> float:
+         base_model = trial.suggest_categorical("base_model", ["ridge", "mlp", "xgboost"])
+
+         if base_model == "ridge":
+             alpha = trial.suggest_float("ridge_alpha", 1e-4, 100, log=True)
+             model = CalibratedClassifierCV(RidgeClassifier(alpha=alpha), cv=3)
+         elif base_model == "mlp":
+             hidden = trial.suggest_categorical("mlp_hidden", [(64,), (128,), (64, 32)])
+             model = CalibratedClassifierCV(MLPClassifier(hidden_layer_sizes=hidden), cv=3)
+         else:
+             n_est = trial.suggest_int("xgb_n_estimators", 50, 300)
+             model = CalibratedClassifierCV(XGBClassifier(n_estimators=n_est), cv=3)
+
+         scores = cross_val_score(model, oof_preds, y, cv=5, scoring="f1_weighted")
+         return scores.mean()
+     ```
+
+     ---
      Optuna Optimization Summary (PHASE_1B):
-     - Label trials: 100 (triple-barrier params)
-     - Feature selection trials: 100 (binary)
-     - Feature pruning trials: 50 (importance-based)
-     - Hyperparameter trials: 100 per model
-     - Total: ~100 + 100 + 50 + (100 × N_models) trials                                                                                                 
+
+     | Stage | Optimization Type | Trials | Parameters | Objective |
+     |-------|-------------------|--------|------------|-----------|
+     | 7 | Label Optimization | 100 | upper_mult, lower_mult, horizon, atr_period | Sharpe with costs |
+     | 8 | Feature Selection | 100 | Binary include/exclude per feature (162 params) | F1 or Sharpe |
+     | 9 | Feature Pruning | 50 | importance_threshold, cumulative_importance, correlation_threshold | Performance - complexity |
+     | 13 | Hyperparameter Tuning | 100 x 23 models | Model-specific (see above) | F1-weighted |
+
+     Total Optimization Trials:
+     - Label trials: 100 (triple-barrier params: upper_mult, lower_mult, horizon, atr_period)
+     - Feature selection trials: 100 (binary include/exclude per feature)
+     - Feature pruning trials: 50 (importance-based removal)
+     - Hyperparameter trials: 100 per model x 23 models = 2,300 trials
+     - **TOTAL: ~2,550 optimization trials**
+
+     Optuna Configuration:
+     ```python
+     OPTUNA_CONFIG = {
+         "label_optimization": {
+             "n_trials": 100,
+             "sampler": "TPESampler",
+             "pruner": "MedianPruner",
+             "direction": "maximize",
+         },
+         "feature_selection": {
+             "n_trials": 100,
+             "sampler": "TPESampler(multivariate=True)",
+             "pruner": "SuccessiveHalvingPruner",
+             "direction": "maximize",
+         },
+         "feature_pruning": {
+             "n_trials": 50,
+             "sampler": "TPESampler",
+             "pruner": "NopPruner",
+             "direction": "maximize",
+         },
+         "hyperparameter_tuning": {
+             "n_trials": 100,
+             "sampler": "TPESampler (boosting/classical) | CmaEsSampler (neural)",
+             "pruner": "MedianPruner",
+             "direction": "maximize",
+         },
+     }
+     ```                                                                                                 
                                                                                                                                         
      ---                                                                                                                                
      Deliverables                                                                                                                       

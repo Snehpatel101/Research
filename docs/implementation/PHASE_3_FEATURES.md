@@ -1,8 +1,11 @@
 # Phase 3: Feature Engineering
 
+**Pipeline Stages:** 5 (Features), 6 (Regime Detection)
 **Status:** ✅ Complete (~180 features)
 **Effort:** 5 days (completed)
-**Dependencies:** Phase 1 (clean OHLCV), Phase 2 (MTF views)
+**Dependencies:** [Phase 1](./PHASE_1_INGESTION.md) (Stages 1-3), [Phase 2](./PHASE_2_MTF_UPSCALING.md) (Stage 4)
+
+> **Cross-Reference:** This phase covers Stages 5-6 of the 16-stage pipeline. After labeling in [Phase 4](./PHASE_4_LABELING.md), Optuna optimization runs for Feature Selection (Stage 8) and Feature Pruning (Stage 9).
 
 ---
 
@@ -44,6 +47,124 @@
 **Estimate:** 1 day
 
 **Days of Work Remaining:** 1 day (Gap 3 only - Gaps 1-2 are Phase 2 dependencies)
+
+---
+
+## Optuna Feature Optimization (Post-Labeling)
+
+> **Important:** Feature Selection (Stage 8) and Feature Pruning (Stage 9) occur AFTER [Phase 4: Labeling](./PHASE_4_LABELING.md) completes. Labels are required to evaluate feature quality.
+
+### Stage 8: OPTUNA Feature Selection (100 trials)
+**Status:** ⚠️ Planned
+**Purpose:** Identify optimal feature subset using binary include/exclude decisions
+**Trials:** 100
+
+**Implementation:**
+```python
+class FeatureSelectionOptimizer:
+    def optimize(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        n_trials: int = 100
+    ) -> List[str]:
+        """Optimize feature selection with Optuna."""
+
+        def objective(trial: optuna.Trial) -> float:
+            # Binary include/exclude for each feature
+            selected_features = []
+            for feature in X.columns:
+                if trial.suggest_categorical(feature, [True, False]):
+                    selected_features.append(feature)
+
+            # Minimum feature constraint
+            if len(selected_features) < 10:
+                return float('-inf')
+
+            # Train quick model on selected features
+            X_selected = X[selected_features]
+            score = self._evaluate_features(X_selected, y)
+
+            return score
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=n_trials)
+
+        return study.best_params
+```
+
+**Search Space:**
+- Binary include/exclude for each of ~180 features
+- Minimum 10 features required
+- Objective: Cross-validated model performance (e.g., ROC-AUC)
+
+**Output:**
+- `data/optimization/feature_selection.json` - Selected feature list
+- `reports/features/{symbol}_selection_trials.html` - Optuna trial visualization
+
+### Stage 9: OPTUNA Feature Pruning (50 trials)
+**Status:** ⚠️ Planned
+**Purpose:** Importance-based feature removal to reduce noise
+**Trials:** 50
+
+**Implementation:**
+```python
+class FeaturePruningOptimizer:
+    def optimize(
+        self,
+        X: pd.DataFrame,
+        y: pd.Series,
+        importance_scores: Dict[str, float],
+        n_trials: int = 50
+    ) -> List[str]:
+        """Prune features based on importance threshold."""
+
+        def objective(trial: optuna.Trial) -> float:
+            # Importance threshold (0.0 = keep all, 1.0 = remove all)
+            threshold = trial.suggest_float("importance_threshold", 0.0, 0.5)
+
+            # Keep features above threshold
+            min_importance = threshold * max(importance_scores.values())
+            selected_features = [
+                f for f, imp in importance_scores.items()
+                if imp >= min_importance
+            ]
+
+            if len(selected_features) < 10:
+                return float('-inf')
+
+            X_pruned = X[selected_features]
+            score = self._evaluate_features(X_pruned, y)
+
+            return score
+
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=n_trials)
+
+        return study.best_params
+```
+
+**Search Space:**
+- `importance_threshold`: 0.0 to 0.5 (percentage of max importance)
+- Importance scores from XGBoost feature_importances_ or permutation importance
+- Minimum 10 features retained
+
+**Output:**
+- `data/optimization/feature_pruning.json` - Pruned feature list
+- `reports/features/{symbol}_pruning_trials.html` - Optuna trial visualization
+
+### Feature Optimization Workflow
+
+```
+[Phase 3: Features] -> [Phase 4: Labeling] -> [Stage 8: Selection] -> [Stage 9: Pruning]
+     Stage 5-6              Stage 7              100 trials            50 trials
+```
+
+**Dependencies:**
+1. Features must be computed (Stage 5)
+2. Labels must be generated (Stage 7) - needed to evaluate feature quality
+3. Feature Selection runs AFTER labels exist
+4. Feature Pruning runs AFTER selection
 
 ---
 
@@ -585,8 +706,28 @@ validation:
 
 **After Phase 3 completion:**
 1. ✅ ~180 features ready for labeling
-2. ➡️ Proceed to **Phase 4: Labeling** for triple-barrier labels
-3. ➡️ Features will be scaled in Phase 4 (after splits to prevent leakage)
+2. ➡️ Proceed to **[Phase 4: Labeling](./PHASE_4_LABELING.md)** (Stage 7) for triple-barrier labels with Optuna optimization
+3. ➡️ After labeling, run **Stage 8: OPTUNA Feature Selection** (100 trials)
+4. ➡️ Then run **Stage 9: OPTUNA Feature Pruning** (50 trials)
+5. ➡️ Features will be scaled in Stage 11 (after splits to prevent leakage)
+
+---
+
+## Pipeline Stage Summary
+
+This phase implements the following stages from the 16-stage pipeline:
+
+| Stage | Name | Description | Status |
+|-------|------|-------------|--------|
+| 5 | Features | Compute ~162 technical indicators | ✅ Complete |
+| 6 | Regime | Market regime detection | ✅ Complete |
+| 8 | OPTUNA Feature Selection | Binary include/exclude optimization (100 trials) | ⚠️ Planned (post-labeling) |
+| 9 | OPTUNA Feature Pruning | Importance-based removal (50 trials) | ⚠️ Planned (post-labeling) |
+
+**Note:** Stages 8-9 run AFTER Stage 7 (Labeling) because labels are required to evaluate feature quality.
+
+**Previous Stages:** Stage 4 (MTF Upscaling) in [PHASE_2_MTF_UPSCALING.md](./PHASE_2_MTF_UPSCALING.md)
+**Next Stages:** Stage 7 (OPTUNA Label Optimization) in [PHASE_4_LABELING.md](./PHASE_4_LABELING.md)
 
 **Validation Checklist:**
 - [ ] ~180 features calculated

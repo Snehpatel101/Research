@@ -6,11 +6,11 @@ This directory contains all configuration files for the ML Model Factory.
 
 | Directory | Description | Files |
 |-----------|-------------|-------|
-| [models/](models/) | Model-specific configurations | 22 model configs (XGBoost, LSTM, etc.) |
+| [models/](models/) | Model-specific configurations | 23 model configs (XGBoost, LSTM, etc.) |
 | [pipeline/](pipeline/) | Pipeline and training settings | training.yaml, cv.yaml, scaling_stats.json |
 | [ensembles/](ensembles/) | Ensemble configurations | boosting_trio.yaml, temporal_stack.yaml |
 | [experiments/](experiments/) | Experiment templates | baseline_experiment.yaml, full_benchmark.yaml |
-| [optimization/](optimization/README.md) | GA optimization results | ga_results/ (symbol-specific) |
+| [optimization/](optimization/README.md) | Optuna optimization configs | label_optimization.yaml, feature_selection.yaml, feature_pruning.yaml, hyperparameter.yaml |
 | [features/](features/README.md) | Feature engineering configs | selection + MTF strategies |
 
 ## Configuration Structure
@@ -20,7 +20,7 @@ config/
 ├── README.md                           # This file
 ├── INDEX.md                            # Comprehensive configuration guide
 │
-├── models/                             # Model configurations (22 models)
+├── models/                             # Model configurations (23 models)
 │   ├── xgboost.yaml
 │   ├── lightgbm.yaml
 │   ├── catboost.yaml
@@ -46,21 +46,23 @@ config/
 │
 ├── experiments/                        # Experiment templates
 │   ├── baseline_experiment.yaml        # Quick baseline validation
-│   └── full_benchmark.yaml             # Full 22-model benchmark
+│   └── full_benchmark.yaml             # Full 23-model benchmark
 │
-├── optimization/                       # Optimization artifacts
-│   └── ga_results/                     # GA optimization results
+├── optimization/                       # Optuna optimization configs
+│   ├── README.md                       # Optimization documentation
+│   ├── label_optimization.yaml         # Triple barrier parameter optimization
+│   ├── feature_selection.yaml          # Binary feature selection
+│   ├── feature_pruning.yaml            # Importance-based pruning
+│   ├── hyperparameter.yaml             # Per-model HP optimization
+│   └── ga_results/                     # GA optimization results (legacy)
 │       ├── MES_ga_h5_best.json
-│       ├── MES_ga_h10_best.json
-│       ├── MES_ga_h15_best.json
-│       ├── MES_ga_h20_best.json
-│       ├── MGC_ga_h5_best.json
-│       ├── MGC_ga_h10_best.json
-│       ├── MGC_ga_h15_best.json
-│       └── MGC_ga_h20_best.json
+│       └── ...
 │
-└── features/                           # Feature configs (reserved)
-    └── (future feature engineering configs)
+└── features/                           # Feature engineering configs
+    ├── README.md                       # Feature configuration documentation
+    ├── model_features.yaml             # Per-model feature selection
+    ├── mtf_strategies.yaml             # Multi-timeframe strategies
+    └── selection_methods.yaml          # Feature selection methods
 ```
 
 ## Quick Start
@@ -105,6 +107,18 @@ python scripts/run_cv.py \
   --tune
 ```
 
+### 5. Optuna Optimization
+```bash
+# Optimize triple barrier labels
+python scripts/optimize_labels.py --config config/optimization/label_optimization.yaml
+
+# Optimize feature selection
+python scripts/optimize_features.py --mode selection --config config/optimization/feature_selection.yaml
+
+# Optimize hyperparameters
+python scripts/tune_model.py --model xgboost --config config/optimization/hyperparameter.yaml
+```
+
 ## Configuration Files
 
 ### Model Configurations
@@ -137,6 +151,20 @@ See [experiments/README.md](experiments/README.md) for experiment templates.
 **Available Templates:**
 - `baseline_experiment.yaml` - Quick validation (15 mins)
 - `full_benchmark.yaml` - Comprehensive benchmark (12 hours)
+
+### Optimization Configurations
+See [optimization/README.md](optimization/README.md) for Optuna optimization configs.
+
+**Pipeline Integration - 4 Optimization Stages:**
+
+| Stage | Config File | Trials | Purpose |
+|-------|-------------|--------|---------|
+| Stage 7 | `label_optimization.yaml` | 100 | Triple barrier parameters (upper_mult, lower_mult, horizon, atr_period) |
+| Stage 8 | `feature_selection.yaml` | 100 | Binary feature include/exclude (~180 features → ~60-100) |
+| Stage 9 | `feature_pruning.yaml` | 50 | Importance-based pruning (~60-100 features → ~30-60) |
+| Stage 13 | `hyperparameter.yaml` | 100 per model | Per-model hyperparameter optimization (23 models) |
+
+**Total Trials:** 100 + 100 + 50 + (100 × 23) = **2,550 Optuna trials**
 
 ## Configuration Validation
 
@@ -271,5 +299,5 @@ Expected batch_size=512 (colab), got batch_size=256 (default)
 
 ---
 
-*Last Updated: 2026-01-13*
-*Configuration Version: 2.0*
+*Last Updated: 2026-01-18*
+*Configuration Version: 2.1*

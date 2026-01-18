@@ -1,8 +1,11 @@
 # Phase 2: Configurable Primary Timeframe & MTF Strategies
 
+**Pipeline Stage:** 4 (MTF Upscaling)
 **Status:** ✅ Complete (9-timeframe ladder implemented, configurable primary timeframe)
 **Effort:** 3 days (completed)
-**Dependencies:** Phase 1 (clean 1-minute OHLCV)
+**Dependencies:** [Phase 1](./PHASE_1_INGESTION.md) (Stages 1-3: clean 1-minute OHLCV)
+
+> **Cross-Reference:** This phase covers Stage 4 of the 16-stage pipeline. See [PHASE_3_FEATURES.md](./PHASE_3_FEATURES.md) for Stage 5 (Features) and Stage 6 (Regime Detection).
 
 ---
 
@@ -585,8 +588,21 @@ phase2:
 
 **After Phase 2 completion:**
 1. ✅ MTF datasets (9 timeframes) ready for feature engineering
-2. ➡️ Proceed to **Phase 3: Feature Engineering** to calculate indicators on all timeframes
-3. ➡️ Strategy 3 implementation enables advanced sequence models (Phase 6)
+2. ➡️ Proceed to **[Phase 3: Feature Engineering](./PHASE_3_FEATURES.md)** (Stages 5-6) to calculate indicators on all timeframes
+3. ➡️ Strategy 3 implementation enables advanced sequence models
+
+---
+
+## Pipeline Stage Summary
+
+This phase implements Stage 4 of the 16-stage pipeline:
+
+| Stage | Name | Description |
+|-------|------|-------------|
+| 4 | MTF Upscaling | Create 9 timeframes from 1-minute data |
+
+**Previous Stages:** Stages 1-3 (Ingestion, Cleaning, Sessions) in [PHASE_1_INGESTION.md](./PHASE_1_INGESTION.md)
+**Next Stages:** Stages 5-6 (Features, Regime) in [PHASE_3_FEATURES.md](./PHASE_3_FEATURES.md)
 
 **Validation Checklist:**
 - [ ] All 9 timeframes created (current: 5)

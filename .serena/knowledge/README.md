@@ -4,6 +4,28 @@ This directory contains semantic knowledge base files for the ML Model Factory p
 
 ---
 
+## Master Plan (START HERE)
+
+### `ml_factory_master_plan.md` ⭐ PRIMARY REFERENCE
+**Purpose:** Complete unified pipeline implementation plan with all architectural decisions.
+
+**Contents:**
+- 16-stage pipeline architecture with Optuna optimization
+- 4 Optuna loops: Label (100 trials), Feature Selection (100), Pruning (50), Hyperparams (2,300)
+- 23 models across 6 families (Boosting, Classical, Neural Basic, Neural Advanced, Ensemble, Meta)
+- Migration map: Current → Proposed locations
+- Dependency tree: Stage inputs/outputs/configs
+- Implementation priorities and success criteria
+
+**Use when:** Understanding the complete plan, implementing new stages, reviewing architecture.
+
+**Related Docs:**
+- `docs/DEPENDENCY_TREE.md` - Full ASCII dependency tree
+- `docs/implementation/UNIFIED_PIPELINE_ARCHITECTURE.md` - Detailed stage specifications
+- `config/optimization/*.yaml` - Optuna configuration files
+
+---
+
 ## Knowledge Base Files
 
 ### 1. `pipeline_implementation_status.md`
@@ -114,19 +136,33 @@ Guidelines for code editing, refactoring, and file organization.
 4. **Leakage prevention** - Purge, embargo, shift(1), train-only scaling
 5. **Plugin-based models** - Register via `@register` decorator
 
-### Current Implementation Status
-- **Phase 1 (Ingestion):** ✅ Complete
-- **Phase 2 (MTF):** ✅ Complete (9 intraday timeframes: 1m-1h)
-- **Phase 3 (Features):** ✅ Complete (~180 features)
-- **Phase 4 (Labeling):** ✅ Complete
-- **Phase 5 (Adapters):** ✅ Complete (2D/3D adapters, 4D not needed)
-- **Phase 6 (Models):** ✅ Complete (23 models: 6 tabular + 10 neural + 3 ensemble + 4 meta)
-- **Phase 7 (Stacking):** ✅ Complete (heterogeneous ensemble support)
+### 16-Stage Pipeline Architecture (V4.0)
 
-### P0 Architecture Improvements (From Oracle Review)
-1. Lineage unification (pipeline→training artifacts) - 1-2 days
-2. Timestamp alignment checks for heterogeneous stacking - 1-2 days
-3. Standardize evaluation reports (JSON + markdown) - 4 hours
+```
+PHASE A: DATA (Stages 1-6)           PHASE B: OPTUNA (Stages 7-9)
+├── Stage 1: Ingestion               ├── Stage 7: Label Optimization (100 trials)
+├── Stage 2: Cleaning                ├── Stage 8: Feature Selection (100 trials)
+├── Stage 3: Sessions                └── Stage 9: Feature Pruning (50 trials)
+├── Stage 4: MTF Upscaling
+├── Stage 5: Features (180)          PHASE D: TRAINING (Stages 13-15)
+└── Stage 6: Regime Detection        ├── Stage 13: Hyperparameter Opt (2,300 trials)
+                                     ├── Stage 14: Training (23 models)
+PHASE C: PREPROCESSING (10-12)       └── Stage 15: Stacking (Meta-learners)
+├── Stage 10: Splits (70/15/15)
+├── Stage 11: Scaling (RobustScaler) PHASE E: DEPLOYMENT (Stage 16)
+└── Stage 12: Adaptation (2D/3D/4D)  └── Stage 16: Bundling (ModelBundle V1.1.0)
+```
+
+### Key Metrics
+- **Total Optuna Trials:** 2,550
+- **Total Models:** 23 (Boosting: 3, Classical: 3, Neural: 10, Ensemble: 3, Meta: 4)
+- **Features:** 180 → 60-100 → 30-60 (after optimization)
+
+### Implementation Priority (Next Steps)
+1. **Create:** `src/pipeline/unified.py` - MLPipeline master orchestrator
+2. **Create:** `src/pipeline/config.py` - MLConfig unified configuration
+3. **Create:** `src/pipeline/state.py` - PipelineState management
+4. **Create:** `src/pipeline/phases/*.py` - Stage wrappers
 
 ---
 
