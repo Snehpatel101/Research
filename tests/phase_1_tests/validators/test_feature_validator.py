@@ -21,7 +21,7 @@ from importlib.util import find_spec
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.validation.features import (
+from src.pipeline._phase1_impl.stages.validation.features import (
     get_feature_columns,
     check_feature_correlations,
     compute_feature_importance,
@@ -31,7 +31,7 @@ from src.phase1.stages.validation.features import (
 
 
 def _set_stationarity_enabled(enabled: bool) -> dict:
-    from src.phase1.config.features import STATIONARITY_TESTS
+    from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
     previous = STATIONARITY_TESTS.copy()
     STATIONARITY_TESTS['enabled'] = enabled
     return previous
@@ -379,13 +379,13 @@ class TestRunStationarityTests:
             previous = _set_stationarity_enabled(False)
             results = run_stationarity_tests(df, feature_cols)
             assert results == []
-            from src.phase1.config.features import STATIONARITY_TESTS
+            from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
             STATIONARITY_TESTS.update(previous)
             return
 
         previous = _set_stationarity_enabled(True)
         results = run_stationarity_tests(df, feature_cols)
-        from src.phase1.config.features import STATIONARITY_TESTS
+        from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
         STATIONARITY_TESTS.update(previous)
 
         # Should test return and rsi features
@@ -412,13 +412,13 @@ class TestRunStationarityTests:
             previous = _set_stationarity_enabled(False)
             results = run_stationarity_tests(df, ['return_1'])
             assert results == []
-            from src.phase1.config.features import STATIONARITY_TESTS
+            from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
             STATIONARITY_TESTS.update(previous)
             return
 
         previous = _set_stationarity_enabled(True)
         results = run_stationarity_tests(df, ['return_1'])
-        from src.phase1.config.features import STATIONARITY_TESTS
+        from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
         STATIONARITY_TESTS.update(previous)
 
         if len(results) > 0:
@@ -432,7 +432,7 @@ class TestRunStationarityTests:
         df = pd.DataFrame({'price': [100] * 100})
         previous = _set_stationarity_enabled(False)
         results = run_stationarity_tests(df, [])
-        from src.phase1.config.features import STATIONARITY_TESTS
+        from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
         STATIONARITY_TESTS.update(previous)
 
         assert results == []
@@ -447,13 +447,13 @@ class TestRunStationarityTests:
             previous = _set_stationarity_enabled(False)
             results = run_stationarity_tests(df, ['return_1'])
             assert results == []
-            from src.phase1.config.features import STATIONARITY_TESTS
+            from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
             STATIONARITY_TESTS.update(previous)
             return
 
         previous = _set_stationarity_enabled(True)
         results = run_stationarity_tests(df, ['return_1'])
-        from src.phase1.config.features import STATIONARITY_TESTS
+        from src.pipeline._phase1_impl.config.features import STATIONARITY_TESTS
         STATIONARITY_TESTS.update(previous)
         # Should skip or handle gracefully
         assert isinstance(results, list)

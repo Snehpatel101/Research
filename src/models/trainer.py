@@ -14,7 +14,7 @@ The Trainer class handles the complete training pipeline:
 Example:
     >>> from src.models.trainer import Trainer
     >>> from src.models.config import TrainerConfig
-    >>> from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    >>> from src.core.container import TimeSeriesDataContainer
     ...
     >>> config = TrainerConfig(model_name="xgboost", horizon=20)
     >>> container = TimeSeriesDataContainer.from_parquet_dir(

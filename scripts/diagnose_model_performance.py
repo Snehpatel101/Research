@@ -628,7 +628,7 @@ def run_diagnostics(
         Dict with all diagnostic results
     """
     from src.models.registry import ModelRegistry
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
     # Import models to ensure registration
     import src.models  # noqa: F401

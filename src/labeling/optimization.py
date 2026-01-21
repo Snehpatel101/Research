@@ -20,7 +20,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -195,6 +196,7 @@ class LabelOptimizer:
         predictability_weight: float = 0.3,
         sample_penalty_weight: float = 0.1,
         verbose: int = 1,
+        storage_path: Optional[Union[str, Path]] = None,
     ) -> None:
         """
         Initialize the label optimizer.
@@ -212,6 +214,9 @@ class LabelOptimizer:
             predictability_weight: Weight for predictability score (0-1).
             sample_penalty_weight: Weight for sample count penalty (0-1).
             verbose: Verbosity level (0=silent, 1=progress, 2=debug).
+            storage_path: Optional path for SQLite storage to persist
+                Optuna study. If None, uses in-memory storage.
+                Enables resuming interrupted studies.
 
         Raises:
             ImportError: If Optuna is not installed.
@@ -236,6 +241,7 @@ class LabelOptimizer:
         self.predictability_weight = predictability_weight
         self.sample_penalty_weight = sample_penalty_weight
         self.verbose = verbose
+        self.storage_path = Path(storage_path) if storage_path else None
 
         # Validate weights
         total_weight = balance_weight + predictability_weight + sample_penalty_weight
@@ -314,10 +320,18 @@ class LabelOptimizer:
         else:
             optuna.logging.set_verbosity(optuna.logging.DEBUG)
 
+        # Configure storage for study persistence
+        storage = None
+        if self.storage_path:
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            storage = optuna.storages.RDBStorage(f"sqlite:///{self.storage_path}")
+
         study = optuna.create_study(
             direction="maximize",
             sampler=sampler,
             study_name="triple_barrier_optimization",
+            storage=storage,
+            load_if_exists=True,
         )
 
         # Define objective with search space

@@ -546,7 +546,7 @@ class PreprocessingGraph:
     def _apply_cleaning(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply data cleaning and resampling."""
         try:
-            from src.phase1.stages.clean.cleaner import DataCleaner
+            from src.pipeline._phase1_impl.stages.clean.cleaner import DataCleaner
 
             # Create a temporary cleaner for resampling
             # Note: In production, this would use the saved cleaner config
@@ -588,10 +588,10 @@ class PreprocessingGraph:
         """Apply feature engineering."""
         try:
             # Import feature functions
-            from src.phase1.stages.features.microstructure import (
+            from src.pipeline._phase1_impl.stages.features.microstructure import (
                 add_microstructure_features,
             )
-            from src.phase1.stages.features.momentum import (
+            from src.pipeline._phase1_impl.stages.features.momentum import (
                 add_cci,
                 add_macd,
                 add_mfi,
@@ -600,15 +600,15 @@ class PreprocessingGraph:
                 add_stochastic,
                 add_williams_r,
             )
-            from src.phase1.stages.features.moving_averages import add_ema, add_sma
-            from src.phase1.stages.features.price_features import (
+            from src.pipeline._phase1_impl.stages.features.moving_averages import add_ema, add_sma
+            from src.pipeline._phase1_impl.stages.features.price_features import (
                 add_price_ratios,
                 add_returns,
             )
-            from src.phase1.stages.features.regime import add_regime_features
-            from src.phase1.stages.features.temporal import add_temporal_features
-            from src.phase1.stages.features.trend import add_adx, add_supertrend
-            from src.phase1.stages.features.volatility import (
+            from src.pipeline._phase1_impl.stages.features.regime import add_regime_features
+            from src.pipeline._phase1_impl.stages.features.temporal import add_temporal_features
+            from src.pipeline._phase1_impl.stages.features.trend import add_adx, add_supertrend
+            from src.pipeline._phase1_impl.stages.features.volatility import (
                 add_atr,
                 add_bollinger_bands,
                 add_garman_klass_volatility,
@@ -618,7 +618,7 @@ class PreprocessingGraph:
                 add_rogers_satchell_volatility,
                 add_yang_zhang_volatility,
             )
-            from src.phase1.stages.features.volume import (
+            from src.pipeline._phase1_impl.stages.features.volume import (
                 add_dollar_volume,
                 add_volume_features,
                 add_vwap,
@@ -669,7 +669,7 @@ class PreprocessingGraph:
             # Apply wavelets if enabled
             if self.config.wavelets.enabled and len(df) >= self.config.wavelets.window:
                 try:
-                    from src.phase1.stages.features.wavelets import add_wavelet_features
+                    from src.pipeline._phase1_impl.stages.features.wavelets import add_wavelet_features
 
                     wav_cfg = self.config.wavelets
                     df = add_wavelet_features(
@@ -701,7 +701,7 @@ class PreprocessingGraph:
     def _apply_mtf(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply multi-timeframe features."""
         try:
-            from src.phase1.stages.mtf.generator import MTFFeatureGenerator
+            from src.pipeline._phase1_impl.stages.mtf.generator import MTFFeatureGenerator
 
             cfg = self.config.mtf
             mtf_gen = MTFFeatureGenerator(

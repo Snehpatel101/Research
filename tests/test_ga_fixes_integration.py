@@ -6,9 +6,9 @@ This test verifies that the fixes work correctly in realistic trading scenarios.
 import numpy as np
 import pytest
 
-from src.phase1.stages.ga_optimize.fitness import calculate_fitness, evaluate_individual
-from src.phase1.stages.labeling import triple_barrier_numba
-from src.phase1.config import TRANSACTION_COSTS, TICK_VALUES
+from src.pipeline._phase1_impl.stages.ga_optimize.fitness import calculate_fitness, evaluate_individual
+from src.pipeline._phase1_impl.stages.labeling import triple_barrier_numba
+from src.pipeline._phase1_impl.config import TRANSACTION_COSTS, TICK_VALUES
 
 
 class TestIntegration:

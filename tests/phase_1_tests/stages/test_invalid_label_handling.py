@@ -18,7 +18,7 @@ import logging
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.splits.core import (
+from src.pipeline._phase1_impl.stages.splits.core import (
     validate_label_distribution,
     create_chronological_splits,
 )

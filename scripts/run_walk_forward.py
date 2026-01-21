@@ -43,7 +43,7 @@ from src.cross_validation.walk_forward import (
 from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from src.models.registry import ModelRegistry
 from src.models.base import PredictionOutput
-from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+from src.core.container import TimeSeriesDataContainer
 
 # Configure logging
 logging.basicConfig(

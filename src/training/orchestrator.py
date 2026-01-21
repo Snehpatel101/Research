@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.models import Trainer
-from src.phase1.stages.datasets import TimeSeriesDataContainer
+from src.core.container import TimeSeriesDataContainer
 from .config import ExperimentConfig, ModelConfig
 from .config_loader import ConfigLoader
 from .feature_selector import FeatureSelector
@@ -202,7 +202,7 @@ class TrainingOrchestrator:
         Returns:
             New container with filtered feature set
         """
-        from src.phase1.stages.datasets import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         split_dfs = {}
 

@@ -33,7 +33,7 @@ from src.cross_validation.cv_runner import (
     analyze_cv_stability,
 )
 from src.cross_validation.oof_generator import analyze_prediction_correlation
-from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+from src.core.container import TimeSeriesDataContainer
 from src.models.registry import ModelRegistry
 
 # Import models to register them

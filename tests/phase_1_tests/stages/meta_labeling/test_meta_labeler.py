@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.phase1.stages.meta_labeling.meta_labeler import (
+from src.pipeline._phase1_impl.stages.meta_labeling.meta_labeler import (
     MetaLabelGenerator,
     MetaLabelingConfig,
     MetaLabelResult,

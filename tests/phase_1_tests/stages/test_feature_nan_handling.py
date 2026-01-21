@@ -23,8 +23,8 @@ import sys
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.features import FeatureEngineer
-from src.phase1.stages.features.nan_handling import clean_nan_columns, audit_nan_columns
+from src.pipeline._phase1_impl.stages.features import FeatureEngineer
+from src.pipeline._phase1_impl.stages.features.nan_handling import clean_nan_columns, audit_nan_columns
 
 
 # =============================================================================

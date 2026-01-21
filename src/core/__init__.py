@@ -9,6 +9,8 @@ This package is the SINGLE SOURCE OF TRUTH for:
 - Constants (CANONICAL_TIMEFRAMES, MODEL_FAMILIES, etc.)
 - Validation utilities
 - PipelineConfig (centralized configuration)
+- Pipeline lineage tracking (PipelineLineage, DatasetChecksum)
+- TimeSeriesDataContainer (unified data container for ML)
 
 Usage:
     from src.core import (
@@ -42,6 +44,16 @@ Usage:
         ValidationError,
         validate_input_shape,
         validate_dataframe,
+
+        # Lineage
+        PipelineLineage,
+        DatasetChecksum,
+        validate_dataset_checksum,
+
+        # Container
+        TimeSeriesDataContainer,
+        DataContainerConfig,
+        SplitData,
     )
 """
 
@@ -176,6 +188,18 @@ from src.core.config import (
 )
 
 # =============================================================================
+# LINEAGE - Pipeline lineage tracking
+# =============================================================================
+from src.core.lineage import (
+    DatasetChecksum,
+    PipelineLineage,
+    compute_dataframe_checksum,
+    compute_file_checksum,
+    create_dataset_checksum,
+    validate_dataset_checksum,
+)
+
+# =============================================================================
 # EXISTING EXPORTS (preserved from original)
 # =============================================================================
 from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
@@ -200,6 +224,17 @@ from src.core.reproducibility import (
     get_reproducibility_info,
     get_worker_init_fn,
     set_all_seeds,
+)
+
+# =============================================================================
+# CONTAINER - TimeSeriesDataContainer (unified data container)
+# =============================================================================
+from src.core.container import (
+    TimeSeriesDataContainer,
+    DataContainerConfig,
+    SplitData,
+    VALID_SPLITS,
+    INVALID_LABEL,
 )
 
 # =============================================================================
@@ -332,6 +367,16 @@ __all__ = [
     "validate_timeframe_list",
 
     # =========================================================================
+    # LINEAGE
+    # =========================================================================
+    "DatasetChecksum",
+    "PipelineLineage",
+    "compute_dataframe_checksum",
+    "compute_file_checksum",
+    "create_dataset_checksum",
+    "validate_dataset_checksum",
+
+    # =========================================================================
     # LEGACY EXPORTS (from original core package)
     # =========================================================================
     # Paths
@@ -361,4 +406,13 @@ __all__ = [
     "get_reproducibility_info",
     "ensure_reproducibility",
     "get_worker_init_fn",
+
+    # =========================================================================
+    # CONTAINER - TimeSeriesDataContainer
+    # =========================================================================
+    "TimeSeriesDataContainer",
+    "DataContainerConfig",
+    "SplitData",
+    "VALID_SPLITS",
+    "INVALID_LABEL",
 ]

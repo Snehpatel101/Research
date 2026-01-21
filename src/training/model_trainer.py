@@ -259,7 +259,7 @@ class ModelTrainer:
         trainer = Trainer(trainer_config)
 
         # Build container from prepared data
-        from src.phase1.stages.datasets import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         # Handle different data ranks for container
         # The container expects 2D data; model will reshape internally if needed

@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 from datetime import datetime, timedelta
 
-from src.phase1.stages.splits.core import (
+from src.pipeline._phase1_impl.stages.splits.core import (
     create_chronological_splits,
     validate_no_overlap,
 )

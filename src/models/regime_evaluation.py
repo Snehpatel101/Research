@@ -581,7 +581,7 @@ class RegimeClassifier:
         """
         # Import from existing implementation
         try:
-            from src.phase1.stages.regime.trend import calculate_adx
+            from src.pipeline._phase1_impl.stages.regime.trend import calculate_adx
 
             return calculate_adx(high, low, close, self.trend_window)
         except ImportError:

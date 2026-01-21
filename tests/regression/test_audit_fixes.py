@@ -34,7 +34,7 @@ class TestHMMNoLookahead:
     def test_hmm_rolling_mode_no_future_data(self):
         """HMM in rolling mode should only use past data for predictions."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime.hmm import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime.hmm import HMMRegimeDetector
 
         # Create test data with distinct patterns
         np.random.seed(42)
@@ -60,7 +60,7 @@ class TestHMMNoLookahead:
     def test_hmm_expanding_mode_attribute(self):
         """HMM expanding mode should be configurable."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime.hmm import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime.hmm import HMMRegimeDetector
 
         detector = HMMRegimeDetector(
             n_states=2,
@@ -96,7 +96,7 @@ class TestGANoTestLeakage:
     def test_ga_safe_mode_uses_train_portion_only(self):
         """GA safe mode should only optimize on training data portion."""
         try:
-            from src.phase1.stages.ga_optimize.optuna_optimizer import (
+            from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import (
                 run_optuna_optimization_safe,
             )
         except ImportError:
@@ -133,7 +133,7 @@ class TestGANoTestLeakage:
 
     def test_ga_standard_mode_exists(self):
         """Standard GA optimization function should exist."""
-        from src.phase1.stages.ga_optimize.optuna_optimizer import (
+        from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import (
             run_optuna_optimization,
         )
 
@@ -156,7 +156,7 @@ class TestTransactionCostsApplied:
 
     def test_barrier_config_has_transaction_costs(self):
         """Barrier configuration should include transaction cost settings."""
-        from src.phase1.config.barriers_config import (
+        from src.pipeline._phase1_impl.config.barriers_config import (
             TRANSACTION_COSTS,
             SLIPPAGE_TICKS,
         )
@@ -171,7 +171,7 @@ class TestTransactionCostsApplied:
 
     def test_triple_barrier_accepts_cost_parameter(self):
         """Triple barrier labeler should accept transaction cost parameter."""
-        from src.phase1.stages.labeling.triple_barrier import TripleBarrierLabeler
+        from src.pipeline._phase1_impl.stages.labeling.triple_barrier import TripleBarrierLabeler
 
         # Create labeler with cost configuration
         labeler = TripleBarrierLabeler(
@@ -189,7 +189,7 @@ class TestTransactionCostsApplied:
 
     def test_triple_barrier_can_disable_costs(self):
         """Triple barrier labeler should allow disabling transaction costs."""
-        from src.phase1.stages.labeling.triple_barrier import TripleBarrierLabeler
+        from src.pipeline._phase1_impl.stages.labeling.triple_barrier import TripleBarrierLabeler
 
         labeler = TripleBarrierLabeler(
             k_up=2.0,
@@ -230,7 +230,7 @@ class TestRegimeOutputShifted:
 
     def test_volatility_regime_detector_exists(self):
         """Volatility regime detector should be available."""
-        from src.phase1.stages.regime.volatility import VolatilityRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime.volatility import VolatilityRegimeDetector
 
         np.random.seed(42)
         n_bars = 100
@@ -251,7 +251,7 @@ class TestRegimeOutputShifted:
     def test_composite_regime_detector_exists(self):
         """Composite regime detector should be available."""
         try:
-            from src.phase1.stages.regime.composite import CompositeRegimeDetector
+            from src.pipeline._phase1_impl.stages.regime.composite import CompositeRegimeDetector
 
             detector = CompositeRegimeDetector()
             assert detector is not None
@@ -318,7 +318,7 @@ class TestNoLookaheadBias:
 
     def test_triple_barrier_labeler_computes_labels(self):
         """Triple barrier labeler should compute labels correctly."""
-        from src.phase1.stages.labeling.triple_barrier import TripleBarrierLabeler
+        from src.pipeline._phase1_impl.stages.labeling.triple_barrier import TripleBarrierLabeler
 
         np.random.seed(42)
         n_bars = 200

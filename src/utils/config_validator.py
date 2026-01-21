@@ -98,7 +98,7 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
         ValidationResult with errors/warnings/suggestions
 
     Example:
-        >>> from src.phase1.pipeline_config import PipelineConfig
+        >>> from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         >>> config = PipelineConfig()
         >>> result = validate_pipeline_config(config)
         >>> if not result.is_valid:

@@ -234,7 +234,7 @@ def get_trainer_for_colab(
     """
     from src.models.trainer import Trainer
     from src.models.config import TrainerConfig
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
     # Set Colab-friendly defaults
     if output_dir is None:

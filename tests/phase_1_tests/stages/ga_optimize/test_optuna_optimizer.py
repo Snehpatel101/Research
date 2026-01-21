@@ -17,7 +17,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.ga_optimize.optuna_optimizer import (
+from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import (
     run_optuna_optimization,
     ConvergenceRecord,
     get_seeded_trials,
@@ -254,7 +254,7 @@ class TestBackwardCompatibility:
 
     def test_run_ga_optimization_interface(self, sample_ohlcv_df):
         """Test run_ga_optimization (wrapper) returns same structure."""
-        from src.phase1.stages.ga_optimize import run_ga_optimization
+        from src.pipeline._phase1_impl.stages.ga_optimize import run_ga_optimization
 
         results, logbook = run_ga_optimization(
             df=sample_ohlcv_df,
@@ -285,7 +285,7 @@ class TestSafeModeOptimization:
 
     def test_run_optuna_optimization_safe_returns_dict(self, sample_ohlcv_df):
         """Test run_optuna_optimization_safe returns expected result structure."""
-        from src.phase1.stages.ga_optimize.optuna_optimizer import run_optuna_optimization_safe
+        from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import run_optuna_optimization_safe
 
         results, convergence = run_optuna_optimization_safe(
             df=sample_ohlcv_df,
@@ -316,7 +316,7 @@ class TestSafeModeOptimization:
 
     def test_safe_mode_uses_only_training_data(self, sample_ohlcv_df):
         """Test that safe mode only uses training portion of data."""
-        from src.phase1.stages.ga_optimize.optuna_optimizer import run_optuna_optimization_safe
+        from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import run_optuna_optimization_safe
 
         n_total = len(sample_ohlcv_df)
         train_ratio = 0.70
@@ -350,7 +350,7 @@ class TestSafeModeOptimization:
         characteristics than the training portion, and verifies that the optimized
         parameters are determined ONLY by the training data.
         """
-        from src.phase1.stages.ga_optimize.optuna_optimizer import (
+        from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import (
             run_optuna_optimization_safe,
             run_optuna_optimization,
         )
@@ -425,7 +425,7 @@ class TestSafeModeOptimization:
 
     def test_run_ga_optimization_safe_wrapper(self, sample_ohlcv_df):
         """Test run_ga_optimization_safe wrapper works correctly."""
-        from src.phase1.stages.ga_optimize import run_ga_optimization_safe
+        from src.pipeline._phase1_impl.stages.ga_optimize import run_ga_optimization_safe
 
         results, logbook = run_ga_optimization_safe(
             df=sample_ohlcv_df,
@@ -453,7 +453,7 @@ class TestSafeModeOptimization:
 
     def test_safe_mode_minimum_samples_validation(self):
         """Test that safe mode rejects datasets with too few training samples."""
-        from src.phase1.stages.ga_optimize.optuna_optimizer import run_optuna_optimization_safe
+        from src.pipeline._phase1_impl.stages.ga_optimize.optuna_optimizer import run_optuna_optimization_safe
 
         # Create a very small dataset
         np.random.seed(42)

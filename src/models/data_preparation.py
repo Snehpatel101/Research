@@ -15,7 +15,7 @@ import numpy as np
 if TYPE_CHECKING:
     from torch.utils.data import Dataset
 
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 

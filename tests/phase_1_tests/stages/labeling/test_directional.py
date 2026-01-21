@@ -20,7 +20,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.labeling import DirectionalLabeler, LabelingType
+from src.pipeline._phase1_impl.stages.labeling import DirectionalLabeler, LabelingType
 
 
 @pytest.fixture

@@ -1,6 +1,12 @@
 """
 Unified CLI for ML Pipeline.
 
+NOTE: This CLI uses MLPipeline which is deprecated in favor of MLFactory.
+The CLI will emit deprecation warnings but remains functional for backward
+compatibility. Future versions will migrate to MLFactory.
+
+See src/factory.py for the canonical MLFactory entry point.
+
 Provides simple command-line interface:
 - ml run: Full pipeline (data + training + evaluation)
 - ml data: Data pipeline only

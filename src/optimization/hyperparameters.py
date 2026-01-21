@@ -38,6 +38,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -562,6 +563,7 @@ class HyperparameterOptimizer:
         y_val: Optional[np.ndarray] = None,
         search_space: Optional[SearchSpaceType] = None,
         sample_weights: Optional[np.ndarray] = None,
+        storage_path: Optional[str] = None,
     ) -> HyperparameterResult:
         """
         Optimize hyperparameters for a single model.
@@ -575,6 +577,9 @@ class HyperparameterOptimizer:
             y_val: Optional validation labels
             search_space: Optional custom search space
             sample_weights: Optional sample weights for training
+            storage_path: Optional path to SQLite database for study persistence.
+                If provided, enables resuming interrupted studies. If None, uses
+                in-memory storage.
 
         Returns:
             HyperparameterResult with best params and scores
@@ -694,10 +699,20 @@ class HyperparameterOptimizer:
         else:
             pruner = None
 
+        # Configure storage for study persistence
+        if storage_path is not None:
+            storage_dir = Path(storage_path).parent
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            storage = optuna.storages.RDBStorage(f"sqlite:///{storage_path}")
+        else:
+            storage = None
+
         study = optuna.create_study(
             direction="maximize",
             sampler=sampler,
             pruner=pruner,
+            storage=storage,
+            load_if_exists=True,
         )
 
         # Run optimization

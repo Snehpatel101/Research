@@ -20,7 +20,7 @@ def _get_pipeline_config():
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
-        from ..phase1 import pipeline_config
+        from ..pipeline._phase1_impl import pipeline_config
 
         _pipeline_config = pipeline_config
     return _pipeline_config
@@ -40,7 +40,7 @@ def _get_presets_module():
     """Lazy import presets module."""
     global _presets_module
     if _presets_module is None:
-        from ..phase1 import presets
+        from ..pipeline._phase1_impl import presets
 
         _presets_module = presets
     return _presets_module
@@ -50,7 +50,7 @@ def _get_model_config():
     """Lazy import model_config module."""
     global _model_config
     if _model_config is None:
-        from ..phase1.config import model_config
+        from ..pipeline._phase1_impl.config import model_config
 
         _model_config = model_config
     return _model_config
@@ -202,7 +202,7 @@ def _create_config_from_args(
     if symbols is not None:
         config_kwargs["symbols"] = [s.strip().upper() for s in symbols.split(",")]
     elif "symbols" not in config_kwargs:
-        from src.phase1.config.runtime import detect_available_symbols
+        from src.pipeline._phase1_impl.config.runtime import detect_available_symbols
 
         detected = detect_available_symbols()
         if detected:

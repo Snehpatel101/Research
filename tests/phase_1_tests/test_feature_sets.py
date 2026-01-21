@@ -1,7 +1,7 @@
 import pandas as pd
 
-from src.phase1.config.feature_sets import FEATURE_SET_DEFINITIONS
-from src.phase1.utils.feature_sets import resolve_feature_set, build_feature_set_manifest
+from src.pipeline._phase1_impl.config.feature_sets import FEATURE_SET_DEFINITIONS
+from src.pipeline._phase1_impl.utils.feature_sets import resolve_feature_set, build_feature_set_manifest
 
 
 def _sample_df() -> pd.DataFrame:

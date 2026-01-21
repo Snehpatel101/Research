@@ -330,7 +330,7 @@ class RegimeAwareTrainer:
     ) -> dict[tuple[str, str], RegimeModelResult]:
         """Train separate models for each regime."""
         from src.models import Trainer, TrainerConfig
-        from src.phase1.stages.datasets import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         all_results: dict[tuple[str, str], RegimeModelResult] = {}
 
@@ -467,7 +467,7 @@ class RegimeAwareTrainer:
     ) -> dict[tuple[str, str], RegimeModelResult]:
         """Train single model with regime as additional feature."""
         from src.models import Trainer, TrainerConfig
-        from src.phase1.stages.datasets import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         all_results: dict[tuple[str, str], RegimeModelResult] = {}
 

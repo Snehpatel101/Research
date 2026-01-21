@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.phase1.stages.datasets import (
+from src.pipeline._phase1_impl.stages.datasets import (
     FeatureSchemaError,
     TimeSeriesDataContainer,
     ValidationResult,

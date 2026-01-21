@@ -61,7 +61,7 @@ def test_numba_function() -> bool:
     """
     print("Testing numba triple barrier function...")
 
-    from src.phase1.stages.labeling import triple_barrier_numba
+    from src.pipeline._phase1_impl.stages.labeling import triple_barrier_numba
 
     # Create small test dataset
     n: int = 100
@@ -103,7 +103,7 @@ def test_quality_scoring() -> bool:
     """
     print("Testing quality scoring...")
 
-    from src.phase1.stages.final_labels import compute_quality_scores
+    from src.pipeline._phase1_impl.stages.final_labels import compute_quality_scores
 
     # Create test data with proper MAE/MFE conventions:
     # - MAE (from long perspective) is always negative or zero (max downside)
@@ -142,7 +142,7 @@ def test_sample_weights() -> bool:
     """
     print("Testing sample weight assignment...")
 
-    from src.phase1.stages.final_labels import assign_sample_weights
+    from src.pipeline._phase1_impl.stages.final_labels import assign_sample_weights
 
     # Create test quality scores
     n: int = 1000
@@ -183,7 +183,7 @@ def test_direction_aware_quality_scoring() -> None:
     """
     print("Testing direction-aware quality scoring...")
 
-    from src.phase1.stages.final_labels import compute_quality_scores
+    from src.pipeline._phase1_impl.stages.final_labels import compute_quality_scores
 
     # Create controlled test data:
     # Sample 0: LONG with good excursions (low adverse, high favorable)

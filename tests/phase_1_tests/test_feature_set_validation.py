@@ -9,7 +9,7 @@ import pytest
 import pandas as pd
 from typing import Any
 
-from src.phase1.config.feature_sets import (
+from src.pipeline._phase1_impl.config.feature_sets import (
     FEATURE_SET_DEFINITIONS,
     FEATURE_SET_ALIASES,
     FeatureSetDefinition,
@@ -19,7 +19,7 @@ from src.phase1.config.feature_sets import (
     validate_feature_set_coverage,
     get_feature_set_columns,
 )
-from src.phase1.utils.feature_sets import (
+from src.pipeline._phase1_impl.utils.feature_sets import (
     resolve_feature_set,
     build_feature_set_manifest,
 )

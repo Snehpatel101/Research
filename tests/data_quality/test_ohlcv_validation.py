@@ -260,13 +260,13 @@ class TestDataValidationIntegration:
     def test_ohlcv_validator_exists(self):
         """OHLCV validator should be importable."""
         try:
-            from src.phase1.stages.ingest.validators import OHLCVValidator
+            from src.pipeline._phase1_impl.stages.ingest.validators import OHLCVValidator
             validator = OHLCVValidator()
             assert validator is not None
         except ImportError:
             # May have different name
             try:
-                from src.phase1.stages.ingest.validators import validate_ohlcv
+                from src.pipeline._phase1_impl.stages.ingest.validators import validate_ohlcv
                 assert callable(validate_ohlcv)
             except ImportError:
                 pytest.skip("OHLCV validator not available with expected name")

@@ -23,7 +23,7 @@ import sys
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.pipeline_config import PipelineConfig, create_default_config
+from src.pipeline._phase1_impl.pipeline_config import PipelineConfig, create_default_config
 
 
 # =============================================================================
@@ -243,13 +243,13 @@ class TestMTFConfigurationPropagation:
         assert loaded.mtf_mode == 'indicators'
 
     def test_target_timeframe_default(self, temp_project_dir: Path) -> None:
-        """Test that default target_timeframe is 1min (canonical source)."""
+        """Test that default target_timeframe is 5min (canonical default)."""
         config = PipelineConfig(
             symbols=['MES'],
             project_root=temp_project_dir
         )
 
-        assert config.target_timeframe == '1min'
+        assert config.target_timeframe == '5min'
 
     def test_custom_target_timeframe(self, temp_project_dir: Path) -> None:
         """Test that custom target_timeframe is accepted."""

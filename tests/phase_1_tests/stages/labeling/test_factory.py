@@ -19,7 +19,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.labeling import (
+from src.pipeline._phase1_impl.stages.labeling import (
     DirectionalLabeler,
     LabelingResult,
     LabelingStrategy,
@@ -29,7 +29,7 @@ from src.phase1.stages.labeling import (
     TripleBarrierLabeler,
     get_labeler,
 )
-from src.phase1.stages.labeling.factory import (
+from src.pipeline._phase1_impl.stages.labeling.factory import (
     create_multi_labeler,
     get_available_strategies,
     register_strategy,
@@ -145,8 +145,8 @@ class TestRegisterStrategy:
     def test_register_custom_strategy(self):
         """Test registering a custom strategy."""
         # Import the registry to save/restore original
-        from src.phase1.stages.labeling.factory import _STRATEGY_REGISTRY
-        from src.phase1.stages.labeling.meta import MetaLabeler
+        from src.pipeline._phase1_impl.stages.labeling.factory import _STRATEGY_REGISTRY
+        from src.pipeline._phase1_impl.stages.labeling.meta import MetaLabeler
 
         # Save original MetaLabeler registration
         original_meta = _STRATEGY_REGISTRY.get(LabelingType.META)

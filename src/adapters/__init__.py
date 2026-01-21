@@ -69,6 +69,18 @@ from .tabular import TabularAdapter
 from .sequence import SequenceAdapter
 from .multi_stream import MultiStreamAdapter
 
+# Multi-Resolution 4D Adapter (migrated from phase1)
+from .multi_resolution import (
+    MultiResolution4DAdapter,
+    MultiResolution4DConfig,
+    MultiResolution4DDataset,
+    create_multi_resolution_dataset,
+)
+from .multi_resolution_utils import (
+    DEFAULT_MTF_FEATURES,
+    DEFAULT_MTF_TIMEFRAMES,
+)
+
 # PHASE_2: AdapterFactory for config-driven adapter creation
 from .factory import AdapterFactory, create_adapter_factory
 
@@ -98,6 +110,13 @@ __all__ = [
     "TabularAdapter",
     "SequenceAdapter",
     "MultiStreamAdapter",
+    # Multi-Resolution 4D
+    "MultiResolution4DAdapter",
+    "MultiResolution4DConfig",
+    "MultiResolution4DDataset",
+    "create_multi_resolution_dataset",
+    "DEFAULT_MTF_FEATURES",
+    "DEFAULT_MTF_TIMEFRAMES",
     # PHASE_2: Factory
     "AdapterFactory",
     "create_adapter_factory",

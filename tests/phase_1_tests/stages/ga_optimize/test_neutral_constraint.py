@@ -26,8 +26,8 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.ga_optimize.fitness import calculate_fitness
-from src.phase1.config import LABEL_BALANCE_CONSTRAINTS
+from src.pipeline._phase1_impl.stages.ga_optimize.fitness import calculate_fitness
+from src.pipeline._phase1_impl.config import LABEL_BALANCE_CONSTRAINTS
 
 
 # =============================================================================

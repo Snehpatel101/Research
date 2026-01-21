@@ -5,7 +5,7 @@ Validates that indicator periods scale correctly with timeframe changes
 to maintain consistent lookback duration.
 """
 import pytest
-from src.phase1.stages.features.scaling import (
+from src.pipeline._phase1_impl.stages.features.scaling import (
     scale_period,
     get_scaled_periods,
     get_unique_scaled_periods,

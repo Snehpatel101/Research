@@ -17,7 +17,7 @@ Stage Flow:
 
 Usage:
     from src.pipeline.runner import PipelineRunner
-    from src.phase1.pipeline_config import create_default_config
+    from src.pipeline._phase1_impl.pipeline_config import create_default_config
 
     # Single symbol run (recommended - each symbol processed in isolation)
     config = create_default_config(

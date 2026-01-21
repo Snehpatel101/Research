@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from src.cross_validation.walk_forward import (
@@ -209,7 +209,7 @@ class WalkForwardTrainer:
 
         # Load container if not provided
         if container is None:
-            from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+            from src.core.container import TimeSeriesDataContainer
 
             container = TimeSeriesDataContainer.from_parquet_dir(
                 path=self.config.data_dir,

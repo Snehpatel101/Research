@@ -38,7 +38,7 @@ class TestPipelineToTrainerConfig:
         The pipeline generates labels for all horizons in label_horizons.
         The trainer then selects one horizon to train on.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
         # Create pipeline config with specific horizons
@@ -68,7 +68,7 @@ class TestPipelineToTrainerConfig:
 
         This is BY DESIGN, not a bug.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
         # Pipeline uses "full" to generate all features
@@ -97,7 +97,7 @@ class TestPipelineToTrainerConfig:
         - PURGE_BARS = max_horizon * 3
         - EMBARGO_BARS depends on timeframe
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         # Test with default horizons [5, 10, 15, 20]
         config = PipelineConfig(
@@ -119,8 +119,8 @@ class TestPipelineToTrainerConfig:
         The pipeline accepts various timeframe formats (5min, 5m, 5T).
         These should be normalized to a consistent format.
         """
-        from src.phase1.pipeline_config import PipelineConfig
-        from src.phase1.config import SUPPORTED_TIMEFRAMES
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.config import SUPPORTED_TIMEFRAMES
 
         # Verify supported timeframes include expected values
         assert "5min" in SUPPORTED_TIMEFRAMES
@@ -139,7 +139,7 @@ class TestPipelineToTrainerConfig:
 
         Same seed should produce reproducible results.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
         seed = 42
@@ -169,7 +169,7 @@ class TestFeatureSetPropagation:
         """
         Test that all expected feature set definitions exist.
         """
-        from src.phase1.config.feature_sets import FEATURE_SET_DEFINITIONS
+        from src.pipeline._phase1_impl.config.feature_sets import FEATURE_SET_DEFINITIONS
 
         expected_sets = [
             "core_min",
@@ -190,7 +190,7 @@ class TestFeatureSetPropagation:
         """
         Test that feature set aliases resolve to canonical names.
         """
-        from src.phase1.config.feature_sets import (
+        from src.pipeline._phase1_impl.config.feature_sets import (
             resolve_feature_set_name,
             FEATURE_SET_ALIASES,
         )
@@ -210,7 +210,7 @@ class TestFeatureSetPropagation:
         - Neural (TCN): neural_optimal (~43 features)
         - Transformer (PatchTST): transformer_raw (~23 features)
         """
-        from src.phase1.config.feature_sets import (
+        from src.pipeline._phase1_impl.config.feature_sets import (
             FEATURE_SET_ALIASES,
             FEATURE_SET_DEFINITIONS,
         )
@@ -231,7 +231,7 @@ class TestFeatureSetPropagation:
         """
         Test that invalid feature set names are rejected.
         """
-        from src.phase1.config.feature_sets import validate_feature_set_config
+        from src.pipeline._phase1_impl.config.feature_sets import validate_feature_set_config
 
         errors = validate_feature_set_config("nonexistent_set")
         assert len(errors) > 0
@@ -252,7 +252,7 @@ class TestTimeframeNormalization:
 
         Per CLAUDE.md, 9 intraday timeframes: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
         """
-        from src.phase1.stages.mtf.constants import MTF_TIMEFRAMES
+        from src.pipeline._phase1_impl.stages.mtf.constants import MTF_TIMEFRAMES
 
         expected_mtf = ["1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "1h"]
 
@@ -263,7 +263,7 @@ class TestTimeframeNormalization:
         """
         Test that valid timeframes pass validation.
         """
-        from src.phase1.config import validate_timeframe
+        from src.pipeline._phase1_impl.config import validate_timeframe
 
         valid_timeframes = ["1min", "5min", "15min", "1h"]
 
@@ -306,7 +306,7 @@ class TestConfigArtifacts:
         """
         Test that PipelineConfig can be serialized to dict.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         config = PipelineConfig(
             symbols=["MES"],
@@ -364,7 +364,7 @@ class TestConfigArtifacts:
         """
         Test that config dicts are JSON serializable.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
         pipeline_config = PipelineConfig(symbols=["MES"])
@@ -406,7 +406,7 @@ class TestCrossModuleConsistency:
 
         Prevents regression where paths were incorrectly set to src/.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         config = PipelineConfig(symbols=["MES"])
 
@@ -455,7 +455,7 @@ class TestCrossModuleConsistency:
 
         The sentinel -99 marks invalid labels that should be excluded.
         """
-        from src.phase1.stages.datasets.validators import INVALID_LABEL
+        from src.pipeline._phase1_impl.stages.datasets.validators import INVALID_LABEL
 
         assert INVALID_LABEL == -99
 
@@ -472,7 +472,7 @@ class TestEndToEndConfigChain:
         """
         Test selecting a specific horizon from pipeline config for training.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
         # Pipeline generates labels for multiple horizons
@@ -546,7 +546,7 @@ class TestRegressionPrevention:
 
         This is not a bug - it's by design per CFG-002 documentation.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
         from src.models.config import TrainerConfig
 
         # Pipeline feature_generation controls GENERATION (renamed from feature_set)

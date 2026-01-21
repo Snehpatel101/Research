@@ -72,7 +72,7 @@ class TestHMMConfig:
 
     def test_default_config(self):
         """Test default config is valid."""
-        from src.phase1.stages.regime import HMMConfig
+        from src.pipeline._phase1_impl.stages.regime import HMMConfig
 
         config = HMMConfig()
         assert config.n_states == 3
@@ -81,21 +81,21 @@ class TestHMMConfig:
 
     def test_invalid_n_states(self):
         """Test n_states validation."""
-        from src.phase1.stages.regime import HMMConfig
+        from src.pipeline._phase1_impl.stages.regime import HMMConfig
 
         with pytest.raises(ValueError, match="n_states must be >= 2"):
             HMMConfig(n_states=1)
 
     def test_invalid_lookback(self):
         """Test lookback validation."""
-        from src.phase1.stages.regime import HMMConfig
+        from src.pipeline._phase1_impl.stages.regime import HMMConfig
 
         with pytest.raises(ValueError, match="lookback"):
             HMMConfig(n_states=3, lookback=30)  # Too small
 
     def test_invalid_input_type(self):
         """Test input_type validation."""
-        from src.phase1.stages.regime import HMMConfig
+        from src.pipeline._phase1_impl.stages.regime import HMMConfig
 
         with pytest.raises(ValueError, match="input_type"):
             HMMConfig(input_type="invalid")
@@ -110,7 +110,7 @@ class TestHMMRegimeDetector:
 
     def test_detector_creation(self):
         """Test detector can be created."""
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=3, lookback=100)
         assert detector.config.n_states == 3
@@ -118,7 +118,7 @@ class TestHMMRegimeDetector:
 
     def test_required_columns(self):
         """Test required columns are declared."""
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=3)
         assert "close" in detector.get_required_columns()
@@ -126,7 +126,7 @@ class TestHMMRegimeDetector:
     def test_detect_returns_series(self, sample_ohlcv_df):
         """Test detect returns a Series."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=2, lookback=100, expanding=True)
         regimes = detector.detect(sample_ohlcv_df)
@@ -137,7 +137,7 @@ class TestHMMRegimeDetector:
     def test_detect_with_probabilities(self, sample_ohlcv_df):
         """Test detect_with_probabilities returns regimes and probs."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=2, lookback=100, expanding=True)
         regimes, probs = detector.detect_with_probabilities(sample_ohlcv_df)
@@ -148,7 +148,7 @@ class TestHMMRegimeDetector:
 
     def test_missing_close_column_raises(self):
         """Test missing close column raises error."""
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=2)
         df = pd.DataFrame({"open": [1, 2, 3], "high": [1, 2, 3]})
@@ -158,7 +158,7 @@ class TestHMMRegimeDetector:
 
     def test_state_labels_2_states(self):
         """Test state labels for 2-state model."""
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=2)
         labels = detector._get_state_labels()
@@ -168,7 +168,7 @@ class TestHMMRegimeDetector:
 
     def test_state_labels_3_states(self):
         """Test state labels for 3-state model."""
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         detector = HMMRegimeDetector(n_states=3)
         labels = detector._get_state_labels()
@@ -188,7 +188,7 @@ class TestHMMPureFunctions:
     def test_fit_gaussian_hmm(self, sample_returns):
         """Test HMM fitting function."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import fit_gaussian_hmm
+        from src.pipeline._phase1_impl.stages.regime import fit_gaussian_hmm
 
         model, states, probs = fit_gaussian_hmm(
             sample_returns,
@@ -206,7 +206,7 @@ class TestHMMPureFunctions:
     def test_fit_gaussian_hmm_insufficient_data(self):
         """Test HMM fitting with insufficient data."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import fit_gaussian_hmm
+        from src.pipeline._phase1_impl.stages.regime import fit_gaussian_hmm
 
         short_data = np.random.randn(10)
 
@@ -216,7 +216,7 @@ class TestHMMPureFunctions:
     def test_order_states_by_volatility(self, sample_returns):
         """Test state ordering by volatility."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import fit_gaussian_hmm, order_states_by_volatility
+        from src.pipeline._phase1_impl.stages.regime import fit_gaussian_hmm, order_states_by_volatility
 
         model, states, _ = fit_gaussian_hmm(
             sample_returns, n_states=2, max_iter=50, n_init=3, random_state=42
@@ -241,7 +241,7 @@ class TestRegimeRouter:
 
     def test_router_creation(self):
         """Test router can be created."""
-        from src.phase1.stages.regime import RegimeRouter
+        from src.pipeline._phase1_impl.stages.regime import RegimeRouter
 
         router = RegimeRouter({
             "low_vol": "trend_model",
@@ -253,7 +253,7 @@ class TestRegimeRouter:
 
     def test_router_default_model(self):
         """Test router uses default for unknown regimes."""
-        from src.phase1.stages.regime import RegimeRouter
+        from src.pipeline._phase1_impl.stages.regime import RegimeRouter
 
         router = RegimeRouter(
             {"low_vol": "model_a"},
@@ -264,7 +264,7 @@ class TestRegimeRouter:
 
     def test_router_batch(self):
         """Test routing a batch of regimes."""
-        from src.phase1.stages.regime import RegimeRouter
+        from src.pipeline._phase1_impl.stages.regime import RegimeRouter
 
         router = RegimeRouter({
             "low_vol": "model_a",
@@ -278,7 +278,7 @@ class TestRegimeRouter:
 
     def test_routing_summary(self):
         """Test routing summary statistics."""
-        from src.phase1.stages.regime import RegimeRouter
+        from src.pipeline._phase1_impl.stages.regime import RegimeRouter
 
         router = RegimeRouter({
             "low_vol": "model_a",
@@ -303,7 +303,7 @@ class TestHMMIntegration:
     def test_full_pipeline(self, sample_ohlcv_df):
         """Test full detection and routing pipeline."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import HMMRegimeDetector, RegimeRouter
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector, RegimeRouter
 
         # Detect regimes
         detector = HMMRegimeDetector(n_states=2, lookback=100, expanding=True)
@@ -323,7 +323,7 @@ class TestHMMIntegration:
 
     def test_without_hmmlearn(self, sample_ohlcv_df):
         """Test graceful degradation without hmmlearn."""
-        from src.phase1.stages.regime.hmm import HMM_AVAILABLE, HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime.hmm import HMM_AVAILABLE, HMMRegimeDetector
 
         if HMM_AVAILABLE:
             pytest.skip("hmmlearn is installed")
@@ -352,7 +352,7 @@ class TestHMMLookaheadBias:
         than a model trained only on the first half.
         """
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         np.random.seed(42)
 
@@ -413,7 +413,7 @@ class TestHMMLookaheadBias:
         similar (not identical, but correlated).
         """
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         # Expanding mode
         detector_expanding = HMMRegimeDetector(
@@ -451,7 +451,7 @@ class TestHMMLookaheadBias:
     def test_retrain_interval_parameter(self, sample_ohlcv_df):
         """Test that retrain_interval parameter is respected."""
         pytest.importorskip("hmmlearn")
-        from src.phase1.stages.regime import HMMRegimeDetector
+        from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector
 
         # With large retrain interval (faster)
         detector_fast = HMMRegimeDetector(

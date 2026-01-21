@@ -17,7 +17,7 @@ from .config import TrainerConfig
 from .metrics import compute_classification_metrics
 
 if TYPE_CHECKING:
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 
 def train_model(

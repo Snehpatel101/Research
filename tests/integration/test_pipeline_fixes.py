@@ -650,7 +650,7 @@ class TestRegressionPrevention:
 
         Prevents paths like src/data/ instead of data/.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         config = PipelineConfig(symbols=['MES'])
 
@@ -665,7 +665,7 @@ class TestRegressionPrevention:
 
         Should not fall back to default barriers.
         """
-        from src.phase1.config.regime_config import get_regime_adjusted_barriers
+        from src.pipeline._phase1_impl.config.regime_config import get_regime_adjusted_barriers
 
         # Test regime adjustment with current API
         adjusted = get_regime_adjusted_barriers(

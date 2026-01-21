@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, List, Dict, Optional, Any
 
 import numpy as np
@@ -189,6 +190,7 @@ class FeatureSelector:
         scoring: str = "f1_weighted",
         feature_families: Optional[Dict[str, List[str]]] = None,
         initial_importance: Optional[Dict[str, float]] = None,
+        storage_path: Optional[str] = None,
     ) -> FeatureSelectionResult:
         """Run feature selection optimization.
 
@@ -204,6 +206,9 @@ class FeatureSelector:
                 names. Required for "family" strategy.
             initial_importance: Optional pre-computed importance scores for
                 "importance" strategy.
+            storage_path: Optional path to SQLite database for study persistence.
+                If provided, enables resuming interrupted studies. If None,
+                uses in-memory storage.
 
         Returns:
             FeatureSelectionResult with selected features and metadata.
@@ -248,10 +253,19 @@ class FeatureSelector:
             interval_steps=1,
         )
 
+        # Set up storage for study persistence
+        storage = None
+        if storage_path:
+            Path(storage_path).parent.mkdir(parents=True, exist_ok=True)
+            storage = optuna.storages.RDBStorage(f"sqlite:///{storage_path}")
+
         study = optuna.create_study(
             direction="maximize",
             sampler=sampler,
             pruner=pruner,
+            study_name="feature_selection",
+            storage=storage,
+            load_if_exists=True,
         )
 
         # Track trial history

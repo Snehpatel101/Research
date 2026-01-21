@@ -516,7 +516,7 @@ def main() -> int:
     if not stacking_data:
         # Standard workflow: Load Phase 1 datasets
         logger.info(f"Loading data from {args.data_dir}...")
-        from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         data_path = PROJECT_ROOT / args.data_dir
         if not data_path.exists():

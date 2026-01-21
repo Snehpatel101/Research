@@ -24,7 +24,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.regime import (
+from src.pipeline._phase1_impl.stages.regime import (
     # Base classes
     RegimeType,
     VolatilityRegimeLabel,
@@ -779,7 +779,7 @@ class TestRegimeIntegration:
 
     def test_regime_features_integration(self, sample_ohlcv_df):
         """Test regime features integrate with feature engineering."""
-        from src.phase1.stages.features.regime import add_regime_features
+        from src.pipeline._phase1_impl.stages.features.regime import add_regime_features
 
         feature_metadata = {}
 
@@ -804,7 +804,7 @@ class TestConfigIntegration:
 
     def test_regime_config_available(self):
         """Test REGIME_CONFIG is available in config."""
-        from src.phase1.config import REGIME_CONFIG
+        from src.pipeline._phase1_impl.config import REGIME_CONFIG
 
         assert 'volatility' in REGIME_CONFIG
         assert 'trend' in REGIME_CONFIG
@@ -812,7 +812,7 @@ class TestConfigIntegration:
 
     def test_regime_adjusted_barriers(self):
         """Test regime-adjusted barrier function."""
-        from src.phase1.config import get_regime_adjusted_barriers
+        from src.pipeline._phase1_impl.config import get_regime_adjusted_barriers
 
         params = get_regime_adjusted_barriers(
             symbol='MES',
@@ -829,7 +829,7 @@ class TestConfigIntegration:
 
     def test_regime_barrier_adjustments_applied(self):
         """Test that barrier adjustments are actually applied."""
-        from src.phase1.config import get_regime_adjusted_barriers, get_barrier_params
+        from src.pipeline._phase1_impl.config import get_regime_adjusted_barriers, get_barrier_params
 
         # Get base params
         base = get_barrier_params('MES', 5)

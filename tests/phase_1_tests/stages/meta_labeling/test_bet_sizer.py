@@ -12,7 +12,7 @@ Tests cover:
 import numpy as np
 import pytest
 
-from src.phase1.stages.meta_labeling.bet_sizer import (
+from src.pipeline._phase1_impl.stages.meta_labeling.bet_sizer import (
     BetSizer,
     BetSizingMethod,
     BetSizingResult,

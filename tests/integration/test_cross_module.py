@@ -216,7 +216,7 @@ class TestLabelFlowIntegration:
         }, index=pd.date_range('2020-01-01', periods=n_bars, freq='5min'))
         df['open'] = df['close'].shift(1).fillna(df['close'].iloc[0])
 
-        from src.phase1.stages.labeling.triple_barrier import TripleBarrierLabeler
+        from src.pipeline._phase1_impl.stages.labeling.triple_barrier import TripleBarrierLabeler
 
         labeler = TripleBarrierLabeler(
             k_up=2.0,

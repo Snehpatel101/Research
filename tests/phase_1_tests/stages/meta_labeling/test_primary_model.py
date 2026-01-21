@@ -13,7 +13,7 @@ import pytest
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 
-from src.phase1.stages.meta_labeling.primary_model import (
+from src.pipeline._phase1_impl.stages.meta_labeling.primary_model import (
     PrimaryClassifier,
     PrimaryModelConfig,
     RecallOptimizer,

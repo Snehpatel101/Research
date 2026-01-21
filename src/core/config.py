@@ -157,6 +157,8 @@ class PipelineConfig:
     mtf_timeframes: List[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
     # MTF timeframes: ["5min", "15min", "60min"]
 
+    compute_mtf_features: bool = True  # Whether to compute MTF features
+
     sequence_length: int = DEFAULT_SEQUENCE_LENGTH  # For neural models (default: 60)
 
     # =========================================================================
@@ -170,6 +172,7 @@ class PipelineConfig:
     upper_mult: float = 2.0  # Upper barrier = ATR * upper_mult
     lower_mult: float = 2.0  # Lower barrier = ATR * lower_mult
     atr_period: int = 14  # ATR calculation period
+    max_holding_bars: int = 20  # Maximum holding period for triple-barrier
 
     # =========================================================================
     # OPTUNA OPTIMIZATION CONFIGURATION
@@ -182,6 +185,7 @@ class PipelineConfig:
 
     # Feature optimization
     optimize_features: bool = True
+    feature_selection_method: str = "optuna"  # Options: "optuna", "shap", "mutual_info"
     feature_selection_trials: int = DEFAULT_FEATURE_SELECTION_TRIALS  # 100
     feature_pruning_trials: int = DEFAULT_FEATURE_PRUNING_TRIALS  # 50
     min_features: int = DEFAULT_MIN_FEATURES  # 20
@@ -441,6 +445,69 @@ class PipelineConfig:
             f"  optimize_hyperparams={self.optimize_hyperparams},\n"
             f"  output_dir={self.output_dir!r},\n"
             f")"
+        )
+
+    def to_phase1_config(self) -> "Phase1PipelineConfig":
+        """
+        Convert to Phase 1 PipelineConfig for PipelineRunner.
+
+        This enables MLFactory to delegate data preparation to PipelineRunner,
+        ensuring ONE unified pipeline instead of parallel implementations.
+
+        Returns:
+            Phase1PipelineConfig compatible with src.pipeline.runner.PipelineRunner
+        """
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig as Phase1PipelineConfig
+
+        # Generate run_id from timestamp
+        from datetime import datetime
+        import secrets
+        run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{secrets.token_hex(2)}"
+
+        # Map feature families to feature_toggles
+        feature_toggles = {}
+        if isinstance(self.feature_families, list):
+            for family in ["wavelets", "microstructure", "volume", "volatility"]:
+                feature_toggles[family] = family in self.feature_families
+        # else "auto" - let Phase 1 use defaults
+
+        # Build barrier overrides from labeling config
+        barrier_overrides = None
+        if self.upper_mult != 2.0 or self.lower_mult != 2.0:
+            barrier_overrides = {
+                "k_up": self.upper_mult,
+                "k_down": self.lower_mult,
+            }
+
+        return Phase1PipelineConfig(
+            # Run identification
+            run_id=run_id,
+            description=f"MLFactory run for {self.symbol}",
+            # Data configuration
+            symbols=[self.symbol],
+            # Timeframe - use 5min as default primary
+            target_timeframe="5min",
+            # MTF configuration
+            mtf_timeframes=self.mtf_timeframes,
+            mtf_mode="aligned",  # Default mode
+            # Labeling
+            label_horizons=self.horizons,
+            # Splits
+            train_ratio=self.train_ratio,
+            val_ratio=self.val_ratio,
+            test_ratio=self.test_ratio,
+            purge_bars=self.purge_bars,
+            embargo_bars=self.embargo_bars,
+            # Scaling
+            scaler_type="standard",
+            # Random seed
+            random_seed=self.random_state,
+            # Feature toggles
+            feature_toggles=feature_toggles if feature_toggles else None,
+            # Barrier overrides
+            barrier_overrides=barrier_overrides,
+            # Project root (parent of output_dir)
+            project_root=self.output_dir.parent,
         )
 
 

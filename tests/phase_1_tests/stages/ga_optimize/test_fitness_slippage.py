@@ -17,8 +17,8 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.ga_optimize.fitness import calculate_fitness, evaluate_individual
-from src.phase1.config import get_total_trade_cost, TICK_VALUES
+from src.pipeline._phase1_impl.stages.ga_optimize.fitness import calculate_fitness, evaluate_individual
+from src.pipeline._phase1_impl.config import get_total_trade_cost, TICK_VALUES
 
 
 # =============================================================================

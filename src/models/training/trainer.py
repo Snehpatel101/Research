@@ -12,7 +12,7 @@ The Trainer class handles the complete training pipeline:
 Example:
     >>> from src.models.trainer import Trainer
     >>> from src.models.config import TrainerConfig
-    >>> from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    >>> from src.core.container import TimeSeriesDataContainer
     ...
     >>> config = TrainerConfig(model_name="xgboost", horizon=20)
     >>> container = TimeSeriesDataContainer.from_parquet_dir(
@@ -50,7 +50,7 @@ from .features import TrainerFeaturesMixin
 if TYPE_CHECKING:
     from src.coordination import TimeframeCoordinator
     from src.feature_selection import FeatureSelectionManager
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         """
         from pathlib import Path
 
-        from src.phase1.lineage import PipelineLineage, validate_dataset_checksum
+        from src.core.lineage import PipelineLineage, validate_dataset_checksum
 
         if not self.config.pipeline_run_id:
             return True, []

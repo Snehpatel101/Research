@@ -15,7 +15,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.phase1.config import (
+from src.pipeline._phase1_impl.config import (
     SLIPPAGE_TICKS,
     TRANSACTION_COSTS,
     TICK_VALUES,
@@ -105,18 +105,18 @@ def main():
 
     print("""
 # Get slippage for a specific regime
-from src.phase1.config import get_slippage_ticks
+from src.pipeline._phase1_impl.config import get_slippage_ticks
 slippage = get_slippage_ticks('MES', 'high_vol')  # 1.0 ticks per fill
 
 # Get total round-trip cost (commission + slippage)
-from src.phase1.config import get_total_trade_cost
+from src.pipeline._phase1_impl.config import get_total_trade_cost
 cost = get_total_trade_cost('MES', 'low_vol')  # 1.5 ticks
 
 # Get commission only (no slippage)
 commission = get_total_trade_cost('MES', include_slippage=False)  # 0.5 ticks
 
 # Calculate fitness with slippage
-from src.phase1.stages.ga_optimize.fitness import calculate_fitness
+from src.pipeline._phase1_impl.stages.ga_optimize.fitness import calculate_fitness
 fitness = calculate_fitness(
     labels, bars_to_hit, mae, mfe, horizon, atr_mean,
     symbol='MES',

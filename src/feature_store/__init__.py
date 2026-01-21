@@ -50,7 +50,7 @@ Integration with Pipeline
 -------------------------
 The feature store integrates with the existing feature engineering pipeline:
 
->>> from src.phase1.stages.features import FeatureEngineer
+>>> from src.pipeline._phase1_impl.stages.features import FeatureEngineer
 >>> from src.feature_store import FeatureStore
 >>>
 >>> store = FeatureStore(cache_dir="data/feature_cache")

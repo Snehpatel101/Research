@@ -15,8 +15,8 @@ from functools import lru_cache
 import pandas as pd
 
 from .strategies import MODEL_FEATURE_STRATEGIES, ModelFeatureStrategy, get_strategy_for_model
-from src.phase1.utils.constants import METADATA_COLUMNS
-from src.phase1.utils.feature_sets import _is_label_column
+from src.pipeline._phase1_impl.utils.constants import METADATA_COLUMNS
+from src.pipeline._phase1_impl.utils.feature_sets import _is_label_column
 
 logger = logging.getLogger(__name__)
 

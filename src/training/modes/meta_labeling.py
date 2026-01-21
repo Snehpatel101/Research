@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 from src.models import Trainer, TrainerConfig
 from src.models.base import PredictionOutput
@@ -262,7 +262,7 @@ class MetaLabelingTrainer:
 
         # Load container if not provided
         if container is None:
-            from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+            from src.core.container import TimeSeriesDataContainer
 
             container = TimeSeriesDataContainer.from_parquet_dir(
                 path=self.config.data_dir,
@@ -468,7 +468,7 @@ class MetaLabelingTrainer:
         Returns:
             Tuple of (Trainer, results dict)
         """
-        from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         # Create container for meta-model training
         # Note: meta-labels are continuous [0, 1], but we'll discretize for classification

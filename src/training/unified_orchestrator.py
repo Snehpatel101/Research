@@ -452,7 +452,7 @@ class UnifiedTrainingOrchestrator:
         trainer = Trainer(trainer_config)
 
         # Build container from prepared data
-        from src.phase1.stages.datasets import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         # Handle different data ranks
         if prepared.data_rank == 2:
@@ -705,7 +705,7 @@ class UnifiedTrainingOrchestrator:
                 output_dir=self.output_dir / "meta_learner",
             )
 
-            from src.phase1.stages.datasets import TimeSeriesDataContainer
+            from src.core.container import TimeSeriesDataContainer
 
             container = TimeSeriesDataContainer(
                 X_train=X_train,
@@ -785,7 +785,7 @@ class UnifiedTrainingOrchestrator:
         trainer = WalkForwardTrainer(exp_config, wf_config)
 
         # Prepare container from df
-        from src.phase1.stages.datasets import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         # Use first model to prepare data (for basic structure)
         prepared = self._data_prep.prepare(

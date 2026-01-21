@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 from typing import Any
 
-from src.phase1.stages.labeling.run import (
+from src.pipeline._phase1_impl.stages.labeling.run import (
     validate_labeling_prerequisites,
     REQUIRED_LABELING_COLUMNS,
     REQUIRED_OHLC_COLUMNS,

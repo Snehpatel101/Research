@@ -24,7 +24,7 @@ from ..registry import ModelRegistry
 INVALID_LABEL_SENTINEL = -99
 
 if TYPE_CHECKING:
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 

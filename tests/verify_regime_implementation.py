@@ -42,7 +42,7 @@ def verify_notebook():
     is_regime_cell = '3.4 Detect Market Regimes' in cell_11_source
     checks.append(("Cell 11 is '3.4 Detect Market Regimes'", is_regime_cell, ""))
 
-    has_hmm_import = 'from src.phase1.stages.regime import HMMRegimeDetector' in cell_11_source
+    has_hmm_import = 'from src.pipeline._phase1_impl.stages.regime import HMMRegimeDetector' in cell_11_source
     checks.append(("Cell 11 imports HMMRegimeDetector", has_hmm_import, ""))
 
     has_hmm_init = 'HMMRegimeDetector(' in cell_11_source

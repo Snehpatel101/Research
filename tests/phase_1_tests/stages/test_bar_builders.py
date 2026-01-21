@@ -70,7 +70,7 @@ class TestBarBuilderRegistry:
 
     def test_list_all(self):
         """Test listing all registered builders."""
-        from src.phase1.stages.clean.bar_builders import BarBuilderRegistry
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarBuilderRegistry
 
         builders = BarBuilderRegistry.list_all()
 
@@ -80,21 +80,21 @@ class TestBarBuilderRegistry:
 
     def test_get_registered_builder(self):
         """Test getting a registered builder."""
-        from src.phase1.stages.clean.bar_builders import BarBuilderRegistry, VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarBuilderRegistry, VolumeBarBuilder
 
         builder_cls = BarBuilderRegistry.get("volume")
         assert builder_cls == VolumeBarBuilder
 
     def test_get_unregistered_raises(self):
         """Test getting unregistered builder raises error."""
-        from src.phase1.stages.clean.bar_builders import BarBuilderRegistry
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarBuilderRegistry
 
         with pytest.raises(ValueError, match="Unknown bar type"):
             BarBuilderRegistry.get("unknown_type")
 
     def test_is_registered(self):
         """Test checking if builder is registered."""
-        from src.phase1.stages.clean.bar_builders import BarBuilderRegistry
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarBuilderRegistry
 
         assert BarBuilderRegistry.is_registered("volume")
         assert BarBuilderRegistry.is_registered("dollar")
@@ -110,7 +110,7 @@ class TestVolumeBarBuilder:
 
     def test_builder_creation(self):
         """Test builder can be created."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=10000)
         assert builder.volume_threshold == 10000
@@ -118,7 +118,7 @@ class TestVolumeBarBuilder:
 
     def test_invalid_threshold_raises(self):
         """Test invalid threshold raises error."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         with pytest.raises(ValueError, match="must be > 0"):
             VolumeBarBuilder(volume_threshold=0)
@@ -128,7 +128,7 @@ class TestVolumeBarBuilder:
 
     def test_build_volume_bars(self, sample_ohlcv_1min):
         """Test building volume bars."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=5000)
         bars = builder.build(sample_ohlcv_1min)
@@ -148,7 +148,7 @@ class TestVolumeBarBuilder:
 
     def test_ohlcv_aggregation_correct(self, sample_ohlcv_1min):
         """Test OHLCV is aggregated correctly."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=5000)
         bars = builder.build(sample_ohlcv_1min)
@@ -166,7 +166,7 @@ class TestVolumeBarBuilder:
 
     def test_volume_bars_compression(self, sample_ohlcv_1min):
         """Test volume bars compress during high volume periods."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=5000)
         bars = builder.build(sample_ohlcv_1min)
@@ -176,7 +176,7 @@ class TestVolumeBarBuilder:
 
     def test_symbol_column(self, sample_ohlcv_1min):
         """Test symbol column is added."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=5000)
         bars = builder.build(sample_ohlcv_1min, symbol="MES")
@@ -186,7 +186,7 @@ class TestVolumeBarBuilder:
 
     def test_missing_columns_raises(self):
         """Test missing columns raises error."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=5000)
         bad_df = pd.DataFrame({"datetime": [1, 2], "close": [100, 101]})
@@ -204,7 +204,7 @@ class TestDollarBarBuilder:
 
     def test_builder_creation(self):
         """Test builder can be created."""
-        from src.phase1.stages.clean.bar_builders import DollarBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import DollarBarBuilder
 
         builder = DollarBarBuilder(dollar_threshold=1000000)
         assert builder.dollar_threshold == 1000000
@@ -212,14 +212,14 @@ class TestDollarBarBuilder:
 
     def test_invalid_threshold_raises(self):
         """Test invalid threshold raises error."""
-        from src.phase1.stages.clean.bar_builders import DollarBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import DollarBarBuilder
 
         with pytest.raises(ValueError, match="must be > 0"):
             DollarBarBuilder(dollar_threshold=0)
 
     def test_build_dollar_bars(self, sample_ohlcv_1min):
         """Test building dollar bars."""
-        from src.phase1.stages.clean.bar_builders import DollarBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import DollarBarBuilder
 
         builder = DollarBarBuilder(dollar_threshold=500000)
         bars = builder.build(sample_ohlcv_1min)
@@ -233,7 +233,7 @@ class TestDollarBarBuilder:
 
     def test_dollar_bars_use_vwap(self, sample_ohlcv_1min):
         """Test dollar bars with VWAP option."""
-        from src.phase1.stages.clean.bar_builders import DollarBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import DollarBarBuilder
 
         builder_close = DollarBarBuilder(dollar_threshold=500000, use_vwap=False)
         builder_vwap = DollarBarBuilder(dollar_threshold=500000, use_vwap=True)
@@ -256,7 +256,7 @@ class TestTimeBarBuilder:
 
     def test_builder_creation(self):
         """Test builder can be created."""
-        from src.phase1.stages.clean.bar_builders import TimeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import TimeBarBuilder
 
         builder = TimeBarBuilder(target_timeframe="5min")
         assert builder.target_timeframe == "5min"
@@ -264,14 +264,14 @@ class TestTimeBarBuilder:
 
     def test_invalid_timeframe_raises(self):
         """Test invalid timeframe raises error."""
-        from src.phase1.stages.clean.bar_builders import TimeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import TimeBarBuilder
 
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             TimeBarBuilder(target_timeframe="3min")
 
     def test_build_5min_bars(self, sample_ohlcv_1min):
         """Test building 5-minute bars."""
-        from src.phase1.stages.clean.bar_builders import TimeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import TimeBarBuilder
 
         builder = TimeBarBuilder(target_timeframe="5min")
         bars = builder.build(sample_ohlcv_1min)
@@ -285,7 +285,7 @@ class TestTimeBarBuilder:
 
     def test_build_15min_bars(self, sample_ohlcv_1min):
         """Test building 15-minute bars."""
-        from src.phase1.stages.clean.bar_builders import TimeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import TimeBarBuilder
 
         builder = TimeBarBuilder(target_timeframe="15min")
         bars = builder.build(sample_ohlcv_1min)
@@ -296,7 +296,7 @@ class TestTimeBarBuilder:
 
     def test_supported_timeframes(self):
         """Test all supported timeframes."""
-        from src.phase1.stages.clean.bar_builders import TimeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import TimeBarBuilder
 
         timeframes = ["1min", "5min", "10min", "15min", "20min", "30min", "45min", "60min"]
 
@@ -314,7 +314,7 @@ class TestBuildBarsFactory:
 
     def test_build_volume_bars(self, sample_ohlcv_1min):
         """Test building volume bars via factory."""
-        from src.phase1.stages.clean.bar_builders import build_bars
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import build_bars
 
         bars = build_bars(sample_ohlcv_1min, bar_type="volume", volume_threshold=5000)
 
@@ -324,7 +324,7 @@ class TestBuildBarsFactory:
 
     def test_build_dollar_bars(self, sample_ohlcv_1min):
         """Test building dollar bars via factory."""
-        from src.phase1.stages.clean.bar_builders import build_bars
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import build_bars
 
         bars = build_bars(sample_ohlcv_1min, bar_type="dollar", dollar_threshold=500000)
 
@@ -334,7 +334,7 @@ class TestBuildBarsFactory:
 
     def test_build_time_bars(self, sample_ohlcv_1min):
         """Test building time bars via factory."""
-        from src.phase1.stages.clean.bar_builders import build_bars
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import build_bars
 
         bars = build_bars(sample_ohlcv_1min, bar_type="time", target_timeframe="5min")
 
@@ -344,7 +344,7 @@ class TestBuildBarsFactory:
 
     def test_build_from_config(self, sample_ohlcv_1min):
         """Test building bars from BarConfig."""
-        from src.phase1.stages.clean.bar_builders import build_bars, BarConfig
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import build_bars, BarConfig
 
         config = BarConfig(bar_type="volume", volume_threshold=5000)
         bars = build_bars(sample_ohlcv_1min, config=config)
@@ -354,7 +354,7 @@ class TestBuildBarsFactory:
 
     def test_unknown_bar_type_raises(self, sample_ohlcv_1min):
         """Test unknown bar type raises error."""
-        from src.phase1.stages.clean.bar_builders import build_bars
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import build_bars
 
         with pytest.raises(ValueError, match="Unknown bar type"):
             build_bars(sample_ohlcv_1min, bar_type="unknown")
@@ -369,7 +369,7 @@ class TestBarConfig:
 
     def test_default_config(self):
         """Test default config values."""
-        from src.phase1.stages.clean.bar_builders import BarConfig
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarConfig
 
         config = BarConfig()
         assert config.bar_type == "time"
@@ -378,7 +378,7 @@ class TestBarConfig:
 
     def test_get_builder_kwargs_time(self):
         """Test getting builder kwargs for time bars."""
-        from src.phase1.stages.clean.bar_builders import BarConfig
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarConfig
 
         config = BarConfig(bar_type="time", target_timeframe="15min")
         kwargs = config.get_builder_kwargs()
@@ -387,7 +387,7 @@ class TestBarConfig:
 
     def test_get_builder_kwargs_volume(self):
         """Test getting builder kwargs for volume bars."""
-        from src.phase1.stages.clean.bar_builders import BarConfig
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarConfig
 
         config = BarConfig(bar_type="volume", volume_threshold=50000)
         kwargs = config.get_builder_kwargs()
@@ -396,7 +396,7 @@ class TestBarConfig:
 
     def test_get_builder_kwargs_dollar(self):
         """Test getting builder kwargs for dollar bars."""
-        from src.phase1.stages.clean.bar_builders import BarConfig
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import BarConfig
 
         config = BarConfig(bar_type="dollar", dollar_threshold=1000000, use_vwap=True)
         kwargs = config.get_builder_kwargs()
@@ -414,7 +414,7 @@ class TestEstimateBarCount:
 
     def test_estimate_time_bars(self, sample_ohlcv_1min):
         """Test estimating time bar count."""
-        from src.phase1.stages.clean.bar_builders import estimate_bar_count
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import estimate_bar_count
 
         estimate = estimate_bar_count(
             sample_ohlcv_1min,
@@ -427,7 +427,7 @@ class TestEstimateBarCount:
 
     def test_estimate_volume_bars(self, sample_ohlcv_1min):
         """Test estimating volume bar count."""
-        from src.phase1.stages.clean.bar_builders import estimate_bar_count
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import estimate_bar_count
 
         total_volume = sample_ohlcv_1min["volume"].sum()
         threshold = 5000
@@ -443,7 +443,7 @@ class TestEstimateBarCount:
 
     def test_estimate_dollar_bars(self, sample_ohlcv_1min):
         """Test estimating dollar bar count."""
-        from src.phase1.stages.clean.bar_builders import estimate_bar_count
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import estimate_bar_count
 
         total_dollars = (sample_ohlcv_1min["volume"] * sample_ohlcv_1min["close"]).sum()
         threshold = 500000
@@ -467,7 +467,7 @@ class TestBarBuilderEdgeCases:
 
     def test_empty_input_raises(self):
         """Test empty input raises error."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         builder = VolumeBarBuilder(volume_threshold=1000)
         empty_df = pd.DataFrame(columns=["datetime", "open", "high", "low", "close", "volume"])
@@ -477,7 +477,7 @@ class TestBarBuilderEdgeCases:
 
     def test_single_bar_output(self, minimal_ohlcv):
         """Test when threshold results in single output bar."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         # Large threshold - should result in single bar
         builder = VolumeBarBuilder(volume_threshold=10000)
@@ -487,7 +487,7 @@ class TestBarBuilderEdgeCases:
 
     def test_unsorted_input(self, sample_ohlcv_1min):
         """Test builder handles unsorted input."""
-        from src.phase1.stages.clean.bar_builders import VolumeBarBuilder
+        from src.pipeline._phase1_impl.stages.clean.bar_builders import VolumeBarBuilder
 
         # Shuffle the data
         shuffled = sample_ohlcv_1min.sample(frac=1, random_state=42)

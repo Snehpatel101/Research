@@ -1,33 +1,29 @@
 """
 MLFactory - THE single cohesive entry point for the entire ML pipeline.
 
+UNIFIED PIPELINE ARCHITECTURE (PHASE_0):
+MLFactory is the ONE entry point that internally delegates to PipelineRunner
+(Phase 1) for data preparation, ensuring no duplicate implementations.
+
 This module provides:
 1. One entry point: `MLFactory`
 2. One configuration: `PipelineConfig` from src/core
 3. Complete pipeline from raw OHLCV to inference-ready bundle
+4. Internal delegation to PipelineRunner for data preparation
 
 ARCHITECTURE:
     Raw OHLCV DataFrame
            │
            ▼
-    ┌──────────────────┐
-    │  Feature Compute │  PHASE_1: 162 base + 240 MTF features
-    │  (+ MTF)         │
-    └────────┬─────────┘
-             │
-             ▼
-    ┌──────────────────┐
-    │  Labeling        │  PHASE_1B: Triple barrier / Optuna optimization
-    │  (Triple Barrier)│
-    └────────┬─────────┘
-             │
-             ▼
-    ┌──────────────────┐
-    │  Feature Select  │  PHASE_1: Pruning, selection, SHAP
-    │  (Optuna/SHAP)   │
-    └────────┬─────────┘
-             │
-             ▼
+    ┌──────────────────────────────────────────────────────────────┐
+    │  PHASE 1: DATA PREPARATION (via PipelineRunner)              │
+    │  ┌──────────────────┐  ┌──────────────────┐                  │
+    │  │  Feature Compute │→ │  Labeling        │→ Splits/Scaling  │
+    │  │  162 base + MTF  │  │  Triple Barrier  │                  │
+    │  └──────────────────┘  └──────────────────┘                  │
+    └────────────────────────────┬─────────────────────────────────┘
+                                 │
+                                 ▼
     ┌──────────────────┐
     │  Adapters        │  PHASE_2: Convert to 2D/3D/4D per model
     │  (Tabular/Seq)   │
@@ -366,7 +362,7 @@ class MLFactory:
         start_time = time.time()
 
         logger.info("\n" + "=" * 70)
-        logger.info("STARTING ML FACTORY PIPELINE")
+        logger.info("STARTING ML FACTORY PIPELINE (UNIFIED)")
         logger.info("=" * 70)
 
         # Initialize result
@@ -375,31 +371,41 @@ class MLFactory:
         training_result = None
 
         # =================================================================
-        # PHASE 1: FEATURE COMPUTATION
+        # PHASE 1: DATA PREPARATION (via PipelineRunner)
         # =================================================================
-        if not skip_features:
+        # This is the UNIFIED approach - MLFactory delegates to PipelineRunner
+        # for all data preparation (features, labels, splits, scaling)
+        if not skip_features and not skip_labels:
             logger.info("\n" + "-" * 60)
-            logger.info("PHASE 1: FEATURE COMPUTATION")
+            logger.info("PHASE 1: DATA PREPARATION (via PipelineRunner)")
+            logger.info("-" * 60)
+            feature_result, labeling_result, df = self._run_data_pipeline(df)
+            logger.info(f"Feature computation complete: {feature_result}")
+            logger.info(f"Labeling complete: {labeling_result}")
+        elif not skip_features:
+            # Legacy path: separate feature computation (deprecated)
+            logger.info("\n" + "-" * 60)
+            logger.info("PHASE 1: FEATURE COMPUTATION (legacy)")
             logger.info("-" * 60)
             feature_result, df = self._compute_features(df)
             logger.info(f"Feature computation complete: {feature_result}")
         else:
-            logger.info("\nSkipping feature computation (skip_features=True)")
+            logger.info("\nSkipping data preparation (skip_features=True)")
 
         # =================================================================
-        # PHASE 1B: LABELING
+        # PHASE 1B: LABELING (legacy path, only if skip_features=True)
         # =================================================================
-        if not skip_labels:
+        if skip_features and not skip_labels:
             logger.info("\n" + "-" * 60)
-            logger.info("PHASE 1B: LABELING")
+            logger.info("PHASE 1B: LABELING (legacy)")
             logger.info("-" * 60)
             labeling_result, df = self._compute_labels(df)
             logger.info(f"Labeling complete: {labeling_result}")
-        else:
+        elif skip_labels and labeling_result is None:
             logger.info("\nSkipping labeling (skip_labels=True)")
 
         # =================================================================
-        # PHASE 1: FEATURE SELECTION (optional)
+        # PHASE 1: FEATURE SELECTION (optional, post-processing)
         # =================================================================
         if self.config.optimize_features and feature_result:
             logger.info("\n" + "-" * 60)
@@ -448,6 +454,98 @@ class MLFactory:
 
         return result
 
+    def _run_data_pipeline(
+        self,
+        df: pd.DataFrame,
+    ) -> tuple[FeatureComputeResult, LabelingResult, pd.DataFrame]:
+        """
+        Run Phase 1 data pipeline via PipelineRunner.
+
+        This is the UNIFIED approach - delegates to PipelineRunner instead of
+        having duplicate feature/labeling implementations.
+
+        Args:
+            df: Raw OHLCV DataFrame
+
+        Returns:
+            Tuple of (FeatureComputeResult, LabelingResult, DataFrame with features & labels)
+        """
+        start = time.time()
+
+        # Convert core PipelineConfig to Phase1 PipelineConfig
+        phase1_config = self.config.to_phase1_config()
+
+        # Save the input DataFrame to the expected location for PipelineRunner
+        # PipelineRunner expects data in a specific directory structure
+        raw_data_dir = phase1_config.data_raw_dir
+        raw_data_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save as parquet for PipelineRunner
+        raw_data_path = raw_data_dir / f"{self.config.symbol}_1min.parquet"
+        df.to_parquet(raw_data_path)
+        logger.info(f"  Saved raw data to: {raw_data_path}")
+
+        # Run PipelineRunner for Phase 1 (data preparation)
+        from src.pipeline.runner import PipelineRunner
+
+        runner = PipelineRunner(phase1_config, resume=False)
+        success = runner.run()
+
+        if not success:
+            raise RuntimeError("Phase 1 data pipeline failed")
+
+        # Load the prepared data from PipelineRunner outputs
+        features_dir = phase1_config.data_features_dir
+        tf = phase1_config.target_timeframe
+
+        # Load features DataFrame
+        features_path = features_dir / f"features_{tf}.parquet"
+        if not features_path.exists():
+            # Try alternate naming
+            features_path = features_dir / f"{self.config.symbol}_{tf}_features.parquet"
+
+        result_df = pd.read_parquet(features_path)
+
+        # Extract feature counts
+        ohlcv_cols = ["open", "high", "low", "close", "volume"]
+        label_cols = [c for c in result_df.columns if c.startswith("label") or c == "target"]
+        feature_cols = [c for c in result_df.columns if c not in ohlcv_cols + label_cols + ["timestamp"]]
+
+        # Estimate base vs MTF features
+        mtf_feature_cols = [c for c in feature_cols if any(tf in c for tf in ["5min", "15min", "60min", "1h"])]
+        base_feature_cols = [c for c in feature_cols if c not in mtf_feature_cols]
+
+        computation_time = time.time() - start
+
+        feature_result = FeatureComputeResult(
+            features_df=result_df[feature_cols] if feature_cols else pd.DataFrame(),
+            base_feature_count=len(base_feature_cols),
+            mtf_feature_count=len(mtf_feature_cols),
+            total_feature_count=len(feature_cols),
+            computation_time_seconds=computation_time,
+        )
+
+        # Extract labeling result
+        label_col = "label" if "label" in result_df.columns else "target"
+        labels = result_df[label_col] if label_col in result_df.columns else pd.Series()
+
+        labeling_result = LabelingResult(
+            labels=labels,
+            labeling_method=self.config.labeling_method,
+            n_samples=len(labels.dropna()) if not labels.empty else 0,
+            class_distribution={int(k): int(v) for k, v in labels.value_counts().items()} if not labels.empty else {},
+            label_params={
+                "horizons": self.config.horizons,
+                "upper_mult": self.config.upper_mult,
+                "lower_mult": self.config.lower_mult,
+            },
+            computation_time_seconds=0.0,  # Included in feature time
+        )
+
+        logger.info(f"  Phase 1 complete: {len(feature_cols)} features, {len(labels.dropna())} labeled samples")
+
+        return feature_result, labeling_result, result_df
+
     def _compute_features(
         self,
         df: pd.DataFrame,
@@ -455,12 +553,23 @@ class MLFactory:
         """
         Compute all features including MTF.
 
+        DEPRECATED: This method is kept for backward compatibility.
+        Use _run_data_pipeline() which delegates to PipelineRunner for unified execution.
+
         Args:
             df: Raw OHLCV DataFrame
 
         Returns:
             Tuple of (FeatureComputeResult, DataFrame with features)
         """
+        import warnings
+        warnings.warn(
+            "MLFactory._compute_features is deprecated. "
+            "The unified pipeline now uses PipelineRunner for data preparation.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         from src.features.compute import (
             compute_all_features,
             compute_mtf_features,
@@ -513,12 +622,23 @@ class MLFactory:
         """
         Compute labels using configured method.
 
+        DEPRECATED: This method is kept for backward compatibility.
+        Use _run_data_pipeline() which delegates to PipelineRunner for unified execution.
+
         Args:
             df: DataFrame with OHLCV and features
 
         Returns:
             Tuple of (LabelingResult, DataFrame with labels)
         """
+        import warnings
+        warnings.warn(
+            "MLFactory._compute_labels is deprecated. "
+            "The unified pipeline now uses PipelineRunner for data preparation.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         start = time.time()
 
         labeling_method = LabelingMethod(self.config.labeling_method)

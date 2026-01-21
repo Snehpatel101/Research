@@ -41,9 +41,17 @@ Integration with PipelineConfig:
     ... )
 """
 
+from src.labeling.base import (
+    LabelingResult,
+    LabelingStrategy,
+    LabelingType,
+)
+
 from src.labeling.triple_barrier import (
     TripleBarrierConfig,
     TripleBarrierLabeler,
+    triple_barrier_numba,
+    triple_barrier_numba_with_costs,
 )
 
 from src.labeling.optimization import (
@@ -54,10 +62,17 @@ from src.labeling.optimization import (
 
 
 __all__ = [
+    # Base classes
+    "LabelingResult",
+    "LabelingStrategy",
+    "LabelingType",
     # Configuration
     "TripleBarrierConfig",
     # Labeler
     "TripleBarrierLabeler",
+    # Numba functions
+    "triple_barrier_numba",
+    "triple_barrier_numba_with_costs",
     # Optimization
     "LabelOptimizationResult",
     "LabelOptimizer",

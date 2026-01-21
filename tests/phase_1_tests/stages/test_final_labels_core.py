@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.phase1.stages.final_labels.core import apply_optimized_labels
+from src.pipeline._phase1_impl.stages.final_labels.core import apply_optimized_labels
 
 
 @pytest.fixture

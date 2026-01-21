@@ -22,7 +22,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.labeling import LabelingType, TripleBarrierLabeler, triple_barrier_numba
+from src.pipeline._phase1_impl.stages.labeling import LabelingType, TripleBarrierLabeler, triple_barrier_numba
 
 
 @pytest.fixture
@@ -412,7 +412,7 @@ class TestTripleBarrierTransactionCosts:
 
     def test_numba_with_costs_makes_upper_barrier_harder(self):
         """Test that cost adjustment makes upper barrier harder to hit."""
-        from src.phase1.stages.labeling import triple_barrier_numba, triple_barrier_numba_with_costs
+        from src.pipeline._phase1_impl.stages.labeling import triple_barrier_numba, triple_barrier_numba_with_costs
 
         n = 30
         close = np.full(n, 100.0)
@@ -446,7 +446,7 @@ class TestTripleBarrierTransactionCosts:
 
     def test_cost_adjustment_requires_more_profit_for_win(self):
         """Verify that cost adjustment requires higher gross profit for WIN."""
-        from src.phase1.stages.labeling import triple_barrier_numba_with_costs
+        from src.pipeline._phase1_impl.stages.labeling import triple_barrier_numba_with_costs
 
         n = 30
         close = np.full(n, 100.0)
@@ -513,7 +513,7 @@ class TestTripleBarrierTransactionCosts:
 
     def test_backward_compatibility_with_disabled_costs(self, sample_ohlcv_df):
         """Test that disabling costs produces identical results to old behavior."""
-        from src.phase1.stages.labeling import triple_barrier_numba
+        from src.pipeline._phase1_impl.stages.labeling import triple_barrier_numba
 
         labeler = TripleBarrierLabeler(apply_transaction_costs=False)
         result = labeler.compute_labels(
@@ -535,7 +535,7 @@ class TestTripleBarrierTransactionCosts:
 
     def test_lower_barrier_not_affected_by_costs(self):
         """Test that the lower barrier is NOT adjusted by transaction costs."""
-        from src.phase1.stages.labeling import triple_barrier_numba, triple_barrier_numba_with_costs
+        from src.pipeline._phase1_impl.stages.labeling import triple_barrier_numba, triple_barrier_numba_with_costs
 
         n = 30
         close = np.full(n, 100.0)

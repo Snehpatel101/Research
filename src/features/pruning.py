@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, List, Dict, Optional, Any, Tuple
 
 import numpy as np
@@ -193,6 +194,7 @@ class FeaturePruner:
         feature_names: List[str],
         model_fn: Callable,
         scoring: str = "f1_weighted",
+        storage_path: Optional[str] = None,
     ) -> FeaturePruningResult:
         """Run feature pruning optimization.
 
@@ -202,6 +204,9 @@ class FeaturePruner:
             feature_names: List of feature names corresponding to columns of X.
             model_fn: Callable that returns a sklearn-compatible model instance.
             scoring: Scoring metric for cross-validation.
+            storage_path: Optional path to SQLite file for Optuna study persistence.
+                If provided, the study can be resumed if interrupted.
+                If None, uses in-memory storage.
 
         Returns:
             FeaturePruningResult with pruned features and metadata.
@@ -252,7 +257,7 @@ class FeaturePruner:
 
         else:  # importance
             pruned_features, study = self._importance_pruning(
-                X, y, feature_names, model_fn, scoring, feature_importance
+                X, y, feature_names, model_fn, scoring, feature_importance, storage_path
             )
             correlation_matrix = None
             null_results = None
@@ -433,6 +438,7 @@ class FeaturePruner:
         model_fn: Callable,
         scoring: str,
         feature_importance: Dict[str, float],
+        storage_path: Optional[str] = None,
     ) -> Tuple[List[str], optuna.Study]:
         """Optuna-based importance pruning.
 
@@ -454,10 +460,19 @@ class FeaturePruner:
             interval_steps=1,
         )
 
+        # Configure storage for study persistence
+        storage = None
+        if storage_path is not None:
+            storage_dir = Path(storage_path).parent
+            storage_dir.mkdir(parents=True, exist_ok=True)
+            storage = optuna.storages.RDBStorage(f"sqlite:///{storage_path}")
+
         study = optuna.create_study(
             direction="maximize",
             sampler=sampler,
             pruner=pruner,
+            storage=storage,
+            load_if_exists=True,
         )
 
         name_to_idx = {name: i for i, name in enumerate(feature_names)}

@@ -57,7 +57,7 @@ class TestConfigurationErrors:
 
     def test_pipeline_config_empty_symbols_raises(self):
         """Pipeline config with empty symbols should raise."""
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         with pytest.raises((ValueError, AssertionError)):
             PipelineConfig(symbols=[])

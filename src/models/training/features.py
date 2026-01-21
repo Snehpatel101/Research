@@ -27,7 +27,7 @@ except ImportError:
     MODEL_DATA_REQUIREMENTS = None
 
 if TYPE_CHECKING:
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
     from src.models.config.trainer_config import TrainerConfig
     from src.models.base import BaseModel
     from src.feature_selection import FeatureSelectionManager
@@ -212,8 +212,8 @@ class TrainerFeaturesMixin:
         Returns:
             List of all feature column names
         """
-        from src.phase1.utils.constants import METADATA_COLUMNS
-        from src.phase1.utils.feature_sets import _is_label_column
+        from src.pipeline._phase1_impl.utils.constants import METADATA_COLUMNS
+        from src.pipeline._phase1_impl.utils.feature_sets import _is_label_column
 
         return [
             col for col in df.columns
@@ -284,11 +284,11 @@ class TrainerFeaturesMixin:
         # Import using importlib to avoid circular imports through __init__.py chain
         import importlib
 
-        feature_sets_config = importlib.import_module("src.phase1.config.feature_sets")
+        feature_sets_config = importlib.import_module("src.pipeline._phase1_impl.config.feature_sets")
         FEATURE_SET_ALIASES = feature_sets_config.FEATURE_SET_ALIASES
         FEATURE_SET_DEFINITIONS = feature_sets_config.FEATURE_SET_DEFINITIONS
 
-        feature_sets_utils = importlib.import_module("src.phase1.utils.feature_sets")
+        feature_sets_utils = importlib.import_module("src.pipeline._phase1_impl.utils.feature_sets")
         resolve_feature_set = feature_sets_utils.resolve_feature_set
 
         feature_set_name = self.config.feature_set
@@ -415,7 +415,7 @@ class TrainerFeaturesMixin:
         """
         import importlib
 
-        feature_sets_config = importlib.import_module("src.phase1.config.feature_sets")
+        feature_sets_config = importlib.import_module("src.pipeline._phase1_impl.config.feature_sets")
         FEATURE_SET_ALIASES = feature_sets_config.FEATURE_SET_ALIASES
 
         # Get the optimal feature set for this model

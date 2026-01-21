@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
 from src.models import Trainer, TrainerConfig
 from src.models.registry import ModelRegistry
@@ -383,7 +383,7 @@ class RegimeAwareTrainer:
 
         # Load container if not provided
         if container is None:
-            from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+            from src.core.container import TimeSeriesDataContainer
 
             container = TimeSeriesDataContainer.from_parquet_dir(
                 path=self.config.data_dir,
@@ -544,7 +544,7 @@ class RegimeAwareTrainer:
             logger.info(f"    Val samples: {n_val}")
 
             # Create regime-specific container
-            from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+            from src.core.container import TimeSeriesDataContainer
 
             regime_container = TimeSeriesDataContainer.from_dataframes(
                 train_df=pd.concat(
@@ -711,7 +711,7 @@ class RegimeAwareTrainer:
         )
 
         # Create container with augmented features
-        from src.phase1.stages.datasets.container import TimeSeriesDataContainer
+        from src.core.container import TimeSeriesDataContainer
 
         augmented_container = TimeSeriesDataContainer.from_dataframes(
             train_df=pd.concat(

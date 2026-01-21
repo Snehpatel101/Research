@@ -21,7 +21,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / 'src'))
 
-from src.phase1.stages.labeling import BetSizeMethod, LabelingType, MetaLabeler
+from src.pipeline._phase1_impl.stages.labeling import BetSizeMethod, LabelingType, MetaLabeler
 
 
 @pytest.fixture
@@ -662,7 +662,7 @@ class TestMetaFactoryIntegration:
 
     def test_create_via_factory(self, sample_df_with_labels):
         """Test creating MetaLabeler via factory."""
-        from src.phase1.stages.labeling import get_labeler, LabelingType
+        from src.pipeline._phase1_impl.stages.labeling import get_labeler, LabelingType
 
         labeler = get_labeler(
             LabelingType.META,
@@ -677,7 +677,7 @@ class TestMetaFactoryIntegration:
 
     def test_create_via_factory_string(self, sample_df_with_labels):
         """Test creating MetaLabeler via factory with string type."""
-        from src.phase1.stages.labeling import get_labeler
+        from src.pipeline._phase1_impl.stages.labeling import get_labeler
 
         labeler = get_labeler(
             'meta',
@@ -689,7 +689,7 @@ class TestMetaFactoryIntegration:
 
     def test_available_strategies_includes_meta(self):
         """Test that META is in available strategies."""
-        from src.phase1.stages.labeling import get_available_strategies, LabelingType
+        from src.pipeline._phase1_impl.stages.labeling import get_available_strategies, LabelingType
 
         strategies = get_available_strategies()
         assert LabelingType.META in strategies

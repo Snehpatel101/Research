@@ -1,34 +1,31 @@
 """
 Unified ML Pipeline - Single entry point for entire ML workflow.
 
-This module provides the main MLPipeline class that orchestrates:
-- Phase 1-5: Raw OHLCV → Labeled Features (data pipeline)
-- Phase 6: Model Training (training orchestration)
-- Phase 7: Evaluation (cross-validation, walk-forward, etc.)
+DEPRECATED: This module is deprecated in favor of src.factory.MLFactory.
+MLFactory is now the ONE canonical entry point that internally delegates to
+PipelineRunner for Phase 1 data preparation.
 
-Usage:
+Migration Guide:
+    # OLD (deprecated)
     from src.ml_pipeline import MLPipeline, MLConfig
-
-    # Create config
-    config = MLConfig(
-        symbol="MES",
-        horizons=[20],
-        models=["xgboost", "lstm"],
-        training_mode="standard",
-        build_ensemble=True,
-    )
-
-    # Run full pipeline
+    config = MLConfig(symbol="MES", horizons=[20], models=["xgboost"])
     pipeline = MLPipeline(config)
     results = pipeline.run()
 
-    # Or run phases separately
-    data_results = pipeline.run_data()
-    training_results = pipeline.run_training()
-    evaluation_results = pipeline.run_evaluation()
+    # NEW (recommended)
+    from src.factory import MLFactory
+    from src.core import PipelineConfig
+    config = PipelineConfig(
+        symbol="MES",
+        data_path="./data/mes.parquet",
+        output_dir="./experiments",
+        models=["xgboost"],
+        horizons=[20],
+    )
+    factory = MLFactory(config)
+    results = factory.run(df)
 
-    # Resume from checkpoint
-    pipeline.resume()
+This module is kept for backward compatibility and will be removed in a future version.
 """
 
 import logging
@@ -39,7 +36,7 @@ from .config import MLConfig
 from .state import PipelineState
 
 if TYPE_CHECKING:
-    from src.phase1.pipeline_config import PipelineConfig
+    from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
     from src.training.config import ExperimentConfig
 
 logger = logging.getLogger(__name__)
@@ -48,6 +45,19 @@ logger = logging.getLogger(__name__)
 class MLPipeline:
     """
     Unified ML pipeline orchestrating entire workflow.
+
+    DEPRECATED: Use src.factory.MLFactory instead.
+    MLFactory is now the ONE canonical entry point that internally delegates to
+    PipelineRunner for Phase 1 data preparation.
+
+    Migration:
+        # OLD
+        from src.ml_pipeline import MLPipeline, MLConfig
+        pipeline = MLPipeline(config)
+
+        # NEW
+        from src.factory import MLFactory
+        factory = MLFactory(config)
 
     Coordinates three main phases:
     1. Data Pipeline (Phase 1-5): Raw OHLCV → Labeled Features
@@ -61,6 +71,8 @@ class MLPipeline:
         """
         Initialize ML pipeline.
 
+        DEPRECATED: Use src.factory.MLFactory instead.
+
         Args:
             config: MLConfig object, dict, YAML path, or YAML string
 
@@ -68,6 +80,15 @@ class MLPipeline:
             ValueError: If config type is invalid
             FileNotFoundError: If YAML path doesn't exist
         """
+        import warnings
+        warnings.warn(
+            "MLPipeline is deprecated. Use src.factory.MLFactory instead. "
+            "MLFactory is now the ONE canonical entry point that internally "
+            "delegates to PipelineRunner for Phase 1 data preparation.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self.config = self._normalize_config(config)
         self.state = PipelineState.load_or_create(self.config.run_id)
 
@@ -223,7 +244,7 @@ class MLPipeline:
 
         try:
             # Convert MLConfig → PipelineConfig
-            from src.phase1.pipeline_config import PipelineConfig
+            from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
             pipeline_config = self._mlconfig_to_pipeline_config()
 
@@ -431,7 +452,7 @@ class MLPipeline:
             Some MLConfig fields may not map directly to PipelineConfig.
             Unmapped fields will use PipelineConfig defaults.
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         # Use MLConfig.run_id if available, otherwise generate new one
         pipeline_run_id = self.config.run_id

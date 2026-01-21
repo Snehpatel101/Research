@@ -938,7 +938,7 @@ class UnifiedConfig:
         -------
         PipelineConfig
         """
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         # Parse timeframe minutes for embargo calculation
         from src.common.timeframes import get_timeframe_minutes

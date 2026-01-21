@@ -27,7 +27,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from src.phase1.stages.features.entropy import (
+from src.pipeline._phase1_impl.stages.features.entropy import (
     DEFAULT_APEN_M,
     DEFAULT_APEN_R,
     DEFAULT_APEN_WINDOWS,
@@ -713,7 +713,7 @@ class TestIntegration:
 
     def test_import_from_package(self):
         """Test that entropy features can be imported from the package."""
-        from src.phase1.stages.features import (
+        from src.pipeline._phase1_impl.stages.features import (
             DEFAULT_APEN_M,
             DEFAULT_APEN_R,
             DEFAULT_APEN_WINDOWS,
@@ -735,7 +735,7 @@ class TestIntegration:
 
     def test_combine_with_other_features(self, sample_ohlcv):
         """Test combining entropy features with other feature types."""
-        from src.phase1.stages.features.volatility import add_historical_volatility
+        from src.pipeline._phase1_impl.stages.features.volatility import add_historical_volatility
 
         df = sample_ohlcv.copy()
         feature_metadata = {}

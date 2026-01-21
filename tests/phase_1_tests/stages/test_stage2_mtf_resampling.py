@@ -99,7 +99,7 @@ class TestConfigTimeframe:
 
     def test_supported_timeframes_exist(self):
         """Test that SUPPORTED_TIMEFRAMES is defined."""
-        from src.phase1.config import SUPPORTED_TIMEFRAMES
+        from src.pipeline._phase1_impl.config import SUPPORTED_TIMEFRAMES
         assert isinstance(SUPPORTED_TIMEFRAMES, list)
         assert len(SUPPORTED_TIMEFRAMES) > 0
         assert '5min' in SUPPORTED_TIMEFRAMES
@@ -107,20 +107,20 @@ class TestConfigTimeframe:
 
     def test_target_timeframe_default(self):
         """Test that TARGET_TIMEFRAME has a default value."""
-        from src.phase1.config import TARGET_TIMEFRAME
+        from src.pipeline._phase1_impl.config import TARGET_TIMEFRAME
         # TARGET_TIMEFRAME is the raw data timeframe (1min)
         assert TARGET_TIMEFRAME == '1min'
 
     def test_validate_timeframe_valid(self):
         """Test validation of valid timeframes - should not raise."""
-        from src.phase1.config import validate_timeframe, SUPPORTED_TIMEFRAMES
+        from src.pipeline._phase1_impl.config import validate_timeframe, SUPPORTED_TIMEFRAMES
         for tf in SUPPORTED_TIMEFRAMES:
             # validate_timeframe raises on invalid, returns None on valid
             validate_timeframe(tf)  # Should not raise
 
     def test_validate_timeframe_invalid(self):
         """Test validation rejects invalid timeframes."""
-        from src.phase1.config import validate_timeframe
+        from src.pipeline._phase1_impl.config import validate_timeframe
         # Use truly unparseable strings - the validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
             validate_timeframe('badtimeframe')
@@ -130,7 +130,7 @@ class TestConfigTimeframe:
 
     def test_parse_timeframe_to_minutes(self):
         """Test parsing timeframe strings to minutes."""
-        from src.phase1.config import parse_timeframe_to_minutes
+        from src.pipeline._phase1_impl.config import parse_timeframe_to_minutes
 
         assert parse_timeframe_to_minutes('1min') == 1
         assert parse_timeframe_to_minutes('5min') == 5
@@ -140,14 +140,14 @@ class TestConfigTimeframe:
 
     def test_parse_timeframe_to_minutes_hours(self):
         """Test parsing hour timeframes."""
-        from src.phase1.config import parse_timeframe_to_minutes
+        from src.pipeline._phase1_impl.config import parse_timeframe_to_minutes
 
         assert parse_timeframe_to_minutes('1h') == 60
         assert parse_timeframe_to_minutes('2h') == 120
 
     def test_get_timeframe_metadata(self):
         """Test getting timeframe metadata."""
-        from src.phase1.config import get_timeframe_metadata
+        from src.pipeline._phase1_impl.config import get_timeframe_metadata
 
         meta = get_timeframe_metadata('5min')
         assert meta['timeframe'] == '5min'
@@ -157,7 +157,7 @@ class TestConfigTimeframe:
 
     def test_get_timeframe_metadata_invalid(self):
         """Test metadata fails for invalid timeframe."""
-        from src.phase1.config import get_timeframe_metadata
+        from src.pipeline._phase1_impl.config import get_timeframe_metadata
         with pytest.raises(ValueError):
             get_timeframe_metadata('invalid')
 
@@ -171,7 +171,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_5min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 5-minute bars."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '5min')
 
@@ -182,7 +182,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_15min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 15-minute bars."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '15min')
 
@@ -192,7 +192,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_30min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 30-minute bars."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '30min')
 
@@ -202,7 +202,7 @@ class TestResampleOHLCV:
 
     def test_resample_1min_to_60min(self, sample_1min_ohlcv):
         """Test resampling from 1-minute to 60-minute bars."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '60min')
 
@@ -215,7 +215,7 @@ class TestResampleOHLCV:
 
     def test_resample_ohlcv_aggregation(self, sample_1min_ohlcv):
         """Test that OHLCV aggregation is correct."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '5min')
 
@@ -236,7 +236,7 @@ class TestResampleOHLCV:
 
     def test_resample_no_metadata(self, sample_1min_ohlcv):
         """Test resampling without metadata column."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         result = resample_ohlcv(sample_1min_ohlcv, '5min', include_metadata=False)
 
@@ -244,7 +244,7 @@ class TestResampleOHLCV:
 
     def test_resample_preserves_symbol(self, sample_1min_ohlcv):
         """Test that resampling preserves symbol column if present."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         sample_1min_ohlcv['symbol'] = 'MES'
         result = resample_ohlcv(sample_1min_ohlcv, '5min')
@@ -254,7 +254,7 @@ class TestResampleOHLCV:
 
     def test_resample_invalid_timeframe(self, sample_1min_ohlcv):
         """Test that invalid timeframe raises error."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
@@ -262,7 +262,7 @@ class TestResampleOHLCV:
 
     def test_resample_missing_columns(self, sample_1min_ohlcv):
         """Test that missing columns raises error."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         df_missing = sample_1min_ohlcv.drop('volume', axis=1)
         with pytest.raises(ValueError, match="Missing required columns"):
@@ -270,7 +270,7 @@ class TestResampleOHLCV:
 
     def test_resample_empty_df(self):
         """Test that empty DataFrame raises error."""
-        from src.phase1.stages.clean import resample_ohlcv
+        from src.pipeline._phase1_impl.stages.clean import resample_ohlcv
 
         df_empty = pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
         with pytest.raises(ValueError, match="empty"):
@@ -286,7 +286,7 @@ class TestBackwardCompatibility:
 
     def test_resample_to_5min_still_works(self, sample_1min_ohlcv):
         """Test that resample_to_5min() still works."""
-        from src.phase1.stages.clean import resample_to_5min
+        from src.pipeline._phase1_impl.stages.clean import resample_to_5min
 
         result = resample_to_5min(sample_1min_ohlcv)
 
@@ -295,7 +295,7 @@ class TestBackwardCompatibility:
 
     def test_resample_to_5min_no_metadata(self, sample_1min_ohlcv):
         """Test that resample_to_5min() does not add timeframe column."""
-        from src.phase1.stages.clean import resample_to_5min
+        from src.pipeline._phase1_impl.stages.clean import resample_to_5min
 
         result = resample_to_5min(sample_1min_ohlcv)
 
@@ -312,7 +312,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_accepts_target_timeframe(self, temp_dir):
         """Test that DataCleaner accepts target_timeframe parameter."""
-        from src.phase1.stages.clean import DataCleaner
+        from src.pipeline._phase1_impl.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -326,7 +326,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_default_target_timeframe(self, temp_dir):
         """Test that DataCleaner defaults to 5min target."""
-        from src.phase1.stages.clean import DataCleaner
+        from src.pipeline._phase1_impl.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -337,7 +337,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_invalid_target_timeframe(self, temp_dir):
         """Test that DataCleaner rejects invalid target_timeframe."""
-        from src.phase1.stages.clean import DataCleaner
+        from src.pipeline._phase1_impl.stages.clean import DataCleaner
 
         # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
@@ -349,7 +349,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_resample_data_method(self, temp_dir, sample_1min_ohlcv):
         """Test DataCleaner.resample_data() method."""
-        from src.phase1.stages.clean import DataCleaner
+        from src.pipeline._phase1_impl.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -365,7 +365,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_resample_override_timeframe(self, temp_dir, sample_1min_ohlcv):
         """Test that resample_data can override default timeframe."""
-        from src.phase1.stages.clean import DataCleaner
+        from src.pipeline._phase1_impl.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -382,7 +382,7 @@ class TestDataCleanerMTF:
 
     def test_datacleaner_resample_skip_if_same(self, temp_dir, sample_1min_ohlcv):
         """Test that resample_data skips if source equals target."""
-        from src.phase1.stages.clean import DataCleaner
+        from src.pipeline._phase1_impl.stages.clean import DataCleaner
 
         cleaner = DataCleaner(
             input_dir=temp_dir,
@@ -406,7 +406,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_default_5min(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data defaults to 5-minute resampling."""
-        from src.phase1.stages.clean import clean_symbol_data
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data
 
         # Save input data
         input_path = temp_dir / "MES.parquet"
@@ -422,7 +422,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_custom_timeframe(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data with custom target_timeframe."""
-        from src.phase1.stages.clean import clean_symbol_data
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data
 
         input_path = temp_dir / "MES.parquet"
         output_path = temp_dir / "MES_15min.parquet"
@@ -441,7 +441,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_no_metadata(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data without timeframe metadata."""
-        from src.phase1.stages.clean import clean_symbol_data
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data
 
         input_path = temp_dir / "MES.parquet"
         output_path = temp_dir / "MES_clean.parquet"
@@ -458,7 +458,7 @@ class TestCleanSymbolDataMTF:
 
     def test_clean_symbol_data_invalid_timeframe(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test clean_symbol_data rejects invalid timeframe."""
-        from src.phase1.stages.clean import clean_symbol_data
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data
 
         input_path = temp_dir / "MES.parquet"
         output_path = temp_dir / "MES_clean.parquet"
@@ -483,7 +483,7 @@ class TestMultiTimeframePipeline:
 
     def test_multi_timeframe_default(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test multi-timeframe processing with defaults."""
-        from src.phase1.stages.clean import clean_symbol_data_multi_timeframe
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data_multi_timeframe
 
         input_path = temp_dir / "MES.parquet"
         output_dir = temp_dir / "clean"
@@ -506,7 +506,7 @@ class TestMultiTimeframePipeline:
 
     def test_multi_timeframe_custom_list(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test multi-timeframe with custom timeframe list."""
-        from src.phase1.stages.clean import clean_symbol_data_multi_timeframe
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data_multi_timeframe
 
         input_path = temp_dir / "MES.parquet"
         output_dir = temp_dir / "clean"
@@ -531,7 +531,7 @@ class TestMultiTimeframePipeline:
 
     def test_multi_timeframe_creates_files(self, temp_dir, sample_1min_ohlcv_300_rows):
         """Test that multi-timeframe creates output files."""
-        from src.phase1.stages.clean import clean_symbol_data_multi_timeframe
+        from src.pipeline._phase1_impl.stages.clean import clean_symbol_data_multi_timeframe
 
         input_path = temp_dir / "MES.parquet"
         output_dir = temp_dir / "clean"
@@ -558,7 +558,7 @@ class TestGetResamplingInfo:
 
     def test_resampling_info_1min_to_5min(self):
         """Test resampling info from 1min to 5min."""
-        from src.phase1.stages.clean import get_resampling_info
+        from src.pipeline._phase1_impl.stages.clean import get_resampling_info
 
         info = get_resampling_info('1min', '5min')
 
@@ -569,7 +569,7 @@ class TestGetResamplingInfo:
 
     def test_resampling_info_5min_to_15min(self):
         """Test resampling info from 5min to 15min."""
-        from src.phase1.stages.clean import get_resampling_info
+        from src.pipeline._phase1_impl.stages.clean import get_resampling_info
 
         info = get_resampling_info('5min', '15min')
 
@@ -578,7 +578,7 @@ class TestGetResamplingInfo:
 
     def test_resampling_info_invalid_downsampling(self):
         """Test that downsampling (larger to smaller) raises error."""
-        from src.phase1.stages.clean import get_resampling_info
+        from src.pipeline._phase1_impl.stages.clean import get_resampling_info
 
         with pytest.raises(ValueError, match="Cannot resample"):
             get_resampling_info('15min', '5min')
@@ -592,16 +592,16 @@ class TestPipelineConfigMTF:
     """Tests for PipelineConfig with target_timeframe."""
 
     def test_pipeline_config_default_timeframe(self):
-        """Test PipelineConfig defaults to 1min (canonical source)."""
-        from src.phase1.pipeline_config import PipelineConfig
+        """Test PipelineConfig defaults to 5min (canonical default)."""
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         config = PipelineConfig(symbols=['MES'])
-        # Default is 1min as the canonical source timeframe
-        assert config.target_timeframe == '1min'
+        # Default is 5min as the canonical default timeframe
+        assert config.target_timeframe == '5min'
 
     def test_pipeline_config_custom_timeframe(self):
         """Test PipelineConfig with custom target_timeframe."""
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         config = PipelineConfig(symbols=['MES'], target_timeframe='15min')
         assert config.target_timeframe == '15min'
@@ -609,7 +609,7 @@ class TestPipelineConfigMTF:
 
     def test_pipeline_config_bar_resolution_backward_compat(self):
         """Test that bar_resolution syncs with target_timeframe."""
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         # Old code might set bar_resolution directly
         config = PipelineConfig(symbols=['MES'], bar_resolution='30min')
@@ -617,7 +617,7 @@ class TestPipelineConfigMTF:
 
     def test_pipeline_config_invalid_timeframe(self):
         """Test PipelineConfig rejects invalid timeframe."""
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         # Use truly unparseable string - validator accepts any parseable format
         with pytest.raises(ValueError, match="Unsupported timeframe"):
@@ -625,7 +625,7 @@ class TestPipelineConfigMTF:
 
     def test_pipeline_config_validate_timeframe(self):
         """Test PipelineConfig.validate() includes timeframe check."""
-        from src.phase1.pipeline_config import PipelineConfig
+        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
 
         config = PipelineConfig(symbols=['MES'])
         issues = config.validate()

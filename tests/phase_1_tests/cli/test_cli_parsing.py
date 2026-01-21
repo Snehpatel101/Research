@@ -50,7 +50,7 @@ def temp_project_dir():
 @pytest.fixture
 def mock_pipeline_config():
     """Mock pipeline_config module."""
-    from src.phase1 import pipeline_config
+    from src.pipeline._phase1_impl import pipeline_config
     return pipeline_config
 
 

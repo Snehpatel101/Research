@@ -1,8 +1,11 @@
 """
-ModelServer - Optional HTTP server for model inference.
+ModelServer - HTTP server for model inference using FastAPI.
 
-Provides a simple REST API for model predictions using Flask.
-Can be extended to use FastAPI for async/production deployments.
+Provides a production-ready REST API for model predictions with:
+- Async support for high concurrency
+- Automatic OpenAPI documentation (Swagger UI at /docs)
+- Pydantic validation for request/response
+- Health checks, metrics, and model info endpoints
 
 Usage:
     # Start server
@@ -13,8 +16,11 @@ Usage:
         -H "Content-Type: application/json" \
         -d '{"features": [[0.1, 0.2, ...]]}'
 
+    # View API docs
+    http://localhost:8080/docs
+
 Note:
-    Flask is optional. Install with: pip install flask
+    FastAPI is optional. Install with: pip install fastapi uvicorn
 """
 
 from __future__ import annotations
@@ -23,7 +29,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -47,53 +53,115 @@ class ServerConfig:
     max_batch_size: int = 1000
     timeout_seconds: float = 30.0
     enable_metrics: bool = True
+    workers: int = 1
 
 
 # =============================================================================
-# REQUEST/RESPONSE MODELS
+# PYDANTIC REQUEST/RESPONSE MODELS
 # =============================================================================
 
+try:
+    from pydantic import BaseModel, Field
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    PYDANTIC_AVAILABLE = False
+    BaseModel = object
+    Field = lambda *args, **kwargs: None
 
-@dataclass
-class PredictionRequest:
+
+class PredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
     """Request format for predictions."""
 
-    features: list[list[float]]  # 2D array of features
-    calibrate: bool = True
-    return_probabilities: bool = True
+    features: list[list[float]] = Field(..., description="2D array of features")
+    calibrate: bool = Field(default=True, description="Apply calibration if available")
+    return_probabilities: bool = Field(default=True, description="Return class probabilities")
 
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> PredictionRequest:
-        return cls(
-            features=data["features"],
-            calibrate=data.get("calibrate", True),
-            return_probabilities=data.get("return_probabilities", True),
-        )
+    if not PYDANTIC_AVAILABLE:
+        def __init__(self, features, calibrate=True, return_probabilities=True):
+            self.features = features
+            self.calibrate = calibrate
+            self.return_probabilities = return_probabilities
+
+        @classmethod
+        def from_dict(cls, data: dict[str, Any]) -> "PredictionRequest":
+            return cls(
+                features=data["features"],
+                calibrate=data.get("calibrate", True),
+                return_probabilities=data.get("return_probabilities", True),
+            )
 
 
-@dataclass
-class PredictionResponse:
+class PredictionResponse(BaseModel if PYDANTIC_AVAILABLE else object):
     """Response format for predictions."""
 
-    predictions: list[int]
-    probabilities: list[list[float]] | None = None
-    confidence: list[float] | None = None
-    inference_time_ms: float = 0.0
-    model_name: str = ""
-    horizon: int = 0
+    predictions: list[int] = Field(..., description="Predicted class labels")
+    probabilities: Optional[list[list[float]]] = Field(None, description="Class probabilities")
+    confidence: Optional[list[float]] = Field(None, description="Prediction confidence scores")
+    inference_time_ms: float = Field(0.0, description="Inference time in milliseconds")
+    model_name: str = Field("", description="Name of the model used")
+    horizon: int = Field(0, description="Prediction horizon")
 
-    def to_dict(self) -> dict[str, Any]:
-        result = {
-            "predictions": self.predictions,
-            "inference_time_ms": self.inference_time_ms,
-            "model_name": self.model_name,
-            "horizon": self.horizon,
-        }
-        if self.probabilities is not None:
-            result["probabilities"] = self.probabilities
-        if self.confidence is not None:
-            result["confidence"] = self.confidence
-        return result
+    if not PYDANTIC_AVAILABLE:
+        def __init__(self, predictions, probabilities=None, confidence=None,
+                     inference_time_ms=0.0, model_name="", horizon=0):
+            self.predictions = predictions
+            self.probabilities = probabilities
+            self.confidence = confidence
+            self.inference_time_ms = inference_time_ms
+            self.model_name = model_name
+            self.horizon = horizon
+
+        def to_dict(self) -> dict[str, Any]:
+            result = {
+                "predictions": self.predictions,
+                "inference_time_ms": self.inference_time_ms,
+                "model_name": self.model_name,
+                "horizon": self.horizon,
+            }
+            if self.probabilities is not None:
+                result["probabilities"] = self.probabilities
+            if self.confidence is not None:
+                result["confidence"] = self.confidence
+            return result
+
+
+class EnsemblePredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
+    """Request format for ensemble predictions."""
+
+    features: list[list[float]] = Field(..., description="2D array of features")
+    calibrate: bool = Field(default=True, description="Apply calibration if available")
+    return_probabilities: bool = Field(default=True, description="Return class probabilities")
+    voting_method: str = Field(default="soft_vote", description="Voting method: soft_vote or hard_vote")
+
+
+class HealthResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+    """Health check response."""
+
+    status: str = Field(..., description="Server status")
+
+
+class ModelInfoResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+    """Model information response."""
+
+    models: list[dict[str, Any]] = Field(..., description="Information about loaded models")
+    horizon: int = Field(..., description="Prediction horizon")
+    n_features: int = Field(..., description="Number of input features")
+    feature_columns: list[str] = Field(..., description="Feature column names")
+
+
+class MetricsResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+    """Server metrics response."""
+
+    request_count: int = Field(..., description="Total number of requests")
+    error_count: int = Field(..., description="Total number of errors")
+    error_rate: float = Field(..., description="Error rate")
+    average_latency_ms: float = Field(..., description="Average latency in milliseconds")
+
+
+class ErrorResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+    """Error response."""
+
+    error: str = Field(..., description="Error message")
 
 
 # =============================================================================
@@ -103,13 +171,15 @@ class PredictionResponse:
 
 class ModelServer:
     """
-    Simple HTTP server for model inference.
+    Production-ready HTTP server for model inference using FastAPI.
 
     Provides REST endpoints for:
-    - /health - Health check
-    - /info - Model information
-    - /predict - Single/batch predictions
-    - /metrics - (optional) Server metrics
+    - GET /health - Health check
+    - GET /info - Model information
+    - POST /predict - Single/batch predictions
+    - POST /predict_ensemble - Ensemble predictions
+    - GET /metrics - Server metrics
+    - GET /docs - Swagger UI documentation
 
     Example:
         >>> server = ModelServer.from_bundle("./bundles/xgb_h20")
@@ -160,145 +230,157 @@ class ModelServer:
 
     def create_app(self):
         """
-        Create Flask application.
+        Create FastAPI application.
 
         Returns:
-            Flask app instance
+            FastAPI app instance
 
         Raises:
-            ImportError: If Flask is not installed
+            ImportError: If FastAPI is not installed
         """
         try:
-            from flask import Flask, jsonify, request
+            from fastapi import FastAPI, HTTPException
+            from fastapi.responses import JSONResponse
         except ImportError:
             raise ImportError(
-                "Flask is required for model serving. " "Install with: pip install flask"
+                "FastAPI is required for model serving. "
+                "Install with: pip install fastapi uvicorn"
             )
 
-        app = Flask(__name__)
+        app = FastAPI(
+            title="ML Model Server",
+            description="Production-ready REST API for ML model inference",
+            version="1.0.0",
+            docs_url="/docs",
+            redoc_url="/redoc",
+        )
 
-        @app.route("/health", methods=["GET"])
-        def health():
+        @app.get("/health", response_model=HealthResponse, tags=["Health"])
+        async def health():
             """Health check endpoint."""
-            return jsonify({"status": "healthy"})
+            return {"status": "healthy"}
 
-        @app.route("/info", methods=["GET"])
-        def info():
+        @app.get("/info", response_model=ModelInfoResponse, tags=["Info"])
+        async def info():
             """Model information endpoint."""
-            return jsonify(
-                {
-                    "models": self.pipeline.get_model_info(),
-                    "horizon": self.pipeline.horizon,
-                    "n_features": len(self.pipeline.feature_columns),
-                    "feature_columns": self.pipeline.feature_columns,
-                }
-            )
+            return {
+                "models": self.pipeline.get_model_info(),
+                "horizon": self.pipeline.horizon,
+                "n_features": len(self.pipeline.feature_columns),
+                "feature_columns": self.pipeline.feature_columns,
+            }
 
-        @app.route("/predict", methods=["POST"])
-        def predict():
-            """Prediction endpoint."""
+        @app.post("/predict", response_model=PredictionResponse, tags=["Prediction"])
+        async def predict(request: PredictionRequest):
+            """
+            Make predictions on input features.
+
+            Accepts a 2D array of features and returns class predictions
+            with optional probabilities and confidence scores.
+            """
             start_time = time.perf_counter()
 
             try:
-                data = request.get_json()
-                req = PredictionRequest.from_dict(data)
-
                 # Validate batch size
-                if len(req.features) > self.config.max_batch_size:
-                    return (
-                        jsonify(
-                            {"error": f"Batch size exceeds maximum ({self.config.max_batch_size})"}
-                        ),
-                        400,
+                if len(request.features) > self.config.max_batch_size:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Batch size exceeds maximum ({self.config.max_batch_size})"
                     )
 
                 # Make predictions
-                X = np.array(req.features, dtype=np.float32)
-                result = self.pipeline.predict(X, calibrate=req.calibrate)
+                X = np.array(request.features, dtype=np.float32)
+                result = self.pipeline.predict(X, calibrate=request.calibrate)
 
                 inference_time = (time.perf_counter() - start_time) * 1000
 
                 # Build response
-                response = PredictionResponse(
-                    predictions=result.predictions.class_predictions.tolist(),
-                    inference_time_ms=inference_time,
-                    model_name=self.pipeline.model_names[0],
-                    horizon=self.pipeline.horizon,
-                )
+                response = {
+                    "predictions": result.predictions.class_predictions.tolist(),
+                    "inference_time_ms": inference_time,
+                    "model_name": self.pipeline.model_names[0],
+                    "horizon": self.pipeline.horizon,
+                }
 
-                if req.return_probabilities:
-                    response.probabilities = result.predictions.class_probabilities.tolist()
-                    response.confidence = result.predictions.confidence.tolist()
+                if request.return_probabilities:
+                    response["probabilities"] = result.predictions.class_probabilities.tolist()
+                    response["confidence"] = result.predictions.confidence.tolist()
 
                 # Update metrics
                 self._request_count += 1
                 self._total_latency_ms += inference_time
 
-                return jsonify(response.to_dict())
+                return response
 
+            except HTTPException:
+                raise
             except Exception as e:
                 self._error_count += 1
                 logger.error(f"Prediction error: {e}")
-                return jsonify({"error": str(e)}), 500
+                raise HTTPException(status_code=500, detail=str(e))
 
-        @app.route("/predict_ensemble", methods=["POST"])
-        def predict_ensemble():
-            """Ensemble prediction endpoint."""
+        @app.post("/predict_ensemble", tags=["Prediction"])
+        async def predict_ensemble(request: EnsemblePredictionRequest):
+            """
+            Make ensemble predictions using multiple models.
+
+            Combines predictions from all loaded models using the specified
+            voting method (soft_vote or hard_vote).
+            """
             if self.pipeline.n_models < 2:
-                return jsonify({"error": "Ensemble requires multiple models"}), 400
+                raise HTTPException(
+                    status_code=400,
+                    detail="Ensemble requires multiple models"
+                )
 
             start_time = time.perf_counter()
 
             try:
-                data = request.get_json()
-                req = PredictionRequest.from_dict(data)
+                X = np.array(request.features, dtype=np.float32)
 
-                X = np.array(req.features, dtype=np.float32)
-                method = data.get("voting_method", "soft_vote")
-
-                result = self.pipeline.predict_ensemble(X, method=method, calibrate=req.calibrate)
-
-                return jsonify(
-                    {
-                        "predictions": result.predictions.class_predictions.tolist(),
-                        "probabilities": (
-                            result.predictions.class_probabilities.tolist()
-                            if req.return_probabilities
-                            else None
-                        ),
-                        "confidence": (
-                            result.predictions.confidence.tolist()
-                            if req.return_probabilities
-                            else None
-                        ),
-                        "voting_method": result.voting_method,
-                        "inference_time_ms": result.inference_time_ms,
-                        "models_used": [r.model_name for r in result.individual_results],
-                    }
+                result = self.pipeline.predict_ensemble(
+                    X,
+                    method=request.voting_method,
+                    calibrate=request.calibrate
                 )
 
+                response = {
+                    "predictions": result.predictions.class_predictions.tolist(),
+                    "voting_method": result.voting_method,
+                    "inference_time_ms": result.inference_time_ms,
+                    "models_used": [r.model_name for r in result.individual_results],
+                }
+
+                if request.return_probabilities:
+                    response["probabilities"] = result.predictions.class_probabilities.tolist()
+                    response["confidence"] = result.predictions.confidence.tolist()
+
+                return response
+
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.error(f"Ensemble prediction error: {e}")
-                return jsonify({"error": str(e)}), 500
+                raise HTTPException(status_code=500, detail=str(e))
 
-        @app.route("/metrics", methods=["GET"])
-        def metrics():
+        @app.get("/metrics", response_model=MetricsResponse, tags=["Metrics"])
+        async def metrics():
             """Server metrics endpoint."""
             if not self.config.enable_metrics:
-                return jsonify({"error": "Metrics disabled"}), 404
+                raise HTTPException(status_code=404, detail="Metrics disabled")
 
             avg_latency = (
-                self._total_latency_ms / self._request_count if self._request_count > 0 else 0
+                self._total_latency_ms / self._request_count
+                if self._request_count > 0
+                else 0
             )
 
-            return jsonify(
-                {
-                    "request_count": self._request_count,
-                    "error_count": self._error_count,
-                    "error_rate": self._error_count / max(self._request_count, 1),
-                    "average_latency_ms": avg_latency,
-                }
-            )
+            return {
+                "request_count": self._request_count,
+                "error_count": self._error_count,
+                "error_rate": self._error_count / max(self._request_count, 1),
+                "average_latency_ms": avg_latency,
+            }
 
         self._app = app
         return app
@@ -308,26 +390,61 @@ class ModelServer:
         host: str | None = None,
         port: int | None = None,
         debug: bool | None = None,
+        workers: int | None = None,
     ) -> None:
         """
-        Run the server.
+        Run the server using uvicorn.
 
         Args:
             host: Host to bind to
             port: Port to listen on
-            debug: Enable debug mode
+            debug: Enable debug mode (reload)
+            workers: Number of worker processes
         """
+        try:
+            import uvicorn
+        except ImportError:
+            raise ImportError(
+                "uvicorn is required to run the server. "
+                "Install with: pip install uvicorn"
+            )
+
         if self._app is None:
             self.create_app()
 
         host = host or self.config.host
         port = port or self.config.port
         debug = debug if debug is not None else self.config.debug
+        workers = workers or self.config.workers
 
         logger.info(f"Starting model server on {host}:{port}")
         logger.info(f"Models: {self.pipeline.model_names}")
+        logger.info(f"API documentation available at http://{host}:{port}/docs")
 
-        self._app.run(host=host, port=port, debug=debug)
+        uvicorn.run(
+            self._app,
+            host=host,
+            port=port,
+            reload=debug,
+            workers=workers if not debug else 1,
+        )
+
+    def get_app(self):
+        """
+        Get the FastAPI app instance for external ASGI servers.
+
+        Useful for deployment with gunicorn, hypercorn, etc.
+
+        Example:
+            # In your_app.py
+            server = ModelServer.from_bundle("./bundles/model")
+            app = server.get_app()
+
+            # Run with: gunicorn your_app:app -w 4 -k uvicorn.workers.UvicornWorker
+        """
+        if self._app is None:
+            self.create_app()
+        return self._app
 
 
 # =============================================================================
@@ -340,6 +457,7 @@ def start_server(
     host: str = "0.0.0.0",
     port: int = 8080,
     debug: bool = False,
+    workers: int = 1,
 ) -> None:
     """
     Start model server with a single bundle.
@@ -348,11 +466,34 @@ def start_server(
         bundle_path: Path to model bundle
         host: Host to bind to
         port: Port to listen on
-        debug: Enable debug mode
+        debug: Enable debug mode (hot reload)
+        workers: Number of worker processes
     """
-    config = ServerConfig(host=host, port=port, debug=debug)
+    config = ServerConfig(host=host, port=port, debug=debug, workers=workers)
     server = ModelServer.from_bundle(bundle_path, config)
     server.run()
+
+
+def create_app_from_bundle(bundle_path: str | Path) -> Any:
+    """
+    Create FastAPI app from a model bundle.
+
+    Useful for deployment with external ASGI servers.
+
+    Args:
+        bundle_path: Path to model bundle
+
+    Returns:
+        FastAPI application instance
+
+    Example:
+        # In app.py
+        app = create_app_from_bundle("./bundles/model")
+
+        # Run with: uvicorn app:app --workers 4
+    """
+    server = ModelServer.from_bundle(bundle_path)
+    return server.get_app()
 
 
 __all__ = [
@@ -360,5 +501,10 @@ __all__ = [
     "ServerConfig",
     "PredictionRequest",
     "PredictionResponse",
+    "EnsemblePredictionRequest",
+    "HealthResponse",
+    "ModelInfoResponse",
+    "MetricsResponse",
     "start_server",
+    "create_app_from_bundle",
 ]
