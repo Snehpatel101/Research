@@ -559,7 +559,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         Calculate transaction cost expressed in ATR units.
         """
         try:
-            from src.pipeline._phase1_impl.config.barriers_config import get_tick_value, get_total_trade_cost
+            from src.pipeline.config.barriers_config import get_tick_value, get_total_trade_cost
 
             cost_ticks = get_total_trade_cost(
                 self.config.symbol, self.config.volatility_regime, include_slippage=True

@@ -246,12 +246,16 @@ class PipelineResult:
                 "mtf_count": self.feature_result.mtf_feature_count,
                 "total_count": self.feature_result.total_feature_count,
                 "time": self.feature_result.computation_time_seconds,
-            } if self.feature_result else None,
+            }
+            if self.feature_result
+            else None,
             "labeling_result": {
                 "method": self.labeling_result.labeling_method,
                 "n_samples": self.labeling_result.n_samples,
                 "distribution": self.labeling_result.class_distribution,
-            } if self.labeling_result else None,
+            }
+            if self.labeling_result
+            else None,
         }
 
     def save(self, path: Optional[Path] = None) -> Path:
@@ -472,12 +476,12 @@ class MLFactory:
         """
         start = time.time()
 
-        # Convert core PipelineConfig to Phase1 PipelineConfig
-        phase1_config = self.config.to_phase1_config()
+        # Convert core PipelineConfig to DataConfig for PipelineRunner
+        data_config = self.config.to_data_config()
 
         # Save the input DataFrame to the expected location for PipelineRunner
         # PipelineRunner expects data in a specific directory structure
-        raw_data_dir = phase1_config.data_raw_dir
+        raw_data_dir = data_config.data_raw_dir
         raw_data_dir.mkdir(parents=True, exist_ok=True)
 
         # Save as parquet for PipelineRunner
@@ -488,15 +492,15 @@ class MLFactory:
         # Run PipelineRunner for Phase 1 (data preparation)
         from src.pipeline.runner import PipelineRunner
 
-        runner = PipelineRunner(phase1_config, resume=False)
+        runner = PipelineRunner(data_config, resume=False)
         success = runner.run()
 
         if not success:
             raise RuntimeError("Phase 1 data pipeline failed")
 
         # Load the prepared data from PipelineRunner outputs
-        features_dir = phase1_config.data_features_dir
-        tf = phase1_config.target_timeframe
+        features_dir = data_config.data_features_dir
+        tf = data_config.target_timeframe
 
         # Load features DataFrame
         features_path = features_dir / f"features_{tf}.parquet"
@@ -509,10 +513,14 @@ class MLFactory:
         # Extract feature counts
         ohlcv_cols = ["open", "high", "low", "close", "volume"]
         label_cols = [c for c in result_df.columns if c.startswith("label") or c == "target"]
-        feature_cols = [c for c in result_df.columns if c not in ohlcv_cols + label_cols + ["timestamp"]]
+        feature_cols = [
+            c for c in result_df.columns if c not in ohlcv_cols + label_cols + ["timestamp"]
+        ]
 
         # Estimate base vs MTF features
-        mtf_feature_cols = [c for c in feature_cols if any(tf in c for tf in ["5min", "15min", "60min", "1h"])]
+        mtf_feature_cols = [
+            c for c in feature_cols if any(tf in c for tf in ["5min", "15min", "60min", "1h"])
+        ]
         base_feature_cols = [c for c in feature_cols if c not in mtf_feature_cols]
 
         computation_time = time.time() - start
@@ -533,7 +541,9 @@ class MLFactory:
             labels=labels,
             labeling_method=self.config.labeling_method,
             n_samples=len(labels.dropna()) if not labels.empty else 0,
-            class_distribution={int(k): int(v) for k, v in labels.value_counts().items()} if not labels.empty else {},
+            class_distribution={int(k): int(v) for k, v in labels.value_counts().items()}
+            if not labels.empty
+            else {},
             label_params={
                 "horizons": self.config.horizons,
                 "upper_mult": self.config.upper_mult,
@@ -542,7 +552,9 @@ class MLFactory:
             computation_time_seconds=0.0,  # Included in feature time
         )
 
-        logger.info(f"  Phase 1 complete: {len(feature_cols)} features, {len(labels.dropna())} labeled samples")
+        logger.info(
+            f"  Phase 1 complete: {len(feature_cols)} features, {len(labels.dropna())} labeled samples"
+        )
 
         return feature_result, labeling_result, result_df
 
@@ -563,6 +575,7 @@ class MLFactory:
             Tuple of (FeatureComputeResult, DataFrame with features)
         """
         import warnings
+
         warnings.warn(
             "MLFactory._compute_features is deprecated. "
             "The unified pipeline now uses PipelineRunner for data preparation.",
@@ -632,6 +645,7 @@ class MLFactory:
             Tuple of (LabelingResult, DataFrame with labels)
         """
         import warnings
+
         warnings.warn(
             "MLFactory._compute_labels is deprecated. "
             "The unified pipeline now uses PipelineRunner for data preparation.",
@@ -748,7 +762,9 @@ class MLFactory:
         optimized_labeler = TripleBarrierLabeler(result.best_config)
         optimized_labels = optimized_labeler.create_labels(df)
 
-        return optimized_labels, result.best_config.__dict__ if hasattr(result.best_config, '__dict__') else {}
+        return optimized_labels, result.best_config.__dict__ if hasattr(
+            result.best_config, "__dict__"
+        ) else {}
 
     def _select_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """

@@ -1,101 +1,61 @@
 """
-Pipeline Stages - Unified Entry Point for All Stage Functions.
+Production-ready data pipeline stages for ensemble trading system.
 
-ARCHITECTURE: This module is THE canonical interface for pipeline stage functions.
-PipelineRunner and MLFactory import from here, NOT from internal implementations.
-
-This re-export layer provides:
-1. Single import location for all stages
-2. Clean abstraction boundary between pipeline orchestration and stage logic
-3. Stable API while implementations can be refactored
-
-Stage implementations are in src/pipeline/_phase1_impl/stages/.
-
-Usage:
-    from src.pipeline.stages import run_feature_engineering  # Always use this!
+Stage 1: Data Ingestion - Load and standardize raw data
+Stage 2: Data Cleaning - Clean, validate, and fill gaps
+Stage 3: Feature Engineering - Generate 50+ technical indicators
+Stage 4: Labeling - Generate target labels
+Stage 5: GA Optimization - Genetic algorithm for label optimization
+Stage 6: Final Labels - Generate final optimized labels
+Stage 7: Data Splitting - Chronological train/val/test splits with purging and embargo
+Stage 7.5: Feature Scaling - Fit scalers on train, transform all splits
+Stage 7.6: Dataset Building - Create model-ready datasets
+Stage 8: Validation - Comprehensive data, label, and feature quality checks
+Stage 9: Report Generation - Comprehensive Phase 1 summary with charts
 """
 
-# =============================================================================
-# STAGE 1: DATA INGESTION
-# =============================================================================
-from src.pipeline._phase1_impl.stages.ingest.run import run_data_generation
+from .clean import DataCleaner
+from .clean.run import run_data_cleaning
+from .datasets.run import run_build_datasets
+from .features import FeatureEngineer
+from .features.run import run_feature_engineering
+from .final_labels.run import run_final_labels
+from .ga_optimize.run import run_ga_optimization
+from .ingest import DataIngestor
+from .ingest.run import run_data_generation
+from .labeling.run import run_initial_labeling
+from .reporting.run import run_generate_report
+from .scaled_validation.run import run_scaled_validation
+from .scaling import (
+    FeatureScaler,
+    FeatureScalingConfig,
+    scale_splits,
+)
+from .scaling.run import run_feature_scaling
+from .splits.core import create_chronological_splits
+from .splits.run import run_create_splits
+from .validation.run import run_validation
 
-# =============================================================================
-# STAGE 2: DATA CLEANING
-# =============================================================================
-from src.pipeline._phase1_impl.stages.clean.run import run_data_cleaning
-
-# =============================================================================
-# STAGE 3: FEATURE ENGINEERING
-# =============================================================================
-from src.pipeline._phase1_impl.stages.features.run import run_feature_engineering
-
-# =============================================================================
-# STAGE 4: INITIAL LABELING (Triple-Barrier)
-# =============================================================================
-from src.pipeline._phase1_impl.stages.labeling.run import run_initial_labeling
-
-# =============================================================================
-# STAGE 5: BARRIER OPTIMIZATION (Optuna/GA)
-# =============================================================================
-from src.pipeline._phase1_impl.stages.ga_optimize.run import run_ga_optimization
-
-# =============================================================================
-# STAGE 6: FINAL LABELS (Quality Scores, Sample Weights)
-# =============================================================================
-from src.pipeline._phase1_impl.stages.final_labels.run import run_final_labels
-
-# =============================================================================
-# STAGE 7: TRAIN/VAL/TEST SPLITS
-# =============================================================================
-from src.pipeline._phase1_impl.stages.splits.run import run_create_splits
-
-# =============================================================================
-# STAGE 8: FEATURE SCALING
-# =============================================================================
-from src.pipeline._phase1_impl.stages.scaling.run import run_feature_scaling
-
-# =============================================================================
-# STAGE 9: DATASET BUILDING (TimeSeriesDataContainer)
-# =============================================================================
-from src.pipeline._phase1_impl.stages.datasets.run import run_build_datasets
-
-# =============================================================================
-# STAGE 10: SCALED DATA VALIDATION
-# =============================================================================
-from src.pipeline._phase1_impl.stages.scaled_validation.run import run_scaled_validation
-
-# =============================================================================
-# STAGE 11: COMPREHENSIVE VALIDATION
-# =============================================================================
-from src.pipeline._phase1_impl.stages.validation.run import run_validation
-
-# =============================================================================
-# STAGE 12: REPORT GENERATION
-# =============================================================================
-from src.pipeline._phase1_impl.stages.reporting.run import run_generate_report
-
-
-# =============================================================================
-# EXPORTS
-# =============================================================================
 __all__ = [
-    # Data stages
-    "run_data_generation",
-    "run_data_cleaning",
-    # Feature stages
-    "run_feature_engineering",
-    # Labeling stages
-    "run_initial_labeling",
-    "run_ga_optimization",
-    "run_final_labels",
-    # Split/scale stages
-    "run_create_splits",
-    "run_feature_scaling",
-    "run_build_datasets",
-    # Validation stages
-    "run_scaled_validation",
+    "DataIngestor",
+    "DataCleaner",
+    "FeatureEngineer",
+    "create_chronological_splits",
     "run_validation",
-    # Reporting
+    "FeatureScalingConfig",
+    "FeatureScaler",
+    "scale_splits",
+    "run_data_cleaning",
+    "run_build_datasets",
+    "run_feature_engineering",
+    "run_final_labels",
+    "run_ga_optimization",
+    "run_data_generation",
+    "run_initial_labeling",
     "run_generate_report",
+    "run_scaled_validation",
+    "run_feature_scaling",
+    "run_create_splits",
 ]
+
+__version__ = "1.0.0"

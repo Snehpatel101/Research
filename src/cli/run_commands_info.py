@@ -7,7 +7,12 @@ their data requirements, and ensemble configurations.
 
 from rich.table import Table
 
-from .run_commands_core import _get_model_config
+from src.models.config.data_requirements import (
+    get_all_ensemble_names,
+    get_all_model_names,
+    get_ensemble_config,
+    get_model_requirements,
+)
 from .utils import console
 
 
@@ -18,8 +23,6 @@ def models_command() -> None:
     Shows all supported models for Phase 2 training with their
     recommended feature sets, scaling requirements, and sequence lengths.
     """
-    model_config = _get_model_config()
-
     console.print("\n[bold cyan]Available Model Types[/bold cyan]\n")
 
     # Create table for models
@@ -31,8 +34,8 @@ def models_command() -> None:
     table.add_column("Sequences", style="blue")
     table.add_column("Description")
 
-    for name in model_config.get_all_model_names():
-        req = model_config.get_model_requirements(name)
+    for name in get_all_model_names():
+        req = get_model_requirements(name)
         table.add_row(
             name,
             req.family.value,
@@ -53,8 +56,8 @@ def models_command() -> None:
     ensemble_table.add_column("Meta-Learner", style="yellow")
     ensemble_table.add_column("Description")
 
-    for name in model_config.get_all_ensemble_names():
-        ens = model_config.get_ensemble_config(name)
+    for name in get_all_ensemble_names():
+        ens = get_ensemble_config(name)
         ensemble_table.add_row(name, ", ".join(ens.base_models), ens.meta_learner, ens.description)
 
     console.print(ensemble_table)

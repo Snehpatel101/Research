@@ -58,29 +58,36 @@ def __getattr__(name: str):
     # NEW: MLFactory - THE single entry point
     if name == "MLFactory":
         from src.factory import MLFactory
+
         return MLFactory
     elif name == "run_pipeline":
         from src.factory import run_pipeline
+
         return run_pipeline
     elif name == "quick_run":
         from src.factory import quick_run
+
         return quick_run
     elif name == "PipelineResult":
         from src.factory import PipelineResult
+
         return PipelineResult
     # NEW: PipelineConfig from src.core
     elif name == "PipelineConfig":
         from src.core import PipelineConfig
+
         return PipelineConfig
     # Legacy exports
     elif name == "create_default_config":
-        from src.pipeline._phase1_impl.pipeline_config import create_default_config
+        from src.pipeline.config.pipeline_defaults import create_default_config
+
         return create_default_config
     elif name == "PipelineRunner":
         from src.pipeline.runner import PipelineRunner
+
         return PipelineRunner
     elif name == "phase1":
-        return importlib.import_module("src.pipeline._phase1_impl")
+        return importlib.import_module("src.pipeline")
     elif name == "common":
         return importlib.import_module("src.common")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

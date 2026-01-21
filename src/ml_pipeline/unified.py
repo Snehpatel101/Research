@@ -36,7 +36,7 @@ from .config import MLConfig
 from .state import PipelineState
 
 if TYPE_CHECKING:
-    from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
+    from src.pipeline.data_config import PipelineConfig
     from src.training.config import ExperimentConfig
 
 logger = logging.getLogger(__name__)
@@ -244,7 +244,7 @@ class MLPipeline:
 
         try:
             # Convert MLConfig → PipelineConfig
-            from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
+            from src.pipeline.data_config import PipelineConfig
 
             pipeline_config = self._mlconfig_to_pipeline_config()
 
@@ -452,7 +452,7 @@ class MLPipeline:
             Some MLConfig fields may not map directly to PipelineConfig.
             Unmapped fields will use PipelineConfig defaults.
         """
-        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig
+        from src.pipeline.data_config import PipelineConfig
 
         # Use MLConfig.run_id if available, otherwise generate new one
         pipeline_run_id = self.config.run_id

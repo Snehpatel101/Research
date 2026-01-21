@@ -65,7 +65,7 @@ Package Structure:
         global_config.py    <- GlobalConfig (YAML loader)
         constants/          <- Re-exports from src.common
         models/             <- Re-exports from src.models.config
-        pipeline/           <- Re-exports from src.phase1.config
+        pipeline/           <- Re-exports from src.pipeline.config
 
 Deprecation Notes:
 ------------------

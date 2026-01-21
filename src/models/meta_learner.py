@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, Tuple, List
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
-from src.pipeline._phase1_impl.stages.labeling.meta import MetaLabeler, BetSizeMethod
+from src.pipeline.stages.labeling.meta import MetaLabeler, BetSizeMethod
 from src.models.base import BaseModel
 
 class MetaLearner:

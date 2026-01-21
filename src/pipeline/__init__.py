@@ -1,5 +1,5 @@
 """
-Pipeline Package - Phase 1 Data Preparation Pipeline.
+Pipeline Package - Data Preparation Pipeline.
 
 This package provides a modular, stage-based pipeline for processing
 raw OHLCV data into ML-ready features and labels.
@@ -17,10 +17,10 @@ Stage Flow:
 
 Usage:
     from src.pipeline.runner import PipelineRunner
-    from src.pipeline._phase1_impl.pipeline_config import create_default_config
+    from src.pipeline.data_config import DataConfig
 
     # Single symbol run (recommended - each symbol processed in isolation)
-    config = create_default_config(
+    config = DataConfig(
         symbols=['MES'],  # Specify your target symbol
         start_date='2020-01-01',
         end_date='2024-12-31'
@@ -35,6 +35,7 @@ from .utils import StageResult, StageStatus
 
 __all__ = [
     "PipelineRunner",
+    "DataConfig",
     "StageStatus",
     "StageResult",
     "PipelineStage",
@@ -46,9 +47,13 @@ __version__ = "1.0.0"
 
 
 def __getattr__(name: str):
-    """Lazy import PipelineRunner to avoid circular dependencies."""
+    """Lazy import for circular dependency avoidance."""
     if name == "PipelineRunner":
         from .runner import PipelineRunner
 
         return PipelineRunner
+    if name == "DataConfig":
+        from .data_config import DataConfig
+
+        return DataConfig
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -29,9 +29,12 @@ Usage:
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Optional, Union, Any, TYPE_CHECKING
 import json
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from src.pipeline.data_config import DataConfig
 
 from src.core.constants import (
     DEFAULT_HORIZONS,
@@ -334,7 +337,9 @@ class PipelineConfig:
         if self.training_mode == TrainingMode.META_LABELING.value:
             # Validate primary model
             try:
-                validate_model_list([self.meta_labeling_primary_model], "meta_labeling_primary_model")
+                validate_model_list(
+                    [self.meta_labeling_primary_model], "meta_labeling_primary_model"
+                )
             except ValidationError:
                 raise ValidationError(
                     f"Invalid meta_labeling_primary_model: {self.meta_labeling_primary_model}",
@@ -447,73 +452,22 @@ class PipelineConfig:
             f")"
         )
 
-    def to_phase1_config(self) -> "Phase1PipelineConfig":
-        """
-        Convert to Phase 1 PipelineConfig for PipelineRunner.
+    def to_data_config(self) -> "DataConfig":
+        """Convert to DataConfig for PipelineRunner."""
+        from src.pipeline.config_adapter import to_data_config
 
-        This enables MLFactory to delegate data preparation to PipelineRunner,
-        ensuring ONE unified pipeline instead of parallel implementations.
+        return to_data_config(self)
 
-        Returns:
-            Phase1PipelineConfig compatible with src.pipeline.runner.PipelineRunner
-        """
-        from src.pipeline._phase1_impl.pipeline_config import PipelineConfig as Phase1PipelineConfig
-
-        # Generate run_id from timestamp
-        from datetime import datetime
-        import secrets
-        run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{secrets.token_hex(2)}"
-
-        # Map feature families to feature_toggles
-        feature_toggles = {}
-        if isinstance(self.feature_families, list):
-            for family in ["wavelets", "microstructure", "volume", "volatility"]:
-                feature_toggles[family] = family in self.feature_families
-        # else "auto" - let Phase 1 use defaults
-
-        # Build barrier overrides from labeling config
-        barrier_overrides = None
-        if self.upper_mult != 2.0 or self.lower_mult != 2.0:
-            barrier_overrides = {
-                "k_up": self.upper_mult,
-                "k_down": self.lower_mult,
-            }
-
-        return Phase1PipelineConfig(
-            # Run identification
-            run_id=run_id,
-            description=f"MLFactory run for {self.symbol}",
-            # Data configuration
-            symbols=[self.symbol],
-            # Timeframe - use 5min as default primary
-            target_timeframe="5min",
-            # MTF configuration
-            mtf_timeframes=self.mtf_timeframes,
-            mtf_mode="aligned",  # Default mode
-            # Labeling
-            label_horizons=self.horizons,
-            # Splits
-            train_ratio=self.train_ratio,
-            val_ratio=self.val_ratio,
-            test_ratio=self.test_ratio,
-            purge_bars=self.purge_bars,
-            embargo_bars=self.embargo_bars,
-            # Scaling
-            scaler_type="standard",
-            # Random seed
-            random_seed=self.random_state,
-            # Feature toggles
-            feature_toggles=feature_toggles if feature_toggles else None,
-            # Barrier overrides
-            barrier_overrides=barrier_overrides,
-            # Project root (parent of output_dir)
-            project_root=self.output_dir.parent,
-        )
+    # Backward compatibility alias
+    def to_phase1_config(self) -> "DataConfig":
+        """Deprecated: Use to_data_config instead."""
+        return self.to_data_config()
 
 
 # =============================================================================
 # PRESET CONFIGURATIONS
 # =============================================================================
+
 
 def quick_config(
     symbol: str,
@@ -591,9 +545,15 @@ def research_config(
         data_path=data_path,
         output_dir=output_dir,
         models=[
-            "xgboost", "lightgbm", "catboost",
+            "xgboost",
+            "lightgbm",
+            "catboost",
             "random_forest",
-            "lstm", "gru", "tcn", "transformer", "tft",
+            "lstm",
+            "gru",
+            "tcn",
+            "transformer",
+            "tft",
         ],
         horizons=[10, 20],
         build_ensemble=True,

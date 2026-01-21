@@ -9,18 +9,16 @@ from pathlib import Path
 
 from .utils import show_info
 
-# Lazy imports to avoid circular dependencies
 _pipeline_config = None
 _pipeline_runner = None
 _presets_module = None
-_model_config = None
 
 
 def _get_pipeline_config():
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
-        from ..pipeline._phase1_impl import pipeline_config
+        from ..pipeline import data_config as pipeline_config
 
         _pipeline_config = pipeline_config
     return _pipeline_config
@@ -40,20 +38,10 @@ def _get_presets_module():
     """Lazy import presets module."""
     global _presets_module
     if _presets_module is None:
-        from ..pipeline._phase1_impl import presets
+        from ..pipeline import presets
 
         _presets_module = presets
     return _presets_module
-
-
-def _get_model_config():
-    """Lazy import model_config module."""
-    global _model_config
-    if _model_config is None:
-        from ..pipeline._phase1_impl.config import model_config
-
-        _model_config = model_config
-    return _model_config
 
 
 def _create_config_from_args(
@@ -202,7 +190,7 @@ def _create_config_from_args(
     if symbols is not None:
         config_kwargs["symbols"] = [s.strip().upper() for s in symbols.split(",")]
     elif "symbols" not in config_kwargs:
-        from src.pipeline._phase1_impl.config.runtime import detect_available_symbols
+        from src.pipeline.config.runtime import detect_available_symbols
 
         detected = detect_available_symbols()
         if detected:
@@ -270,7 +258,15 @@ def _create_config_from_args(
         if output_timeframes.lower() == "9tf":
             # Full 9-TF ladder: 1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h
             config_kwargs["output_timeframes"] = [
-                "1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"
+                "1min",
+                "5min",
+                "10min",
+                "15min",
+                "20min",
+                "25min",
+                "30min",
+                "45min",
+                "60min",
             ]
             show_info("Using full 9-TF ladder for output timeframes")
         else:

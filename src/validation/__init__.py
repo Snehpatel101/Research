@@ -153,7 +153,7 @@ from src.feature_store import (
 )
 
 # Phase 6: Meta-Labeling (Lopez de Prado AFML approach)
-from src.pipeline._phase1_impl.stages.meta_labeling import (
+from src.pipeline.stages.meta_labeling import (
     # Primary classifier for high-recall direction prediction
     PrimaryClassifier,
     PrimaryModelConfig,
@@ -173,7 +173,7 @@ from src.pipeline._phase1_impl.stages.meta_labeling import (
 )
 
 # Phase 6: Alternative MetaLabeler from labeling module
-from src.pipeline._phase1_impl.stages.labeling import (
+from src.pipeline.stages.labeling import (
     MetaLabeler,
     BetSizeMethod,
 )

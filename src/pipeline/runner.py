@@ -2,7 +2,7 @@
 Pipeline Runner - Main Orchestrator.
 
 Manages stage execution, dependency tracking, and artifact management for
-the Phase 1 data preparation pipeline.
+the data preparation pipeline.
 """
 
 import json
@@ -10,8 +10,12 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from src.pipeline.data_config import DataConfig
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -31,8 +35,6 @@ class NumpyEncoder(json.JSONEncoder):
 
 from .stage_registry import PipelineStage, get_stage_definitions
 
-# Import stage execution functions from unified stages interface
-# This breaks the direct src/phase1/ dependency - stages re-export from canonical locations
 from .stages import (
     run_data_cleaning,
     run_build_datasets,
@@ -52,9 +54,9 @@ from .utils import StageResult, StageStatus
 
 
 class PipelineRunner:
-    """Orchestrates the Phase 1 pipeline execution."""
+    """Orchestrates the data pipeline execution."""
 
-    def __init__(self, config: "PipelineConfig", resume: bool = False):
+    def __init__(self, config: "DataConfig", resume: bool = False):
         """
         Initialize pipeline runner.
 

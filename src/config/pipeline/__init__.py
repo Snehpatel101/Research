@@ -1,5 +1,5 @@
 """
-Pipeline configuration - re-exports from src.phase1.config.
+Pipeline configuration - re-exports from src.pipeline.config.
 
 This module provides unified access to pipeline configuration.
 All config modules remain in their original locations; this is a facade.
@@ -31,7 +31,7 @@ from src.models.config.data_requirements import (
 # =============================================================================
 # BARRIERS CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.barriers_config import (
+from src.pipeline.config.barriers_config import (
     BARRIER_PARAMS,
     BARRIER_PARAMS_DEFAULT,
     PERCENTAGE_BARRIER_PARAMS,
@@ -48,7 +48,7 @@ from src.pipeline._phase1_impl.config.barriers_config import (
 # =============================================================================
 # LABELING CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.labeling_config import (
+from src.pipeline.config.labeling_config import (
     DEFAULT_LABELING_STRATEGY,
     LABEL_BALANCE_CONSTRAINTS,
     LABELING_STRATEGY_CONFIGS,
@@ -62,7 +62,7 @@ from src.pipeline._phase1_impl.config.labeling_config import (
 # =============================================================================
 # LABELS CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.labels import (
+from src.pipeline.config.labels import (
     ALL_LABEL_TEMPLATES,
     LABEL_COLUMN_METADATA,
     OPTIONAL_LABEL_TEMPLATES,
@@ -77,7 +77,7 @@ from src.pipeline._phase1_impl.config.labels import (
 # =============================================================================
 # FEATURE SETS CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.feature_sets import (
+from src.pipeline.config.feature_sets import (
     FEATURE_SET_ALIASES,
     FEATURE_SET_DEFINITIONS,
     FeatureSetDefinition,
@@ -90,7 +90,7 @@ from src.pipeline._phase1_impl.config.feature_sets import (
 # =============================================================================
 # FEATURES CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.features import (
+from src.pipeline.config.features import (
     CORRELATION_THRESHOLD,
     DRIFT_CONFIG,
     MTF_CONFIG,
@@ -112,7 +112,7 @@ from src.pipeline._phase1_impl.config.features import (
 # =============================================================================
 # REGIME CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.regime_config import (
+from src.pipeline.config.regime_config import (
     REGIME_BARRIER_ADJUSTMENTS,
     REGIME_CONFIG,
     get_regime_adjusted_barriers,
@@ -121,7 +121,7 @@ from src.pipeline._phase1_impl.config.regime_config import (
 # =============================================================================
 # RUNTIME CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.runtime import (
+from src.pipeline.config.runtime import (
     CONFIG_DIR as PHASE1_CONFIG_DIR,
     DATA_DIR,
     EMBARGO_BARS,
@@ -144,7 +144,7 @@ from src.pipeline._phase1_impl.config.runtime import (
 # =============================================================================
 # MULTI-MODEL CONFIG
 # =============================================================================
-from src.pipeline._phase1_impl.config.multi_model import (
+from src.pipeline.config.multi_model import (
     MultiModelPipelineConfig,
     build_multi_model_config,
     expand_ensemble_models,

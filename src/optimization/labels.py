@@ -228,7 +228,7 @@ class LabelOptimizer:
             Array of labels (-1, 0, 1, or -99 for invalid)
         """
         try:
-            from src.pipeline._phase1_impl.stages.labeling import TripleBarrierLabeler
+            from src.pipeline.stages.labeling import TripleBarrierLabeler
 
             labeler = TripleBarrierLabeler(
                 k_up=config.k_up,

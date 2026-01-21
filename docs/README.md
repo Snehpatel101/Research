@@ -2,24 +2,19 @@
 
 ## Overview
 
-This is the documentation hub for the **ML Model Factory** - a single-pipeline architecture for training, evaluating, and deploying machine learning models on OHLCV time series data.
+Documentation hub for the **ML Model Factory** - a unified pipeline for training ML models on OHLCV time series data.
 
 **Key Principle:** One canonical 1-min OHLCV dataset → Model-specific adapters → Per-model training
-
-The factory processes one futures contract at a time through a unified 7-phase pipeline, producing trained models with standardized artifacts and performance reports.
 
 ---
 
 ## Quick Start
-
-**New here?** Start with these:
 
 | Resource | Description |
 |----------|-------------|
 | [Main README](../README.md) | Project overview and quick commands |
 | [CLAUDE.md](../CLAUDE.md) | Complete system documentation |
 | [Quickstart Guide](guides/QUICKSTART.md) | 5-minute getting started |
-| [Notebook Setup](guides/NOTEBOOK_SETUP.md) | Jupyter and Colab setup |
 
 ---
 
@@ -47,26 +42,6 @@ The factory processes one futures contract at a time through a unified 7-phase p
 
 ---
 
-## SNwH Implementation Plan (NEW)
-
-**Unified Multi-Timeframe Model Factory** - Complete implementation plan to make every model work with every timeframe and enable heterogeneous ensembles by default.
-
-| Doc | Purpose |
-|-----|---------|
-| [Z/README.md](../Z/README.md) | **Start here** - Overview and quick start |
-| [Z/00_INDEX.md](../Z/00_INDEX.md) | Master index with roadmap |
-| [Z/SNWH_ARCHITECTURE_SYNTHESIS.md](../Z/SNWH_ARCHITECTURE_SYNTHESIS.md) | Gap analysis, dependency graph |
-| [Z/SNWH_IMPLEMENTATION_PHASE_0.md](../Z/SNWH_IMPLEMENTATION_PHASE_0.md) | Canonical Contracts |
-| [Z/SNWH_IMPLEMENTATION_PHASE_1.md](../Z/SNWH_IMPLEMENTATION_PHASE_1.md) | Configuration Layer |
-| [Z/SNWH_IMPLEMENTATION_PHASE_2.md](../Z/SNWH_IMPLEMENTATION_PHASE_2.md) | Adapter Architecture |
-| [Z/SNWH_IMPLEMENTATION_PHASE_3.md](../Z/SNWH_IMPLEMENTATION_PHASE_3.md) | Timeframe Coordination |
-| [Z/SNWH_IMPLEMENTATION_PHASE_4.md](../Z/SNWH_IMPLEMENTATION_PHASE_4.md) | OOF Integrity |
-| [Z/SNWH_IMPLEMENTATION_PHASE_5.md](../Z/SNWH_IMPLEMENTATION_PHASE_5.md) | Feature Strategy |
-| [Z/SNWH_TESTING_STRATEGY.md](../Z/SNWH_TESTING_STRATEGY.md) | Testing (28 files, 305 methods) |
-| [Z/SNWH_IMPLEMENTATION_PHASE_6.md](../Z/SNWH_IMPLEMENTATION_PHASE_6.md) | Single Config System (89% code reduction) |
-
----
-
 ## Implementation Details
 
 | Doc | Purpose |
@@ -80,7 +55,6 @@ The factory processes one futures contract at a time through a unified 7-phase p
 | [Phase 7: Stacking](implementation/PHASE_7_META_LEARNER_STACKING.md) | Meta-learner ensembles |
 | [Unified Training System](implementation/UNIFIED_TRAINING_SYSTEM.md) | Build-a-bear interface |
 | [Unified Pipeline Architecture](implementation/UNIFIED_PIPELINE_ARCHITECTURE.md) | Pipeline design |
-| [Advanced Models Roadmap](implementation/ADVANCED_MODELS_ROADMAP.md) | Neural model history |
 
 ---
 
@@ -100,40 +74,33 @@ The factory processes one futures contract at a time through a unified 7-phase p
 
 ---
 
-## Archive
+## Current Implementation
 
-Historical and legacy documentation is preserved in [archive/](archive/README.md). These documents are for reference only and do not reflect the current implementation.
-
----
-
-## Current Implementation Summary
-
-| Component | Status | Count |
-|-----------|--------|-------|
-| **Models** | ✅ Complete | 23 (22 if CatBoost unavailable) |
-| **MTF Timeframes** | ✅ Complete | 9 (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h) |
-| **Ensemble Methods** | ✅ Complete | 3 (Voting, Stacking, Blending) |
-| **Meta-Learners** | ✅ Complete | 4 (Ridge, MLP, Calibrated, XGBoost) |
-| **Features** | ✅ Complete | ~180 |
+| Component | Count |
+|-----------|-------|
+| **Models** | 23 |
+| **MTF Timeframes** | 9 (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h) |
+| **Ensemble Methods** | 3 (Voting, Stacking, Blending) |
+| **Meta-Learners** | 4 (Ridge, MLP, Calibrated, XGBoost) |
+| **Features** | ~180 |
 
 **Models by Family:**
-
 - **Tabular (6):** XGBoost, LightGBM, CatBoost, Random Forest, Logistic, SVM
 - **Neural (10):** LSTM, GRU, TCN, Transformer, InceptionTime, ResNet1D, N-BEATS, PatchTST, iTransformer, TFT
-- **Ensemble (3):** Voting, Stacking, Blending
-- **Meta-Learners (4):** Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta
+- **Ensemble (7):** Voting, Stacking, Blending + 4 Meta-Learners
 
 ---
 
-## Pipeline Paths
+## Key Paths
 
 | Path | Purpose |
 |------|---------|
-| `data/raw/` | Raw OHLCV data (e.g., `MES_1m.parquet`) |
-| `data/splits/scaled/` | Processed train/val/test splits |
-| `experiments/runs/{run_id}/` | Training artifacts and models |
-| `config/models/` | Model configuration files |
+| `src/pipeline/` | Data pipeline stages |
+| `src/models/` | Model registry and implementations |
+| `src/training/` | Training infrastructure |
+| `data/raw/` | Raw OHLCV data |
+| `config/` | Configuration files |
 
 ---
 
-*Last Updated: 2026-01-16*
+*Last Updated: 2026-01-21*
