@@ -15,12 +15,10 @@ Import from here:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
 from src.config.base import BaseConfig
-
 
 # =============================================================================
 # ENUMS
@@ -78,9 +76,7 @@ class CVConfig(BaseConfig):
 
         valid_methods = [m.value for m in CVMethod]
         if self.method not in valid_methods:
-            issues.append(
-                f"method must be one of {valid_methods}, got '{self.method}'"
-            )
+            issues.append(f"method must be one of {valid_methods}, got '{self.method}'")
 
         if self.n_splits < 2:
             issues.append(f"n_splits must be >= 2, got {self.n_splits}")
@@ -132,9 +128,7 @@ class PurgeEmbargoConfig(BaseConfig):
             issues.append(f"embargo_bars must be non-negative, got {self.embargo_bars}")
 
         if self.purge_multiplier <= 0:
-            issues.append(
-                f"purge_multiplier must be positive, got {self.purge_multiplier}"
-            )
+            issues.append(f"purge_multiplier must be positive, got {self.purge_multiplier}")
 
         return issues
 
@@ -263,9 +257,7 @@ class CPCVConfig(BaseConfig):
             )
 
         if self.max_combinations < 1:
-            issues.append(
-                f"max_combinations must be >= 1, got {self.max_combinations}"
-            )
+            issues.append(f"max_combinations must be >= 1, got {self.max_combinations}")
 
         if not 0 <= self.purge_pct < 0.5:
             issues.append(f"purge_pct must be in [0, 0.5), got {self.purge_pct}")
@@ -342,14 +334,10 @@ class WalkForwardConfig(BaseConfig):
 
         valid_types = [t.value for t in WindowType]
         if self.window_type not in valid_types:
-            issues.append(
-                f"window_type must be one of {valid_types}, got '{self.window_type}'"
-            )
+            issues.append(f"window_type must be one of {valid_types}, got '{self.window_type}'")
 
         if not 0 < self.min_train_pct < 1:
-            issues.append(
-                f"min_train_pct must be in (0, 1), got {self.min_train_pct}"
-            )
+            issues.append(f"min_train_pct must be in (0, 1), got {self.min_train_pct}")
 
         if not 0 < self.test_pct < 1:
             issues.append(f"test_pct must be in (0, 1), got {self.test_pct}")
@@ -357,8 +345,7 @@ class WalkForwardConfig(BaseConfig):
         # Check total doesn't exceed 100%
         if self.min_train_pct + self.n_windows * self.test_pct > 1.0:
             issues.append(
-                f"min_train_pct + n_windows * test_pct exceeds 1.0. "
-                f"Reduce n_windows or test_pct."
+                "min_train_pct + n_windows * test_pct exceeds 1.0. " "Reduce n_windows or test_pct."
             )
 
         if self.embargo_bars < 0:
@@ -416,9 +403,7 @@ class PBOConfig(BaseConfig):
             issues.append(f"n_partitions must be >= 2, got {self.n_partitions}")
 
         if self.n_train_partitions < 1:
-            issues.append(
-                f"n_train_partitions must be >= 1, got {self.n_train_partitions}"
-            )
+            issues.append(f"n_train_partitions must be >= 1, got {self.n_train_partitions}")
 
         if self.n_train_partitions >= self.n_partitions:
             issues.append(
@@ -427,9 +412,7 @@ class PBOConfig(BaseConfig):
             )
 
         if self.annualization_factor <= 0:
-            issues.append(
-                f"annualization_factor must be positive, got {self.annualization_factor}"
-            )
+            issues.append(f"annualization_factor must be positive, got {self.annualization_factor}")
 
         return issues
 

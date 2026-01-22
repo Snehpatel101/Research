@@ -55,7 +55,7 @@ from src.data.adapters import (
 # -> models.base -> models/__init__ -> models.ensemble -> orchestrator
 # -> cross_validation (CIRCULAR)
 if TYPE_CHECKING:
-    from src.training.unified_orchestrator import TrainingRunResult
+    from src.models.training.unified_orchestrator import TrainingRunResult
     from src.validation.cv import OOFPrediction, StackingDataset
 else:
     # At runtime, use Protocol for type hints (structural typing)
@@ -414,7 +414,7 @@ class EnsembleOrchestrator:
         oof_predictions: dict[str, OOFPrediction] = {}
         y_train: np.ndarray | None = None
 
-        for key, model_result in training_result.model_results.items():
+        for _key, model_result in training_result.model_results.items():
             if model_result.oof_prediction is not None:
                 oof_predictions[model_result.model_name] = model_result.oof_prediction
 

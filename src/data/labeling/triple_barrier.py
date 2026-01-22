@@ -559,7 +559,10 @@ class TripleBarrierLabeler(LabelingStrategy):
         Calculate transaction cost expressed in ATR units.
         """
         try:
-            from src.data.pipeline.config.barriers_config import get_tick_value, get_total_trade_cost
+            from src.data.pipeline.config.barriers_config import (
+                get_tick_value,
+                get_total_trade_cost,
+            )
 
             cost_ticks = get_total_trade_cost(
                 self.config.symbol, self.config.volatility_regime, include_slippage=True
@@ -753,10 +756,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         Returns:
             dict: Distribution with keys 'long', 'neutral', 'short'.
         """
-        if isinstance(labels, pd.Series):
-            labels_arr = labels.values
-        else:
-            labels_arr = labels
+        labels_arr = labels.values if isinstance(labels, pd.Series) else labels
 
         valid_labels = labels_arr[labels_arr != -99]
         valid_labels = valid_labels[~np.isnan(valid_labels)]

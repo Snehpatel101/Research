@@ -6,19 +6,13 @@ These commands provide the main ML pipeline orchestration using MLPipeline.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import List, Optional
 
 import typer
 
 from src.cli.utils import (
-    PROJECT_ROOT,
-    show_error,
-    show_info,
-    show_success,
-    show_warning,
     console,
+    show_error,
 )
 
 pipeline_app = typer.Typer(
@@ -30,16 +24,16 @@ pipeline_app = typer.Typer(
 
 def _build_config(
     symbol: str,
-    horizons: List[int],
-    models: List[str],
+    horizons: list[int],
+    models: list[str],
     timeframe: str,
     training_mode: str,
     build_ensemble: bool,
     optimize_features: bool,
-    evaluation_methods: List[str],
-    start_date: Optional[str],
-    end_date: Optional[str],
-    config_path: Optional[Path],
+    evaluation_methods: list[str],
+    start_date: str | None,
+    end_date: str | None,
+    config_path: Path | None,
 ):
     """Build MLConfig from arguments."""
     from src.ml_pipeline import MLConfig, ModelConfig
@@ -73,19 +67,27 @@ def _build_config(
 def run_pipeline(
     symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option("20", "--horizons", "-h", help="Label horizons (comma-separated)"),
-    models: str = typer.Option("xgboost", "--models", "-m", help="Models to train (comma-separated)"),
+    models: str = typer.Option(
+        "xgboost", "--models", "-m", help="Models to train (comma-separated)"
+    ),
     timeframe: str = typer.Option("5min", "--timeframe", "-t", help="Primary timeframe"),
     training_mode: str = typer.Option(
         "standard",
         "--training-mode",
         help="Training mode: standard, walk_forward, regime_aware, meta_labeling",
     ),
-    build_ensemble: bool = typer.Option(False, "--build-ensemble", help="Build ensemble from base models"),
-    optimize_features: bool = typer.Option(False, "--optimize-features", help="Run feature optimization"),
-    evaluation_methods: str = typer.Option("", "--evaluation-methods", help="Evaluation methods (comma-separated)"),
-    start_date: Optional[str] = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
-    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
+    build_ensemble: bool = typer.Option(
+        False, "--build-ensemble", help="Build ensemble from base models"
+    ),
+    optimize_features: bool = typer.Option(
+        False, "--optimize-features", help="Run feature optimization"
+    ),
+    evaluation_methods: str = typer.Option(
+        "", "--evaluation-methods", help="Evaluation methods (comma-separated)"
+    ),
+    start_date: str | None = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
+    end_date: str | None = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
 ):
     """
     Run full ML pipeline (data + training + evaluation).
@@ -114,7 +116,7 @@ def run_pipeline(
         config_path=config,
     )
 
-    console.print(f"\n[bold]Starting full ML pipeline[/bold]")
+    console.print("\n[bold]Starting full ML pipeline[/bold]")
     console.print(f"Symbol: {ml_config.symbol}")
     console.print(f"Horizons: {ml_config.horizons}")
     console.print(f"Models: {[m.name for m in ml_config.models]}")
@@ -145,7 +147,7 @@ def run_pipeline(
 
     except Exception as e:
         show_error(f"Pipeline failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @pipeline_app.command("data")
@@ -153,9 +155,9 @@ def run_data(
     symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option("20", "--horizons", "-h", help="Label horizons (comma-separated)"),
     timeframe: str = typer.Option("5min", "--timeframe", "-t", help="Primary timeframe"),
-    start_date: Optional[str] = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
-    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
+    start_date: str | None = typer.Option(None, "--start-date", help="Start date (YYYY-MM-DD)"),
+    end_date: str | None = typer.Option(None, "--end-date", help="End date (YYYY-MM-DD)"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
 ):
     """
     Run data pipeline only.
@@ -181,7 +183,7 @@ def run_data(
         config_path=config,
     )
 
-    console.print(f"\n[bold]Running data pipeline[/bold]")
+    console.print("\n[bold]Running data pipeline[/bold]")
     console.print(f"Symbol: {ml_config.symbol}")
     console.print(f"Horizons: {ml_config.horizons}")
     console.print(f"Run ID: {ml_config.run_id}")
@@ -202,7 +204,7 @@ def run_data(
 
     except Exception as e:
         show_error(f"Data pipeline failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @pipeline_app.command("status")
@@ -246,10 +248,10 @@ def show_status(
 
     except FileNotFoundError:
         show_error(f"Run ID '{run_id}' not found")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         show_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @pipeline_app.command("resume")
@@ -257,10 +259,12 @@ def resume_pipeline(
     run_id: str = typer.Option(..., "--run-id", "-r", help="Run ID to resume"),
     symbol: str = typer.Option("MES", "--symbol", "-s", help="Trading symbol"),
     horizons: str = typer.Option("20", "--horizons", "-h", help="Label horizons (comma-separated)"),
-    models: str = typer.Option("xgboost", "--models", "-m", help="Models to train (comma-separated)"),
+    models: str = typer.Option(
+        "xgboost", "--models", "-m", help="Models to train (comma-separated)"
+    ),
     timeframe: str = typer.Option("5min", "--timeframe", "-t", help="Primary timeframe"),
     training_mode: str = typer.Option("standard", "--training-mode", help="Training mode"),
-    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
 ):
     """
     Resume pipeline from checkpoint.
@@ -289,7 +293,7 @@ def resume_pipeline(
 
     ml_config.run_id = run_id
 
-    console.print(f"\n[bold]Resuming pipeline[/bold]")
+    console.print("\n[bold]Resuming pipeline[/bold]")
     console.print(f"Run ID: {ml_config.run_id}")
     console.print()
 
@@ -307,4 +311,4 @@ def resume_pipeline(
 
     except Exception as e:
         show_error(f"Resume failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

@@ -22,7 +22,6 @@ from typing import Any
 
 from src.config.base import BaseConfig
 
-
 # =============================================================================
 # ENUMS
 # =============================================================================
@@ -91,17 +90,13 @@ class InferenceConfig(BaseConfig):
 
         valid_modes = [m.value for m in InferenceMode]
         if self.mode not in valid_modes:
-            issues.append(
-                f"mode must be one of {valid_modes}, got '{self.mode}'"
-            )
+            issues.append(f"mode must be one of {valid_modes}, got '{self.mode}'")
 
         if self.batch_size <= 0:
             issues.append(f"batch_size must be positive, got {self.batch_size}")
 
         if self.timeout_seconds <= 0:
-            issues.append(
-                f"timeout_seconds must be positive, got {self.timeout_seconds}"
-            )
+            issues.append(f"timeout_seconds must be positive, got {self.timeout_seconds}")
 
         return issues
 
@@ -221,9 +216,7 @@ class ServerConfig(BaseConfig):
             issues.append(f"timeout must be positive, got {self.timeout}")
 
         if self.max_batch_size <= 0:
-            issues.append(
-                f"max_batch_size must be positive, got {self.max_batch_size}"
-            )
+            issues.append(f"max_batch_size must be positive, got {self.max_batch_size}")
 
         if self.ssl_enabled:
             if not self.ssl_cert_path:
@@ -290,9 +283,7 @@ class BacktestConfig(BaseConfig):
         issues = super().validate()
 
         if self.initial_capital <= 0:
-            issues.append(
-                f"initial_capital must be positive, got {self.initial_capital}"
-            )
+            issues.append(f"initial_capital must be positive, got {self.initial_capital}")
 
         if self.commission < 0:
             issues.append(f"commission must be non-negative, got {self.commission}")
@@ -303,14 +294,11 @@ class BacktestConfig(BaseConfig):
         valid_sizing = [m.value for m in PositionSizingMethod]
         if self.position_sizing not in valid_sizing:
             issues.append(
-                f"position_sizing must be one of {valid_sizing}, "
-                f"got '{self.position_sizing}'"
+                f"position_sizing must be one of {valid_sizing}, " f"got '{self.position_sizing}'"
             )
 
         if self.max_position_size <= 0:
-            issues.append(
-                f"max_position_size must be positive, got {self.max_position_size}"
-            )
+            issues.append(f"max_position_size must be positive, got {self.max_position_size}")
 
         return issues
 
@@ -358,22 +346,16 @@ class PositionSizerConfig(BaseConfig):
 
         valid_methods = [m.value for m in PositionSizingMethod]
         if self.method not in valid_methods:
-            issues.append(
-                f"method must be one of {valid_methods}, got '{self.method}'"
-            )
+            issues.append(f"method must be one of {valid_methods}, got '{self.method}'")
 
         if self.base_size < 0:
             issues.append(f"base_size must be non-negative, got {self.base_size}")
 
         if not 0 < self.kelly_fraction <= 1:
-            issues.append(
-                f"kelly_fraction must be in (0, 1], got {self.kelly_fraction}"
-            )
+            issues.append(f"kelly_fraction must be in (0, 1], got {self.kelly_fraction}")
 
         if self.volatility_target <= 0:
-            issues.append(
-                f"volatility_target must be positive, got {self.volatility_target}"
-            )
+            issues.append(f"volatility_target must be positive, got {self.volatility_target}")
 
         return issues
 
@@ -475,9 +457,7 @@ class AlertConfig(BaseConfig):
             )
 
         if self.cooldown_seconds < 0:
-            issues.append(
-                f"cooldown_seconds must be non-negative, got {self.cooldown_seconds}"
-            )
+            issues.append(f"cooldown_seconds must be non-negative, got {self.cooldown_seconds}")
 
         return issues
 

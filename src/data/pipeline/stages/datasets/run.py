@@ -16,7 +16,10 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.data.pipeline.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
+from src.data.pipeline.config.feature_sets import (
+    get_feature_set_definitions,
+    resolve_feature_set_names,
+)
 from src.data.pipeline.config.labels import OPTIONAL_LABEL_TEMPLATES, REQUIRED_LABEL_TEMPLATES
 from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 from src.data.pipeline.utils.constants import METADATA_COLUMNS
@@ -91,9 +94,8 @@ def validate_feature_schema(
             extra_by_file[name] = sorted(extra)
 
         # Check column order if sets match
-        if not missing and not extra:
-            if list(ref_df.columns) != list(df.columns):
-                order_mismatches.append(name)
+        if not missing and not extra and list(ref_df.columns) != list(df.columns):
+            order_mismatches.append(name)
 
     # Log order mismatches as warnings (not errors)
     if order_mismatches and warn_on_order_mismatch:
@@ -136,6 +138,7 @@ def validate_feature_schema(
 
 if TYPE_CHECKING:
     from manifest import ArtifactManifest
+
     from pipeline_config import PipelineConfig
 
 logger = logging.getLogger(__name__)

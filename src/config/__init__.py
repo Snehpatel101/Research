@@ -107,121 +107,6 @@ from src.config.base import (
 )
 
 # =============================================================================
-# DATA CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.data import (
-    # Enums
-    FeatureCategory,
-    LabelingMethod,
-    MTFMode,
-    ScalerType,
-    # Configs
-    BarConfig,
-    FeatureConfig,
-    LabelingConfig,
-    MTFConfig,
-    MultiResolutionConfig,
-    ScalerConfig,
-    SequenceConfig,
-    SessionConfig,
-    SessionsConfig,
-    SplitConfig,
-)
-
-# =============================================================================
-# TRAINING CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.training import (
-    # Optimization
-    CalibrationConfig,
-    CheckpointConfig,
-    ConformalConfig,
-    ExperimentConfig,
-    GAConfig,
-    OOMConfig,
-    OptunaConfig,
-    ParallelTrainingConfig,
-)
-
-# =============================================================================
-# CROSS-VALIDATION CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.cv import (
-    # Enums
-    CVMethod,
-    WindowType,
-    # Configs
-    CPCVConfig,
-    CVConfig,
-    DSRConfig,
-    PBOConfig,
-    PurgedKFoldConfig,
-    PurgeEmbargoConfig,
-    WalkForwardConfig,
-)
-
-# =============================================================================
-# MODEL CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.model_configs import (
-    # Enums
-    ActivationType,
-    ModelFamily,
-    # Base
-    ModelConfig,
-    # Boosting
-    CatBoostConfig,
-    GRUConfig,
-    LightGBMConfig,
-    # Neural
-    LSTMConfig,
-    # Transformer
-    PatchTSTConfig,
-    # Per-model
-    PerModelConfig,
-    TCNConfig,
-    TransformerConfig,
-    XGBoostConfig,
-)
-
-# =============================================================================
-# ENSEMBLE CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.ensemble import (
-    # Enums
-    EnsembleMethod,
-    MetaLearnerType,
-    VotingType,
-    # Configs
-    BlendingConfig,
-    EnsembleConfig,
-    MetaLearnerConfig,
-    OOFAlignmentConfig,
-    # Predefined
-    PREDEFINED_ENSEMBLES,
-    StackingConfig,
-    VotingConfig,
-    get_predefined_ensemble,
-)
-
-# =============================================================================
-# INFERENCE CONFIGS (consolidated from multiple locations)
-# =============================================================================
-from src.config.inference import (
-    # Enums
-    InferenceMode,
-    PositionSizingMethod,
-    # Configs
-    AlertConfig,
-    BacktestConfig,
-    BundleConfig,
-    InferenceConfig,
-    PositionSizerConfig,
-    PreprocessingGraphConfig,
-    ServerConfig,
-)
-
-# =============================================================================
 # COMMONLY USED CONSTANTS (from src.config.constants)
 # =============================================================================
 from src.config.constants import (
@@ -247,6 +132,65 @@ from src.config.constants import (
 )
 
 # =============================================================================
+# CROSS-VALIDATION CONFIGS (consolidated from multiple locations)
+# =============================================================================
+from src.config.cv import (
+    # Configs
+    CPCVConfig,
+    CVConfig,
+    # Enums
+    CVMethod,
+    DSRConfig,
+    PBOConfig,
+    PurgedKFoldConfig,
+    PurgeEmbargoConfig,
+    WalkForwardConfig,
+    WindowType,
+)
+
+# =============================================================================
+# DATA CONFIGS (consolidated from multiple locations)
+# =============================================================================
+from src.config.data import (
+    # Configs
+    BarConfig,
+    # Enums
+    FeatureCategory,
+    FeatureConfig,
+    LabelingConfig,
+    LabelingMethod,
+    MTFConfig,
+    MTFMode,
+    MultiResolutionConfig,
+    ScalerConfig,
+    ScalerType,
+    SequenceConfig,
+    SessionConfig,
+    SessionsConfig,
+    SplitConfig,
+)
+
+# =============================================================================
+# ENSEMBLE CONFIGS (consolidated from multiple locations)
+# =============================================================================
+from src.config.ensemble import (
+    # Predefined
+    PREDEFINED_ENSEMBLES,
+    # Configs
+    BlendingConfig,
+    EnsembleConfig,
+    # Enums
+    EnsembleMethod,
+    MetaLearnerConfig,
+    MetaLearnerType,
+    OOFAlignmentConfig,
+    StackingConfig,
+    VotingConfig,
+    VotingType,
+    get_predefined_ensemble,
+)
+
+# =============================================================================
 # GLOBAL CONFIGURATION (Legacy - prefer UnifiedConfig)
 # =============================================================================
 from src.config.global_config import (
@@ -254,6 +198,47 @@ from src.config.global_config import (
     get_global_config,
     load_global_config,
     set_global_config,
+)
+
+# =============================================================================
+# INFERENCE CONFIGS (consolidated from multiple locations)
+# =============================================================================
+from src.config.inference import (
+    # Configs
+    AlertConfig,
+    BacktestConfig,
+    BundleConfig,
+    InferenceConfig,
+    # Enums
+    InferenceMode,
+    PositionSizerConfig,
+    PositionSizingMethod,
+    PreprocessingGraphConfig,
+    ServerConfig,
+)
+
+# =============================================================================
+# MODEL CONFIGS (consolidated from multiple locations)
+# =============================================================================
+from src.config.model_configs import (
+    # Enums
+    ActivationType,
+    # Boosting
+    CatBoostConfig,
+    GRUConfig,
+    LightGBMConfig,
+    # Neural
+    LSTMConfig,
+    # Base
+    ModelConfig,
+    ModelFamily,
+    # Transformer
+    PatchTSTConfig,
+    # Per-model
+    PerModelConfig,
+    TCNConfig,
+    TransformerConfig,
+    XGBoostConfig,
 )
 
 # =============================================================================
@@ -299,6 +284,21 @@ from src.config.smart_config import (
     show_defaults,
     # Core API
     train,
+)
+
+# =============================================================================
+# TRAINING CONFIGS (consolidated from multiple locations)
+# =============================================================================
+from src.config.training import (
+    # Optimization
+    CalibrationConfig,
+    CheckpointConfig,
+    ConformalConfig,
+    ExperimentConfig,
+    GAConfig,
+    OOMConfig,
+    OptunaConfig,
+    ParallelTrainingConfig,
 )
 
 # =============================================================================

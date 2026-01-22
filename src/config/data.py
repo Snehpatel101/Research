@@ -18,10 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 from src.config.base import BaseConfig
-
 
 # =============================================================================
 # ENUMS
@@ -201,9 +199,7 @@ class LabelingConfig(BaseConfig):
             issues.append(f"atr_period must be positive, got {self.atr_period}")
 
         if self.max_holding_bars <= 0:
-            issues.append(
-                f"max_holding_bars must be positive, got {self.max_holding_bars}"
-            )
+            issues.append(f"max_holding_bars must be positive, got {self.max_holding_bars}")
 
         return issues
 
@@ -252,14 +248,10 @@ class ScalerConfig(BaseConfig):
 
         valid_types = [t.value for t in ScalerType]
         if self.scaler_type not in valid_types:
-            issues.append(
-                f"scaler_type must be one of {valid_types}, got '{self.scaler_type}'"
-            )
+            issues.append(f"scaler_type must be one of {valid_types}, got '{self.scaler_type}'")
 
         if self.clip_range[0] >= self.clip_range[1]:
-            issues.append(
-                f"clip_range min must be < max, got {self.clip_range}"
-            )
+            issues.append(f"clip_range min must be < max, got {self.clip_range}")
 
         return issues
 
@@ -430,9 +422,7 @@ class MultiResolutionConfig(BaseConfig):
             issues.append("At least one timeframe must be specified")
 
         if self.sequence_length <= 0:
-            issues.append(
-                f"sequence_length must be positive, got {self.sequence_length}"
-            )
+            issues.append(f"sequence_length must be positive, got {self.sequence_length}")
 
         return issues
 
@@ -567,9 +557,7 @@ class BarConfig(BaseConfig):
 
         valid_types = ["time", "tick", "volume", "dollar"]
         if self.bar_type not in valid_types:
-            issues.append(
-                f"bar_type must be one of {valid_types}, got '{self.bar_type}'"
-            )
+            issues.append(f"bar_type must be one of {valid_types}, got '{self.bar_type}'")
 
         if self.bar_type != "time" and self.threshold is None:
             issues.append(f"threshold required for {self.bar_type} bars")

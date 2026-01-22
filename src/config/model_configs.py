@@ -22,7 +22,6 @@ from typing import Any
 
 from src.config.base import BaseConfig
 
-
 # =============================================================================
 # ENUMS
 # =============================================================================
@@ -95,9 +94,7 @@ class ModelConfig(BaseConfig):
 
         valid_families = [f.value for f in ModelFamily]
         if self.family not in valid_families:
-            issues.append(
-                f"family must be one of {valid_families}, got '{self.family}'"
-            )
+            issues.append(f"family must be one of {valid_families}, got '{self.family}'")
 
         if self.n_classes < 2:
             issues.append(f"n_classes must be >= 2, got {self.n_classes}")
@@ -171,9 +168,7 @@ class XGBoostConfig(BaseConfig):
             issues.append(f"subsample must be in (0, 1], got {self.subsample}")
 
         if not 0 < self.colsample_bytree <= 1:
-            issues.append(
-                f"colsample_bytree must be in (0, 1], got {self.colsample_bytree}"
-            )
+            issues.append(f"colsample_bytree must be in (0, 1], got {self.colsample_bytree}")
 
         return issues
 
@@ -495,9 +490,7 @@ class TransformerConfig(BaseConfig):
             issues.append(f"n_heads must be positive, got {self.n_heads}")
 
         if self.d_model % self.n_heads != 0:
-            issues.append(
-                f"d_model ({self.d_model}) must be divisible by n_heads ({self.n_heads})"
-            )
+            issues.append(f"d_model ({self.d_model}) must be divisible by n_heads ({self.n_heads})")
 
         if self.n_layers <= 0:
             issues.append(f"n_layers must be positive, got {self.n_layers}")
@@ -545,9 +538,7 @@ class PatchTSTConfig(BaseConfig):
             issues.append(f"stride must be positive, got {self.stride}")
 
         if self.d_model % self.n_heads != 0:
-            issues.append(
-                f"d_model ({self.d_model}) must be divisible by n_heads ({self.n_heads})"
-            )
+            issues.append(f"d_model ({self.d_model}) must be divisible by n_heads ({self.n_heads})")
 
         return issues
 

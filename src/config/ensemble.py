@@ -17,10 +17,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 from src.config.base import BaseConfig
-
 
 # =============================================================================
 # ENUMS
@@ -106,9 +104,7 @@ class EnsembleConfig(BaseConfig):
 
         valid_methods = [m.value for m in EnsembleMethod]
         if self.method not in valid_methods:
-            issues.append(
-                f"method must be one of {valid_methods}, got '{self.method}'"
-            )
+            issues.append(f"method must be one of {valid_methods}, got '{self.method}'")
 
         if len(self.base_models) < 2:
             issues.append("At least 2 base models required for ensemble")
@@ -166,19 +162,13 @@ class MetaLearnerConfig(BaseConfig):
 
         valid_types = [t.value for t in MetaLearnerType]
         if self.learner_type not in valid_types:
-            issues.append(
-                f"learner_type must be one of {valid_types}, got '{self.learner_type}'"
-            )
+            issues.append(f"learner_type must be one of {valid_types}, got '{self.learner_type}'")
 
         if self.regularization < 0:
-            issues.append(
-                f"regularization must be non-negative, got {self.regularization}"
-            )
+            issues.append(f"regularization must be non-negative, got {self.regularization}")
 
         if self.learning_rate <= 0:
-            issues.append(
-                f"learning_rate must be positive, got {self.learning_rate}"
-            )
+            issues.append(f"learning_rate must be positive, got {self.learning_rate}")
 
         if self.max_iter <= 0:
             issues.append(f"max_iter must be positive, got {self.max_iter}")
@@ -268,13 +258,10 @@ class VotingConfig(BaseConfig):
 
         valid_types = [t.value for t in VotingType]
         if self.voting_type not in valid_types:
-            issues.append(
-                f"voting_type must be one of {valid_types}, got '{self.voting_type}'"
-            )
+            issues.append(f"voting_type must be one of {valid_types}, got '{self.voting_type}'")
 
-        if self.weights is not None:
-            if any(w < 0 for w in self.weights):
-                issues.append("All weights must be non-negative")
+        if self.weights is not None and any(w < 0 for w in self.weights):
+            issues.append("All weights must be non-negative")
 
         return issues
 
@@ -313,9 +300,7 @@ class BlendingConfig(BaseConfig):
         issues = super().validate()
 
         if not 0 < self.holdout_fraction < 1:
-            issues.append(
-                f"holdout_fraction must be in (0, 1), got {self.holdout_fraction}"
-            )
+            issues.append(f"holdout_fraction must be in (0, 1), got {self.holdout_fraction}")
 
         issues.extend(self.meta_learner.validate())
 
@@ -363,17 +348,13 @@ class OOFAlignmentConfig(BaseConfig):
 
         valid_strategies = ["intersection", "union", "majority"]
         if self.strategy not in valid_strategies:
-            issues.append(
-                f"strategy must be one of {valid_strategies}, got '{self.strategy}'"
-            )
+            issues.append(f"strategy must be one of {valid_strategies}, got '{self.strategy}'")
 
         if self.n_classes < 2:
             issues.append(f"n_classes must be >= 2, got {self.n_classes}")
 
         if not 0 <= self.min_coverage <= 1:
-            issues.append(
-                f"min_coverage must be in [0, 1], got {self.min_coverage}"
-            )
+            issues.append(f"min_coverage must be in [0, 1], got {self.min_coverage}")
 
         return issues
 

@@ -28,8 +28,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
-from abc import ABC
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Self, TypeVar
@@ -40,7 +39,7 @@ T = TypeVar("T", bound="BaseConfig")
 
 
 @dataclass
-class BaseConfig(ABC):
+class BaseConfig:
     """
     Base configuration class with common functionality.
 

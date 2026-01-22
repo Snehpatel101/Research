@@ -15,8 +15,8 @@ from src.core.common.split_ratios import (
     DEFAULT_TRAIN_RATIO,
     DEFAULT_VAL_RATIO,
 )
-from src.data.pipeline.config.barriers_config import BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
 from src.core.common.timeframes import timeframe_to_minutes as parse_timeframe_to_minutes
+from src.data.pipeline.config.barriers_config import BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"

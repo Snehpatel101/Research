@@ -14,6 +14,7 @@ from src.data.adapters import PreparedData, UnifiedDataPreparation
 
 if TYPE_CHECKING:
     import pandas as pd
+
     from src.core import PipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ class DataPreparer:
     - Generate OOF (handled by OOFGenerationService)
     """
 
-    def __init__(self, config: "PipelineConfig") -> None:
+    def __init__(self, config: PipelineConfig) -> None:
         """
         Initialize DataPreparer with PipelineConfig.
 
@@ -48,9 +49,9 @@ class DataPreparer:
 
     def prepare(
         self,
-        df: "pd.DataFrame",
+        df: pd.DataFrame,
         model_name: str,
-        additional_dfs: dict[str, "pd.DataFrame"] | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> PreparedData:
         """
         Prepare data for a specific model.

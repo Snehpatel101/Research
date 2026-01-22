@@ -18,10 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from src.config.base import BaseConfig
-
 
 # =============================================================================
 # NOTE: TrainerConfig is NOT imported here to avoid circular imports.
@@ -92,21 +90,15 @@ class OptunaConfig(BaseConfig):
 
         valid_samplers = ["tpe", "random", "cmaes", "grid"]
         if self.sampler not in valid_samplers:
-            issues.append(
-                f"sampler must be one of {valid_samplers}, got '{self.sampler}'"
-            )
+            issues.append(f"sampler must be one of {valid_samplers}, got '{self.sampler}'")
 
         valid_pruners = ["median", "hyperband", "none", "percentile"]
         if self.pruner not in valid_pruners:
-            issues.append(
-                f"pruner must be one of {valid_pruners}, got '{self.pruner}'"
-            )
+            issues.append(f"pruner must be one of {valid_pruners}, got '{self.pruner}'")
 
         valid_directions = ["maximize", "minimize"]
         if self.direction not in valid_directions:
-            issues.append(
-                f"direction must be one of {valid_directions}, got '{self.direction}'"
-            )
+            issues.append(f"direction must be one of {valid_directions}, got '{self.direction}'")
 
         return issues
 
@@ -154,9 +146,7 @@ class CalibrationConfig(BaseConfig):
 
         valid_methods = ["auto", "isotonic", "platt", "temperature", "none"]
         if self.method not in valid_methods:
-            issues.append(
-                f"method must be one of {valid_methods}, got '{self.method}'"
-            )
+            issues.append(f"method must be one of {valid_methods}, got '{self.method}'")
 
         if self.cv_folds < 2:
             issues.append(f"cv_folds must be >= 2, got {self.cv_folds}")
@@ -202,14 +192,10 @@ class ConformalConfig(BaseConfig):
 
         valid_methods = ["naive", "aps", "raps"]
         if self.method not in valid_methods:
-            issues.append(
-                f"method must be one of {valid_methods}, got '{self.method}'"
-            )
+            issues.append(f"method must be one of {valid_methods}, got '{self.method}'")
 
         if not 0 < self.calibration_size < 1:
-            issues.append(
-                f"calibration_size must be in (0, 1), got {self.calibration_size}"
-            )
+            issues.append(f"calibration_size must be in (0, 1), got {self.calibration_size}")
 
         return issues
 
@@ -259,15 +245,11 @@ class CheckpointConfig(BaseConfig):
             issues.append(f"save_interval must be positive, got {self.save_interval}")
 
         if self.keep_n_checkpoints <= 0:
-            issues.append(
-                f"keep_n_checkpoints must be positive, got {self.keep_n_checkpoints}"
-            )
+            issues.append(f"keep_n_checkpoints must be positive, got {self.keep_n_checkpoints}")
 
         valid_modes = ["min", "max"]
         if self.monitor_mode not in valid_modes:
-            issues.append(
-                f"monitor_mode must be one of {valid_modes}, got '{self.monitor_mode}'"
-            )
+            issues.append(f"monitor_mode must be one of {valid_modes}, got '{self.monitor_mode}'")
 
         return issues
 
@@ -320,9 +302,7 @@ class OOMConfig(BaseConfig):
             )
 
         if self.min_batch_size <= 0:
-            issues.append(
-                f"min_batch_size must be positive, got {self.min_batch_size}"
-            )
+            issues.append(f"min_batch_size must be positive, got {self.min_batch_size}")
 
         return issues
 
@@ -374,9 +354,7 @@ class ParallelTrainingConfig(BaseConfig):
 
         valid_backends = ["loky", "multiprocessing", "threading"]
         if self.backend not in valid_backends:
-            issues.append(
-                f"backend must be one of {valid_backends}, got '{self.backend}'"
-            )
+            issues.append(f"backend must be one of {valid_backends}, got '{self.backend}'")
 
         if self.batch_size <= 0:
             issues.append(f"batch_size must be positive, got {self.batch_size}")
@@ -485,22 +463,16 @@ class GAConfig(BaseConfig):
         issues = super().validate()
 
         if self.population_size < 2:
-            issues.append(
-                f"population_size must be >= 2, got {self.population_size}"
-            )
+            issues.append(f"population_size must be >= 2, got {self.population_size}")
 
         if self.generations <= 0:
             issues.append(f"generations must be positive, got {self.generations}")
 
         if not 0 <= self.crossover_rate <= 1:
-            issues.append(
-                f"crossover_rate must be in [0, 1], got {self.crossover_rate}"
-            )
+            issues.append(f"crossover_rate must be in [0, 1], got {self.crossover_rate}")
 
         if not 0 <= self.mutation_rate <= 1:
-            issues.append(
-                f"mutation_rate must be in [0, 1], got {self.mutation_rate}"
-            )
+            issues.append(f"mutation_rate must be in [0, 1], got {self.mutation_rate}")
 
         if self.elite_size < 0:
             issues.append(f"elite_size must be non-negative, got {self.elite_size}")

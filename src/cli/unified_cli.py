@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import typer
 
+from src.cli.commands.evaluate import evaluate_app
 from src.cli.commands.pipeline import pipeline_app
 from src.cli.commands.train import train_app
-from src.cli.commands.evaluate import evaluate_app
 
 # Create the main CLI app
 app = typer.Typer(
@@ -42,12 +42,8 @@ app = typer.Typer(
 app.command("run", help="Run full pipeline (data + training + evaluation)")(
     pipeline_app.registered_commands[0].callback
 )
-app.command("data", help="Run data pipeline only")(
-    pipeline_app.registered_commands[1].callback
-)
-app.command("status", help="Show pipeline status")(
-    pipeline_app.registered_commands[2].callback
-)
+app.command("data", help="Run data pipeline only")(pipeline_app.registered_commands[1].callback)
+app.command("status", help="Show pipeline status")(pipeline_app.registered_commands[2].callback)
 app.command("resume", help="Resume pipeline from checkpoint")(
     pipeline_app.registered_commands[3].callback
 )
@@ -64,9 +60,7 @@ app.add_typer(train_app, name="train", help="Model training commands")
 # =============================================================================
 
 # Register evaluation commands directly on main app for convenience
-app.command("cv", help="Run cross-validation")(
-    evaluate_app.registered_commands[0].callback
-)
+app.command("cv", help="Run cross-validation")(evaluate_app.registered_commands[0].callback)
 app.command("walk-forward", help="Run walk-forward evaluation")(
     evaluate_app.registered_commands[1].callback
 )
@@ -84,6 +78,7 @@ app.command("cpcv-pbo", help="Run CPCV/PBO evaluation")(
 def show_version():
     """Show version information."""
     from rich.console import Console
+
     console = Console()
     console.print("[bold]ML Pipeline CLI[/bold]")
     console.print("Version: 1.0.0")

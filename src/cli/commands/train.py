@@ -8,23 +8,20 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
 from src.cli.utils import (
-    PROJECT_ROOT,
     DEFAULT_DATA_DIR,
     DEFAULT_OUTPUT_DIR,
-    DEFAULT_STACKING_OUTPUT_DIR,
+    PROJECT_ROOT,
+    console,
+    setup_logging,
     show_error,
     show_info,
-    show_success,
     show_warning,
-    setup_logging,
-    console,
 )
 
 train_app = typer.Typer(
@@ -38,7 +35,7 @@ def _load_phase3_stacking_data(
     cv_run_id: str,
     horizon: int,
     phase3_base_dir: Path,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Load Phase 3 stacking dataset for ensemble training.
 
@@ -108,24 +105,24 @@ def _load_phase3_stacking_data(
 
 
 def _build_config_overrides(
-    batch_size: Optional[int] = None,
-    max_epochs: Optional[int] = None,
-    learning_rate: Optional[float] = None,
-    early_stopping_patience: Optional[int] = None,
-    seq_len: Optional[int] = None,
-    hidden_size: Optional[int] = None,
-    num_layers: Optional[int] = None,
-    dropout: Optional[float] = None,
-    num_channels: Optional[str] = None,
-    kernel_size: Optional[int] = None,
-    n_estimators: Optional[int] = None,
-    max_depth: Optional[int] = None,
-    feature_set: Optional[str] = None,
+    batch_size: int | None = None,
+    max_epochs: int | None = None,
+    learning_rate: float | None = None,
+    early_stopping_patience: int | None = None,
+    seq_len: int | None = None,
+    hidden_size: int | None = None,
+    num_layers: int | None = None,
+    dropout: float | None = None,
+    num_channels: str | None = None,
+    kernel_size: int | None = None,
+    n_estimators: int | None = None,
+    max_depth: int | None = None,
+    feature_set: str | None = None,
     device: str = "auto",
     no_mixed_precision: bool = False,
-    base_models: Optional[str] = None,
-    meta_learner: Optional[str] = None,
-    voting: Optional[str] = None,
+    base_models: str | None = None,
+    meta_learner: str | None = None,
+    voting: str | None = None,
 ) -> dict[str, Any]:
     """Build config overrides from CLI arguments."""
     overrides: dict[str, Any] = {}
@@ -176,8 +173,8 @@ def _build_config_overrides(
 
 def _list_models() -> None:
     """Print all available models."""
-    from src.models.registry import ModelRegistry
     import src.models  # noqa: F401
+    from src.models.registry import ModelRegistry
 
     console.print("\n[bold]Available Models:[/bold]")
     console.print("=" * 60)
@@ -199,14 +196,14 @@ def _list_models() -> None:
 
 def _show_model_info(model_name: str) -> None:
     """Print detailed info about a model."""
-    from src.models.registry import ModelRegistry
     import src.models  # noqa: F401
+    from src.models.registry import ModelRegistry
 
     try:
         info = ModelRegistry.get_model_info(model_name)
     except ValueError as e:
         show_error(str(e))
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(f"\n[bold]Model: {info['name']}[/bold]")
     console.print("=" * 60)
@@ -223,42 +220,72 @@ def _show_model_info(model_name: str) -> None:
 def train_model(
     model: str = typer.Option(None, "--model", "-m", help="Model name (e.g., xgboost, lstm, tcn)"),
     horizon: int = typer.Option(20, "--horizon", "-h", help="Label horizon"),
-    feature_set: Optional[str] = typer.Option(None, "--feature-set", help="Feature set name"),
+    feature_set: str | None = typer.Option(None, "--feature-set", help="Feature set name"),
     # Ensemble arguments
-    base_models: Optional[str] = typer.Option(None, "--base-models", help="Comma-separated base models for ensemble"),
-    meta_learner: Optional[str] = typer.Option(None, "--meta-learner", help="Meta-learner for stacking/blending"),
-    voting: Optional[str] = typer.Option(None, "--voting", help="Voting strategy: soft/hard"),
+    base_models: str | None = typer.Option(
+        None, "--base-models", help="Comma-separated base models for ensemble"
+    ),
+    meta_learner: str | None = typer.Option(
+        None, "--meta-learner", help="Meta-learner for stacking/blending"
+    ),
+    voting: str | None = typer.Option(None, "--voting", help="Voting strategy: soft/hard"),
     # Phase 3->4 integration
-    stacking_data: Optional[str] = typer.Option(None, "--stacking-data", help="CV run ID for Phase 3 stacking data"),
-    phase3_output: Path = typer.Option(Path("data/stacking"), "--phase3-output", help="Phase 3 outputs directory"),
+    stacking_data: str | None = typer.Option(
+        None, "--stacking-data", help="CV run ID for Phase 3 stacking data"
+    ),
+    phase3_output: Path = typer.Option(
+        Path("data/stacking"), "--phase3-output", help="Phase 3 outputs directory"
+    ),
     # Data arguments
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled splits directory"),
-    output_dir: Path = typer.Option(DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output directory for artifacts"),
+    data_dir: Path = typer.Option(
+        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled splits directory"
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output directory for artifacts"
+    ),
     # Training arguments
-    batch_size: Optional[int] = typer.Option(None, "--batch-size", help="Training batch size"),
-    max_epochs: Optional[int] = typer.Option(None, "--max-epochs", help="Maximum training epochs"),
-    learning_rate: Optional[float] = typer.Option(None, "--learning-rate", "--lr", help="Learning rate"),
-    early_stopping_patience: Optional[int] = typer.Option(None, "--early-stopping-patience", help="Early stopping patience"),
+    batch_size: int | None = typer.Option(None, "--batch-size", help="Training batch size"),
+    max_epochs: int | None = typer.Option(None, "--max-epochs", help="Maximum training epochs"),
+    learning_rate: float | None = typer.Option(
+        None, "--learning-rate", "--lr", help="Learning rate"
+    ),
+    early_stopping_patience: int | None = typer.Option(
+        None, "--early-stopping-patience", help="Early stopping patience"
+    ),
     # Sequence model arguments
-    seq_len: Optional[int] = typer.Option(None, "--seq-len", help="Sequence length for sequential models"),
-    hidden_size: Optional[int] = typer.Option(None, "--hidden-size", help="Hidden size for RNN/TCN models"),
-    num_layers: Optional[int] = typer.Option(None, "--num-layers", help="Number of layers for RNN models"),
-    dropout: Optional[float] = typer.Option(None, "--dropout", help="Dropout rate"),
+    seq_len: int | None = typer.Option(
+        None, "--seq-len", help="Sequence length for sequential models"
+    ),
+    hidden_size: int | None = typer.Option(
+        None, "--hidden-size", help="Hidden size for RNN/TCN models"
+    ),
+    num_layers: int | None = typer.Option(
+        None, "--num-layers", help="Number of layers for RNN models"
+    ),
+    dropout: float | None = typer.Option(None, "--dropout", help="Dropout rate"),
     # TCN-specific
-    num_channels: Optional[str] = typer.Option(None, "--num-channels", help="Comma-separated channel sizes for TCN"),
-    kernel_size: Optional[int] = typer.Option(None, "--kernel-size", help="Kernel size for TCN"),
+    num_channels: str | None = typer.Option(
+        None, "--num-channels", help="Comma-separated channel sizes for TCN"
+    ),
+    kernel_size: int | None = typer.Option(None, "--kernel-size", help="Kernel size for TCN"),
     # Boosting-specific
-    n_estimators: Optional[int] = typer.Option(None, "--n-estimators", help="Number of estimators"),
-    max_depth: Optional[int] = typer.Option(None, "--max-depth", help="Max tree depth"),
+    n_estimators: int | None = typer.Option(None, "--n-estimators", help="Number of estimators"),
+    max_depth: int | None = typer.Option(None, "--max-depth", help="Max tree depth"),
     # Device
     device: str = typer.Option("auto", "--device", help="Device: cuda, cpu, auto"),
-    no_mixed_precision: bool = typer.Option(False, "--no-mixed-precision", help="Disable mixed precision"),
+    no_mixed_precision: bool = typer.Option(
+        False, "--no-mixed-precision", help="Disable mixed precision"
+    ),
     # Test evaluation
-    evaluate_test: bool = typer.Option(True, "--evaluate-test/--no-evaluate-test", help="Evaluate on test set"),
+    evaluate_test: bool = typer.Option(
+        True, "--evaluate-test/--no-evaluate-test", help="Evaluate on test set"
+    ),
     # Utility
-    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Path to YAML config file"),
     list_models: bool = typer.Option(False, "--list-models", help="List available models and exit"),
-    model_info: Optional[str] = typer.Option(None, "--model-info", help="Show info about a specific model"),
+    model_info: str | None = typer.Option(
+        None, "--model-info", help="Show info about a specific model"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     skip_save: bool = typer.Option(False, "--skip-save", help="Skip saving artifacts"),
 ):
@@ -292,18 +319,18 @@ def train_model(
     if not model:
         show_error("--model is required")
         show_info("Use --list-models to see available models")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Import models to ensure registration
     logger.info("Loading model registry...")
-    from src.models.registry import ModelRegistry
     import src.models  # noqa: F401
+    from src.models.registry import ModelRegistry
 
     # Validate model exists
     if not ModelRegistry.is_registered(model):
         show_error(f"Unknown model '{model}'")
         show_info(f"Available: {ModelRegistry.list_all()}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Build config overrides
     config_overrides = _build_config_overrides(
@@ -334,7 +361,7 @@ def train_model(
         if invalid:
             show_error(f"Unknown base models: {invalid}")
             show_info(f"Available: {ModelRegistry.list_all()}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     # Phase 3->4 workflow: Load stacking data if provided
     stacking_data_dict = None
@@ -357,7 +384,7 @@ def train_model(
                 )
             except (FileNotFoundError, ValueError) as e:
                 show_error(f"Failed to load Phase 3 stacking data: {e}")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
     # Load data (Phase 1 datasets OR Phase 3 stacking data)
     container = None
@@ -369,7 +396,7 @@ def train_model(
         data_path = PROJECT_ROOT / data_dir
         if not data_path.exists():
             show_error(f"Data directory not found: {data_path}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         try:
             container = TimeSeriesDataContainer.from_parquet_dir(
@@ -378,7 +405,7 @@ def train_model(
             )
         except Exception as e:
             show_error(f"Error loading data: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         logger.info(f"Loaded: {container}")
     else:
@@ -411,7 +438,7 @@ def train_model(
         )
     except Exception as e:
         show_error(f"Configuration error: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Override settings from CLI
     if output_dir:
@@ -437,7 +464,7 @@ def train_model(
             results = trainer.run(container, skip_save=skip_save)
         except Exception as e:
             logger.exception(f"Training failed: {e}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     # Print results
     _print_training_results(results, skip_save)
@@ -451,8 +478,8 @@ def _train_on_stacking_data(
     stacking_source: str,
 ) -> dict:
     """Train meta-learner on Phase 3 OOF predictions."""
-    import numpy as np
     from sklearn.model_selection import train_test_split
+
     from src.models.trainer import Trainer, compute_classification_metrics
 
     logger = logging.getLogger(__name__)
@@ -524,7 +551,7 @@ def _train_on_stacking_data(
 
     except Exception as e:
         logger.exception(f"Meta-learner training failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def _print_training_results(results: dict, skip_save: bool) -> None:
@@ -536,7 +563,7 @@ def _print_training_results(results: dict, skip_save: bool) -> None:
     console.print(f"Model: {results['model_name']}")
     console.print(f"Horizon: {results['horizon']}")
 
-    console.print(f"\n[bold]Validation Metrics:[/bold]")
+    console.print("\n[bold]Validation Metrics:[/bold]")
     eval_metrics = results["evaluation_metrics"]
     console.print(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
     console.print(f"  Macro F1: {eval_metrics['macro_f1']:.4f}")
@@ -546,27 +573,31 @@ def _print_training_results(results: dict, skip_save: bool) -> None:
     # Trading metrics (validation)
     if "trading" in eval_metrics:
         trading = eval_metrics["trading"]
-        console.print(f"\n  [bold]Trading Metrics (Validation):[/bold]")
+        console.print("\n  [bold]Trading Metrics (Validation):[/bold]")
         console.print(f"    Position Win Rate: {trading.get('position_win_rate', 0):.4f}")
         console.print(f"    Long Accuracy: {trading.get('long_accuracy', 0):.4f}")
         console.print(f"    Short Accuracy: {trading.get('short_accuracy', 0):.4f}")
         console.print(f"    Position Sharpe: {trading.get('position_sharpe', 0):.4f}")
         console.print(f"    Total Positions: {trading.get('total_positions', 0)}")
 
-    console.print(f"\n[bold]Per-Class F1:[/bold]")
+    console.print("\n[bold]Per-Class F1:[/bold]")
     for cls, f1 in eval_metrics.get("per_class_f1", {}).items():
         console.print(f"  {cls}: {f1:.4f}")
 
     # Test set metrics (if evaluated)
     if results.get("test_metrics") is not None:
         console.print("\n" + "=" * 70)
-        console.print("[bold yellow]TEST SET RESULTS (ONE-SHOT GENERALIZATION ESTIMATE)[/bold yellow]")
+        console.print(
+            "[bold yellow]TEST SET RESULTS (ONE-SHOT GENERALIZATION ESTIMATE)[/bold yellow]"
+        )
         console.print("=" * 70)
-        console.print("[yellow]WARNING: Do NOT iterate on these results. If you do, you're overfitting to test.[/yellow]")
+        console.print(
+            "[yellow]WARNING: Do NOT iterate on these results. If you do, you're overfitting to test.[/yellow]"
+        )
         console.print("=" * 70)
 
         test_metrics = results["test_metrics"]
-        console.print(f"\n[bold]Test Metrics:[/bold]")
+        console.print("\n[bold]Test Metrics:[/bold]")
         console.print(f"  Accuracy: {test_metrics['accuracy']:.4f}")
         console.print(f"  Macro F1: {test_metrics['macro_f1']:.4f}")
         console.print(f"  Precision: {test_metrics['precision']:.4f}")
@@ -574,20 +605,24 @@ def _print_training_results(results: dict, skip_save: bool) -> None:
 
         if "trading" in test_metrics:
             trading = test_metrics["trading"]
-            console.print(f"\n  [bold]Trading Metrics (Test):[/bold]")
+            console.print("\n  [bold]Trading Metrics (Test):[/bold]")
             console.print(f"    Position Win Rate: {trading.get('position_win_rate', 0):.4f}")
             console.print(f"    Long Accuracy: {trading.get('long_accuracy', 0):.4f}")
             console.print(f"    Short Accuracy: {trading.get('short_accuracy', 0):.4f}")
             console.print(f"    Position Sharpe: {trading.get('position_sharpe', 0):.4f}")
             console.print(f"    Total Positions: {trading.get('total_positions', 0)}")
 
-        console.print(f"\n[bold]Per-Class F1 (Test):[/bold]")
+        console.print("\n[bold]Per-Class F1 (Test):[/bold]")
         for cls, f1 in test_metrics.get("per_class_f1", {}).items():
             console.print(f"  {cls}: {f1:.4f}")
 
         console.print("\n" + "=" * 70)
-        console.print("[yellow]If test results are disappointing: DO NOT tune and re-evaluate.[/yellow]")
-        console.print("[yellow]Move on to the next experiment. Test set discipline is critical.[/yellow]")
+        console.print(
+            "[yellow]If test results are disappointing: DO NOT tune and re-evaluate.[/yellow]"
+        )
+        console.print(
+            "[yellow]Move on to the next experiment. Test set discipline is critical.[/yellow]"
+        )
         console.print("=" * 70)
 
     console.print(f"\nTraining Time: {results['total_time_seconds']:.1f}s")
@@ -597,25 +632,37 @@ def _print_training_results(results: dict, skip_save: bool) -> None:
 
 @train_app.command("ensemble")
 def train_ensemble(
-    base_models: str = typer.Option(..., "--base-models", "-b", help="Comma-separated base model names"),
-    meta_learner: str = typer.Option("logistic", "--meta-learner", "-m", help="Meta-learner model name"),
+    base_models: str = typer.Option(
+        ..., "--base-models", "-b", help="Comma-separated base model names"
+    ),
+    meta_learner: str = typer.Option(
+        "logistic", "--meta-learner", "-m", help="Meta-learner model name"
+    ),
     horizon: int = typer.Option(20, "--horizon", "-h", help="Label horizon"),
-    feature_set: Optional[str] = typer.Option(None, "--feature-set", help="Feature set name"),
+    feature_set: str | None = typer.Option(None, "--feature-set", help="Feature set name"),
     # Stacking configuration
     n_folds: int = typer.Option(5, "--n-folds", help="Number of CV folds for OOF generation"),
     purge_bars: int = typer.Option(60, "--purge-bars", help="Purge bars for CV splits"),
     embargo_bars: int = typer.Option(1440, "--embargo-bars", help="Embargo bars for CV splits"),
     # Data arguments
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled splits directory"),
-    output_dir: Path = typer.Option(DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"),
+    data_dir: Path = typer.Option(
+        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled splits directory"
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+    ),
     # Sequence model arguments
     seq_len: int = typer.Option(60, "--seq-len", help="Sequence length for sequence models"),
     # Device
     device: str = typer.Option("auto", "--device", help="Device: cuda, cpu, auto"),
     # Test evaluation
-    evaluate_test: bool = typer.Option(True, "--evaluate-test/--no-evaluate-test", help="Evaluate on test set"),
+    evaluate_test: bool = typer.Option(
+        True, "--evaluate-test/--no-evaluate-test", help="Evaluate on test set"
+    ),
     # Utility
-    list_models: bool = typer.Option(False, "--list-models", help="List available base models and meta-learners"),
+    list_models: bool = typer.Option(
+        False, "--list-models", help="List available base models and meta-learners"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     skip_save: bool = typer.Option(False, "--skip-save", help="Skip saving artifacts"),
 ):
@@ -641,29 +688,30 @@ def train_ensemble(
 
     # Import models to ensure registration
     logger.info("Loading model registry...")
-    from src.models.registry import ModelRegistry
     import src.models  # noqa: F401
+    from src.models.registry import ModelRegistry
 
     # Parse and validate base models
     base_model_names = [m.strip().lower() for m in base_models.split(",") if m.strip()]
     if len(base_model_names) < 2:
         show_error("At least 2 base models required for stacking")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     invalid = [m for m in base_model_names if not ModelRegistry.is_registered(m)]
     if invalid:
         show_error(f"Unknown base models: {invalid}")
         show_info(f"Available: {ModelRegistry.list_all()}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Validate meta-learner
     if not ModelRegistry.is_registered(meta_learner):
         show_error(f"Unknown meta-learner '{meta_learner}'")
         show_info("Available: logistic, ridge_meta, mlp_meta, calibrated_meta, xgboost_meta")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Classify base models
     from src.models.ensemble.validator import classify_base_models
+
     tabular_models, sequence_models = classify_base_models(base_model_names)
     is_heterogeneous = len(tabular_models) > 0 and len(sequence_models) > 0
 
@@ -686,7 +734,7 @@ def train_ensemble(
     data_path = PROJECT_ROOT / data_dir
     if not data_path.exists():
         show_error(f"Data directory not found: {data_path}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     try:
         container = TimeSeriesDataContainer.from_parquet_dir(
@@ -695,7 +743,7 @@ def train_ensemble(
         )
     except Exception as e:
         show_error(f"Error loading data: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     logger.info(f"Loaded: {container}")
 
@@ -726,7 +774,7 @@ def train_ensemble(
         )
     except Exception as e:
         show_error(f"Configuration error: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Override settings from CLI
     if output_dir:
@@ -749,7 +797,7 @@ def train_ensemble(
         results = trainer.run(container, skip_save=skip_save)
     except Exception as e:
         logger.exception(f"Training failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Print results
     console.print("\n" + "=" * 70)
@@ -759,7 +807,7 @@ def train_ensemble(
     console.print(f"Model: stacking ({len(base_model_names)} bases + {meta_learner})")
     console.print(f"Horizon: {results['horizon']}")
 
-    console.print(f"\n[bold]Validation Metrics:[/bold]")
+    console.print("\n[bold]Validation Metrics:[/bold]")
     eval_metrics = results["evaluation_metrics"]
     console.print(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
     console.print(f"  Macro F1: {eval_metrics['macro_f1']:.4f}")
@@ -768,23 +816,25 @@ def train_ensemble(
 
     if "trading" in eval_metrics:
         trading = eval_metrics["trading"]
-        console.print(f"\n  [bold]Trading Metrics (Validation):[/bold]")
+        console.print("\n  [bold]Trading Metrics (Validation):[/bold]")
         console.print(f"    Position Win Rate: {trading.get('position_win_rate', 0):.4f}")
         console.print(f"    Long Accuracy: {trading.get('long_accuracy', 0):.4f}")
         console.print(f"    Short Accuracy: {trading.get('short_accuracy', 0):.4f}")
 
-    console.print(f"\n[bold]Per-Class F1:[/bold]")
+    console.print("\n[bold]Per-Class F1:[/bold]")
     for cls, f1 in eval_metrics.get("per_class_f1", {}).items():
         console.print(f"  {cls}: {f1:.4f}")
 
     # Test set metrics
     if results.get("test_metrics") is not None:
         console.print("\n" + "=" * 70)
-        console.print("[bold yellow]TEST SET RESULTS (ONE-SHOT GENERALIZATION ESTIMATE)[/bold yellow]")
+        console.print(
+            "[bold yellow]TEST SET RESULTS (ONE-SHOT GENERALIZATION ESTIMATE)[/bold yellow]"
+        )
         console.print("=" * 70)
 
         test_metrics = results["test_metrics"]
-        console.print(f"\n[bold]Test Metrics:[/bold]")
+        console.print("\n[bold]Test Metrics:[/bold]")
         console.print(f"  Accuracy: {test_metrics['accuracy']:.4f}")
         console.print(f"  Macro F1: {test_metrics['macro_f1']:.4f}")
         console.print(f"  Precision: {test_metrics['precision']:.4f}")
@@ -799,8 +849,8 @@ def train_ensemble(
 
 def _list_ensemble_models() -> None:
     """Print available base models and meta-learners."""
-    from src.models.registry import ModelRegistry
     import src.models  # noqa: F401
+    from src.models.registry import ModelRegistry
 
     console.print("\n[bold]Heterogeneous Ensemble Components[/bold]")
     console.print("=" * 70)

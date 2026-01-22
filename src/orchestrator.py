@@ -297,15 +297,17 @@ class MLPipeline:
         # Try aligned OOF from ensemble
         if self._training_result.aligned_oof is not None:
             oof = self._training_result.aligned_oof
-            return pd.DataFrame({
-                "datetime": df["datetime"].iloc[oof.common_indices],
-                "prediction": oof.ensemble_predictions,
-                "confidence": (
-                    oof.ensemble_probabilities.max(axis=1)
-                    if oof.ensemble_probabilities is not None
-                    else None
-                ),
-            })
+            return pd.DataFrame(
+                {
+                    "datetime": df["datetime"].iloc[oof.common_indices],
+                    "prediction": oof.ensemble_predictions,
+                    "confidence": (
+                        oof.ensemble_probabilities.max(axis=1)
+                        if oof.ensemble_probabilities is not None
+                        else None
+                    ),
+                }
+            )
 
         # Try OOF from best model
         best_model = self._training_result.best_model
@@ -313,24 +315,21 @@ class MLPipeline:
             model_result = self._training_result.model_results[best_model]
             if model_result.oof_prediction is not None:
                 oof = model_result.oof_prediction
-                return pd.DataFrame({
-                    "datetime": df["datetime"].iloc[oof.indices],
-                    "prediction": oof.predictions,
-                    "confidence": (
-                        oof.probabilities.max(axis=1)
-                        if oof.probabilities is not None
-                        else None
-                    ),
-                })
+                return pd.DataFrame(
+                    {
+                        "datetime": df["datetime"].iloc[oof.indices],
+                        "prediction": oof.predictions,
+                        "confidence": (
+                            oof.probabilities.max(axis=1) if oof.probabilities is not None else None
+                        ),
+                    }
+                )
 
         return None
 
     def _get_ensemble_metrics(self) -> dict:
         """Extract ensemble metrics from training result."""
-        if (
-            self._training_result is not None
-            and self._training_result.ensemble_result is not None
-        ):
+        if self._training_result is not None and self._training_result.ensemble_result is not None:
             return self._training_result.ensemble_result.metrics
         return {}
 

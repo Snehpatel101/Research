@@ -21,7 +21,7 @@ def basic_example():
         end_date="2024-12-31",
     )
 
-    pipeline = MLPipeline(config)
+    MLPipeline(config)
 
     print(f"Starting pipeline (run_id={config.run_id})")
     print(f"Symbol: {config.symbol}")
@@ -62,7 +62,7 @@ def advanced_example():
         evaluation_methods=["cv"],
     )
 
-    pipeline = MLPipeline(config)
+    MLPipeline(config)
 
     print(f"Starting advanced pipeline (run_id={config.run_id})")
     print(f"Training {len(config.models)} models:")
@@ -81,7 +81,7 @@ def phase_by_phase_example():
         models=["xgboost"],
     )
 
-    pipeline = MLPipeline(config)
+    MLPipeline(config)
 
     # Phase 1-5: Data pipeline
     print("Running data pipeline...")
@@ -147,7 +147,7 @@ meta_learner: ridge_meta
     config_path.write_text(yaml_content)
 
     # Load and run
-    pipeline = MLPipeline(config_path)
+    MLPipeline(config_path)
     print(f"Loaded config from {config_path}")
 
     # Clean up

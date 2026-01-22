@@ -570,10 +570,7 @@ def train(
         models = [models]
 
     # Normalize horizons to list
-    if isinstance(horizon, int):
-        horizons = [horizon]
-    else:
-        horizons = list(horizon)
+    horizons = [horizon] if isinstance(horizon, int) else list(horizon)
 
     # Extract per-model overrides from kwargs
     overrides = {}
@@ -638,8 +635,8 @@ def train(
     logger.info("=" * 60)
 
     # Actually run training via orchestrator
-    from src.training.config import ExperimentConfig, ModelConfig
-    from src.training.orchestrator import TrainingOrchestrator
+    from src.models.training.config import ExperimentConfig, ModelConfig
+    from src.models.training.orchestrator import TrainingOrchestrator
 
     # Convert resolved config to ExperimentConfig
     model_configs = [

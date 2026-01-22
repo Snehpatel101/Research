@@ -11,29 +11,24 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
 import typer
 
 from src.cli.utils import (
-    PROJECT_ROOT,
+    DEFAULT_CPCV_OUTPUT_DIR,
     DEFAULT_DATA_DIR,
     DEFAULT_STACKING_OUTPUT_DIR,
     DEFAULT_WALK_FORWARD_OUTPUT_DIR,
-    DEFAULT_CPCV_OUTPUT_DIR,
-    DEFAULT_HORIZONS,
-    show_error,
-    show_info,
-    show_success,
-    show_warning,
-    setup_logging,
-    parse_model_list,
-    parse_horizon_list,
-    validate_data_dir,
-    generate_run_id,
     console,
+    generate_run_id,
+    parse_horizon_list,
+    parse_model_list,
+    setup_logging,
+    show_error,
+    show_warning,
+    validate_data_dir,
 )
 
 evaluate_app = typer.Typer(
@@ -51,21 +46,33 @@ evaluate_app = typer.Typer(
 @evaluate_app.command("cv")
 def run_cv(
     models: str = typer.Option(..., "--models", "-m", help="Comma-separated models or 'all'"),
-    horizons: str = typer.Option("5,10,15,20", "--horizons", "-h", help="Comma-separated horizons or 'all'"),
+    horizons: str = typer.Option(
+        "5,10,15,20", "--horizons", "-h", help="Comma-separated horizons or 'all'"
+    ),
     # CV configuration
     n_splits: int = typer.Option(5, "--n-splits", help="Number of CV folds"),
     purge_bars: int = typer.Option(60, "--purge-bars", help="Purge bars before test set"),
     embargo_bars: int = typer.Option(1440, "--embargo-bars", help="Embargo bars after test set"),
     # Feature selection
-    no_feature_selection: bool = typer.Option(False, "--no-feature-selection", help="Disable feature selection"),
-    n_features: int = typer.Option(50, "--n-features", help="Number of features to select per fold"),
+    no_feature_selection: bool = typer.Option(
+        False, "--no-feature-selection", help="Disable feature selection"
+    ),
+    n_features: int = typer.Option(
+        50, "--n-features", help="Number of features to select per fold"
+    ),
     # Hyperparameter tuning
     tune: bool = typer.Option(False, "--tune", help="Enable Optuna hyperparameter tuning"),
     n_trials: int = typer.Option(50, "--n-trials", help="Number of Optuna trials per model"),
     # Paths
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Input data directory"),
-    output_dir: Path = typer.Option(DEFAULT_STACKING_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"),
-    output_name: Optional[str] = typer.Option(None, "--output-name", help="Custom subdirectory name for this CV run"),
+    data_dir: Path = typer.Option(
+        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Input data directory"
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_STACKING_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+    ),
+    output_name: str | None = typer.Option(
+        None, "--output-name", help="Custom subdirectory name for this CV run"
+    ),
     # Verbosity
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
@@ -97,10 +104,10 @@ def run_cv(
         raise typer.Exit(1)
 
     # Import CV modules
-    from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+    from src.core.container import TimeSeriesDataContainer
     from src.cross_validation.cv_runner import CrossValidationRunner, analyze_cv_stability
     from src.cross_validation.oof_generator import analyze_prediction_correlation
-    from src.core.container import TimeSeriesDataContainer
+    from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
     # Generate unique run ID for this CV run
     cv_run_id = output_name if output_name else generate_run_id()
@@ -164,6 +171,7 @@ def run_cv(
             show_error(f"CV failed for H{horizon}: {e}")
             if verbose:
                 import traceback
+
                 traceback.print_exc()
             continue
 
@@ -224,7 +232,7 @@ def run_cv(
     console.print(f"\nCV Run ID: {cv_run_id}")
     console.print(f"Results saved to: {cv_output_dir}")
     console.print(f"Stacking datasets saved to: {cv_output_dir / 'stacking'}")
-    console.print(f"\n[bold]To use in Phase 4:[/bold]")
+    console.print("\n[bold]To use in Phase 4:[/bold]")
     console.print(f"  ml train model --model stacking --horizon <H> --stacking-data {cv_run_id}")
 
     raise typer.Exit(0)
@@ -254,10 +262,14 @@ def _run_walk_forward_for_model(
     label_end_times=None,
 ):
     """Run walk-forward evaluation for a single model."""
-    from src.cross_validation.walk_forward import WalkForwardEvaluator, WalkForwardResult, WindowMetrics
     from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-    from src.models.registry import ModelRegistry
+    from src.cross_validation.walk_forward import (
+        WalkForwardEvaluator,
+        WalkForwardResult,
+        WindowMetrics,
+    )
     from src.models.base import PredictionOutput
+    from src.models.registry import ModelRegistry
 
     logger = logging.getLogger(__name__)
     start_time = time.time()
@@ -383,16 +395,26 @@ def _run_walk_forward_for_model(
 @evaluate_app.command("walk-forward")
 def run_walk_forward(
     models: str = typer.Option(..., "--models", "-m", help="Comma-separated models or 'all'"),
-    horizons: str = typer.Option("5,10,15,20", "--horizons", "-h", help="Comma-separated horizons or 'all'"),
+    horizons: str = typer.Option(
+        "5,10,15,20", "--horizons", "-h", help="Comma-separated horizons or 'all'"
+    ),
     # Walk-forward configuration
     n_windows: int = typer.Option(5, "--n-windows", help="Number of walk-forward windows"),
-    window_type: str = typer.Option("expanding", "--window-type", help="Window type: expanding or rolling"),
-    min_train_pct: float = typer.Option(0.4, "--min-train-pct", help="Minimum training data percentage"),
+    window_type: str = typer.Option(
+        "expanding", "--window-type", help="Window type: expanding or rolling"
+    ),
+    min_train_pct: float = typer.Option(
+        0.4, "--min-train-pct", help="Minimum training data percentage"
+    ),
     test_pct: float = typer.Option(0.1, "--test-pct", help="Test window percentage"),
     gap_bars: int = typer.Option(0, "--gap-bars", help="Gap bars between train and test"),
     # Paths
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"),
-    output_dir: Path = typer.Option(DEFAULT_WALK_FORWARD_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"),
+    data_dir: Path = typer.Option(
+        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_WALK_FORWARD_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+    ),
     # Verbosity
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
@@ -424,8 +446,8 @@ def run_walk_forward(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Import modules
-    from src.cross_validation.walk_forward import WalkForwardConfig, WalkForwardResult
     from src.core.container import TimeSeriesDataContainer
+    from src.cross_validation.walk_forward import WalkForwardConfig, WalkForwardResult
 
     # Build config
     config = WalkForwardConfig(
@@ -498,6 +520,7 @@ def run_walk_forward(
                 show_error(f"Failed {model_name} H{horizon}: {e}")
                 if verbose:
                     import traceback
+
                     traceback.print_exc()
                 continue
 
@@ -553,11 +576,12 @@ def _compute_sharpe(returns: np.ndarray) -> float:
 
 def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times=None):
     """Run CPCV evaluation for a single model."""
-    from src.cross_validation.cpcv import CombinatorialPurgedCV, CPCVResult, CPCVPathResult
-    from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-    from src.models.registry import ModelRegistry
-    from src.models.base import PredictionOutput
     from sklearn.metrics import accuracy_score, f1_score
+
+    from src.cross_validation.cpcv import CombinatorialPurgedCV, CPCVPathResult, CPCVResult
+    from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+    from src.models.base import PredictionOutput
+    from src.models.registry import ModelRegistry
 
     logger = logging.getLogger(__name__)
 
@@ -617,10 +641,10 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
 
         path_result = CPCVPathResult(
             path_id=path_id,
-            test_groups=tuple(),
+            test_groups=(),
             train_size=len(train_idx),
             test_size=len(test_idx),
-            train_groups=tuple(),
+            train_groups=(),
             accuracy=accuracy,
             f1=f1,
             sharpe=sharpe,
@@ -681,13 +705,19 @@ def run_cpcv_pbo(
     # CPCV configuration
     n_groups: int = typer.Option(6, "--n-groups", help="Number of time groups"),
     n_test_groups: int = typer.Option(2, "--n-test-groups", help="Groups held out as test"),
-    max_combinations: int = typer.Option(15, "--max-combinations", help="Maximum combinations to evaluate"),
+    max_combinations: int = typer.Option(
+        15, "--max-combinations", help="Maximum combinations to evaluate"
+    ),
     # PBO thresholds
     pbo_warn: float = typer.Option(0.5, "--pbo-warn", help="PBO warning threshold"),
     pbo_block: float = typer.Option(0.8, "--pbo-block", help="PBO blocking threshold"),
     # Paths
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"),
-    output_dir: Path = typer.Option(DEFAULT_CPCV_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"),
+    data_dir: Path = typer.Option(
+        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Path to scaled data directory"
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_CPCV_OUTPUT_DIR, "--output-dir", "-o", help="Output directory"
+    ),
     # Verbosity
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
 ):
@@ -720,9 +750,9 @@ def run_cpcv_pbo(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Import modules
+    from src.core.container import TimeSeriesDataContainer
     from src.cross_validation.cpcv import CPCVConfig, CPCVResult
     from src.cross_validation.pbo import PBOConfig, pbo_gate
-    from src.core.container import TimeSeriesDataContainer
 
     # Build configs
     cpcv_config = CPCVConfig(
@@ -785,6 +815,7 @@ def run_cpcv_pbo(
                 show_error(f"Failed {model_name}: {e}")
                 if verbose:
                     import traceback
+
                     traceback.print_exc()
                 continue
 
@@ -801,7 +832,9 @@ def run_cpcv_pbo(
 
             # Gate check
             should_proceed, reason = pbo_gate(pbo_result, strict=False)
-            console.print(f"  Gate Decision: {'[green]PASS[/green]' if should_proceed else '[red]FAIL[/red]'}")
+            console.print(
+                f"  Gate Decision: {'[green]PASS[/green]' if should_proceed else '[red]FAIL[/red]'}"
+            )
             console.print(f"  Reason: {reason}")
 
             all_results.append(

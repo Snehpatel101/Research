@@ -30,7 +30,7 @@ class EnsembleRequest:
     """Request to build an ensemble."""
 
     oof_predictions: dict[str, OOFPrediction]
-    config: "PipelineConfig"
+    config: PipelineConfig
     df: pd.DataFrame | None = None  # For label extraction
 
 
@@ -151,9 +151,7 @@ class EnsembleService:
         logger.info(f"Stacking dataset: {stacking_dataset.n_samples} samples")
 
         # Train meta-learner
-        meta_learner, ensemble_metrics = self._train_meta_learner(
-            stacking_dataset, config
-        )
+        meta_learner, ensemble_metrics = self._train_meta_learner(stacking_dataset, config)
 
         training_time = time.time() - start_time
 
@@ -203,16 +201,14 @@ class EnsembleService:
                 y_full = oof_pred.predictions["y_true"].values
                 # Align to common indices
                 if aligned.common_indices is not None:
-                    valid_indices = aligned.common_indices[
-                        aligned.common_indices < len(y_full)
-                    ]
+                    valid_indices = aligned.common_indices[aligned.common_indices < len(y_full)]
                     return y_full[valid_indices]
         return None
 
     def _train_meta_learner(
         self,
         stacking_dataset: StackingDataset,
-        config: "PipelineConfig",
+        config: PipelineConfig,
     ) -> tuple[Any, dict[str, float]]:
         """Train meta-learner on stacking dataset."""
         import time
@@ -263,8 +259,7 @@ class EnsembleService:
             }
 
             logger.info(
-                f"Meta-learner ({config.meta_learner}) trained: "
-                f"val_f1={metrics['val_f1']:.4f}"
+                f"Meta-learner ({config.meta_learner}) trained: " f"val_f1={metrics['val_f1']:.4f}"
             )
 
             return trainer, metrics

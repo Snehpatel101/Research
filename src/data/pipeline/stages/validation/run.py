@@ -10,7 +10,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from src.data.pipeline.stages.validation import validate_data
-from src.data.pipeline.utils import StageResult, StageStatus, create_failed_result, create_stage_result
+from src.data.pipeline.utils import (
+    StageResult,
+    StageStatus,
+    create_failed_result,
+    create_stage_result,
+)
 
 if TYPE_CHECKING:
     from manifest import ArtifactManifest

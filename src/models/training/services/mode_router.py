@@ -9,13 +9,15 @@ isolate training mode selection logic.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from src.core import TrainingMode
 
 if TYPE_CHECKING:
     import pandas as pd
+
     from src.core import PipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -71,9 +73,9 @@ class ModeRouter:
 
     def route(
         self,
-        config: "PipelineConfig",
-        df: "pd.DataFrame",
-        additional_dfs: dict[str, "pd.DataFrame"] | None = None,
+        config: PipelineConfig,
+        df: pd.DataFrame,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> None:
         """
         Route to appropriate training mode handler.
@@ -89,10 +91,9 @@ class ModeRouter:
         mode = TrainingMode(config.training_mode)
 
         if mode not in self._handlers:
-            available = [m.value for m in self._handlers.keys()]
+            available = [m.value for m in self._handlers]
             raise ValueError(
-                f"Unknown training mode: {mode.value}. "
-                f"Available modes: {available}"
+                f"Unknown training mode: {mode.value}. " f"Available modes: {available}"
             )
 
         handler = self._handlers[mode]
@@ -105,7 +106,7 @@ class ModeRouter:
 
     def get_available_modes(self) -> list[str]:
         """Get list of available training modes."""
-        return [m.value for m in self._handlers.keys()]
+        return [m.value for m in self._handlers]
 
     def is_registered(self, mode: TrainingMode) -> bool:
         """Check if a mode is registered."""

@@ -41,7 +41,7 @@ from src.core import PipelineConfig
 
 if TYPE_CHECKING:
     from src.models.ensemble.orchestrator import EnsembleResult
-    from src.training.unified_orchestrator import TrainingRunResult
+    from src.models.training.unified_orchestrator import TrainingRunResult
 
 logger = logging.getLogger(__name__)
 

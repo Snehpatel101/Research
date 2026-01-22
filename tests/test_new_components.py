@@ -111,7 +111,7 @@ class TestDatasetContract:
 
         split_contract = SplitDatasetContract(train=train, val=val, test=test)
 
-        assert split_contract.has_test == True
+        assert split_contract.has_test
         assert split_contract.train.split == "train"
 
 
@@ -241,14 +241,18 @@ class TestParallelTrainingService:
         assert results == []
 
     def test_pipeline_config_has_parallel_training(self):
-        """Test that PipelineConfig has parallel_training field."""
-        from src.pipeline_config import PipelineConfig
+        """Test that PipelineConfig has n_jobs for parallel training."""
+        from src.core.config import PipelineConfig
 
-        config = PipelineConfig(symbol="MES")
+        config = PipelineConfig(
+            symbol="MES",
+            data_path="./data/test.parquet",
+            output_dir="./output",
+        )
 
-        assert hasattr(config, "parallel_training")
+        # Canonical PipelineConfig uses n_jobs for parallel processing
         assert hasattr(config, "n_jobs")
-        assert config.n_jobs == -1
+        assert config.n_jobs >= 1  # Default: 1 (single-threaded) or more
 
 
 # =============================================================================
@@ -378,7 +382,8 @@ class TestTrainingServicesIntegration:
         import src.models.training.unified_orchestrator as uto_module
 
         # The orchestrator should have service imports
-        source = open(uto_module.__file__).read()
+        with open(uto_module.__file__) as f:
+            source = f.read()
         assert "ModelTrainingService" in source
         assert "OOFGenerationService" in source
         assert "ArtifactManager" in source

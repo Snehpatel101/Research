@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from src.core import CVMethod, OOFResult, PipelineConfig, TrainingMode
+from src.core import CVMethod, PipelineConfig, TrainingMode
 from src.data.adapters import AlignedOOFResult, PreparedData
 from src.validation.cv import OOFPrediction, PurgedKFold, PurgedKFoldConfig, StackingDataset
 

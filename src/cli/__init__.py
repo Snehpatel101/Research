@@ -17,6 +17,6 @@ Usage:
     python -m src.cli run --help
 """
 
-from .unified_cli import main, app
+from .unified_cli import app, main
 
 __all__ = ["main", "app"]

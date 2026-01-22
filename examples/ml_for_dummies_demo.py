@@ -17,7 +17,7 @@ print("ML FOR DUMMIES - Quick Start Demo")
 print("=" * 60)
 
 # Import the simple API
-from src.config import (
+from src.config import (  # noqa: E402
     describe_model,
     list_models,
     preview_config,
