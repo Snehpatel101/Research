@@ -2,7 +2,7 @@
 
 **Date:** 2026-01-21
 **Status:** Conflict Analysis + Reconciled Implementation Plan
-**Version:** 2.2 (Simplified to ONE config, ONE orchestrator)
+**Version:** 2.3 (Fixed false "dead code" claims, resolved internal contradictions)
 
 ---
 
@@ -26,31 +26,35 @@ config = PipelineConfig(
 result = MLPipeline(config).run()  # Does EVERYTHING
 ```
 
-### What We're Eliminating
+### What We're Consolidating
+
+> **NOTE:** Earlier versions of this document incorrectly labeled MLConfig, UnifiedConfig, and SmartConfig
+> as "dead code". Analysis of the actual codebase shows these ARE actively used. The goal is
+> CONSOLIDATION (with deprecation warnings), not deletion.
 
 | Current State | Target State |
 |---------------|--------------|
-| 7 config classes | **1 config** (`PipelineConfig`) |
+| 30+ overlapping config classes | **2 configs** (`UnifiedConfig` user-facing + `DataConfig` internal) |
 | 4 entry points | **1 orchestrator** (`MLPipeline`) |
 | 71+ duplicate `_get_global_or_default()` functions | **1 centralized** `get_config_value()` |
-| Dead code (MLConfig, UnifiedConfig, SmartConfig) | **Deleted** |
+| Overlapping configs | **Consolidated** with deprecation shims |
 
-### Dead Code to Remove
+### Configs to DEPRECATE (with shims, NOT delete)
 
 | File | Class | Status | Action |
 |------|-------|--------|--------|
-| `src/ml_pipeline/config.py` | MLConfig | 0 imports | **DELETE** |
-| `src/config/smart_config.py` | SmartConfig | 0 imports | **DELETE** |
-| `src/config/unified.py` | UnifiedConfig | 0 imports | **DELETE** |
+| `src/ml_pipeline/config.py` | MLConfig | Used by MLPipeline | **DEPRECATE** → shim to UnifiedConfig |
+| `src/config/smart_config.py` | SmartConfig | Used as beginner API | **DEPRECATE** → shim to UnifiedConfig |
+| `src/core/config.py` | PipelineConfig | Used by MLFactory | **DEPRECATE** → shim to UnifiedConfig |
 
 ### Configs to KEEP
 
 | Config | Location | Purpose |
 |--------|----------|---------|
-| `PipelineConfig` | `src/core/config.py` | **THE ONE** user-facing config |
+| `UnifiedConfig` | `src/config/unified.py` | **THE ONE** user-facing config (1117 lines, comprehensive) |
 | `GlobalConfig` | `src/config/global_config.py` | YAML defaults (internal) |
 | `TrainerConfig` | `src/models/config/trainer_config.py` | Per-model settings (internal) |
-| `DataConfig` | `src/pipeline/data_config.py` | Pipeline internals (hidden) |
+| `DataConfig` | `src/pipeline/data_config.py` | Pipeline internals (hidden, renamed from PipelineConfig) |
 
 ---
 
@@ -853,6 +857,20 @@ ml status
 
 ## Changelog
 
+### v2.3 (2026-01-21)
+**Fixed False "Dead Code" Claims:**
+- MLConfig, UnifiedConfig, SmartConfig are NOT dead code - they are actively used
+- Changed "Dead Code to Remove" section to "Configs to DEPRECATE (with shims)"
+- UnifiedConfig is now correctly identified as THE ONE user-facing config
+- PipelineConfig should be deprecated with shim to UnifiedConfig
+- Updated success criteria to reflect 2 configs (UnifiedConfig + DataConfig)
+- Resolved internal contradiction between "delete UnifiedConfig" and "use UnifiedConfig"
+
+### v2.2 (2026-01-21)
+**Simplified Vision Integration:**
+- Added reference to SIMPLIFIED_VISION.md
+- Clarified ONE config, ONE orchestrator goal
+
 ### v2.1 (2026-01-21)
 **Two-Tier Config Architecture Update:**
 - Added "CRITICAL: Two-Tier Configuration Architecture" section before Phase 2
@@ -884,5 +902,6 @@ ml status
 
 ---
 
-*Last Updated: 2026-01-21 (v2.1)*
+*Last Updated: 2026-01-21 (v2.3)*
 *Status: Ready for Team Review - Decision Required on MLFactory vs MLPipeline Direction*
+*Note: v2.3 fixed false "dead code" claims - UnifiedConfig is THE ONE config, not dead code*

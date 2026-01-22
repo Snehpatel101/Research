@@ -1,7 +1,10 @@
 # Simplified Vision: ONE Config, ONE Orchestrator
 
 **Date:** 2026-01-21
-**Status:** Final Architecture Decision
+**Status:** Architecture Proposal (REQUIRES RECONCILIATION)
+
+> ⚠️ **WARNING:** This document contains inaccuracies about "dead code" that have been corrected below.
+> See the "CORRECTION" notes throughout. This proposal needs reconciliation with RECONCILED_PLAN.md.
 
 ---
 
@@ -15,18 +18,28 @@
 
 ## Current State (The Problem)
 
+> **CORRECTION:** The original "dead code" claims below were INACCURATE. Analysis of the actual codebase shows:
+> - `MLConfig`: Used by MLPipeline, exported in `__all__`
+> - `UnifiedConfig`: Documented as primary interface in `src/config/__init__.py` (1117 lines, 16 sections)
+> - `SmartConfig`: 925-line UX layer for beginners, actively maintained
+>
+> These are NOT dead code. The actual problem is **overlapping configs**, not unused ones.
+
 ```
-7 Config Classes (only 2 actually used):
-├── PipelineConfig     ← THE ONE (actually used by MLFactory)
-├── GlobalConfig       ← Loads YAML defaults (needed)
-├── TrainerConfig      ← Per-model settings (internal, needed)
-├── DataConfig         ← Internal pipeline (hidden, needed)
-├── MLConfig           ← DEAD CODE (0 imports in production)
-├── UnifiedConfig      ← DEAD CODE (1117 lines, 0 imports)
-└── SmartConfig        ← DEAD CODE (train() never called)
+30+ Config Classes (overlapping, confusing):
+├── PipelineConfig (x2!)  ← TWO classes with same name in different locations!
+│   ├── src/core/config.py (625 lines) - Orchestration
+│   └── src/pipeline/data_config.py (350 lines) - Data prep
+├── UnifiedConfig         ← Comprehensive (1117 lines, 16 sections) - ACTIVELY USED
+├── GlobalConfig          ← Loads YAML defaults (needed)
+├── TrainerConfig         ← Per-model settings (internal, needed)
+├── DataConfig            ← Internal pipeline (hidden, needed)
+├── MLConfig              ← ML pipeline specific - ACTIVELY USED
+├── SmartConfig           ← Beginner-friendly API - ACTIVELY USED
+└── [20+ more specialized configs across modules]
 
 4 Entry Points (confusing):
-├── MLFactory          ← Primary entry point
+├── MLFactory          ← Primary entry point (940 lines)
 ├── MLPipeline         ← Deprecated, delegates to MLFactory
 ├── PipelineRunner     ← Phase 1 data only
 └── UnifiedTrainingOrchestrator ← Training only
@@ -164,13 +177,21 @@ Phase 8: Backtesting (optional)
 
 ## Implementation: What to Change
 
-### Step 1: Delete Dead Code (Day 1)
+### Step 1: Consolidate Configs (Day 1)
+
+> **CORRECTION:** Do NOT delete these files - they are actively used!
+> The correct approach is to CONSOLIDATE, not delete.
 
 ```bash
-# Remove unused config classes
-rm src/ml_pipeline/config.py       # MLConfig - dead
-rm src/config/smart_config.py      # SmartConfig - dead
-# Keep UnifiedConfig for now, but mark deprecated
+# WRONG - These are NOT dead code:
+# rm src/ml_pipeline/config.py       # MLConfig - USED by MLPipeline
+# rm src/config/smart_config.py      # SmartConfig - USED as beginner API
+
+# CORRECT - Add deprecation warnings and consolidate:
+# 1. Choose ONE canonical config (PipelineConfig or UnifiedConfig - TEAM DECISION)
+# 2. Add deprecation warnings to non-canonical configs
+# 3. Create adapters so old configs delegate to canonical one
+# 4. Update all internal code to use canonical config
 ```
 
 ### Step 2: Extend PipelineConfig (Day 2-3)
@@ -285,10 +306,13 @@ class MLFactory:
 
 | Before | After |
 |--------|-------|
-| 7 config classes | 1 config class (PipelineConfig) |
+| 30+ overlapping config classes | 1 canonical config (PipelineConfig) + internal helpers |
 | 4 entry points | 1 entry point (MLPipeline) |
 | User confusion | Simple, clear API |
-| Dead code everywhere | Clean codebase |
+| Overlapping responsibilities | Clear boundaries |
+
+> **NOTE:** Achieving "1 config" doesn't mean deleting configs - it means having ONE
+> user-facing config that internally delegates to specialized configs as needed.
 
 ---
 
@@ -327,3 +351,32 @@ print(f"Ensemble F1: {result.ensemble_metrics['f1']}")
 ```
 
 **That's it. ONE config. ONE orchestrator. EVERYTHING runs.**
+
+---
+
+## ⚠️ CRITICAL: Reconciliation Required
+
+This document proposes `PipelineConfig` as THE ONE config. However, `RECONCILED_PLAN.md` proposes `UnifiedConfig` as THE ONE config.
+
+| Document | Canonical Config | Rationale |
+|----------|-----------------|-----------|
+| SIMPLIFIED_VISION.md | `PipelineConfig` | Already used by MLFactory, simpler |
+| RECONCILED_PLAN.md | `UnifiedConfig` | Already comprehensive (1117 lines, 16 sections) |
+
+**TEAM DECISION REQUIRED:**
+1. **Option A (This doc):** Extend `PipelineConfig`, deprecate `UnifiedConfig`
+2. **Option B (RECONCILED_PLAN):** Keep `UnifiedConfig`, deprecate `PipelineConfig`
+
+**Factors to Consider:**
+- `UnifiedConfig` already has `to_trainer_config()` and `to_pipeline_config()` adapters
+- `PipelineConfig` is already the type MLFactory accepts
+- Changing canonical config affects ALL existing code and scripts
+
+**Timeline Mismatch:**
+- This document: 1 week (optimistic, may be unrealistic)
+- RECONCILED_PLAN.md: 7 weeks (more realistic, includes tooling and buffer)
+
+---
+
+*Last Updated: 2026-01-21*
+*Status: DRAFT - Corrections applied, awaiting team decision*
