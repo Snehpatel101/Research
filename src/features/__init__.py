@@ -1,74 +1,26 @@
-from .registry import (
-    FeatureDefinition,
-    FEATURE_REGISTRY,
-    get_features_by_families,
-    get_features_by_model,
-    get_feature_families,
-)
+"""
+DEPRECATED: Import from 'src.data.features' instead.
 
-# Feature computation (PHASE_1)
-from .compute import (
-    compute_all_features,
-    compute_features_by_family,
-    compute_features_by_names,
-    compute_single_feature,
-    FEATURE_COMPUTE_MAP,
-    get_all_feature_names,
-    get_features_in_family,
-)
+This module will be removed in v2.0.0.
 
-# MTF (Multi-Timeframe) feature computation (PHASE_1)
-from .compute import (
-    MTFConfig,
-    MTFFeatureComputer,
-    compute_mtf_features,
-    get_mtf_feature_names,
-    validate_mtf_config,
-    resample_ohlcv,
-    DEFAULT_MTF_FEATURES,
-)
+Migration:
+    # Old (deprecated)
+    from src.features import compute_all_features, FeatureDefinition
 
-from .strategies import (
-    ModelFeatureStrategy,
-    MODEL_FEATURE_STRATEGIES,
-    get_strategy_for_model,
-    get_baseline_features,
-)
+    # New (preferred)
+    from src.data.features import compute_all_features, FeatureDefinition
+"""
 
-from .optimization import (
-    OptimizationResult,
-    FeatureOptimizer,
-    optimize_features_for_model,
-    suggest_features,
-)
+import warnings
 
-from .strategy_manager import (
-    ResolvedFeatureSet,
-    FeatureStrategyManager,
-    get_features_for_model,
-)
-
-from .selection import (
-    FeatureSelectionResult,
-    FeatureSelector,
-    select_features,
-)
-
-from .pruning import (
-    FeaturePruningResult,
-    FeaturePruner,
-    prune_features,
-    prune_correlated_features,
-)
-
-__all__ = [
+_FEATURES_EXPORTS = [
     # Registry
     "FeatureDefinition",
     "FEATURE_REGISTRY",
     "get_features_by_families",
     "get_features_by_model",
     "get_feature_families",
-    # Compute (PHASE_1)
+    # Compute
     "compute_all_features",
     "compute_features_by_family",
     "compute_features_by_names",
@@ -76,7 +28,7 @@ __all__ = [
     "FEATURE_COMPUTE_MAP",
     "get_all_feature_names",
     "get_features_in_family",
-    # MTF Compute (PHASE_1)
+    # MTF Compute
     "MTFConfig",
     "MTFFeatureComputer",
     "compute_mtf_features",
@@ -89,7 +41,7 @@ __all__ = [
     "MODEL_FEATURE_STRATEGIES",
     "get_strategy_for_model",
     "get_baseline_features",
-    # Optimization (legacy)
+    # Optimization
     "OptimizationResult",
     "FeatureOptimizer",
     "optimize_features_for_model",
@@ -98,13 +50,33 @@ __all__ = [
     "ResolvedFeatureSet",
     "FeatureStrategyManager",
     "get_features_for_model",
-    # Selection (PHASE_1B)
+    # Selection
     "FeatureSelectionResult",
     "FeatureSelector",
     "select_features",
-    # Pruning (PHASE_1B)
+    # Pruning
     "FeaturePruningResult",
     "FeaturePruner",
     "prune_features",
     "prune_correlated_features",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import to avoid circular imports."""
+    if name in _FEATURES_EXPORTS:
+        warnings.warn(
+            f"Importing '{name}' from 'src.features' is deprecated. "
+            f"Use 'from src.data.features import {name}' instead. "
+            "This will be removed in v2.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from src.data import features as features_module
+
+        return getattr(features_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return _FEATURES_EXPORTS

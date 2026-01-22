@@ -23,8 +23,8 @@ Legacy import paths (still work, will be deprecated in v2.0):
     from src.feature_store import FeatureStore
 """
 
-# Re-export from pipeline
-from src.pipeline import (
+# Re-export from pipeline (now in data/pipeline)
+from .pipeline import (
     PipelineRunner,
     DataConfig,
     PipelineStage,
@@ -34,8 +34,8 @@ from src.pipeline import (
     get_stage_order,
 )
 
-# Re-export from adapters
-from src.adapters import (
+# Re-export from adapters (now in data/adapters)
+from .adapters import (
     AdapterRegistry,
     get_adapter,
     BaseAdapter,
@@ -64,8 +64,8 @@ from src.adapters import (
     validate_oof_results,
 )
 
-# Re-export from features
-from src.features import (
+# Re-export from features (now in data/features)
+from .features import (
     FeatureDefinition,
     FEATURE_REGISTRY,
     get_features_by_families,
@@ -104,8 +104,8 @@ from src.features import (
     prune_correlated_features,
 )
 
-# Re-export from labeling
-from src.labeling import (
+# Re-export from labeling (now in data/labeling)
+from .labeling import (
     LabelingResult,
     LabelingStrategy,
     LabelingType,
@@ -118,8 +118,8 @@ from src.labeling import (
     optimize_labels,
 )
 
-# Re-export from feature_store
-from src.feature_store import (
+# Re-export from feature_store (now in data/store)
+from .store import (
     FeatureStore,
     FeatureStoreError,
     FeatureNotFoundError,

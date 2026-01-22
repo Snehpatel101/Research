@@ -1,39 +1,19 @@
 """
-Pipeline Package - Data Preparation Pipeline.
+DEPRECATED: Import from 'src.data.pipeline' instead.
 
-This package provides a modular, stage-based pipeline for processing
-raw OHLCV data into ML-ready features and labels.
+This module will be removed in v2.0.0.
 
-Stage Flow:
-1. data_generation    - Generate/validate raw data
-2. data_cleaning      - Clean and resample OHLCV data
-3. feature_engineering - Generate technical features
-4. initial_labeling   - Apply initial triple-barrier labels
-5. ga_optimize        - Genetic algorithm optimization of barrier params
-6. final_labels       - Apply optimized labels with quality scores
-7. create_splits      - Create train/val/test splits
-8. validate           - Comprehensive data validation
-9. generate_report    - Generate completion report
+Migration:
+    # Old (deprecated)
+    from src.pipeline import PipelineRunner, DataConfig
 
-Usage:
-    from src.pipeline.runner import PipelineRunner
-    from src.pipeline.data_config import DataConfig
-
-    # Single symbol run (recommended - each symbol processed in isolation)
-    config = DataConfig(
-        symbols=['MES'],  # Specify your target symbol
-        start_date='2020-01-01',
-        end_date='2024-12-31'
-    )
-
-    runner = PipelineRunner(config)
-    success = runner.run()
+    # New (preferred)
+    from src.data.pipeline import PipelineRunner, DataConfig
 """
 
-from .stage_registry import PipelineStage, get_stage_definitions, get_stage_order
-from .utils import StageResult, StageStatus
+import warnings
 
-__all__ = [
+_PIPELINE_EXPORTS = [
     "PipelineRunner",
     "DataConfig",
     "StageStatus",
@@ -43,17 +23,22 @@ __all__ = [
     "get_stage_order",
 ]
 
-__version__ = "1.0.0"
-
 
 def __getattr__(name: str):
-    """Lazy import for circular dependency avoidance."""
-    if name == "PipelineRunner":
-        from .runner import PipelineRunner
+    """Lazy import to avoid circular imports."""
+    if name in _PIPELINE_EXPORTS:
+        warnings.warn(
+            f"Importing '{name}' from 'src.pipeline' is deprecated. "
+            f"Use 'from src.data.pipeline import {name}' instead. "
+            "This will be removed in v2.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from src.data import pipeline as pipeline_module
 
-        return PipelineRunner
-    if name == "DataConfig":
-        from .data_config import DataConfig
-
-        return DataConfig
+        return getattr(pipeline_module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return _PIPELINE_EXPORTS

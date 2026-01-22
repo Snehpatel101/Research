@@ -1,67 +1,19 @@
 """
-Labeling Package for PHASE_1B - Triple-Barrier Labeling and Optimization.
+DEPRECATED: Import from 'src.data.labeling' instead.
 
-This package provides the triple-barrier labeling method from Lopez de Prado's
-"Advances in Financial Machine Learning" along with Optuna-based optimization
-for finding optimal labeling parameters.
+This module will be removed in v2.0.0.
 
-Components:
-    - TripleBarrierConfig: Configuration dataclass for labeling parameters
-    - TripleBarrierLabeler: Triple-barrier label generation
-    - LabelOptimizer: Optuna-based parameter optimization
-    - LabelOptimizationResult: Optimization result container
+Migration:
+    # Old (deprecated)
+    from src.labeling import TripleBarrierLabeler, LabelOptimizer
 
-Labels:
-    -1 = Short (lower barrier hit first)
-     0 = Neutral/Timeout (time barrier hit)
-    +1 = Long (upper barrier hit first)
-
-Usage:
-    Basic Labeling:
-        >>> from src.labeling import TripleBarrierConfig, TripleBarrierLabeler
-        >>> config = TripleBarrierConfig(upper_mult=2.0, lower_mult=2.0, horizon=20)
-        >>> labeler = TripleBarrierLabeler(config)
-        >>> labels = labeler.create_labels(ohlcv_df)
-
-    With Optimization:
-        >>> from src.labeling import LabelOptimizer, optimize_labels
-        >>> result = optimize_labels(ohlcv_df, feature_df, n_trials=100)
-        >>> print(f"Best config: {result.best_config}")
-        >>> labels = TripleBarrierLabeler(result.best_config).create_labels(ohlcv_df)
-
-Integration with PipelineConfig:
-    >>> from src.core import PipelineConfig
-    >>> config = PipelineConfig(
-    ...     symbol="MES",
-    ...     data_path="./data/mes.parquet",
-    ...     output_dir="./experiments/exp_001",
-    ...     labeling_method="triple_barrier",
-    ...     optimize_labels=True,
-    ...     label_optimization_trials=100,
-    ... )
+    # New (preferred)
+    from src.data.labeling import TripleBarrierLabeler, LabelOptimizer
 """
 
-from src.labeling.base import (
-    LabelingResult,
-    LabelingStrategy,
-    LabelingType,
-)
+import warnings
 
-from src.labeling.triple_barrier import (
-    TripleBarrierConfig,
-    TripleBarrierLabeler,
-    triple_barrier_numba,
-    triple_barrier_numba_with_costs,
-)
-
-from src.labeling.optimization import (
-    LabelOptimizationResult,
-    LabelOptimizer,
-    optimize_labels,
-)
-
-
-__all__ = [
+_LABELING_EXPORTS = [
     # Base classes
     "LabelingResult",
     "LabelingStrategy",
@@ -78,3 +30,23 @@ __all__ = [
     "LabelOptimizer",
     "optimize_labels",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import to avoid circular imports."""
+    if name in _LABELING_EXPORTS:
+        warnings.warn(
+            f"Importing '{name}' from 'src.labeling' is deprecated. "
+            f"Use 'from src.data.labeling import {name}' instead. "
+            "This will be removed in v2.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from src.data import labeling as labeling_module
+
+        return getattr(labeling_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return _LABELING_EXPORTS
