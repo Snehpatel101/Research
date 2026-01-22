@@ -43,10 +43,12 @@ def get_model_inventory() -> dict:
 
     # Trigger model registration by importing all model modules
     try:
-        from src.models import boosting  # noqa: F401
-        from src.models import classical  # noqa: F401
-        from src.models import ensemble  # noqa: F401
-        from src.models import neural  # noqa: F401
+        from src.models import (
+            boosting,  # noqa: F401
+            classical,  # noqa: F401
+            ensemble,  # noqa: F401
+            neural,  # noqa: F401
+        )
     except ImportError as e:
         print(f"Warning: Could not import all model modules: {e}", file=sys.stderr)
 
@@ -63,29 +65,31 @@ def get_model_inventory() -> dict:
                 metadata = ModelRegistry.get_metadata(model_name)
                 # Check if model is actually available (dependencies installed)
                 is_available = ModelRegistry.is_available(model_name)
-                models.append({
-                    "name": model_name,
-                    "description": metadata.get("description", ""),
-                    "class": metadata.get("class", ""),
-                    "aliases": metadata.get("aliases", []),
-                    "available": is_available,
-                })
+                models.append(
+                    {
+                        "name": model_name,
+                        "description": metadata.get("description", ""),
+                        "class": metadata.get("class", ""),
+                        "aliases": metadata.get("aliases", []),
+                        "available": is_available,
+                    }
+                )
             except Exception as e:
                 print(f"Warning: Could not get metadata for {model_name}: {e}", file=sys.stderr)
-                models.append({
-                    "name": model_name,
-                    "description": "",
-                    "class": "",
-                    "aliases": [],
-                    "available": False,
-                })
+                models.append(
+                    {
+                        "name": model_name,
+                        "description": "",
+                        "class": "",
+                        "aliases": [],
+                        "available": False,
+                    }
+                )
         families[family_name] = models
 
     # Count available models
     available_count = sum(
-        1 for family_models in families.values()
-        for model in family_models
-        if model["available"]
+        1 for family_models in families.values() for model in family_models if model["available"]
     )
 
     return {
@@ -133,7 +137,11 @@ def format_markdown(inventory: dict) -> str:
         lines.append("|-------|-------|-----------|-------------|")
         for model in models:
             available_mark = "Yes" if model["available"] else "No"
-            desc = model["description"][:60] + "..." if len(model["description"]) > 60 else model["description"]
+            desc = (
+                model["description"][:60] + "..."
+                if len(model["description"]) > 60
+                else model["description"]
+            )
             lines.append(f"| `{model['name']}` | {model['class']} | {available_mark} | {desc} |")
         lines.append("")
 
@@ -149,7 +157,9 @@ def format_summary(inventory: dict) -> str:
     """Format a brief summary for embedding in other docs."""
     lines = []
 
-    lines.append(f"**Models by Family ({len(inventory['families'])} Families, {inventory['total_count']} Models):**")
+    lines.append(
+        f"**Models by Family ({len(inventory['families'])} Families, {inventory['total_count']} Models):**"
+    )
     lines.append("")
 
     for family_name, models in sorted(inventory["families"].items()):

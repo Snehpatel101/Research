@@ -19,13 +19,18 @@ Usage:
     result = adapter.transform(df)
 """
 
+# PHASE_2: OOF alignment utilities for heterogeneous ensembles
+from .alignment import (
+    AlignedOOFResult,
+    OOFAligner,
+    align_oof_predictions,
+    compute_coverage_stats,
+    validate_oof_results,
+)
 from .base import AdapterResult, BaseAdapter
-from .registry import AdapterRegistry, get_adapter
 
-# Import adapters to register them
-from .tabular import TabularAdapter
-from .sequence import SequenceAdapter
-from .multi_stream import MultiStreamAdapter
+# PHASE_2: AdapterFactory for config-driven adapter creation
+from .factory import AdapterFactory, create_adapter_factory
 
 # Multi-Resolution 4D Adapter (migrated from phase1)
 from .multi_resolution import (
@@ -38,24 +43,18 @@ from .multi_resolution_utils import (
     DEFAULT_MTF_FEATURES,
     DEFAULT_MTF_TIMEFRAMES,
 )
-
-# PHASE_2: AdapterFactory for config-driven adapter creation
-from .factory import AdapterFactory, create_adapter_factory
-
-# PHASE_2: Scaling for adapter outputs
-from .scaling import AdapterScaler, ScalerConfig, create_scaler
+from .multi_stream import MultiStreamAdapter
 
 # PHASE_2: Unified data preparation (split + transform + scale)
 from .preparation import PreparedData, UnifiedDataPreparation, prepare_for_model
+from .registry import AdapterRegistry, get_adapter
 
-# PHASE_2: OOF alignment utilities for heterogeneous ensembles
-from .alignment import (
-    AlignedOOFResult,
-    OOFAligner,
-    align_oof_predictions,
-    compute_coverage_stats,
-    validate_oof_results,
-)
+# PHASE_2: Scaling for adapter outputs
+from .scaling import AdapterScaler, ScalerConfig, create_scaler
+from .sequence import SequenceAdapter
+
+# Import adapters to register them
+from .tabular import TabularAdapter
 
 __all__ = [
     # Registry

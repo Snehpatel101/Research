@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -18,11 +18,7 @@ import pandas as pd
 from .metrics import (
     PerformanceMetrics,
     calculate_all_metrics,
-    calculate_calmar_ratio,
     calculate_max_drawdown,
-    calculate_max_drawdown_duration,
-    calculate_sharpe_ratio,
-    calculate_sortino_ratio,
 )
 
 
@@ -57,9 +53,9 @@ class Trade:
     costs: float
     net_pnl: float
     return_pct: float
-    label: Optional[int] = None
-    prediction: Optional[int] = None
-    confidence: Optional[float] = None
+    label: int | None = None
+    prediction: int | None = None
+    confidence: float | None = None
 
     @property
     def is_winner(self) -> bool:
@@ -73,7 +69,7 @@ class Trade:
             return int((self.exit_time - self.entry_time).total_seconds())
         return 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert trade to dictionary."""
         return {
             "entry_time": self.entry_time,
@@ -110,10 +106,10 @@ class EquityCurve:
     """
 
     initial_equity: float = 100000.0
-    timestamps: List[datetime] = field(default_factory=list)
-    equity_values: List[float] = field(default_factory=list)
-    trades: List[Trade] = field(default_factory=list)
-    _cached_metrics: Optional[PerformanceMetrics] = field(default=None, repr=False)
+    timestamps: list[datetime] = field(default_factory=list)
+    equity_values: list[float] = field(default_factory=list)
+    trades: list[Trade] = field(default_factory=list)
+    _cached_metrics: PerformanceMetrics | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """Initialize with starting equity if empty."""
@@ -219,11 +215,13 @@ class EquityCurve:
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert equity curve to DataFrame."""
-        return pd.DataFrame({
-            "timestamp": self.timestamps,
-            "equity": self.equity_values,
-            "drawdown": self.get_drawdowns(),
-        })
+        return pd.DataFrame(
+            {
+                "timestamp": self.timestamps,
+                "equity": self.equity_values,
+                "drawdown": self.get_drawdowns(),
+            }
+        )
 
     def trades_to_dataframe(self) -> pd.DataFrame:
         """Convert trade history to DataFrame."""
@@ -231,7 +229,7 @@ class EquityCurve:
             return pd.DataFrame()
         return pd.DataFrame([t.to_dict() for t in self.trades])
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         """Generate summary statistics."""
         metrics = self.get_metrics()
         return {
@@ -251,10 +249,10 @@ class EquityCurve:
 
     def plot(
         self,
-        figsize: Tuple[int, int] = (14, 10),
+        figsize: tuple[int, int] = (14, 10),
         show_drawdowns: bool = True,
         show_trades: bool = True,
-        save_path: Optional[Path | str] = None,
+        save_path: Path | str | None = None,
     ) -> Any:
         """
         Plot equity curve with optional drawdowns and trade markers.
@@ -286,8 +284,13 @@ class EquityCurve:
         # Panel 1: Equity curve
         ax1 = axes[0]
         ax1.plot(df["timestamp"], df["equity"], "b-", linewidth=1.5, label="Equity")
-        ax1.axhline(y=self.initial_equity, color="gray", linestyle="--", alpha=0.5,
-                    label=f"Initial: ${self.initial_equity:,.0f}")
+        ax1.axhline(
+            y=self.initial_equity,
+            color="gray",
+            linestyle="--",
+            alpha=0.5,
+            label=f"Initial: ${self.initial_equity:,.0f}",
+        )
 
         # Mark trades if requested
         if show_trades and self.trades:
@@ -298,14 +301,28 @@ class EquityCurve:
                 win_times = [t.exit_time for t in wins]
                 # Find equity at exit times
                 win_equities = [self._get_equity_at_time(t) for t in win_times]
-                ax1.scatter(win_times, win_equities, c="green", marker="^",
-                           s=50, alpha=0.7, label=f"Wins ({len(wins)})")
+                ax1.scatter(
+                    win_times,
+                    win_equities,
+                    c="green",
+                    marker="^",
+                    s=50,
+                    alpha=0.7,
+                    label=f"Wins ({len(wins)})",
+                )
 
             if losses:
                 loss_times = [t.exit_time for t in losses]
                 loss_equities = [self._get_equity_at_time(t) for t in loss_times]
-                ax1.scatter(loss_times, loss_equities, c="red", marker="v",
-                           s=50, alpha=0.7, label=f"Losses ({len(losses)})")
+                ax1.scatter(
+                    loss_times,
+                    loss_equities,
+                    c="red",
+                    marker="v",
+                    s=50,
+                    alpha=0.7,
+                    label=f"Losses ({len(losses)})",
+                )
 
         ax1.set_ylabel("Equity ($)")
         ax1.set_title("Equity Curve")
@@ -318,15 +335,18 @@ class EquityCurve:
         # Panel 2: Drawdowns
         if show_drawdowns:
             ax2 = axes[1]
-            ax2.fill_between(df["timestamp"], df["drawdown"] * 100, 0,
-                            color="red", alpha=0.3)
+            ax2.fill_between(df["timestamp"], df["drawdown"] * 100, 0, color="red", alpha=0.3)
             ax2.plot(df["timestamp"], df["drawdown"] * 100, "r-", linewidth=1)
 
             # Mark max drawdown
             max_dd, peak_idx, trough_idx = calculate_max_drawdown(np.array(self.equity_values))
             if trough_idx < len(df):
-                ax2.axhline(y=max_dd * 100, color="darkred", linestyle="--",
-                           label=f"Max DD: {max_dd*100:.1f}%")
+                ax2.axhline(
+                    y=max_dd * 100,
+                    color="darkred",
+                    linestyle="--",
+                    label=f"Max DD: {max_dd*100:.1f}%",
+                )
 
             ax2.set_ylabel("Drawdown (%)")
             ax2.set_xlabel("Date")
@@ -360,9 +380,9 @@ class EquityCurve:
 
     def plot_returns_distribution(
         self,
-        figsize: Tuple[int, int] = (12, 6),
+        figsize: tuple[int, int] = (12, 6),
         bins: int = 50,
-        save_path: Optional[Path | str] = None,
+        save_path: Path | str | None = None,
     ) -> Any:
         """
         Plot distribution of returns.
@@ -387,8 +407,12 @@ class EquityCurve:
         returns = self.returns * 100  # Convert to percentage
         if len(returns) > 0:
             ax1.hist(returns, bins=bins, color="steelblue", alpha=0.7, edgecolor="black")
-            ax1.axvline(x=np.mean(returns), color="red", linestyle="--",
-                       label=f"Mean: {np.mean(returns):.2f}%")
+            ax1.axvline(
+                x=np.mean(returns),
+                color="red",
+                linestyle="--",
+                label=f"Mean: {np.mean(returns):.2f}%",
+            )
             ax1.axvline(x=0, color="black", linestyle="-", alpha=0.5)
         ax1.set_xlabel("Return (%)")
         ax1.set_ylabel("Frequency")
@@ -401,8 +425,12 @@ class EquityCurve:
         trade_returns = self.trade_returns
         if len(trade_returns) > 0:
             ax2.hist(trade_returns, bins=bins, color="green", alpha=0.7, edgecolor="black")
-            ax2.axvline(x=np.mean(trade_returns), color="red", linestyle="--",
-                       label=f"Mean: ${np.mean(trade_returns):.2f}")
+            ax2.axvline(
+                x=np.mean(trade_returns),
+                color="red",
+                linestyle="--",
+                label=f"Mean: ${np.mean(trade_returns):.2f}",
+            )
             ax2.axvline(x=0, color="black", linestyle="-", alpha=0.5)
         ax2.set_xlabel("P&L ($)")
         ax2.set_ylabel("Frequency")
@@ -419,8 +447,8 @@ class EquityCurve:
 
     def plot_monthly_returns(
         self,
-        figsize: Tuple[int, int] = (14, 8),
-        save_path: Optional[Path | str] = None,
+        figsize: tuple[int, int] = (14, 8),
+        save_path: Path | str | None = None,
     ) -> Any:
         """
         Plot monthly returns heatmap.
@@ -433,8 +461,8 @@ class EquityCurve:
             Matplotlib figure
         """
         try:
-            import matplotlib.pyplot as plt
             import matplotlib.colors as mcolors
+            import matplotlib.pyplot as plt
         except ImportError:
             raise ImportError("matplotlib is required for plotting")
 
@@ -457,14 +485,25 @@ class EquityCurve:
 
         # Create heatmap
         cmap = plt.cm.RdYlGn
-        norm = mcolors.TwoSlopeNorm(vmin=monthly.values.min(), vcenter=0,
-                                     vmax=monthly.values.max())
+        norm = mcolors.TwoSlopeNorm(vmin=monthly.values.min(), vcenter=0, vmax=monthly.values.max())
 
         im = ax.imshow(monthly.values * 100, cmap=cmap, norm=norm, aspect="auto")
 
         # Labels
-        month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        month_labels = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ]
         ax.set_xticks(range(12))
         ax.set_xticklabels(month_labels)
         ax.set_yticks(range(len(monthly.index)))
@@ -476,8 +515,15 @@ class EquityCurve:
                 val = monthly.values[i, j]
                 if not np.isnan(val):
                     text_color = "white" if abs(val) > 0.05 else "black"
-                    ax.text(j, i, f"{val*100:.1f}%", ha="center", va="center",
-                           color=text_color, fontsize=8)
+                    ax.text(
+                        j,
+                        i,
+                        f"{val*100:.1f}%",
+                        ha="center",
+                        va="center",
+                        color=text_color,
+                        fontsize=8,
+                    )
 
         ax.set_title("Monthly Returns (%)")
         plt.colorbar(im, label="Return (%)")
@@ -507,7 +553,7 @@ class EquityCurve:
             self.trades_to_dataframe().to_parquet(trades_path)
 
     @classmethod
-    def load(cls, path: Path | str) -> "EquityCurve":
+    def load(cls, path: Path | str) -> EquityCurve:
         """
         Load equity curve from parquet file.
 
@@ -552,7 +598,7 @@ class EquityCurve:
 
 
 def create_equity_curve_from_trades(
-    trades: List[Trade],
+    trades: list[Trade],
     initial_equity: float = 100000.0,
 ) -> EquityCurve:
     """

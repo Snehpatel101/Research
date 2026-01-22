@@ -130,7 +130,7 @@ class DataCleaner:
         -------
         ValueError : If target_timeframe is not supported
         """
-        from src.pipeline.config import validate_timeframe
+        from src.data.pipeline.config import validate_timeframe
 
         validate_timeframe(target_timeframe)
 
@@ -310,7 +310,7 @@ class DataCleaner:
         logger.info(f"Detecting outliers using method: {self.outlier_method}")
 
         df = df.copy()
-        initial_rows = len(df)
+        len(df)
 
         outliers_by_method = {}
         total_outlier_mask = pd.Series(False, index=df.index)

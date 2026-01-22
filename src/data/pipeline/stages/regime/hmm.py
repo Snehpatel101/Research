@@ -5,7 +5,7 @@ Classifies market regimes using unsupervised Gaussian HMM trained on returns.
 Supports regime routing for adaptive model selection.
 
 Usage:
-    from src.pipeline.stages.regime import HMMRegimeDetector
+    from src.data.pipeline.stages.regime import HMMRegimeDetector
 
     detector = HMMRegimeDetector(n_states=3, lookback=252)
     regimes = detector.detect(df)

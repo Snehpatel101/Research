@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.config.global_config import GlobalConfig
+    pass
 
 
 def _get_global_or_default(attr_path: str, fallback):
@@ -67,8 +67,10 @@ LABEL_HORIZONS: list[int] = ACTIVE_HORIZONS
 # =============================================================================
 # Import timeframe definitions from the canonical source of truth.
 # NOTE: Use get_timeframe_minutes() for parsing timeframe strings.
-from src.common.timeframes import (
+from src.core.common.timeframes import (
     TIMEFRAME_TO_MINUTES as HORIZON_TIMEFRAME_MINUTES,
+)
+from src.core.common.timeframes import (
     get_timeframe_minutes as _get_timeframe_minutes,
 )
 

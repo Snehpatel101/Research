@@ -4,11 +4,10 @@ Price feature computation - Returns, ratios, and autocorrelation.
 PHASE_1 Unified Features: 12 PRICE features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -27,6 +26,7 @@ def _safe_log_return(series: pd.Series, periods: int = 1) -> pd.Series:
 
 def _rolling_autocorr(series: pd.Series, lag: int, window: int = 20) -> pd.Series:
     """Rolling autocorrelation with specified lag."""
+
     def autocorr_lag(x: np.ndarray) -> float:
         if len(x) <= lag:
             return np.nan
@@ -139,7 +139,7 @@ def compute_autocorr_lag5(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-PRICE_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+PRICE_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Returns
     "return_1": compute_return_1,
     "return_5": compute_return_5,

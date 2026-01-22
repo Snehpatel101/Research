@@ -7,7 +7,7 @@ This module contains configuration for:
 - Symbol isolation policy (no cross-asset features)
 - Multi-timeframe (MTF) feature configuration
 
-NOTE: Timeframe definitions are imported from src.common.timeframes.
+NOTE: Timeframe definitions are imported from src.core.common.timeframes.
 Do not redefine timeframe constants here - use the common module instead.
 """
 
@@ -15,13 +15,8 @@ Do not redefine timeframe constants here - use the common module instead.
 # TIMEFRAME CONFIGURATION
 # =============================================================================
 # Import canonical timeframe definitions from the single source of truth
-from src.common.timeframes import (
-    SUPPORTED_TIMEFRAMES,
-    TIMEFRAME_TO_FREQ,
-    get_timeframe_minutes as parse_timeframe_to_minutes,
+from src.core.common.timeframes import (
     is_valid_timeframe,
-    normalize_timeframe_list,
-    validate_timeframe,
 )
 
 
@@ -36,7 +31,7 @@ def auto_scale_purge_embargo(
     This delegates to the shared horizon_config implementation so
     all code paths use the same defaults and validation.
     """
-    from src.common.horizon_config import auto_scale_purge_embargo as _auto_scale
+    from src.core.common.horizon_config import auto_scale_purge_embargo as _auto_scale
 
     return _auto_scale(
         horizons,
@@ -145,6 +140,7 @@ def validate_horizons_with_data(
     ValueError: Horizon validation failed: ...
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     errors = validate_horizons(horizons, data_length=data_length)
@@ -160,7 +156,7 @@ def validate_horizons_with_data(
 
 
 # Import canonical horizon definitions from the centralized module
-# Do NOT define horizons locally - always import from src.common.horizon_config
+# Do NOT define horizons locally - always import from src.core.common.horizon_config
 
 # =============================================================================
 # FEATURE SELECTION CONFIGURATION
@@ -343,6 +339,7 @@ def get_mtf_base_timeframe(target_tf: str | None = None) -> str:
 
     # If invalid, log warning and return default
     import logging
+
     logger = logging.getLogger(__name__)
     logger.warning(
         f"Invalid target_tf '{target_tf}' provided to get_mtf_base_timeframe(). "
@@ -383,7 +380,7 @@ def validate_mtf_config(config: dict = None) -> list[str]:
     list[str]
         List of validation error messages (empty if valid)
     """
-    from src.common.timeframes import is_valid_timeframe
+    from src.core.common.timeframes import is_valid_timeframe
 
     if config is None:
         config = MTF_CONFIG

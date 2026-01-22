@@ -21,7 +21,7 @@ import pandas as pd
 # Import directly from module to avoid circular imports through __init__.py
 from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
-from .config import FeatureSelectionConfig, ModelFamilyDefaults
+from .config import FeatureSelectionConfig
 from .result import FeatureSelectionResult, PersistedFeatureSelection
 from .walk_forward import WalkForwardFeatureSelector
 

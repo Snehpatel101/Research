@@ -4,11 +4,10 @@ Temporal feature computation - Time-based cyclical encodings and trading session
 PHASE_1 Unified Features: 9 TEMPORAL features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -156,7 +155,7 @@ def compute_session_ny(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-TEMPORAL_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+TEMPORAL_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Hour encodings
     "hour_sin": compute_hour_sin,
     "hour_cos": compute_hour_cos,

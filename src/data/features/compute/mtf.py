@@ -12,7 +12,7 @@ Key Features:
 - Returns features named as: {feature}_{timeframe} (e.g., rsi_14_5min)
 
 Usage:
-    from src.features.compute.mtf import (
+    from src.data.features.compute.mtf import (
         MTFConfig,
         MTFFeatureComputer,
         compute_mtf_features,
@@ -32,8 +32,9 @@ Usage:
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -44,7 +45,6 @@ from src.core.constants import (
     OHLCV_COLUMNS,
 )
 
-
 # =============================================================================
 # MTF FEATURE SELECTION
 # =============================================================================
@@ -52,7 +52,7 @@ from src.core.constants import (
 # Default features to compute on higher timeframes (~30 features)
 # These are selected for their relevance in multi-timeframe analysis
 # All names must exist in FEATURE_COMPUTE_MAP (see src/features/compute/__init__.py)
-DEFAULT_MTF_FEATURES: List[str] = [
+DEFAULT_MTF_FEATURES: list[str] = [
     # Momentum (8)
     "rsi_14",
     "rsi_7",
@@ -122,10 +122,10 @@ class MTFConfig:
         )
     """
 
-    timeframes: List[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
-    features: List[str] = field(default_factory=lambda: DEFAULT_MTF_FEATURES.copy())
+    timeframes: list[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
+    features: list[str] = field(default_factory=lambda: DEFAULT_MTF_FEATURES.copy())
     apply_shift: bool = True  # Anti-lookahead protection
-    ffill_limit: Optional[int] = None  # Forward fill limit after reindex
+    ffill_limit: int | None = None  # Forward fill limit after reindex
     min_periods_ratio: float = 0.5  # Minimum valid data ratio
 
     def __post_init__(self):
@@ -134,9 +134,7 @@ class MTFConfig:
         valid_timeframes = ["5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"]
         for tf in self.timeframes:
             if tf not in valid_timeframes:
-                raise ValueError(
-                    f"Invalid timeframe '{tf}'. Must be one of: {valid_timeframes}"
-                )
+                raise ValueError(f"Invalid timeframe '{tf}'. Must be one of: {valid_timeframes}")
 
         # Validate features list is not empty
         if not self.features:
@@ -170,7 +168,7 @@ class MTFConfig:
 def resample_ohlcv(
     df: pd.DataFrame,
     timeframe: str,
-    datetime_col: Optional[str] = None,
+    datetime_col: str | None = None,
 ) -> pd.DataFrame:
     """
     Resample 1-minute OHLCV data to a higher timeframe.
@@ -216,9 +214,7 @@ def resample_ohlcv(
     }
 
     if timeframe not in tf_map:
-        raise ValueError(
-            f"Invalid timeframe '{timeframe}'. Valid options: {list(tf_map.keys())}"
-        )
+        raise ValueError(f"Invalid timeframe '{timeframe}'. Valid options: {list(tf_map.keys())}")
 
     offset = tf_map[timeframe]
 
@@ -232,9 +228,7 @@ def resample_ohlcv(
 
     # Ensure index is DatetimeIndex
     if not isinstance(df_work.index, pd.DatetimeIndex):
-        raise ValueError(
-            "DataFrame index must be DatetimeIndex or datetime_col must be specified"
-        )
+        raise ValueError("DataFrame index must be DatetimeIndex or datetime_col must be specified")
 
     # Define resampling rules for OHLCV
     ohlcv_agg = {
@@ -257,7 +251,7 @@ def resample_ohlcv(
 def _reindex_to_base(
     resampled_df: pd.DataFrame,
     base_index: pd.DatetimeIndex,
-    ffill_limit: Optional[int] = None,
+    ffill_limit: int | None = None,
 ) -> pd.DataFrame:
     """
     Reindex resampled data back to base (1-minute) index with forward fill.
@@ -303,12 +297,11 @@ def _get_feature_compute_fn(feature_name: str) -> Callable[[pd.DataFrame], pd.Se
         ValueError: If feature is unknown
     """
     # Import here to avoid circular imports
-    from src.features.compute import FEATURE_COMPUTE_MAP
+    from src.data.features.compute import FEATURE_COMPUTE_MAP
 
     if feature_name not in FEATURE_COMPUTE_MAP:
         raise ValueError(
-            f"Unknown feature '{feature_name}'. "
-            f"Available features: {len(FEATURE_COMPUTE_MAP)}"
+            f"Unknown feature '{feature_name}'. " f"Available features: {len(FEATURE_COMPUTE_MAP)}"
         )
 
     return FEATURE_COMPUTE_MAP[feature_name]
@@ -316,7 +309,7 @@ def _get_feature_compute_fn(feature_name: str) -> Callable[[pd.DataFrame], pd.Se
 
 def _compute_features_on_resampled(
     resampled_df: pd.DataFrame,
-    feature_names: List[str],
+    feature_names: list[str],
 ) -> pd.DataFrame:
     """
     Compute specified features on resampled OHLCV data.
@@ -336,6 +329,7 @@ def _compute_features_on_resampled(
             results[feature_name] = compute_fn(resampled_df)
         except Exception as e:
             import warnings
+
             warnings.warn(f"Error computing {feature_name}: {e}")
             results[feature_name] = pd.Series(np.nan, index=resampled_df.index)
 
@@ -369,7 +363,7 @@ class MTFFeatureComputer:
         # Result has columns like: rsi_14_5min, rsi_14_15min, rsi_14_60min, etc.
     """
 
-    def __init__(self, config: Optional[MTFConfig] = None):
+    def __init__(self, config: MTFConfig | None = None):
         """
         Initialize MTF Feature Computer.
 
@@ -377,13 +371,13 @@ class MTFFeatureComputer:
             config: MTFConfig instance. If None, uses defaults.
         """
         self.config = config or MTFConfig()
-        self._feature_fns: Dict[str, Callable] = {}
+        self._feature_fns: dict[str, Callable] = {}
         self._validate_features()
 
     def _validate_features(self) -> None:
         """Validate that all configured features exist in FEATURE_COMPUTE_MAP."""
         # Import here to avoid circular imports
-        from src.features.compute import FEATURE_COMPUTE_MAP
+        from src.data.features.compute import FEATURE_COMPUTE_MAP
 
         invalid_features = []
         for feature_name in self.config.features:
@@ -401,7 +395,7 @@ class MTFFeatureComputer:
     def compute(
         self,
         df: pd.DataFrame,
-        datetime_col: Optional[str] = None,
+        datetime_col: str | None = None,
     ) -> pd.DataFrame:
         """
         Compute MTF features for all configured timeframes.
@@ -434,7 +428,7 @@ class MTFFeatureComputer:
             )
 
         base_index = df_work.index
-        all_mtf_features: Dict[str, pd.Series] = {}
+        all_mtf_features: dict[str, pd.Series] = {}
 
         for timeframe in self.config.timeframes:
             # 1. Resample OHLCV to higher timeframe
@@ -442,13 +436,12 @@ class MTFFeatureComputer:
 
             if len(resampled) == 0:
                 import warnings
+
                 warnings.warn(f"No data after resampling to {timeframe}, skipping")
                 continue
 
             # 2. Compute features on resampled data
-            tf_features = _compute_features_on_resampled(
-                resampled, self.config.features
-            )
+            tf_features = _compute_features_on_resampled(resampled, self.config.features)
 
             # 3. Reindex back to base frequency with forward fill
             tf_features_aligned = _reindex_to_base(
@@ -477,7 +470,7 @@ class MTFFeatureComputer:
         self,
         df: pd.DataFrame,
         timeframe: str,
-        datetime_col: Optional[str] = None,
+        datetime_col: str | None = None,
     ) -> pd.DataFrame:
         """
         Compute MTF features for a single timeframe.
@@ -492,7 +485,6 @@ class MTFFeatureComputer:
         """
         if timeframe not in self.config.timeframes:
             # Temporarily add timeframe
-            original_timeframes = self.config.timeframes
             self.config.timeframes = [timeframe]
 
         # Set up working DataFrame with datetime index
@@ -513,21 +505,17 @@ class MTFFeatureComputer:
         tf_features = _compute_features_on_resampled(resampled, self.config.features)
 
         # Reindex and shift
-        tf_features_aligned = _reindex_to_base(
-            tf_features, base_index, self.config.ffill_limit
-        )
+        tf_features_aligned = _reindex_to_base(tf_features, base_index, self.config.ffill_limit)
 
         if self.config.apply_shift:
             tf_features_aligned = tf_features_aligned.shift(1)
 
         # Rename with timeframe suffix
-        tf_features_aligned.columns = [
-            f"{col}_{timeframe}" for col in tf_features_aligned.columns
-        ]
+        tf_features_aligned.columns = [f"{col}_{timeframe}" for col in tf_features_aligned.columns]
 
         return tf_features_aligned
 
-    def get_feature_names(self) -> List[str]:
+    def get_feature_names(self) -> list[str]:
         """
         Get list of all MTF feature names that will be generated.
 
@@ -558,10 +546,10 @@ class MTFFeatureComputer:
 
 def compute_mtf_features(
     df: pd.DataFrame,
-    timeframes: Optional[List[str]] = None,
-    features: Optional[List[str]] = None,
+    timeframes: list[str] | None = None,
+    features: list[str] | None = None,
     apply_shift: bool = True,
-    datetime_col: Optional[str] = None,
+    datetime_col: str | None = None,
 ) -> pd.DataFrame:
     """
     Convenience function to compute MTF features with minimal configuration.
@@ -602,9 +590,9 @@ def compute_mtf_features(
 
 
 def get_mtf_feature_names(
-    timeframes: Optional[List[str]] = None,
-    features: Optional[List[str]] = None,
-) -> List[str]:
+    timeframes: list[str] | None = None,
+    features: list[str] | None = None,
+) -> list[str]:
     """
     Get list of MTF feature names without computing.
 
@@ -627,7 +615,7 @@ def get_mtf_feature_names(
     return names
 
 
-def validate_mtf_config(config: MTFConfig) -> Dict[str, any]:
+def validate_mtf_config(config: MTFConfig) -> dict[str, any]:
     """
     Validate MTF configuration and return diagnostics.
 
@@ -641,31 +629,25 @@ def validate_mtf_config(config: MTFConfig) -> Dict[str, any]:
         - warnings: List of warning messages
         - stats: Dict with configuration statistics
     """
-    from src.features.compute import FEATURE_COMPUTE_MAP
+    from src.data.features.compute import FEATURE_COMPUTE_MAP
 
     errors = []
     warnings_list = []
 
     # Check features exist
-    invalid_features = [
-        f for f in config.features if f not in FEATURE_COMPUTE_MAP
-    ]
+    invalid_features = [f for f in config.features if f not in FEATURE_COMPUTE_MAP]
     if invalid_features:
         errors.append(f"Unknown features: {invalid_features}")
 
     # Check timeframes
     valid_timeframes = ["5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"]
-    invalid_timeframes = [
-        tf for tf in config.timeframes if tf not in valid_timeframes
-    ]
+    invalid_timeframes = [tf for tf in config.timeframes if tf not in valid_timeframes]
     if invalid_timeframes:
         errors.append(f"Invalid timeframes: {invalid_timeframes}")
 
     # Warnings
     if len(config.features) > 50:
-        warnings_list.append(
-            f"Large feature set ({len(config.features)}) may impact performance"
-        )
+        warnings_list.append(f"Large feature set ({len(config.features)}) may impact performance")
 
     if len(config.timeframes) > 5:
         warnings_list.append(

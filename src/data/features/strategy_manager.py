@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from functools import lru_cache
 
 import pandas as pd
 
-from .strategies import MODEL_FEATURE_STRATEGIES, ModelFeatureStrategy, get_strategy_for_model
-from src.pipeline.utils.constants import METADATA_COLUMNS
-from src.pipeline.utils.feature_sets import _is_label_column
+from src.data.pipeline.utils.constants import METADATA_COLUMNS
+from src.data.pipeline.utils.feature_sets import _is_label_column
+
+from .strategies import ModelFeatureStrategy, get_strategy_for_model
 
 logger = logging.getLogger(__name__)
 

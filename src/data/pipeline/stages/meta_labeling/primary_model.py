@@ -25,7 +25,6 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import recall_score
 from sklearn.model_selection import cross_val_predict
 
 logger = logging.getLogger(__name__)
@@ -189,11 +188,9 @@ class RecallOptimizer:
 
         unique_labels = np.unique(y_true)
         if not set(unique_labels).issubset({0, 1}):
-            raise ValueError(
-                f"y_true must be binary (0 or 1), got unique values: {unique_labels}"
-            )
+            raise ValueError(f"y_true must be binary (0 or 1), got unique values: {unique_labels}")
 
-        if not 0 <= y_proba.min() and y_proba.max() <= 1:
+        if not y_proba.min() >= 0 and y_proba.max() <= 1:
             raise ValueError("y_proba must be in range [0, 1]")
 
         # Search thresholds

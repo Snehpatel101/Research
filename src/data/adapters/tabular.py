@@ -19,9 +19,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from src.core.contracts import DataContract, DataRank
+
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
-from src.core.contracts import DataContract, DataRank
 
 if TYPE_CHECKING:
     from src.core.contracts import ModelContract
@@ -54,7 +55,7 @@ class TabularAdapter(BaseAdapter):
     def transform(
         self,
         df: pd.DataFrame,
-        model_contract: "ModelContract | None" = None,
+        model_contract: ModelContract | None = None,
     ) -> AdapterResult:
         """
         Transform DataFrame to 2D arrays for tabular models.

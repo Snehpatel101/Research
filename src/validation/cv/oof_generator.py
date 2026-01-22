@@ -23,6 +23,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.models.registry import ModelRegistry
+
 # Import from specialized modules
 from .oof_cache import OOFCache, compute_data_hash
 from .oof_core import (
@@ -40,7 +42,6 @@ from .oof_stacking import (
 )
 from .oof_validation import OOFValidator, _grade_diversity
 from .purged_kfold import PurgedKFold
-from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 

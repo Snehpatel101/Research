@@ -11,6 +11,7 @@ This script verifies:
 Run with:
     python scripts/test_feature_set_meta_learner.py
 """
+
 from __future__ import annotations
 
 import logging
@@ -45,27 +46,53 @@ def create_realistic_mock_data(
     # Create realistic feature names that match feature set definitions
     feature_names = [
         # Returns (match boosting_optimal, neural_optimal)
-        "return_1", "return_5", "return_10", "return_20",
-        "log_return_1", "log_return_5", "log_return_10",
+        "return_1",
+        "return_5",
+        "return_10",
+        "return_20",
+        "log_return_1",
+        "log_return_5",
+        "log_return_10",
         # RSI (match boosting_optimal)
-        "rsi_14", "rsi_21", "rsi_7",
+        "rsi_14",
+        "rsi_21",
+        "rsi_7",
         # MACD (match boosting_optimal)
-        "macd_12_26", "macd_signal_12_26", "macd_hist_12_26",
+        "macd_12_26",
+        "macd_signal_12_26",
+        "macd_hist_12_26",
         # Bollinger (match boosting_optimal)
-        "bb_pct_20", "bb_width_20",
+        "bb_pct_20",
+        "bb_width_20",
         # ATR and volatility (match boosting_optimal)
-        "atr_14", "atr_21", "realized_vol_20", "parkinson_vol_20",
+        "atr_14",
+        "atr_21",
+        "realized_vol_20",
+        "parkinson_vol_20",
         # Volume (match boosting_optimal)
-        "volume_ratio_20", "vwap_distance",
+        "volume_ratio_20",
+        "vwap_distance",
         # Temporal (match boosting_optimal)
-        "hour_sin", "hour_cos", "day_of_week_sin", "is_rth",
+        "hour_sin",
+        "hour_cos",
+        "day_of_week_sin",
+        "is_rth",
         # Additional momentum
-        "momentum_10", "momentum_20", "roc_10", "roc_20",
+        "momentum_10",
+        "momentum_20",
+        "roc_10",
+        "roc_20",
         # Trend
-        "trend_regime", "adx_14", "di_plus_14", "di_minus_14",
+        "trend_regime",
+        "adx_14",
+        "di_plus_14",
+        "di_minus_14",
         # More features
-        "ema_ratio_5_20", "sma_ratio_10_50", "price_position",
-        "skewness_20", "kurtosis_20",
+        "ema_ratio_5_20",
+        "sma_ratio_10_50",
+        "price_position",
+        "skewness_20",
+        "kurtosis_20",
     ]
     n_features = len(feature_names)
 
@@ -198,7 +225,9 @@ def test_feature_set_resolution():
     for fs_name in ["boosting_optimal", "neural_optimal", "ensemble_base"]:
         definition = FEATURE_SET_DEFINITIONS[fs_name]
         columns = resolve_feature_set(X_train_df, definition)
-        print(f"  [{fs_name}] Resolved {len(columns)} features from {len(X_train_df.columns)} total")
+        print(
+            f"  [{fs_name}] Resolved {len(columns)} features from {len(X_train_df.columns)} total"
+        )
         if len(columns) > 0:
             print(f"    Sample: {columns[:5]}...")
 
@@ -238,7 +267,7 @@ def test_trainer_feature_set_integration():
         # Run training
         results = trainer.run(mock_data, skip_save=True)
 
-        print(f"  [PASS] Training completed")
+        print("  [PASS] Training completed")
         print(f"    Model: {results['model_name']}")
         print(f"    Accuracy: {results['evaluation_metrics']['accuracy']:.4f}")
         print(f"    Macro F1: {results['evaluation_metrics']['macro_f1']:.4f}")
@@ -262,7 +291,7 @@ def test_trainer_feature_set_integration():
         trainer2 = Trainer(config2)
         results2 = trainer2.run(mock_data, skip_save=True)
 
-        print(f"  [PASS] Training completed with auto feature set")
+        print("  [PASS] Training completed with auto feature set")
         print(f"    Model: {results2['model_name']}")
         print(f"    Accuracy: {results2['evaluation_metrics']['accuracy']:.4f}")
 
@@ -277,8 +306,8 @@ def test_meta_learner_training():
     print("=" * 70)
 
     from src.models.ensemble.meta_learners import (
-        RidgeMetaLearner,
         MLPMetaLearner,
+        RidgeMetaLearner,
         XGBoostMeta,
     )
 
@@ -305,54 +334,58 @@ def test_meta_learner_training():
     proba = ridge_meta.predict_proba(X_val)
 
     # Handle PredictionOutput wrapper - predictions are class_predictions
-    if hasattr(pred_output, 'class_predictions'):
+    if hasattr(pred_output, "class_predictions"):
         preds = pred_output.class_predictions
-    elif hasattr(pred_output, 'predictions'):
+    elif hasattr(pred_output, "predictions"):
         preds = pred_output.predictions
     else:
         preds = pred_output
-    print(f"  [PASS] RidgeMetaLearner trained")
+    print("  [PASS] RidgeMetaLearner trained")
     print(f"    Val Accuracy: {metrics.val_accuracy:.4f}")
     print(f"    Predictions shape: {np.array(preds).shape}")
     print(f"    Probabilities shape: {np.array(proba).shape}")
 
     # Test MLP Meta
     print("\n3.2 Testing MLPMetaLearner...")
-    mlp_meta = MLPMetaLearner({
-        "hidden_sizes": [32, 16],
-        "epochs": 5,
-        "learning_rate": 0.01,
-    })
+    mlp_meta = MLPMetaLearner(
+        {
+            "hidden_sizes": [32, 16],
+            "epochs": 5,
+            "learning_rate": 0.01,
+        }
+    )
     metrics2 = mlp_meta.fit(X_train, y_train, X_val, y_val)
     pred_output2 = mlp_meta.predict(X_val)
 
-    if hasattr(pred_output2, 'class_predictions'):
+    if hasattr(pred_output2, "class_predictions"):
         preds2 = pred_output2.class_predictions
-    elif hasattr(pred_output2, 'predictions'):
+    elif hasattr(pred_output2, "predictions"):
         preds2 = pred_output2.predictions
     else:
         preds2 = pred_output2
-    print(f"  [PASS] MLPMetaLearner trained")
+    print("  [PASS] MLPMetaLearner trained")
     print(f"    Val Accuracy: {metrics2.val_accuracy:.4f}")
     print(f"    Predictions shape: {np.array(preds2).shape}")
 
     # Test XGBoost Meta
     print("\n3.3 Testing XGBoostMeta...")
-    xgb_meta = XGBoostMeta({
-        "n_estimators": 10,
-        "max_depth": 3,
-        "verbosity": 0,
-    })
+    xgb_meta = XGBoostMeta(
+        {
+            "n_estimators": 10,
+            "max_depth": 3,
+            "verbosity": 0,
+        }
+    )
     metrics3 = xgb_meta.fit(X_train, y_train, X_val, y_val)
     pred_output3 = xgb_meta.predict(X_val)
 
-    if hasattr(pred_output3, 'class_predictions'):
+    if hasattr(pred_output3, "class_predictions"):
         preds3 = pred_output3.class_predictions
-    elif hasattr(pred_output3, 'predictions'):
+    elif hasattr(pred_output3, "predictions"):
         preds3 = pred_output3.predictions
     else:
         preds3 = pred_output3
-    print(f"  [PASS] XGBoostMeta trained")
+    print("  [PASS] XGBoostMeta trained")
     print(f"    Val Accuracy: {metrics3.val_accuracy:.4f}")
     print(f"    Predictions shape: {np.array(preds3).shape}")
 
@@ -383,15 +416,17 @@ def test_stacking_ensemble():
     # Test homogeneous stacking (tabular only)
     print("\n4.1 Testing homogeneous tabular stacking (XGBoost + LightGBM)...")
 
-    stacking = StackingEnsemble({
-        "base_model_names": ["xgboost", "lightgbm"],
-        "meta_learner_name": "ridge_meta",
-        "n_folds": 3,
-        "purge_bars": 10,  # Reduced for testing
-        "embargo_bars": 20,  # Reduced for testing
-        "use_probabilities": True,
-        "use_default_configs_for_oof": True,
-    })
+    stacking = StackingEnsemble(
+        {
+            "base_model_names": ["xgboost", "lightgbm"],
+            "meta_learner_name": "ridge_meta",
+            "n_folds": 3,
+            "purge_bars": 10,  # Reduced for testing
+            "embargo_bars": 20,  # Reduced for testing
+            "use_probabilities": True,
+            "use_default_configs_for_oof": True,
+        }
+    )
 
     # Check if it's correctly identified as homogeneous
     print(f"  Is heterogeneous: {stacking._is_heterogeneous}")
@@ -399,7 +434,7 @@ def test_stacking_ensemble():
     # Fit
     metrics = stacking.fit(X_train, y_train, X_val, y_val)
 
-    print(f"  [PASS] Stacking ensemble trained")
+    print("  [PASS] Stacking ensemble trained")
     print(f"    Base models: {stacking.config.get('base_model_names')}")
     print(f"    Meta-learner: {stacking.config.get('meta_learner_name')}")
     print(f"    Val Accuracy: {metrics.val_accuracy:.4f}")
@@ -409,7 +444,7 @@ def test_stacking_ensemble():
     proba = stacking.predict_proba(X_val)
 
     # PredictionOutput has .predictions attribute
-    preds = pred_output.predictions if hasattr(pred_output, 'predictions') else pred_output
+    preds = pred_output.predictions if hasattr(pred_output, "predictions") else pred_output
     print(f"    Predictions shape: {np.array(preds).shape}")
     print(f"    Probabilities shape: {np.array(proba).shape}")
 
@@ -424,8 +459,8 @@ def test_heterogeneous_ensemble_detection():
     print("=" * 70)
 
     from src.models.ensemble.validator import (
-        is_heterogeneous_ensemble,
         classify_base_models,
+        is_heterogeneous_ensemble,
         validate_ensemble_config,
     )
     from src.models.registry import ModelRegistry
@@ -468,7 +503,7 @@ def test_heterogeneous_ensemble_detection():
     print(f"  Models: {test_models}")
     print(f"  Tabular: {tabular}")
     print(f"  Sequence: {sequence}")
-    classification_correct = (tabular == ["xgboost"] and set(sequence) == {"lstm", "tcn", "patchtst"})
+    classification_correct = tabular == ["xgboost"] and set(sequence) == {"lstm", "tcn", "patchtst"}
     print(f"  [{'PASS' if classification_correct else 'FAIL'}] Classification correct")
 
     # Test validation
@@ -479,7 +514,9 @@ def test_heterogeneous_ensemble_detection():
         ensemble_type="stacking",
         base_model_names=["xgboost", "lstm", "tcn"],
     )
-    print(f"  [{'PASS' if valid_stacking else 'FAIL'}] Heterogeneous stacking: valid={valid_stacking}")
+    print(
+        f"  [{'PASS' if valid_stacking else 'FAIL'}] Heterogeneous stacking: valid={valid_stacking}"
+    )
 
     # Invalid voting (rejects heterogeneous)
     valid_voting, msg = validate_ensemble_config(
@@ -489,7 +526,7 @@ def test_heterogeneous_ensemble_detection():
     if not valid_voting:
         print(f"  [PASS] Heterogeneous voting correctly rejected: {msg[:50]}...")
     else:
-        print(f"  [FAIL] Heterogeneous voting should have been rejected")
+        print("  [FAIL] Heterogeneous voting should have been rejected")
 
     print("\n[TEST 5 COMPLETE]")
     return True
@@ -503,8 +540,8 @@ def main():
 
     # Import models to trigger registration
     import src.models  # noqa: F401
-
     from src.models.registry import ModelRegistry
+
     print(f"\nModel Registry: {ModelRegistry.count()} models registered")
 
     tests = [

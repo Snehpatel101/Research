@@ -461,7 +461,7 @@ class TFTNetwork(nn.Module):
         x = self.lstm_grn(lstm_out)
 
         # Multi-head attention layers
-        for attn_layer, grn in zip(self.attention_layers_list, self.attention_grns):
+        for attn_layer, grn in zip(self.attention_layers_list, self.attention_grns, strict=False):
             # Self-attention
             attn_out = attn_layer(x, x, x)
             # Gated residual

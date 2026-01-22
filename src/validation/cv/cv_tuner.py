@@ -12,14 +12,15 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.models.registry import ModelRegistry
+from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
+
 from .param_spaces import (
     PARAM_SPACES,
     get_max_leaves_for_depth,
     validate_lightgbm_params,
 )
 from .purged_kfold import PurgedKFold
-from src.models.registry import ModelRegistry
-from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
 
 logger = logging.getLogger(__name__)
 

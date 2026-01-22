@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 from .core import (
     create_chronological_splits,
@@ -135,7 +135,11 @@ def run_create_splits(config: "PipelineConfig", manifest: "ArtifactManifest") ->
 
             validate_per_symbol_distribution(combined_df, train_indices, val_indices, test_indices)
             validate_label_distribution(
-                combined_df, train_indices, val_indices, test_indices, horizons=config.label_horizons
+                combined_df,
+                train_indices,
+                val_indices,
+                test_indices,
+                horizons=config.label_horizons,
             )
 
             # Create per-timeframe splits directory for multi-TF mode

@@ -1,45 +1,78 @@
-"""Training orchestrator - master controller for unified training system."""
+"""
+DEPRECATED: TrainingOrchestrator is deprecated in favor of UnifiedTrainingOrchestrator.
+
+This module is maintained for backward compatibility only.
+Please migrate to:
+    from src.models.training import UnifiedTrainingOrchestrator
+
+Migration Guide:
+    # Old usage (deprecated)
+    from src.models.training import TrainingOrchestrator
+    orchestrator = TrainingOrchestrator(config_dict)
+    results = orchestrator.run()
+
+    # New usage (preferred)
+    from src.core import PipelineConfig
+    from src.models.training import UnifiedTrainingOrchestrator
+
+    config = PipelineConfig(
+        symbol="MES",
+        data_path="./data/mes.parquet",
+        output_dir="./experiments",
+        models=["xgboost", "lightgbm"],
+    )
+    orchestrator = UnifiedTrainingOrchestrator(config)
+    result = orchestrator.train(df)
+
+This module will be removed in v2.0.0.
+"""
 
 import json
 import logging
+import warnings
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
-
-from .trainer import Trainer
 from src.core.container import TimeSeriesDataContainer
+
 from .config import ExperimentConfig, ModelConfig
 from .config_loader import ConfigLoader
 from .feature_selector import FeatureSelector
 from .model_factory import ModelFactory
+from .trainer import Trainer
 
 logger = logging.getLogger(__name__)
 
 
+def _emit_deprecation_warning():
+    """Emit deprecation warning for TrainingOrchestrator."""
+    warnings.warn(
+        "TrainingOrchestrator is deprecated. Use UnifiedTrainingOrchestrator instead. "
+        "This class will be removed in v2.0.0. "
+        "See src/models/training/orchestrator.py for migration guide.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 class TrainingOrchestrator:
     """
+    DEPRECATED: Use UnifiedTrainingOrchestrator instead.
+
     Master controller for unified ML training system.
+    This class is maintained for backward compatibility only.
 
-    Coordinates:
-    - Data loading
-    - Feature selection
-    - Model training (single/multiple/ensemble)
-    - Hyperparameter optimization
-    - Feature optimization
-    - Results aggregation
-
-    Usage:
-        config = load_config_from_params(
-            symbol='MES',
-            horizons=[20],
-            models=['xgboost', 'lightgbm'],
-            feature_mode='full',
-            build_ensemble=True
-        )
-
-        orchestrator = TrainingOrchestrator(config)
+    Migration:
+        # Old (deprecated)
+        orchestrator = TrainingOrchestrator(config_dict)
         results = orchestrator.run()
+
+        # New (preferred)
+        from src.core import PipelineConfig
+        from src.models.training import UnifiedTrainingOrchestrator
+        config = PipelineConfig(...)
+        orchestrator = UnifiedTrainingOrchestrator(config)
+        result = orchestrator.train(df)
     """
 
     def __init__(self, config: dict | ExperimentConfig):
@@ -49,6 +82,8 @@ class TrainingOrchestrator:
         Args:
             config: Validated configuration dict or ExperimentConfig
         """
+        _emit_deprecation_warning()
+
         if isinstance(config, ExperimentConfig):
             self.experiment_config = config
             self.config = None
@@ -66,8 +101,11 @@ class TrainingOrchestrator:
         self.feature_selector = FeatureSelector()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Initialized TrainingOrchestrator: {self.experiment_name}")
+        logger.info(f"[DEPRECATED] Initialized TrainingOrchestrator: {self.experiment_name}")
         logger.info(f"Output directory: {self.output_dir}")
+        logger.warning(
+            "TrainingOrchestrator is deprecated. Please migrate to UnifiedTrainingOrchestrator."
+        )
 
     def _generate_run_id(self) -> str:
         """Generate unique run ID."""
@@ -108,7 +146,7 @@ class TrainingOrchestrator:
                     )
 
                 if model_cfg.optimize_features:
-                    from src.features.optimization import optimize_features_for_model
+                    from src.data.features.optimization import optimize_features_for_model
 
                     logger.info(f"  Optimizing features for {model_cfg.name}...")
 
@@ -181,7 +219,9 @@ class TrainingOrchestrator:
             logger.info(f"  Feature mode '{feature_mode}': using all {len(feature_list)} features")
             return container
 
-        logger.info(f"  Feature mode '{feature_mode}': {len(feature_list)} features (from {len(X_train_df.columns)})")
+        logger.info(
+            f"  Feature mode '{feature_mode}': {len(feature_list)} features (from {len(X_train_df.columns)})"
+        )
 
         return self._filter_container_to_features(container, feature_list, horizon)
 
@@ -541,8 +581,9 @@ class TrainingOrchestrator:
         base_model_names = self.config["ensemble"].get("base_models", list(model_results.keys()))
 
         if ensemble_method == "stacking":
-            from .trainer import Trainer
             from src.models.config import TrainerConfig
+
+            from .trainer import Trainer
 
             ensemble_config = TrainerConfig(
                 model_name="stacking",
@@ -609,4 +650,7 @@ class TrainingOrchestrator:
         print(f"\nResults saved to: {self.output_dir}")
 
 
-__all__ = ["TrainingOrchestrator"]
+# Alias for backward compatibility
+LegacyTrainingOrchestrator = TrainingOrchestrator
+
+__all__ = ["TrainingOrchestrator", "LegacyTrainingOrchestrator"]

@@ -27,6 +27,11 @@ Example:
 """
 
 # Re-export from training package
+# Re-export config for convenience
+from .config import TrainerConfig
+
+# Re-export metrics for convenience
+from .metrics import compute_classification_metrics, compute_trading_metrics
 from .training import (
     INVALID_LABEL_SENTINEL,
     Trainer,
@@ -35,12 +40,6 @@ from .training import (
     TrainerFeaturesMixin,
     _validate_labels,
 )
-
-# Re-export config for convenience
-from .config import TrainerConfig
-
-# Re-export metrics for convenience
-from .metrics import compute_classification_metrics, compute_trading_metrics
 
 # Re-export training utilities
 from .training_utils import evaluate_model, train_model

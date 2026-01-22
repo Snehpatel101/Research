@@ -30,7 +30,7 @@ class CVEvaluator:
         self.output_dir = Path(config.get("output_dir", "experiments/evaluation/cv"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Initialized CVEvaluator")
+        logger.info("Initialized CVEvaluator")
         logger.info(f"Output directory: {self.output_dir}")
 
     def run(self) -> dict[str, Any]:

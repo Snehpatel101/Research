@@ -17,13 +17,14 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from .base import BaseAdapter, AdapterResult
-from .registry import AdapterRegistry
+from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
 from src.core.contracts import DataRank
-from src.common.timeframes import normalize_timeframe, get_timeframe_minutes
+
+from .base import AdapterResult, BaseAdapter
+from .registry import AdapterRegistry
 
 if TYPE_CHECKING:
-    from src.core.contracts import ModelContract, DataContract
+    from src.core.contracts import ModelContract
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +117,7 @@ class MultiStreamAdapter(BaseAdapter):
     def transform(
         self,
         df: pd.DataFrame,
-        model_contract: "ModelContract | None" = None,
+        model_contract: ModelContract | None = None,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> AdapterResult:
         """
@@ -181,9 +182,7 @@ class MultiStreamAdapter(BaseAdapter):
             adapter_name=self.adapter_id,
         )
 
-    def _resolve_timeframes(
-        self, model_contract: "ModelContract | None"
-    ) -> list[str]:
+    def _resolve_timeframes(self, model_contract: ModelContract | None) -> list[str]:
         """Resolve timeframes from contract or instance config."""
         if model_contract is not None and model_contract.mtf_timeframes:
             # Contract specifies primary_timeframe + mtf_timeframes
@@ -193,9 +192,7 @@ class MultiStreamAdapter(BaseAdapter):
 
         return self.timeframes
 
-    def _resolve_sequence_length(
-        self, model_contract: "ModelContract | None"
-    ) -> int:
+    def _resolve_sequence_length(self, model_contract: ModelContract | None) -> int:
         """Resolve sequence length from contract or instance config."""
         if model_contract is not None:
             return model_contract.sequence_length
@@ -204,7 +201,7 @@ class MultiStreamAdapter(BaseAdapter):
     def _resolve_feature_columns(
         self,
         df: pd.DataFrame,
-        model_contract: "ModelContract | None",
+        model_contract: ModelContract | None,
     ) -> list[str]:
         """Resolve feature columns, validating they exist."""
         feature_cols = self.feature_columns or self.DEFAULT_FEATURE_COLUMNS.copy()
@@ -267,17 +264,14 @@ class MultiStreamAdapter(BaseAdapter):
                     )
             else:
                 raise ValueError(
-                    f"No data for timeframe '{tf}'. "
-                    f"Provide in additional_dfs or set data_dir."
+                    f"No data for timeframe '{tf}'. " f"Provide in additional_dfs or set data_dir."
                 )
 
             # Validate feature columns exist in this timeframe's DataFrame
             tf_df = tf_dfs[tf]
             missing = [col for col in feature_cols if col not in tf_df.columns]
             if missing:
-                raise ValueError(
-                    f"Timeframe '{tf}' DataFrame missing feature columns: {missing}"
-                )
+                raise ValueError(f"Timeframe '{tf}' DataFrame missing feature columns: {missing}")
 
         return tf_dfs
 
@@ -485,9 +479,7 @@ class MultiStreamAdapter(BaseAdapter):
 
         return result.astype(np.float32)
 
-    def _resample_to_length(
-        self, arr: np.ndarray, target_len: int
-    ) -> np.ndarray:
+    def _resample_to_length(self, arr: np.ndarray, target_len: int) -> np.ndarray:
         """
         Resample array to target length using repetition.
 
@@ -503,8 +495,7 @@ class MultiStreamAdapter(BaseAdapter):
         """
         current_len = len(arr)
         if current_len == 0:
-            return np.zeros((target_len, arr.shape[1] if arr.ndim > 1 else 1),
-                          dtype=np.float32)
+            return np.zeros((target_len, arr.shape[1] if arr.ndim > 1 else 1), dtype=np.float32)
 
         if current_len >= target_len:
             return arr[:target_len]
@@ -519,10 +510,13 @@ class MultiStreamAdapter(BaseAdapter):
 
         # Add remainder from the end (most recent bars)
         if remainder > 0:
-            result = np.concatenate([
-                arr[-remainder:],  # Pad at start with repeated end values
-                result,
-            ], axis=0)
+            result = np.concatenate(
+                [
+                    arr[-remainder:],  # Pad at start with repeated end values
+                    result,
+                ],
+                axis=0,
+            )
 
         return result[:target_len]
 

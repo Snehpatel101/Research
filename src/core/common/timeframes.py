@@ -10,7 +10,7 @@ This module provides unified timeframe handling across the entire codebase:
 All other modules should import from here instead of defining their own timeframe lists.
 
 Usage:
-    from src.common.timeframes import (
+    from src.core.common.timeframes import (
         normalize_timeframe,
         normalize_timeframe_list,
         get_timeframe_minutes,
@@ -46,7 +46,7 @@ FULL_9TF_LADDER = CANONICAL_TIMEFRAMES.copy()
 
 # Extended timeframes (including multi-hour and daily)
 EXTENDED_TIMEFRAMES = [
-    "240min",   # 4h
+    "240min",  # 4h
     "1440min",  # daily
 ]
 
@@ -56,11 +56,11 @@ ALL_CANONICAL_TIMEFRAMES = CANONICAL_TIMEFRAMES + EXTENDED_TIMEFRAMES
 # All supported timeframes (canonical + aliases for input validation)
 # NOTE: Only canonical forms should be used for output/storage.
 SUPPORTED_TIMEFRAMES = CANONICAL_TIMEFRAMES + [
-    "1h",    # Alias for 60min (accepted on input, normalized internally)
-    "4h",    # Alias for 240min
-    "daily", # Alias for 1440min
-    "1d",    # Alias for 1440min
-    "D",     # Pandas convention alias for daily
+    "1h",  # Alias for 60min (accepted on input, normalized internally)
+    "4h",  # Alias for 240min
+    "daily",  # Alias for 1440min
+    "1d",  # Alias for 1440min
+    "D",  # Pandas convention alias for daily
 ]
 
 # =============================================================================

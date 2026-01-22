@@ -5,11 +5,10 @@ Performs exhaustive checks on temporal integrity, label distribution, scaling, a
 """
 
 import json
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple
-from collections import Counter
+
+import numpy as np
+import pandas as pd
 
 # Paths
 DATA_DIR = Path("/Users/sneh/research/data/splits/final_correct")
@@ -34,7 +33,7 @@ def color_status(passed: bool) -> str:
     return f"{RED}{BOLD}FAIL{RESET}"
 
 
-def load_configs() -> Tuple[dict, dict]:
+def load_configs() -> tuple[dict, dict]:
     """Load split and scaling configs."""
     with open(DATA_DIR / "split_config.json") as f:
         split_config = json.load(f)
@@ -43,7 +42,7 @@ def load_configs() -> Tuple[dict, dict]:
     return split_config, scaling_config
 
 
-def load_splits() -> Dict[str, pd.DataFrame]:
+def load_splits() -> dict[str, pd.DataFrame]:
     """Load all splits."""
     print(f"\n{BLUE}{BOLD}Loading data splits...{RESET}")
     splits = {}
@@ -55,7 +54,7 @@ def load_splits() -> Dict[str, pd.DataFrame]:
     return splits
 
 
-def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dict) -> bool:
+def verify_temporal_integrity(splits: dict[str, pd.DataFrame], split_config: dict) -> bool:
     """
     CRITICAL: Verify no timestamp overlap and proper gaps.
     """
@@ -146,7 +145,7 @@ def verify_temporal_integrity(splits: Dict[str, pd.DataFrame], split_config: dic
     return all_passed
 
 
-def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
+def verify_label_distribution(splits: dict[str, pd.DataFrame]) -> bool:
     """
     CRITICAL: Verify all horizons exist and neutral percentage is reasonable.
     """
@@ -225,7 +224,7 @@ def verify_label_distribution(splits: Dict[str, pd.DataFrame]) -> bool:
     return all_passed
 
 
-def verify_symbol_balance(splits: Dict[str, pd.DataFrame]) -> bool:
+def verify_symbol_balance(splits: dict[str, pd.DataFrame]) -> bool:
     """
     Verify both symbols present and reasonably balanced.
     """
@@ -262,7 +261,7 @@ def verify_symbol_balance(splits: Dict[str, pd.DataFrame]) -> bool:
     return all_passed
 
 
-def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict) -> bool:
+def verify_feature_scaling(splits: dict[str, pd.DataFrame], scaling_config: dict) -> bool:
     """
     Verify scaler was fit on train only and features are properly scaled.
     """
@@ -373,7 +372,7 @@ def verify_feature_scaling(splits: Dict[str, pd.DataFrame], scaling_config: dict
     return all_passed
 
 
-def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict) -> bool:
+def verify_data_completeness(splits: dict[str, pd.DataFrame], split_config: dict) -> bool:
     """
     Verify row counts and check for unexpected patterns.
     """
@@ -460,7 +459,7 @@ def verify_data_completeness(splits: Dict[str, pd.DataFrame], split_config: dict
     return all_passed
 
 
-def verify_invalid_labels(splits: Dict[str, pd.DataFrame]) -> bool:
+def verify_invalid_labels(splits: dict[str, pd.DataFrame]) -> bool:
     """
     Check for label=-99 (invalid markers) and verify proper handling.
     """

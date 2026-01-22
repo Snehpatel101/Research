@@ -302,9 +302,7 @@ class EnsembleBundle:
             # Get from stacking dataset shape
             stacking_data = ensemble_result.stacking_dataset.data
             # Exclude y_true and datetime columns
-            feature_cols = [
-                c for c in stacking_data.columns if c not in ("y_true", "datetime")
-            ]
+            feature_cols = [c for c in stacking_data.columns if c not in ("y_true", "datetime")]
             n_stacking_features = len(feature_cols)
             stacking_feature_names = feature_cols
 
@@ -375,9 +373,7 @@ class EnsembleBundle:
             ValueError: If orchestrator has not been trained
         """
         if not orchestrator.is_trained:
-            raise ValueError(
-                "Orchestrator has not been trained. Call train() first."
-            )
+            raise ValueError("Orchestrator has not been trained. Call train() first.")
 
         result = orchestrator.result
         config = orchestrator.config
@@ -544,9 +540,7 @@ class EnsembleBundle:
         bundles_path = path / ENSEMBLE_BASE_BUNDLES_FILE
         if bundles_path.exists():
             with open(bundles_path) as f:
-                base_bundle_paths = [
-                    Path(p) for p in json.load(f).get("paths", [])
-                ]
+                base_bundle_paths = [Path(p) for p in json.load(f).get("paths", [])]
 
         # Load alignment config
         alignment_config = AlignmentConfig()
@@ -572,9 +566,7 @@ class EnsembleBundle:
                 if hasattr(meta_learner, "load"):
                     meta_learner.load(meta_dir)
             except ImportError:
-                logger.warning(
-                    "Could not load meta-learner: get_meta_learner not available"
-                )
+                logger.warning("Could not load meta-learner: get_meta_learner not available")
 
         # Load scaler
         scaler = None
@@ -687,9 +679,7 @@ class EnsembleBundle:
         self._ensure_base_bundles_loaded()
 
         if not self._base_bundles:
-            raise ValueError(
-                "No base bundles loaded. Ensure base_bundle_paths are valid."
-            )
+            raise ValueError("No base bundles loaded. Ensure base_bundle_paths are valid.")
 
         # Get predictions from each base model
         base_predictions: dict[str, np.ndarray] = {}
@@ -716,8 +706,8 @@ class EnsembleBundle:
         Returns:
             Stacked feature array ready for meta-learner
         """
-        from src.data.adapters import OOFAligner
         from src.core import OOFResult
+        from src.data.adapters import OOFAligner
 
         # If predictions are already aligned (same length), simple stack
         lengths = [arr.shape[0] for arr in base_predictions.values()]
@@ -852,9 +842,7 @@ class EnsembleBundle:
             issues.append("No stacking feature names defined")
 
         # Check base bundle paths
-        missing_bundles = [
-            str(p) for p in self.base_bundle_paths if not p.exists()
-        ]
+        missing_bundles = [str(p) for p in self.base_bundle_paths if not p.exists()]
         if missing_bundles:
             issues.append(f"Missing base bundles: {missing_bundles}")
 
@@ -862,9 +850,7 @@ class EnsembleBundle:
             "valid": len(issues) == 0,
             "issues": issues,
             "metadata": self.metadata.to_dict(),
-            "n_base_bundles_available": len(
-                [p for p in self.base_bundle_paths if p.exists()]
-            ),
+            "n_base_bundles_available": len([p for p in self.base_bundle_paths if p.exists()]),
         }
 
     def summary(self) -> str:
@@ -889,11 +875,13 @@ class EnsembleBundle:
         if len(self.metadata.base_model_names) > 5:
             lines.append(f"    ... and {len(self.metadata.base_model_names) - 5} more")
 
-        lines.extend([
-            f"  Stacking features: {self.metadata.n_stacking_features}",
-            f"  Coverage: {self.metadata.coverage:.2%}",
-            f"  Alignment offset: {self.metadata.alignment_offset}",
-        ])
+        lines.extend(
+            [
+                f"  Stacking features: {self.metadata.n_stacking_features}",
+                f"  Coverage: {self.metadata.coverage:.2%}",
+                f"  Alignment offset: {self.metadata.alignment_offset}",
+            ]
+        )
 
         # Metrics
         if self.metadata.metrics:

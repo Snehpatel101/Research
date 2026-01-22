@@ -183,7 +183,7 @@ def capture_config_snapshot(config: Any, include_paths: bool = False) -> dict[st
         Dictionary with safe config values for manifest storage.
 
     Example:
-        >>> from src.pipeline.utils import capture_config_snapshot
+        >>> from src.data.pipeline.utils import capture_config_snapshot
         >>> snapshot = capture_config_snapshot(pipeline_config)
         >>> manifest.set_config_snapshot(snapshot)
 
@@ -255,7 +255,9 @@ def _serialize_config_value(value: Any) -> Any:
 
     if hasattr(value, "__dict__"):
         # Recursively serialize objects with __dict__
-        return {k: _serialize_config_value(v) for k, v in vars(value).items() if not k.startswith("_")}
+        return {
+            k: _serialize_config_value(v) for k, v in vars(value).items() if not k.startswith("_")
+        }
 
     # Fallback: convert to string
     return str(value)

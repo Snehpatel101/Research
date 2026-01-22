@@ -23,7 +23,6 @@ from .data_requirements import (
     get_models_by_family,
     validate_model_config,
 )
-from .per_model_config import EnsemblePlan, PerModelConfig
 from .environment import Environment, detect_environment, is_colab, resolve_device
 from .exceptions import ConfigError, ConfigValidationError
 from .loaders import (
@@ -44,6 +43,7 @@ from .merging import (
     merge_configs,
 )
 from .paths import CONFIG_DIR, CONFIG_ROOT, CV_CONFIG_PATH, TRAINING_CONFIG_PATH
+from .per_model_config import EnsemblePlan, PerModelConfig
 from .serialization import save_config, save_config_json
 from .trainer_config import TrainerConfig
 from .utils import get_model_info, list_available_models

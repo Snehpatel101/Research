@@ -30,7 +30,7 @@ class WalkForwardEvaluator:
         self.output_dir = Path(config.get("output_dir", "experiments/evaluation/walk_forward"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Initialized WalkForwardEvaluator")
+        logger.info("Initialized WalkForwardEvaluator")
         logger.info(f"Output directory: {self.output_dir}")
 
     def run(self) -> dict[str, Any]:

@@ -5,12 +5,9 @@ PHASE_1 Unified Features: 5 RAW features.
 These simply pass through the OHLCV columns from the input DataFrame.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import pandas as pd
-
-from src.core import OHLCV_COLUMNS
-
 
 # =============================================================================
 # FEATURE COMPUTATION FUNCTIONS
@@ -46,7 +43,7 @@ def compute_volume(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP - Maps feature names to compute functions
 # =============================================================================
 
-RAW_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+RAW_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     "open": compute_open,
     "high": compute_high,
     "low": compute_low,

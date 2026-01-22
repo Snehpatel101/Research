@@ -6,11 +6,10 @@ PHASE_1 Unified Features: 15 MICROSTRUCTURE features.
 These features measure market quality, liquidity, and microstructure effects.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -142,13 +141,10 @@ def compute_micro_cs_spread(df: pd.DataFrame) -> pd.Series:
     """
     # Calculate beta (sum of squared log high-low ratios)
     log_hl = np.log(df["high"] / df["low"])
-    log_hl_sq = log_hl ** 2
+    log_hl_sq = log_hl**2
 
     # Two-period sum
-    beta = (
-        log_hl_sq
-        + log_hl_sq.shift(1)
-    ).rolling(window=20, min_periods=20).mean()
+    beta = (log_hl_sq + log_hl_sq.shift(1)).rolling(window=20, min_periods=20).mean()
 
     # Calculate gamma (squared log of two-period high-low range)
     high_2 = df["high"].rolling(window=2).max()
@@ -299,7 +295,7 @@ def compute_micro_vol_ratio(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-MICROSTRUCTURE_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+MICROSTRUCTURE_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Amihud
     "micro_amihud": compute_micro_amihud,
     "micro_amihud_10": compute_micro_amihud_10,

@@ -14,8 +14,8 @@ from typing import Any
 
 import pandas as pd
 
-from src.common.split_ratios import DEFAULT_TRAIN_RATIO
-from src.pipeline.config import TRANSACTION_COSTS
+from src.core.common.split_ratios import DEFAULT_TRAIN_RATIO
+from src.data.pipeline.config import TRANSACTION_COSTS
 
 from .optuna_optimizer import (
     run_optuna_optimization,
@@ -214,7 +214,7 @@ def process_symbol_ga(
         The global path fallback is deprecated and will be removed in a future version.
     """
     if horizons is None:
-        from src.pipeline.config import HORIZONS
+        from src.data.pipeline.config import HORIZONS
 
         horizons = HORIZONS
 
@@ -300,7 +300,7 @@ def process_symbol_ga(
 
 def main():
     """Run Stage 5: Optimization for all symbols using dynamic horizons."""
-    from src.pipeline.config import (
+    from src.data.pipeline.config import (
         ACTIVE_HORIZONS,
         HORIZONS,
         RANDOM_SEED,

@@ -90,10 +90,7 @@ def get_default(key: str) -> Any:
 
 def as_dict() -> dict[str, Any]:
     """Get all defaults as a dictionary."""
-    return {
-        field: getattr(DEFAULTS, field)
-        for field in GlobalDefaults.__dataclass_fields__
-    }
+    return {field: getattr(DEFAULTS, field) for field in GlobalDefaults.__dataclass_fields__}
 
 
 __all__ = [

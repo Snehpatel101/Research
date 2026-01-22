@@ -22,6 +22,8 @@ import pandas as pd
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
+from src.models.base import PredictionOutput
+from src.models.registry import ModelRegistry
 from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from src.validation.cv.walk_forward import (
     WalkForwardConfig,
@@ -29,8 +31,6 @@ from src.validation.cv.walk_forward import (
     WalkForwardResult,
     WindowMetrics,
 )
-from src.models.base import PredictionOutput
-from src.models.registry import ModelRegistry
 
 from ..config import ExperimentConfig
 
@@ -115,9 +115,7 @@ class WalkForwardTrainingResult:
 # =============================================================================
 
 
-def compute_classification_metrics(
-    y_true: np.ndarray, y_pred: np.ndarray
-) -> dict[str, float]:
+def compute_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Compute classification metrics."""
     from sklearn.metrics import (
         accuracy_score,
@@ -222,10 +220,7 @@ class WalkForwardTrainer:
         logger.info(f"Container: {container}")
 
         # Get model names - handle both string and ModelConfig types
-        model_names = [
-            m if isinstance(m, str) else m.name
-            for m in self.config.models
-        ]
+        model_names = [m if isinstance(m, str) else m.name for m in self.config.models]
         logger.info(f"Models: {model_names}")
 
         # Build walk-forward config
@@ -320,9 +315,7 @@ class WalkForwardTrainer:
         # Get scaling method for this model
         scaling_method = get_scaling_method_for_model(model_name)
 
-        logger.info(
-            f"  Running {wf_config.n_windows} windows ({wf_config.window_type})"
-        )
+        logger.info(f"  Running {wf_config.n_windows} windows ({wf_config.window_type})")
 
         for window_idx, (train_idx, test_idx) in enumerate(
             evaluator.split(X, y, label_end_times=label_end_times)
@@ -341,9 +334,7 @@ class WalkForwardTrainer:
 
             # Fold-aware scaling
             scaler = FoldAwareScaler(method=scaling_method)
-            scaling_result = scaler.fit_transform_fold(
-                X_train_raw.values, X_test_raw.values
-            )
+            scaling_result = scaler.fit_transform_fold(X_train_raw.values, X_test_raw.values)
             X_train_scaled = scaling_result.X_train_scaled
             X_test_scaled = scaling_result.X_val_scaled
 
@@ -354,7 +345,7 @@ class WalkForwardTrainer:
 
             # Create and train model
             model = ModelRegistry.create(model_name)
-            training_metrics = model.fit(
+            model.fit(
                 X_train=X_train_scaled,
                 y_train=y_train.values,
                 X_val=X_test_scaled,
@@ -403,9 +394,7 @@ class WalkForwardTrainer:
 
             # Save model if requested
             if save_models:
-                model_path = (
-                    self.output_dir / f"{model_name}_window{window_idx}.pkl"
-                )
+                model_path = self.output_dir / f"{model_name}_window{window_idx}.pkl"
                 model.save(model_path)
                 model_paths.append(model_path)
 
@@ -417,9 +406,7 @@ class WalkForwardTrainer:
         # Build predictions DataFrame
         predictions_df = pd.DataFrame(
             {
-                "datetime": X.index
-                if isinstance(X.index, pd.DatetimeIndex)
-                else range(len(X)),
+                "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
                 f"{model_name}_pred": all_preds,
                 f"{model_name}_confidence": all_confidence,
                 "y_true": y.values,
@@ -462,9 +449,7 @@ class WalkForwardTrainer:
             total_time=total_time,
         )
 
-    def _build_summary(
-        self, results: dict[str, WalkForwardTrainingResult]
-    ) -> dict[str, Any]:
+    def _build_summary(self, results: dict[str, WalkForwardTrainingResult]) -> dict[str, Any]:
         """Build summary from all model results."""
         summary = {
             "n_models": len(results),

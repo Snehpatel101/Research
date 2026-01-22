@@ -17,8 +17,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
-from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
-from src.utils.memory import estimate_array_size
+from src.core.utils.memory import estimate_array_size
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..registry import ModelRegistry, register
@@ -516,7 +515,9 @@ class StackingEnsemble(BaseModel):
                 "is_heterogeneous": self._is_heterogeneous,
                 "tabular_models": list(self._tabular_models) if self._is_heterogeneous else [],
                 "sequence_models": list(self._sequence_models) if self._is_heterogeneous else [],
-                "diversity_analysis": self._diversity_metrics.to_dict() if self._diversity_metrics else None,
+                "diversity_analysis": self._diversity_metrics.to_dict()
+                if self._diversity_metrics
+                else None,
             },
         )
 
@@ -584,6 +585,9 @@ class StackingEnsemble(BaseModel):
             }
 
         # Create PurgedKFold splitter to prevent label leakage
+        # Deferred import to avoid circular dependency with src.validation
+        from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
+
         purged_kfold_config = PurgedKFoldConfig(
             n_splits=self._n_folds,
             purge_bars=purge_bars,  # Prevent overlapping label leakage
@@ -1088,9 +1092,7 @@ class StackingEnsemble(BaseModel):
         freed_bytes = self._seq_cache_size_bytes
 
         if freed_bytes > 0:
-            logger.info(
-                f"MOD-007: Clearing cached sequence data: {freed_bytes / 1024**2:.1f}MB"
-            )
+            logger.info(f"MOD-007: Clearing cached sequence data: {freed_bytes / 1024**2:.1f}MB")
 
         self._X_train_seq = None
         self._X_val_seq = None
@@ -1098,6 +1100,7 @@ class StackingEnsemble(BaseModel):
 
         # Trigger garbage collection to actually free memory
         import gc
+
         gc.collect()
 
         return freed_bytes

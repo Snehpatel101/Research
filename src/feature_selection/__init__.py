@@ -74,6 +74,7 @@ def __getattr__(name: str):
         )
         # Import from new location
         from src.optimization import feature_selection as fs_module
+
         return getattr(fs_module, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

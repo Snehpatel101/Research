@@ -277,9 +277,13 @@ def paired_ttest(
     mean_diff = np.mean(diff)
     if significant:
         if mean_diff > 0:
-            conclusion = f"Model 1 significantly better (mean diff={mean_diff:.4f}, p={p_value:.4f})"
+            conclusion = (
+                f"Model 1 significantly better (mean diff={mean_diff:.4f}, p={p_value:.4f})"
+            )
         else:
-            conclusion = f"Model 2 significantly better (mean diff={mean_diff:.4f}, p={p_value:.4f})"
+            conclusion = (
+                f"Model 2 significantly better (mean diff={mean_diff:.4f}, p={p_value:.4f})"
+            )
     else:
         conclusion = f"No significant difference (mean diff={mean_diff:.4f}, p={p_value:.4f})"
 
@@ -376,9 +380,13 @@ def wilcoxon_test(
     median_diff = np.median(diff)
     if significant:
         if median_diff > 0:
-            conclusion = f"Model 1 significantly better (median diff={median_diff:.4f}, p={p_value:.4f})"
+            conclusion = (
+                f"Model 1 significantly better (median diff={median_diff:.4f}, p={p_value:.4f})"
+            )
         else:
-            conclusion = f"Model 2 significantly better (median diff={median_diff:.4f}, p={p_value:.4f})"
+            conclusion = (
+                f"Model 2 significantly better (median diff={median_diff:.4f}, p={p_value:.4f})"
+            )
     else:
         conclusion = f"No significant difference (median diff={median_diff:.4f}, p={p_value:.4f})"
 
@@ -430,9 +438,7 @@ def compare_models(
 
     # Diebold-Mariano test (requires predictions)
     if y_true is not None and pred1 is not None and pred2 is not None:
-        results["diebold_mariano"] = diebold_mariano_test(
-            y_true, pred1, pred2, alpha=alpha
-        )
+        results["diebold_mariano"] = diebold_mariano_test(y_true, pred1, pred2, alpha=alpha)
 
     # Paired tests (require metrics)
     if metrics1 is not None and metrics2 is not None:
@@ -440,9 +446,7 @@ def compare_models(
         results["wilcoxon"] = wilcoxon_test(metrics1, metrics2, alpha=alpha)
 
     if not results:
-        raise ValueError(
-            "Provide either (y_true, pred1, pred2) or (metrics1, metrics2)"
-        )
+        raise ValueError("Provide either (y_true, pred1, pred2) or (metrics1, metrics2)")
 
     return results
 

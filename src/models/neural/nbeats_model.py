@@ -423,7 +423,7 @@ class NBEATSNetwork(nn.Module):
                 forecast_size=input_dim,
             )
         elif stack_type == "seasonality":
-            actual_theta_size = 2 * n_harmonics
+            2 * n_harmonics
             return SeasonalityBasis(
                 n_harmonics=n_harmonics,
                 backcast_size=input_dim,
@@ -450,7 +450,7 @@ class NBEATSNetwork(nn.Module):
             Output logits, shape (batch, n_classes)
             Optionally: list of stack forecasts for interpretability
         """
-        batch_size = x.size(0)
+        x.size(0)
 
         # Pool features: (batch, seq_len, features) -> (batch, seq_len)
         x_pooled = self.feature_pool(x).squeeze(-1)
@@ -732,7 +732,7 @@ class NBEATSModel(BaseRNNModel):
             _, stack_forecasts = self._model(X_tensor, return_components=True)
 
         stack_types = self._config.get("stack_types", ["generic", "trend", "seasonality"])
-        n_stacks = self._config.get("n_stacks", 3)
+        self._config.get("n_stacks", 3)
 
         result = {}
         for i, forecast in enumerate(stack_forecasts):

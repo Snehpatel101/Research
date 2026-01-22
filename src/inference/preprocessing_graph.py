@@ -151,9 +151,7 @@ class RegimeConfig:
     """Regime detection configuration."""
 
     enabled: bool = True
-    regime_types: list[str] = field(
-        default_factory=lambda: ["volatility", "trend", "structure"]
-    )
+    regime_types: list[str] = field(default_factory=lambda: ["volatility", "trend", "structure"])
     # Volatility regime params
     vol_lookback: int = 20
     vol_threshold_low: float = 0.5
@@ -369,9 +367,7 @@ class PreprocessingGraph:
             scaler_type=scale_cfg.get("scaler_type", "robust"),
             clip_outliers=scale_cfg.get("clip_outliers", True),
             clip_range=tuple(scale_cfg.get("clip_range", [-5.0, 5.0])),
-            robust_quantile_range=tuple(
-                scale_cfg.get("robust_quantile_range", [25.0, 75.0])
-            ),
+            robust_quantile_range=tuple(scale_cfg.get("robust_quantile_range", [25.0, 75.0])),
             apply_log_to_price_volume=scale_cfg.get("apply_log_to_price_volume", True),
             feature_columns=feature_columns or [],
             scaling_params=scaling_params or {},
@@ -508,16 +504,11 @@ class PreprocessingGraph:
 
         # Step 7: Select feature columns if specified
         if self.config.scaling.feature_columns:
-            available_cols = [
-                c for c in self.config.scaling.feature_columns if c in df.columns
-            ]
-            missing_cols = set(self.config.scaling.feature_columns) - set(
-                available_cols
-            )
+            available_cols = [c for c in self.config.scaling.feature_columns if c in df.columns]
+            missing_cols = set(self.config.scaling.feature_columns) - set(available_cols)
             if missing_cols:
                 logger.warning(
-                    f"Missing {len(missing_cols)} feature columns: "
-                    f"{list(missing_cols)[:5]}..."
+                    f"Missing {len(missing_cols)} feature columns: " f"{list(missing_cols)[:5]}..."
                 )
             df = df[available_cols]
 
@@ -528,25 +519,20 @@ class PreprocessingGraph:
         required_cols = {"open", "high", "low", "close", "volume"}
 
         # Check for datetime column or index
-        has_datetime = "datetime" in df.columns or isinstance(
-            df.index, pd.DatetimeIndex
-        )
+        has_datetime = "datetime" in df.columns or isinstance(df.index, pd.DatetimeIndex)
 
         missing = required_cols - set(df.columns)
         if missing:
             raise ValueError(
-                f"Missing required OHLCV columns: {missing}. "
-                f"Expected: {required_cols}"
+                f"Missing required OHLCV columns: {missing}. " f"Expected: {required_cols}"
             )
         if not has_datetime:
-            raise ValueError(
-                "DataFrame must have 'datetime' column or DatetimeIndex"
-            )
+            raise ValueError("DataFrame must have 'datetime' column or DatetimeIndex")
 
     def _apply_cleaning(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply data cleaning and resampling."""
         try:
-            from src.pipeline.stages.clean.cleaner import DataCleaner
+            from src.data.pipeline.stages.clean.cleaner import DataCleaner
 
             # Create a temporary cleaner for resampling
             # Note: In production, this would use the saved cleaner config
@@ -573,9 +559,7 @@ class PreprocessingGraph:
                     }
                 )
                 df = df_resampled.dropna()
-                logger.debug(
-                    f"Resampled from {source_freq} to {target_freq}: {len(df)} bars"
-                )
+                logger.debug(f"Resampled from {source_freq} to {target_freq}: {len(df)} bars")
 
             df = df.reset_index()
             return df
@@ -588,10 +572,10 @@ class PreprocessingGraph:
         """Apply feature engineering."""
         try:
             # Import feature functions
-            from src.pipeline.stages.features.microstructure import (
+            from src.data.pipeline.stages.features.microstructure import (
                 add_microstructure_features,
             )
-            from src.pipeline.stages.features.momentum import (
+            from src.data.pipeline.stages.features.momentum import (
                 add_cci,
                 add_macd,
                 add_mfi,
@@ -600,15 +584,15 @@ class PreprocessingGraph:
                 add_stochastic,
                 add_williams_r,
             )
-            from src.pipeline.stages.features.moving_averages import add_ema, add_sma
-            from src.pipeline.stages.features.price_features import (
+            from src.data.pipeline.stages.features.moving_averages import add_ema, add_sma
+            from src.data.pipeline.stages.features.price_features import (
                 add_price_ratios,
                 add_returns,
             )
-            from src.pipeline.stages.features.regime import add_regime_features
-            from src.pipeline.stages.features.temporal import add_temporal_features
-            from src.pipeline.stages.features.trend import add_adx, add_supertrend
-            from src.pipeline.stages.features.volatility import (
+            from src.data.pipeline.stages.features.regime import add_regime_features
+            from src.data.pipeline.stages.features.temporal import add_temporal_features
+            from src.data.pipeline.stages.features.trend import add_adx, add_supertrend
+            from src.data.pipeline.stages.features.volatility import (
                 add_atr,
                 add_bollinger_bands,
                 add_garman_klass_volatility,
@@ -618,7 +602,7 @@ class PreprocessingGraph:
                 add_rogers_satchell_volatility,
                 add_yang_zhang_volatility,
             )
-            from src.pipeline.stages.features.volume import (
+            from src.data.pipeline.stages.features.volume import (
                 add_dollar_volume,
                 add_volume_features,
                 add_vwap,
@@ -640,9 +624,7 @@ class PreprocessingGraph:
                 slow_period=cfg.macd_slow,
                 signal_period=cfg.macd_signal,
             )
-            df = add_stochastic(
-                df, metadata, k_period=cfg.stochastic_k, d_period=cfg.stochastic_d
-            )
+            df = add_stochastic(df, metadata, k_period=cfg.stochastic_k, d_period=cfg.stochastic_d)
             df = add_williams_r(df, metadata, period=cfg.williams_r_period)
             df = add_roc(df, metadata, periods=cfg.roc_periods)
             df = add_cci(df, metadata, period=cfg.cci_period)
@@ -652,9 +634,7 @@ class PreprocessingGraph:
             df = add_keltner_channels(df, metadata, period=cfg.keltner_period)
             df = add_historical_volatility(df, metadata, periods=cfg.hvol_periods)
             df = add_parkinson_volatility(df, metadata, period=cfg.parkinson_period)
-            df = add_garman_klass_volatility(
-                df, metadata, period=cfg.garman_klass_period
-            )
+            df = add_garman_klass_volatility(df, metadata, period=cfg.garman_klass_period)
             df = add_rogers_satchell_volatility(df, metadata, period=cfg.rs_vol_period)
             df = add_yang_zhang_volatility(df, metadata, period=cfg.yz_vol_period)
             df = add_volume_features(df, metadata, period=cfg.volume_sma_period)
@@ -669,7 +649,7 @@ class PreprocessingGraph:
             # Apply wavelets if enabled
             if self.config.wavelets.enabled and len(df) >= self.config.wavelets.window:
                 try:
-                    from src.pipeline.stages.features.wavelets import add_wavelet_features
+                    from src.data.pipeline.stages.features.wavelets import add_wavelet_features
 
                     wav_cfg = self.config.wavelets
                     df = add_wavelet_features(
@@ -701,7 +681,7 @@ class PreprocessingGraph:
     def _apply_mtf(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply multi-timeframe features."""
         try:
-            from src.pipeline.stages.mtf.generator import MTFFeatureGenerator
+            from src.data.pipeline.stages.mtf.generator import MTFFeatureGenerator
 
             cfg = self.config.mtf
             mtf_gen = MTFFeatureGenerator(
@@ -731,12 +711,8 @@ class PreprocessingGraph:
             return df
 
         # Get numeric columns for scaling
-        feature_cols = [
-            c for c in df.columns if c not in ["datetime", "date", "time", "symbol"]
-        ]
-        numeric_cols = df[feature_cols].select_dtypes(
-            include=[np.number]
-        ).columns.tolist()
+        feature_cols = [c for c in df.columns if c not in ["datetime", "date", "time", "symbol"]]
+        numeric_cols = df[feature_cols].select_dtypes(include=[np.number]).columns.tolist()
 
         if not numeric_cols:
             return df

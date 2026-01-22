@@ -28,6 +28,7 @@ Example Request:
         -H "Content-Type: application/json" \
         -d '{"features": [[0.1, 0.2, 0.3, ...]]}'
 """
+
 from __future__ import annotations
 
 import argparse

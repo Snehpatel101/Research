@@ -116,14 +116,16 @@ class TrainerEvaluationMixin:
 
         if self._is_heterogeneous_ensemble():
             # Heterogeneous stacking: load BOTH tabular and sequence test data
-            logger.info(
-                "Heterogeneous stacking: preparing both tabular and sequence test data"
-            )
+            logger.info("Heterogeneous stacking: preparing both tabular and sequence test data")
 
             # Tabular test data
             X_test_result, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
             # Ensure we have a DataFrame for feature operations
-            X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
+            X_test_df = (
+                X_test_result
+                if isinstance(X_test_result, pd.DataFrame)
+                else pd.DataFrame(X_test_result)
+            )
 
             # MOD-006 FIX: Validate and apply feature set filtering (must happen before feature selection)
             if self._feature_set_columns is not None:
@@ -141,7 +143,7 @@ class TrainerEvaluationMixin:
                 X_test_df = self._apply_feature_set_filter(X_test_df, self._feature_set_columns)
 
                 # MOD-004: Post-filter shape validation for heterogeneous test data
-                expected_n_features = len([c for c in self._feature_set_columns if c in X_test_df.columns])
+                len([c for c in self._feature_set_columns if c in X_test_df.columns])
                 if X_test_df.shape[1] == 0:
                     raise ValueError(
                         f"MOD-004: No features remain after filtering test data for heterogeneous ensemble. "
@@ -206,7 +208,11 @@ class TrainerEvaluationMixin:
             # Tabular models: load DataFrame and apply feature selection
             X_test_result, y_test_series, _ = container.get_sklearn_arrays("test", return_df=True)
             # Ensure we have a DataFrame for feature operations
-            X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
+            X_test_df = (
+                X_test_result
+                if isinstance(X_test_result, pd.DataFrame)
+                else pd.DataFrame(X_test_result)
+            )
 
             # MOD-006 FIX: Validate and apply feature set filtering (must happen before feature selection)
             if self._feature_set_columns is not None:

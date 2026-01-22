@@ -11,12 +11,10 @@ This module provides risk-adjusted performance metrics:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-
 
 # ============================================================================
 # Core Risk Metrics
@@ -107,7 +105,7 @@ def calculate_sortino_ratio(
         return 10.0 if mean_return > target_return else 0.0
 
     # Downside deviation (semi-deviation)
-    downside_deviation = np.sqrt(np.mean(downside_returns ** 2))
+    downside_deviation = np.sqrt(np.mean(downside_returns**2))
 
     if downside_deviation <= 0:
         return 0.0
@@ -123,7 +121,7 @@ def calculate_sortino_ratio(
 
 def calculate_max_drawdown(
     equity_curve: np.ndarray | pd.Series,
-) -> Tuple[float, int, int]:
+) -> tuple[float, int, int]:
     """
     Calculate maximum drawdown from an equity curve.
 
@@ -152,14 +150,14 @@ def calculate_max_drawdown(
     max_dd = float(drawdowns[trough_idx])
 
     # Find the peak that precedes this trough
-    peak_idx = int(np.argmax(equity[:trough_idx + 1])) if trough_idx > 0 else 0
+    peak_idx = int(np.argmax(equity[: trough_idx + 1])) if trough_idx > 0 else 0
 
     return max_dd, peak_idx, trough_idx
 
 
 def calculate_max_drawdown_duration(
     equity_curve: np.ndarray | pd.Series,
-) -> Tuple[int, int, int]:
+) -> tuple[int, int, int]:
     """
     Calculate maximum drawdown duration (time to recover).
 
@@ -205,8 +203,8 @@ def calculate_max_drawdown_duration(
 
 def calculate_calmar_ratio(
     returns: np.ndarray | pd.Series,
-    max_drawdown: Optional[float] = None,
-    equity_curve: Optional[np.ndarray | pd.Series] = None,
+    max_drawdown: float | None = None,
+    equity_curve: np.ndarray | pd.Series | None = None,
     periods_per_year: int = 252,
 ) -> float:
     """
@@ -429,6 +427,7 @@ def calculate_var(
     else:
         # Parametric VaR: assume normal distribution
         from scipy import stats
+
         mean = np.mean(returns)
         std = np.std(returns, ddof=1)
         z_score = stats.norm.ppf(1 - confidence_level)
@@ -495,7 +494,7 @@ def calculate_ulcer_index(
     running_max = np.maximum.accumulate(equity)
     drawdowns = (equity - running_max) / running_max * 100  # Percentage
 
-    ulcer_index = np.sqrt(np.mean(drawdowns ** 2))
+    ulcer_index = np.sqrt(np.mean(drawdowns**2))
 
     return float(ulcer_index)
 
@@ -575,8 +574,8 @@ class PerformanceMetrics:
     cvar_95: float = 0.0
 
     # Time metrics
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    start_date: str | None = None
+    end_date: str | None = None
     trading_days: int = 0
 
 

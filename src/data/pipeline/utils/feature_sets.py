@@ -6,9 +6,9 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from src.common.timeframes import TIMEFRAME_TO_MINUTES
-from src.pipeline.config.feature_sets import FeatureSetDefinition
-from src.pipeline.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
+from src.core.common.timeframes import TIMEFRAME_TO_MINUTES
+from src.data.pipeline.config.feature_sets import FeatureSetDefinition
+from src.data.pipeline.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 
 
 def _mtf_suffixes() -> list[str]:

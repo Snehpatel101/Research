@@ -15,15 +15,16 @@ Key Principles:
 import logging
 from dataclasses import dataclass, field
 
-from .feature_sets import (
-    FEATURE_SET_DEFINITIONS,
-)
 # Import from canonical location in src/models/config/
 from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     ModelFamily,
     ScalerType,
+)
+
+from .feature_sets import (
+    FEATURE_SET_DEFINITIONS,
 )
 
 logger = logging.getLogger(__name__)

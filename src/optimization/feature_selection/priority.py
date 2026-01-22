@@ -11,7 +11,6 @@ This module consolidates priority constants from:
 
 from __future__ import annotations
 
-
 # Feature interpretability ranking - higher is more interpretable/fundamental
 # This guides which feature to keep from correlated pairs
 FEATURE_PRIORITY: dict[str, int] = {

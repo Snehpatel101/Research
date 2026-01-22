@@ -92,9 +92,7 @@ class AlignedOOFResult:
 
         # Derived: mean confidence per sample
         # Reshape to (n_common, n_models, n_classes) to get max per model
-        probs_reshaped = self.probabilities.reshape(
-            self.n_common, self.n_models, self.n_classes
-        )
+        probs_reshaped = self.probabilities.reshape(self.n_common, self.n_models, self.n_classes)
         # Max probability per model (confidence)
         confidences = np.nanmax(probs_reshaped, axis=2)  # (n_common, n_models)
         # Mean confidence across models (ignoring NaN)
@@ -181,10 +179,7 @@ class AlignedOOFResult:
             ValueError: If model_name not found.
         """
         if model_name not in self.model_names:
-            raise ValueError(
-                f"Model '{model_name}' not found. "
-                f"Available: {self.model_names}"
-            )
+            raise ValueError(f"Model '{model_name}' not found. " f"Available: {self.model_names}")
 
         idx = self.model_names.index(model_name)
         start_col = idx * self.n_classes
@@ -200,9 +195,7 @@ class AlignedOOFResult:
         """
         # Check if any probability is NaN for each sample
         # Reshape and check across all models/classes
-        probs_reshaped = self.probabilities.reshape(
-            self.n_common, self.n_models, self.n_classes
-        )
+        probs_reshaped = self.probabilities.reshape(self.n_common, self.n_models, self.n_classes)
         # Valid if no NaN in any model/class
         return ~np.any(np.isnan(probs_reshaped), axis=(1, 2))
 
@@ -336,9 +329,7 @@ class OOFAligner:
             )
 
         # Allocate aligned arrays
-        aligned_probs = np.full(
-            (n_common, n_models * self.n_classes), np.nan, dtype=np.float32
-        )
+        aligned_probs = np.full((n_common, n_models * self.n_classes), np.nan, dtype=np.float32)
         aligned_preds = np.full(
             (n_common, n_models), AlignedOOFResult.MISSING_PREDICTION, dtype=np.int64
         )
@@ -472,9 +463,7 @@ class OOFAligner:
             >>> aligner.estimate_common_samples(10000, ["xgboost", "lstm"], 60)
             9941
         """
-        max_offset = max(
-            self.compute_offset(name, sequence_length) for name in model_names
-        )
+        max_offset = max(self.compute_offset(name, sequence_length) for name in model_names)
         return max(0, total_samples - max_offset)
 
 

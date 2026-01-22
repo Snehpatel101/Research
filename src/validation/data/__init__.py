@@ -11,24 +11,6 @@ Legacy import path (still works):
     from src.validation import LookaheadAuditor, LeakageReport
 """
 
-from src.validation.lookahead_audit import (
-    LookaheadAuditor,
-    LookaheadAuditResult,
-    ResampleConfig,
-    audit_feature_lookahead,
-    audit_mtf_alignment,
-    validate_resample_config,
-)
-
-from src.validation.leakage_detection import (
-    LeakageCheckResult,
-    LeakageReport,
-    check_feature_label_correlation,
-    check_information_leakage,
-    check_temporal_leakage,
-    comprehensive_leakage_check,
-)
-
 from src.validation.bootstrap import (
     BootstrapResult,
     bootstrap_accuracy,
@@ -39,7 +21,6 @@ from src.validation.bootstrap import (
     bootstrap_sharpe_ratio,
     bootstrap_win_rate,
 )
-
 from src.validation.deflated_sharpe import (
     DSRConfig,
     DSRResult,
@@ -48,7 +29,22 @@ from src.validation.deflated_sharpe import (
     compute_dsr_from_optuna_study,
     dsr_gate,
 )
-
+from src.validation.leakage_detection import (
+    LeakageCheckResult,
+    LeakageReport,
+    check_feature_label_correlation,
+    check_information_leakage,
+    check_temporal_leakage,
+    comprehensive_leakage_check,
+)
+from src.validation.lookahead_audit import (
+    LookaheadAuditor,
+    LookaheadAuditResult,
+    ResampleConfig,
+    audit_feature_lookahead,
+    audit_mtf_alignment,
+    validate_resample_config,
+)
 from src.validation.statistical_tests import (
     LossFunction,
     StatisticalTestResult,

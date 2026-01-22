@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.pipeline.data_config import DataConfig
+    from src.data.pipeline.data_config import DataConfig
 
 
 def generate_pipeline_summary(config: "DataConfig") -> str:

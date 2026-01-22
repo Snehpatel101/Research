@@ -7,7 +7,6 @@ Provides production-grade experiment tracking using MLflow.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,9 +60,7 @@ class MLflowTracker(ExperimentTracker):
             ImportError: If MLflow is not installed
         """
         if not MLFLOW_AVAILABLE:
-            raise ImportError(
-                "MLflow is not installed. Install with: pip install mlflow>=2.0"
-            )
+            raise ImportError("MLflow is not installed. Install with: pip install mlflow>=2.0")
 
         super().__init__(config)
 
@@ -179,9 +176,7 @@ class MLflowTracker(ExperimentTracker):
                 str_value = str(value)
             elif hasattr(value, "tolist"):  # numpy arrays
                 str_value = str(value.tolist())[:500]
-            elif isinstance(value, dict):
-                str_value = str(value)[:500]
-            elif isinstance(value, list):
+            elif isinstance(value, dict) or isinstance(value, list):
                 str_value = str(value)[:500]
             else:
                 str_value = str(value)[:500] if value is not None else "None"

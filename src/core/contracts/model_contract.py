@@ -91,9 +91,7 @@ class ModelContract:
         else:
             raise ValueError(f"Unknown input rank: {self.input_rank}")
 
-    def validate_data_contract(
-        self, data_contract: "DataContract"
-    ) -> tuple[bool, list[str]]:
+    def validate_data_contract(self, data_contract: DataContract) -> tuple[bool, list[str]]:
         """
         Validate that a data contract satisfies this model's requirements.
 
@@ -166,7 +164,7 @@ class ModelContract:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ModelContract":
+    def from_dict(cls, data: dict[str, Any]) -> ModelContract:
         """Deserialize from dictionary."""
         return cls(
             model_name=data["model_name"],
@@ -547,9 +545,7 @@ def get_model_contract(model_name: str) -> ModelContract:
     name_lower = model_name.lower().strip()
     if name_lower not in MODEL_CONTRACTS:
         available = sorted(MODEL_CONTRACTS.keys())
-        raise ValueError(
-            f"No contract for model '{model_name}'. Available: {available}"
-        )
+        raise ValueError(f"No contract for model '{model_name}'. Available: {available}")
     return MODEL_CONTRACTS[name_lower]
 
 
@@ -576,23 +572,17 @@ def list_model_contracts(family: str | None = None) -> dict[str, ModelContract]:
 
 def get_models_by_rank(rank: DataRank) -> list[str]:
     """Get all model names that use a specific data rank."""
-    return [
-        name for name, contract in MODEL_CONTRACTS.items() if contract.input_rank == rank
-    ]
+    return [name for name, contract in MODEL_CONTRACTS.items() if contract.input_rank == rank]
 
 
 def get_models_requiring_scaling() -> list[str]:
     """Get all model names that require feature scaling."""
-    return [
-        name for name, contract in MODEL_CONTRACTS.items() if contract.requires_scaling
-    ]
+    return [name for name, contract in MODEL_CONTRACTS.items() if contract.requires_scaling]
 
 
 def get_models_by_mtf_mode(mtf_mode: MTFMode) -> list[str]:
     """Get all model names that use a specific MTF mode."""
-    return [
-        name for name, contract in MODEL_CONTRACTS.items() if contract.mtf_mode == mtf_mode
-    ]
+    return [name for name, contract in MODEL_CONTRACTS.items() if contract.mtf_mode == mtf_mode]
 
 
 __all__ = [

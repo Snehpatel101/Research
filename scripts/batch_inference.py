@@ -25,6 +25,7 @@ Usage:
         --output ensemble_predictions.parquet \
         --ensemble
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,7 +40,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.inference import (
     BatchPredictor,
     BatchProgress,
-    InferencePipeline,
 )
 
 # Configure logging

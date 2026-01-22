@@ -165,7 +165,9 @@ def set_all_seeds(seed: int, deterministic: bool = False) -> ReproducibilityInfo
 
             # Get CUDA/cuDNN versions
             cuda_version = torch.version.cuda
-            cudnn_version = str(torch.backends.cudnn.version()) if torch.backends.cudnn.is_available() else None
+            cudnn_version = (
+                str(torch.backends.cudnn.version()) if torch.backends.cudnn.is_available() else None
+            )
 
         # Set deterministic mode if requested
         if deterministic:
@@ -249,7 +251,9 @@ def get_reproducibility_info() -> ReproducibilityInfo:
 
         if cuda_available:
             cuda_version = torch.version.cuda
-            cudnn_version = str(torch.backends.cudnn.version()) if torch.backends.cudnn.is_available() else None
+            cudnn_version = (
+                str(torch.backends.cudnn.version()) if torch.backends.cudnn.is_available() else None
+            )
             cudnn_deterministic = torch.backends.cudnn.deterministic
             cudnn_benchmark = torch.backends.cudnn.benchmark
 

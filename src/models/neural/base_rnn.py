@@ -30,7 +30,7 @@ from ..base import BaseModel, PredictionOutput, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
 from .checkpointing import CheckpointConfig, CheckpointManager
-from .numerical_stability import NumericalInstabilityError, NumericalValidator, validate_training_inputs
+from .numerical_stability import NumericalValidator, validate_training_inputs
 from .oom_recovery import OOMConfig, OOMRecoveryManager
 
 logger = logging.getLogger(__name__)
@@ -194,9 +194,7 @@ class BaseRNNModel(BaseModel):
 
         # Device setup with "auto" detection support
         device_config = self._config.get("device", "auto")
-        if device_config == "auto":
-            self._device = _get_device(use_cuda=True)
-        elif device_config == "cuda":
+        if device_config == "auto" or device_config == "cuda":
             self._device = _get_device(use_cuda=True)
         else:
             self._device = torch.device(device_config)
@@ -371,7 +369,9 @@ class BaseRNNModel(BaseModel):
             class_counts = np.maximum(class_counts, 1)
             # Inverse frequency weighting: rarer classes get higher weights
             class_weights = len(y_train) / (len(class_counts) * class_counts)
-            class_weights_tensor = torch.tensor(class_weights, dtype=torch.float32, device=self._device)
+            class_weights_tensor = torch.tensor(
+                class_weights, dtype=torch.float32, device=self._device
+            )
             criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
             logger.debug(f"Class weights: {class_weights}")
         else:
@@ -517,7 +517,9 @@ class BaseRNNModel(BaseModel):
                     train_loader = self._create_dataloader(
                         X_train, y_train, sample_weights, train_config, shuffle=True
                     )
-                    val_loader = self._create_dataloader(X_val, y_val, None, train_config, shuffle=False)
+                    val_loader = self._create_dataloader(
+                        X_val, y_val, None, train_config, shuffle=False
+                    )
 
                     # Reset scheduler steps for new data loader size
                     scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))

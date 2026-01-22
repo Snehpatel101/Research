@@ -15,8 +15,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from src.pipeline.stages.mtf.constants import MTF_TIMEFRAMES
-
+from src.data.pipeline.stages.mtf.constants import MTF_TIMEFRAMES
 
 # =============================================================================
 # CONSTANTS

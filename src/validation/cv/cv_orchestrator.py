@@ -19,17 +19,19 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.core import CVMethod, PipelineConfig, MODEL_DATA_RANKS
-from .purged_kfold import PurgedKFold, PurgedKFoldConfig
+from src.core import MODEL_DATA_RANKS, CVMethod, PipelineConfig
+
 from .cpcv import CombinatorialPurgedCV, CPCVConfig
-from .walk_forward import WalkForwardEvaluator, WalkForwardConfig
-from .pbo import compute_pbo, PBOConfig, PBOResult
+from .pbo import PBOConfig, PBOResult, compute_pbo
+from .purged_kfold import PurgedKFold, PurgedKFoldConfig
+from .walk_forward import WalkForwardConfig, WalkForwardEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +87,7 @@ class CVSplitInfo:
     n_samples: int
     purge_bars: int
     embargo_bars: int
-    folds: List[CVFoldResult] = field(default_factory=list)
+    folds: list[CVFoldResult] = field(default_factory=list)
 
     @property
     def total_train_samples(self) -> int:
@@ -107,7 +109,7 @@ class CVSplitInfo:
         """Average test set size per fold."""
         return self.total_test_samples / len(self.folds) if self.folds else 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "cv_method": self.cv_method,
@@ -152,7 +154,7 @@ class CVOrchestrator:
 
     Usage:
         from src.core import PipelineConfig
-        from src.cross_validation import CVOrchestrator
+        from src.validation.cv import CVOrchestrator
 
         config = PipelineConfig(...)
         cv_orch = CVOrchestrator.from_config(config)
@@ -191,7 +193,7 @@ class CVOrchestrator:
         # Walk-forward specific
         n_windows: int = 5,
         window_type: str = "expanding",
-        min_train_size: Optional[int] = None,
+        min_train_size: int | None = None,
         min_train_pct: float = 0.4,
         test_pct: float = 0.1,
     ) -> None:
@@ -238,7 +240,7 @@ class CVOrchestrator:
         )
 
     @classmethod
-    def from_config(cls, config: PipelineConfig) -> "CVOrchestrator":
+    def from_config(cls, config: PipelineConfig) -> CVOrchestrator:
         """
         Create CVOrchestrator from PipelineConfig.
 
@@ -325,11 +327,11 @@ class CVOrchestrator:
 
     def split(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray, None] = None,
-        groups: Optional[np.ndarray] = None,
-        label_end_times: Optional[pd.Series] = None,
-    ) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        X: pd.DataFrame | np.ndarray,
+        y: pd.Series | np.ndarray | None = None,
+        groups: np.ndarray | None = None,
+        label_end_times: pd.Series | None = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Generate train/test indices for CV.
 
@@ -369,9 +371,9 @@ class CVOrchestrator:
 
     def get_n_splits(
         self,
-        X: Union[pd.DataFrame, np.ndarray, None] = None,
-        y: Union[pd.Series, np.ndarray, None] = None,
-        groups: Optional[np.ndarray] = None,
+        X: pd.DataFrame | np.ndarray | None = None,
+        y: pd.Series | np.ndarray | None = None,
+        groups: np.ndarray | None = None,
     ) -> int:
         """
         Get number of splits for this CV configuration.
@@ -393,9 +395,9 @@ class CVOrchestrator:
 
     def get_split_info(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray, None] = None,
-        label_end_times: Optional[pd.Series] = None,
+        X: pd.DataFrame | np.ndarray,
+        y: pd.Series | np.ndarray | None = None,
+        label_end_times: pd.Series | None = None,
     ) -> CVSplitInfo:
         """
         Get detailed information about CV splits.
@@ -483,9 +485,9 @@ class CVOrchestrator:
 
     def validate_coverage(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
-        y: Union[pd.Series, np.ndarray, None] = None,
-    ) -> Dict[str, Any]:
+        X: pd.DataFrame | np.ndarray,
+        y: pd.Series | np.ndarray | None = None,
+    ) -> dict[str, Any]:
         """
         Validate that CV covers all samples appropriately.
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.pipeline.config.barriers_config import get_barrier_params
+from src.data.pipeline.config.barriers_config import get_barrier_params
 
 REGIME_CONFIG: dict[str, dict[str, Any]] = {
     "volatility": {

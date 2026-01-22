@@ -5,14 +5,14 @@ CFG-010: This module provides the canonical default split ratios used throughout
 the codebase. All files that need default ratios should import from here.
 
 Usage:
-    from src.common.split_ratios import DEFAULT_SPLIT_RATIOS
+    from src.core.common.split_ratios import DEFAULT_SPLIT_RATIOS
 
     train_ratio = DEFAULT_SPLIT_RATIOS["train"]
     val_ratio = DEFAULT_SPLIT_RATIOS["val"]
     test_ratio = DEFAULT_SPLIT_RATIOS["test"]
 
     # Or unpack all at once
-    from src.common.split_ratios import (
+    from src.core.common.split_ratios import (
         DEFAULT_TRAIN_RATIO,
         DEFAULT_VAL_RATIO,
         DEFAULT_TEST_RATIO,

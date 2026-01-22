@@ -17,17 +17,19 @@ Result Types:
 """
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TypeVar, List, Dict, Optional, Union, Protocol, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
+
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # RESULT DATACLASSES
 # =============================================================================
+
 
 @dataclass
 class AdapterResult:
@@ -45,12 +47,13 @@ class AdapterResult:
         weights: Optional sample weights
         metadata: Additional adapter-specific metadata
     """
+
     data: np.ndarray  # Shape: (n, f) or (n, s, f) or (n, t, s, f)
     labels: np.ndarray  # Shape: (n,)
-    feature_names: List[str]
+    feature_names: list[str]
     original_indices: np.ndarray  # For OOF alignment
-    weights: Optional[np.ndarray] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    weights: np.ndarray | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def n_samples(self) -> int:
@@ -79,7 +82,7 @@ class AdapterResult:
         if len(self.labels) != self.n_samples:
             raise ValueError(f"Labels length ({len(self.labels)}) != n_samples ({self.n_samples})")
         if len(self.original_indices) != self.n_samples:
-            raise ValueError(f"original_indices length != n_samples")
+            raise ValueError("original_indices length != n_samples")
         if np.isnan(self.data).any():
             raise ValueError("AdapterResult data contains NaN values")
 
@@ -95,9 +98,10 @@ class PredictionResult:
         confidence: Prediction confidence (max probability)
         indices: Original indices for alignment
     """
+
     class_predictions: np.ndarray  # Shape: (n,) - predicted labels
     class_probabilities: np.ndarray  # Shape: (n, n_classes)
-    indices: Optional[np.ndarray] = None
+    indices: np.ndarray | None = None
 
     @property
     def n_samples(self) -> int:
@@ -126,12 +130,13 @@ class TrainingResult:
         training_time_seconds: Total training time
         metadata: Additional training metadata
     """
+
     model: Any
-    metrics: Dict[str, float]
-    oof_predictions: Optional[np.ndarray] = None
-    feature_importance: Optional[Dict[str, float]] = None
+    metrics: dict[str, float]
+    oof_predictions: np.ndarray | None = None
+    feature_importance: dict[str, float] | None = None
     training_time_seconds: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def has_oof(self) -> bool:
@@ -154,6 +159,7 @@ class OOFResult:
         model_name: Name of the model that produced these predictions
         coverage: Fraction of total samples covered (may be < 1.0 for sequence models)
     """
+
     predictions: np.ndarray  # Shape: (n,)
     probabilities: np.ndarray  # Shape: (n, n_classes)
     indices: np.ndarray  # Original DataFrame indices
@@ -169,7 +175,7 @@ class OOFResult:
     def n_classes(self) -> int:
         return self.probabilities.shape[1]
 
-    def align_to(self, target_indices: np.ndarray) -> "OOFResult":
+    def align_to(self, target_indices: np.ndarray) -> OOFResult:
         """
         Align this OOF result to a target index set.
 
@@ -203,6 +209,7 @@ class OOFResult:
 # PROTOCOLS - For structural typing without circular imports
 # =============================================================================
 
+
 @runtime_checkable
 class OOFPredictionProtocol(Protocol):
     """
@@ -217,11 +224,11 @@ class OOFPredictionProtocol(Protocol):
 
     model_name: str
     predictions: pd.DataFrame
-    fold_info: List[Dict[str, Any]]
+    fold_info: list[dict[str, Any]]
     coverage: float
-    original_indices: Optional[np.ndarray]
-    sequence_length: Optional[int]
-    n_total_samples: Optional[int]
+    original_indices: np.ndarray | None
+    sequence_length: int | None
+    n_total_samples: int | None
 
     @property
     def n_valid(self) -> int:
@@ -245,6 +252,7 @@ class OOFPredictionProtocol(Protocol):
 # =============================================================================
 # ABSTRACT CONTRACTS
 # =============================================================================
+
 
 class DataContract(ABC):
     """
@@ -270,7 +278,7 @@ class DataContract(ABC):
 
     @property
     @abstractmethod
-    def required_features(self) -> List[str]:
+    def required_features(self) -> list[str]:
         """
         Minimum required feature families.
 
@@ -289,7 +297,7 @@ class DataContract(ABC):
         pass
 
     @property
-    def sequence_length(self) -> Optional[int]:
+    def sequence_length(self) -> int | None:
         """Sequence length for 3D/4D models. None for 2D models."""
         return None if self.rank == 2 else 60  # Default: 60 bars
 
@@ -316,9 +324,9 @@ class ModelContract(ABC):
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-        sample_weights: Optional[np.ndarray] = None,
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+        sample_weights: np.ndarray | None = None,
         **kwargs: Any,
     ) -> TrainingResult:
         """
@@ -375,7 +383,7 @@ class ModelContract(ABC):
 
     @classmethod
     @abstractmethod
-    def load(cls, path: Path) -> "ModelContract":
+    def load(cls, path: Path) -> ModelContract:
         """
         Load model from disk.
 

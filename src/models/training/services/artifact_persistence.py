@@ -1,14 +1,14 @@
 # src/training/services/artifact_persistence.py
 """Service for managing training artifacts."""
 
+import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import json
-import logging
 
-from src.validation.cv import OOFPrediction
 from src.core import PipelineConfig
+from src.validation.cv import OOFPrediction
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +73,7 @@ class ArtifactManager:
 
         logger.info(f"Results saved to: {request.output_dir}")
 
-    def save_config(
-        self, config: PipelineConfig, output_dir: Path | None = None
-    ) -> Path:
+    def save_config(self, config: PipelineConfig, output_dir: Path | None = None) -> Path:
         """
         Save configuration.
 
@@ -92,9 +90,7 @@ class ArtifactManager:
         logger.info(f"  Saved config to: {config_path}")
         return config_path
 
-    def save_metrics(
-        self, model_results: dict[str, Any], output_dir: Path | None = None
-    ) -> Path:
+    def save_metrics(self, model_results: dict[str, Any], output_dir: Path | None = None) -> Path:
         """
         Save metrics summary.
 
@@ -146,9 +142,7 @@ class ArtifactManager:
 
         logger.info(f"  Saved {len(oof_predictions)} OOF predictions to: {oof_dir}")
 
-    def save_models(
-        self, trained_models: dict[str, Any], output_dir: Path | None = None
-    ) -> None:
+    def save_models(self, trained_models: dict[str, Any], output_dir: Path | None = None) -> None:
         """
         Save trained model files.
 

@@ -1,5 +1,5 @@
 """
-Pipeline configuration - re-exports from src.pipeline.config.
+Pipeline configuration - re-exports from src.data.pipeline.config.
 
 This module provides unified access to pipeline configuration.
 All config modules remain in their original locations; this is a facade.
@@ -12,6 +12,19 @@ Usage:
 # =============================================================================
 # MODEL CONFIG (canonical location: src.models.config.data_requirements)
 # =============================================================================
+# Timeframe config - import from common module (single source of truth)
+from src.core.common.timeframes import (
+    SUPPORTED_TIMEFRAMES as PHASE1_SUPPORTED_TIMEFRAMES,
+)
+from src.core.common.timeframes import (
+    TIMEFRAME_TO_FREQ as PHASE1_TIMEFRAME_TO_FREQ,
+)
+from src.core.common.timeframes import (
+    get_timeframe_minutes as parse_timeframe_to_minutes,
+)
+from src.core.common.timeframes import (
+    validate_timeframe as validate_phase1_timeframe,
+)
 from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
@@ -31,7 +44,7 @@ from src.models.config.data_requirements import (
 # =============================================================================
 # BARRIERS CONFIG
 # =============================================================================
-from src.pipeline.config.barriers_config import (
+from src.data.pipeline.config.barriers_config import (
     BARRIER_PARAMS,
     BARRIER_PARAMS_DEFAULT,
     PERCENTAGE_BARRIER_PARAMS,
@@ -46,9 +59,40 @@ from src.pipeline.config.barriers_config import (
 )
 
 # =============================================================================
+# FEATURE SETS CONFIG
+# =============================================================================
+from src.data.pipeline.config.feature_sets import (
+    FEATURE_SET_ALIASES,
+    FEATURE_SET_DEFINITIONS,
+    FeatureSetDefinition,
+    get_feature_set_definitions,
+    resolve_feature_set_name,
+    resolve_feature_set_names,
+    validate_feature_set_config,
+)
+
+# =============================================================================
+# FEATURES CONFIG
+# =============================================================================
+from src.data.pipeline.config.features import (
+    CORRELATION_THRESHOLD,
+    DRIFT_CONFIG,
+    MTF_CONFIG,
+    STATIONARITY_TESTS,
+    VARIANCE_THRESHOLD,
+    get_drift_config,
+    get_mtf_config,
+    get_stationarity_config,
+    validate_drift_config,
+    validate_feature_thresholds,
+    validate_mtf_config,
+    validate_stationarity_config,
+)
+
+# =============================================================================
 # LABELING CONFIG
 # =============================================================================
-from src.pipeline.config.labeling_config import (
+from src.data.pipeline.config.labeling_config import (
     DEFAULT_LABELING_STRATEGY,
     LABEL_BALANCE_CONSTRAINTS,
     LABELING_STRATEGY_CONFIGS,
@@ -62,7 +106,7 @@ from src.pipeline.config.labeling_config import (
 # =============================================================================
 # LABELS CONFIG
 # =============================================================================
-from src.pipeline.config.labels import (
+from src.data.pipeline.config.labels import (
     ALL_LABEL_TEMPLATES,
     LABEL_COLUMN_METADATA,
     OPTIONAL_LABEL_TEMPLATES,
@@ -75,44 +119,20 @@ from src.pipeline.config.labels import (
 )
 
 # =============================================================================
-# FEATURE SETS CONFIG
+# MULTI-MODEL CONFIG
 # =============================================================================
-from src.pipeline.config.feature_sets import (
-    FEATURE_SET_ALIASES,
-    FEATURE_SET_DEFINITIONS,
-    FeatureSetDefinition,
-    get_feature_set_definitions,
-    resolve_feature_set_name,
-    resolve_feature_set_names,
-    validate_feature_set_config,
-)
-
-# =============================================================================
-# FEATURES CONFIG
-# =============================================================================
-from src.pipeline.config.features import (
-    CORRELATION_THRESHOLD,
-    DRIFT_CONFIG,
-    MTF_CONFIG,
-    STATIONARITY_TESTS,
-    SUPPORTED_TIMEFRAMES as PHASE1_SUPPORTED_TIMEFRAMES,
-    TIMEFRAME_TO_FREQ as PHASE1_TIMEFRAME_TO_FREQ,
-    VARIANCE_THRESHOLD,
-    get_drift_config,
-    get_mtf_config,
-    get_stationarity_config,
-    parse_timeframe_to_minutes,
-    validate_drift_config,
-    validate_feature_thresholds,
-    validate_mtf_config,
-    validate_stationarity_config,
-    validate_timeframe as validate_phase1_timeframe,
+from src.data.pipeline.config.multi_model import (
+    MultiModelPipelineConfig,
+    build_multi_model_config,
+    expand_ensemble_models,
+    get_recommended_feature_set,
+    validate_multi_model_setup,
 )
 
 # =============================================================================
 # REGIME CONFIG
 # =============================================================================
-from src.pipeline.config.regime_config import (
+from src.data.pipeline.config.regime_config import (
     REGIME_BARRIER_ADJUSTMENTS,
     REGIME_CONFIG,
     get_regime_adjusted_barriers,
@@ -121,8 +141,10 @@ from src.pipeline.config.regime_config import (
 # =============================================================================
 # RUNTIME CONFIG
 # =============================================================================
-from src.pipeline.config.runtime import (
+from src.data.pipeline.config.runtime import (
     CONFIG_DIR as PHASE1_CONFIG_DIR,
+)
+from src.data.pipeline.config.runtime import (
     DATA_DIR,
     EMBARGO_BARS,
     PROJECT_ROOT,
@@ -138,18 +160,9 @@ from src.pipeline.config.runtime import (
     VAL_RATIO,
     get_timeframe_metadata,
     set_global_seeds,
-    validate_config as validate_runtime_config,
 )
-
-# =============================================================================
-# MULTI-MODEL CONFIG
-# =============================================================================
-from src.pipeline.config.multi_model import (
-    MultiModelPipelineConfig,
-    build_multi_model_config,
-    expand_ensemble_models,
-    get_recommended_feature_set,
-    validate_multi_model_setup,
+from src.data.pipeline.config.runtime import (
+    validate_config as validate_runtime_config,
 )
 
 __all__ = [

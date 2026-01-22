@@ -5,7 +5,7 @@ Unified interface for constructing different bar types.
 Integrates with pipeline configuration.
 
 Usage:
-    from src.pipeline.stages.clean.bar_builders import build_bars, BarConfig
+    from src.data.pipeline.stages.clean.bar_builders import build_bars, BarConfig
 
     # Build with explicit parameters
     bars = build_bars(df, bar_type='volume', volume_threshold=100_000)

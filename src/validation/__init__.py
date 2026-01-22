@@ -7,12 +7,40 @@ statistical model comparison, bootstrap confidence intervals,
 feature-label leakage detection, ensemble diversity analysis,
 regime-conditional evaluation, production backtesting,
 walk-forward validation, CPCV, PBO, and feature store.
+
+Note: Meta-labeling components are NOT re-exported here to avoid circular imports.
+Import them directly:
+    from src.data.pipeline.stages.labeling import MetaLabeler, BetSizeMethod
+    from src.data.pipeline.stages.meta_labeling import (
+        MetaLabelGenerator, BetSizer, PrimaryClassifier, run_meta_labeling
+    )
 """
 
+# Phase 5: Feature Store
+from src.data.store import (
+    CacheMetadata,
+    DataSource,
+    FeatureCache,
+    FeatureIntegrityError,
+    FeatureLineage,
+    FeatureNotFoundError,
+    FeatureStore,
+    FeatureStoreError,
+    LineageTracker,
+    SemanticVersion,
+    Transformation,
+    TransformationType,
+    VersionInfo,
+    VersionManager,
+    compute_config_hash,
+    compute_dataframe_checksum,
+    compute_file_checksum,
+    compute_schema_hash,
+)
 from src.inference.backtesting import (
     BacktestConfig,
-    BacktestResult,
     Backtester,
+    BacktestResult,
     CostCalculator,
     EquityCurve,
     ExecutionModel,
@@ -32,13 +60,6 @@ from src.inference.backtesting import (
     calculate_win_rate,
     run_backtest,
     run_walk_forward_backtest,
-)
-from src.validation.cv.walk_forward import (
-    WalkForwardConfig,
-    WalkForwardEvaluator,
-    WalkForwardResult,
-    WindowMetrics,
-    create_walk_forward_evaluator,
 )
 from src.models.ensemble.diversity import (
     DiversityAnalyzer,
@@ -78,6 +99,32 @@ from src.validation.bootstrap import (
     bootstrap_sharpe_ratio,
     bootstrap_win_rate,
 )
+
+# Phase 5: CPCV (Combinatorial Purged Cross-Validation)
+from src.validation.cv.cpcv import (
+    CombinatorialPurgedCV,
+    CPCVConfig,
+    CPCVPathResult,
+    CPCVResult,
+    create_cpcv,
+)
+
+# Phase 5: PBO (Probability of Backtest Overfitting)
+from src.validation.cv.pbo import (
+    PBOConfig,
+    PBOResult,
+    analyze_overfitting_risk,
+    compute_pbo,
+    compute_pbo_from_returns,
+    pbo_gate,
+)
+from src.validation.cv.walk_forward import (
+    WalkForwardConfig,
+    WalkForwardEvaluator,
+    WalkForwardResult,
+    WindowMetrics,
+    create_walk_forward_evaluator,
+)
 from src.validation.deflated_sharpe import (
     DSRConfig,
     DSRResult,
@@ -109,73 +156,6 @@ from src.validation.statistical_tests import (
     diebold_mariano_test,
     paired_ttest,
     wilcoxon_test,
-)
-
-# Phase 5: CPCV (Combinatorial Purged Cross-Validation)
-from src.validation.cv.cpcv import (
-    CombinatorialPurgedCV,
-    CPCVConfig,
-    CPCVPathResult,
-    CPCVResult,
-    create_cpcv,
-)
-
-# Phase 5: PBO (Probability of Backtest Overfitting)
-from src.validation.cv.pbo import (
-    PBOConfig,
-    PBOResult,
-    analyze_overfitting_risk,
-    compute_pbo,
-    compute_pbo_from_returns,
-    pbo_gate,
-)
-
-# Phase 5: Feature Store
-from src.data.store import (
-    CacheMetadata,
-    DataSource,
-    FeatureCache,
-    FeatureIntegrityError,
-    FeatureLineage,
-    FeatureNotFoundError,
-    FeatureStore,
-    FeatureStoreError,
-    LineageTracker,
-    SemanticVersion,
-    Transformation,
-    TransformationType,
-    VersionInfo,
-    VersionManager,
-    compute_config_hash,
-    compute_dataframe_checksum,
-    compute_file_checksum,
-    compute_schema_hash,
-)
-
-# Phase 6: Meta-Labeling (Lopez de Prado AFML approach)
-from src.data.pipeline.stages.meta_labeling import (
-    # Primary classifier for high-recall direction prediction
-    PrimaryClassifier,
-    PrimaryModelConfig,
-    RecallOptimizer,
-    # Meta-label generation (1=correct, 0=incorrect)
-    MetaLabelGenerator,
-    MetaLabelingConfig,
-    MetaLabelResult,
-    # Bet sizing (Kelly, volatility-scaled, etc.)
-    BetSizer,
-    BetSizingMethod,
-    KellyCriterion as MetaKellyCriterion,  # Renamed to avoid conflict with backtesting
-    VolatilityScaler,
-    # Pipeline integration
-    run_meta_labeling,
-    add_meta_labels_standalone,
-)
-
-# Phase 6: Alternative MetaLabeler from labeling module
-from src.data.pipeline.stages.labeling import (
-    MetaLabeler,
-    BetSizeMethod,
 )
 
 __all__ = [
@@ -303,23 +283,6 @@ __all__ = [
     "compute_dataframe_checksum",
     "compute_schema_hash",
     "compute_config_hash",
-    # Meta-Labeling - Primary Classifier (Phase 6)
-    "PrimaryClassifier",
-    "PrimaryModelConfig",
-    "RecallOptimizer",
-    # Meta-Labeling - Meta Label Generation (Phase 6)
-    "MetaLabelGenerator",
-    "MetaLabelingConfig",
-    "MetaLabelResult",
-    # Meta-Labeling - Bet Sizing (Phase 6)
-    "BetSizer",
-    "BetSizingMethod",
-    "MetaKellyCriterion",
-    "VolatilityScaler",
-    # Meta-Labeling - Pipeline Integration (Phase 6)
-    "run_meta_labeling",
-    "add_meta_labels_standalone",
-    # Meta-Labeling - Alternative Labeler (Phase 6)
-    "MetaLabeler",
-    "BetSizeMethod",
+    # Meta-Labeling (Phase 6) - Import directly from src.data.pipeline.stages.meta_labeling
+    # to avoid circular imports. See module docstring for details.
 ]

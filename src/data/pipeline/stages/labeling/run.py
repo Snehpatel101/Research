@@ -16,12 +16,11 @@ triple-barrier labeling cannot compute appropriate profit targets and stop losse
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.pipeline.utils import create_failed_result, create_stage_result
+from src.data.pipeline.utils import create_failed_result, create_stage_result
 
 from .triple_barrier import triple_barrier_numba
 
@@ -90,7 +89,11 @@ def validate_labeling_prerequisites(
     if missing_cols:
         context = ""
         if symbol or timeframe:
-            context = f" for {symbol} @ {timeframe}" if symbol and timeframe else f" for {symbol or timeframe}"
+            context = (
+                f" for {symbol} @ {timeframe}"
+                if symbol and timeframe
+                else f" for {symbol or timeframe}"
+            )
 
         raise ValueError(
             f"Labeling prerequisites not met{context}: "

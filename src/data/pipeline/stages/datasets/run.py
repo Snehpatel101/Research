@@ -16,15 +16,15 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.pipeline.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
-from src.pipeline.config.labels import OPTIONAL_LABEL_TEMPLATES, REQUIRED_LABEL_TEMPLATES
-from src.pipeline.utils.constants import METADATA_COLUMNS
-from src.pipeline.utils.feature_sets import (
+from src.data.pipeline.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
+from src.data.pipeline.config.labels import OPTIONAL_LABEL_TEMPLATES, REQUIRED_LABEL_TEMPLATES
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
+from src.data.pipeline.utils.constants import METADATA_COLUMNS
+from src.data.pipeline.utils.feature_sets import (
     build_feature_set_manifest,
     resolve_feature_set,
     validate_feature_set_columns,
 )
-from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 
 class FeatureSchemaError(ValueError):

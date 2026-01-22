@@ -33,16 +33,17 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.labeling.base import LabelingResult, LabelingStrategy, LabelingType
+from src.data.labeling.base import LabelingResult, LabelingStrategy, LabelingType
 
 # Try to import numba, fall back to pure Python if unavailable
 try:
     import numba as nb
+
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
@@ -113,7 +114,7 @@ class TripleBarrierConfig:
         if self.vol_lookback < 1:
             raise ValueError(f"vol_lookback must be at least 1, got {self.vol_lookback}")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary."""
         return {
             "upper_mult": self.upper_mult,
@@ -129,7 +130,7 @@ class TripleBarrierConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "TripleBarrierConfig":
+    def from_dict(cls, d: dict[str, Any]) -> TripleBarrierConfig:
         """Create config from dictionary."""
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
@@ -227,6 +228,7 @@ def _triple_barrier_python(
 
 
 if NUMBA_AVAILABLE:
+
     @nb.jit(nopython=True, cache=True)
     def triple_barrier_numba(
         close: np.ndarray,
@@ -449,9 +451,7 @@ else:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Pure Python fallback with transaction costs."""
         # Adjust k_up to include costs
-        return _triple_barrier_python(
-            close, high, low, atr, k_up + cost_in_atr, k_down, max_bars
-        )
+        return _triple_barrier_python(close, high, low, atr, k_up + cost_in_atr, k_down, max_bars)
 
 
 # =============================================================================
@@ -483,7 +483,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         >>> print(result.quality_metrics)
     """
 
-    def __init__(self, config: Optional[TripleBarrierConfig] = None) -> None:
+    def __init__(self, config: TripleBarrierConfig | None = None) -> None:
         """
         Initialize the triple-barrier labeler.
 
@@ -546,7 +546,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         # Rolling std
         scaling = np.ones(len(df))
         for i in range(vol_lookback, len(df)):
-            recent_vol = np.nanstd(returns[i - vol_lookback:i])
+            recent_vol = np.nanstd(returns[i - vol_lookback : i])
             long_term_vol = np.nanstd(returns[:i])
             if long_term_vol > 0:
                 ratio = recent_vol / long_term_vol
@@ -559,7 +559,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         Calculate transaction cost expressed in ATR units.
         """
         try:
-            from src.pipeline.config.barriers_config import get_tick_value, get_total_trade_cost
+            from src.data.pipeline.config.barriers_config import get_tick_value, get_total_trade_cost
 
             cost_ticks = get_total_trade_cost(
                 self.config.symbol, self.config.volatility_regime, include_slippage=True
@@ -582,9 +582,9 @@ class TripleBarrierLabeler(LabelingStrategy):
         self,
         df: pd.DataFrame,
         horizon: int,
-        k_up: Optional[float] = None,
-        k_down: Optional[float] = None,
-        max_bars: Optional[int] = None,
+        k_up: float | None = None,
+        k_down: float | None = None,
+        max_bars: int | None = None,
         **kwargs: Any,
     ) -> LabelingResult:
         """
@@ -743,7 +743,7 @@ class TripleBarrierLabeler(LabelingStrategy):
 
         return metrics
 
-    def get_class_distribution(self, labels: pd.Series) -> Dict[str, float]:
+    def get_class_distribution(self, labels: pd.Series) -> dict[str, float]:
         """
         Compute class distribution from labels.
 

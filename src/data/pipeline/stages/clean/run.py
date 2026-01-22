@@ -108,7 +108,9 @@ def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValida
                     has_datetime = True
                     break
                 except (ValueError, TypeError):
-                    warnings.append(f"Column '{actual_col}' exists but cannot be parsed as datetime")
+                    warnings.append(
+                        f"Column '{actual_col}' exists but cannot be parsed as datetime"
+                    )
 
     if not has_datetime:
         warnings.append("No datetime index or valid datetime column found")
@@ -147,12 +149,13 @@ def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValida
 
     return result
 
+
 # Import from local modules
 from . import clean_symbol_data, clean_symbol_data_multi_timeframe
 
 # StageResult imports - adjust path based on pipeline structure
 try:
-    from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+    from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 except ImportError:
     # Fallback for different import paths
     from pipeline.utils import StageResult, create_failed_result, create_stage_result

@@ -12,9 +12,10 @@ for each feature, family-based selection, and importance-guided search.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Dict, Optional, Any
+from typing import Any
 
 import numpy as np
 import optuna
@@ -23,11 +24,9 @@ from sklearn.model_selection import cross_val_score
 from src.core.constants import (
     DEFAULT_FEATURE_SELECTION_TRIALS,
     DEFAULT_MIN_FEATURES,
-    DEFAULT_OPTUNA_RANDOM_STATE,
     DEFAULT_N_SPLITS,
+    DEFAULT_OPTUNA_RANDOM_STATE,
 )
-from src.core.types import FeatureFamily
-
 
 logger = logging.getLogger(__name__)
 
@@ -56,17 +55,17 @@ class FeatureSelectionResult:
         trial_history: List of (n_features, score) tuples from all trials.
     """
 
-    selected_features: List[str]
-    all_features: List[str]
+    selected_features: list[str]
+    all_features: list[str]
     n_selected: int
     n_total: int
     selection_ratio: float
     best_score: float
-    feature_importance: Dict[str, float]
+    feature_importance: dict[str, float]
     study: optuna.Study
     baseline_score: float = 0.0
     improvement: float = 0.0
-    trial_history: List[tuple] = field(default_factory=list)
+    trial_history: list[tuple] = field(default_factory=list)
 
     def __repr__(self) -> str:
         return (
@@ -77,7 +76,7 @@ class FeatureSelectionResult:
             f"improvement={self.improvement:+.2%})"
         )
 
-    def get_top_features(self, n: int = 20) -> List[str]:
+    def get_top_features(self, n: int = 20) -> list[str]:
         """Get top N features by importance.
 
         Args:
@@ -86,12 +85,10 @@ class FeatureSelectionResult:
         Returns:
             List of feature names sorted by importance.
         """
-        sorted_features = sorted(
-            self.feature_importance.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_features = sorted(self.feature_importance.items(), key=lambda x: x[1], reverse=True)
         return [f[0] for f in sorted_features[:n]]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for serialization."""
         return {
             "selected_features": self.selected_features,
@@ -158,7 +155,7 @@ class FeatureSelector:
         selection_strategy: str = "binary",
         cv_folds: int = DEFAULT_N_SPLITS,
         random_state: int = DEFAULT_OPTUNA_RANDOM_STATE,
-        timeout: Optional[int] = None,
+        timeout: int | None = None,
         n_jobs: int = -1,
     ) -> None:
         if selection_strategy not in self.VALID_STRATEGIES:
@@ -177,20 +174,20 @@ class FeatureSelector:
         self.n_jobs = n_jobs
 
         # Internal state
-        self._feature_names: List[str] = []
-        self._feature_families: Dict[str, List[int]] = {}
-        self._initial_importance: Optional[Dict[str, float]] = None
+        self._feature_names: list[str] = []
+        self._feature_families: dict[str, list[int]] = {}
+        self._initial_importance: dict[str, float] | None = None
 
     def select_features(
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         scoring: str = "f1_weighted",
-        feature_families: Optional[Dict[str, List[str]]] = None,
-        initial_importance: Optional[Dict[str, float]] = None,
-        storage_path: Optional[str] = None,
+        feature_families: dict[str, list[str]] | None = None,
+        initial_importance: dict[str, float] | None = None,
+        storage_path: str | None = None,
     ) -> FeatureSelectionResult:
         """Run feature selection optimization.
 
@@ -236,9 +233,7 @@ class FeatureSelector:
 
         # Build family index for family strategy
         if self.selection_strategy == "family" and feature_families:
-            self._feature_families = self._build_family_index(
-                feature_names, feature_families
-            )
+            self._feature_families = self._build_family_index(feature_names, feature_families)
 
         # Compute baseline score with all features
         logger.info(f"Computing baseline score with {n_features} features...")
@@ -269,7 +264,7 @@ class FeatureSelector:
         )
 
         # Track trial history
-        trial_history: List[tuple] = []
+        trial_history: list[tuple] = []
 
         def objective(trial: optuna.Trial) -> float:
             # Select features based on strategy
@@ -278,9 +273,7 @@ class FeatureSelector:
                     trial, n_features, effective_min, effective_max
                 )
             elif self.selection_strategy == "family":
-                selected_indices = self._family_selection(
-                    trial, effective_min, effective_max
-                )
+                selected_indices = self._family_selection(trial, effective_min, effective_max)
             else:  # importance
                 selected_indices = self._importance_selection(
                     trial, n_features, effective_min, effective_max
@@ -342,9 +335,7 @@ class FeatureSelector:
 
         # Get best trial results
         best_trial = study.best_trial
-        best_indices = best_trial.user_attrs.get(
-            "selected_indices", list(range(n_features))
-        )
+        best_indices = best_trial.user_attrs.get("selected_indices", list(range(n_features)))
         selected_features = [feature_names[i] for i in best_indices]
 
         # Compute feature importance based on selection frequency
@@ -352,9 +343,7 @@ class FeatureSelector:
 
         # Calculate improvement
         improvement = (
-            (study.best_value - baseline_score) / baseline_score
-            if baseline_score > 0
-            else 0.0
+            (study.best_value - baseline_score) / baseline_score if baseline_score > 0 else 0.0
         )
 
         logger.info(
@@ -380,17 +369,15 @@ class FeatureSelector:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
-        feature_families: Optional[Dict[str, List[str]]],
+        feature_names: list[str],
+        feature_families: dict[str, list[str]] | None,
     ) -> None:
         """Validate input arguments."""
         if X.ndim != 2:
             raise ValueError(f"X must be 2D array, got shape {X.shape}")
 
         if len(y) != X.shape[0]:
-            raise ValueError(
-                f"X and y size mismatch: X has {X.shape[0]} samples, y has {len(y)}"
-            )
+            raise ValueError(f"X and y size mismatch: X has {X.shape[0]} samples, y has {len(y)}")
 
         if len(feature_names) != X.shape[1]:
             raise ValueError(
@@ -398,9 +385,7 @@ class FeatureSelector:
             )
 
         if self.selection_strategy == "family" and not feature_families:
-            raise ValueError(
-                "feature_families required for 'family' selection strategy"
-            )
+            raise ValueError("feature_families required for 'family' selection strategy")
 
     def _compute_baseline_score(
         self,
@@ -424,7 +409,7 @@ class FeatureSelector:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         scoring: str,
     ) -> FeatureSelectionResult:
@@ -450,11 +435,11 @@ class FeatureSelector:
 
     def _build_family_index(
         self,
-        feature_names: List[str],
-        feature_families: Dict[str, List[str]],
-    ) -> Dict[str, List[int]]:
+        feature_names: list[str],
+        feature_families: dict[str, list[str]],
+    ) -> dict[str, list[int]]:
         """Build mapping of family name to feature indices."""
-        family_index: Dict[str, List[int]] = {}
+        family_index: dict[str, list[int]] = {}
         name_to_idx = {name: i for i, name in enumerate(feature_names)}
 
         for family, members in feature_families.items():
@@ -470,9 +455,9 @@ class FeatureSelector:
         n_features: int,
         min_features: int,
         max_features: int,
-    ) -> List[int]:
+    ) -> list[int]:
         """Binary feature selection - include/exclude each feature."""
-        selected_indices: List[int] = []
+        selected_indices: list[int] = []
 
         for i in range(n_features):
             if trial.suggest_categorical(f"include_{i}", [True, False]):
@@ -485,9 +470,7 @@ class FeatureSelector:
             needed = min_features - len(selected_indices)
             if unselected:
                 extra = list(
-                    np.random.choice(
-                        unselected, size=min(needed, len(unselected)), replace=False
-                    )
+                    np.random.choice(unselected, size=min(needed, len(unselected)), replace=False)
                 )
                 selected_indices.extend(extra)
 
@@ -505,9 +488,9 @@ class FeatureSelector:
         trial: optuna.Trial,
         min_features: int,
         max_features: int,
-    ) -> List[int]:
+    ) -> list[int]:
         """Family-based feature selection - select entire families."""
-        selected_indices: List[int] = []
+        selected_indices: list[int] = []
 
         for family, indices in self._feature_families.items():
             if trial.suggest_categorical(f"include_family_{family}", [True, False]):
@@ -519,9 +502,7 @@ class FeatureSelector:
             self._feature_families
         ):
             for family, indices in self._feature_families.items():
-                if family not in families_added and not any(
-                    i in selected_indices for i in indices
-                ):
+                if family not in families_added and not any(i in selected_indices for i in indices):
                     selected_indices.extend(indices)
                     families_added.add(family)
                     if len(selected_indices) >= min_features:
@@ -542,16 +523,14 @@ class FeatureSelector:
         n_features: int,
         min_features: int,
         max_features: int,
-    ) -> List[int]:
+    ) -> list[int]:
         """Importance-guided feature selection."""
         if self._initial_importance is None:
             # Fall back to binary if no importance available
             return self._binary_selection(trial, n_features, min_features, max_features)
 
         # Sort features by importance
-        sorted_features = sorted(
-            self._initial_importance.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_features = sorted(self._initial_importance.items(), key=lambda x: x[1], reverse=True)
 
         name_to_idx = {name: i for i, name in enumerate(self._feature_names)}
 
@@ -559,7 +538,7 @@ class FeatureSelector:
         n_selected = trial.suggest_int("n_features", min_features, max_features)
 
         # Use importance to guide selection with some randomness
-        selected_indices: List[int] = []
+        selected_indices: list[int] = []
 
         for feat_name, importance in sorted_features:
             if feat_name not in name_to_idx:
@@ -590,8 +569,8 @@ class FeatureSelector:
         return selected_indices
 
     def _compute_selection_frequency(
-        self, study: optuna.Study, feature_names: List[str]
-    ) -> Dict[str, float]:
+        self, study: optuna.Study, feature_names: list[str]
+    ) -> dict[str, float]:
         """Compute feature importance based on selection frequency in top trials.
 
         Features that appear more frequently in high-scoring trials are
@@ -609,9 +588,7 @@ class FeatureSelector:
         weighted_counts = np.zeros(n_features)
 
         # Get completed trials sorted by value (best first)
-        completed_trials = [
-            t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
-        ]
+        completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
 
         if not completed_trials:
             return {name: 0.0 for name in feature_names}
@@ -637,9 +614,7 @@ class FeatureSelector:
         max_weighted = weighted_counts.max() if weighted_counts.max() > 0 else 1.0
         importance_scores = weighted_counts / max_weighted
 
-        return {
-            feature_names[i]: float(importance_scores[i]) for i in range(n_features)
-        }
+        return {feature_names[i]: float(importance_scores[i]) for i in range(n_features)}
 
 
 # =============================================================================
@@ -650,7 +625,7 @@ class FeatureSelector:
 def select_features(
     X: np.ndarray,
     y: np.ndarray,
-    feature_names: List[str],
+    feature_names: list[str],
     model_fn: Callable,
     n_trials: int = DEFAULT_FEATURE_SELECTION_TRIALS,
     min_features: int = DEFAULT_MIN_FEATURES,

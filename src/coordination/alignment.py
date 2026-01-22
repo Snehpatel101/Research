@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.common.timeframes import get_timeframe_minutes, normalize_timeframe
+from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
 
 if TYPE_CHECKING:
     pass
@@ -224,9 +224,7 @@ def apply_mtf_lag(
         return df.copy()
 
     if shift <= 0:
-        logger.warning(
-            "apply_mtf_lag: shift=%d is not positive, no lag applied", shift
-        )
+        logger.warning("apply_mtf_lag: shift=%d is not positive, no lag applied", shift)
         return df.copy()
 
     result = df.copy()

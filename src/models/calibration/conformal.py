@@ -283,9 +283,7 @@ class ConformalPredictor:
 
                 # Include classes until cumsum exceeds threshold
                 for j, idx in enumerate(sorted_idx):
-                    if j == 0:
-                        prediction_sets[i, idx] = True
-                    elif cumsum[j] <= self._threshold:
+                    if j == 0 or cumsum[j] <= self._threshold:
                         prediction_sets[i, idx] = True
                     else:
                         break

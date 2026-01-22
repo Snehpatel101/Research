@@ -13,8 +13,10 @@ This is the SINGLE SOURCE OF TRUTH for:
 """
 
 from __future__ import annotations
-from enum import Enum, auto
-from typing import TypeVar, Union, TYPE_CHECKING
+
+from enum import Enum
+from typing import TYPE_CHECKING, TypeVar, Union
+
 import numpy as np
 import pandas as pd
 
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
 # DATA RANK - Tensor dimensionality for different model types
 # =============================================================================
 
+
 class DataRank(int, Enum):
     """
     Data tensor dimensionality for model input.
@@ -34,14 +37,16 @@ class DataRank(int, Enum):
     - SEQUENCE_3D: (n_samples, seq_len, n_features) - RNN, CNN, most neural
     - MULTI_TF_4D: (n_samples, n_timeframes, seq_len, n_features) - PatchTST, iTransformer
     """
+
     TABULAR_2D = 2
     SEQUENCE_3D = 3
     MULTI_TF_4D = 4
 
     @classmethod
-    def from_model(cls, model_name: str) -> "DataRank":
+    def from_model(cls, model_name: str) -> DataRank:
         """Get the expected data rank for a model."""
         from src.core.constants import MODEL_DATA_RANKS
+
         rank = MODEL_DATA_RANKS.get(model_name.lower())
         if rank is None:
             raise ValueError(f"Unknown model: {model_name}")
@@ -52,6 +57,7 @@ class DataRank(int, Enum):
 # MODEL FAMILY - Groupings of models with similar characteristics
 # =============================================================================
 
+
 class ModelFamily(str, Enum):
     """
     Model family classification.
@@ -61,6 +67,7 @@ class ModelFamily(str, Enum):
     - Adapter type (2D/3D/4D)
     - Training hyperparameter defaults
     """
+
     BOOSTING = "boosting"
     CLASSICAL = "classical"
     NEURAL = "neural"
@@ -68,9 +75,10 @@ class ModelFamily(str, Enum):
     META_LEARNER = "meta_learner"
 
     @classmethod
-    def from_model(cls, model_name: str) -> "ModelFamily":
+    def from_model(cls, model_name: str) -> ModelFamily:
         """Get the family for a model."""
         from src.core.constants import MODEL_TO_FAMILY
+
         family = MODEL_TO_FAMILY.get(model_name.lower())
         if family is None:
             raise ValueError(f"Unknown model: {model_name}")
@@ -80,6 +88,7 @@ class ModelFamily(str, Enum):
 # =============================================================================
 # FEATURE FAMILY - 12 feature families (162 total features)
 # =============================================================================
+
 
 class FeatureFamily(str, Enum):
     """
@@ -100,6 +109,7 @@ class FeatureFamily(str, Enum):
     - REGIME: 9 (vol/trend regimes)
     - MTF: ~30 per higher timeframe
     """
+
     RAW = "raw"
     MOMENTUM = "momentum"
     MOVING_AVERAGE = "moving_average"
@@ -119,6 +129,7 @@ class FeatureFamily(str, Enum):
 # TRAINING MODE - How the model is trained
 # =============================================================================
 
+
 class TrainingMode(str, Enum):
     """
     Training mode - determines training procedure.
@@ -128,6 +139,7 @@ class TrainingMode(str, Enum):
     - REGIME_AWARE: Separate models per market regime
     - META_LABELING: Two-stage labeling (primary + confidence)
     """
+
     STANDARD = "standard"
     WALK_FORWARD = "walk_forward"
     REGIME_AWARE = "regime_aware"
@@ -138,6 +150,7 @@ class TrainingMode(str, Enum):
 # CV METHOD - Cross-validation approach
 # =============================================================================
 
+
 class CVMethod(str, Enum):
     """
     Cross-validation method with proper purge/embargo handling.
@@ -147,6 +160,7 @@ class CVMethod(str, Enum):
     - WALK_FORWARD: Expanding/sliding window
     - PBO: Probability of Backtest Overfitting
     """
+
     PURGED_KFOLD = "purged_kfold"
     CPCV = "cpcv"
     WALK_FORWARD = "walk_forward"
@@ -157,6 +171,7 @@ class CVMethod(str, Enum):
 # ADAPTER TYPE - Data transformation adapter
 # =============================================================================
 
+
 class AdapterType(str, Enum):
     """
     Adapter type for model data preparation.
@@ -165,12 +180,13 @@ class AdapterType(str, Enum):
     - SEQUENCE: 3D sliding window for RNN/CNN
     - MULTI_STREAM: 4D multi-timeframe for advanced transformers
     """
+
     TABULAR = "tabular"
     SEQUENCE = "sequence"
     MULTI_STREAM = "multi_stream"
 
     @classmethod
-    def from_rank(cls, rank: int) -> "AdapterType":
+    def from_rank(cls, rank: int) -> AdapterType:
         """Get adapter type from data rank."""
         mapping = {2: cls.TABULAR, 3: cls.SEQUENCE, 4: cls.MULTI_STREAM}
         if rank not in mapping:
@@ -182,6 +198,7 @@ class AdapterType(str, Enum):
 # LABELING METHOD - How labels are generated
 # =============================================================================
 
+
 class LabelingMethod(str, Enum):
     """
     Labeling method for target generation.
@@ -191,6 +208,7 @@ class LabelingMethod(str, Enum):
     - THRESHOLD: Fixed percentage thresholds
     - REGRESSION: Continuous return values
     """
+
     TRIPLE_BARRIER = "triple_barrier"
     DIRECTIONAL = "directional"
     THRESHOLD = "threshold"

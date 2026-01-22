@@ -17,11 +17,10 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import total_ordering
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Iterator
+    from collections.abc import Iterator
 
 logger = logging.getLogger(__name__)
 

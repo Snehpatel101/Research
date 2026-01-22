@@ -25,6 +25,7 @@ Requirements:
     - Phase 1 data in data/splits/scaled/
     - Model registered in ModelRegistry
 """
+
 from __future__ import annotations
 
 import argparse
@@ -371,10 +372,12 @@ def analyze_label_distribution(
 
         unique, counts = np.unique(y, return_counts=True)
         total = len(y)
-        distribution = {LABEL_MAP.get(int(c), str(c)): int(cnt) for c, cnt in zip(unique, counts)}
+        distribution = {
+            LABEL_MAP.get(int(c), str(c)): int(cnt) for c, cnt in zip(unique, counts, strict=False)
+        }
         percentages = {
             LABEL_MAP.get(int(c), str(c)): float(cnt / total * 100)
-            for c, cnt in zip(unique, counts)
+            for c, cnt in zip(unique, counts, strict=False)
         }
 
         result["splits"][name] = {
@@ -402,7 +405,7 @@ def analyze_label_distribution(
 
     result["class_balance"] = {
         "class_proportions": {
-            LABEL_MAP.get(int(c), str(c)): float(p) for c, p in zip(unique, props)
+            LABEL_MAP.get(int(c), str(c)): float(p) for c, p in zip(unique, props, strict=False)
         },
         "imbalance_score": float(imbalance),
         "is_balanced": imbalance < 0.1,  # Less than 10% deviation from uniform
@@ -579,9 +582,7 @@ def validate_time_splits(
         if train_end >= val_start:
             result["ordering_valid"] = False
             result["leakage_detected"] = True
-            result["issues"].append(
-                f"LEAKAGE: Train end ({train_end}) >= Val start ({val_start})"
-            )
+            result["issues"].append(f"LEAKAGE: Train end ({train_end}) >= Val start ({val_start})")
 
         if test_df is not None and datetime_col in test_df.columns:
             val_end = pd.to_datetime(val_df[datetime_col]).max()
@@ -627,17 +628,14 @@ def run_diagnostics(
     Returns:
         Dict with all diagnostic results
     """
-    from src.models.registry import ModelRegistry
-    from src.core.container import TimeSeriesDataContainer
-
     # Import models to ensure registration
     import src.models  # noqa: F401
+    from src.core.container import TimeSeriesDataContainer
+    from src.models.registry import ModelRegistry
 
     # Validate model exists
     if not ModelRegistry.is_registered(model_name):
-        raise ValueError(
-            f"Unknown model '{model_name}'. Available: {ModelRegistry.list_all()}"
-        )
+        raise ValueError(f"Unknown model '{model_name}'. Available: {ModelRegistry.list_all()}")
 
     # Get model info
     model_info = ModelRegistry.get_model_info(model_name)
@@ -798,7 +796,7 @@ def print_diagnostic_report(results: dict[str, Any]) -> None:
     print(f"Horizon: H{results['horizon']}")
     print(f"Model Family: {results['model_info']['family']}")
     print(f"Requires Sequences: {results['model_info']['requires_sequences']}")
-    print(f"\nData Shape:")
+    print("\nData Shape:")
     print(f"  Train samples: {results['data_shape']['n_train']:,}")
     print(f"  Val samples: {results['data_shape']['n_val']:,}")
     print(f"  Features: {results['data_shape']['n_features']}")
@@ -838,9 +836,7 @@ def print_diagnostic_report(results: dict[str, Any]) -> None:
         print(f"  {'Baseline':<20} {'Accuracy':>10} {'F1 Macro':>10}")
         print("  " + "-" * 42)
         for name, metrics in tests["baselines"].items():
-            print(
-                f"  {name:<20} {metrics['accuracy']:>10.4f} {metrics['f1_macro']:>10.4f}"
-            )
+            print(f"  {name:<20} {metrics['accuracy']:>10.4f} {metrics['f1_macro']:>10.4f}")
         print("\n  Model should significantly beat these baselines.")
         print(f"  Coin-flip (3-class) accuracy: ~{COIN_FLIP_ACCURACY:.3f}")
 
@@ -857,12 +853,12 @@ def print_diagnostic_report(results: dict[str, Any]) -> None:
                 count = split_data["distribution"][label]
                 print(f"    {label:<10}: {count:>8,} ({pct:>5.1f}%)")
 
-        print(f"\n  Class Balance:")
+        print("\n  Class Balance:")
         balance = dist["class_balance"]
         print(f"    Imbalance score: {balance['imbalance_score']:.4f}")
         print(f"    Is balanced: {balance['is_balanced']}")
 
-        print(f"\n  Autocorrelation (label persistence):")
+        print("\n  Autocorrelation (label persistence):")
         for split_name, ac in dist["autocorrelation"].items():
             print(f"    {split_name}: {ac['lag1_persistence']:.4f}")
         print("    (High persistence = labels are sticky, model may just predict previous)")
@@ -893,7 +889,7 @@ def print_diagnostic_report(results: dict[str, Any]) -> None:
                     f"{metrics['f1']:>10.4f} {metrics['support']:>10}"
                 )
 
-            print(f"\n  Overall:")
+            print("\n  Overall:")
             print(f"    Accuracy: {cm_data['overall']['accuracy']:.4f}")
             print(f"    Macro F1: {cm_data['overall']['macro_f1']:.4f}")
             print(f"    Weighted F1: {cm_data['overall']['weighted_f1']:.4f}")
@@ -1040,9 +1036,8 @@ def main() -> int:
 
     # Handle list-models
     if args.list_models:
-        from src.models.registry import ModelRegistry
-
         import src.models  # noqa: F401
+        from src.models.registry import ModelRegistry
 
         print("\nAvailable Models:")
         for family, models in sorted(ModelRegistry.list_models().items()):

@@ -33,9 +33,9 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -75,17 +75,19 @@ class PredictionResult:
     inference_time_ms: float
     n_samples: int
     is_ensemble: bool = False
-    individual_predictions: Optional[Dict[str, np.ndarray]] = None
+    individual_predictions: dict[str, np.ndarray] | None = None
 
     def to_dataframe(self) -> pd.DataFrame:
         """Convert to DataFrame with predictions."""
-        df = pd.DataFrame({
-            "prediction": self.class_predictions,
-            "confidence": self.confidence,
-            "prob_short": self.class_probabilities[:, 0],
-            "prob_neutral": self.class_probabilities[:, 1],
-            "prob_long": self.class_probabilities[:, 2],
-        })
+        df = pd.DataFrame(
+            {
+                "prediction": self.class_predictions,
+                "confidence": self.confidence,
+                "prob_short": self.class_probabilities[:, 0],
+                "prob_neutral": self.class_probabilities[:, 1],
+                "prob_long": self.class_probabilities[:, 2],
+            }
+        )
         return df
 
     def summary(self) -> str:
@@ -96,7 +98,7 @@ class PredictionResult:
             f"  Samples: {self.n_samples}",
             f"  Inference time: {self.inference_time_ms:.2f}ms",
             f"  Is ensemble: {self.is_ensemble}",
-            f"  Class distribution:",
+            "  Class distribution:",
             f"    Short (-1): {(self.class_predictions == -1).sum()}",
             f"    Neutral (0): {(self.class_predictions == 0).sum()}",
             f"    Long (1): {(self.class_predictions == 1).sum()}",
@@ -142,7 +144,7 @@ class InferenceOrchestrator:
 
     def __init__(
         self,
-        config: Optional[PipelineConfig] = None,
+        config: PipelineConfig | None = None,
     ) -> None:
         """
         Initialize InferenceOrchestrator.
@@ -151,15 +153,15 @@ class InferenceOrchestrator:
             config: Optional PipelineConfig from src/core
         """
         self.config = config
-        self._bundles: Dict[str, Any] = {}  # model_name -> ModelBundle
-        self._ensemble_bundle: Optional[Any] = None  # EnsembleBundle or meta-learner
-        self._preprocessing_graph: Optional[Any] = None
+        self._bundles: dict[str, Any] = {}  # model_name -> ModelBundle
+        self._ensemble_bundle: Any | None = None  # EnsembleBundle or meta-learner
+        self._preprocessing_graph: Any | None = None
         self._is_loaded = False
 
         logger.info("InferenceOrchestrator initialized")
 
     @classmethod
-    def from_config(cls, config: PipelineConfig) -> "InferenceOrchestrator":
+    def from_config(cls, config: PipelineConfig) -> InferenceOrchestrator:
         """
         Create orchestrator from PipelineConfig.
 
@@ -176,7 +178,7 @@ class InferenceOrchestrator:
         cls,
         config: PipelineConfig,
         load_ensemble: bool = True,
-    ) -> "InferenceOrchestrator":
+    ) -> InferenceOrchestrator:
         """
         Create orchestrator from experiment results.
 
@@ -212,9 +214,9 @@ class InferenceOrchestrator:
     @classmethod
     def from_bundle(
         cls,
-        bundle_path: Union[str, Path],
-        config: Optional[PipelineConfig] = None,
-    ) -> "InferenceOrchestrator":
+        bundle_path: str | Path,
+        config: PipelineConfig | None = None,
+    ) -> InferenceOrchestrator:
         """
         Create orchestrator from a single bundle.
 
@@ -243,9 +245,9 @@ class InferenceOrchestrator:
     @classmethod
     def from_bundles(
         cls,
-        bundle_paths: List[Union[str, Path]],
-        config: Optional[PipelineConfig] = None,
-    ) -> "InferenceOrchestrator":
+        bundle_paths: list[str | Path],
+        config: PipelineConfig | None = None,
+    ) -> InferenceOrchestrator:
         """
         Create orchestrator from multiple bundles.
 
@@ -277,8 +279,8 @@ class InferenceOrchestrator:
     def from_training_result(
         cls,
         training_result: Any,  # TrainingRunResult from PHASE_3
-        config: Optional[PipelineConfig] = None,
-    ) -> "InferenceOrchestrator":
+        config: PipelineConfig | None = None,
+    ) -> InferenceOrchestrator:
         """
         Create orchestrator from PHASE_3 TrainingRunResult.
 
@@ -309,8 +311,8 @@ class InferenceOrchestrator:
 
     def predict(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
-        model_name: Optional[str] = None,
+        X: pd.DataFrame | np.ndarray,
+        model_name: str | None = None,
         calibrate: bool = True,
     ) -> PredictionResult:
         """
@@ -334,7 +336,9 @@ class InferenceOrchestrator:
         if model_name:
             # Predict with specific model
             if model_name not in self._bundles:
-                raise ValueError(f"Model '{model_name}' not loaded. Available: {list(self._bundles.keys())}")
+                raise ValueError(
+                    f"Model '{model_name}' not loaded. Available: {list(self._bundles.keys())}"
+                )
             bundle = self._bundles[model_name]
             output = bundle.predict(X, calibrate=calibrate)
             is_ensemble = False
@@ -351,7 +355,7 @@ class InferenceOrchestrator:
             is_ensemble = False
 
         inference_time = (time.perf_counter() - start_time) * 1000
-        n_samples = len(X) if hasattr(X, '__len__') else X.shape[0]
+        n_samples = len(X) if hasattr(X, "__len__") else X.shape[0]
 
         return PredictionResult(
             class_predictions=output.class_predictions,
@@ -366,9 +370,9 @@ class InferenceOrchestrator:
 
     def predict_all(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
-    ) -> Dict[str, PredictionResult]:
+    ) -> dict[str, PredictionResult]:
         """
         Get predictions from all loaded models.
 
@@ -393,7 +397,7 @@ class InferenceOrchestrator:
     def predict_from_raw(
         self,
         raw_df: pd.DataFrame,
-        model_name: Optional[str] = None,
+        model_name: str | None = None,
         calibrate: bool = True,
     ) -> PredictionResult:
         """
@@ -430,10 +434,10 @@ class InferenceOrchestrator:
 
     def predict_batch(
         self,
-        data: Union[pd.DataFrame, Path],
+        data: pd.DataFrame | Path,
         batch_size: int = 10000,
-        model_name: Optional[str] = None,
-        output_path: Optional[Path] = None,
+        model_name: str | None = None,
+        output_path: Path | None = None,
         calibrate: bool = True,
         show_progress: bool = True,
     ) -> pd.DataFrame:
@@ -494,9 +498,9 @@ class InferenceOrchestrator:
 
     def predict_with_uncertainty(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get predictions with uncertainty estimates from all models.
 
@@ -524,19 +528,17 @@ class InferenceOrchestrator:
         all_results = self.predict_all(X, calibrate=calibrate)
 
         # Stack probabilities for uncertainty calculation
-        prob_stack = np.stack([
-            r.class_probabilities for name, r in all_results.items()
-            if name != "ensemble"
-        ])
+        prob_stack = np.stack(
+            [r.class_probabilities for name, r in all_results.items() if name != "ensemble"]
+        )
 
         # Calculate uncertainty as std of probabilities
         uncertainty = np.mean(np.std(prob_stack, axis=0), axis=1)
 
         # Calculate agreement as proportion of models predicting same class
-        pred_stack = np.stack([
-            r.class_predictions for name, r in all_results.items()
-            if name != "ensemble"
-        ])
+        pred_stack = np.stack(
+            [r.class_predictions for name, r in all_results.items() if name != "ensemble"]
+        )
         mode_predictions = np.apply_along_axis(
             lambda x: np.bincount(x.astype(int) + 1, minlength=3).argmax() - 1,
             axis=0,
@@ -559,7 +561,7 @@ class InferenceOrchestrator:
 
     def _predict_with_ensemble(
         self,
-        X: Union[pd.DataFrame, np.ndarray],
+        X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
     ) -> Any:
         """
@@ -573,7 +575,7 @@ class InferenceOrchestrator:
             PredictionOutput from ensemble
         """
         # If we have a dedicated ensemble bundle, use it directly
-        if hasattr(self._ensemble_bundle, 'predict'):
+        if hasattr(self._ensemble_bundle, "predict"):
             return self._ensemble_bundle.predict(X, calibrate=calibrate)
 
         # Otherwise, collect base model predictions and combine
@@ -588,6 +590,7 @@ class InferenceOrchestrator:
         confidence = np.max(avg_probs, axis=1)
 
         from src.models.base import PredictionOutput
+
         return PredictionOutput(
             class_predictions=class_predictions,
             class_probabilities=avg_probs,
@@ -621,6 +624,7 @@ class InferenceOrchestrator:
             # Try to load as EnsembleBundle first
             try:
                 from src.inference.ensemble_bundle import EnsembleBundle
+
                 self._ensemble_bundle = EnsembleBundle.load(ensemble_path)
                 logger.info("Loaded ensemble bundle")
                 return
@@ -629,6 +633,7 @@ class InferenceOrchestrator:
 
             # Try to load as a model bundle
             from src.inference.bundle import ModelBundle
+
             if (ensemble_path / "manifest.json").exists():
                 self._ensemble_bundle = ModelBundle.load(ensemble_path)
                 logger.info("Loaded ensemble as model bundle")
@@ -636,10 +641,10 @@ class InferenceOrchestrator:
 
             # Try to load meta-learner directly
             from src.models.ensemble import (
-                RidgeMetaLearner,
-                MLPMetaLearner,
-                XGBoostMeta,
                 CalibratedMetaLearner,
+                MLPMetaLearner,
+                RidgeMetaLearner,
+                XGBoostMeta,
             )
 
             # Determine meta-learner type from config
@@ -675,14 +680,14 @@ class InferenceOrchestrator:
         if self._bundles:
             first_bundle = next(iter(self._bundles.values()))
             return first_bundle.metadata.horizon
-        if self._ensemble_bundle is not None and hasattr(self._ensemble_bundle, 'metadata'):
+        if self._ensemble_bundle is not None and hasattr(self._ensemble_bundle, "metadata"):
             return self._ensemble_bundle.metadata.horizon
         if self.config is not None and self.config.horizons:
             return self.config.horizons[0]
         return 0
 
     @property
-    def loaded_models(self) -> List[str]:
+    def loaded_models(self) -> list[str]:
         """Get list of loaded model names."""
         models = list(self._bundles.keys())
         if self._ensemble_bundle is not None:
@@ -700,7 +705,7 @@ class InferenceOrchestrator:
         return self._preprocessing_graph is not None
 
     @property
-    def preprocessing_graph(self) -> Optional[Any]:
+    def preprocessing_graph(self) -> Any | None:
         """Get preprocessing graph if available."""
         return self._preprocessing_graph
 
@@ -714,14 +719,14 @@ class InferenceOrchestrator:
         self._preprocessing_graph = graph
         logger.info("Preprocessing graph set")
 
-    def validate(self) -> Dict[str, Any]:
+    def validate(self) -> dict[str, Any]:
         """
         Validate orchestrator state.
 
         Returns:
             Dict with validation results
         """
-        issues: List[str] = []
+        issues: list[str] = []
 
         if not self._bundles:
             issues.append("No model bundles loaded")
@@ -761,7 +766,7 @@ class InferenceOrchestrator:
 
 
 def load_inference(
-    experiment_dir: Union[str, Path],
+    experiment_dir: str | Path,
 ) -> InferenceOrchestrator:
     """
     Convenience function to load inference from experiment.
@@ -783,8 +788,8 @@ def load_inference(
 
 
 def predict_from_bundle(
-    bundle_path: Union[str, Path],
-    X: Union[pd.DataFrame, np.ndarray],
+    bundle_path: str | Path,
+    X: pd.DataFrame | np.ndarray,
     calibrate: bool = True,
 ) -> PredictionResult:
     """
@@ -803,9 +808,9 @@ def predict_from_bundle(
 
 
 def predict_batch_from_bundle(
-    bundle_path: Union[str, Path],
-    data_path: Union[str, Path],
-    output_path: Union[str, Path],
+    bundle_path: str | Path,
+    data_path: str | Path,
+    output_path: str | Path,
     batch_size: int = 10000,
 ) -> pd.DataFrame:
     """

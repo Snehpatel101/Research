@@ -155,9 +155,9 @@ def _validate_sequences(
                     result.add_warning(
                         f"{name}/{sym}: Only {n_seq} sequences (< {MIN_SEQUENCES_PER_SYMBOL})"
                     )
-                result.metadata.setdefault("sequences_per_symbol", {}).setdefault(name, {})[
-                    sym
-                ] = n_seq
+                result.metadata.setdefault("sequences_per_symbol", {}).setdefault(name, {})[sym] = (
+                    n_seq
+                )
 
 
 def _validate_integration(container: TimeSeriesDataContainer, result: ValidationResult) -> None:
@@ -243,7 +243,7 @@ def main() -> int:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s: %(message)s"
     )
-    from src.pipeline.stages.datasets.container import TimeSeriesDataContainer
+    from src.data.pipeline.stages.datasets.container import TimeSeriesDataContainer
 
     path = Path(args.path)
     if not path.is_dir():

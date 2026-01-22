@@ -18,25 +18,24 @@ Functions:
 """
 
 from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import List, Optional, Any, Union
-from pathlib import Path
 
 from src.core.constants import (
-    MODEL_TO_FAMILY,
-    MODEL_DATA_RANKS,
-    CANONICAL_TIMEFRAMES,
-    OHLCV_COLUMNS,
-    REQUIRED_COLUMNS,
     ALL_MODELS,
+    CANONICAL_TIMEFRAMES,
     N_CLASSES,
+    OHLCV_COLUMNS,
 )
-
 
 # =============================================================================
 # VALIDATION ERROR
 # =============================================================================
+
 
 class ValidationError(ValueError):
     """
@@ -51,9 +50,9 @@ class ValidationError(ValueError):
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
-        expected: Optional[Any] = None,
-        actual: Optional[Any] = None,
+        field: str | None = None,
+        expected: Any | None = None,
+        actual: Any | None = None,
     ):
         self.field = field
         self.expected = expected
@@ -72,6 +71,7 @@ class ValidationError(ValueError):
 # =============================================================================
 # ARRAY VALIDATION
 # =============================================================================
+
 
 def validate_input_shape(
     X: np.ndarray,
@@ -237,8 +237,9 @@ def validate_probabilities(
 # FEATURE VALIDATION
 # =============================================================================
 
+
 def validate_features(
-    feature_columns: List[str],
+    feature_columns: list[str],
     min_features: int,
     max_features: int,
     context: str = "features",
@@ -286,9 +287,10 @@ def validate_features(
 # DATAFRAME VALIDATION
 # =============================================================================
 
+
 def validate_dataframe(
     df: pd.DataFrame,
-    required_columns: Optional[List[str]] = None,
+    required_columns: list[str] | None = None,
     context: str = "DataFrame",
     check_ohlcv: bool = False,
 ) -> None:
@@ -398,6 +400,7 @@ def validate_ohlcv(df: pd.DataFrame, context: str = "OHLCV") -> None:
 # MODEL VALIDATION
 # =============================================================================
 
+
 def validate_model_name(model_name: str, context: str = "model") -> None:
     """
     Validate that model name is recognized.
@@ -419,7 +422,7 @@ def validate_model_name(model_name: str, context: str = "model") -> None:
         )
 
 
-def validate_model_list(models: List[str], context: str = "models") -> None:
+def validate_model_list(models: list[str], context: str = "models") -> None:
     """
     Validate a list of model names.
 
@@ -441,8 +444,9 @@ def validate_model_list(models: List[str], context: str = "models") -> None:
 # PATH VALIDATION
 # =============================================================================
 
+
 def validate_path_exists(
-    path: Union[str, Path],
+    path: str | Path,
     must_be_file: bool = False,
     must_be_dir: bool = False,
     context: str = "path",
@@ -489,6 +493,7 @@ def validate_path_exists(
 # TIMEFRAME VALIDATION
 # =============================================================================
 
+
 def validate_timeframe(timeframe: str, context: str = "timeframe") -> None:
     """
     Validate that timeframe is canonical.
@@ -509,7 +514,7 @@ def validate_timeframe(timeframe: str, context: str = "timeframe") -> None:
         )
 
 
-def validate_timeframe_list(timeframes: List[str], context: str = "timeframes") -> None:
+def validate_timeframe_list(timeframes: list[str], context: str = "timeframes") -> None:
     """
     Validate a list of timeframes.
 

@@ -285,9 +285,7 @@ class FeatureStore:
             manager = self._get_version_manager(feature_set)
             latest = manager.latest_version
             if latest is None:
-                raise FeatureNotFoundError(
-                    f"No versions found for feature set '{feature_set}'"
-                )
+                raise FeatureNotFoundError(f"No versions found for feature set '{feature_set}'")
             version = str(latest)
 
         # Find cache entry
@@ -299,9 +297,7 @@ class FeatureStore:
                 break
 
         if matching_entry is None:
-            raise FeatureNotFoundError(
-                f"Features not found: {feature_set}/{symbol}/{version}"
-            )
+            raise FeatureNotFoundError(f"Features not found: {feature_set}/{symbol}/{version}")
 
         # Get from cache
         try:
@@ -314,9 +310,7 @@ class FeatureStore:
             raise FeatureIntegrityError(str(e)) from e
 
         if result is None:
-            raise FeatureNotFoundError(
-                f"Failed to load features: {feature_set}/{symbol}/{version}"
-            )
+            raise FeatureNotFoundError(f"Failed to load features: {feature_set}/{symbol}/{version}")
 
         df, metadata = result
         logger.info(
@@ -356,9 +350,7 @@ class FeatureStore:
             manager = self._get_version_manager(feature_set)
             latest = manager.latest_version
             if latest is None:
-                raise FeatureNotFoundError(
-                    f"No versions found for feature set '{feature_set}'"
-                )
+                raise FeatureNotFoundError(f"No versions found for feature set '{feature_set}'")
             version = str(latest)
 
         # Find cache entry
@@ -373,9 +365,7 @@ class FeatureStore:
                 if result is not None:
                     return result
 
-        raise FeatureNotFoundError(
-            f"Features not found: {feature_set}/{symbol}/{version}"
-        )
+        raise FeatureNotFoundError(f"Features not found: {feature_set}/{symbol}/{version}")
 
     def get_features_as_of(
         self,
@@ -433,8 +423,7 @@ class FeatureStore:
 
         if datetime_col is None:
             raise ValueError(
-                f"No datetime column found in features. "
-                f"Available columns: {list(df.columns)}"
+                f"No datetime column found in features. " f"Available columns: {list(df.columns)}"
             )
 
         # Convert to datetime if needed
@@ -501,9 +490,7 @@ class FeatureStore:
                 break
 
         if datetime_col is None:
-            logger.warning(
-                "No datetime column found. Point-in-time queries will not work."
-            )
+            logger.warning("No datetime column found. Point-in-time queries will not work.")
 
         # Compute hashes for versioning
         schema_hash = compute_schema_hash(
@@ -809,8 +796,7 @@ class FeatureStore:
 
         if invalidated:
             logger.info(
-                f"Invalidated features: {feature_set}/{symbol}"
-                + (f"/{version}" if version else "")
+                f"Invalidated features: {feature_set}/{symbol}" + (f"/{version}" if version else "")
             )
 
         return invalidated

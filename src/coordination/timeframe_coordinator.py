@@ -12,7 +12,7 @@ Key responsibilities:
 
 Usage:
     from src.coordination import TimeframeCoordinator
-    from src.contracts import get_model_contract
+    from src.core.contracts import get_model_contract
 
     coordinator = TimeframeCoordinator(
         data_dir="data/splits/scaled",
@@ -40,12 +40,11 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.common.timeframes import (
-    CANONICAL_TIMEFRAMES,
+from src.core.common.timeframes import (
     get_timeframe_minutes,
     normalize_timeframe,
 )
-from src.contracts import ModelContract, get_model_contract
+from src.core.contracts import ModelContract, get_model_contract
 
 if TYPE_CHECKING:
     pass
@@ -53,32 +52,34 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Columns to exclude when auto-detecting features
-_METADATA_COLUMNS = frozenset({
-    # Index/timestamp
-    "timestamp",
-    "date",
-    "datetime",
-    "time",
-    "index",
-    # Labels
-    "label",
-    "target",
-    "y",
-    "label_horizon_5",
-    "label_horizon_10",
-    "label_horizon_15",
-    "label_horizon_20",
-    # Weights
-    "weight",
-    "sample_weight",
-    "weights",
-    # Other metadata
-    "symbol",
-    "contract",
-    "session",
-    "split",
-    "fold",
-})
+_METADATA_COLUMNS = frozenset(
+    {
+        # Index/timestamp
+        "timestamp",
+        "date",
+        "datetime",
+        "time",
+        "index",
+        # Labels
+        "label",
+        "target",
+        "y",
+        "label_horizon_5",
+        "label_horizon_10",
+        "label_horizon_15",
+        "label_horizon_20",
+        # Weights
+        "weight",
+        "sample_weight",
+        "weights",
+        # Other metadata
+        "symbol",
+        "contract",
+        "session",
+        "split",
+        "fold",
+    }
+)
 
 # Label column patterns to exclude
 _LABEL_PATTERNS = ("label_", "target_", "horizon_", "y_")
@@ -331,9 +332,7 @@ class TimeframeCoordinator:
             return
 
         # Find smallest timeframe by minutes
-        tf_minutes = [
-            (tf, get_timeframe_minutes(tf)) for tf in self._timeframe_data.keys()
-        ]
+        tf_minutes = [(tf, get_timeframe_minutes(tf)) for tf in self._timeframe_data.keys()]
         tf_minutes.sort(key=lambda x: x[1])
         self._anchor_timeframe = tf_minutes[0][0]
 
@@ -378,8 +377,7 @@ class TimeframeCoordinator:
         tf_norm = normalize_timeframe(timeframe)
         if tf_norm not in self._timeframe_data:
             raise KeyError(
-                f"Timeframe '{tf_norm}' not loaded. "
-                f"Available: {self.loaded_timeframes}"
+                f"Timeframe '{tf_norm}' not loaded. " f"Available: {self.loaded_timeframes}"
             )
         return self._timeframe_data[tf_norm]
 

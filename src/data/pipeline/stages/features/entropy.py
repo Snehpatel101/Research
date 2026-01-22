@@ -30,7 +30,6 @@ All features use .shift(1) to prevent lookahead bias.
 """
 
 import logging
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -125,9 +124,7 @@ def _calculate_shannon_entropy(bin_counts: np.ndarray) -> float:
     return entropy
 
 
-def _rolling_shannon_entropy(
-    returns: np.ndarray, window: int, n_bins: int
-) -> np.ndarray:
+def _rolling_shannon_entropy(returns: np.ndarray, window: int, n_bins: int) -> np.ndarray:
     """
     Calculate rolling Shannon entropy over returns.
 
@@ -177,7 +174,7 @@ def add_shannon_entropy(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
     price_col: str = "close",
-    windows: Optional[list[int]] = None,
+    windows: list[int] | None = None,
     n_bins: int = DEFAULT_SHANNON_BINS,
 ) -> pd.DataFrame:
     """
@@ -365,7 +362,7 @@ def add_lempel_ziv_complexity(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
     price_col: str = "close",
-    windows: Optional[list[int]] = None,
+    windows: list[int] | None = None,
 ) -> pd.DataFrame:
     """
     Add Lempel-Ziv complexity measuring pattern complexity in price movements.
@@ -422,9 +419,7 @@ def add_lempel_ziv_complexity(
         # ANTI-LOOKAHEAD: shift(1) ensures feature at bar[t] uses data up to bar[t-1]
         df[col_name] = pd.Series(lz_values, index=df.index).shift(1)
 
-        feature_metadata[col_name] = (
-            f"Lempel-Ziv complexity normalized ({window}-period, lagged)"
-        )
+        feature_metadata[col_name] = f"Lempel-Ziv complexity normalized ({window}-period, lagged)"
 
     return df
 
@@ -560,7 +555,7 @@ def add_approximate_entropy(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
     price_col: str = "close",
-    windows: Optional[list[int]] = None,
+    windows: list[int] | None = None,
     m: int = DEFAULT_APEN_M,
     r: float = DEFAULT_APEN_R,
 ) -> pd.DataFrame:
@@ -625,9 +620,7 @@ def add_approximate_entropy(
         # ANTI-LOOKAHEAD: shift(1) ensures feature at bar[t] uses data up to bar[t-1]
         df[col_name] = pd.Series(apen, index=df.index).shift(1)
 
-        feature_metadata[col_name] = (
-            f"Approximate entropy (m={m}, r={r}, {window}-period, lagged)"
-        )
+        feature_metadata[col_name] = f"Approximate entropy (m={m}, r={r}, {window}-period, lagged)"
 
     return df
 
@@ -781,7 +774,7 @@ def add_hurst_features(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
     price_col: str = "close",
-    windows: Optional[list[int]] = None,
+    windows: list[int] | None = None,
 ) -> pd.DataFrame:
     """
     Add Hurst exponent features for mean-reversion vs trending detection.
@@ -843,9 +836,7 @@ def add_hurst_features(
         # ANTI-LOOKAHEAD: shift(1) ensures feature at bar[t] uses data up to bar[t-1]
         df[col_name] = pd.Series(hurst, index=df.index).shift(1)
 
-        feature_metadata[col_name] = (
-            f"Hurst exponent ({window}-period R/S method, lagged)"
-        )
+        feature_metadata[col_name] = f"Hurst exponent ({window}-period R/S method, lagged)"
 
     # Add regime classification based on primary window (middle window)
     primary_window = windows[len(windows) // 2] if len(windows) > 0 else 100
@@ -934,7 +925,7 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
         return count
 
     # Count matches for m and m+1 dimensions
-    B = count_matches(m)      # Matches for dimension m
+    B = count_matches(m)  # Matches for dimension m
     A = count_matches(m + 1)  # Matches for dimension m+1
 
     # Avoid division by zero
@@ -949,9 +940,7 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
     return -np.log(A / B)
 
 
-def _rolling_sample_entropy(
-    data: np.ndarray, window: int, m: int, r: float
-) -> np.ndarray:
+def _rolling_sample_entropy(data: np.ndarray, window: int, m: int, r: float) -> np.ndarray:
     """
     Calculate rolling Sample Entropy.
 
@@ -1001,7 +990,7 @@ def add_sample_entropy(
     df: pd.DataFrame,
     feature_metadata: dict[str, str],
     price_col: str = "close",
-    windows: Optional[list[int]] = None,
+    windows: list[int] | None = None,
     m: int = DEFAULT_SAMPLE_ENTROPY_M,
     r: float = DEFAULT_SAMPLE_ENTROPY_R,
 ) -> pd.DataFrame:
@@ -1073,32 +1062,30 @@ def add_sample_entropy(
         # ANTI-LOOKAHEAD: shift(1) ensures feature at bar[t] uses data up to bar[t-1]
         df[col_name] = pd.Series(sampen, index=df.index).shift(1)
 
-        feature_metadata[col_name] = (
-            f"Sample entropy (m={m}, r={r}, {window}-period, lagged)"
-        )
+        feature_metadata[col_name] = f"Sample entropy (m={m}, r={r}, {window}-period, lagged)"
 
     return df
 
 
 def add_entropy_features(
     df: pd.DataFrame,
-    feature_metadata: Optional[dict[str, str]] = None,
+    feature_metadata: dict[str, str] | None = None,
     price_col: str = "close",
     include_shannon: bool = True,
     include_lempel_ziv: bool = True,
     include_approximate: bool = True,
     include_sample: bool = True,
     include_hurst: bool = True,
-    shannon_windows: Optional[list[int]] = None,
+    shannon_windows: list[int] | None = None,
     shannon_bins: int = DEFAULT_SHANNON_BINS,
-    lz_windows: Optional[list[int]] = None,
-    apen_windows: Optional[list[int]] = None,
+    lz_windows: list[int] | None = None,
+    apen_windows: list[int] | None = None,
     apen_m: int = DEFAULT_APEN_M,
     apen_r: float = DEFAULT_APEN_R,
-    sampen_windows: Optional[list[int]] = None,
+    sampen_windows: list[int] | None = None,
     sampen_m: int = DEFAULT_SAMPLE_ENTROPY_M,
     sampen_r: float = DEFAULT_SAMPLE_ENTROPY_R,
-    hurst_windows: Optional[list[int]] = None,
+    hurst_windows: list[int] | None = None,
 ) -> pd.DataFrame:
     """
     Add all information-theoretic entropy features from OHLCV data.

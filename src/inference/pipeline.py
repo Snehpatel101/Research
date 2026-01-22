@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 
 from src.inference.bundle import ModelBundle
-from src.models.base import PredictionOutput
+from src.models.base import PredictionResult
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class InferenceResult:
     Result from inference pipeline.
 
     Attributes:
-        predictions: PredictionOutput with class predictions and probabilities
+        predictions: PredictionResult with class predictions and probabilities
         inference_time_ms: Time taken for inference in milliseconds
         model_name: Name of the model used
         horizon: Prediction horizon
@@ -59,7 +59,7 @@ class InferenceResult:
         metadata: Additional inference metadata
     """
 
-    predictions: PredictionOutput
+    predictions: PredictionResult
     inference_time_ms: float
     model_name: str
     horizon: int
@@ -85,13 +85,13 @@ class EnsembleResult:
     Result from ensemble inference.
 
     Attributes:
-        predictions: Combined PredictionOutput
+        predictions: Combined PredictionResult
         individual_results: Results from each model
         voting_method: Method used for combining predictions
         inference_time_ms: Total time in milliseconds
     """
 
-    predictions: PredictionOutput
+    predictions: PredictionResult
     individual_results: list[InferenceResult]
     voting_method: str
     inference_time_ms: float
@@ -325,7 +325,7 @@ class InferencePipeline:
         results: list[InferenceResult],
         method: str,
         weights: list[float] | None,
-    ) -> PredictionOutput:
+    ) -> PredictionResult:
         """Combine predictions from multiple models."""
         if method == "soft_vote":
             return self._soft_vote(results, weights)
@@ -342,7 +342,7 @@ class InferencePipeline:
         self,
         results: list[InferenceResult],
         weights: list[float] | None,
-    ) -> PredictionOutput:
+    ) -> PredictionResult:
         """Average probabilities across models."""
         if weights is None:
             weights = [1.0] * len(results)
@@ -362,7 +362,7 @@ class InferencePipeline:
         class_predictions = np.argmax(avg_probs, axis=1) - 1  # Map to -1, 0, 1
         confidence = np.max(avg_probs, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=avg_probs,
             confidence=confidence,
@@ -373,7 +373,7 @@ class InferencePipeline:
         self,
         results: list[InferenceResult],
         weights: list[float] | None,
-    ) -> PredictionOutput:
+    ) -> PredictionResult:
         """Majority vote on class predictions."""
         if weights is None:
             weights = [1.0] * len(results)
@@ -401,7 +401,7 @@ class InferencePipeline:
             avg_probs += result.predictions.class_probabilities
         avg_probs /= len(results)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=avg_probs,
             confidence=confidence,

@@ -16,11 +16,12 @@ Design Principles:
 - Leakage prevention: chronological splits with gaps
 - Reproducibility: scalers saved for inference
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any
 import logging
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -29,12 +30,10 @@ from src.core.config import PipelineConfig
 from src.core.constants import (
     MODEL_ADAPTER_MAP,
     MODEL_DATA_RANKS,
-    DEFAULT_SEQUENCE_LENGTH,
 )
-from .registry import AdapterRegistry, get_adapter
-from .scaling import AdapterScaler, ScalerConfig
-from .base import AdapterResult
 
+from .registry import get_adapter
+from .scaling import AdapterScaler, ScalerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +67,7 @@ class PreparedData:
         sequence_length: Sequence length if applicable (3D/4D)
         n_timeframes: Number of timeframes if multi-stream (4D)
     """
+
     # Data arrays - required
     X_train: np.ndarray
     y_train: np.ndarray
@@ -75,32 +75,32 @@ class PreparedData:
     y_val: np.ndarray
 
     # Data arrays - optional (test set)
-    X_test: Optional[np.ndarray] = None
-    y_test: Optional[np.ndarray] = None
+    X_test: np.ndarray | None = None
+    y_test: np.ndarray | None = None
 
     # Weights (optional)
-    train_weights: Optional[np.ndarray] = None
-    val_weights: Optional[np.ndarray] = None
-    test_weights: Optional[np.ndarray] = None
+    train_weights: np.ndarray | None = None
+    val_weights: np.ndarray | None = None
+    test_weights: np.ndarray | None = None
 
     # Metadata
     model_name: str = ""
     adapter_type: str = ""
     data_rank: int = 2
-    feature_names: List[str] = field(default_factory=list)
+    feature_names: list[str] = field(default_factory=list)
 
     # Index tracking (for mapping predictions back to source)
-    train_indices: Optional[np.ndarray] = None
-    val_indices: Optional[np.ndarray] = None
-    test_indices: Optional[np.ndarray] = None
+    train_indices: np.ndarray | None = None
+    val_indices: np.ndarray | None = None
+    test_indices: np.ndarray | None = None
 
     # Scaler for inference
-    scaler: Optional[AdapterScaler] = None
+    scaler: AdapterScaler | None = None
 
     # Sequence/multi-stream metadata
-    sequence_length: Optional[int] = None
-    n_timeframes: Optional[int] = None
-    timeframe_names: List[str] = field(default_factory=list)
+    sequence_length: int | None = None
+    n_timeframes: int | None = None
+    timeframe_names: list[str] = field(default_factory=list)
 
     @property
     def n_train(self) -> int:
@@ -132,14 +132,14 @@ class PreparedData:
         """Check if sample weights are available."""
         return self.train_weights is not None
 
-    def validate(self) -> Tuple[bool, List[str]]:
+    def validate(self) -> tuple[bool, list[str]]:
         """
         Validate prepared data consistency.
 
         Returns:
             Tuple of (is_valid, list_of_issues)
         """
-        issues: List[str] = []
+        issues: list[str] = []
 
         # Check X/y length match
         if self.X_train.shape[0] != self.y_train.shape[0]:
@@ -147,9 +147,7 @@ class PreparedData:
                 f"Train X/y length mismatch: X={self.X_train.shape[0]}, y={len(self.y_train)}"
             )
         if self.X_val.shape[0] != self.y_val.shape[0]:
-            issues.append(
-                f"Val X/y length mismatch: X={self.X_val.shape[0]}, y={len(self.y_val)}"
-            )
+            issues.append(f"Val X/y length mismatch: X={self.X_val.shape[0]}, y={len(self.y_val)}")
         if self.has_test and self.X_test.shape[0] != self.y_test.shape[0]:
             issues.append(
                 f"Test X/y length mismatch: X={self.X_test.shape[0]}, y={len(self.y_test)}"
@@ -227,7 +225,7 @@ class UnifiedDataPreparation:
     def __init__(
         self,
         config: PipelineConfig,
-        scaler_config: Optional[ScalerConfig] = None,
+        scaler_config: ScalerConfig | None = None,
     ):
         """
         Initialize unified data preparation.
@@ -240,16 +238,16 @@ class UnifiedDataPreparation:
         """
         self.config = config
         self.scaler_config = scaler_config or ScalerConfig()
-        self._scalers: Dict[str, AdapterScaler] = {}
+        self._scalers: dict[str, AdapterScaler] = {}
 
     def prepare(
         self,
         df: pd.DataFrame,
         model_name: str,
-        feature_columns: Optional[List[str]] = None,
+        feature_columns: list[str] | None = None,
         label_column: str = "label",
-        weight_column: Optional[str] = None,
-        additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
+        weight_column: str | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
         apply_scaling: bool = True,
     ) -> PreparedData:
         """
@@ -291,8 +289,7 @@ class UnifiedDataPreparation:
         data_rank = MODEL_DATA_RANKS.get(model_key, 2)
 
         logger.info(
-            f"Preparing data for {model_name}: "
-            f"adapter={adapter_type}, rank={data_rank}D"
+            f"Preparing data for {model_name}: " f"adapter={adapter_type}, rank={data_rank}D"
         )
 
         # 2. Split data chronologically with purge/embargo
@@ -319,11 +316,17 @@ class UnifiedDataPreparation:
             # Multi-stream needs additional timeframe DataFrames
             train_additional = self._split_additional_dfs(additional_dfs, "train")
             val_additional = self._split_additional_dfs(additional_dfs, "val")
-            test_additional = self._split_additional_dfs(additional_dfs, "test") if test_df is not None else None
+            test_additional = (
+                self._split_additional_dfs(additional_dfs, "test") if test_df is not None else None
+            )
 
             train_result = adapter.transform(train_df, additional_dfs=train_additional)
             val_result = adapter.transform(val_df, additional_dfs=val_additional)
-            test_result = adapter.transform(test_df, additional_dfs=test_additional) if test_df is not None else None
+            test_result = (
+                adapter.transform(test_df, additional_dfs=test_additional)
+                if test_df is not None
+                else None
+            )
         else:
             train_result = adapter.transform(train_df)
             val_result = adapter.transform(val_df)
@@ -377,13 +380,13 @@ class UnifiedDataPreparation:
     def prepare_heterogeneous(
         self,
         df: pd.DataFrame,
-        models: List[str],
-        feature_columns: Optional[List[str]] = None,
+        models: list[str],
+        feature_columns: list[str] | None = None,
         label_column: str = "label",
-        weight_column: Optional[str] = None,
-        additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
+        weight_column: str | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
         apply_scaling: bool = True,
-    ) -> Dict[str, PreparedData]:
+    ) -> dict[str, PreparedData]:
         """
         Prepare data for heterogeneous ensemble (multiple model types).
 
@@ -410,7 +413,7 @@ class UnifiedDataPreparation:
             >>> xgb_data = results["xgboost"]  # 2D
             >>> lstm_data = results["lstm"]    # 3D
         """
-        results: Dict[str, PreparedData] = {}
+        results: dict[str, PreparedData] = {}
 
         for model_name in models:
             logger.info(f"Preparing data for model: {model_name}")
@@ -429,7 +432,7 @@ class UnifiedDataPreparation:
     def _split_with_purge_embargo(
         self,
         df: pd.DataFrame,
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, Optional[pd.DataFrame]]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]:
         """
         Split data chronologically with purge and embargo gaps.
 
@@ -489,9 +492,9 @@ class UnifiedDataPreparation:
 
     def _split_additional_dfs(
         self,
-        additional_dfs: Dict[str, pd.DataFrame],
+        additional_dfs: dict[str, pd.DataFrame],
         split: str,
-    ) -> Dict[str, pd.DataFrame]:
+    ) -> dict[str, pd.DataFrame]:
         """
         Split additional DataFrames for multi-stream adapter.
 
@@ -505,7 +508,7 @@ class UnifiedDataPreparation:
         Returns:
             Dictionary with the requested split for each timeframe.
         """
-        result: Dict[str, pd.DataFrame] = {}
+        result: dict[str, pd.DataFrame] = {}
 
         for tf, tf_df in additional_dfs.items():
             train_df, val_df, test_df = self._split_with_purge_embargo(tf_df)
@@ -528,10 +531,10 @@ class UnifiedDataPreparation:
     def _build_adapter_kwargs(
         self,
         adapter_type: str,
-        feature_columns: Optional[List[str]],
+        feature_columns: list[str] | None,
         label_column: str,
-        weight_column: Optional[str],
-    ) -> Dict[str, Any]:
+        weight_column: str | None,
+    ) -> dict[str, Any]:
         """
         Build keyword arguments for adapter constructor.
 
@@ -544,7 +547,7 @@ class UnifiedDataPreparation:
         Returns:
             Dictionary of kwargs for adapter constructor.
         """
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "feature_columns": feature_columns,
             "label_column": label_column,
             "weight_column": weight_column,
@@ -560,7 +563,7 @@ class UnifiedDataPreparation:
 
         return kwargs
 
-    def get_scaler(self, model_name: str) -> Optional[AdapterScaler]:
+    def get_scaler(self, model_name: str) -> AdapterScaler | None:
         """
         Get the fitted scaler for a model.
 
@@ -572,7 +575,7 @@ class UnifiedDataPreparation:
         """
         return self._scalers.get(model_name)
 
-    def get_all_scalers(self) -> Dict[str, AdapterScaler]:
+    def get_all_scalers(self) -> dict[str, AdapterScaler]:
         """
         Get all fitted scalers.
 
@@ -586,11 +589,12 @@ class UnifiedDataPreparation:
 # CONVENIENCE FUNCTIONS
 # =============================================================================
 
+
 def prepare_for_model(
     df: pd.DataFrame,
     model_name: str,
     config: PipelineConfig,
-    feature_columns: Optional[List[str]] = None,
+    feature_columns: list[str] | None = None,
     label_column: str = "label",
     **kwargs: Any,
 ) -> PreparedData:

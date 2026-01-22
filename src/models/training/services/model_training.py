@@ -1,11 +1,11 @@
 # src/training/services/model_training.py
 """Service for training individual models."""
 
+import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-import logging
-import time
 
 import numpy as np
 import pandas as pd
@@ -84,7 +84,6 @@ class ModelTrainingService:
             ModelTrainingResult with metrics and trained model
         """
         from src.models import Trainer, TrainerConfig
-        from src.core.container import TimeSeriesDataContainer
 
         start = time.time()
 
@@ -109,9 +108,7 @@ class ModelTrainingService:
 
         # Hyperparameter optimization if enabled
         if request.optimize_hyperparams:
-            trainer_config = self._optimize_hyperparams(
-                trainer_config, prepared, request
-            )
+            trainer_config = self._optimize_hyperparams(trainer_config, prepared, request)
 
         # Create trainer and run
         trainer = Trainer(trainer_config)
@@ -202,11 +199,7 @@ class ModelTrainingService:
             X_val=X_val_df,
             y_val=pd.Series(prepared.y_val),
             X_test=X_test_df if X_test_df is not None else pd.DataFrame(),
-            y_test=(
-                pd.Series(prepared.y_test)
-                if prepared.has_test
-                else pd.Series(dtype=float)
-            ),
+            y_test=(pd.Series(prepared.y_test) if prepared.has_test else pd.Series(dtype=float)),
             sample_weights=sample_weights,
         )
 

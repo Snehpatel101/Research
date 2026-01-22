@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -113,9 +113,7 @@ class RegimeDetectorConfig:
         """Validate configuration."""
         valid_methods = [m.value for m in RegimeDetectionMethod]
         if self.method not in valid_methods:
-            raise ValueError(
-                f"Invalid method: {self.method}. Must be one of {valid_methods}"
-            )
+            raise ValueError(f"Invalid method: {self.method}. Must be one of {valid_methods}")
 
         if self.n_regimes not in [2, 3]:
             raise ValueError(f"n_regimes must be 2 or 3, got {self.n_regimes}")
@@ -124,7 +122,7 @@ class RegimeDetectorConfig:
             raise ValueError(f"lookback must be >= 10, got {self.lookback}")
 
     @classmethod
-    def from_pipeline_config(cls, config: "PipelineConfig") -> "RegimeDetectorConfig":
+    def from_pipeline_config(cls, config: PipelineConfig) -> RegimeDetectorConfig:
         """Create from PipelineConfig."""
         return cls(
             method=config.regime_detection_method,
@@ -160,9 +158,7 @@ class RegimeResult:
             self.regime_counts = self.regimes.value_counts().to_dict()
         if not self.regime_fractions:
             total = len(self.regimes)
-            self.regime_fractions = {
-                k: v / total for k, v in self.regime_counts.items()
-            }
+            self.regime_fractions = {k: v / total for k, v in self.regime_counts.items()}
         if self.n_regimes == 0:
             self.n_regimes = len(self.regime_counts)
 
@@ -190,9 +186,7 @@ def _compute_volatility(returns: pd.Series, window: int) -> pd.Series:
     return returns.rolling(window=window, min_periods=window).std()
 
 
-def _compute_atr(
-    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
-) -> pd.Series:
+def _compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """Compute Average True Range."""
     high_low = high - low
     high_close = (high - close.shift(1)).abs()
@@ -202,9 +196,7 @@ def _compute_atr(
     return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
-def _compute_adx(
-    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
-) -> pd.Series:
+def _compute_adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """
     Compute Average Directional Index (ADX).
 
@@ -340,7 +332,7 @@ class RegimeDetector:
         )
 
     @classmethod
-    def from_config(cls, config: "PipelineConfig") -> "RegimeDetector":
+    def from_config(cls, config: PipelineConfig) -> RegimeDetector:
         """
         Create RegimeDetector from PipelineConfig.
 
@@ -495,9 +487,7 @@ class RegimeDetector:
                 return df[col]
         raise ValueError("No close price column found in DataFrame")
 
-    def _get_ohlc(
-        self, df: pd.DataFrame
-    ) -> tuple[pd.Series, pd.Series, pd.Series]:
+    def _get_ohlc(self, df: pd.DataFrame) -> tuple[pd.Series, pd.Series, pd.Series]:
         """Get high, low, close from DataFrame."""
         high = low = close = None
 
@@ -521,9 +511,7 @@ class RegimeDetector:
 
         return high, low, close
 
-    def get_regime_masks(
-        self, df: pd.DataFrame
-    ) -> dict[str, pd.Series]:
+    def get_regime_masks(self, df: pd.DataFrame) -> dict[str, pd.Series]:
         """
         Get boolean masks for each regime.
 
@@ -534,13 +522,9 @@ class RegimeDetector:
             Dict mapping regime label to boolean mask
         """
         result = self.detect(df)
-        return {
-            label: result.get_mask(label) for label in result.get_regime_labels()
-        }
+        return {label: result.get_mask(label) for label in result.get_regime_labels()}
 
-    def split_by_regime(
-        self, df: pd.DataFrame
-    ) -> dict[str, pd.DataFrame]:
+    def split_by_regime(self, df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         """
         Split DataFrame by regime.
 

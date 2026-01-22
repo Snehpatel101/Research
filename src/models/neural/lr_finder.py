@@ -260,7 +260,9 @@ class LRFinder:
 
             # Log progress
             if (iteration + 1) % 20 == 0:
-                logger.debug(f"  iter {iteration + 1}/{num_iter}: lr={current_lr:.2e}, loss={smoothed_loss:.4f}")
+                logger.debug(
+                    f"  iter {iteration + 1}/{num_iter}: lr={current_lr:.2e}, loss={smoothed_loss:.4f}"
+                )
 
         # Restore original state
         self._restore_state()

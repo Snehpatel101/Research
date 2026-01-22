@@ -6,7 +6,7 @@ PHASE_1 Unified Features: 15 WAVELETS features.
 Uses PyWavelets (pywt) if available, otherwise returns NaN stubs.
 """
 
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ import pandas as pd
 # Try to import pywt, set flag if not available
 try:
     import pywt
+
     PYWT_AVAILABLE = True
 except ImportError:
     PYWT_AVAILABLE = False
@@ -29,7 +30,7 @@ def _wavelet_decompose(
     wavelet: str = "db4",
     level: int = 3,
     window: int = 64,
-) -> tuple[Optional[np.ndarray], Optional[list[np.ndarray]]]:
+) -> tuple[np.ndarray | None, list[np.ndarray] | None]:
     """
     Perform wavelet decomposition on a rolling basis.
 
@@ -77,7 +78,7 @@ def _rolling_wavelet_feature(
     result = pd.Series(np.nan, index=series.index)
 
     for i in range(window, len(series) + 1):
-        window_data = series.iloc[i - window:i]
+        window_data = series.iloc[i - window : i]
         try:
             value = extract_fn(window_data)
             result.iloc[i - 1] = value
@@ -104,7 +105,7 @@ def _wavelet_energy(coeffs: list) -> list:
     """Calculate energy of each wavelet coefficient level."""
     if coeffs is None:
         return []
-    return [np.sum(c ** 2) for c in coeffs]
+    return [np.sum(c**2) for c in coeffs]
 
 
 # =============================================================================
@@ -118,6 +119,7 @@ def compute_wavelet_close_approx(df: pd.DataFrame) -> pd.Series:
 
     The approximation captures the low-frequency trend.
     """
+
     def extract_approx(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None:
@@ -134,6 +136,7 @@ def compute_wavelet_close_d1(df: pd.DataFrame) -> pd.Series:
 
     Captures short-term noise/fluctuations.
     """
+
     def extract_d1(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
@@ -149,6 +152,7 @@ def compute_wavelet_close_d2(df: pd.DataFrame) -> pd.Series:
 
     Captures medium-frequency fluctuations.
     """
+
     def extract_d2(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 3:
@@ -164,6 +168,7 @@ def compute_wavelet_close_d3(df: pd.DataFrame) -> pd.Series:
 
     Captures lower-frequency fluctuations (more trend-like).
     """
+
     def extract_d3(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 4:
@@ -180,6 +185,7 @@ def compute_wavelet_close_d3(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_volume_approx(df: pd.DataFrame) -> pd.Series:
     """Wavelet approximation of volume (trend component)."""
+
     def extract_approx(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None:
@@ -191,6 +197,7 @@ def compute_wavelet_volume_approx(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_volume_d1(df: pd.DataFrame) -> pd.Series:
     """Wavelet detail level 1 of volume (high-frequency component)."""
+
     def extract_d1(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
@@ -207,6 +214,7 @@ def compute_wavelet_volume_d1(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_close_energy_approx(df: pd.DataFrame) -> pd.Series:
     """Energy of approximation coefficients (trend energy)."""
+
     def extract_energy(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None:
@@ -218,6 +226,7 @@ def compute_wavelet_close_energy_approx(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_close_energy_d1(df: pd.DataFrame) -> pd.Series:
     """Energy of detail level 1 (high-frequency energy)."""
+
     def extract_energy(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
@@ -229,6 +238,7 @@ def compute_wavelet_close_energy_d1(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_close_energy_d2(df: pd.DataFrame) -> pd.Series:
     """Energy of detail level 2."""
+
     def extract_energy(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 3:
@@ -240,6 +250,7 @@ def compute_wavelet_close_energy_d2(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_close_energy_d3(df: pd.DataFrame) -> pd.Series:
     """Energy of detail level 3."""
+
     def extract_energy(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 4:
@@ -255,13 +266,14 @@ def compute_wavelet_close_energy_ratio(df: pd.DataFrame) -> pd.Series:
 
     High ratio indicates strong trend, low ratio indicates noisy market.
     """
+
     def extract_ratio(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
             return np.nan
 
         trend_energy = np.sum(coeffs[0] ** 2)
-        detail_energy = sum(np.sum(c ** 2) for c in coeffs[1:])
+        detail_energy = sum(np.sum(c**2) for c in coeffs[1:])
 
         if detail_energy == 0:
             return np.nan
@@ -282,6 +294,7 @@ def compute_wavelet_close_volatility(df: pd.DataFrame) -> pd.Series:
 
     Uses detail coefficients to estimate volatility.
     """
+
     def extract_volatility(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
@@ -303,12 +316,13 @@ def compute_wavelet_close_trend_strength(df: pd.DataFrame) -> pd.Series:
 
     Measures how much of the signal is captured by the trend component.
     """
+
     def extract_trend_strength(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
             return np.nan
 
-        total_energy = sum(np.sum(c ** 2) for c in coeffs)
+        total_energy = sum(np.sum(c**2) for c in coeffs)
         if total_energy == 0:
             return np.nan
 
@@ -325,6 +339,7 @@ def compute_wavelet_close_trend_direction(df: pd.DataFrame) -> pd.Series:
     Uses slope of approximation coefficients.
     Returns 1 for uptrend, -1 for downtrend, 0 for flat.
     """
+
     def extract_direction(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None:
@@ -349,13 +364,14 @@ def compute_wavelet_close_trend_direction(df: pd.DataFrame) -> pd.Series:
 
 def compute_wavelet_volume_energy_ratio(df: pd.DataFrame) -> pd.Series:
     """Volume wavelet energy ratio (trend vs detail)."""
+
     def extract_ratio(window_data):
         coeffs = _get_wavelet_coeffs(window_data)
         if coeffs is None or len(coeffs) < 2:
             return np.nan
 
         trend_energy = np.sum(coeffs[0] ** 2)
-        detail_energy = sum(np.sum(c ** 2) for c in coeffs[1:])
+        detail_energy = sum(np.sum(c**2) for c in coeffs[1:])
 
         if detail_energy == 0:
             return np.nan
@@ -369,7 +385,7 @@ def compute_wavelet_volume_energy_ratio(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-WAVELETS_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+WAVELETS_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Close price wavelets
     "wavelet_close_approx": compute_wavelet_close_approx,
     "wavelet_close_d1": compute_wavelet_close_d1,

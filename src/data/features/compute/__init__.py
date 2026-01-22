@@ -19,7 +19,7 @@ Feature Families (162 total):
 - regime: 9 features (vol/trend regimes)
 
 Usage:
-    from src.features.compute import (
+    from src.data.features.compute import (
         compute_all_features,
         compute_features_by_family,
         compute_single_feature,
@@ -38,41 +38,42 @@ Usage:
     rsi_14 = compute_single_feature(ohlcv_df, "rsi_14")
 """
 
-from typing import Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Dict, List, Optional, Union
 
 import pandas as pd
 
-# Import all feature maps from submodules
-from src.features.compute.raw import RAW_FEATURES
-from src.features.compute.momentum import MOMENTUM_FEATURES
-from src.features.compute.moving_average import MOVING_AVERAGE_FEATURES
-from src.features.compute.volatility import VOLATILITY_FEATURES
-from src.features.compute.volume import VOLUME_FEATURES
-from src.features.compute.trend import TREND_FEATURES
-from src.features.compute.price import PRICE_FEATURES
-from src.features.compute.microstructure import MICROSTRUCTURE_FEATURES
-from src.features.compute.entropy import ENTROPY_FEATURES
-from src.features.compute.wavelets import WAVELETS_FEATURES, PYWT_AVAILABLE
-from src.features.compute.temporal import TEMPORAL_FEATURES
-from src.features.compute.regime import REGIME_FEATURES
+from src.data.features.compute.entropy import ENTROPY_FEATURES
+from src.data.features.compute.microstructure import MICROSTRUCTURE_FEATURES
+from src.data.features.compute.momentum import MOMENTUM_FEATURES
+from src.data.features.compute.moving_average import MOVING_AVERAGE_FEATURES
 
 # MTF (Multi-Timeframe) features - PHASE_1
-from src.features.compute.mtf import (
+from src.data.features.compute.mtf import (
+    DEFAULT_MTF_FEATURES,
     MTFConfig,
     MTFFeatureComputer,
     compute_mtf_features,
     get_mtf_feature_names,
-    validate_mtf_config,
     resample_ohlcv,
-    DEFAULT_MTF_FEATURES,
+    validate_mtf_config,
 )
+from src.data.features.compute.price import PRICE_FEATURES
 
+# Import all feature maps from submodules
+from src.data.features.compute.raw import RAW_FEATURES
+from src.data.features.compute.regime import REGIME_FEATURES
+from src.data.features.compute.temporal import TEMPORAL_FEATURES
+from src.data.features.compute.trend import TREND_FEATURES
+from src.data.features.compute.volatility import VOLATILITY_FEATURES
+from src.data.features.compute.volume import VOLUME_FEATURES
+from src.data.features.compute.wavelets import PYWT_AVAILABLE, WAVELETS_FEATURES
 
 # =============================================================================
 # FEATURE FAMILY MAPS
 # =============================================================================
 
-FAMILY_FEATURE_MAPS: Dict[str, Dict[str, Callable[[pd.DataFrame], pd.Series]]] = {
+FAMILY_FEATURE_MAPS: dict[str, dict[str, Callable[[pd.DataFrame], pd.Series]]] = {
     "raw": RAW_FEATURES,
     "momentum": MOMENTUM_FEATURES,
     "moving_average": MOVING_AVERAGE_FEATURES,
@@ -91,7 +92,7 @@ FAMILY_FEATURE_MAPS: Dict[str, Dict[str, Callable[[pd.DataFrame], pd.Series]]] =
 # UNIFIED FEATURE MAP - All 162 features
 # =============================================================================
 
-FEATURE_COMPUTE_MAP: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {}
+FEATURE_COMPUTE_MAP: dict[str, Callable[[pd.DataFrame], pd.Series]] = {}
 
 # Build unified map from all families
 for family_name, family_map in FAMILY_FEATURE_MAPS.items():
@@ -104,6 +105,7 @@ EXPECTED_FEATURES = 162
 # Log warning if count mismatch (don't raise error to allow flexibility)
 if TOTAL_FEATURES != EXPECTED_FEATURES:
     import warnings
+
     warnings.warn(
         f"Feature count mismatch: expected {EXPECTED_FEATURES}, got {TOTAL_FEATURES}. "
         "This may indicate missing or extra features."
@@ -114,12 +116,11 @@ if TOTAL_FEATURES != EXPECTED_FEATURES:
 # FEATURE FAMILY METADATA
 # =============================================================================
 
-FEATURE_FAMILY_COUNTS: Dict[str, int] = {
-    family: len(features)
-    for family, features in FAMILY_FEATURE_MAPS.items()
+FEATURE_FAMILY_COUNTS: dict[str, int] = {
+    family: len(features) for family, features in FAMILY_FEATURE_MAPS.items()
 }
 
-FEATURE_TO_FAMILY: Dict[str, str] = {
+FEATURE_TO_FAMILY: dict[str, str] = {
     feature_name: family
     for family, features in FAMILY_FEATURE_MAPS.items()
     for feature_name in features.keys()
@@ -131,12 +132,12 @@ FEATURE_TO_FAMILY: Dict[str, str] = {
 # =============================================================================
 
 
-def get_feature_families() -> List[str]:
+def get_feature_families() -> list[str]:
     """Get list of all feature family names."""
     return list(FAMILY_FEATURE_MAPS.keys())
 
 
-def get_features_in_family(family: str) -> List[str]:
+def get_features_in_family(family: str) -> list[str]:
     """Get list of feature names in a specific family."""
     if family not in FAMILY_FEATURE_MAPS:
         raise ValueError(
@@ -145,7 +146,7 @@ def get_features_in_family(family: str) -> List[str]:
     return list(FAMILY_FEATURE_MAPS[family].keys())
 
 
-def get_all_feature_names() -> List[str]:
+def get_all_feature_names() -> list[str]:
     """Get list of all feature names."""
     return list(FEATURE_COMPUTE_MAP.keys())
 
@@ -176,8 +177,7 @@ def compute_single_feature(
     """
     if feature_name not in FEATURE_COMPUTE_MAP:
         raise ValueError(
-            f"Unknown feature '{feature_name}'. "
-            f"Available features: {len(FEATURE_COMPUTE_MAP)}"
+            f"Unknown feature '{feature_name}'. " f"Available features: {len(FEATURE_COMPUTE_MAP)}"
         )
 
     compute_fn = FEATURE_COMPUTE_MAP[feature_name]
@@ -186,9 +186,9 @@ def compute_single_feature(
 
 def compute_features_by_family(
     df: pd.DataFrame,
-    families: Union[str, List[str]],
+    families: str | list[str],
     return_dataframe: bool = True,
-) -> Union[pd.DataFrame, Dict[str, pd.Series]]:
+) -> pd.DataFrame | dict[str, pd.Series]:
     """
     Compute all features for specified families.
 
@@ -220,6 +220,7 @@ def compute_features_by_family(
             except Exception as e:
                 # Log error and continue with NaN
                 import warnings
+
                 warnings.warn(f"Error computing {feature_name}: {e}")
                 results[feature_name] = pd.Series(float("nan"), index=df.index)
 
@@ -230,9 +231,9 @@ def compute_features_by_family(
 
 def compute_features_by_names(
     df: pd.DataFrame,
-    feature_names: List[str],
+    feature_names: list[str],
     return_dataframe: bool = True,
-) -> Union[pd.DataFrame, Dict[str, pd.Series]]:
+) -> pd.DataFrame | dict[str, pd.Series]:
     """
     Compute specific features by name.
 
@@ -249,6 +250,7 @@ def compute_features_by_names(
     for feature_name in feature_names:
         if feature_name not in FEATURE_COMPUTE_MAP:
             import warnings
+
             warnings.warn(f"Unknown feature '{feature_name}', skipping")
             continue
 
@@ -257,6 +259,7 @@ def compute_features_by_names(
             results[feature_name] = compute_fn(df)
         except Exception as e:
             import warnings
+
             warnings.warn(f"Error computing {feature_name}: {e}")
             results[feature_name] = pd.Series(float("nan"), index=df.index)
 
@@ -267,8 +270,8 @@ def compute_features_by_names(
 
 def compute_all_features(
     df: pd.DataFrame,
-    exclude_families: Optional[List[str]] = None,
-    exclude_features: Optional[List[str]] = None,
+    exclude_families: list[str] | None = None,
+    exclude_features: list[str] | None = None,
     include_original: bool = False,
 ) -> pd.DataFrame:
     """
@@ -316,13 +319,14 @@ def compute_all_features(
                 results[feature_name] = compute_fn(df)
             except Exception as e:
                 import warnings
+
                 warnings.warn(f"Error computing {feature_name}: {e}")
                 results[feature_name] = pd.Series(float("nan"), index=df.index)
 
     return pd.DataFrame(results, index=df.index)
 
 
-def get_feature_info() -> Dict[str, Dict]:
+def get_feature_info() -> dict[str, dict]:
     """
     Get metadata about all features.
 
@@ -345,8 +349,8 @@ def get_feature_info() -> Dict[str, Dict]:
 
 def validate_features_computed(
     df: pd.DataFrame,
-    expected_features: Optional[List[str]] = None,
-) -> Dict[str, bool]:
+    expected_features: list[str] | None = None,
+) -> dict[str, bool]:
     """
     Validate that expected features exist and have valid values.
 

@@ -30,7 +30,7 @@ class CPCVPBOEvaluator:
         self.output_dir = Path(config.get("output_dir", "experiments/evaluation/cpcv_pbo"))
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Initialized CPCVPBOEvaluator")
+        logger.info("Initialized CPCVPBOEvaluator")
         logger.info(f"Output directory: {self.output_dir}")
 
     def run(self) -> dict[str, Any]:

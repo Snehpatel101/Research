@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from src.common.split_ratios import (
+from src.core.common.split_ratios import (
     DEFAULT_TEST_RATIO,
     DEFAULT_TRAIN_RATIO,
     DEFAULT_VAL_RATIO,
@@ -108,7 +108,7 @@ def validate_label_distribution(
         Dict: Distribution statistics per label column per split
     """
     if horizons is None:
-        from src.common.horizon_config import ACTIVE_HORIZONS
+        from src.core.common.horizon_config import ACTIVE_HORIZONS
 
         horizons = ACTIVE_HORIZONS
 

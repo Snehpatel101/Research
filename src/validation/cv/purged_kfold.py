@@ -108,7 +108,7 @@ class PurgedKFoldConfig:
             >>> config.embargo_bars
             120   # 5 days at 1-hour bars
         """
-        from src.common.horizon_config import compute_embargo_bars
+        from src.core.common.horizon_config import compute_embargo_bars
 
         embargo_bars = compute_embargo_bars(
             timeframe=timeframe,

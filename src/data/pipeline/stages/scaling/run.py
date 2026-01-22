@@ -18,13 +18,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from src.pipeline.stages.scaling import (
+from src.data.pipeline.stages.scaling import (
     FeatureScaler,
     ScalerConfig,
     validate_no_leakage,
     validate_scaling,
 )
-from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
     from manifest import ArtifactManifest
@@ -245,9 +245,7 @@ def _scale_single_timeframe(
     logger.info(f"Features scaled: {len(feature_cols)}")
     logger.info(f"Scaler type: {scaler_type}")
     logger.info("Outlier clipping: [-5.0, 5.0]")
-    logger.info(
-        f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'WARNINGS'}"
-    )
+    logger.info(f"Scaling validation: {'PASSED' if scaling_validation['is_valid'] else 'WARNINGS'}")
     logger.info("Leakage check: PASSED")
 
     artifacts = [
@@ -304,9 +302,7 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
 
         # Process each timeframe
         for tf in output_timeframes:
-            artifacts, scaling_metadata = _scale_single_timeframe(
-                config, manifest, tf, is_multi_tf
-            )
+            artifacts, scaling_metadata = _scale_single_timeframe(config, manifest, tf, is_multi_tf)
             all_artifacts.extend(artifacts)
             all_metadata[tf] = scaling_metadata
 

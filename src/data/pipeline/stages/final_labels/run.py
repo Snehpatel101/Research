@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.pipeline.utils import create_failed_result, create_stage_result
+from src.data.pipeline.utils import create_failed_result, create_stage_result
 
 from .core import apply_optimized_labels, generate_labeling_report
 
@@ -68,7 +68,7 @@ def run_final_labels(
     logger.info("=" * 70)
 
     try:
-        from src.pipeline.config import TRANSACTION_COSTS
+        from src.data.pipeline.config import TRANSACTION_COSTS
 
         try:
             from src import __version__ as src_version
@@ -120,7 +120,9 @@ def run_final_labels(
                         )
                     else:
                         # Single-TF mode: warn and skip (backward compatible)
-                        logger.warning(f"Features file not found for {symbol} @ {tf}: {features_path}")
+                        logger.warning(
+                            f"Features file not found for {symbol} @ {tf}: {features_path}"
+                        )
                         continue
 
                 df = pd.read_parquet(features_path)

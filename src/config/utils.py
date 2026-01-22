@@ -330,9 +330,7 @@ def get_config_value_strict(attr_path: str) -> Any:
         config = _load_global_config()
 
         if config is None:
-            raise ConfigValueError(
-                f"Cannot get '{attr_path}': Global config not loaded"
-            )
+            raise ConfigValueError(f"Cannot get '{attr_path}': Global config not loaded")
 
         parts = attr_path.split(".")
         value = config

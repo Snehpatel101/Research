@@ -64,121 +64,40 @@ Usage:
 # =============================================================================
 # TYPES - Enums and type aliases
 # =============================================================================
-from src.core.types import (
-    DataRank,
-    ModelFamily,
-    FeatureFamily,
-    TrainingMode,
-    CVMethod,
-    AdapterType,
-    LabelingMethod,
-    # Type aliases
-    Features,
-    Labels,
-    ModelType,
-    Array1D,
-    Array2D,
-    Array3D,
-    Array4D,
-    DatetimeIndex,
-    Index,
-)
+# NOTE: src.config imports are NOT included here to avoid circular imports.
+# Import directly from src.config when needed:
+#   from src.config import GlobalConfig, UnifiedConfig, TrainerConfig, etc.
 
 # =============================================================================
-# CONSTANTS - Canonical values
+# ABSORBED: src/common - Timeframes, horizons, split ratios
 # =============================================================================
-from src.core.constants import (
-    # Timeframes
-    CANONICAL_TIMEFRAMES,
-    BASE_TIMEFRAME,
-    DEFAULT_MTF_TIMEFRAMES,
-    # Horizons
-    DEFAULT_HORIZONS,
-    DEFAULT_HORIZON,
-    # Splits
-    DEFAULT_SPLIT_RATIOS,
-    # Purge/Embargo
-    DEFAULT_PURGE_BARS,
-    DEFAULT_EMBARGO_BARS,
-    # Models
-    MODEL_FAMILIES,
-    ALL_MODELS,
-    MODEL_TO_FAMILY,
-    MODEL_DATA_RANKS,
-    MODEL_ADAPTER_MAP,
-    # Features
-    FEATURE_FAMILY_COUNTS,
-    TOTAL_BASE_FEATURES,
-    MTF_FEATURES_PER_TF,
-    MTF_TOTAL_FEATURES,
-    # Sequence defaults
-    DEFAULT_SEQUENCE_LENGTH,
-    DEFAULT_HIDDEN_SIZE,
-    DEFAULT_NUM_LAYERS,
-    DEFAULT_DROPOUT,
-    # Training defaults
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_MAX_EPOCHS,
-    DEFAULT_LEARNING_RATE,
-    DEFAULT_EARLY_STOPPING_PATIENCE,
-    DEFAULT_N_SPLITS,
-    # Optuna defaults
-    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
-    DEFAULT_FEATURE_SELECTION_TRIALS,
-    DEFAULT_FEATURE_PRUNING_TRIALS,
-    DEFAULT_HYPERPARAM_TRIALS,
-    DEFAULT_OPTUNA_RANDOM_STATE,
-    DEFAULT_MIN_FEATURES,
-    # OHLCV
-    OHLCV_COLUMNS,
-    REQUIRED_COLUMNS,
-    # Labels
-    LABEL_CLASSES,
-    N_CLASSES,
-    # Helper functions
-    get_models_for_family,
-    get_models_for_rank,
-    get_adapter_for_model,
-)
-
-# =============================================================================
-# INTERFACES - Abstract contracts
-# =============================================================================
-from src.core.interfaces import (
-    # Result types
-    AdapterResult,
-    PredictionResult,
-    TrainingResult,
-    OOFResult,
-    # Contracts
-    DataContract,
-    ModelContract,
-    AdapterContract,
-)
-
-# =============================================================================
-# VALIDATION - Input validation
-# =============================================================================
-from src.core.validation import (
-    # Exception
-    ValidationError,
-    # Array validation
-    validate_input_shape,
-    validate_labels,
-    validate_probabilities,
-    # Feature validation
-    validate_features,
-    # DataFrame validation
-    validate_dataframe,
-    validate_ohlcv,
-    # Model validation
-    validate_model_name,
-    validate_model_list,
-    # Path validation
-    validate_path_exists,
-    # Timeframe validation
-    validate_timeframe,
-    validate_timeframe_list,
+from src.core.common import (
+    ACTIVE_HORIZONS,
+    ALL_CANONICAL_TIMEFRAMES,
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+    EXTENDED_TIMEFRAMES,
+    FULL_9TF_LADDER,
+    HORIZONS,
+    LABEL_HORIZONS,
+    LOOKBACK_HORIZONS,
+    SUPPORTED_HORIZONS,
+    SUPPORTED_TIMEFRAMES,
+    TIMEFRAME_ALIASES,
+    TIMEFRAME_TO_FREQ,
+    TIMEFRAME_TO_MINUTES,
+    HorizonConfig,
+    auto_scale_purge_embargo,
+    get_default_barrier_params_for_horizon,
+    get_scaled_horizons,
+    get_timeframe_minutes,
+    is_valid_timeframe,
+    normalize_timeframe,
+    normalize_timeframe_list,
+    timeframe_to_minutes,
+    validate_horizons,
+    validate_split_ratios,
 )
 
 # =============================================================================
@@ -186,9 +105,134 @@ from src.core.validation import (
 # =============================================================================
 from src.core.config import (
     PipelineConfig,
-    quick_config,
     production_config,
+    quick_config,
     research_config,
+)
+
+# =============================================================================
+# CONSTANTS - Canonical values
+# =============================================================================
+from src.core.constants import (
+    ALL_MODELS,
+    BASE_TIMEFRAME,
+    # Timeframes
+    CANONICAL_TIMEFRAMES,
+    # Training defaults
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_DROPOUT,
+    DEFAULT_EARLY_STOPPING_PATIENCE,
+    DEFAULT_EMBARGO_BARS,
+    DEFAULT_FEATURE_PRUNING_TRIALS,
+    DEFAULT_FEATURE_SELECTION_TRIALS,
+    DEFAULT_HIDDEN_SIZE,
+    DEFAULT_HORIZON,
+    # Horizons
+    DEFAULT_HORIZONS,
+    DEFAULT_HYPERPARAM_TRIALS,
+    # Optuna defaults
+    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
+    DEFAULT_LEARNING_RATE,
+    DEFAULT_MAX_EPOCHS,
+    DEFAULT_MIN_FEATURES,
+    DEFAULT_MTF_TIMEFRAMES,
+    DEFAULT_N_SPLITS,
+    DEFAULT_NUM_LAYERS,
+    DEFAULT_OPTUNA_RANDOM_STATE,
+    # Purge/Embargo
+    DEFAULT_PURGE_BARS,
+    # Sequence defaults
+    DEFAULT_SEQUENCE_LENGTH,
+    # Splits
+    DEFAULT_SPLIT_RATIOS,
+    # Features
+    FEATURE_FAMILY_COUNTS,
+    # Labels
+    LABEL_CLASSES,
+    MODEL_ADAPTER_MAP,
+    MODEL_DATA_RANKS,
+    # Models
+    MODEL_FAMILIES,
+    MODEL_TO_FAMILY,
+    MTF_FEATURES_PER_TF,
+    MTF_TOTAL_FEATURES,
+    N_CLASSES,
+    # OHLCV
+    OHLCV_COLUMNS,
+    REQUIRED_COLUMNS,
+    TOTAL_BASE_FEATURES,
+    get_adapter_for_model,
+    # Helper functions
+    get_models_for_family,
+    get_models_for_rank,
+)
+
+# =============================================================================
+# CONTAINER - TimeSeriesDataContainer (unified data container)
+# =============================================================================
+from src.core.container import (
+    INVALID_LABEL,
+    VALID_SPLITS,
+    DataContainerConfig,
+    SplitData,
+    TimeSeriesDataContainer,
+)
+
+# =============================================================================
+# ABSORBED: src/contracts - Model and data contracts
+# =============================================================================
+from src.core.contracts import (
+    DATA_SCHEMA,
+    MODEL_CONTRACTS,
+    ArtifactManifest,
+    DataContractSchema,
+    FeatureMode,
+    MTFMode,
+    get_model_contract,
+    get_models_by_mtf_mode,
+    get_models_by_rank,
+    get_models_requiring_scaling,
+    list_model_contracts,
+)
+
+# =============================================================================
+# ABSORBED: src/coordination - Temporal alignment utilities
+# =============================================================================
+from src.core.coordination import (
+    TimeframeCoordinator,
+    TimeframeData,
+    align_to_anchor,
+    apply_mtf_lag,
+    compute_sequence_offset,
+    validate_timestamp_alignment,
+)
+
+# =============================================================================
+# DATA CONTRACT - Explicit data passing between pipeline stages
+# =============================================================================
+from src.core.data_contract import (
+    DatasetContract,
+    SplitDatasetContract,
+)
+
+# =============================================================================
+# EXISTING EXPORTS (preserved from original)
+# =============================================================================
+from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
+
+# =============================================================================
+# INTERFACES - Abstract contracts
+# =============================================================================
+from src.core.interfaces import (
+    AdapterContract,
+    # Result types
+    AdapterResult,
+    # Contracts
+    DataContract,
+    ModelContract,
+    OOFResult,
+    PredictionResult,
+    TrainingResult,
 )
 
 # =============================================================================
@@ -202,11 +246,6 @@ from src.core.lineage import (
     create_dataset_checksum,
     validate_dataset_checksum,
 )
-
-# =============================================================================
-# EXISTING EXPORTS (preserved from original)
-# =============================================================================
-from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
 from src.core.paths import (
     CONFIG_DIR,
     CONFIG_MODELS_DIR,
@@ -229,131 +268,76 @@ from src.core.reproducibility import (
     get_worker_init_fn,
     set_all_seeds,
 )
-
-# =============================================================================
-# CONTAINER - TimeSeriesDataContainer (unified data container)
-# =============================================================================
-from src.core.container import (
-    TimeSeriesDataContainer,
-    DataContainerConfig,
-    SplitData,
-    VALID_SPLITS,
-    INVALID_LABEL,
-)
-
-# =============================================================================
-# DATA CONTRACT - Explicit data passing between pipeline stages
-# =============================================================================
-from src.core.data_contract import (
-    DatasetContract,
-    SplitDatasetContract,
-)
-
-# =============================================================================
-# ABSORBED: src/contracts - Model and data contracts
-# =============================================================================
-from src.core.contracts import (
-    FeatureMode,
-    MTFMode,
-    DataContractSchema,
-    DATA_SCHEMA,
-    MODEL_CONTRACTS,
-    get_model_contract,
-    list_model_contracts,
-    get_models_by_rank,
-    get_models_requiring_scaling,
-    get_models_by_mtf_mode,
-    ArtifactManifest,
-)
-
-# =============================================================================
-# ABSORBED: src/config - Unified configuration
-# =============================================================================
-from src.config import (
-    UnifiedConfig,
-    get_unified_config,
-    set_unified_config,
-    reset_unified_config,
-    get_config_value,
-    get_config_value_strict,
-    validate_config,
-    validate_config_file,
-    GlobalConfig,
-    load_global_config,
-    get_global_config,
-    TrainerConfig,
-    detect_environment,
-)
-
-# =============================================================================
-# ABSORBED: src/common - Timeframes, horizons, split ratios
-# =============================================================================
-from src.core.common import (
-    HorizonConfig,
-    HORIZONS,
-    SUPPORTED_HORIZONS,
-    ACTIVE_HORIZONS,
-    LABEL_HORIZONS,
-    LOOKBACK_HORIZONS,
-    validate_horizons,
-    get_scaled_horizons,
-    auto_scale_purge_embargo,
-    get_default_barrier_params_for_horizon,
-    ALL_CANONICAL_TIMEFRAMES,
-    EXTENDED_TIMEFRAMES,
-    FULL_9TF_LADDER,
-    SUPPORTED_TIMEFRAMES,
-    TIMEFRAME_ALIASES,
-    TIMEFRAME_TO_FREQ,
-    TIMEFRAME_TO_MINUTES,
-    get_timeframe_minutes,
-    is_valid_timeframe,
-    normalize_timeframe,
-    normalize_timeframe_list,
-    timeframe_to_minutes,
-    DEFAULT_TRAIN_RATIO,
-    DEFAULT_VAL_RATIO,
-    DEFAULT_TEST_RATIO,
-    validate_split_ratios,
+from src.core.types import (
+    AdapterType,
+    Array1D,
+    Array2D,
+    Array3D,
+    Array4D,
+    CVMethod,
+    DataRank,
+    DatetimeIndex,
+    FeatureFamily,
+    # Type aliases
+    Features,
+    Index,
+    LabelingMethod,
+    Labels,
+    ModelFamily,
+    ModelType,
+    TrainingMode,
 )
 
 # =============================================================================
 # ABSORBED: src/utils - Memory, cache, notebook utilities
 # =============================================================================
 from src.core.utils import (
-    CacheManager,
     CacheConfig,
     CacheEntry,
+    CacheManager,
     CacheStats,
+    CheckpointManager,
+    DataCache,
+    DataCacheConfig,
     MemoryInfo,
+    cached_result,
     check_available_memory,
     check_memory_sufficient,
     estimate_array_size,
     estimate_object_size,
+    get_global_cache,
+    get_global_data_cache,
     get_memory_info,
+    is_colab,
     log_memory_usage,
     memory_logged,
-    get_global_cache,
-    DataCache,
-    DataCacheConfig,
-    cached_result,
-    get_global_data_cache,
-    CheckpointManager,
-    is_colab,
-    setup_environment,
     setup_colab_environment,
+    setup_environment,
 )
 
 # =============================================================================
-# ABSORBED: src/coordination - Temporal alignment utilities
+# VALIDATION - Input validation
 # =============================================================================
-from src.core.coordination import (
-    align_to_anchor,
-    apply_mtf_lag,
-    compute_sequence_offset,
-    validate_timestamp_alignment,
-    TimeframeCoordinator,
-    TimeframeData,
+from src.core.validation import (
+    # Exception
+    ValidationError,
+    # DataFrame validation
+    validate_dataframe,
+    # Feature validation
+    validate_features,
+    # Array validation
+    validate_input_shape,
+    validate_labels,
+    validate_model_list,
+    # Model validation
+    validate_model_name,
+    validate_ohlcv,
+    # Path validation
+    validate_path_exists,
+    validate_probabilities,
+    # Timeframe validation
+    validate_timeframe,
+    validate_timeframe_list,
 )
 
 # =============================================================================
@@ -367,7 +351,6 @@ __all__ = [
     "quick_config",
     "production_config",
     "research_config",
-
     # =========================================================================
     # TYPES - Enums
     # =========================================================================
@@ -378,7 +361,6 @@ __all__ = [
     "CVMethod",
     "AdapterType",
     "LabelingMethod",
-
     # Type aliases
     "Features",
     "Labels",
@@ -389,20 +371,17 @@ __all__ = [
     "Array4D",
     "DatetimeIndex",
     "Index",
-
     # =========================================================================
     # INTERFACES - Contracts
     # =========================================================================
     "DataContract",
     "ModelContract",
     "AdapterContract",
-
     # Result types
     "AdapterResult",
     "PredictionResult",
     "TrainingResult",
     "OOFResult",
-
     # =========================================================================
     # CONSTANTS
     # =========================================================================
@@ -410,44 +389,36 @@ __all__ = [
     "CANONICAL_TIMEFRAMES",
     "BASE_TIMEFRAME",
     "DEFAULT_MTF_TIMEFRAMES",
-
     # Horizons
     "DEFAULT_HORIZONS",
     "DEFAULT_HORIZON",
-
     # Splits
     "DEFAULT_SPLIT_RATIOS",
-
     # Purge/Embargo
     "DEFAULT_PURGE_BARS",
     "DEFAULT_EMBARGO_BARS",
-
     # Models
     "MODEL_FAMILIES",
     "ALL_MODELS",
     "MODEL_TO_FAMILY",
     "MODEL_DATA_RANKS",
     "MODEL_ADAPTER_MAP",
-
     # Features
     "FEATURE_FAMILY_COUNTS",
     "TOTAL_BASE_FEATURES",
     "MTF_FEATURES_PER_TF",
     "MTF_TOTAL_FEATURES",
-
     # Sequence defaults
     "DEFAULT_SEQUENCE_LENGTH",
     "DEFAULT_HIDDEN_SIZE",
     "DEFAULT_NUM_LAYERS",
     "DEFAULT_DROPOUT",
-
     # Training defaults
     "DEFAULT_BATCH_SIZE",
     "DEFAULT_MAX_EPOCHS",
     "DEFAULT_LEARNING_RATE",
     "DEFAULT_EARLY_STOPPING_PATIENCE",
     "DEFAULT_N_SPLITS",
-
     # Optuna defaults
     "DEFAULT_LABEL_OPTIMIZATION_TRIALS",
     "DEFAULT_FEATURE_SELECTION_TRIALS",
@@ -455,20 +426,16 @@ __all__ = [
     "DEFAULT_HYPERPARAM_TRIALS",
     "DEFAULT_OPTUNA_RANDOM_STATE",
     "DEFAULT_MIN_FEATURES",
-
     # OHLCV
     "OHLCV_COLUMNS",
     "REQUIRED_COLUMNS",
-
     # Labels
     "LABEL_CLASSES",
     "N_CLASSES",
-
     # Helper functions
     "get_models_for_family",
     "get_models_for_rank",
     "get_adapter_for_model",
-
     # =========================================================================
     # VALIDATION
     # =========================================================================
@@ -484,7 +451,6 @@ __all__ = [
     "validate_path_exists",
     "validate_timeframe",
     "validate_timeframe_list",
-
     # =========================================================================
     # LINEAGE
     # =========================================================================
@@ -494,7 +460,6 @@ __all__ = [
     "compute_file_checksum",
     "create_dataset_checksum",
     "validate_dataset_checksum",
-
     # =========================================================================
     # LEGACY EXPORTS (from original core package)
     # =========================================================================
@@ -511,13 +476,11 @@ __all__ = [
     "CONFIG_DIR",
     "TRAINING_CONFIG_PATH",
     "CV_CONFIG_PATH",
-
     # Defaults
     "DEFAULTS",
     "GlobalDefaults",
     "get_default",
     "as_dict",
-
     # Reproducibility
     "ReproducibilityConfig",
     "ReproducibilityInfo",
@@ -525,7 +488,6 @@ __all__ = [
     "get_reproducibility_info",
     "ensure_reproducibility",
     "get_worker_init_fn",
-
     # =========================================================================
     # CONTAINER - TimeSeriesDataContainer
     # =========================================================================
@@ -534,13 +496,11 @@ __all__ = [
     "SplitData",
     "VALID_SPLITS",
     "INVALID_LABEL",
-
     # =========================================================================
     # DATA CONTRACT - Explicit data passing between pipeline stages
     # =========================================================================
     "DatasetContract",
     "SplitDatasetContract",
-
     # =========================================================================
     # ABSORBED: src/contracts
     # =========================================================================
@@ -555,24 +515,10 @@ __all__ = [
     "get_models_requiring_scaling",
     "get_models_by_mtf_mode",
     "ArtifactManifest",
-
     # =========================================================================
-    # ABSORBED: src/config
+    # NOTE: src.config items NOT re-exported to avoid circular imports.
+    # Import directly: from src.config import GlobalConfig, UnifiedConfig, etc.
     # =========================================================================
-    "UnifiedConfig",
-    "get_unified_config",
-    "set_unified_config",
-    "reset_unified_config",
-    "get_config_value",
-    "get_config_value_strict",
-    "validate_config",
-    "validate_config_file",
-    "GlobalConfig",
-    "load_global_config",
-    "get_global_config",
-    "TrainerConfig",
-    "detect_environment",
-
     # =========================================================================
     # ABSORBED: src/common
     # =========================================================================
@@ -602,7 +548,6 @@ __all__ = [
     "DEFAULT_VAL_RATIO",
     "DEFAULT_TEST_RATIO",
     "validate_split_ratios",
-
     # =========================================================================
     # ABSORBED: src/utils
     # =========================================================================
@@ -627,7 +572,6 @@ __all__ = [
     "is_colab",
     "setup_environment",
     "setup_colab_environment",
-
     # =========================================================================
     # ABSORBED: src/coordination
     # =========================================================================

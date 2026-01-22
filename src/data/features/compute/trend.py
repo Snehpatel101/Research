@@ -4,11 +4,10 @@ Trend feature computation - ADX, Directional Indicators, Supertrend.
 PHASE_1 Unified Features: 6 TREND features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -27,10 +26,12 @@ def _true_range(df: pd.DataFrame) -> pd.Series:
 
 def _smoothed_ma(series: pd.Series, period: int) -> pd.Series:
     """Wilder's smoothing (equivalent to EMA with alpha=1/period)."""
-    return series.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    return series.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
-def _compute_directional_movement(df: pd.DataFrame, period: int = 14) -> tuple[pd.Series, pd.Series, pd.Series]:
+def _compute_directional_movement(
+    df: pd.DataFrame, period: int = 14
+) -> tuple[pd.Series, pd.Series, pd.Series]:
     """
     Compute +DM, -DM, and True Range for directional indicators.
 
@@ -136,7 +137,9 @@ def compute_adx_strong_trend(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def _compute_supertrend(df: pd.DataFrame, period: int = 10, multiplier: float = 3.0) -> tuple[pd.Series, pd.Series]:
+def _compute_supertrend(
+    df: pd.DataFrame, period: int = 10, multiplier: float = 3.0
+) -> tuple[pd.Series, pd.Series]:
     """
     Compute Supertrend indicator.
 
@@ -149,7 +152,7 @@ def _compute_supertrend(df: pd.DataFrame, period: int = 10, multiplier: float = 
     """
     # Calculate ATR
     tr = _true_range(df)
-    atr = tr.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    atr = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
     # Basic upper and lower bands
     hl2 = (df["high"] + df["low"]) / 2
@@ -177,18 +180,18 @@ def _compute_supertrend(df: pd.DataFrame, period: int = 10, multiplier: float = 
     # Calculate Supertrend
     for i in range(first_valid + 1, n):
         # Adjust bands based on previous close
-        if lower[i] > supertrend[i-1] if direction[i-1] == 1 else True:
+        if lower[i] > supertrend[i - 1] if direction[i - 1] == 1 else True:
             final_lower = lower[i]
         else:
-            final_lower = supertrend[i-1] if direction[i-1] == 1 else lower[i]
+            final_lower = supertrend[i - 1] if direction[i - 1] == 1 else lower[i]
 
-        if upper[i] < supertrend[i-1] if direction[i-1] == -1 else True:
+        if upper[i] < supertrend[i - 1] if direction[i - 1] == -1 else True:
             final_upper = upper[i]
         else:
-            final_upper = supertrend[i-1] if direction[i-1] == -1 else upper[i]
+            final_upper = supertrend[i - 1] if direction[i - 1] == -1 else upper[i]
 
         # Determine trend direction
-        if direction[i-1] == 1:
+        if direction[i - 1] == 1:
             if close[i] <= final_lower:
                 direction[i] = -1
                 supertrend[i] = final_upper
@@ -237,7 +240,7 @@ def compute_supertrend_direction(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-TREND_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+TREND_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # ADX
     "adx_14": compute_adx_14,
     "plus_di_14": compute_plus_di_14,

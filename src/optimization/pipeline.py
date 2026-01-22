@@ -50,36 +50,36 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from src.core import (
-    PipelineConfig,
-    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
-    DEFAULT_FEATURE_SELECTION_TRIALS,
     DEFAULT_FEATURE_PRUNING_TRIALS,
+    DEFAULT_FEATURE_SELECTION_TRIALS,
     DEFAULT_HYPERPARAM_TRIALS,
-    DEFAULT_OPTUNA_RANDOM_STATE,
+    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
     DEFAULT_MIN_FEATURES,
+    DEFAULT_OPTUNA_RANDOM_STATE,
+    PipelineConfig,
 )
-
+from src.optimization.features import (
+    FeatureOptimizer,
+    FeaturePruningResult,
+    FeatureSelectionResult,
+)
+from src.optimization.hyperparameters import (
+    HyperparameterOptimizer,
+    HyperparameterResult,
+)
 from src.optimization.labels import (
     LabelOptimizationResult,
     LabelOptimizer,
     TripleBarrierConfig,
-)
-from src.optimization.features import (
-    FeatureSelectionResult,
-    FeaturePruningResult,
-    FeatureOptimizer,
-)
-from src.optimization.hyperparameters import (
-    HyperparameterResult,
-    HyperparameterOptimizer,
 )
 
 if TYPE_CHECKING:
@@ -91,6 +91,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # RESULT DATACLASS
 # =============================================================================
+
 
 @dataclass
 class FullOptimizationResult:
@@ -119,23 +120,23 @@ class FullOptimizationResult:
     """
 
     # Stage results
-    label_result: Optional[LabelOptimizationResult] = None
-    selection_result: Optional[FeatureSelectionResult] = None
-    pruning_result: Optional[FeaturePruningResult] = None
-    hyperparam_results: Dict[str, HyperparameterResult] = field(default_factory=dict)
+    label_result: LabelOptimizationResult | None = None
+    selection_result: FeatureSelectionResult | None = None
+    pruning_result: FeaturePruningResult | None = None
+    hyperparam_results: dict[str, HyperparameterResult] = field(default_factory=dict)
 
     # Final configurations
-    final_features: List[str] = field(default_factory=list)
-    final_label_config: Optional[TripleBarrierConfig] = None
-    final_hyperparams: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    final_features: list[str] = field(default_factory=list)
+    final_label_config: TripleBarrierConfig | None = None
+    final_hyperparams: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     # Statistics
     total_trials: int = 0
     optimization_time_seconds: float = 0.0
 
     # Metadata
-    stages_run: List[str] = field(default_factory=list)
-    config_used: Optional[Dict[str, Any]] = None
+    stages_run: list[str] = field(default_factory=list)
+    config_used: dict[str, Any] | None = None
 
     def __repr__(self) -> str:
         stages = ", ".join(self.stages_run) if self.stages_run else "none"
@@ -149,13 +150,12 @@ class FullOptimizationResult:
             f")"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = {
             "final_features": self.final_features,
             "final_label_config": (
-                self.final_label_config.to_dict()
-                if self.final_label_config else None
+                self.final_label_config.to_dict() if self.final_label_config else None
             ),
             "final_hyperparams": self.final_hyperparams,
             "total_trials": self.total_trials,
@@ -179,6 +179,7 @@ class FullOptimizationResult:
     def save(self, path: Path) -> None:
         """Save result to JSON file."""
         import json
+
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -191,6 +192,7 @@ class FullOptimizationResult:
 # =============================================================================
 # OPTIMIZATION PIPELINE
 # =============================================================================
+
 
 class OptimizationPipeline:
     """
@@ -249,7 +251,7 @@ class OptimizationPipeline:
         self._hyperparam_optimizer = None
 
     @classmethod
-    def from_config(cls, config: PipelineConfig) -> "OptimizationPipeline":
+    def from_config(cls, config: PipelineConfig) -> OptimizationPipeline:
         """
         Create pipeline from PipelineConfig.
 
@@ -276,11 +278,11 @@ class OptimizationPipeline:
             print(f"STAGE {stage_num}/{total_stages}: {stage_name}")
             print(f"{'='*70}")
 
-    def _print_pipeline_header(self, stages: List[str]) -> None:
+    def _print_pipeline_header(self, stages: list[str]) -> None:
         """Print pipeline start header."""
         if self.verbose >= 1:
             print(f"\n{'#'*70}")
-            print(f"# OPTIMIZATION PIPELINE - PHASE_1B")
+            print("# OPTIMIZATION PIPELINE - PHASE_1B")
             print(f"# Stages: {', '.join(stages)}")
             print(f"# Random state: {self.random_state}")
             print(f"{'#'*70}")
@@ -289,13 +291,13 @@ class OptimizationPipeline:
         self,
         ohlcv_df: pd.DataFrame,
         feature_df: pd.DataFrame,
-        models: List[str],
-        model_factories: Dict[str, Callable[[Dict[str, Any]], Any]],
-        labels: Optional[np.ndarray] = None,
+        models: list[str],
+        model_factories: dict[str, Callable[[dict[str, Any]], Any]],
+        labels: np.ndarray | None = None,
         optimize_labels: bool = True,
         optimize_features: bool = True,
         optimize_hyperparams: bool = True,
-        target_distribution: Optional[Dict[int, float]] = None,
+        target_distribution: dict[int, float] | None = None,
     ) -> FullOptimizationResult:
         """
         Run full optimization pipeline.
@@ -392,8 +394,10 @@ class OptimizationPipeline:
 
         # Split data for optimization (use first model for feature/label optimization)
         from sklearn.model_selection import train_test_split
+
         X_train, X_val, y_train, y_val = train_test_split(
-            X_all, y_all,
+            X_all,
+            y_all,
             test_size=0.2,
             random_state=self.random_state,
             stratify=y_all,
@@ -402,8 +406,7 @@ class OptimizationPipeline:
         # Get a representative model factory for feature optimization
         representative_model = models[0] if models else "xgboost"
         representative_factory = model_factories.get(
-            representative_model,
-            list(model_factories.values())[0] if model_factories else None
+            representative_model, list(model_factories.values())[0] if model_factories else None
         )
 
         # =====================================================================
@@ -496,8 +499,7 @@ class OptimizationPipeline:
 
             # Get final feature indices
             final_feature_indices = [
-                feature_names.index(f) for f in selected_features
-                if f in feature_names
+                feature_names.index(f) for f in selected_features if f in feature_names
             ]
             X_train_final = X_train[:, final_feature_indices]
             X_val_final = X_val[:, final_feature_indices]
@@ -531,7 +533,7 @@ class OptimizationPipeline:
             stages_run.append("hyperparameter_optimization")
 
             if self.verbose >= 1:
-                print(f"\n  Hyperparameter optimization complete")
+                print("\n  Hyperparameter optimization complete")
                 print(f"  Models optimized: {len(hyperparam_results)}")
 
         # =====================================================================
@@ -545,7 +547,7 @@ class OptimizationPipeline:
 
         if self.verbose >= 1:
             print(f"\n{'#'*70}")
-            print(f"# OPTIMIZATION PIPELINE COMPLETE")
+            print("# OPTIMIZATION PIPELINE COMPLETE")
             print(f"# Total trials: {total_trials}")
             print(f"# Total time: {optimization_time:.1f}s")
             print(f"# Stages: {', '.join(stages_run)}")
@@ -556,7 +558,7 @@ class OptimizationPipeline:
     def run_label_optimization(
         self,
         ohlcv_df: pd.DataFrame,
-        target_distribution: Optional[Dict[int, float]] = None,
+        target_distribution: dict[int, float] | None = None,
     ) -> LabelOptimizationResult:
         """
         Run only label optimization.
@@ -584,10 +586,10 @@ class OptimizationPipeline:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        feature_names: List[str],
-        model_factory: Callable[[Dict[str, Any]], Any],
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
+        feature_names: list[str],
+        model_factory: Callable[[dict[str, Any]], Any],
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
     ) -> tuple[FeatureSelectionResult, FeaturePruningResult]:
         """
         Run only feature optimization (selection + pruning).
@@ -623,13 +625,13 @@ class OptimizationPipeline:
 
     def run_hyperparameter_optimization(
         self,
-        models: List[str],
-        model_factories: Dict[str, Callable[[Dict[str, Any]], Any]],
+        models: list[str],
+        model_factories: dict[str, Callable[[dict[str, Any]], Any]],
         X_train: np.ndarray,
         y_train: np.ndarray,
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-    ) -> Dict[str, HyperparameterResult]:
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+    ) -> dict[str, HyperparameterResult]:
         """
         Run only hyperparameter optimization.
 

@@ -80,12 +80,36 @@ from src.inference.batch import (
     BatchResult,
     run_batch_inference,
 )
+from src.inference.builder import (
+    BundleBuilder,
+    BundleBuildResult,
+    build_bundles,
+    build_from_run,
+)
 from src.inference.bundle import (
     BUNDLE_PREPROCESSING_GRAPH_FILE,
     BUNDLE_VERSION,
     BundleManifest,
     BundleMetadata,
     ModelBundle,
+)
+
+# PHASE_5: Ensemble bundle for stacking ensembles
+from src.inference.ensemble_bundle import (
+    ENSEMBLE_BUNDLE_VERSION,
+    AlignmentConfig,
+    EnsembleBundle,
+    EnsembleBundleManifest,
+    EnsembleBundleMetadata,
+)
+
+# PHASE_5: InferenceOrchestrator - THE single entry point for inference
+from src.inference.orchestrator import (
+    InferenceOrchestrator,
+    PredictionResult,
+    load_inference,
+    predict_batch_from_bundle,
+    predict_from_bundle,
 )
 from src.inference.pipeline import (
     EnsembleResult,
@@ -108,28 +132,6 @@ from src.inference.server import (
     ModelServer,
     ServerConfig,
     start_server,
-)
-from src.inference.builder import (
-    BundleBuilder,
-    BundleBuildResult,
-    build_bundles,
-    build_from_run,
-)
-# PHASE_5: Ensemble bundle for stacking ensembles
-from src.inference.ensemble_bundle import (
-    AlignmentConfig,
-    EnsembleBundle,
-    EnsembleBundleManifest,
-    EnsembleBundleMetadata,
-    ENSEMBLE_BUNDLE_VERSION,
-)
-# PHASE_5: InferenceOrchestrator - THE single entry point for inference
-from src.inference.orchestrator import (
-    InferenceOrchestrator,
-    PredictionResult,
-    load_inference,
-    predict_from_bundle,
-    predict_batch_from_bundle,
 )
 
 __all__ = [

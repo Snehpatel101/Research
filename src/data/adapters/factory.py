@@ -37,17 +37,18 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.core.constants import MODEL_ADAPTER_MAP, MODEL_DATA_RANKS
 from src.core.config import PipelineConfig
-from .registry import AdapterRegistry
+from src.core.constants import MODEL_ADAPTER_MAP, MODEL_DATA_RANKS
+
 from .base import AdapterResult, BaseAdapter
+from .registry import AdapterRegistry
 
 if TYPE_CHECKING:
-    from src.core.interfaces import DataContract
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class AdapterFactory:
                 and other parameters needed by different adapter types.
         """
         self.config = config
-        self._adapters: Dict[str, BaseAdapter] = {}
+        self._adapters: dict[str, BaseAdapter] = {}
         logger.debug(
             f"AdapterFactory initialized with config: "
             f"seq_len={config.sequence_length}, "
@@ -96,9 +97,9 @@ class AdapterFactory:
     def get_adapter(
         self,
         model_name: str,
-        feature_columns: Optional[List[str]] = None,
+        feature_columns: list[str] | None = None,
         label_column: str = "label_h20",
-        weight_column: Optional[str] = "sample_weight_h20",
+        weight_column: str | None = "sample_weight_h20",
         use_cache: bool = False,
     ) -> BaseAdapter:
         """
@@ -147,7 +148,7 @@ class AdapterFactory:
             )
 
         # Build kwargs based on adapter type
-        kwargs: Dict[str, any] = {
+        kwargs: dict[str, any] = {
             "feature_columns": feature_columns,
             "label_column": label_column,
             "weight_column": weight_column,
@@ -178,9 +179,7 @@ class AdapterFactory:
         if use_cache:
             self._adapters[model_key] = adapter
 
-        logger.debug(
-            f"Created {adapter_type} adapter for model: {model_name}"
-        )
+        logger.debug(f"Created {adapter_type} adapter for model: {model_name}")
 
         return adapter
 
@@ -188,10 +187,10 @@ class AdapterFactory:
         self,
         model_name: str,
         df: pd.DataFrame,
-        feature_columns: Optional[List[str]] = None,
+        feature_columns: list[str] | None = None,
         label_column: str = "label_h20",
-        weight_column: Optional[str] = "sample_weight_h20",
-        additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
+        weight_column: str | None = "sample_weight_h20",
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> AdapterResult:
         """
         Prepare data for a model - NO BYPASS.
@@ -257,13 +256,13 @@ class AdapterFactory:
 
     def prepare_heterogeneous(
         self,
-        models: List[str],
+        models: list[str],
         df: pd.DataFrame,
-        additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
-        feature_columns: Optional[List[str]] = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+        feature_columns: list[str] | None = None,
         label_column: str = "label_h20",
-        weight_column: Optional[str] = "sample_weight_h20",
-    ) -> Dict[str, AdapterResult]:
+        weight_column: str | None = "sample_weight_h20",
+    ) -> dict[str, AdapterResult]:
         """
         Prepare data for heterogeneous ensemble (different adapters per model).
 
@@ -298,7 +297,7 @@ class AdapterFactory:
             # lstm: (9940, 60, 162), rank=3
             # patchtst: (9940, 3, 60, 5), rank=4
         """
-        results: Dict[str, AdapterResult] = {}
+        results: dict[str, AdapterResult] = {}
 
         for model_name in models:
             adapter = self.get_adapter(
@@ -323,13 +322,12 @@ class AdapterFactory:
             )
 
         logger.info(
-            f"Prepared heterogeneous data for {len(models)} models: "
-            f"{list(results.keys())}"
+            f"Prepared heterogeneous data for {len(models)} models: " f"{list(results.keys())}"
         )
 
         return results
 
-    def get_model_info(self, model_name: str) -> Dict[str, any]:
+    def get_model_info(self, model_name: str) -> dict[str, any]:
         """
         Get adapter info for a model without creating an adapter.
 
@@ -405,7 +403,7 @@ class AdapterFactory:
         return rank
 
     @staticmethod
-    def list_models_by_adapter() -> Dict[str, List[str]]:
+    def list_models_by_adapter() -> dict[str, list[str]]:
         """
         List all models grouped by their adapter type.
 
@@ -420,7 +418,7 @@ class AdapterFactory:
                 "multi_stream": ["patchtst", "itransformer"],
             }
         """
-        grouped: Dict[str, List[str]] = {}
+        grouped: dict[str, list[str]] = {}
         for model, adapter in MODEL_ADAPTER_MAP.items():
             if adapter not in grouped:
                 grouped[adapter] = []
@@ -433,7 +431,7 @@ class AdapterFactory:
         return grouped
 
     @staticmethod
-    def list_models_by_rank() -> Dict[int, List[str]]:
+    def list_models_by_rank() -> dict[int, list[str]]:
         """
         List all models grouped by their data rank.
 
@@ -448,7 +446,7 @@ class AdapterFactory:
                 4: ["patchtst", "itransformer"],
             }
         """
-        grouped: Dict[int, List[str]] = {}
+        grouped: dict[int, list[str]] = {}
         for model, rank in MODEL_DATA_RANKS.items():
             if rank not in grouped:
                 grouped[rank] = []

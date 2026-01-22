@@ -7,29 +7,29 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.config.global_config import GlobalConfig
+    pass
 
 # Import HorizonConfig and active horizons from the dedicated horizon module
 # Re-exported here for backward compatibility
-from src.common.horizon_config import ACTIVE_HORIZONS, HorizonConfig
-from src.common.split_ratios import (
+from src.core.common.horizon_config import ACTIVE_HORIZONS, HorizonConfig
+from src.core.common.split_ratios import (
     DEFAULT_TEST_RATIO,
     DEFAULT_TRAIN_RATIO,
     DEFAULT_VAL_RATIO,
 )
+from src.data.pipeline.config.pipeline_defaults import create_default_config
 
 # Import extracted modules
-from src.pipeline.config.pipeline_paths import PipelinePathMixin
-from src.pipeline.config.pipeline_persistence import PipelinePersistenceMixin
-from src.pipeline.config.pipeline_summary import generate_pipeline_summary
-from src.pipeline.config.pipeline_validation import validate_pipeline_config
-from src.pipeline.config.pipeline_defaults import create_default_config
+from src.data.pipeline.config.pipeline_paths import PipelinePathMixin
+from src.data.pipeline.config.pipeline_persistence import PipelinePersistenceMixin
+from src.data.pipeline.config.pipeline_summary import generate_pipeline_summary
+from src.data.pipeline.config.pipeline_validation import validate_pipeline_config
 
 # Import MTF configuration
-from src.pipeline.stages.mtf.constants import (
+from src.data.pipeline.stages.mtf.constants import (
     DEFAULT_MTF_MODE,
     DEFAULT_MTF_TIMEFRAMES,
     FULL_MTF_TIMEFRAMES,
@@ -199,8 +199,8 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
     def __post_init__(self):
         """Validate configuration after initialization."""
-        from src.common.timeframes import is_valid_timeframe, validate_timeframe
-        from src.pipeline.config import (
+        from src.core.common.timeframes import is_valid_timeframe, validate_timeframe
+        from src.data.pipeline.config import (
             SUPPORTED_HORIZONS,
             auto_scale_purge_embargo,
             validate_feature_set_config,
@@ -235,13 +235,13 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
             raise ValueError(f"Feature generation validation failed: {feature_set_issues}")
 
         # Validate MTF configuration
-        # CFG-007: Use unified validation from src.common.timeframes
+        # CFG-007: Use unified validation from src.core.common.timeframes
         valid_mtf_modes = ["bars", "indicators", "both"]
         if self.mtf_mode not in valid_mtf_modes:
             raise ValueError(f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'")
         for tf in self.mtf_timeframes:
             if not is_valid_timeframe(tf, allow_extended=True):
-                from src.common.timeframes import SUPPORTED_TIMEFRAMES as SUPPORTED_TF
+                from src.core.common.timeframes import SUPPORTED_TIMEFRAMES as SUPPORTED_TF
 
                 raise ValueError(f"Unsupported MTF timeframe: '{tf}'. Supported: {SUPPORTED_TF}")
 

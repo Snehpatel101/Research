@@ -38,7 +38,6 @@ def generate_executive_summary(
         if validation_data and validation_data.get("status") == "PASSED"
         else "NEEDS ATTENTION"
     )
-    status_icon = "checkmark" if status == "PASSED" else "warning"
 
     quality_status = "All checks passed"
     if validation_data and validation_data.get("issues_count", 1) > 0:

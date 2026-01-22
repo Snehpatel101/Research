@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import logging
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ class ConfigValidationError(Exception):
     def __init__(self, result: ValidationResult):
         self.result = result
         errors = [str(e) for e in result.errors]
-        super().__init__(f"Configuration validation failed:\n" + "\n".join(errors))
+        super().__init__("Configuration validation failed:\n" + "\n".join(errors))
 
 
 # =============================================================================
@@ -497,7 +498,7 @@ def validate_timeframes(data: dict[str, Any]) -> ValidationResult:
     """Validate timeframe configuration."""
     result = ValidationResult()
 
-    from src.common.timeframes import CANONICAL_TIMEFRAMES as VALID_TFS
+    from src.core.common.timeframes import CANONICAL_TIMEFRAMES as VALID_TFS
 
     timeframes = data.get("timeframes", {})
     canonical_ladder = timeframes.get("canonical_ladder", [])
@@ -663,9 +664,7 @@ def validate_config(
     if result.errors:
         logger.error(f"Configuration validation failed: {len(result.errors)} error(s)")
     elif result.warnings:
-        logger.warning(
-            f"Configuration valid with {len(result.warnings)} warning(s)"
-        )
+        logger.warning(f"Configuration valid with {len(result.warnings)} warning(s)")
 
     # Strict mode
     if strict and not result.is_valid:

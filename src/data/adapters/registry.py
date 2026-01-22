@@ -7,7 +7,7 @@ Phase 2 SNwH Implementation.
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.core.contracts import ModelContract
@@ -43,9 +43,7 @@ class AdapterRegistry:
 
         def decorator(adapter_class: type[BaseAdapter]) -> type[BaseAdapter]:
             if adapter_id in cls._adapters:
-                logger.warning(
-                    f"Adapter '{adapter_id}' already registered, overwriting"
-                )
+                logger.warning(f"Adapter '{adapter_id}' already registered, overwriting")
             cls._adapters[adapter_id] = adapter_class
             adapter_class.adapter_id = adapter_id
             logger.debug(f"Registered adapter: {adapter_id}")
@@ -69,8 +67,7 @@ class AdapterRegistry:
         """
         if adapter_id not in cls._adapters:
             raise ValueError(
-                f"Unknown adapter '{adapter_id}'. "
-                f"Available: {sorted(cls._adapters.keys())}"
+                f"Unknown adapter '{adapter_id}'. " f"Available: {sorted(cls._adapters.keys())}"
             )
         return cls._adapters[adapter_id]
 
@@ -117,7 +114,7 @@ class AdapterRegistry:
     @classmethod
     def get_for_contract(
         cls,
-        contract: "ModelContract",
+        contract: ModelContract,
         **kwargs: Any,
     ) -> BaseAdapter:
         """

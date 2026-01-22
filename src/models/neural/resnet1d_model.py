@@ -231,7 +231,7 @@ class ResNet1DNetwork(nn.Module):
         self.stages = nn.ModuleList()
         in_channels = channels[0]
 
-        for i, (n_block, out_channels) in enumerate(zip(n_blocks, channels)):
+        for i, (n_block, out_channels) in enumerate(zip(n_blocks, channels, strict=False)):
             stride = 2 if i > 0 else 1  # Downsample after first stage
 
             blocks = []

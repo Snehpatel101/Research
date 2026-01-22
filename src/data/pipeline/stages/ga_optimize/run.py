@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.pipeline.utils import create_failed_result, create_stage_result
+from src.data.pipeline.utils import create_failed_result, create_stage_result
 
 from .optimization import run_ga_optimization, run_ga_optimization_safe
 from .plotting import plot_convergence
@@ -138,7 +138,9 @@ def run_ga_optimization(
                             logger.warning(
                                 "    Negative fitness indicates constraint violation (e.g., <10% neutral)"
                             )
-                            logger.warning("    Re-running optimization with stricter constraints...")
+                            logger.warning(
+                                "    Re-running optimization with stricter constraints..."
+                            )
                             # Remove invalid cached file
                             results_path.unlink()
 
@@ -147,7 +149,9 @@ def run_ga_optimization(
                     safe_mode = getattr(config, "ga_safe_mode", True)  # Default to safe
 
                     if safe_mode:
-                        logger.info(f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization...")
+                        logger.info(
+                            f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization..."
+                        )
                         logger.info(
                             "    (Safe mode: using only training portion to prevent test data leakage)"
                         )
@@ -197,7 +201,7 @@ def run_ga_optimization(
                         logger.warning("    Falling back to default barrier parameters...")
 
                         # Import defaults
-                        from src.pipeline.config import get_barrier_params
+                        from src.data.pipeline.config import get_barrier_params
 
                         default_params = get_barrier_params(symbol, horizon)
 

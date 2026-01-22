@@ -19,7 +19,7 @@ from typing import Dict, Any
 
 # Import from src modules
 from src.phase1.stages.validation.normalization import detect_outliers
-from src.monitoring import PSIDetector
+from src.validation.monitoring import PSIDetector
 
 def check_missing_values(df: pd.DataFrame, threshold: float = 0.05) -> Dict[str, Any]:
     """Check for missing values in dataframe."""
@@ -33,13 +33,13 @@ def check_missing_values(df: pd.DataFrame, threshold: float = 0.05) -> Dict[str,
 
 print("MLOps helper functions loaded from src/ modules")
 '''
-    cell['source'] = new_source.splitlines(keepends=True)
+    cell["source"] = new_source.splitlines(keepends=True)
     return cell
 
 
 def refactor_cell_14(cell):
     """Cell 14: Data Quality Validation (168→40 lines)"""
-    new_source = '''#@title 3.6 Data Quality Validation { display-mode: "form" }
+    new_source = """#@title 3.6 Data Quality Validation { display-mode: "form" }
 
 import numpy as np
 import pandas as pd
@@ -88,14 +88,14 @@ else:
     CONFIG.data_quality_gate_passed = summary['status'] == 'PASSED'
 
 print("\\n" + "=" * 70)
-'''
-    cell['source'] = new_source.splitlines(keepends=True)
+"""
+    cell["source"] = new_source.splitlines(keepends=True)
     return cell
 
 
 def refactor_cell_22(cell):
     """Cell 22: Prediction Calibration (143→35 lines)"""
-    new_source = '''#@title 4.5 Prediction Calibration & Confidence { display-mode: "form" }
+    new_source = """#@title 4.5 Prediction Calibration & Confidence { display-mode: "form" }
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -160,14 +160,14 @@ else:
         print("\\n✅ Calibration complete")
 
 print("\\n" + "=" * 70)
-'''
-    cell['source'] = new_source.splitlines(keepends=True)
+"""
+    cell["source"] = new_source.splitlines(keepends=True)
     return cell
 
 
 def refactor_cell_26(cell):
     """Cell 26: Performance Monitoring (135→30 lines)"""
-    new_source = '''#@title 4.6 Performance Monitoring (Rolling Window) { display-mode: "form" }
+    new_source = """#@title 4.6 Performance Monitoring (Rolling Window) { display-mode: "form" }
 
 import numpy as np
 import pandas as pd
@@ -240,14 +240,14 @@ else:
         plt.show()
 
 print("\\n" + "=" * 70)
-'''
-    cell['source'] = new_source.splitlines(keepends=True)
+"""
+    cell["source"] = new_source.splitlines(keepends=True)
     return cell
 
 
 def refactor_cell_30(cell):
     """Cell 30: Feature Drift Detection (160→45 lines)"""
-    new_source = '''#@title 5.6 Feature Drift Detection { display-mode: "form" }
+    new_source = """#@title 5.6 Feature Drift Detection { display-mode: "form" }
 
 import numpy as np
 import pandas as pd
@@ -255,7 +255,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Import from src modules
-from src.monitoring import PSIDetector, KSDetector
+from src.validation.monitoring import PSIDetector, KSDetector
 
 print("=" * 70)
 print("FEATURE DRIFT DETECTION")
@@ -332,14 +332,14 @@ else:
     print(f"\\n{'⚠️' if CONFIG.drift_detection_results['drift_detected'] else '✅'} Drift detection complete")
 
 print("\\n" + "=" * 70)
-'''
-    cell['source'] = new_source.splitlines(keepends=True)
+"""
+    cell["source"] = new_source.splitlines(keepends=True)
     return cell
 
 
 def refactor_cell_32(cell):
     """Cell 32: Deployment Decision Gate (170→50 lines)"""
-    new_source = '''#@title 5.7 Deployment Decision Gate { display-mode: "form" }
+    new_source = """#@title 5.7 Deployment Decision Gate { display-mode: "form" }
 
 import numpy as np
 import pandas as pd
@@ -430,16 +430,16 @@ else:
     print("=" * 70)
 
 print("\\n" + "=" * 70)
-'''
-    cell['source'] = new_source.splitlines(keepends=True)
+"""
+    cell["source"] = new_source.splitlines(keepends=True)
     return cell
 
 
 def main():
-    nb_path = Path('/home/jake/Desktop/Research/notebooks/ML_Pipeline.ipynb')
+    nb_path = Path("/home/jake/Desktop/Research/notebooks/ML_Pipeline.ipynb")
 
     print("Loading notebook...")
-    with open(nb_path, 'r') as f:
+    with open(nb_path) as f:
         nb = json.load(f)
 
     print(f"Total cells: {len(nb['cells'])}")
@@ -457,20 +457,20 @@ def main():
     # Apply refactorings
     for cell_idx, refactor_fn in refactorings.items():
         print(f"Refactoring cell {cell_idx}...")
-        original_lines = len(nb['cells'][cell_idx]['source'])
-        nb['cells'][cell_idx] = refactor_fn(nb['cells'][cell_idx])
-        new_lines = len(nb['cells'][cell_idx]['source'])
+        original_lines = len(nb["cells"][cell_idx]["source"])
+        nb["cells"][cell_idx] = refactor_fn(nb["cells"][cell_idx])
+        new_lines = len(nb["cells"][cell_idx]["source"])
         print(f"  {original_lines} → {new_lines} lines (saved {original_lines - new_lines} lines)")
 
     # Save refactored notebook
     output_path = nb_path
     print(f"\nSaving refactored notebook to {output_path}...")
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(nb, f, indent=1)
 
     print("✅ Refactoring complete!")
     print(f"\nBackup saved at: {nb_path}.refactor_backup")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

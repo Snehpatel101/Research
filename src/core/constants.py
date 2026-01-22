@@ -12,29 +12,35 @@ Defines:
 - DEFAULT_* values for pipeline configuration
 """
 
-from typing import Dict, List, Tuple
-
 
 # =============================================================================
 # TIMEFRAMES - 9 canonical intraday timeframes
 # =============================================================================
 
-CANONICAL_TIMEFRAMES: List[str] = [
-    "1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"
+CANONICAL_TIMEFRAMES: list[str] = [
+    "1min",
+    "5min",
+    "10min",
+    "15min",
+    "20min",
+    "25min",
+    "30min",
+    "45min",
+    "60min",
 ]
 
 # Base timeframe (source data resolution)
 BASE_TIMEFRAME: str = "1min"
 
 # Default MTF timeframes for multi-timeframe features
-DEFAULT_MTF_TIMEFRAMES: List[str] = ["5min", "15min", "60min"]
+DEFAULT_MTF_TIMEFRAMES: list[str] = ["5min", "15min", "60min"]
 
 
 # =============================================================================
 # HORIZONS - Prediction horizons (in bars)
 # =============================================================================
 
-DEFAULT_HORIZONS: List[int] = [5, 10, 15, 20]
+DEFAULT_HORIZONS: list[int] = [5, 10, 15, 20]
 DEFAULT_HORIZON: int = 20
 
 
@@ -42,7 +48,7 @@ DEFAULT_HORIZON: int = 20
 # DATA SPLIT RATIOS
 # =============================================================================
 
-DEFAULT_SPLIT_RATIOS: Dict[str, float] = {
+DEFAULT_SPLIT_RATIOS: dict[str, float] = {
     "train": 0.70,
     "val": 0.15,
     "test": 0.15,
@@ -53,7 +59,7 @@ DEFAULT_SPLIT_RATIOS: Dict[str, float] = {
 # PURGE/EMBARGO - Leakage prevention
 # =============================================================================
 
-DEFAULT_PURGE_BARS: int = 60      # Gap before test fold
+DEFAULT_PURGE_BARS: int = 60  # Gap before test fold
 DEFAULT_EMBARGO_BARS: int = 1440  # Gap after test fold (1 day at 1min)
 
 
@@ -61,22 +67,27 @@ DEFAULT_EMBARGO_BARS: int = 1440  # Gap after test fold (1 day at 1min)
 # MODEL FAMILIES - 23 models across 5 families
 # =============================================================================
 
-MODEL_FAMILIES: Dict[str, List[str]] = {
+MODEL_FAMILIES: dict[str, list[str]] = {
     "boosting": ["xgboost", "lightgbm", "catboost"],
     "classical": ["random_forest", "logistic", "svm"],
     "neural": [
-        "lstm", "gru", "tcn", "transformer",
-        "patchtst", "itransformer", "tft",
-        "nbeats", "inceptiontime", "resnet1d"
+        "lstm",
+        "gru",
+        "tcn",
+        "transformer",
+        "patchtst",
+        "itransformer",
+        "tft",
+        "nbeats",
+        "inceptiontime",
+        "resnet1d",
     ],
     "ensemble": ["voting", "stacking", "blending"],
     "meta_learner": ["ridge_meta", "mlp_meta", "xgboost_meta", "calibrated_meta"],
 }
 
 # Total model count verification
-ALL_MODELS: List[str] = [
-    model for models in MODEL_FAMILIES.values() for model in models
-]
+ALL_MODELS: list[str] = [model for models in MODEL_FAMILIES.values() for model in models]
 assert len(ALL_MODELS) == 23, f"Expected 23 models, got {len(ALL_MODELS)}"
 
 
@@ -84,10 +95,8 @@ assert len(ALL_MODELS) == 23, f"Expected 23 models, got {len(ALL_MODELS)}"
 # MODEL -> FAMILY MAPPING
 # =============================================================================
 
-MODEL_TO_FAMILY: Dict[str, str] = {
-    model: family
-    for family, models in MODEL_FAMILIES.items()
-    for model in models
+MODEL_TO_FAMILY: dict[str, str] = {
+    model: family for family, models in MODEL_FAMILIES.items() for model in models
 }
 
 
@@ -95,17 +104,15 @@ MODEL_TO_FAMILY: Dict[str, str] = {
 # MODEL -> DATA RANK MAPPING (2D/3D/4D)
 # =============================================================================
 
-MODEL_DATA_RANKS: Dict[str, int] = {
+MODEL_DATA_RANKS: dict[str, int] = {
     # Boosting - 2D (tabular)
     "xgboost": 2,
     "lightgbm": 2,
     "catboost": 2,
-
     # Classical - 2D (tabular)
     "random_forest": 2,
     "logistic": 2,
     "svm": 2,
-
     # Neural RNN/CNN - 3D (sequence)
     "lstm": 3,
     "gru": 3,
@@ -115,11 +122,9 @@ MODEL_DATA_RANKS: Dict[str, int] = {
     "inceptiontime": 3,
     "resnet1d": 3,
     "tft": 3,  # TFT is 3D sequence (see PHASE_0 notes)
-
     # Advanced Neural - 4D (multi-stream/multi-timeframe)
     "patchtst": 4,
     "itransformer": 4,
-
     # Ensemble/Meta - 2D (OOF probabilities)
     "voting": 2,
     "stacking": 2,
@@ -140,17 +145,15 @@ MODEL_DATA_RANKS: Dict[str, int] = {
 # MODEL -> ADAPTER MAPPING
 # =============================================================================
 
-MODEL_ADAPTER_MAP: Dict[str, str] = {
+MODEL_ADAPTER_MAP: dict[str, str] = {
     # Boosting -> Tabular (2D)
     "xgboost": "tabular",
     "lightgbm": "tabular",
     "catboost": "tabular",
-
     # Classical -> Tabular (2D)
     "random_forest": "tabular",
     "logistic": "tabular",
     "svm": "tabular",
-
     # Neural -> Sequence (3D)
     "lstm": "sequence",
     "gru": "sequence",
@@ -160,11 +163,9 @@ MODEL_ADAPTER_MAP: Dict[str, str] = {
     "inceptiontime": "sequence",
     "resnet1d": "sequence",
     "tft": "sequence",  # TFT uses sequence adapter (3D)
-
     # Advanced Neural -> Multi-Stream (4D)
     "patchtst": "multi_stream",
     "itransformer": "multi_stream",
-
     # Ensemble/Meta -> Tabular (2D on OOF)
     "voting": "tabular",
     "stacking": "tabular",
@@ -180,7 +181,7 @@ MODEL_ADAPTER_MAP: Dict[str, str] = {
 # FEATURE FAMILIES - 12 families, 162 base features
 # =============================================================================
 
-FEATURE_FAMILY_COUNTS: Dict[str, int] = {
+FEATURE_FAMILY_COUNTS: dict[str, int] = {
     "raw": 5,
     "momentum": 23,
     "moving_average": 16,
@@ -240,15 +241,15 @@ DEFAULT_MIN_FEATURES: int = 20
 # OHLCV COLUMN NAMES
 # =============================================================================
 
-OHLCV_COLUMNS: List[str] = ["open", "high", "low", "close", "volume"]
-REQUIRED_COLUMNS: List[str] = ["datetime"] + OHLCV_COLUMNS
+OHLCV_COLUMNS: list[str] = ["open", "high", "low", "close", "volume"]
+REQUIRED_COLUMNS: list[str] = ["datetime"] + OHLCV_COLUMNS
 
 
 # =============================================================================
 # LABEL CLASSES
 # =============================================================================
 
-LABEL_CLASSES: Dict[int, str] = {
+LABEL_CLASSES: dict[int, str] = {
     -1: "short",
     0: "neutral",
     1: "long",
@@ -260,12 +261,13 @@ N_CLASSES: int = 3
 # HELPER FUNCTIONS
 # =============================================================================
 
-def get_models_for_family(family: str) -> List[str]:
+
+def get_models_for_family(family: str) -> list[str]:
     """Get all models belonging to a family."""
     return MODEL_FAMILIES.get(family, [])
 
 
-def get_models_for_rank(rank: int) -> List[str]:
+def get_models_for_rank(rank: int) -> list[str]:
     """Get all models requiring a specific data rank."""
     return [model for model, r in MODEL_DATA_RANKS.items() if r == rank]
 

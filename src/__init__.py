@@ -39,26 +39,32 @@ def __getattr__(name: str):
     """Lazy imports."""
     if name == "MLPipeline":
         from src.orchestrator import MLPipeline
+
         return MLPipeline
 
     if name == "PipelineConfig":
         from src.pipeline_config import PipelineConfig
+
         return PipelineConfig
 
     if name == "PipelineResult":
         from src.orchestrator import PipelineResult
+
         return PipelineResult
 
     if name == "quick_config":
         from src.pipeline_config import quick_config
+
         return quick_config
 
     if name == "production_config":
         from src.pipeline_config import production_config
+
         return production_config
 
     if name == "research_config":
         from src.pipeline_config import research_config
+
         return research_config
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

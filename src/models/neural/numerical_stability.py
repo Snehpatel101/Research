@@ -19,7 +19,7 @@ import torch
 import torch.nn as nn
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    pass
 
 logger = logging.getLogger(__name__)
 

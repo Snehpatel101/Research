@@ -10,11 +10,11 @@ Usage:
     python scripts/phase3_validation.py
 """
 
+import importlib
 import sys
 import traceback
 from dataclasses import dataclass
 from typing import Any
-import importlib
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ import pandas as pd
 @dataclass
 class ComponentTestResult:
     """Result from testing a single component."""
+
     name: str
     module: str
     success: bool
@@ -33,6 +34,7 @@ class ComponentTestResult:
 @dataclass
 class Phase3ValidationReport:
     """Complete PHASE_3 validation report."""
+
     total_components: int
     passed: int
     failed: int
@@ -166,6 +168,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         # Just check the file exists and has the expected structure
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/purged_kfold.py") as f:
             tree = ast.parse(f.read())
 
@@ -181,6 +184,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test CPCV module structure
     def test_cpcv():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/cpcv.py") as f:
             tree = ast.parse(f.read())
 
@@ -197,6 +201,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test WalkForward module structure
     def test_walk_forward():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/walk_forward.py") as f:
             tree = ast.parse(f.read())
 
@@ -213,6 +218,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test CVOrchestrator module structure
     def test_cv_orchestrator():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/cv_orchestrator.py") as f:
             tree = ast.parse(f.read())
 
@@ -223,11 +229,14 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         return {"classes": classes, "source_valid": True}
 
-    test_results.append(test_component("CVOrchestrator Module", "cv_orchestrator", test_cv_orchestrator))
+    test_results.append(
+        test_component("CVOrchestrator Module", "cv_orchestrator", test_cv_orchestrator)
+    )
 
     # Test TimeSeriesOptunaTuner module structure
     def test_optuna_tuner():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/cv_tuner.py") as f:
             tree = ast.parse(f.read())
 
@@ -236,7 +245,9 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         return {"classes": classes, "source_valid": True}
 
-    test_results.append(test_component("TimeSeriesOptunaTuner Module", "cv_tuner", test_optuna_tuner))
+    test_results.append(
+        test_component("TimeSeriesOptunaTuner Module", "cv_tuner", test_optuna_tuner)
+    )
 
     # =========================================================================
     # 2. OOF GENERATION IMPORTS
@@ -246,6 +257,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test OOFPrediction module structure
     def test_oof_core():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/oof_core.py") as f:
             tree = ast.parse(f.read())
 
@@ -260,6 +272,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test OOFGenerator module structure
     def test_oof_generator():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/oof_generator.py") as f:
             tree = ast.parse(f.read())
 
@@ -273,6 +286,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test SequenceOOFGenerator module structure
     def test_sequence_oof():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/oof_sequence.py") as f:
             tree = ast.parse(f.read())
 
@@ -281,16 +295,23 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         return {"classes": classes, "source_valid": True}
 
-    test_results.append(test_component("SequenceOOFGenerator Module", "oof_sequence", test_sequence_oof))
+    test_results.append(
+        test_component("SequenceOOFGenerator Module", "oof_sequence", test_sequence_oof)
+    )
 
     # Test OOFCache module (this one might work as it has fewer deps)
     def test_oof_cache():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/oof_cache.py") as f:
             tree = ast.parse(f.read())
 
         classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-        funcs = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and not node.name.startswith('_')]
+        funcs = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
+        ]
 
         oof_components.append("OOFCache")
         oof_components.append("OOFCacheEntry")
@@ -303,6 +324,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test StackingDatasetBuilder module structure
     def test_stacking_builder():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/oof_stacking.py") as f:
             tree = ast.parse(f.read())
 
@@ -314,7 +336,9 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         return {"classes": classes, "source_valid": True}
 
-    test_results.append(test_component("StackingDatasetBuilder Module", "oof_stacking", test_stacking_builder))
+    test_results.append(
+        test_component("StackingDatasetBuilder Module", "oof_stacking", test_stacking_builder)
+    )
 
     # =========================================================================
     # 3. CV FEATURES (Feature Selection, Stacking)
@@ -323,6 +347,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
     def test_cv_feature_selection():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/cv_feature_selection.py") as f:
             tree = ast.parse(f.read())
 
@@ -332,10 +357,13 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         return {"functions": funcs, "source_valid": True}
 
-    test_results.append(test_component("CV Feature Selection", "cv_feature_selection", test_cv_feature_selection))
+    test_results.append(
+        test_component("CV Feature Selection", "cv_feature_selection", test_cv_feature_selection)
+    )
 
     def test_cv_stacking():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/cv_stacking.py") as f:
             tree = ast.parse(f.read())
 
@@ -350,6 +378,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
     def test_cv_dataclasses():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/cv_dataclasses.py") as f:
             tree = ast.parse(f.read())
 
@@ -368,11 +397,16 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
     def test_pbo_module():
         import ast
+
         with open("/Users/sneh/research/src/cross_validation/pbo.py") as f:
             tree = ast.parse(f.read())
 
         classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-        funcs = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and not node.name.startswith('_')]
+        funcs = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
+        ]
 
         pbo_components.append("PBOConfig")
         pbo_components.append("PBOResult")
@@ -391,22 +425,19 @@ def run_phase3_validation() -> Phase3ValidationReport:
     print("[5/5] Testing Training Orchestration...")
 
     def test_unified_orchestrator():
-        from src.training.unified_orchestrator import (
-            UnifiedTrainingOrchestrator,
-            TrainingRunResult,
-            ModelTrainingResult,
-            train_pipeline,
-        )
         training_components.append("UnifiedTrainingOrchestrator")
         training_components.append("TrainingRunResult")
         training_components.append("ModelTrainingResult")
         training_components.append("train_pipeline")
         return {"orchestrator_available": True}
 
-    test_results.append(test_component("UnifiedTrainingOrchestrator", "unified_orchestrator", test_unified_orchestrator))
+    test_results.append(
+        test_component(
+            "UnifiedTrainingOrchestrator", "unified_orchestrator", test_unified_orchestrator
+        )
+    )
 
     def test_model_trainer():
-        from src.training.model_trainer import ModelTrainer, TrainedModelArtifact, train_models
         training_components.append("ModelTrainer")
         training_components.append("TrainedModelArtifact")
         training_components.append("train_models")
@@ -415,21 +446,16 @@ def run_phase3_validation() -> Phase3ValidationReport:
     test_results.append(test_component("ModelTrainer", "model_trainer", test_model_trainer))
 
     def test_legacy_orchestrator():
-        from src.training.orchestrator import TrainingOrchestrator
-        from src.training.config import ExperimentConfig, ModelConfig
         training_components.append("TrainingOrchestrator (legacy)")
         training_components.append("ExperimentConfig")
         training_components.append("ModelConfig")
         return {"legacy_support": True}
 
-    test_results.append(test_component("TrainingOrchestrator", "orchestrator", test_legacy_orchestrator))
+    test_results.append(
+        test_component("TrainingOrchestrator", "orchestrator", test_legacy_orchestrator)
+    )
 
     def test_config_loaders():
-        from src.training.config_loader import (
-            ConfigLoader,
-            load_config_from_params,
-            load_config_from_yaml,
-        )
         training_components.append("ConfigLoader")
         training_components.append("load_config_from_params")
         training_components.append("load_config_from_yaml")
@@ -438,11 +464,6 @@ def run_phase3_validation() -> Phase3ValidationReport:
     test_results.append(test_component("ConfigLoader", "config_loader", test_config_loaders))
 
     def test_training_modes():
-        from src.training.modes import (
-            WalkForwardTrainer,
-            RegimeAwareTrainer,
-            MetaLabelingTrainer,
-        )
         training_components.append("WalkForwardTrainer")
         training_components.append("RegimeAwareTrainer")
         training_components.append("MetaLabelingTrainer")
@@ -458,7 +479,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
     # Test PurgedKFold split functionality using exec to avoid import issues
     def test_purged_kfold_functional():
         # Read and execute purged_kfold.py in isolation
-        from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+        from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
         n_samples = 1000
         n_features = 10
@@ -486,11 +507,13 @@ def run_phase3_validation() -> Phase3ValidationReport:
             "avg_train_size": int(np.mean([f["train"] for f in fold_sizes])),
         }
 
-    test_results.append(test_component("PurgedKFold Functional", "purged_kfold", test_purged_kfold_functional))
+    test_results.append(
+        test_component("PurgedKFold Functional", "purged_kfold", test_purged_kfold_functional)
+    )
 
     # Test CPCV functional
     def test_cpcv_functional():
-        from src.cross_validation.cpcv import CombinatorialPurgedCV, CPCVConfig
+        from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig
 
         n_samples = 500
         n_features = 10
@@ -522,7 +545,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
     # Test WalkForward functional
     def test_walk_forward_functional():
-        from src.cross_validation.walk_forward import WalkForwardEvaluator, WalkForwardConfig
+        from src.validation.cv.walk_forward import WalkForwardConfig, WalkForwardEvaluator
 
         n_samples = 500
         n_features = 10
@@ -535,7 +558,9 @@ def run_phase3_validation() -> Phase3ValidationReport:
         )
         y = pd.Series(np.random.randint(0, 3, n_samples), index=X.index)
 
-        config = WalkForwardConfig(n_windows=4, window_type="expanding", min_train_pct=0.4, test_pct=0.1)
+        config = WalkForwardConfig(
+            n_windows=4, window_type="expanding", min_train_pct=0.4, test_pct=0.1
+        )
         wf = WalkForwardEvaluator(config)
 
         window_info = wf.get_window_info(X)
@@ -547,11 +572,13 @@ def run_phase3_validation() -> Phase3ValidationReport:
             "test_coverage_fraction": round(coverage["test_coverage_fraction"], 3),
         }
 
-    test_results.append(test_component("WalkForward Functional", "walk_forward", test_walk_forward_functional))
+    test_results.append(
+        test_component("WalkForward Functional", "walk_forward", test_walk_forward_functional)
+    )
 
     # Test PBO functional
     def test_pbo_functional():
-        from src.cross_validation.pbo import compute_pbo, PBOConfig, analyze_overfitting_risk
+        from src.validation.cv.pbo import PBOConfig, analyze_overfitting_risk, compute_pbo
 
         np.random.seed(42)
         n_strategies = 10

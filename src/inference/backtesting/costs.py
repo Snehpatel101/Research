@@ -12,7 +12,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import numpy as np
 
@@ -73,7 +72,7 @@ class TransactionCosts:
         Returns:
             Total entry cost in dollars
         """
-        fixed_cost = (self.commission_per_contract / 2 + self.exchange_fee / 2 + self.nfa_fee / 2)
+        fixed_cost = self.commission_per_contract / 2 + self.exchange_fee / 2 + self.nfa_fee / 2
         slippage_cost = self.slippage_ticks * self.tick_value
         return contracts * (fixed_cost + slippage_cost)
 
@@ -147,9 +146,9 @@ class BaseSlippageModel(ABC):
         self,
         order_size: int,
         price: float,
-        volatility: Optional[float] = None,
-        spread: Optional[float] = None,
-        volume: Optional[float] = None,
+        volatility: float | None = None,
+        spread: float | None = None,
+        volume: float | None = None,
     ) -> float:
         """
         Estimate slippage for an order.
@@ -183,9 +182,9 @@ class FixedSlippage(BaseSlippageModel):
         self,
         order_size: int,
         price: float,
-        volatility: Optional[float] = None,
-        spread: Optional[float] = None,
-        volume: Optional[float] = None,
+        volatility: float | None = None,
+        spread: float | None = None,
+        volume: float | None = None,
     ) -> float:
         """Return fixed slippage in price units."""
         return self.ticks * self.tick_size
@@ -210,9 +209,9 @@ class LinearSlippage(BaseSlippageModel):
         self,
         order_size: int,
         price: float,
-        volatility: Optional[float] = None,
-        spread: Optional[float] = None,
-        volume: Optional[float] = None,
+        volatility: float | None = None,
+        spread: float | None = None,
+        volume: float | None = None,
     ) -> float:
         """Return linear slippage scaled by order size."""
         slippage_ticks = self.base_ticks + order_size * self.size_factor
@@ -241,9 +240,9 @@ class SquareRootSlippage(BaseSlippageModel):
         self,
         order_size: int,
         price: float,
-        volatility: Optional[float] = None,
-        spread: Optional[float] = None,
-        volume: Optional[float] = None,
+        volatility: float | None = None,
+        spread: float | None = None,
+        volume: float | None = None,
     ) -> float:
         """
         Estimate slippage using square root impact model.
@@ -295,9 +294,9 @@ class VolatilityScaledSlippage(BaseSlippageModel):
         self,
         order_size: int,
         price: float,
-        volatility: Optional[float] = None,
-        spread: Optional[float] = None,
-        volume: Optional[float] = None,
+        volatility: float | None = None,
+        spread: float | None = None,
+        volume: float | None = None,
     ) -> float:
         """
         Estimate volatility-scaled slippage.
@@ -341,8 +340,8 @@ class CostCalculator:
         contracts: int,
         entry_price: float,
         exit_price: float,
-        entry_volatility: Optional[float] = None,
-        exit_volatility: Optional[float] = None,
+        entry_volatility: float | None = None,
+        exit_volatility: float | None = None,
     ) -> dict:
         """
         Calculate total cost for a complete trade (round-trip).
@@ -370,13 +369,21 @@ class CostCalculator:
         entry_slip_price = self.slippage_model.estimate_slippage(
             contracts, entry_price, volatility=entry_volatility
         )
-        entry_slippage = contracts * (entry_slip_price / self.transaction_costs.tick_size) * self.transaction_costs.tick_value
+        entry_slippage = (
+            contracts
+            * (entry_slip_price / self.transaction_costs.tick_size)
+            * self.transaction_costs.tick_value
+        )
 
         # Slippage at exit
         exit_slip_price = self.slippage_model.estimate_slippage(
             contracts, exit_price, volatility=exit_volatility
         )
-        exit_slippage = contracts * (exit_slip_price / self.transaction_costs.tick_size) * self.transaction_costs.tick_value
+        exit_slippage = (
+            contracts
+            * (exit_slip_price / self.transaction_costs.tick_size)
+            * self.transaction_costs.tick_value
+        )
 
         total_slippage = entry_slippage + exit_slippage
         total_cost = commission + total_slippage
@@ -398,8 +405,8 @@ class CostCalculator:
         direction: int,
         point_value: float = 5.0,
         include_costs: bool = True,
-        entry_volatility: Optional[float] = None,
-        exit_volatility: Optional[float] = None,
+        entry_volatility: float | None = None,
+        exit_volatility: float | None = None,
     ) -> dict:
         """
         Calculate P&L for a trade including costs.
@@ -428,8 +435,7 @@ class CostCalculator:
         # Costs
         if include_costs:
             cost_breakdown = self.calculate_trade_cost(
-                contracts, entry_price, exit_price,
-                entry_volatility, exit_volatility
+                contracts, entry_price, exit_price, entry_volatility, exit_volatility
             )
             total_costs = cost_breakdown["total_cost"]
         else:

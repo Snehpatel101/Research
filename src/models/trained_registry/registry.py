@@ -256,11 +256,7 @@ class TrainedModelRegistry:
         if query is None:
             results = list(self._entries.values())
         else:
-            results = [
-                entry
-                for entry in self._entries.values()
-                if query.matches(entry.to_dict())
-            ]
+            results = [entry for entry in self._entries.values() if query.matches(entry.to_dict())]
 
         # Sort if specified
         if query and query.sort_metric:
@@ -374,9 +370,7 @@ class TrainedModelRegistry:
         Returns:
             Number of entries removed
         """
-        invalid_ids = [
-            run_id for run_id, entry in self._entries.items() if not entry.is_valid()
-        ]
+        invalid_ids = [run_id for run_id, entry in self._entries.items() if not entry.is_valid()]
         for run_id in invalid_ids:
             del self._entries[run_id]
 
@@ -412,12 +406,8 @@ class TrainedModelRegistry:
                 if metric not in metrics_ranges:
                     metrics_ranges[metric] = {"min": value, "max": value}
                 else:
-                    metrics_ranges[metric]["min"] = min(
-                        metrics_ranges[metric]["min"], value
-                    )
-                    metrics_ranges[metric]["max"] = max(
-                        metrics_ranges[metric]["max"], value
-                    )
+                    metrics_ranges[metric]["min"] = min(metrics_ranges[metric]["min"], value)
+                    metrics_ranges[metric]["max"] = max(metrics_ranges[metric]["max"], value)
 
         return {
             "count": len(self._entries),

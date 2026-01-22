@@ -18,12 +18,11 @@ print("=" * 60)
 
 # Import the simple API
 from src.config import (
-    train,
-    list_models,
     describe_model,
-    show_defaults,
+    list_models,
     preview_config,
     quick_compare,
+    show_defaults,
 )
 
 # -----------------------------------------------------------------------------

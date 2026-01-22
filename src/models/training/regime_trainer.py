@@ -36,7 +36,6 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -48,8 +47,8 @@ from .regime_detector import (
 )
 
 if TYPE_CHECKING:
-    from src.data.adapters import PreparedData
     from src.core import PipelineConfig
+    from src.data.adapters import PreparedData
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +122,7 @@ class RegimeTrainingResult:
     horizon: int
     regime_method: str
     n_regimes: int
-    regime_results: dict[tuple[str, str], RegimeModelResult] = field(
-        default_factory=dict
-    )
+    regime_results: dict[tuple[str, str], RegimeModelResult] = field(default_factory=dict)
     regime_distribution: dict[str, int] = field(default_factory=dict)
     aggregated_metrics: dict[str, float] = field(default_factory=dict)
     total_time_seconds: float = 0.0
@@ -197,7 +194,7 @@ class RegimeAwareTrainer:
         predictions = trainer.predict(X_test)
     """
 
-    def __init__(self, config: "PipelineConfig") -> None:
+    def __init__(self, config: PipelineConfig) -> None:
         """
         Initialize RegimeAwareTrainer.
 
@@ -225,7 +222,7 @@ class RegimeAwareTrainer:
 
     def train(
         self,
-        prepared: "PreparedData",
+        prepared: PreparedData,
         horizon: int,
         model_name: str | None = None,
         save_models: bool = True,
@@ -258,7 +255,7 @@ class RegimeAwareTrainer:
         train_df = self._create_df_for_detection(prepared)
         regime_result = self.detector.detect(train_df)
 
-        logger.info(f"\nRegime distribution (training data):")
+        logger.info("\nRegime distribution (training data):")
         for regime, count in regime_result.regime_counts.items():
             pct = 100 * regime_result.regime_fractions[regime]
             logger.info(f"  {regime}: {count} samples ({pct:.1f}%)")
@@ -322,15 +319,15 @@ class RegimeAwareTrainer:
 
     def _train_separate_models(
         self,
-        prepared: "PreparedData",
+        prepared: PreparedData,
         horizon: int,
         models: list[str],
         regime_result: RegimeResult,
         save_models: bool,
     ) -> dict[tuple[str, str], RegimeModelResult]:
         """Train separate models for each regime."""
-        from src.models import Trainer, TrainerConfig
         from src.core.container import TimeSeriesDataContainer
+        from src.models import Trainer, TrainerConfig
 
         all_results: dict[tuple[str, str], RegimeModelResult] = {}
 
@@ -459,15 +456,15 @@ class RegimeAwareTrainer:
 
     def _train_with_regime_feature(
         self,
-        prepared: "PreparedData",
+        prepared: PreparedData,
         horizon: int,
         models: list[str],
         regime_result: RegimeResult,
         save_models: bool,
     ) -> dict[tuple[str, str], RegimeModelResult]:
         """Train single model with regime as additional feature."""
-        from src.models import Trainer, TrainerConfig
         from src.core.container import TimeSeriesDataContainer
+        from src.models import Trainer, TrainerConfig
 
         all_results: dict[tuple[str, str], RegimeModelResult] = {}
 
@@ -667,7 +664,7 @@ class RegimeAwareTrainer:
             return predictions, regimes.regimes
         return predictions
 
-    def _create_df_for_detection(self, prepared: "PreparedData") -> pd.DataFrame:
+    def _create_df_for_detection(self, prepared: PreparedData) -> pd.DataFrame:
         """Create DataFrame suitable for regime detection from PreparedData."""
         # If we have feature names that include price data, use them
         if prepared.data_rank == 2:
@@ -698,7 +695,7 @@ class RegimeAwareTrainer:
     def _create_df_for_detection_from_array(
         self,
         X: np.ndarray,
-        prepared: "PreparedData",
+        prepared: PreparedData,
     ) -> pd.DataFrame:
         """Create DataFrame for regime detection from raw array."""
         if prepared.data_rank == 2:
@@ -729,9 +726,7 @@ class RegimeAwareTrainer:
         for model_name, model_results in model_metrics.items():
             total_samples = sum(r.n_samples for r in model_results)
 
-            weighted_f1 = sum(
-                r.val_f1 * r.n_samples / total_samples for r in model_results
-            )
+            weighted_f1 = sum(r.val_f1 * r.n_samples / total_samples for r in model_results)
             weighted_accuracy = sum(
                 r.val_accuracy * r.n_samples / total_samples for r in model_results
             )

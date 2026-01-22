@@ -12,15 +12,15 @@ Uses PHASE_2 OOFAligner for alignment.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
-from src.core import PipelineConfig, MODEL_DATA_RANKS
-from src.core.interfaces import OOFResult, OOFPredictionProtocol
-from src.data.adapters import OOFAligner, AlignedOOFResult
+from src.core import MODEL_DATA_RANKS, PipelineConfig
+from src.core.interfaces import OOFPredictionProtocol, OOFResult
+from src.data.adapters import AlignedOOFResult, OOFAligner
 
 # TYPE_CHECKING import to break circular dependency:
 # cross_validation/__init__ -> cv_feature_selection -> oof_generator -> oof_core
@@ -45,8 +45,8 @@ class StackingFeatures:
 
     X: np.ndarray  # (n_samples, n_features)
     y: np.ndarray  # (n_samples,)
-    feature_names: List[str]
-    model_names: List[str]
+    feature_names: list[str]
+    model_names: list[str]
     n_samples: int
     n_features: int
     coverage: float
@@ -108,9 +108,9 @@ class HeterogeneousStackingBuilder:
 
     def __init__(
         self,
-        config: Optional[PipelineConfig] = None,
+        config: PipelineConfig | None = None,
         add_derived_features: bool = True,
-        class_names: Optional[List[str]] = None,
+        class_names: list[str] | None = None,
     ) -> None:
         """
         Initialize builder.
@@ -128,14 +128,14 @@ class HeterogeneousStackingBuilder:
         self._aligner = OOFAligner()
 
     @classmethod
-    def from_config(cls, config: PipelineConfig) -> "HeterogeneousStackingBuilder":
+    def from_config(cls, config: PipelineConfig) -> HeterogeneousStackingBuilder:
         """Create builder from PipelineConfig."""
         return cls(config=config)
 
     def build(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
-        y_true: Union[np.ndarray, pd.Series],
+        oof_predictions: dict[str, OOFPrediction],
+        y_true: np.ndarray | pd.Series,
     ) -> StackingFeatures:
         """
         Build stacking features from OOF predictions.
@@ -181,8 +181,7 @@ class HeterogeneousStackingBuilder:
         # Validate shapes
         if prob_features.shape[0] != len(y_aligned):
             raise ValueError(
-                f"Shape mismatch: features={prob_features.shape[0]}, "
-                f"labels={len(y_aligned)}"
+                f"Shape mismatch: features={prob_features.shape[0]}, " f"labels={len(y_aligned)}"
             )
 
         logger.info(f"  Built features: {prob_features.shape}")
@@ -206,8 +205,8 @@ class HeterogeneousStackingBuilder:
 
     def _convert_to_oof_results(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
-    ) -> List[OOFResult]:
+        oof_predictions: dict[str, OOFPrediction],
+    ) -> list[OOFResult]:
         """
         Convert OOFPrediction objects to OOFResult objects for OOFAligner.
 
@@ -291,8 +290,8 @@ class HeterogeneousStackingBuilder:
     ) -> tuple:
         """Compute derived ensemble diversity features."""
         n_samples = aligned.n_common
-        n_models = len(aligned.model_names)
-        n_classes = len(self.class_names)
+        len(aligned.model_names)
+        len(self.class_names)
 
         # Stack all model probabilities: (n_models, n_samples, n_classes)
         all_probs = []
@@ -375,8 +374,8 @@ class HeterogeneousStackingBuilder:
 
     def get_model_coverage_report(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
-    ) -> Dict[str, Any]:
+        oof_predictions: dict[str, OOFPrediction],
+    ) -> dict[str, Any]:
         """
         Get detailed coverage report for each model.
 
@@ -386,7 +385,7 @@ class HeterogeneousStackingBuilder:
         Returns:
             Dict with coverage statistics per model
         """
-        report: Dict[str, Any] = {
+        report: dict[str, Any] = {
             "models": {},
             "summary": {},
         }
@@ -442,9 +441,9 @@ class HeterogeneousStackingBuilder:
 
 
 def build_stacking_features(
-    oof_predictions: Dict[str, OOFPrediction],
+    oof_predictions: dict[str, OOFPrediction],
     y_true: np.ndarray,
-    config: Optional[PipelineConfig] = None,
+    config: PipelineConfig | None = None,
     add_derived_features: bool = True,
 ) -> StackingFeatures:
     """

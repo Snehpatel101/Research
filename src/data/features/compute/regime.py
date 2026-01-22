@@ -6,11 +6,10 @@ PHASE_1 Unified Features: 9 REGIME features.
 These features identify market regimes for regime-aware trading strategies.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -44,7 +43,7 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     low_close = (df["low"] - df["close"].shift(1)).abs()
 
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    return tr.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
 # =============================================================================
@@ -213,7 +212,7 @@ def compute_composite_regime(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-REGIME_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+REGIME_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Volatility regimes
     "volatility_regime": compute_volatility_regime,
     "regime_low_vol": compute_regime_low_vol,

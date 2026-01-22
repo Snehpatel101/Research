@@ -10,16 +10,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from .costs import CostCalculator, TransactionCosts, create_cost_calculator
-from .equity_curve import EquityCurve, Trade, create_equity_curve_from_trades
-from .metrics import PerformanceMetrics, calculate_all_metrics
-from .position_sizing import BasePositionSizer, FixedContracts, create_position_sizer
+from .costs import CostCalculator, TransactionCosts
+from .equity_curve import EquityCurve, Trade
+from .metrics import PerformanceMetrics
+from .position_sizing import BasePositionSizer, create_position_sizer
 
 
 class ExecutionModel(Enum):
@@ -74,7 +73,7 @@ class BacktestConfig:
     max_holding_period: int = 0
 
     @classmethod
-    def for_mes(cls, **kwargs) -> "BacktestConfig":
+    def for_mes(cls, **kwargs) -> BacktestConfig:
         """Create config for Micro E-mini S&P 500."""
         defaults = {
             "tick_value": 1.25,
@@ -85,7 +84,7 @@ class BacktestConfig:
         return cls(**defaults)
 
     @classmethod
-    def for_mgc(cls, **kwargs) -> "BacktestConfig":
+    def for_mgc(cls, **kwargs) -> BacktestConfig:
         """Create config for Micro Gold."""
         defaults = {
             "tick_value": 1.00,
@@ -105,11 +104,11 @@ class Position:
     entry_price: float
     entry_time: datetime
     entry_bar: int
-    stop_loss: Optional[float] = None
-    take_profit: Optional[float] = None
-    label: Optional[int] = None
-    prediction: Optional[int] = None
-    confidence: Optional[float] = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    label: int | None = None
+    prediction: int | None = None
+    confidence: float | None = None
 
 
 @dataclass
@@ -127,11 +126,11 @@ class BacktestResult:
 
     equity_curve: EquityCurve
     metrics: PerformanceMetrics
-    trades: List[Trade]
+    trades: list[Trade]
     config: BacktestConfig
-    stats: Dict[str, Any] = field(default_factory=dict)
+    stats: dict[str, Any] = field(default_factory=dict)
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         """Generate summary of backtest results."""
         return {
             "initial_equity": self.config.initial_equity,
@@ -195,9 +194,9 @@ class Backtester:
         self,
         predictions: pd.DataFrame,
         prices: pd.DataFrame,
-        config: Optional[BacktestConfig] = None,
-        cost_calculator: Optional[CostCalculator] = None,
-        position_sizer: Optional[BasePositionSizer] = None,
+        config: BacktestConfig | None = None,
+        cost_calculator: CostCalculator | None = None,
+        position_sizer: BasePositionSizer | None = None,
     ):
         """
         Initialize backtester.
@@ -246,10 +245,10 @@ class Backtester:
             self.position_sizer = position_sizer
 
         # State variables
-        self._current_position: Optional[Position] = None
+        self._current_position: Position | None = None
         self._equity = self.config.initial_equity
-        self._trades: List[Trade] = []
-        self._equity_history: List[Tuple[datetime, float]] = []
+        self._trades: list[Trade] = []
+        self._equity_history: list[tuple[datetime, float]] = []
 
     def _validate_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validate and normalize predictions DataFrame."""
@@ -369,8 +368,8 @@ class Backtester:
     def _calculate_position_size(
         self,
         current_price: float,
-        stop_distance: Optional[float] = None,
-        volatility: Optional[float] = None,
+        stop_distance: float | None = None,
+        volatility: float | None = None,
         win_rate: float = 0.5,
         avg_win: float = 100.0,
         avg_loss: float = 100.0,
@@ -396,9 +395,9 @@ class Backtester:
         price: float,
         timestamp: datetime,
         bar_idx: int,
-        label: Optional[int] = None,
-        prediction: Optional[int] = None,
-        confidence: Optional[float] = None,
+        label: int | None = None,
+        prediction: int | None = None,
+        confidence: float | None = None,
     ) -> None:
         """Open a new position."""
         contracts = self._calculate_position_size(price)
@@ -421,7 +420,7 @@ class Backtester:
         self,
         price: float,
         timestamp: datetime,
-    ) -> Optional[Trade]:
+    ) -> Trade | None:
         """Close current position and record trade."""
         if self._current_position is None:
             return None
@@ -628,7 +627,7 @@ class Backtester:
 def run_backtest(
     predictions: pd.DataFrame,
     prices: pd.DataFrame,
-    config: Optional[BacktestConfig] = None,
+    config: BacktestConfig | None = None,
     **kwargs,
 ) -> BacktestResult:
     """
@@ -654,8 +653,8 @@ def run_walk_forward_backtest(
     predictions: pd.DataFrame,
     prices: pd.DataFrame,
     n_splits: int = 5,
-    config: Optional[BacktestConfig] = None,
-) -> List[BacktestResult]:
+    config: BacktestConfig | None = None,
+) -> list[BacktestResult]:
     """
     Run walk-forward backtest with multiple out-of-sample periods.
 

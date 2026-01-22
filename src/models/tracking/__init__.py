@@ -19,6 +19,7 @@ __all__ = [
 # Optional MLflow import
 try:
     from .mlflow_tracker import MLflowTracker
+
     __all__.append("MLflowTracker")
 except ImportError:
     pass

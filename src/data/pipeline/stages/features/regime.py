@@ -139,7 +139,7 @@ def _add_advanced_regime_features(
         DataFrame with advanced regime features added
     """
     try:
-        from src.pipeline.stages.regime import (
+        from src.data.pipeline.stages.regime import (
             add_regime_features_to_dataframe,
         )
     except ImportError:
@@ -267,7 +267,7 @@ def add_structure_regime(
     logger.info("Adding structure regime...")
 
     try:
-        from src.pipeline.stages.regime import MarketStructureDetector
+        from src.data.pipeline.stages.regime import MarketStructureDetector
     except ImportError:
         try:
             from stages.regime import MarketStructureDetector

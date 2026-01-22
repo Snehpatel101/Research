@@ -25,22 +25,21 @@ Engineering Rules Applied:
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
-from src.pipeline.utils import create_failed_result, create_stage_result
+from src.data.pipeline.utils import create_failed_result, create_stage_result
 
-from .bet_sizer import BetSizer, BetSizingMethod
+from .bet_sizer import BetSizer
 from .meta_labeler import MetaLabelGenerator
 from .primary_model import PrimaryClassifier
 
 if TYPE_CHECKING:
-    from src.pipeline.manifest import ArtifactManifest
-    from src.pipeline.data_config import PipelineConfig
-    from src.pipeline.utils import StageResult
+    from src.data.pipeline.data_config import PipelineConfig
+    from src.data.pipeline.manifest import ArtifactManifest
+    from src.data.pipeline.utils import StageResult
 
 logger = logging.getLogger(__name__)
 
@@ -323,7 +322,7 @@ def run_meta_labeling(
         base_model = meta_config.get("base_model", "logistic")
         min_confidence = meta_config.get("min_confidence", DEFAULT_MIN_CONFIDENCE)
 
-        logger.info(f"Meta-labeling config:")
+        logger.info("Meta-labeling config:")
         logger.info(f"  Recall target: {recall_target:.0%}")
         logger.info(f"  Base model: {base_model}")
         logger.info(f"  Min confidence: {min_confidence:.0%}")
@@ -390,9 +389,8 @@ def run_meta_labeling(
                         weights = df_valid[weight_col].values
 
                     # Get returns for meta-labeling
-                    returns = None
                     if return_col in df_valid.columns:
-                        returns = df_valid[return_col].values
+                        df_valid[return_col].values
 
                     # Step 1: Train primary model
                     primary, primary_metrics = _train_primary_model(

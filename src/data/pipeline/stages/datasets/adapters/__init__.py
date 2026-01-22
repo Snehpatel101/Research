@@ -9,7 +9,7 @@ different tensor formats for various model architectures:
 
 Usage:
 ------
-    from src.pipeline.stages.datasets.adapters import (
+    from src.data.pipeline.stages.datasets.adapters import (
         MultiResolution4DAdapter,
         MultiResolution4DDataset,
         MultiResolution4DConfig,
@@ -34,7 +34,7 @@ Usage:
         pass
 """
 
-from src.pipeline.stages.datasets.adapters.multi_resolution import (
+from src.data.pipeline.stages.datasets.adapters.multi_resolution import (
     MultiResolution4DAdapter,
     MultiResolution4DConfig,
     MultiResolution4DDataset,

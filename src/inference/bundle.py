@@ -421,7 +421,7 @@ class ModelBundle:
             raise ValueError(f"Invalid bundle: missing {BUNDLE_MANIFEST_FILE}")
 
         with open(manifest_path) as f:
-            manifest = BundleManifest.from_dict(json.load(f))
+            BundleManifest.from_dict(json.load(f))
 
         # Load metadata
         metadata_path = path / BUNDLE_METADATA_FILE
@@ -460,9 +460,7 @@ class ModelBundle:
                     preprocessing_graph.set_scaler(scaler)
                 logger.info(f"Loaded preprocessing graph from {graph_path}")
             except ImportError:
-                logger.warning(
-                    "PreprocessingGraph module not available, skipping graph loading"
-                )
+                logger.warning("PreprocessingGraph module not available, skipping graph loading")
 
         # Load model
         model_dir = path / BUNDLE_MODEL_DIR
@@ -615,9 +613,7 @@ class ModelBundle:
         if self.scaler is not None:
             graph.set_scaler(self.scaler)
 
-        logger.info(
-            f"Set preprocessing graph (hash: {self.metadata.preprocessing_graph_hash})"
-        )
+        logger.info(f"Set preprocessing graph (hash: {self.metadata.preprocessing_graph_hash})")
 
     def preprocess(
         self,

@@ -10,7 +10,7 @@ position sizing, use src.backtesting module.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -82,8 +82,8 @@ def compute_classification_metrics(
 def compute_trading_metrics(
     y_true: np.ndarray,
     y_pred: np.ndarray,
-    prices: Optional[pd.DataFrame] = None,
-    timestamps: Optional[np.ndarray] = None,
+    prices: pd.DataFrame | None = None,
+    timestamps: np.ndarray | None = None,
     point_value: float = 5.0,
     commission_per_contract: float = 2.50,
     slippage_ticks: float = 1.0,
@@ -207,20 +207,17 @@ def _compute_proxy_metrics(
     """Compute proxy metrics when real prices not available."""
     if position_mask.sum() > 0:
         # Proxy returns: correct = +1, incorrect = -1
-        position_returns = np.where(
-            y_pred[position_mask] == y_true[position_mask], 1.0, -1.0
-        )
+        position_returns = np.where(y_pred[position_mask] == y_true[position_mask], 1.0, -1.0)
         proxy_sharpe = (
             float(position_returns.mean() / position_returns.std())
             if position_returns.std() > 0
             else 0.0
         )
         proxy_expectancy = float(position_returns.mean())
-        proxy_win_rate = float((position_returns > 0).sum() / len(position_returns))
+        float((position_returns > 0).sum() / len(position_returns))
     else:
         proxy_sharpe = 0.0
         proxy_expectancy = 0.0
-        proxy_win_rate = 0.0
 
     return {
         "sharpe_ratio": proxy_sharpe,
@@ -278,7 +275,6 @@ def _compute_real_pnl_metrics(
 
     position = 0  # Current position: -1, 0, 1
     entry_price = 0.0
-    entry_idx = 0
 
     cost_per_contract = commission_per_contract + 2 * slippage_ticks * tick_value
 
@@ -301,7 +297,6 @@ def _compute_real_pnl_metrics(
             # Open new position
             if signal != 0:
                 entry_price = close_prices[i]
-                entry_idx = i
                 position = signal
             else:
                 position = 0
@@ -366,8 +361,12 @@ def _compute_real_pnl_metrics(
         "total_costs": float(sum(costs_list)),
         "n_trades": len(trade_returns),
         "win_rate": float(win_rate),
-        "avg_win": float(trade_returns[trade_returns > 0].mean()) if (trade_returns > 0).any() else 0.0,
-        "avg_loss": float(trade_returns[trade_returns < 0].mean()) if (trade_returns < 0).any() else 0.0,
+        "avg_win": float(trade_returns[trade_returns > 0].mean())
+        if (trade_returns > 0).any()
+        else 0.0,
+        "avg_loss": float(trade_returns[trade_returns < 0].mean())
+        if (trade_returns < 0).any()
+        else 0.0,
     }
 
 
@@ -422,7 +421,7 @@ def compute_regime_metrics(
     y_proba: np.ndarray,
     prices: pd.DataFrame,
     timestamps: pd.DatetimeIndex,
-    classifier_config: Optional[dict[str, Any]] = None,
+    classifier_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Compute regime-conditional metrics for model evaluation.
@@ -498,8 +497,8 @@ def compute_metrics_with_regime_breakdown(
     y_true: np.ndarray,
     y_pred: np.ndarray,
     y_proba: np.ndarray,
-    prices: Optional[pd.DataFrame] = None,
-    timestamps: Optional[pd.DatetimeIndex] = None,
+    prices: pd.DataFrame | None = None,
+    timestamps: pd.DatetimeIndex | None = None,
     include_regime: bool = True,
 ) -> dict[str, Any]:
     """

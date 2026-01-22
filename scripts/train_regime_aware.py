@@ -25,12 +25,11 @@ import logging
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models import TrainerConfig, Trainer
+from src.models import Trainer, TrainerConfig
 from src.phase1.stages.datasets import TimeSeriesDataContainer
 
 logging.basicConfig(
@@ -199,7 +198,7 @@ Examples:
     logger.info(f"Loading data from {args.data_dir}...")
     container = TimeSeriesDataContainer.from_parquet_dir(args.data_dir, horizon=args.horizon)
 
-    logger.info(f"Data loaded:")
+    logger.info("Data loaded:")
     logger.info(f"  Train: {container.X_train.shape}")
     logger.info(f"  Val: {container.X_val.shape}")
     logger.info(f"  Test: {container.X_test.shape}")

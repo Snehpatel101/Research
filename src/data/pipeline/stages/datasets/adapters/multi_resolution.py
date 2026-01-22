@@ -21,7 +21,7 @@ Key Features:
 
 Usage:
 ------
-    from src.pipeline.stages.datasets.adapters import MultiResolution4DAdapter
+    from src.data.pipeline.stages.datasets.adapters import MultiResolution4DAdapter
 
     # Create adapter for 9-timeframe MTF data
     adapter = MultiResolution4DAdapter(
@@ -57,18 +57,16 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from src.pipeline.stages.mtf.constants import (
-    DEFAULT_MTF_TIMEFRAMES,
-    MTF_TIMEFRAMES,
-)
-from src.pipeline.stages.datasets.adapters.utils import (
+from src.data.pipeline.stages.datasets.adapters.utils import (
     DEFAULT_MTF_FEATURES,
     TIMEFRAME_SUFFIX_PATTERNS,
     build_4d_sequence_indices,
     build_timeframe_feature_map,
-    extract_timeframe_columns,
     find_symbol_boundaries,
-    get_timeframe_suffix,
+)
+from src.data.pipeline.stages.mtf.constants import (
+    DEFAULT_MTF_TIMEFRAMES,
+    MTF_TIMEFRAMES,
 )
 
 logger = logging.getLogger(__name__)
@@ -263,7 +261,7 @@ class MultiResolution4DAdapter:
         weight_column: str | None = None,
         symbol_column: str | None = None,
         auto_prepare: bool = True,
-    ) -> "MultiResolution4DDataset":
+    ) -> MultiResolution4DDataset:
         """
         Create a PyTorch Dataset from the DataFrame.
 

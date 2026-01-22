@@ -270,8 +270,13 @@ def run_command(
     # Output timeframes / Multi-TF processing
     effective_tfs = config.effective_output_timeframes
     if len(effective_tfs) > 1:
-        table.add_row("Output Timeframes", f"{len(effective_tfs)} TFs: {', '.join(effective_tfs[:5])}{'...' if len(effective_tfs) > 5 else ''}")
-        table.add_row("Process All TFs", "Yes" if getattr(config, "process_all_timeframes", False) else "No")
+        table.add_row(
+            "Output Timeframes",
+            f"{len(effective_tfs)} TFs: {', '.join(effective_tfs[:5])}{'...' if len(effective_tfs) > 5 else ''}",
+        )
+        table.add_row(
+            "Process All TFs", "Yes" if getattr(config, "process_all_timeframes", False) else "No"
+        )
 
     # Model settings if specified
     if hasattr(config, "model_config") and config.model_config:

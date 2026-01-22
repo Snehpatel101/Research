@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
 from src.models import Trainer, TrainerConfig
-from src.models.registry import ModelRegistry
 
 from ..config import ExperimentConfig
 
@@ -396,10 +395,7 @@ class RegimeAwareTrainer:
         logger.info(f"Container: {container}")
 
         # Get model names - handle both string and ModelConfig types
-        model_names = [
-            m if isinstance(m, str) else m.name
-            for m in self.config.models
-        ]
+        model_names = [m if isinstance(m, str) else m.name for m in self.config.models]
         logger.info(f"Models: {model_names}")
         logger.info(f"Regime type: {self.regime_config.regime_type}")
 
@@ -502,7 +498,7 @@ class RegimeAwareTrainer:
 
         # Log regime distribution
         regime_dist = train_regimes.value_counts().to_dict()
-        logger.info(f"  Regime distribution (train):")
+        logger.info("  Regime distribution (train):")
         for regime, count in regime_dist.items():
             pct = 100 * count / len(train_regimes)
             logger.info(f"    {regime}: {count} ({pct:.1f}%)")
@@ -616,8 +612,7 @@ class RegimeAwareTrainer:
                     r.val_f1 * r.n_samples / total_samples for r in regime_results.values()
                 ),
                 "weighted_accuracy": sum(
-                    r.val_accuracy * r.n_samples / total_samples
-                    for r in regime_results.values()
+                    r.val_accuracy * r.n_samples / total_samples for r in regime_results.values()
                 ),
                 "n_regimes_trained": len(regime_results),
             }
@@ -675,7 +670,7 @@ class RegimeAwareTrainer:
 
         # Log regime distribution
         regime_dist = train_regimes.value_counts().to_dict()
-        logger.info(f"  Regime distribution (train):")
+        logger.info("  Regime distribution (train):")
         for regime, count in regime_dist.items():
             pct = 100 * count / len(train_regimes)
             logger.info(f"    {regime}: {count} ({pct:.1f}%)")
@@ -790,9 +785,7 @@ class RegimeAwareTrainer:
             total_time=total_time,
         )
 
-    def _build_summary(
-        self, results: dict[str, RegimeAwareTrainingResult]
-    ) -> dict[str, Any]:
+    def _build_summary(self, results: dict[str, RegimeAwareTrainingResult]) -> dict[str, Any]:
         """Build summary from all results."""
         summary = {
             "n_models": len(results),

@@ -50,7 +50,7 @@ Integration with Pipeline
 -------------------------
 The feature store integrates with the existing feature engineering pipeline:
 
->>> from src.pipeline.stages.features import FeatureEngineer
+>>> from src.data.pipeline.stages.features import FeatureEngineer
 >>> from src.data.store import FeatureStore
 >>>
 >>> store = FeatureStore(cache_dir="data/feature_cache")
@@ -81,13 +81,6 @@ The feature store integrates with the existing feature engineering pipeline:
 """
 
 # Main store class
-from .store import (
-    FeatureIntegrityError,
-    FeatureNotFoundError,
-    FeatureStore,
-    FeatureStoreError,
-)
-
 # Cache components
 from .cache import (
     CacheMetadata,
@@ -103,7 +96,15 @@ from .lineage import (
     LineageTracker,
     Transformation,
     TransformationType,
+)
+from .lineage import (
     compute_file_checksum as compute_lineage_checksum,
+)
+from .store import (
+    FeatureIntegrityError,
+    FeatureNotFoundError,
+    FeatureStore,
+    FeatureStoreError,
 )
 
 # Version management

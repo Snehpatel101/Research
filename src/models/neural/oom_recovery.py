@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import gc
 import logging
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator
+from typing import Any
 
 import torch
 
@@ -134,9 +135,7 @@ class OOMRecoveryManager:
             return None
 
         if self._current_retries >= self.config.max_retries:
-            logger.error(
-                f"OOM recovery failed: max retries ({self.config.max_retries}) exceeded"
-            )
+            logger.error(f"OOM recovery failed: max retries ({self.config.max_retries}) exceeded")
             return None
 
         # Calculate new batch size

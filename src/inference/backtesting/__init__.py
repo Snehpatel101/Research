@@ -12,7 +12,7 @@ Import paths:
     from src.inference.backtesting import Backtester, BacktestConfig
 
     # Legacy (still works, deprecation warning):
-    from src.backtesting import Backtester, BacktestConfig
+    from src.inference.backtesting import Backtester, BacktestConfig
 
 Quick Start:
 -----------
@@ -73,8 +73,8 @@ from __future__ import annotations
 # Backtest core
 from .backtest import (
     BacktestConfig,
-    BacktestResult,
     Backtester,
+    BacktestResult,
     ExecutionModel,
     Position,
     run_backtest,

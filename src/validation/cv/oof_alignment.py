@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from src.core.contracts import ModelContract, get_model_contract
+from src.core.contracts import get_model_contract
 
 if TYPE_CHECKING:
     from .oof_core import OOFPrediction
@@ -377,15 +377,14 @@ def compute_oof_coverage(
     coverage_ratio = n_valid / n_total_samples
 
     logger.debug(
-        f"{model_name}: coverage={coverage_ratio:.1%}, "
-        f"valid={n_valid}, missing={n_missing}"
+        f"{model_name}: coverage={coverage_ratio:.1%}, " f"valid={n_valid}, missing={n_missing}"
     )
 
     return coverage_ratio, n_missing
 
 
 def validate_oof_for_stacking(
-    oof_results: dict[str, "OOFPrediction"],
+    oof_results: dict[str, OOFPrediction],
     min_coverage: float = 0.95,
 ) -> tuple[bool, list[str]]:
     """
@@ -414,8 +413,7 @@ def validate_oof_for_stacking(
     for model_name, oof_pred in oof_results.items():
         if oof_pred.coverage < min_coverage:
             issues.append(
-                f"{model_name}: coverage {oof_pred.coverage:.1%} < "
-                f"minimum {min_coverage:.1%}"
+                f"{model_name}: coverage {oof_pred.coverage:.1%} < " f"minimum {min_coverage:.1%}"
             )
 
     # Check sample count alignment

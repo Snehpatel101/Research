@@ -8,9 +8,10 @@ Every stage should accept and return DatasetContract objects.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Any
-import pandas as pd
+from typing import Any
+
 import numpy as np
+import pandas as pd
 
 
 @dataclass
@@ -28,13 +29,14 @@ class DatasetContract:
         split: Which split this belongs to ("train", "val", "test")
         metadata: Arbitrary metadata (symbol, horizon, etc.)
     """
+
     # Core data
     features: pd.DataFrame
     labels: pd.Series
 
     # Index tracking (EXPLICIT)
     indices: pd.Index | None = None
-    label_end_times: Optional[pd.Series] = None
+    label_end_times: pd.Series | None = None
 
     # Metadata
     split: str = "train"  # "train", "val", "test"
@@ -45,8 +47,7 @@ class DatasetContract:
         # Check feature/label length match
         if len(self.features) != len(self.labels):
             raise ValueError(
-                f"Feature/label length mismatch: "
-                f"{len(self.features)} != {len(self.labels)}"
+                f"Feature/label length mismatch: " f"{len(self.features)} != {len(self.labels)}"
             )
 
         # Check index match
@@ -81,7 +82,7 @@ class DatasetContract:
         """Convert to numpy arrays (for model training)."""
         return self.features.values, self.labels.values
 
-    def filter_by_indices(self, indices: pd.Index) -> "DatasetContract":
+    def filter_by_indices(self, indices: pd.Index) -> DatasetContract:
         """Filter dataset to specific indices (for OOF alignment)."""
         mask = self.indices.isin(indices)
 
@@ -89,18 +90,22 @@ class DatasetContract:
             features=self.features.loc[mask].copy(),
             labels=self.labels.loc[mask].copy(),
             indices=self.indices[mask],
-            label_end_times=self.label_end_times.loc[mask].copy() if self.label_end_times is not None else None,
+            label_end_times=self.label_end_times.loc[mask].copy()
+            if self.label_end_times is not None
+            else None,
             split=self.split,
             metadata=self.metadata.copy(),
         )
 
-    def copy(self) -> "DatasetContract":
+    def copy(self) -> DatasetContract:
         """Create a deep copy."""
         return DatasetContract(
             features=self.features.copy(),
             labels=self.labels.copy(),
             indices=self.indices.copy(),
-            label_end_times=self.label_end_times.copy() if self.label_end_times is not None else None,
+            label_end_times=self.label_end_times.copy()
+            if self.label_end_times is not None
+            else None,
             split=self.split,
             metadata=self.metadata.copy(),
         )
@@ -113,7 +118,7 @@ class DatasetContract:
         feature_names: list[str] | None = None,
         split: str = "train",
         **metadata,
-    ) -> "DatasetContract":
+    ) -> DatasetContract:
         """Create from numpy arrays."""
         if feature_names is None:
             feature_names = [f"f{i}" for i in range(X.shape[1])]
@@ -132,6 +137,7 @@ class DatasetContract:
 @dataclass
 class SplitDatasetContract:
     """Contract for train/val/test splits."""
+
     train: DatasetContract
     val: DatasetContract
     test: DatasetContract | None = None

@@ -49,8 +49,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import optuna
@@ -58,8 +59,8 @@ from optuna.samplers import TPESampler
 from sklearn.metrics import f1_score
 
 from src.core import (
-    DEFAULT_FEATURE_SELECTION_TRIALS,
     DEFAULT_FEATURE_PRUNING_TRIALS,
+    DEFAULT_FEATURE_SELECTION_TRIALS,
     DEFAULT_MIN_FEATURES,
     DEFAULT_OPTUNA_RANDOM_STATE,
 )
@@ -70,6 +71,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # RESULT DATACLASSES
 # =============================================================================
+
 
 @dataclass
 class FeatureSelectionResult:
@@ -90,7 +92,7 @@ class FeatureSelectionResult:
         feature_inclusion_rates: Dict of feature -> selection frequency across trials
     """
 
-    selected_features: List[str]
+    selected_features: list[str]
     selection_mask: np.ndarray
     n_original: int
     n_selected: int
@@ -100,7 +102,7 @@ class FeatureSelectionResult:
     n_trials: int
     study: optuna.Study
     optimization_time: float = 0.0
-    feature_inclusion_rates: Dict[str, float] = field(default_factory=dict)
+    feature_inclusion_rates: dict[str, float] = field(default_factory=dict)
 
     @property
     def reduction_ratio(self) -> float:
@@ -118,7 +120,7 @@ class FeatureSelectionResult:
             f"improvement={self.improvement:+.2%})"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "selected_features": self.selected_features,
@@ -153,9 +155,9 @@ class FeaturePruningResult:
         optimization_time: Time taken in seconds
     """
 
-    selected_features: List[str]
-    feature_importances: Dict[str, float]
-    pruning_order: List[str]
+    selected_features: list[str]
+    feature_importances: dict[str, float]
+    pruning_order: list[str]
     n_original: int
     n_selected: int
     optimal_n_features: int
@@ -182,7 +184,7 @@ class FeaturePruningResult:
             f"improvement={self.improvement:+.2%})"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "selected_features": self.selected_features,
@@ -202,6 +204,7 @@ class FeaturePruningResult:
 # =============================================================================
 # FEATURE OPTIMIZER
 # =============================================================================
+
 
 class FeatureOptimizer:
     """
@@ -253,6 +256,7 @@ class FeatureOptimizer:
         """Get scoring function based on metric name."""
         if self.scoring == "accuracy":
             from sklearn.metrics import accuracy_score
+
             return accuracy_score
         elif self.scoring == "f1_weighted":
             return lambda y_true, y_pred: f1_score(y_true, y_pred, average="weighted")
@@ -284,10 +288,10 @@ class FeatureOptimizer:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        feature_names: List[str],
-        model_factory: Callable[[Dict[str, Any]], Any],
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
+        feature_names: list[str],
+        model_factory: Callable[[dict[str, Any]], Any],
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
     ) -> FeatureSelectionResult:
         """
         Optimize feature selection using binary include/exclude flags.
@@ -312,7 +316,7 @@ class FeatureOptimizer:
 
         if self.verbose >= 1:
             print(f"\n{'='*60}")
-            print(f"Optimizing feature selection (binary)")
+            print("Optimizing feature selection (binary)")
             print(f"  n_features={n_features}, n_trials={self.selection_trials}")
             print(f"  min_features={self.min_features}")
             print(f"{'='*60}")
@@ -320,8 +324,10 @@ class FeatureOptimizer:
         # Split data if no validation set provided
         if X_val is None or y_val is None:
             from sklearn.model_selection import train_test_split
+
             X_train, X_val, y_train, y_val = train_test_split(
-                X_train, y_train,
+                X_train,
+                y_train,
                 test_size=0.2,
                 random_state=self.random_state,
                 stratify=y_train,
@@ -411,19 +417,15 @@ class FeatureOptimizer:
         feature_inclusion_rates = {}
         if n_completed_trials > 0:
             feature_inclusion_rates = {
-                f: count / n_completed_trials
-                for f, count in feature_inclusion_counts.items()
+                f: count / n_completed_trials for f, count in feature_inclusion_counts.items()
             }
 
         # Compute improvement
         best_score = study.best_value
-        improvement = (
-            (best_score - baseline_score) / baseline_score
-            if baseline_score > 0 else 0.0
-        )
+        improvement = (best_score - baseline_score) / baseline_score if baseline_score > 0 else 0.0
 
         if self.verbose >= 1:
-            print(f"\nSelection optimization complete:")
+            print("\nSelection optimization complete:")
             print(f"  Selected {len(selected_features)}/{n_features} features")
             print(f"  Baseline score: {baseline_score:.4f}")
             print(f"  Best score: {best_score:.4f}")
@@ -448,11 +450,11 @@ class FeatureOptimizer:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        feature_names: List[str],
-        model_factory: Callable[[Dict[str, Any]], Any],
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-        feature_importances: Optional[Dict[str, float]] = None,
+        feature_names: list[str],
+        model_factory: Callable[[dict[str, Any]], Any],
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+        feature_importances: dict[str, float] | None = None,
     ) -> FeaturePruningResult:
         """
         Optimize feature count using importance-based pruning.
@@ -478,7 +480,7 @@ class FeatureOptimizer:
 
         if self.verbose >= 1:
             print(f"\n{'='*60}")
-            print(f"Optimizing feature pruning (importance-based)")
+            print("Optimizing feature pruning (importance-based)")
             print(f"  n_features={n_features}, n_trials={self.pruning_trials}")
             print(f"  min_features={self.min_features}")
             print(f"{'='*60}")
@@ -486,8 +488,10 @@ class FeatureOptimizer:
         # Split data if no validation set provided
         if X_val is None or y_val is None:
             from sklearn.model_selection import train_test_split
+
             X_train, X_val, y_train, y_val = train_test_split(
-                X_train, y_train,
+                X_train,
+                y_train,
                 test_size=0.2,
                 random_state=self.random_state,
                 stratify=y_train,
@@ -565,19 +569,15 @@ class FeatureOptimizer:
         best_trial = study.best_trial
         optimal_n_features = best_trial.params.get("n_features", n_features)
         selected_features = best_trial.user_attrs.get(
-            "selected_features",
-            sorted_features[:optimal_n_features]
+            "selected_features", sorted_features[:optimal_n_features]
         )
 
         # Compute improvement
         best_score = study.best_value
-        improvement = (
-            (best_score - baseline_score) / baseline_score
-            if baseline_score > 0 else 0.0
-        )
+        improvement = (best_score - baseline_score) / baseline_score if baseline_score > 0 else 0.0
 
         if self.verbose >= 1:
-            print(f"\nPruning optimization complete:")
+            print("\nPruning optimization complete:")
             print(f"  Optimal features: {len(selected_features)}/{n_features}")
             print(f"  Baseline score: {baseline_score:.4f}")
             print(f"  Best score: {best_score:.4f}")
@@ -603,9 +603,9 @@ class FeatureOptimizer:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_factory: Callable,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Compute feature importances using permutation importance.
 
@@ -622,7 +622,8 @@ class FeatureOptimizer:
 
         # Split for importance calculation
         X_tr, X_val, y_tr, y_val = train_test_split(
-            X_train, y_train,
+            X_train,
+            y_train,
             test_size=0.2,
             random_state=self.random_state,
             stratify=y_train,
@@ -638,22 +639,21 @@ class FeatureOptimizer:
             return {f: 1.0 / len(feature_names) for f in feature_names}
 
         # Try to get built-in feature importances first
-        if hasattr(model, 'feature_importances_'):
+        if hasattr(model, "feature_importances_"):
             importances = model.feature_importances_
-            return {
-                feature_names[i]: float(importances[i])
-                for i in range(len(feature_names))
-            }
+            return {feature_names[i]: float(importances[i]) for i in range(len(feature_names))}
 
         # Fall back to permutation importance
         try:
             from sklearn.inspection import permutation_importance
 
             result = permutation_importance(
-                model, X_val, y_val,
+                model,
+                X_val,
+                y_val,
                 n_repeats=5,
                 random_state=self.random_state,
-                scoring='f1_weighted',
+                scoring="f1_weighted",
             )
 
             return {
@@ -670,12 +670,12 @@ class FeatureOptimizer:
         self,
         X_train: np.ndarray,
         y_train: np.ndarray,
-        feature_names: List[str],
-        model_factory: Callable[[Dict[str, Any]], Any],
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
+        feature_names: list[str],
+        model_factory: Callable[[dict[str, Any]], Any],
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
         method: str = "both",
-    ) -> Tuple[FeatureSelectionResult, FeaturePruningResult]:
+    ) -> tuple[FeatureSelectionResult, FeaturePruningResult]:
         """
         Run both selection and pruning optimization.
 

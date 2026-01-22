@@ -1,7 +1,7 @@
 """
-Central constants - re-exports from src.common.
+Central constants - re-exports from src.core.common.
 
-This module provides unified access to constants from src.common.
+This module provides unified access to constants from src.core.common.
 All constants modules remain in their original locations; this is a facade.
 
 Usage:
@@ -13,7 +13,43 @@ Usage:
 # =============================================================================
 # TIMEFRAME CONFIGURATION
 # =============================================================================
-from src.common.timeframes import (
+# =============================================================================
+# HORIZON CONFIGURATION
+# =============================================================================
+from src.core.common.horizon_config import (
+    # Horizon lists
+    ACTIVE_HORIZONS,
+    # Purge/embargo configuration
+    DEFAULT_TIMEFRAME_MINUTES,
+    EMBARGO_MULTIPLIER,
+    EMBARGO_TIME_MINUTES,
+    HORIZONS,
+    LABEL_HORIZONS,
+    LOOKBACK_HORIZONS,
+    MIN_EMBARGO_BARS,
+    PURGE_MULTIPLIER,
+    SUPPORTED_HORIZONS,
+    # HorizonConfig dataclass
+    HorizonConfig,
+    # Functions
+    auto_scale_purge_embargo,
+    compute_embargo_bars,
+    get_default_barrier_params_for_horizon,
+    get_scaled_horizons,
+    validate_horizons,
+)
+
+# =============================================================================
+# SPLIT RATIO CONFIGURATION
+# =============================================================================
+from src.core.common.split_ratios import (
+    DEFAULT_SPLIT_RATIOS,
+    DEFAULT_TEST_RATIO,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+    validate_split_ratios,
+)
+from src.core.common.timeframes import (
     # Core timeframe lists
     ALL_CANONICAL_TIMEFRAMES,
     CANONICAL_TIMEFRAMES,
@@ -33,43 +69,6 @@ from src.common.timeframes import (
     normalize_timeframe_list,
     timeframe_to_minutes,
     validate_timeframe,
-)
-
-# =============================================================================
-# SPLIT RATIO CONFIGURATION
-# =============================================================================
-from src.common.split_ratios import (
-    DEFAULT_SPLIT_RATIOS,
-    DEFAULT_TEST_RATIO,
-    DEFAULT_TRAIN_RATIO,
-    DEFAULT_VAL_RATIO,
-    validate_split_ratios,
-)
-
-# =============================================================================
-# HORIZON CONFIGURATION
-# =============================================================================
-from src.common.horizon_config import (
-    # Horizon lists
-    ACTIVE_HORIZONS,
-    HORIZONS,
-    LABEL_HORIZONS,
-    LOOKBACK_HORIZONS,
-    SUPPORTED_HORIZONS,
-    # Purge/embargo configuration
-    DEFAULT_TIMEFRAME_MINUTES,
-    EMBARGO_MULTIPLIER,
-    EMBARGO_TIME_MINUTES,
-    MIN_EMBARGO_BARS,
-    PURGE_MULTIPLIER,
-    # HorizonConfig dataclass
-    HorizonConfig,
-    # Functions
-    auto_scale_purge_embargo,
-    compute_embargo_bars,
-    get_default_barrier_params_for_horizon,
-    get_scaled_horizons,
-    validate_horizons,
 )
 
 __all__ = [

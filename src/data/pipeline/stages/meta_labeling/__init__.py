@@ -32,7 +32,7 @@ Key Classes
 
 Usage
 -----
->>> from src.pipeline.stages.meta_labeling import (
+>>> from src.data.pipeline.stages.meta_labeling import (
 ...     PrimaryClassifier,
 ...     MetaLabelGenerator,
 ...     BetSizer,
@@ -75,7 +75,7 @@ from .primary_model import (
     PrimaryModelConfig,
     RecallOptimizer,
 )
-from .run import run_meta_labeling, add_meta_labels_standalone
+from .run import add_meta_labels_standalone, run_meta_labeling
 
 __all__ = [
     # Primary model

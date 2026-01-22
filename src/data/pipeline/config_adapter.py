@@ -6,14 +6,15 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.core.config import PipelineConfig
-    from src.pipeline.data_config import DataConfig
+    from src.data.pipeline.data_config import DataConfig
 
 
-def to_data_config(config: "PipelineConfig") -> "DataConfig":
+def to_data_config(config: PipelineConfig) -> DataConfig:
     """Convert core PipelineConfig to pipeline DataConfig for PipelineRunner."""
-    from datetime import datetime
     import secrets
-    from src.pipeline.data_config import DataConfig
+    from datetime import datetime
+
+    from src.data.pipeline.data_config import DataConfig
 
     run_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{secrets.token_hex(2)}"
 

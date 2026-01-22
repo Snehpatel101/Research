@@ -28,7 +28,7 @@ class DataRank(int, Enum):
     MULTI_TF_4D = 4  # (n_samples, n_timeframes, seq_len, n_features) - multi-stream
 
     @classmethod
-    def from_ndim(cls, ndim: int) -> "DataRank":
+    def from_ndim(cls, ndim: int) -> DataRank:
         """Get DataRank from array dimensions."""
         for rank in cls:
             if rank.value == ndim:
@@ -167,13 +167,9 @@ class DataContract:
         """Compute schema hash and set defaults."""
         # Set label column if not provided
         if not self.label_column:
-            object.__setattr__(
-                self, "label_column", DATA_SCHEMA.get_label_column(self.horizon)
-            )
+            object.__setattr__(self, "label_column", DATA_SCHEMA.get_label_column(self.horizon))
         if not self.weight_column:
-            object.__setattr__(
-                self, "weight_column", DATA_SCHEMA.get_weight_column(self.horizon)
-            )
+            object.__setattr__(self, "weight_column", DATA_SCHEMA.get_weight_column(self.horizon))
         if not self.schema_hash:
             object.__setattr__(self, "schema_hash", self._compute_schema_hash())
 
@@ -207,9 +203,7 @@ class DataContract:
 
         # Check sample count
         if len(df) != self.n_samples:
-            issues.append(
-                f"Sample count mismatch: expected {self.n_samples}, got {len(df)}"
-            )
+            issues.append(f"Sample count mismatch: expected {self.n_samples}, got {len(df)}")
 
         # Check feature columns exist
         if self.feature_columns:
@@ -228,9 +222,7 @@ class DataContract:
 
         return len(issues) == 0, issues
 
-    def validate_array(
-        self, X: np.ndarray, y: np.ndarray | None = None
-    ) -> tuple[bool, list[str]]:
+    def validate_array(self, X: np.ndarray, y: np.ndarray | None = None) -> tuple[bool, list[str]]:
         """
         Validate numpy arrays against this contract.
 
@@ -241,17 +233,13 @@ class DataContract:
 
         # Check rank
         if X.ndim != self.data_rank.value:
-            issues.append(
-                f"Rank mismatch: expected {self.data_rank.value}D, got {X.ndim}D"
-            )
+            issues.append(f"Rank mismatch: expected {self.data_rank.value}D, got {X.ndim}D")
             return False, issues
 
         # Check shape based on rank
         if self.data_rank == DataRank.TABULAR_2D:
             if X.shape[0] != self.n_samples:
-                issues.append(
-                    f"Sample count mismatch: expected {self.n_samples}, got {X.shape[0]}"
-                )
+                issues.append(f"Sample count mismatch: expected {self.n_samples}, got {X.shape[0]}")
             if X.shape[1] != self.n_features:
                 issues.append(
                     f"Feature count mismatch: expected {self.n_features}, got {X.shape[1]}"
@@ -273,8 +261,7 @@ class DataContract:
             # (n_samples, n_timeframes, seq_len, n_features)
             if self.n_timeframes and X.shape[1] != self.n_timeframes:
                 issues.append(
-                    f"Timeframe count mismatch: expected {self.n_timeframes}, "
-                    f"got {X.shape[1]}"
+                    f"Timeframe count mismatch: expected {self.n_timeframes}, " f"got {X.shape[1]}"
                 )
             if self.sequence_length and X.shape[2] != self.sequence_length:
                 issues.append(
@@ -290,8 +277,7 @@ class DataContract:
         if y is not None:
             if y.shape[0] != X.shape[0]:
                 issues.append(
-                    f"Label count mismatch: X has {X.shape[0]} samples, "
-                    f"y has {y.shape[0]}"
+                    f"Label count mismatch: X has {X.shape[0]} samples, " f"y has {y.shape[0]}"
                 )
 
         return len(issues) == 0, issues
@@ -322,7 +308,7 @@ class DataContract:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DataContract":
+    def from_dict(cls, data: dict[str, Any]) -> DataContract:
         """Deserialize from dictionary."""
         return cls(
             symbol=data["symbol"],
@@ -357,7 +343,7 @@ class DataContract:
         split: str,
         feature_columns: list[str],
         pipeline_run_id: str = "",
-    ) -> "DataContract":
+    ) -> DataContract:
         """Create contract from a DataFrame."""
         return cls(
             symbol=symbol,
@@ -381,7 +367,7 @@ class DataContract:
         split: str,
         feature_columns: list[str] | None = None,
         pipeline_run_id: str = "",
-    ) -> "DataContract":
+    ) -> DataContract:
         """Create contract from numpy array."""
         if X.ndim == 2:
             return cls(
@@ -432,8 +418,7 @@ class DataContract:
             shape = f"{self.n_samples}x{self.sequence_length}x{self.n_features}"
         if self.n_timeframes:
             shape = (
-                f"{self.n_samples}x{self.n_timeframes}x"
-                f"{self.sequence_length}x{self.n_features}"
+                f"{self.n_samples}x{self.n_timeframes}x" f"{self.sequence_length}x{self.n_features}"
             )
         return (
             f"DataContract({self.symbol}/{self.timeframe}/h{self.horizon}, "

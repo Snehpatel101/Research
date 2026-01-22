@@ -21,7 +21,7 @@ from . import DataIngestor
 
 # StageResult imports - adjust path based on pipeline structure
 try:
-    from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+    from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 except ImportError:
     # Fallback for different import paths
     from pipeline.utils import StageResult, create_failed_result, create_stage_result

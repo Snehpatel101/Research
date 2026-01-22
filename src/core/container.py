@@ -55,21 +55,41 @@ METADATA_COLUMNS_VERSION = "1.0"
 # Metadata columns to exclude from features
 METADATA_COLUMNS = {
     # Temporal identifiers
-    "datetime", "timestamp", "date", "time",
+    "datetime",
+    "timestamp",
+    "date",
+    "time",
     # Symbol identifiers
     "symbol",
     # Raw OHLCV data
-    "open", "high", "low", "close", "volume",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
     # Pipeline metadata
-    "timeframe", "session_id", "missing_bar", "roll_event",
-    "roll_window", "filled",
+    "timeframe",
+    "session_id",
+    "missing_bar",
+    "roll_event",
+    "roll_window",
+    "filled",
 }
 
 # Label column prefixes (targets, not features)
 _LABEL_PREFIXES = (
-    "label_", "bars_to_hit_", "mae_", "mfe_", "quality_",
-    "sample_weight_", "touch_type_", "pain_to_gain_",
-    "time_weighted_dd_", "fwd_return_", "fwd_return_log_", "time_to_hit_",
+    "label_",
+    "bars_to_hit_",
+    "mae_",
+    "mfe_",
+    "quality_",
+    "sample_weight_",
+    "touch_type_",
+    "pain_to_gain_",
+    "time_weighted_dd_",
+    "fwd_return_",
+    "fwd_return_log_",
+    "time_to_hit_",
 )
 
 
@@ -608,7 +628,7 @@ class TimeSeriesDataContainer:
         features_per_timeframe: list[str] | None = None,
         symbol_isolated: bool = True,
         include_base_features: bool = True,
-    ) -> "Dataset":
+    ) -> Dataset:
         """
         Get PyTorch Dataset with multi-resolution 4D sequences.
 

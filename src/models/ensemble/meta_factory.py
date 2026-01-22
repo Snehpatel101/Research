@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.core import PipelineConfig
@@ -73,7 +73,7 @@ class MetaLearnerConfig:
 
     name: str
     # Ridge parameters
-    alphas: List[float] = field(default_factory=lambda: [0.1, 1.0, 10.0, 100.0])
+    alphas: list[float] = field(default_factory=lambda: [0.1, 1.0, 10.0, 100.0])
     # MLP parameters
     hidden_layers: tuple = (64, 32)
     dropout: float = 0.2
@@ -88,7 +88,7 @@ class MetaLearnerConfig:
     method: str = "isotonic"
     cv: int = 3
 
-    def to_dict(self, meta_learner_name: Optional[str] = None) -> Dict[str, Any]:
+    def to_dict(self, meta_learner_name: str | None = None) -> dict[str, Any]:
         """
         Convert config to dictionary for specific meta-learner.
 
@@ -126,7 +126,7 @@ class MetaLearnerConfig:
 
 
 # Meta-learner registry (populated on first access)
-META_LEARNER_REGISTRY: Dict[str, Type] = {}
+META_LEARNER_REGISTRY: dict[str, type] = {}
 
 # Flag to track initialization
 _REGISTRY_INITIALIZED = False
@@ -237,7 +237,7 @@ class MetaLearnerFactory:
         ridge_meta = factory.create("ridge_meta", alpha=0.5)
     """
 
-    def __init__(self, config: Optional[PipelineConfig] = None) -> None:
+    def __init__(self, config: PipelineConfig | None = None) -> None:
         """
         Initialize factory.
 
@@ -264,7 +264,7 @@ class MetaLearnerFactory:
 
     def create(
         self,
-        meta_learner_name: Optional[str] = None,
+        meta_learner_name: str | None = None,
         **kwargs: Any,
     ) -> Any:
         """
@@ -300,8 +300,7 @@ class MetaLearnerFactory:
 
         if name not in META_LEARNER_REGISTRY:
             raise ValueError(
-                f"Unknown meta-learner: {name}. "
-                f"Available: {list(META_LEARNER_REGISTRY.keys())}"
+                f"Unknown meta-learner: {name}. " f"Available: {list(META_LEARNER_REGISTRY.keys())}"
             )
 
         meta_class = META_LEARNER_REGISTRY[name]
@@ -313,7 +312,7 @@ class MetaLearnerFactory:
 
         return meta_class(config=config_dict)
 
-    def _build_config_dict(self, name: str, **kwargs: Any) -> Dict[str, Any]:
+    def _build_config_dict(self, name: str, **kwargs: Any) -> dict[str, Any]:
         """
         Build configuration dictionary for meta-learner.
 
@@ -332,7 +331,7 @@ class MetaLearnerFactory:
 
         return defaults
 
-    def _get_defaults(self, name: str) -> Dict[str, Any]:
+    def _get_defaults(self, name: str) -> dict[str, Any]:
         """
         Get default parameters for a meta-learner.
 
@@ -390,7 +389,7 @@ class MetaLearnerFactory:
             return {}
 
     @staticmethod
-    def list_available() -> List[str]:
+    def list_available() -> list[str]:
         """
         List available meta-learners.
 
@@ -401,7 +400,7 @@ class MetaLearnerFactory:
         return list(META_LEARNER_REGISTRY.keys())
 
     @staticmethod
-    def get_meta_learner_info(name: str) -> Dict[str, Any]:
+    def get_meta_learner_info(name: str) -> dict[str, Any]:
         """
         Get information about a meta-learner.
 
@@ -481,7 +480,7 @@ class MetaLearnerFactory:
         }
 
     @staticmethod
-    def get_all_info() -> Dict[str, Dict[str, Any]]:
+    def get_all_info() -> dict[str, dict[str, Any]]:
         """
         Get information about all available meta-learners.
 
@@ -490,14 +489,13 @@ class MetaLearnerFactory:
         """
         _ensure_registry_loaded()
         return {
-            name: MetaLearnerFactory.get_meta_learner_info(name)
-            for name in META_LEARNER_REGISTRY
+            name: MetaLearnerFactory.get_meta_learner_info(name) for name in META_LEARNER_REGISTRY
         }
 
 
 def get_meta_learner(
     name: str,
-    config: Optional[PipelineConfig] = None,
+    config: PipelineConfig | None = None,
     **kwargs: Any,
 ) -> Any:
     """
@@ -555,7 +553,7 @@ def create_meta_learner_from_config(config: PipelineConfig) -> Any:
     return factory.create()
 
 
-def list_meta_learners() -> List[str]:
+def list_meta_learners() -> list[str]:
     """
     List all available meta-learner names.
 

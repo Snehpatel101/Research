@@ -10,21 +10,20 @@ This module provides a unified scaling interface that:
 - Handles 2D, 3D, and 4D arrays from different adapters
 - Supports save/load for inference pipelines
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional, Dict, Any, Tuple
 import json
 import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-import numpy as np
 import joblib
-
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler as SKMinMaxScaler
 from sklearn.preprocessing import RobustScaler as SKRobustScaler
 from sklearn.preprocessing import StandardScaler as SKStandardScaler
-from sklearn.preprocessing import MinMaxScaler as SKMinMaxScaler
-
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +41,15 @@ class ScalerConfig:
         quantile_range: For RobustScaler, the quantile range used to calculate scale
         feature_range: For MinMaxScaler, the target range for scaled features
     """
+
     method: str = "robust"  # "robust", "standard", "minmax", "none"
     clip_value: float = 5.0  # Clip scaled values to [-clip, clip]
     with_centering: bool = True
     with_scaling: bool = True
-    quantile_range: Tuple[float, float] = (25.0, 75.0)
-    feature_range: Tuple[float, float] = (0.0, 1.0)  # For MinMaxScaler
+    quantile_range: tuple[float, float] = (25.0, 75.0)
+    feature_range: tuple[float, float] = (0.0, 1.0)  # For MinMaxScaler
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for serialization."""
         return {
             "method": self.method,
@@ -61,7 +61,7 @@ class ScalerConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "ScalerConfig":
+    def from_dict(cls, d: dict[str, Any]) -> ScalerConfig:
         """Create config from dictionary."""
         return cls(
             method=d.get("method", "robust"),
@@ -97,7 +97,7 @@ class AdapterScaler:
     # Valid scaling methods
     VALID_METHODS = ("robust", "standard", "minmax", "none")
 
-    def __init__(self, config: Optional[ScalerConfig] = None):
+    def __init__(self, config: ScalerConfig | None = None):
         """
         Initialize the scaler.
 
@@ -106,10 +106,10 @@ class AdapterScaler:
                     standard settings and clipping at +/- 5.0.
         """
         self.config = config or ScalerConfig()
-        self._scaler: Optional[SKRobustScaler | SKStandardScaler | SKMinMaxScaler] = None
+        self._scaler: SKRobustScaler | SKStandardScaler | SKMinMaxScaler | None = None
         self._is_fitted = False
         self._n_features: int = 0
-        self._original_shape: Optional[tuple] = None
+        self._original_shape: tuple | None = None
 
         # Validate method
         if self.config.method not in self.VALID_METHODS:
@@ -128,7 +128,7 @@ class AdapterScaler:
         """Number of features the scaler was fitted on."""
         return self._n_features
 
-    def fit(self, X: np.ndarray) -> "AdapterScaler":
+    def fit(self, X: np.ndarray) -> AdapterScaler:
         """
         Fit scaler on training data.
 
@@ -163,9 +163,7 @@ class AdapterScaler:
         elif self.config.method == "standard":
             self._scaler = SKStandardScaler()
         elif self.config.method == "minmax":
-            self._scaler = SKMinMaxScaler(
-                feature_range=self.config.feature_range
-            )
+            self._scaler = SKMinMaxScaler(feature_range=self.config.feature_range)
         else:
             raise ValueError(f"Unknown scaling method: {self.config.method}")
 
@@ -215,11 +213,7 @@ class AdapterScaler:
 
         # Clip values if configured
         if self.config.clip_value > 0:
-            X_scaled = np.clip(
-                X_scaled,
-                -self.config.clip_value,
-                self.config.clip_value
-            )
+            X_scaled = np.clip(X_scaled, -self.config.clip_value, self.config.clip_value)
 
         return self._from_2d(X_scaled, original_shape)
 
@@ -289,10 +283,7 @@ class AdapterScaler:
             n, tf, seq, feat = X.shape
             return X.reshape(-1, feat)
         else:
-            raise ValueError(
-                f"Unsupported array rank: {X.ndim}. "
-                f"Expected 2D, 3D, or 4D array."
-            )
+            raise ValueError(f"Unsupported array rank: {X.ndim}. " f"Expected 2D, 3D, or 4D array.")
 
     def _from_2d(self, X_2d: np.ndarray, original_shape: tuple) -> np.ndarray:
         """
@@ -342,7 +333,7 @@ class AdapterScaler:
         logger.info(f"Saved AdapterScaler to {path}")
 
     @classmethod
-    def load(cls, path: Path) -> "AdapterScaler":
+    def load(cls, path: Path) -> AdapterScaler:
         """
         Load scaler from disk.
 
@@ -362,7 +353,7 @@ class AdapterScaler:
         if not config_path.exists():
             raise FileNotFoundError(f"Scaler config not found: {config_path}")
 
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config_dict = json.load(f)
 
         # Create instance with loaded config
@@ -383,7 +374,7 @@ class AdapterScaler:
         logger.info(f"Loaded AdapterScaler from {path}")
         return instance
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get scaler statistics for debugging and analysis.
 
@@ -394,21 +385,29 @@ class AdapterScaler:
         if not self._is_fitted or self._scaler is None:
             return {"fitted": False}
 
-        stats: Dict[str, Any] = {
+        stats: dict[str, Any] = {
             "fitted": True,
             "method": self.config.method,
             "n_features": self._n_features,
         }
 
         if self.config.method == "robust":
-            stats["center"] = self._scaler.center_.tolist() if hasattr(self._scaler, "center_") else None
-            stats["scale"] = self._scaler.scale_.tolist() if hasattr(self._scaler, "scale_") else None
+            stats["center"] = (
+                self._scaler.center_.tolist() if hasattr(self._scaler, "center_") else None
+            )
+            stats["scale"] = (
+                self._scaler.scale_.tolist() if hasattr(self._scaler, "scale_") else None
+            )
         elif self.config.method == "standard":
             stats["mean"] = self._scaler.mean_.tolist() if hasattr(self._scaler, "mean_") else None
             stats["std"] = self._scaler.scale_.tolist() if hasattr(self._scaler, "scale_") else None
         elif self.config.method == "minmax":
-            stats["data_min"] = self._scaler.data_min_.tolist() if hasattr(self._scaler, "data_min_") else None
-            stats["data_max"] = self._scaler.data_max_.tolist() if hasattr(self._scaler, "data_max_") else None
+            stats["data_min"] = (
+                self._scaler.data_min_.tolist() if hasattr(self._scaler, "data_min_") else None
+            )
+            stats["data_max"] = (
+                self._scaler.data_max_.tolist() if hasattr(self._scaler, "data_max_") else None
+            )
 
         return stats
 
@@ -416,6 +415,7 @@ class AdapterScaler:
 # =============================================================================
 # FACTORY FUNCTIONS
 # =============================================================================
+
 
 def create_scaler(
     method: str = "robust",

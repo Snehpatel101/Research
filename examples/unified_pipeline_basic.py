@@ -6,7 +6,8 @@ the complete ML workflow from raw data to trained models.
 """
 
 from pathlib import Path
-from src.ml_pipeline import MLPipeline, MLConfig, ModelConfig
+
+from src.ml_pipeline import MLConfig, MLPipeline, ModelConfig
 
 
 def basic_example():

@@ -41,46 +41,11 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 """
 
 # Result classes - these have no external dependencies
-from .result import (
-    FeatureSelectionResult,
-    PersistedFeatureSelection,
-)
-
 # Configuration - these have no external dependencies
 from .config import (
     FeatureSelectionConfig,
     FeatureSelectorConfig,
     ModelFamilyDefaults,
-)
-
-# Priority - no external dependencies
-from .priority import (
-    DEFAULT_PRIORITY,
-    FEATURE_PRIORITY,
-    get_feature_priority,
-)
-
-# Walk-forward selectors - minimal external dependencies
-from .walk_forward import (
-    CVIntegratedFeatureSelector,
-    WalkForwardFeatureSelector,
-)
-
-# OHLCV-specific selectors
-from .ohlcv_selector import (
-    FEATURE_CATEGORIES,
-    OHLCVFeatureSelector,
-    StabilityMetrics,
-    categorize_feature,
-    create_ohlcv_selector,
-    filter_ohlcv_features,
-    get_feature_categories,
-)
-
-# Purged selector
-from .purged_selector import (
-    PurgedFeatureSelector,
-    create_purged_selector,
 )
 
 # Filtering functions
@@ -95,14 +60,48 @@ from .filtering import (
     select_from_correlated_group,
 )
 
+# OHLCV-specific selectors
+from .ohlcv_selector import (
+    FEATURE_CATEGORIES,
+    OHLCVFeatureSelector,
+    StabilityMetrics,
+    categorize_feature,
+    create_ohlcv_selector,
+    filter_ohlcv_features,
+    get_feature_categories,
+)
+
 # Optimization
 from .optimization import (
     FeatureOptimizer,
     optimize_feature_subset_simple,
 )
 
+# Priority - no external dependencies
+from .priority import (
+    DEFAULT_PRIORITY,
+    FEATURE_PRIORITY,
+    get_feature_priority,
+)
+
+# Purged selector
+from .purged_selector import (
+    PurgedFeatureSelector,
+    create_purged_selector,
+)
+from .result import (
+    FeatureSelectionResult,
+    PersistedFeatureSelection,
+)
+
+# Walk-forward selectors - minimal external dependencies
+from .walk_forward import (
+    CVIntegratedFeatureSelector,
+    WalkForwardFeatureSelector,
+)
+
 # Lazy import for FeatureSelectionManager to avoid circular dependency
-# (it imports from src.cross_validation which can trigger src.models imports)
+# (it imports from src.validation.cv which can trigger src.models imports)
 _FeatureSelectionManager = None
 
 

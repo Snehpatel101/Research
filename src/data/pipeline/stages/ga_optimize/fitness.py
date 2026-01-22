@@ -8,10 +8,10 @@ Contains:
 
 import numpy as np
 
-from src.pipeline.config import LABEL_BALANCE_CONSTRAINTS, TICK_VALUES, get_total_trade_cost
+from src.data.pipeline.config import LABEL_BALANCE_CONSTRAINTS, TICK_VALUES, get_total_trade_cost
 
 # Import labeling function and config
-from src.pipeline.stages.labeling import triple_barrier_numba
+from src.data.pipeline.stages.labeling import triple_barrier_numba
 
 
 def calculate_fitness(

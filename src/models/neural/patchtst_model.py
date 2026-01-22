@@ -16,7 +16,6 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-import math
 from typing import Any
 
 import numpy as np

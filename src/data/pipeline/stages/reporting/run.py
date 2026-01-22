@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
     from manifest import ArtifactManifest
@@ -43,7 +43,7 @@ def generate_report_content(
     Returns:
         Markdown formatted report string
     """
-    from src.pipeline.utils import StageStatus
+    from src.data.pipeline.utils import StageStatus
 
     report = f"""# Phase 1 Completion Report
 ## Ensemble Price Prediction System

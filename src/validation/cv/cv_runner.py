@@ -79,26 +79,24 @@ from typing import Any
 
 import pandas as pd
 
+# Re-export ModelRegistry for backward compatibility
+from src.models.registry import ModelRegistry
+from src.optimization.feature_selection import WalkForwardFeatureSelector
+
 from .cv_dataclasses import CVResult, FoldMetrics
 from .cv_feature_selection import run_cv_with_per_fold_feature_selection
 from .cv_stacking import (
-    _grade_stability,
     analyze_cv_stability,
     build_stacking_datasets_from_cv_results,
-    validate_stacking_consistency,
 )
 from .cv_tuner import TimeSeriesOptunaTuner
-from src.optimization.feature_selection import WalkForwardFeatureSelector
-from .oof_generator import OOFGenerator, OOFPrediction, StackingDataset
+from .oof_generator import OOFGenerator, StackingDataset
 from .param_spaces import (
     PARAM_SPACES,
     get_max_leaves_for_depth,
     validate_lightgbm_params,
 )
 from .purged_kfold import ModelAwareCV, PurgedKFold
-
-# Re-export ModelRegistry for backward compatibility
-from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 

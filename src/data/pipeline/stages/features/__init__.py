@@ -54,6 +54,26 @@ from .constants import (
 )
 from .engineer import FeatureEngineer
 
+# Feature functions - Entropy
+from .entropy import (
+    DEFAULT_APEN_M,
+    DEFAULT_APEN_R,
+    DEFAULT_APEN_WINDOWS,
+    DEFAULT_HURST_WINDOWS,
+    DEFAULT_LZ_WINDOWS,
+    DEFAULT_SAMPLE_ENTROPY_M,
+    DEFAULT_SAMPLE_ENTROPY_R,
+    DEFAULT_SAMPLE_ENTROPY_WINDOWS,
+    DEFAULT_SHANNON_BINS,
+    DEFAULT_SHANNON_WINDOWS,
+    add_approximate_entropy,
+    add_entropy_features,
+    add_hurst_features,
+    add_lempel_ziv_complexity,
+    add_sample_entropy,
+    add_shannon_entropy,
+)
+
 # Feature functions - Microstructure
 from .microstructure import (
     add_amihud_illiquidity,
@@ -134,6 +154,7 @@ from .trend import (
 
 # Feature functions - Volatility
 from .volatility import (
+    ARCH_AVAILABLE,
     add_atr,
     add_bollinger_bands,
     add_garch_features,
@@ -144,7 +165,6 @@ from .volatility import (
     add_parkinson_volatility,
     add_rogers_satchell_volatility,
     add_yang_zhang_volatility,
-    ARCH_AVAILABLE,
 )
 
 # Feature functions - Volume
@@ -168,26 +188,6 @@ from .wavelets import (
     add_wavelet_features,
     add_wavelet_trend_strength,
     add_wavelet_volatility,
-)
-
-# Feature functions - Entropy
-from .entropy import (
-    DEFAULT_APEN_M,
-    DEFAULT_APEN_R,
-    DEFAULT_APEN_WINDOWS,
-    DEFAULT_HURST_WINDOWS,
-    DEFAULT_LZ_WINDOWS,
-    DEFAULT_SAMPLE_ENTROPY_M,
-    DEFAULT_SAMPLE_ENTROPY_R,
-    DEFAULT_SAMPLE_ENTROPY_WINDOWS,
-    DEFAULT_SHANNON_BINS,
-    DEFAULT_SHANNON_WINDOWS,
-    add_approximate_entropy,
-    add_entropy_features,
-    add_hurst_features,
-    add_lempel_ziv_complexity,
-    add_sample_entropy,
-    add_shannon_entropy,
 )
 
 __all__ = [

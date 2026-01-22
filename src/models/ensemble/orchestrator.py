@@ -33,16 +33,14 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from src.core import (
-    MODEL_ADAPTER_MAP,
-    MODEL_DATA_RANKS,
     OOFResult,
     PipelineConfig,
 )
@@ -50,7 +48,6 @@ from src.core.interfaces import OOFPredictionProtocol
 from src.data.adapters import (
     AlignedOOFResult,
     OOFAligner,
-    align_oof_predictions,
 )
 
 # TYPE_CHECKING import to break circular dependency:
@@ -58,8 +55,8 @@ from src.data.adapters import (
 # -> models.base -> models/__init__ -> models.ensemble -> orchestrator
 # -> cross_validation (CIRCULAR)
 if TYPE_CHECKING:
-    from src.validation.cv import OOFPrediction, StackingDataset
     from src.training.unified_orchestrator import TrainingRunResult
+    from src.validation.cv import OOFPrediction, StackingDataset
 else:
     # At runtime, use Protocol for type hints (structural typing)
     OOFPrediction = OOFPredictionProtocol
@@ -94,16 +91,16 @@ class EnsembleResult:
 
     ensemble_name: str
     meta_learner_name: str
-    base_model_names: List[str]
-    metrics: Dict[str, float]
-    stacking_dataset: Optional[StackingDataset] = None
-    aligned_oof: Optional[AlignedOOFResult] = None
+    base_model_names: list[str]
+    metrics: dict[str, float]
+    stacking_dataset: StackingDataset | None = None
+    aligned_oof: AlignedOOFResult | None = None
     training_time_seconds: float = 0.0
     n_base_models: int = 0
     coverage: float = 1.0
     alignment_offset: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "ensemble_name": self.ensemble_name,
@@ -196,7 +193,7 @@ class EnsembleOrchestrator:
 
         # Results storage
         self._ensemble: Any = None
-        self._result: Optional[EnsembleResult] = None
+        self._result: EnsembleResult | None = None
         self._aligner = OOFAligner()
 
         logger.info("EnsembleOrchestrator initialized")
@@ -206,9 +203,9 @@ class EnsembleOrchestrator:
 
     def train(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
+        oof_predictions: dict[str, OOFPrediction],
         y_train: np.ndarray,
-        sample_weights: Optional[np.ndarray] = None,
+        sample_weights: np.ndarray | None = None,
     ) -> EnsembleResult:
         """
         Train ensemble from OOF predictions.
@@ -222,7 +219,7 @@ class EnsembleOrchestrator:
 
         Args:
             oof_predictions: Dict mapping model_name -> OOFPrediction
-                from src.cross_validation
+                from src.validation.cv
             y_train: Training labels (full length, will be aligned)
             sample_weights: Optional sample weights (full length)
 
@@ -239,9 +236,7 @@ class EnsembleOrchestrator:
         logger.info("=" * 60)
 
         if len(oof_predictions) < 2:
-            raise ValueError(
-                f"Need at least 2 models for ensemble, got {len(oof_predictions)}"
-            )
+            raise ValueError(f"Need at least 2 models for ensemble, got {len(oof_predictions)}")
 
         # Step 1: Convert OOFPrediction to OOFResult for OOFAligner
         oof_results = self._convert_to_oof_results(oof_predictions)
@@ -398,7 +393,7 @@ class EnsembleOrchestrator:
 
     def train_from_training_result(
         self,
-        training_result: "TrainingRunResult",
+        training_result: TrainingRunResult,
     ) -> EnsembleResult:
         """
         Train ensemble from PHASE_3 TrainingRunResult.
@@ -416,8 +411,8 @@ class EnsembleOrchestrator:
             ValueError: If no OOF predictions found in training result
         """
         # Extract OOF predictions from model results
-        oof_predictions: Dict[str, OOFPrediction] = {}
-        y_train: Optional[np.ndarray] = None
+        oof_predictions: dict[str, OOFPrediction] = {}
+        y_train: np.ndarray | None = None
 
         for key, model_result in training_result.model_results.items():
             if model_result.oof_prediction is not None:
@@ -444,15 +439,13 @@ class EnsembleOrchestrator:
                 "Ensure OOF predictions include 'y_true' column."
             )
 
-        logger.info(
-            f"Extracted {len(oof_predictions)} OOF predictions from TrainingRunResult"
-        )
+        logger.info(f"Extracted {len(oof_predictions)} OOF predictions from TrainingRunResult")
 
         return self.train(oof_predictions, y_train)
 
     def predict(
         self,
-        base_predictions: Dict[str, np.ndarray],
+        base_predictions: dict[str, np.ndarray],
     ) -> np.ndarray:
         """
         Generate ensemble predictions from base model outputs.
@@ -471,7 +464,7 @@ class EnsembleOrchestrator:
             raise ValueError("Ensemble not trained. Call train() first.")
 
         # Convert to OOFResult format for alignment
-        oof_results: List[OOFResult] = []
+        oof_results: list[OOFResult] = []
 
         for name, probs in base_predictions.items():
             n_samples = probs.shape[0]
@@ -502,7 +495,7 @@ class EnsembleOrchestrator:
 
     def predict_proba(
         self,
-        base_predictions: Dict[str, np.ndarray],
+        base_predictions: dict[str, np.ndarray],
     ) -> np.ndarray:
         """
         Generate ensemble probability predictions from base model outputs.
@@ -520,7 +513,7 @@ class EnsembleOrchestrator:
             raise ValueError("Ensemble not trained. Call train() first.")
 
         # Convert to OOFResult format for alignment
-        oof_results: List[OOFResult] = []
+        oof_results: list[OOFResult] = []
 
         for name, probs in base_predictions.items():
             n_samples = probs.shape[0]
@@ -545,8 +538,8 @@ class EnsembleOrchestrator:
 
     def _convert_to_oof_results(
         self,
-        oof_predictions: Dict[str, OOFPrediction],
-    ) -> List[OOFResult]:
+        oof_predictions: dict[str, OOFPrediction],
+    ) -> list[OOFResult]:
         """
         Convert OOFPrediction dict to list of OOFResult for OOFAligner.
 
@@ -559,7 +552,7 @@ class EnsembleOrchestrator:
         Returns:
             List of OOFResult for alignment
         """
-        oof_results: List[OOFResult] = []
+        oof_results: list[OOFResult] = []
 
         for model_name, oof_pred in oof_predictions.items():
             # Extract probabilities and predictions
@@ -626,7 +619,7 @@ class EnsembleOrchestrator:
 
         logger.info(f"Ensemble results saved to: {ensemble_dir}")
 
-    def load(self, path: Union[str, Path]) -> None:
+    def load(self, path: str | Path) -> None:
         """
         Load a trained ensemble from disk.
 
@@ -669,7 +662,7 @@ class EnsembleOrchestrator:
         return self._ensemble
 
     @property
-    def result(self) -> Optional[EnsembleResult]:
+    def result(self) -> EnsembleResult | None:
         """Get training result."""
         return self._result
 
@@ -686,9 +679,9 @@ class EnsembleOrchestrator:
 
 def build_ensemble(
     config: PipelineConfig,
-    oof_predictions: Dict[str, OOFPrediction],
+    oof_predictions: dict[str, OOFPrediction],
     y_train: np.ndarray,
-    sample_weights: Optional[np.ndarray] = None,
+    sample_weights: np.ndarray | None = None,
 ) -> EnsembleResult:
     """
     Convenience function to build ensemble.

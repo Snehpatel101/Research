@@ -172,13 +172,9 @@ def check_feature_label_correlation(
 
         # Compute correlation
         if method == "spearman":
-            corr, p_val = stats.spearmanr(
-                feature_col[valid_mask], labels[valid_mask]
-            )
+            corr, p_val = stats.spearmanr(feature_col[valid_mask], labels[valid_mask])
         elif method == "pearson":
-            corr, p_val = stats.pearsonr(
-                feature_col[valid_mask], labels[valid_mask]
-            )
+            corr, p_val = stats.pearsonr(feature_col[valid_mask], labels[valid_mask])
         else:
             raise ValueError(f"Unknown method: {method}")
 
@@ -188,9 +184,7 @@ def check_feature_label_correlation(
             p_val = 1.0
 
         abs_corr = abs(corr)
-        is_suspicious = (
-            abs_corr >= correlation_threshold and p_val < p_value_threshold
-        )
+        is_suspicious = abs_corr >= correlation_threshold and p_val < p_value_threshold
 
         # Leakage score: combines correlation magnitude and significance
         if p_val < p_value_threshold:
@@ -303,24 +297,18 @@ def check_temporal_leakage(
         for lag in range(1, max_lag + 1):
             # Forward: does feature predict future labels?
             if lag < n_samples:
-                f_corr, _ = stats.spearmanr(
-                    feature_col[:-lag], labels[lag:], nan_policy="omit"
-                )
+                f_corr, _ = stats.spearmanr(feature_col[:-lag], labels[lag:], nan_policy="omit")
                 if not np.isnan(f_corr):
                     forward_corrs.append(abs(f_corr))
 
             # Backward: does feature relate to past labels?
             if lag < n_samples:
-                b_corr, _ = stats.spearmanr(
-                    feature_col[lag:], labels[:-lag], nan_policy="omit"
-                )
+                b_corr, _ = stats.spearmanr(feature_col[lag:], labels[:-lag], nan_policy="omit")
                 if not np.isnan(b_corr):
                     backward_corrs.append(abs(b_corr))
 
         # Concurrent correlation
-        concurrent_corr, p_val = stats.spearmanr(
-            feature_col, labels, nan_policy="omit"
-        )
+        concurrent_corr, p_val = stats.spearmanr(feature_col, labels, nan_policy="omit")
         if np.isnan(concurrent_corr):
             concurrent_corr = 0.0
             p_val = 1.0
@@ -330,9 +318,8 @@ def check_temporal_leakage(
         avg_backward = np.mean(backward_corrs) if backward_corrs else 0.0
 
         # Suspicious if forward correlation is strong or forward > backward
-        is_suspicious = (
-            avg_forward > correlation_threshold
-            or (avg_forward > avg_backward * 1.5 and avg_forward > 0.1)
+        is_suspicious = avg_forward > correlation_threshold or (
+            avg_forward > avg_backward * 1.5 and avg_forward > 0.1
         )
 
         leakage_score = max(
@@ -353,7 +340,9 @@ def check_temporal_leakage(
                     "forward_backward_ratio": (
                         float(avg_forward / avg_backward)
                         if avg_backward > 0
-                        else float("inf") if avg_forward > 0 else 0.0
+                        else float("inf")
+                        if avg_forward > 0
+                        else 0.0
                     ),
                     "max_lag": max_lag,
                 },

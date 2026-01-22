@@ -4,11 +4,10 @@ Momentum feature computation - RSI, MACD, Stochastic, Williams %R, ROC, CCI, MFI
 PHASE_1 Unified Features: 23 MOMENTUM features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -41,8 +40,8 @@ def _compute_rsi(series: pd.Series, period: int) -> pd.Series:
     loss = (-delta).where(delta < 0, 0.0)
 
     # Use EMA for smoothing (Wilder's smoothing)
-    avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
     # Avoid division by zero
     rs = avg_gain / avg_loss.replace(0, np.nan)
@@ -333,7 +332,7 @@ def compute_mfi_oversold(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-MOMENTUM_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+MOMENTUM_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # RSI
     "rsi_7": compute_rsi_7,
     "rsi_14": compute_rsi_14,

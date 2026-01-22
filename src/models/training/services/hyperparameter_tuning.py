@@ -1,11 +1,9 @@
 # src/training/services/hyperparameter_tuning.py
 """Service for hyperparameter optimization."""
 
+import logging
 from dataclasses import dataclass
 from typing import Any
-import logging
-
-import numpy as np
 
 from src.data.adapters import PreparedData
 from src.validation.cv import TimeSeriesOptunaTuner
@@ -16,6 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TuningRequest:
     """Request for hyperparameter tuning."""
+
     model_name: str
     horizon: int
     prepared_data: PreparedData
@@ -26,6 +25,7 @@ class TuningRequest:
 @dataclass
 class TuningResult:
     """Result from hyperparameter tuning."""
+
     best_params: dict[str, Any]
     best_score: float
     n_trials_completed: int
@@ -63,11 +63,7 @@ class HyperparameterTuningService:
 
         # Flatten to 2D for tuning
         X_train = request.prepared_data.X_train
-        X_train_2d = (
-            X_train.reshape(X_train.shape[0], -1)
-            if X_train.ndim > 2
-            else X_train
-        )
+        X_train_2d = X_train.reshape(X_train.shape[0], -1) if X_train.ndim > 2 else X_train
 
         best_params = tuner.optimize(
             X=X_train_2d,

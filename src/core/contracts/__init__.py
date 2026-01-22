@@ -25,7 +25,7 @@ Usage:
     )
 
 Example:
-    >>> from src.contracts import get_model_contract, DataContract, DataRank
+    >>> from src.core.contracts import get_model_contract, DataContract, DataRank
     >>>
     >>> # Get contract for a model
     >>> contract = get_model_contract("xgboost")
@@ -43,25 +43,25 @@ Example:
     >>> is_valid, issues = contract.validate_data_contract(data_contract)
 """
 
+from .artifact_manifest import (
+    ArtifactManifest,
+)
 from .data_contract import (
+    DATA_SCHEMA,
+    DataContract,
+    DataContractSchema,
     DataRank,
     FeatureMode,
     MTFMode,
-    DataContractSchema,
-    DATA_SCHEMA,
-    DataContract,
 )
 from .model_contract import (
-    ModelContract,
     MODEL_CONTRACTS,
+    ModelContract,
     get_model_contract,
-    list_model_contracts,
+    get_models_by_mtf_mode,
     get_models_by_rank,
     get_models_requiring_scaling,
-    get_models_by_mtf_mode,
-)
-from .artifact_manifest import (
-    ArtifactManifest,
+    list_model_contracts,
 )
 
 __all__ = [

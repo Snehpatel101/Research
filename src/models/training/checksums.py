@@ -20,7 +20,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -150,7 +149,9 @@ class ArtifactIntegrityManager:
         # Store in index
         self._checksums[rel_path] = checksum
 
-        logger.debug(f"Registered artifact: {rel_path} ({size_bytes} bytes, sha256={sha256[:16]}...)")
+        logger.debug(
+            f"Registered artifact: {rel_path} ({size_bytes} bytes, sha256={sha256[:16]}...)"
+        )
 
         return checksum
 

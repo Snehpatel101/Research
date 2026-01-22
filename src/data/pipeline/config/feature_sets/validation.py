@@ -6,7 +6,7 @@ Contains functions to resolve, validate, and get feature set columns.
 
 import logging
 
-from .core import FeatureSetDefinition, FEATURE_SET_ALIASES
+from .core import FEATURE_SET_ALIASES, FeatureSetDefinition
 from .definitions import FEATURE_SET_DEFINITIONS
 
 
@@ -140,9 +140,7 @@ def validate_feature_set_coverage(
             matched_explicit.add(col)
         else:
             # include_columns are optional, just log if missing
-            logger.debug(
-                f"Feature set '{feature_set.name}': include_column '{col}' not found"
-            )
+            logger.debug(f"Feature set '{feature_set.name}': include_column '{col}' not found")
 
     # Check required explicit_columns (these MUST be present)
     for col in feature_set.explicit_columns:

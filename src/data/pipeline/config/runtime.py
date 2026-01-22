@@ -9,14 +9,14 @@ from pathlib import Path
 
 import numpy as np
 
-from src.common.horizon_config import HORIZONS, auto_scale_purge_embargo
-from src.common.split_ratios import (
+from src.core.common.horizon_config import HORIZONS, auto_scale_purge_embargo
+from src.core.common.split_ratios import (
     DEFAULT_TEST_RATIO,
     DEFAULT_TRAIN_RATIO,
     DEFAULT_VAL_RATIO,
 )
-from src.pipeline.config.barriers_config import BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
-from src.pipeline.config.features import parse_timeframe_to_minutes
+from src.data.pipeline.config.barriers_config import BARRIER_PARAMS, BARRIER_PARAMS_DEFAULT
+from src.core.common.timeframes import timeframe_to_minutes as parse_timeframe_to_minutes
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_DIR = PROJECT_ROOT / "data"
@@ -86,7 +86,7 @@ def validate_config() -> None:
     for params in BARRIER_PARAMS_DEFAULT.values():
         max_max_bars = max(max_max_bars, params.get("max_bars", 0))
 
-    if PURGE_BARS < max_max_bars:
+    if max_max_bars > PURGE_BARS:
         raise ValueError(
             f"PURGE_BARS ({PURGE_BARS}) < max_bars ({max_max_bars}) - label leakage risk"
         )

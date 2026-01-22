@@ -22,10 +22,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import Any
 
 import numpy as np
-from scipy import stats
 from scipy.special import kl_div
 from sklearn.metrics import matthews_corrcoef
 
@@ -39,6 +38,7 @@ _MIN_PROB = 1e-7
 @dataclass
 class DiversityAnalysisResult:
     """Result from diversity analysis for model selection."""
+
     selected_models: list[str]
     diversity_matrix: np.ndarray
     model_names: list[str]
@@ -108,7 +108,9 @@ def compute_pairwise_correlation(predictions: np.ndarray) -> float:
         Returns 0.0 if fewer than 2 models.
     """
     if predictions.ndim != 2:
-        raise ValueError(f"predictions must be 2D (n_samples, n_models), got shape {predictions.shape}")
+        raise ValueError(
+            f"predictions must be 2D (n_samples, n_models), got shape {predictions.shape}"
+        )
 
     n_models = predictions.shape[1]
     if n_models < 2:
@@ -442,7 +444,9 @@ def compute_average_kl_divergence(probabilities: np.ndarray) -> float:
         Average KL divergence. Higher = more diverse.
     """
     if probabilities.ndim != 3:
-        raise ValueError(f"probabilities must be 3D (n_samples, n_models, n_classes), got {probabilities.shape}")
+        raise ValueError(
+            f"probabilities must be 3D (n_samples, n_models, n_classes), got {probabilities.shape}"
+        )
 
     n_samples, n_models, n_classes = probabilities.shape
     if n_models < 2:
@@ -590,9 +594,7 @@ class DiversityAnalyzer:
 
         if n_models < 2:
             logger.warning("Need at least 2 models for diversity analysis")
-            return DiversityMetrics(
-                recommendations=["Add more base models (minimum 2 required)"]
-            )
+            return DiversityMetrics(recommendations=["Add more base models (minimum 2 required)"])
 
         # Stack predictions into matrix (n_samples, n_models)
         first_preds = base_predictions[model_names[0]]
@@ -602,9 +604,7 @@ class DiversityAnalyzer:
         for i, name in enumerate(model_names):
             preds = base_predictions[name]
             if len(preds) != n_samples:
-                raise ValueError(
-                    f"Model {name} has {len(preds)} predictions, expected {n_samples}"
-                )
+                raise ValueError(f"Model {name} has {len(preds)} predictions, expected {n_samples}")
             predictions_matrix[:, i] = preds
 
         # Compute pairwise correlations
@@ -622,9 +622,7 @@ class DiversityAnalyzer:
         double_fault = 0.0
         if y_true is not None:
             if len(y_true) != n_samples:
-                raise ValueError(
-                    f"y_true has {len(y_true)} samples, expected {n_samples}"
-                )
+                raise ValueError(f"y_true has {len(y_true)} samples, expected {n_samples}")
             q_statistic = compute_average_q_statistic(y_true, predictions_matrix)
             double_fault = compute_average_double_fault(y_true, predictions_matrix)
 
@@ -806,7 +804,7 @@ class DiversityAnalyzer:
         return removals[:max_removals]
 
 
-def compute_mcc_diversity_matrix(predictions: List[np.ndarray]) -> np.ndarray:
+def compute_mcc_diversity_matrix(predictions: list[np.ndarray]) -> np.ndarray:
     """
     Compute pairwise diversity (disagreement) between models using MCC.
 
@@ -842,7 +840,7 @@ def compute_mcc_diversity_matrix(predictions: List[np.ndarray]) -> np.ndarray:
 
 
 def select_diverse_models(
-    oof_predictions: Dict[str, Any],  # model_name -> OOFPrediction
+    oof_predictions: dict[str, Any],  # model_name -> OOFPrediction
     min_diversity: float = 0.3,
     max_models: int = 10,
 ) -> DiversityAnalysisResult:
@@ -881,7 +879,7 @@ def select_diverse_models(
     predictions = []
     for name in model_names:
         oof = oof_predictions[name]
-        if hasattr(oof, 'predictions'):
+        if hasattr(oof, "predictions"):
             predictions.append(np.asarray(oof.predictions))
         else:
             predictions.append(np.asarray(oof))
@@ -893,7 +891,7 @@ def select_diverse_models(
     scores = []
     for name in model_names:
         oof = oof_predictions[name]
-        if hasattr(oof, 'metrics') and isinstance(oof.metrics, dict):
+        if hasattr(oof, "metrics") and isinstance(oof.metrics, dict):
             score = oof.metrics.get("val_f1", oof.metrics.get("accuracy", 0.5))
         else:
             score = 0.5
@@ -917,7 +915,9 @@ def select_diverse_models(
 
         # Check if meets diversity threshold
         if avg_diversity[next_idx] < min_diversity:
-            logger.info(f"Stopping: next best diversity {avg_diversity[next_idx]:.3f} < threshold {min_diversity}")
+            logger.info(
+                f"Stopping: next best diversity {avg_diversity[next_idx]:.3f} < threshold {min_diversity}"
+            )
             break
 
         selected_indices.append(next_idx)
@@ -938,9 +938,9 @@ def select_diverse_models(
 
 
 def filter_correlated_models(
-    oof_predictions: Dict[str, Any],
+    oof_predictions: dict[str, Any],
     correlation_threshold: float = 0.9,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Remove models that are too correlated with better-performing models.
 

@@ -29,50 +29,50 @@ Usage:
 # Local trainer classes
 from .artifacts import TrainerArtifactsMixin
 from .checksums import ArtifactChecksum, ArtifactIntegrityManager, compute_file_checksum
-from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
-from .features import TrainerFeaturesMixin
-from .trainer import Trainer
 
 # Config and loading
 from .config import ExperimentConfig, ModelConfig
 from .config_loader import ConfigLoader, load_config_from_params, load_config_from_yaml
+from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
+from .features import TrainerFeaturesMixin
 
-# Legacy orchestrator
-from .orchestrator import TrainingOrchestrator
+# PHASE_3: Meta-labeling components
+from .meta_labeling import (
+    BetSizingConfig,
+    BetSizingStrategy,
+    compute_bet_sizes,
+    get_strategy_description,
+    predict_with_sizing,
+)
 
 # PHASE_3: Unified model trainer with adapter integration
 from .model_trainer import ModelTrainer, TrainedModelArtifact, train_models
 
-# PHASE_3: Unified Training Orchestrator - THE single entry point
-from .unified_orchestrator import (
-    UnifiedTrainingOrchestrator,
-    TrainingRunResult,
-    ModelTrainingResult,
-    train_pipeline,
-    train_meta_labeling,
-)
+# Legacy orchestrator
+from .orchestrator import TrainingOrchestrator
 
 # PHASE_3: Regime-aware training components
 from .regime_detector import (
+    RegimeDetectionMethod,
     RegimeDetector,
     RegimeDetectorConfig,
     RegimeResult,
-    RegimeDetectionMethod,
     detect_regimes,
 )
 from .regime_trainer import (
     RegimeAwareTrainer,
-    RegimeTrainingResult,
     RegimeModelResult,
+    RegimeTrainingResult,
 )
+from .trainer import Trainer
 
-# PHASE_3: Meta-labeling components
-from .meta_labeling import (
-    BetSizingStrategy,
-    BetSizingConfig,
-    compute_bet_sizes,
-    predict_with_sizing,
-    get_strategy_description,
+# PHASE_3: Unified Training Orchestrator - THE single entry point
+from .unified_orchestrator import (
+    ModelTrainingResult,
+    TrainingRunResult,
+    UnifiedTrainingOrchestrator,
+    train_meta_labeling,
+    train_pipeline,
 )
 
 __all__ = [

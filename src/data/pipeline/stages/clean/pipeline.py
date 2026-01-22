@@ -107,7 +107,7 @@ def clean_symbol_data(
     ... )
     """
     # Validate target timeframe at the boundary
-    from src.pipeline.config import validate_timeframe
+    from src.data.pipeline.config import validate_timeframe
 
     validate_timeframe(target_timeframe)
 
@@ -233,7 +233,7 @@ def clean_symbol_data_multi_timeframe(
     ... )
     >>> df_15min = results['15min']
     """
-    from src.pipeline.config import validate_timeframe
+    from src.data.pipeline.config import validate_timeframe
 
     if timeframes is None:
         timeframes = ["5min", "15min", "30min"]

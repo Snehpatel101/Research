@@ -270,9 +270,7 @@ class SequenceDataset(Dataset):
         self._features = np.ascontiguousarray(
             df[feature_columns].to_numpy(dtype=np.float32, copy=True)
         )
-        self._labels = np.ascontiguousarray(
-            df[label_column].to_numpy(dtype=np.float32, copy=True)
-        )
+        self._labels = np.ascontiguousarray(df[label_column].to_numpy(dtype=np.float32, copy=True))
 
         # Handle weights
         if weight_column and weight_column in df.columns:

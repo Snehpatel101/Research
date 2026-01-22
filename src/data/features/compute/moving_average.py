@@ -4,11 +4,10 @@ Moving Average feature computation - SMA, EMA, price ratios, and crossovers.
 PHASE_1 Unified Features: 16 MOVING_AVERAGE features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -193,7 +192,7 @@ def compute_ema_cross_9_21(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-MOVING_AVERAGE_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+MOVING_AVERAGE_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # SMA
     "sma_10": compute_sma_10,
     "sma_20": compute_sma_20,

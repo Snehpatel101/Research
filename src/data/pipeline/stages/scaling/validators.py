@@ -92,8 +92,9 @@ def validate_scaling(
         if len(train_clean) > 0 and len(val_clean) > 0:
             train_mean, train_std = np.mean(train_clean), np.std(train_clean)
             val_mean, val_std = np.mean(val_clean), np.std(val_clean)
-            test_mean, test_std = np.mean(test_clean), (
-                np.std(test_clean) if len(test_clean) > 0 else (0, 0)
+            test_mean, test_std = (
+                np.mean(test_clean),
+                (np.std(test_clean) if len(test_clean) > 0 else (0, 0)),
             )
 
             # Check if val/test means are within z_threshold of train
@@ -265,9 +266,9 @@ def validate_scaling_for_splits(
 
     # Create and fit scaler
     scaler = FeatureScaler(scaler_type=scaler_type)
-    train_scaled = scaler.fit_transform(train_df, feature_cols)
-    val_scaled = scaler.transform(val_df)
-    test_scaled = scaler.transform(test_df)
+    scaler.fit_transform(train_df, feature_cols)
+    scaler.transform(val_df)
+    scaler.transform(test_df)
 
     # Run validation
     scaling_validation = validate_scaling(scaler, train_df, val_df, test_df, feature_cols)

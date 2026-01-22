@@ -139,12 +139,12 @@ def get_annualization_factor(timeframe: str, extended_hours: bool = False) -> fl
 
 # Bars per day for common timeframes (regular 6.5-hour session)
 BARS_PER_DAY_MAP: dict[str, float] = {
-    tf: get_bars_per_day(tf, extended_hours=False) for tf in TIMEFRAME_MINUTES.keys()
+    tf: get_bars_per_day(tf, extended_hours=False) for tf in TIMEFRAME_MINUTES
 }
 
 # Annualization factors for common timeframes (regular session)
 ANNUALIZATION_FACTOR_MAP: dict[str, float] = {
-    tf: get_annualization_factor(tf, extended_hours=False) for tf in TIMEFRAME_MINUTES.keys()
+    tf: get_annualization_factor(tf, extended_hours=False) for tf in TIMEFRAME_MINUTES
 }
 
 

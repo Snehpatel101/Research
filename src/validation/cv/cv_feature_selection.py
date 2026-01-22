@@ -17,12 +17,14 @@ import pandas as pd
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.metrics import accuracy_score, f1_score
 
+from src.models.registry import ModelRegistry
+
 from .cv_dataclasses import FoldMetrics
+
 # Import OOFPrediction directly from oof_core (where it's defined)
 # to reduce import chain length and avoid going through oof_generator
 from .oof_core import OOFPrediction
 from .purged_kfold import PurgedKFold, PurgedKFoldConfig
-from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -186,8 +188,7 @@ def run_cv_with_per_fold_feature_selection(
         )
 
         logger.debug(
-            f"  Fold {fold_idx + 1}: selected {len(fold_features)} features, "
-            f"F1={fold_f1:.4f}"
+            f"  Fold {fold_idx + 1}: selected {len(fold_features)} features, " f"F1={fold_f1:.4f}"
         )
 
     # Aggregate selected features: keep features that appear in >= 60% of folds

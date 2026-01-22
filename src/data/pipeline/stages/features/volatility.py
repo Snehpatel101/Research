@@ -656,7 +656,9 @@ def add_garch_features(
         )
         return df
 
-    logger.info(f"Adding GARCH({p},{q}) volatility features with forecast horizon: {forecast_horizon}")
+    logger.info(
+        f"Adding GARCH({p},{q}) volatility features with forecast horizon: {forecast_horizon}"
+    )
 
     # Calculate log returns
     log_returns = np.log(df["close"] / df["close"].shift(1)).values
@@ -693,9 +695,7 @@ def add_garch_features(
         * ann_factor
     )
     df["garch_vol_ratio"] = df["garch_vol_forecast"] / realized_vol.replace(0, np.nan)
-    feature_metadata["garch_vol_ratio"] = (
-        "GARCH forecast / realized volatility ratio (lagged)"
-    )
+    feature_metadata["garch_vol_ratio"] = "GARCH forecast / realized volatility ratio (lagged)"
 
     # Z-score of forecast relative to its rolling mean
     forecast_mean = df["garch_vol_forecast"].rolling(window=50).mean()
@@ -703,9 +703,7 @@ def add_garch_features(
     df["garch_vol_zscore"] = (df["garch_vol_forecast"] - forecast_mean) / forecast_std.replace(
         0, np.nan
     )
-    feature_metadata["garch_vol_zscore"] = (
-        "GARCH forecast z-score (50-period rolling, lagged)"
-    )
+    feature_metadata["garch_vol_zscore"] = "GARCH forecast z-score (50-period rolling, lagged)"
 
     return df
 

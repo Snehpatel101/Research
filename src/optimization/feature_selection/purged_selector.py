@@ -21,11 +21,11 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
-from src.feature_selection.result import FeatureSelectionResult
 from src.feature_selection.ohlcv_selector import (
     OHLCVFeatureSelector,
     get_feature_categories,
 )
+from src.feature_selection.result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
 

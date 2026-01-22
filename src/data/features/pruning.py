@@ -12,22 +12,22 @@ on bad feature combinations and comprehensive null importance testing.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Dict, Optional, Any, Tuple
+from typing import Any
 
 import numpy as np
 import optuna
-from sklearn.model_selection import cross_val_score
 from sklearn.inspection import permutation_importance
+from sklearn.model_selection import cross_val_score
 
 from src.core.constants import (
     DEFAULT_FEATURE_PRUNING_TRIALS,
     DEFAULT_MIN_FEATURES,
-    DEFAULT_OPTUNA_RANDOM_STATE,
     DEFAULT_N_SPLITS,
+    DEFAULT_OPTUNA_RANDOM_STATE,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +58,9 @@ class FeaturePruningResult:
         study: The Optuna study object for further analysis.
     """
 
-    original_features: List[str]
-    pruned_features: List[str]
-    removed_features: List[str]
+    original_features: list[str]
+    pruned_features: list[str]
+    removed_features: list[str]
     n_original: int
     n_pruned: int
     n_removed: int
@@ -68,10 +68,10 @@ class FeaturePruningResult:
     score_before: float
     score_after: float
     improvement: float
-    feature_importance: Dict[str, float] = field(default_factory=dict)
-    correlation_matrix: Optional[np.ndarray] = None
-    null_importance_results: Optional[Dict[str, float]] = None
-    study: Optional[optuna.Study] = None
+    feature_importance: dict[str, float] = field(default_factory=dict)
+    correlation_matrix: np.ndarray | None = None
+    null_importance_results: dict[str, float] | None = None
+    study: optuna.Study | None = None
 
     def __repr__(self) -> str:
         return (
@@ -84,7 +84,7 @@ class FeaturePruningResult:
             f"improvement={self.improvement:+.2%})"
         )
 
-    def get_removed_by_importance(self) -> List[Tuple[str, float]]:
+    def get_removed_by_importance(self) -> list[tuple[str, float]]:
         """Get removed features sorted by importance.
 
         Returns:
@@ -96,7 +96,7 @@ class FeaturePruningResult:
             reverse=True,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for serialization."""
         return {
             "original_features": self.original_features,
@@ -191,10 +191,10 @@ class FeaturePruner:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         scoring: str = "f1_weighted",
-        storage_path: Optional[str] = None,
+        storage_path: str | None = None,
     ) -> FeaturePruningResult:
         """Run feature pruning optimization.
 
@@ -234,9 +234,7 @@ class FeaturePruner:
 
         # Get feature importance
         logger.info("Computing feature importance...")
-        feature_importance = self._get_feature_importance(
-            X, y, feature_names, model_fn, scoring
-        )
+        feature_importance = self._get_feature_importance(X, y, feature_names, model_fn, scoring)
 
         # Apply pruning strategy
         if self.pruning_strategy == "correlation":
@@ -251,9 +249,7 @@ class FeaturePruner:
             )
             study = None
             correlation_matrix = None
-            null_results = {
-                f: feature_importance.get(f, 0.0) for f in feature_names
-            }
+            null_results = {f: feature_importance.get(f, 0.0) for f in feature_names}
 
         else:  # importance
             pruned_features, study = self._importance_pruning(
@@ -286,9 +282,7 @@ class FeaturePruner:
         removed_features = [f for f in feature_names if f not in pruned_features]
 
         # Calculate improvement
-        improvement = (
-            (score_after - score_before) / score_before if score_before > 0 else 0.0
-        )
+        improvement = (score_after - score_before) / score_before if score_before > 0 else 0.0
 
         logger.info(
             f"Pruning complete: {len(pruned_features)}/{n_features} features kept, "
@@ -316,16 +310,14 @@ class FeaturePruner:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
     ) -> None:
         """Validate input arguments."""
         if X.ndim != 2:
             raise ValueError(f"X must be 2D array, got shape {X.shape}")
 
         if len(y) != X.shape[0]:
-            raise ValueError(
-                f"X and y size mismatch: X has {X.shape[0]} samples, y has {len(y)}"
-            )
+            raise ValueError(f"X and y size mismatch: X has {X.shape[0]} samples, y has {len(y)}")
 
         if len(feature_names) != X.shape[1]:
             raise ValueError(
@@ -354,7 +346,7 @@ class FeaturePruner:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         scoring: str,
     ) -> FeaturePruningResult:
@@ -379,10 +371,10 @@ class FeaturePruner:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         scoring: str,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """Get feature importance from trained model.
 
         Uses model's feature_importances_ if available, otherwise falls back
@@ -406,7 +398,11 @@ class FeaturePruner:
             if hasattr(model, "feature_importances_"):
                 importances = model.feature_importances_
             elif hasattr(model, "coef_"):
-                importances = np.abs(model.coef_).mean(axis=0) if model.coef_.ndim > 1 else np.abs(model.coef_)
+                importances = (
+                    np.abs(model.coef_).mean(axis=0)
+                    if model.coef_.ndim > 1
+                    else np.abs(model.coef_)
+                )
             else:
                 # Fall back to permutation importance
                 result = permutation_importance(
@@ -434,12 +430,12 @@ class FeaturePruner:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         scoring: str,
-        feature_importance: Dict[str, float],
-        storage_path: Optional[str] = None,
-    ) -> Tuple[List[str], optuna.Study]:
+        feature_importance: dict[str, float],
+        storage_path: str | None = None,
+    ) -> tuple[list[str], optuna.Study]:
         """Optuna-based importance pruning.
 
         Uses Optuna to find optimal threshold for removing low-importance features.
@@ -448,9 +444,7 @@ class FeaturePruner:
         effective_min = min(self.min_features, n_features)
 
         # Sort features by importance
-        sorted_features = sorted(
-            feature_importance.items(), key=lambda x: x[1], reverse=True
-        )
+        sorted_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
 
         # Create Optuna study with MedianPruner
         sampler = optuna.samplers.TPESampler(seed=self.random_state)
@@ -548,15 +542,11 @@ class FeaturePruner:
 
         # Get best trial's selected features
         best_trial = study.best_trial
-        pruned_features = best_trial.user_attrs.get(
-            "selected_features", feature_names.copy()
-        )
+        pruned_features = best_trial.user_attrs.get("selected_features", feature_names.copy())
 
         return pruned_features, study
 
-    def prune_by_correlation(
-        self, X: np.ndarray, feature_names: List[str]
-    ) -> List[str]:
+    def prune_by_correlation(self, X: np.ndarray, feature_names: list[str]) -> list[str]:
         """Remove highly correlated features.
 
         For each pair of highly correlated features (above threshold),
@@ -622,10 +612,10 @@ class FeaturePruner:
         self,
         X: np.ndarray,
         y: np.ndarray,
-        feature_names: List[str],
+        feature_names: list[str],
         model_fn: Callable,
         n_permutations: int = 20,
-    ) -> List[str]:
+    ) -> list[str]:
         """Remove features with null importance using permutation test.
 
         A feature has null importance if shuffling it doesn't significantly
@@ -643,9 +633,7 @@ class FeaturePruner:
         """
         n_features = len(feature_names)
 
-        logger.info(
-            f"Running null importance test with {n_permutations} permutations..."
-        )
+        logger.info(f"Running null importance test with {n_permutations} permutations...")
 
         try:
             # Train model on all features
@@ -667,12 +655,10 @@ class FeaturePruner:
 
             # Features with importance > 2 standard deviations above 0 are significant
             significant_features = []
-            for i, (mean, std) in enumerate(zip(importances_mean, importances_std)):
+            for i, (mean, std) in enumerate(zip(importances_mean, importances_std, strict=False)):
                 # Feature is significant if mean importance > threshold
                 # or if confidence interval doesn't include 0
-                is_significant = mean > self.importance_threshold or (
-                    mean - 2 * std > 0
-                )
+                is_significant = mean > self.importance_threshold or (mean - 2 * std > 0)
                 if is_significant:
                     significant_features.append(feature_names[i])
                 else:
@@ -685,7 +671,7 @@ class FeaturePruner:
             if len(significant_features) < self.min_features:
                 # Add features by importance until minimum is met
                 sorted_by_importance = sorted(
-                    zip(feature_names, importances_mean),
+                    zip(feature_names, importances_mean, strict=False),
                     key=lambda x: x[1],
                     reverse=True,
                 )
@@ -715,7 +701,7 @@ class FeaturePruner:
 def prune_features(
     X: np.ndarray,
     y: np.ndarray,
-    feature_names: List[str],
+    feature_names: list[str],
     model_fn: Callable,
     n_trials: int = DEFAULT_FEATURE_PRUNING_TRIALS,
     strategy: str = "importance",
@@ -776,10 +762,10 @@ def prune_features(
 
 def prune_correlated_features(
     X: np.ndarray,
-    feature_names: List[str],
+    feature_names: list[str],
     correlation_threshold: float = 0.95,
     min_features: int = DEFAULT_MIN_FEATURES,
-) -> List[str]:
+) -> list[str]:
     """Convenience function for correlation-based pruning only.
 
     This is a fast method that doesn't require model training.

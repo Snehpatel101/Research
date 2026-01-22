@@ -235,7 +235,10 @@ PARAM_SPACES: dict[str, dict[str, dict[str, Any]]] = {
         "solver": {"type": "categorical", "choices": ["auto", "svd", "cholesky", "lsqr"]},
     },
     "mlp_meta": {
-        "hidden_layer_sizes": {"type": "categorical", "choices": [(64,), (128,), (64, 32), (128, 64)]},
+        "hidden_layer_sizes": {
+            "type": "categorical",
+            "choices": [(64,), (128,), (64, 32), (128, 64)],
+        },
         "activation": {"type": "categorical", "choices": ["relu", "tanh"]},
         "alpha": {"type": "float", "low": 1e-5, "high": 1e-2, "log": True},
         "learning_rate_init": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},

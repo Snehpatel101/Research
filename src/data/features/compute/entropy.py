@@ -6,11 +6,10 @@ PHASE_1 Unified Features: 12 ENTROPY features.
 These features measure market complexity, randomness, and predictability.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -139,7 +138,7 @@ def _approximate_entropy(x: np.ndarray, m: int = 2, r: float = None) -> float:
 
     def _phi(m_val):
         """Calculate phi for given m."""
-        patterns = np.array([x[i:i + m_val] for i in range(n - m_val + 1)])
+        patterns = np.array([x[i : i + m_val] for i in range(n - m_val + 1)])
         n_patterns = len(patterns)
 
         counts = np.zeros(n_patterns)
@@ -174,7 +173,7 @@ def _sample_entropy(x: np.ndarray, m: int = 2, r: float = None) -> float:
 
     def _count_matches(m_val):
         """Count matches for embedding dimension m."""
-        patterns = np.array([x[i:i + m_val] for i in range(n - m_val)])
+        patterns = np.array([x[i : i + m_val] for i in range(n - m_val)])
         n_patterns = len(patterns)
 
         count = 0
@@ -225,7 +224,7 @@ def _hurst_exponent(x: np.ndarray) -> float:
 
         rs_chunk = []
         for i in range(n_chunks):
-            chunk = x[i * size:(i + 1) * size]
+            chunk = x[i * size : (i + 1) * size]
 
             # Mean-adjusted series
             mean_adj = chunk - np.mean(chunk)
@@ -426,7 +425,7 @@ def compute_hurst_regime(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-ENTROPY_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+ENTROPY_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Shannon
     "entropy_shannon_10": compute_entropy_shannon_10,
     "entropy_shannon_20": compute_entropy_shannon_20,

@@ -9,9 +9,9 @@ This script splits raw OHLCV data into:
 The holdout data preserves the temporal split to ensure no lookahead bias.
 """
 
-import pandas as pd
 from pathlib import Path
-from datetime import datetime
+
+import pandas as pd
 
 
 def create_holdout_split(
@@ -49,7 +49,7 @@ def create_holdout_split(
     date_min = df["datetime"].min()
     date_max = df["datetime"].max()
 
-    print(f"\nOriginal Data:")
+    print("\nOriginal Data:")
     print(f"  - Total rows: {total_rows:,}")
     print(f"  - Date range: {date_min} to {date_max}")
 

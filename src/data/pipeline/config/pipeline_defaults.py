@@ -23,7 +23,7 @@ def create_default_config(
     Returns:
         DataConfig instance
     """
-    from src.pipeline.data_config import DataConfig
+    from src.data.pipeline.data_config import DataConfig
 
     config_kwargs = {}
 

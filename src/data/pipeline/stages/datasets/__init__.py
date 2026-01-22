@@ -13,11 +13,11 @@ This module provides:
 Usage:
 ------
     # Pipeline stage
-    from src.pipeline.stages.datasets import run_build_datasets
+    from src.data.pipeline.stages.datasets import run_build_datasets
     result = run_build_datasets(config, manifest)
 
     # Direct data loading for Phase 2
-    from src.pipeline.stages.datasets import TimeSeriesDataContainer
+    from src.data.pipeline.stages.datasets import TimeSeriesDataContainer
 
     container = TimeSeriesDataContainer.from_parquet_dir(
         path="data/splits/scaled",
@@ -38,7 +38,7 @@ Usage:
     nf_df = container.get_neuralforecast_df("train")
 
     # Validate model readiness
-    from src.pipeline.stages.datasets import validate_model_ready, ValidationResult
+    from src.data.pipeline.stages.datasets import validate_model_ready, ValidationResult
     result = validate_model_ready(container)
     if not result.is_valid:
         raise ValueError(f"Validation failed: {result.errors}")
@@ -52,29 +52,29 @@ from src.core.container import (
     SplitData,
     TimeSeriesDataContainer,
 )
-from src.pipeline.utils.constants import LABEL_PREFIXES
-from src.pipeline.stages.datasets.run import (
+from src.data.pipeline.stages.datasets.adapters import (
+    MultiResolution4DAdapter,
+    MultiResolution4DConfig,
+    MultiResolution4DDataset,
+    create_multi_resolution_dataset,
+)
+from src.data.pipeline.stages.datasets.run import (
     FeatureSchemaError,
     run_build_datasets,
     validate_feature_schema,
 )
-from src.pipeline.stages.datasets.sequences import (
+from src.data.pipeline.stages.datasets.sequences import (
     SequenceConfig,
     SequenceDataset,
     build_sequence_indices,
     create_sequence_dataset,
     find_symbol_boundaries,
 )
-from src.pipeline.stages.datasets.validators import (
+from src.data.pipeline.stages.datasets.validators import (
     ValidationResult,
     validate_model_ready,
 )
-from src.pipeline.stages.datasets.adapters import (
-    MultiResolution4DAdapter,
-    MultiResolution4DConfig,
-    MultiResolution4DDataset,
-    create_multi_resolution_dataset,
-)
+from src.data.pipeline.utils.constants import LABEL_PREFIXES
 
 __all__ = [
     # Pipeline stage

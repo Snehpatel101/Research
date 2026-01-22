@@ -54,16 +54,24 @@ Reference: Bergstra et al. (2011) "Algorithms for Hyper-Parameter Optimization"
 # =============================================================================
 # HYPERPARAMETER OPTIMIZATION
 # =============================================================================
+# =============================================================================
+# FEATURE OPTIMIZATION
+# =============================================================================
+from src.optimization.features import (
+    FeatureOptimizer,
+    FeaturePruningResult,
+    FeatureSelectionResult,
+)
 from src.optimization.hyperparameters import (
-    # Result types
-    HyperparameterResult,
     # Search spaces
     HYPERPARAMETER_SPACES,
     # Optimizer
     HyperparameterOptimizer,
+    # Result types
+    HyperparameterResult,
+    get_default_hyperparameters,
     # Utility functions
     suggest_hyperparameters,
-    get_default_hyperparameters,
 )
 
 # =============================================================================
@@ -71,17 +79,8 @@ from src.optimization.hyperparameters import (
 # =============================================================================
 from src.optimization.labels import (
     LabelOptimizationResult,
-    TripleBarrierConfig,
     LabelOptimizer,
-)
-
-# =============================================================================
-# FEATURE OPTIMIZATION
-# =============================================================================
-from src.optimization.features import (
-    FeatureSelectionResult,
-    FeaturePruningResult,
-    FeatureOptimizer,
+    TripleBarrierConfig,
 )
 
 # =============================================================================

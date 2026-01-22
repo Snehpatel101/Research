@@ -4,11 +4,10 @@ Volatility feature computation - ATR, Bollinger Bands, Keltner Channels, Histori
 PHASE_1 Unified Features: 25 VOLATILITY features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -32,7 +31,7 @@ def _true_range(df: pd.DataFrame) -> pd.Series:
 def _atr(df: pd.DataFrame, period: int) -> pd.Series:
     """Average True Range using Wilder's smoothing."""
     tr = _true_range(df)
-    return tr.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
 def _sma(series: pd.Series, window: int) -> pd.Series:
@@ -230,7 +229,7 @@ def compute_parkinson_vol(df: pd.DataFrame) -> pd.Series:
     """
     log_hl = np.log(df["high"] / df["low"])
     factor = 1.0 / (4 * np.log(2))
-    parkinson = np.sqrt(factor * (log_hl ** 2).rolling(window=20, min_periods=20).mean())
+    parkinson = np.sqrt(factor * (log_hl**2).rolling(window=20, min_periods=20).mean())
     return parkinson * np.sqrt(252)
 
 
@@ -244,9 +243,10 @@ def compute_gk_vol(df: pd.DataFrame) -> pd.Series:
     log_co = np.log(df["close"] / df["open"])
 
     gk_var = (
-        0.5 * (log_hl ** 2)
-        - (2 * np.log(2) - 1) * (log_co ** 2)
-    ).rolling(window=20, min_periods=20).mean()
+        (0.5 * (log_hl**2) - (2 * np.log(2) - 1) * (log_co**2))
+        .rolling(window=20, min_periods=20)
+        .mean()
+    )
 
     return np.sqrt(gk_var.clip(lower=0)) * np.sqrt(252)
 
@@ -341,7 +341,7 @@ def compute_garch_vol_ratio(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-VOLATILITY_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+VOLATILITY_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # ATR
     "atr_7": compute_atr_7,
     "atr_14": compute_atr_14,

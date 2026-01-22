@@ -14,13 +14,13 @@ Expected output:
     Parallel mode should show ~40-60% latency reduction compared to sequential.
     Target: < 10ms for single-sample inference, < 50ms for 1000 samples.
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -35,7 +35,7 @@ def create_mock_data(
     n_features: int = 150,
     n_classes: int = 3,
     seed: int = 42,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Create mock training and inference data."""
     rng = np.random.default_rng(seed)
 
@@ -54,8 +54,8 @@ def train_base_models(
     y_train: np.ndarray,
     X_val: np.ndarray,
     y_val: np.ndarray,
-    model_names: List[str],
-) -> Tuple[List, List[str]]:
+    model_names: list[str],
+) -> tuple[list, list[str]]:
     """Train boosting models for benchmarking."""
     print("\n[1/3] Training base models...")
     models = []
@@ -80,8 +80,8 @@ def train_base_models(
             trained_names.append(name)
             elapsed = time.perf_counter() - start
             print(f"done ({elapsed:.1f}s)")
-        except ImportError as e:
-            print(f"skipped (not installed)")
+        except ImportError:
+            print("skipped (not installed)")
 
     if len(models) < 2:
         print("\n  [ERROR] Need at least 2 models for ensemble benchmark")
@@ -96,7 +96,7 @@ def benchmark_single_model(
     X: np.ndarray,
     warmup: int = 3,
     iterations: int = 50,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Benchmark a single model's inference latency."""
     # Warmup
     for _ in range(warmup):
@@ -122,12 +122,12 @@ def benchmark_single_model(
 
 
 def benchmark_ensemble(
-    models: List,
+    models: list,
     X: np.ndarray,
     parallel: bool,
     warmup: int = 3,
     iterations: int = 50,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Benchmark ensemble inference latency."""
     from src.models.ensemble.voting import VotingEnsemble
 
@@ -161,7 +161,7 @@ def benchmark_ensemble(
 
 def print_results(
     name: str,
-    results: Dict[str, float],
+    results: dict[str, float],
     indent: int = 0,
 ) -> None:
     """Print benchmark results."""
@@ -214,7 +214,7 @@ def main():
     # Benchmark individual models
     print("\n[2/3] Benchmarking individual models...")
     individual_results = {}
-    for i, (name, model) in enumerate(zip(trained_names, models)):
+    for i, (name, model) in enumerate(zip(trained_names, models, strict=False)):
         results = benchmark_single_model(
             model,
             X_test,

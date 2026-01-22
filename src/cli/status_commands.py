@@ -118,7 +118,7 @@ def _display_pipeline_state(run_dir: Path) -> None:
     stages_table.add_column("Artifacts", style="yellow")
 
     try:
-        from src.pipeline.stage_registry import get_stage_definitions
+        from src.data.pipeline.stage_registry import get_stage_definitions
 
         stage_defs = get_stage_definitions()
         all_stages = [stage["name"] for stage in stage_defs]
@@ -341,7 +341,7 @@ def list_runs_command(
             completed = len(state.get("completed_stages", []))
             # Get total from stage registry
             try:
-                from src.pipeline.stage_registry import get_stage_definitions
+                from src.data.pipeline.stage_registry import get_stage_definitions
 
                 total = len(get_stage_definitions())
             except Exception:

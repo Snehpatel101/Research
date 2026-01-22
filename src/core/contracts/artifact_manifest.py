@@ -113,7 +113,9 @@ class ArtifactManifest:
     def __post_init__(self):
         """Capture runtime info if not provided."""
         if not self.python_version:
-            self.python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            self.python_version = (
+                f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            )
         if not self.code_version:
             self.code_version = _get_git_commit()
         if not self.package_versions:
@@ -154,8 +156,7 @@ class ArtifactManifest:
             current_hash = self.compute_artifact_hash(path)
             if current_hash != self.artifact_hash:
                 issues.append(
-                    f"Artifact hash mismatch: expected {self.artifact_hash}, "
-                    f"got {current_hash}"
+                    f"Artifact hash mismatch: expected {self.artifact_hash}, " f"got {current_hash}"
                 )
 
         return len(issues) == 0, issues
@@ -227,7 +228,7 @@ class ArtifactManifest:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ArtifactManifest":
+    def from_dict(cls, data: dict[str, Any]) -> ArtifactManifest:
         """Deserialize from dictionary."""
         return cls(
             artifact_type=data.get("artifact_type", "unknown"),
@@ -261,7 +262,7 @@ class ArtifactManifest:
             json.dump(self.to_dict(), f, indent=2)
 
     @classmethod
-    def load(cls, path: Path | str) -> "ArtifactManifest":
+    def load(cls, path: Path | str) -> ArtifactManifest:
         """Load manifest from JSON file."""
         with open(path) as f:
             data = json.load(f)
@@ -272,13 +273,13 @@ class ArtifactManifest:
         cls,
         model_path: Path | str,
         model_name: str,
-        data_contract: "DataContract",
-        model_contract: "ModelContract",
+        data_contract: DataContract,
+        model_contract: ModelContract,
         config_hash: str = "",
         pipeline_run_id: str = "",
         training_run_id: str = "",
         training_metrics: dict[str, float] | None = None,
-    ) -> "ArtifactManifest":
+    ) -> ArtifactManifest:
         """
         Create manifest for a saved model.
 
@@ -326,10 +327,10 @@ class ArtifactManifest:
         cls,
         predictions_path: Path | str,
         model_name: str,
-        data_contract: "DataContract",
-        parent_model_manifest: "ArtifactManifest | None" = None,
+        data_contract: DataContract,
+        parent_model_manifest: ArtifactManifest | None = None,
         split: str = "test",
-    ) -> "ArtifactManifest":
+    ) -> ArtifactManifest:
         """
         Create manifest for saved predictions.
 
@@ -370,10 +371,10 @@ class ArtifactManifest:
         cls,
         oof_path: Path | str,
         model_name: str,
-        data_contract: "DataContract",
+        data_contract: DataContract,
         n_folds: int = 5,
         coverage: float = 1.0,
-    ) -> "ArtifactManifest":
+    ) -> ArtifactManifest:
         """
         Create manifest for OOF predictions.
 

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from .priority import DEFAULT_PRIORITY, FEATURE_PRIORITY, get_feature_priority
+from .priority import get_feature_priority
 from .result import FeatureSelectionResult
 
 if TYPE_CHECKING:

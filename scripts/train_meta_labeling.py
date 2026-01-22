@@ -29,11 +29,10 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.models import TrainerConfig, Trainer
+from src.models import Trainer, TrainerConfig
 from src.phase1.stages.datasets import TimeSeriesDataContainer
 
 logging.basicConfig(
@@ -90,7 +89,7 @@ def train_primary_model(
     trainer = Trainer(config)
     results = trainer.run(container)
 
-    logger.info(f"\nPrimary Model Results:")
+    logger.info("\nPrimary Model Results:")
     logger.info(f"  Val F1: {results['evaluation_metrics']['val_f1']:.4f}")
     logger.info(f"  Val Accuracy: {results['evaluation_metrics']['val_accuracy']:.4f}")
 
@@ -133,7 +132,7 @@ def train_meta_model(
         quality_metrics["val"],
     )
 
-    logger.info(f"Meta-label statistics (train):")
+    logger.info("Meta-label statistics (train):")
     logger.info(f"  Mean: {y_meta_train.mean():.3f}")
     logger.info(f"  Std:  {y_meta_train.std():.3f}")
     logger.info(f"  Min:  {y_meta_train.min():.3f}")
@@ -152,7 +151,7 @@ def train_meta_model(
     trainer_meta = Trainer(config_meta)
     results_meta = trainer_meta.run(meta_container)
 
-    logger.info(f"\nMeta-Model Results:")
+    logger.info("\nMeta-Model Results:")
     logger.info(f"  Val MAE: {results_meta['evaluation_metrics'].get('val_mae', 'N/A')}")
 
     return trainer_meta, results_meta
@@ -201,10 +200,10 @@ def evaluate_meta_labeling(
         correct_meta = 0.0
         trade_fraction = 0.0
 
-    logger.info(f"\nTest Set Results:")
-    logger.info(f"  Primary Only:")
+    logger.info("\nTest Set Results:")
+    logger.info("  Primary Only:")
     logger.info(f"    Accuracy: {correct_primary:.4f}")
-    logger.info(f"    Trades: 100%")
+    logger.info("    Trades: 100%")
     logger.info(f"\n  With Meta-Labeling (threshold={meta_threshold}):")
     logger.info(f"    Accuracy: {correct_meta:.4f}")
     logger.info(f"    Trades Taken: {trade_fraction*100:.1f}%")
@@ -279,7 +278,7 @@ Examples:
     logger.info(f"Loading data from {args.data_dir}...")
     container = TimeSeriesDataContainer.from_parquet_dir(args.data_dir, horizon=args.horizon)
 
-    logger.info(f"Data loaded:")
+    logger.info("Data loaded:")
     logger.info(f"  Train: {container.X_train.shape}")
     logger.info(f"  Val: {container.X_val.shape}")
     logger.info(f"  Test: {container.X_test.shape}")
@@ -353,7 +352,7 @@ Examples:
     if eval_results["improvement"] > 0:
         logger.info(f"\n✅ Meta-labeling improved accuracy by {eval_results['improvement']:+.2%}")
     else:
-        logger.info(f"\n⚠️ Meta-labeling did not improve accuracy (try adjusting threshold)")
+        logger.info("\n⚠️ Meta-labeling did not improve accuracy (try adjusting threshold)")
 
 
 if __name__ == "__main__":

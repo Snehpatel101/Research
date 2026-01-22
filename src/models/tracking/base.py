@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     pass
@@ -254,7 +255,9 @@ class DisabledTracker(ExperimentTracker):
         pass
 
 
-def get_tracker(backend: str | None = None, config: TrackerConfig | None = None) -> ExperimentTracker:
+def get_tracker(
+    backend: str | None = None, config: TrackerConfig | None = None
+) -> ExperimentTracker:
     """
     Get an experiment tracker for the specified backend.
 
@@ -279,15 +282,18 @@ def get_tracker(backend: str | None = None, config: TrackerConfig | None = None)
 
     if backend == "local":
         from .local_tracker import LocalTracker
+
         return LocalTracker(config)
 
     if backend == "mlflow":
         try:
             from .mlflow_tracker import MLflowTracker
+
             return MLflowTracker(config)
         except ImportError as e:
             logger.warning(f"MLflow not installed, falling back to local tracker: {e}")
             from .local_tracker import LocalTracker
+
             return LocalTracker(config)
 
     raise ValueError(f"Unknown tracking backend: {backend}")

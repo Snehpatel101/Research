@@ -31,8 +31,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import optuna
@@ -40,9 +41,9 @@ import pandas as pd
 from optuna.samplers import TPESampler
 
 from src.core import (
+    DEFAULT_HORIZON,
     DEFAULT_LABEL_OPTIMIZATION_TRIALS,
     DEFAULT_OPTUNA_RANDOM_STATE,
-    DEFAULT_HORIZON,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # CONFIGURATION DATACLASS
 # =============================================================================
+
 
 @dataclass
 class TripleBarrierConfig:
@@ -73,7 +75,7 @@ class TripleBarrierConfig:
     apply_transaction_costs: bool = True
     horizon: int = DEFAULT_HORIZON
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "k_up": self.k_up,
@@ -85,7 +87,7 @@ class TripleBarrierConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "TripleBarrierConfig":
+    def from_dict(cls, d: dict[str, Any]) -> TripleBarrierConfig:
         """Create from dictionary."""
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
@@ -99,6 +101,7 @@ class TripleBarrierConfig:
 # =============================================================================
 # RESULT DATACLASS
 # =============================================================================
+
 
 @dataclass
 class LabelOptimizationResult:
@@ -119,13 +122,13 @@ class LabelOptimizationResult:
 
     best_config: TripleBarrierConfig
     best_score: float
-    target_distribution: Dict[int, float]
-    achieved_distribution: Dict[int, float]
+    target_distribution: dict[int, float]
+    achieved_distribution: dict[int, float]
     distribution_error: float
     n_trials: int
     study: optuna.Study
     optimization_time: float = 0.0
-    trial_history: List[Tuple[TripleBarrierConfig, float]] = field(default_factory=list)
+    trial_history: list[tuple[TripleBarrierConfig, float]] = field(default_factory=list)
 
     def __repr__(self) -> str:
         return (
@@ -137,7 +140,7 @@ class LabelOptimizationResult:
             f")"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "best_config": self.best_config.to_dict(),
@@ -153,6 +156,7 @@ class LabelOptimizationResult:
 # =============================================================================
 # LABEL OPTIMIZER
 # =============================================================================
+
 
 class LabelOptimizer:
     """
@@ -228,7 +232,7 @@ class LabelOptimizer:
             Array of labels (-1, 0, 1, or -99 for invalid)
         """
         try:
-            from src.pipeline.stages.labeling import TripleBarrierLabeler
+            from src.data.pipeline.stages.labeling import TripleBarrierLabeler
 
             labeler = TripleBarrierLabeler(
                 k_up=config.k_up,
@@ -274,10 +278,7 @@ class LabelOptimizer:
             # Simple ATR calculation
             tr = np.maximum(
                 high - low,
-                np.maximum(
-                    np.abs(high - np.roll(close, 1)),
-                    np.abs(low - np.roll(close, 1))
-                )
+                np.maximum(np.abs(high - np.roll(close, 1)), np.abs(low - np.roll(close, 1))),
             )
             tr[0] = high[0] - low[0]
             atr = pd.Series(tr).rolling(config.atr_period).mean().values
@@ -315,11 +316,11 @@ class LabelOptimizer:
                 labels[i] = 0
 
         # Mark last max_bars as invalid
-        labels[-config.max_bars:] = -99
+        labels[-config.max_bars :] = -99
 
         return labels
 
-    def _compute_distribution(self, labels: np.ndarray) -> Dict[int, float]:
+    def _compute_distribution(self, labels: np.ndarray) -> dict[int, float]:
         """
         Compute class distribution from labels.
 
@@ -345,8 +346,8 @@ class LabelOptimizer:
 
     def _distribution_error(
         self,
-        achieved: Dict[int, float],
-        target: Dict[int, float],
+        achieved: dict[int, float],
+        target: dict[int, float],
     ) -> float:
         """
         Compute L2 distance between distributions.
@@ -366,9 +367,9 @@ class LabelOptimizer:
     def optimize(
         self,
         ohlcv_df: pd.DataFrame,
-        target_distribution: Optional[Dict[int, float]] = None,
-        model_factory: Optional[Callable] = None,
-        feature_df: Optional[pd.DataFrame] = None,
+        target_distribution: dict[int, float] | None = None,
+        model_factory: Callable | None = None,
+        feature_df: pd.DataFrame | None = None,
     ) -> LabelOptimizationResult:
         """
         Optimize triple-barrier parameters.
@@ -394,13 +395,13 @@ class LabelOptimizer:
 
         if self.verbose >= 1:
             print(f"\n{'='*60}")
-            print(f"Optimizing triple-barrier labels")
+            print("Optimizing triple-barrier labels")
             print(f"  n_trials={self.n_trials}, objective={self.objective}")
             print(f"  target_distribution={target_distribution}")
             print(f"{'='*60}")
 
         # Trial history
-        trial_history: List[Tuple[TripleBarrierConfig, float]] = []
+        trial_history: list[tuple[TripleBarrierConfig, float]] = []
 
         def objective(trial: optuna.Trial) -> float:
             # Suggest parameters
@@ -513,7 +514,7 @@ class LabelOptimizer:
         distribution_error = self._distribution_error(achieved_distribution, target_distribution)
 
         if self.verbose >= 1:
-            print(f"\nOptimization complete:")
+            print("\nOptimization complete:")
             print(f"  Best config: {best_config}")
             print(f"  Achieved distribution: {achieved_distribution}")
             print(f"  Distribution error: {distribution_error:.4f}")

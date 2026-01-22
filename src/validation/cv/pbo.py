@@ -267,7 +267,7 @@ def compute_pbo(
 
         # Find best IS strategy (highest IS rank)
         best_is_idx = np.argmax(is_ranks)
-        best_is_rank = is_ranks[best_is_idx]
+        is_ranks[best_is_idx]
 
         # Get OOS rank of best IS strategy
         best_is_oos_rank = oos_ranks[best_is_idx]

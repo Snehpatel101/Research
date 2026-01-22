@@ -7,10 +7,9 @@ based on model confidence and risk management principles.
 
 from __future__ import annotations
 
-from enum import Enum
-from dataclasses import dataclass
-from typing import Tuple
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 
@@ -19,21 +18,23 @@ logger = logging.getLogger(__name__)
 
 class BetSizingStrategy(Enum):
     """Bet sizing strategies for meta-labeling."""
-    BINARY = "binary"              # Current: trade or no-trade
+
+    BINARY = "binary"  # Current: trade or no-trade
     PROPORTIONAL = "proportional"  # Size proportional to probability
-    KELLY = "kelly"                # Kelly Criterion
-    HALF_KELLY = "half_kelly"      # Half Kelly (more conservative)
-    CONFIDENCE = "confidence"      # Based on prediction confidence
+    KELLY = "kelly"  # Kelly Criterion
+    HALF_KELLY = "half_kelly"  # Half Kelly (more conservative)
+    CONFIDENCE = "confidence"  # Based on prediction confidence
 
 
 @dataclass
 class BetSizingConfig:
     """Configuration for bet sizing."""
+
     strategy: BetSizingStrategy = BetSizingStrategy.BINARY
-    threshold: float = 0.5         # Minimum probability to trade
-    max_size: float = 1.0          # Maximum position size (fraction of capital)
-    min_size: float = 0.0          # Minimum position size (if trading)
-    kelly_fraction: float = 0.5    # Fraction of Kelly to use
+    threshold: float = 0.5  # Minimum probability to trade
+    max_size: float = 1.0  # Maximum position size (fraction of capital)
+    min_size: float = 0.0  # Minimum position size (if trading)
+    kelly_fraction: float = 0.5  # Fraction of Kelly to use
 
 
 def compute_bet_sizes(
@@ -94,7 +95,7 @@ def compute_bet_sizes(
         sizes = np.zeros_like(probabilities)
         if np.any(above_threshold):
             excess = (probabilities[above_threshold] - threshold) / (1.0 - threshold)
-            sizes[above_threshold] = min_size + (excess ** 2) * (max_size - min_size)
+            sizes[above_threshold] = min_size + (excess**2) * (max_size - min_size)
 
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
@@ -109,7 +110,7 @@ def predict_with_sizing(
     primary_predictions: np.ndarray,
     meta_probabilities: np.ndarray,
     config: BetSizingConfig | None = None,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Combine primary model predictions with meta-model bet sizing.
 

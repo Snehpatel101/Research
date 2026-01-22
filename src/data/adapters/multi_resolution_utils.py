@@ -16,8 +16,7 @@ import numpy as np
 import pandas as pd
 
 # Import from canonical location
-from src.common.timeframes import TIMEFRAME_TO_MINUTES
-
+from src.core.common.timeframes import TIMEFRAME_TO_MINUTES
 
 # =============================================================================
 # CONSTANTS

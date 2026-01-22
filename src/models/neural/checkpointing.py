@@ -83,7 +83,7 @@ class CheckpointMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "CheckpointMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> CheckpointMetadata:
         """Create from dictionary."""
         return cls(**data)
 
@@ -156,7 +156,9 @@ class CheckpointManager:
         index_path = self.config.checkpoint_dir / "checkpoint_index.json"
         data = {
             "checkpoints": [c.to_dict() for c in self._checkpoints],
-            "best_checkpoint": str(self._best_checkpoint_path) if self._best_checkpoint_path else None,
+            "best_checkpoint": str(self._best_checkpoint_path)
+            if self._best_checkpoint_path
+            else None,
             "best_metric": self._best_metric,
             "config": self.config.to_dict(),
             "updated_at": datetime.now().isoformat(),
@@ -220,11 +222,13 @@ class CheckpointManager:
         is_best = False
 
         if metric_value is not None:
-            if self._best_metric is None:
-                is_best = True
-            elif self.config.metric_mode == "min" and metric_value < self._best_metric:
-                is_best = True
-            elif self.config.metric_mode == "max" and metric_value > self._best_metric:
+            if (
+                self._best_metric is None
+                or self.config.metric_mode == "min"
+                and metric_value < self._best_metric
+                or self.config.metric_mode == "max"
+                and metric_value > self._best_metric
+            ):
                 is_best = True
 
             if is_best:
@@ -233,7 +237,9 @@ class CheckpointManager:
                 # Copy to best.pt
                 best_path = self.config.checkpoint_dir / "best.pt"
                 shutil.copy2(ckpt_path, best_path)
-                logger.info(f"New best checkpoint (epoch {epoch}, {self.config.metric_name}={metric_value:.4f})")
+                logger.info(
+                    f"New best checkpoint (epoch {epoch}, {self.config.metric_name}={metric_value:.4f})"
+                )
 
         # Create metadata
         metadata = CheckpointMetadata(

@@ -23,11 +23,13 @@ import numpy as np
 import pandas as pd
 
 # Import from authoritative implementation
-from src.labeling.triple_barrier import (
+from src.data.labeling.triple_barrier import (
     TripleBarrierConfig,
-    TripleBarrierLabeler as AuthoritativeTripleBarrierLabeler,
     triple_barrier_numba,
     triple_barrier_numba_with_costs,
+)
+from src.data.labeling.triple_barrier import (
+    TripleBarrierLabeler as AuthoritativeTripleBarrierLabeler,
 )
 
 # Import base classes from local pipeline base for interface compatibility
@@ -102,7 +104,7 @@ class TripleBarrierLabeler(LabelingStrategy):
     def _get_default_params(self, horizon: int) -> dict[str, Any]:
         """Get default parameters for a given horizon from pipeline config."""
         try:
-            from src.pipeline.config import BARRIER_PARAMS_DEFAULT
+            from src.data.pipeline.config import BARRIER_PARAMS_DEFAULT
 
             if horizon in BARRIER_PARAMS_DEFAULT:
                 return BARRIER_PARAMS_DEFAULT[horizon]
@@ -208,7 +210,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         authoritative_labeler = AuthoritativeTripleBarrierLabeler(config)
 
         # Delegate to authoritative implementation
-        # The authoritative compute_labels returns a LabelingResult from src.labeling.base
+        # The authoritative compute_labels returns a LabelingResult from src.data.labeling.base
         # which is compatible with our local LabelingResult
         auth_result = authoritative_labeler.compute_labels(
             df=df,

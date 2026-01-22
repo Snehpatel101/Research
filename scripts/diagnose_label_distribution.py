@@ -5,9 +5,10 @@ This script traces through the pipeline to identify where and why
 label distributions become imbalanced between train and validation sets.
 """
 
-import pandas as pd
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 
 def main():
@@ -23,7 +24,7 @@ def main():
 
     print(f"Total rows: {len(df):,}")
     print(f"Date range: {df['datetime'].min()} to {df['datetime'].max()}")
-    print(f"\nLabel distribution (label_h20):")
+    print("\nLabel distribution (label_h20):")
     for label in [-1, 0, 1]:
         count = (df["label_h20"] == label).sum()
         pct = count / len(df) * 100
@@ -71,7 +72,7 @@ def main():
     val_df = df.iloc[val_indices]
     test_df = df.iloc[test_indices]
 
-    print(f"\nLabel distribution after indexing:")
+    print("\nLabel distribution after indexing:")
     for split_name, split_df in [("Train", train_df), ("Val", val_df), ("Test", test_df)]:
         print(f"\n{split_name} ({len(split_df):,} rows):")
         for label in [-1, 0, 1]:
@@ -87,12 +88,12 @@ def main():
     val_scaled = pd.read_parquet("/Users/sneh/research/data/splits/scaled/val_scaled.parquet")
     test_scaled = pd.read_parquet("/Users/sneh/research/data/splits/scaled/test_scaled.parquet")
 
-    print(f"Scaled data dimensions:")
+    print("Scaled data dimensions:")
     print(f"  Train: {len(train_scaled):,} rows")
     print(f"  Val:   {len(val_scaled):,} rows")
     print(f"  Test:  {len(test_scaled):,} rows")
 
-    print(f"\n**CRITICAL: Data loss detected!**")
+    print("\n**CRITICAL: Data loss detected!**")
     print(
         f"  Train: {len(train_df):,} -> {len(train_scaled):,} ({(1-len(train_scaled)/len(train_df))*100:.1f}% loss)"
     )
@@ -103,7 +104,7 @@ def main():
         f"  Test:  {len(test_df):,} -> {len(test_scaled):,} ({(1-len(test_scaled)/len(test_df))*100:.1f}% loss)"
     )
 
-    print(f"\nLabel distribution in scaled data:")
+    print("\nLabel distribution in scaled data:")
     for split_name, split_df in [
         ("Train", train_scaled),
         ("Val", val_scaled),
@@ -119,10 +120,10 @@ def main():
     # Step 5: Check date ranges
     print("\n5. DATE RANGE MISMATCH")
     print("-" * 80)
-    print(f"Original combined data:")
+    print("Original combined data:")
     print(f"  Date range: {df['datetime'].min()} to {df['datetime'].max()}")
 
-    print(f"\nScaled data:")
+    print("\nScaled data:")
     print(f"  Train: {train_scaled['datetime'].min()} to {train_scaled['datetime'].max()}")
     print(f"  Val:   {val_scaled['datetime'].min()} to {val_scaled['datetime'].max()}")
     print(f"  Test:  {test_scaled['datetime'].min()} to {test_scaled['datetime'].max()}")

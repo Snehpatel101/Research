@@ -13,14 +13,15 @@ import logging
 import pickle
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 import pandas as pd
 
-from src.utils.memory import (
+from src.core.utils.memory import (
     CacheConfig,
     CacheManager,
     check_available_memory,

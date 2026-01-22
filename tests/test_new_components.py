@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-
 # =============================================================================
 # TEST: DatasetContract (HIGH #4)
 # =============================================================================
+
 
 class TestDatasetContract:
     """Tests for DatasetContract class."""
@@ -23,6 +23,7 @@ class TestDatasetContract:
     def test_import(self):
         """Test that DatasetContract can be imported."""
         from src.core import DatasetContract, SplitDatasetContract
+
         assert DatasetContract is not None
         assert SplitDatasetContract is not None
 
@@ -30,28 +31,30 @@ class TestDatasetContract:
         """Test creating DatasetContract from DataFrame."""
         from src.core import DatasetContract
 
-        features = pd.DataFrame({
-            'f1': [1, 2, 3, 4, 5],
-            'f2': [10, 20, 30, 40, 50],
-        })
-        labels = pd.Series([0, 1, 0, 1, 0], name='label')
+        features = pd.DataFrame(
+            {
+                "f1": [1, 2, 3, 4, 5],
+                "f2": [10, 20, 30, 40, 50],
+            }
+        )
+        labels = pd.Series([0, 1, 0, 1, 0], name="label")
 
         contract = DatasetContract(
             features=features,
             labels=labels,
-            split='train',
+            split="train",
         )
 
         assert contract.n_samples == 5
         assert contract.n_features == 2
-        assert contract.feature_names == ['f1', 'f2']
-        assert contract.split == 'train'
+        assert contract.feature_names == ["f1", "f2"]
+        assert contract.split == "train"
 
     def test_to_numpy(self):
         """Test converting to numpy arrays."""
         from src.core import DatasetContract
 
-        features = pd.DataFrame({'f1': [1, 2], 'f2': [3, 4]})
+        features = pd.DataFrame({"f1": [1, 2], "f2": [3, 4]})
         labels = pd.Series([0, 1])
 
         contract = DatasetContract(features=features, labels=labels)
@@ -69,30 +72,30 @@ class TestDatasetContract:
         X = np.array([[1, 2], [3, 4], [5, 6]])
         y = np.array([0, 1, 0])
 
-        contract = DatasetContract.from_arrays(X, y, split='val')
+        contract = DatasetContract.from_arrays(X, y, split="val")
 
         assert contract.n_samples == 3
         assert contract.n_features == 2
-        assert contract.split == 'val'
+        assert contract.split == "val"
 
     def test_filter_by_indices(self):
         """Test filtering by indices."""
         from src.core import DatasetContract
 
-        features = pd.DataFrame({'f1': [1, 2, 3, 4]}, index=[10, 20, 30, 40])
+        features = pd.DataFrame({"f1": [1, 2, 3, 4]}, index=[10, 20, 30, 40])
         labels = pd.Series([0, 1, 0, 1], index=[10, 20, 30, 40])
 
         contract = DatasetContract(features=features, labels=labels)
         filtered = contract.filter_by_indices(pd.Index([10, 30]))
 
         assert filtered.n_samples == 2
-        assert list(filtered.features['f1']) == [1, 3]
+        assert list(filtered.features["f1"]) == [1, 3]
 
     def test_validation_length_mismatch(self):
         """Test that mismatched lengths raise error."""
         from src.core import DatasetContract
 
-        features = pd.DataFrame({'f1': [1, 2, 3]})
+        features = pd.DataFrame({"f1": [1, 2, 3]})
         labels = pd.Series([0, 1])  # Wrong length
 
         with pytest.raises(ValueError, match="length mismatch"):
@@ -102,19 +105,20 @@ class TestDatasetContract:
         """Test SplitDatasetContract."""
         from src.core import DatasetContract, SplitDatasetContract
 
-        train = DatasetContract.from_arrays(np.array([[1]]), np.array([0]), split='train')
-        val = DatasetContract.from_arrays(np.array([[2]]), np.array([1]), split='val')
-        test = DatasetContract.from_arrays(np.array([[3]]), np.array([0]), split='test')
+        train = DatasetContract.from_arrays(np.array([[1]]), np.array([0]), split="train")
+        val = DatasetContract.from_arrays(np.array([[2]]), np.array([1]), split="val")
+        test = DatasetContract.from_arrays(np.array([[3]]), np.array([0]), split="test")
 
         split_contract = SplitDatasetContract(train=train, val=val, test=test)
 
         assert split_contract.has_test == True
-        assert split_contract.train.split == 'train'
+        assert split_contract.train.split == "train"
 
 
 # =============================================================================
 # TEST: Diversity Analysis (MEDIUM #6)
 # =============================================================================
+
 
 class TestDiversityAnalysis:
     """Tests for ensemble diversity analysis."""
@@ -124,9 +128,8 @@ class TestDiversityAnalysis:
         from src.models.ensemble.diversity import (
             compute_mcc_diversity_matrix,
             select_diverse_models,
-            filter_correlated_models,
-            DiversityAnalysisResult,
         )
+
         assert compute_mcc_diversity_matrix is not None
         assert select_diverse_models is not None
 
@@ -150,7 +153,7 @@ class TestDiversityAnalysis:
 
     def test_select_diverse_models(self):
         """Test diverse model selection."""
-        from src.models.ensemble.diversity import select_diverse_models, DiversityAnalysisResult
+        from src.models.ensemble.diversity import DiversityAnalysisResult, select_diverse_models
 
         # Create mock OOF predictions
         class MockOOF:
@@ -159,15 +162,15 @@ class TestDiversityAnalysis:
                 self.metrics = metrics
 
         oof_predictions = {
-            'model_a': MockOOF(np.array([0, 1, 0, 1]), {'val_f1': 0.8}),
-            'model_b': MockOOF(np.array([0, 1, 0, 1]), {'val_f1': 0.7}),  # Same as a
-            'model_c': MockOOF(np.array([1, 0, 1, 0]), {'val_f1': 0.6}),  # Opposite
+            "model_a": MockOOF(np.array([0, 1, 0, 1]), {"val_f1": 0.8}),
+            "model_b": MockOOF(np.array([0, 1, 0, 1]), {"val_f1": 0.7}),  # Same as a
+            "model_c": MockOOF(np.array([1, 0, 1, 0]), {"val_f1": 0.6}),  # Opposite
         }
 
         result = select_diverse_models(oof_predictions, min_diversity=0.3, max_models=2)
 
         assert isinstance(result, DiversityAnalysisResult)
-        assert 'model_a' in result.selected_models  # Best performing
+        assert "model_a" in result.selected_models  # Best performing
         assert len(result.selected_models) <= 2
 
     def test_filter_correlated_models(self):
@@ -177,11 +180,11 @@ class TestDiversityAnalysis:
         class MockOOF:
             def __init__(self, predictions):
                 self.predictions = predictions
-                self.metrics = {'val_f1': 0.5}
+                self.metrics = {"val_f1": 0.5}
 
         oof_predictions = {
-            'model_a': MockOOF(np.array([0, 1, 0, 1])),
-            'model_b': MockOOF(np.array([0, 1, 0, 1])),  # Identical to a
+            "model_a": MockOOF(np.array([0, 1, 0, 1])),
+            "model_b": MockOOF(np.array([0, 1, 0, 1])),  # Identical to a
         }
 
         filtered = filter_correlated_models(oof_predictions, correlation_threshold=0.9)
@@ -194,16 +197,17 @@ class TestDiversityAnalysis:
 # TEST: Parallel Training Service (MEDIUM #7)
 # =============================================================================
 
+
 class TestParallelTrainingService:
     """Tests for parallel training service."""
 
     def test_import(self):
         """Test that parallel training can be imported."""
         from src.models.training.services import (
-            ParallelTrainingService,
             ParallelTrainingConfig,
-            train_models_parallel,
+            ParallelTrainingService,
         )
+
         assert ParallelTrainingService is not None
         assert ParallelTrainingConfig is not None
 
@@ -215,7 +219,7 @@ class TestParallelTrainingService:
 
         assert service.n_jobs == 2
         assert service.verbose == 0
-        assert service.backend == 'loky'
+        assert service.backend == "loky"
 
     def test_config_defaults(self):
         """Test parallel training config defaults."""
@@ -225,7 +229,7 @@ class TestParallelTrainingService:
 
         assert config.n_jobs == -1
         assert config.verbose == 10
-        assert config.backend == 'loky'
+        assert config.backend == "loky"
 
     def test_empty_request_list(self):
         """Test training with empty request list."""
@@ -240,16 +244,17 @@ class TestParallelTrainingService:
         """Test that PipelineConfig has parallel_training field."""
         from src.pipeline_config import PipelineConfig
 
-        config = PipelineConfig(symbol='MES')
+        config = PipelineConfig(symbol="MES")
 
-        assert hasattr(config, 'parallel_training')
-        assert hasattr(config, 'n_jobs')
+        assert hasattr(config, "parallel_training")
+        assert hasattr(config, "n_jobs")
         assert config.n_jobs == -1
 
 
 # =============================================================================
 # TEST: Bet Sizing (LOW #8)
 # =============================================================================
+
 
 class TestBetSizing:
     """Tests for bet sizing module."""
@@ -258,16 +263,15 @@ class TestBetSizing:
         """Test that bet sizing can be imported."""
         from src.models.training.meta_labeling import (
             BetSizingStrategy,
-            BetSizingConfig,
             compute_bet_sizes,
-            predict_with_sizing,
         )
+
         assert BetSizingStrategy is not None
         assert compute_bet_sizes is not None
 
     def test_binary_sizing(self):
         """Test binary bet sizing strategy."""
-        from src.models.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
+        from src.models.training.meta_labeling import BetSizingStrategy, compute_bet_sizes
 
         probs = np.array([0.3, 0.5, 0.7, 0.9])
         sizes = compute_bet_sizes(probs, strategy=BetSizingStrategy.BINARY, threshold=0.5)
@@ -280,7 +284,7 @@ class TestBetSizing:
 
     def test_proportional_sizing(self):
         """Test proportional bet sizing strategy."""
-        from src.models.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
+        from src.models.training.meta_labeling import BetSizingStrategy, compute_bet_sizes
 
         probs = np.array([0.5, 0.75, 1.0])
         sizes = compute_bet_sizes(probs, strategy=BetSizingStrategy.PROPORTIONAL, threshold=0.5)
@@ -292,10 +296,12 @@ class TestBetSizing:
 
     def test_kelly_sizing(self):
         """Test Kelly criterion bet sizing."""
-        from src.models.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
+        from src.models.training.meta_labeling import BetSizingStrategy, compute_bet_sizes
 
         probs = np.array([0.5, 0.75, 1.0])
-        sizes = compute_bet_sizes(probs, strategy=BetSizingStrategy.KELLY, threshold=0.5, kelly_fraction=1.0)
+        sizes = compute_bet_sizes(
+            probs, strategy=BetSizingStrategy.KELLY, threshold=0.5, kelly_fraction=1.0
+        )
 
         # Kelly: f* = 2p - 1 for even odds
         # p=0.5 -> 0, p=0.75 -> 0.5, p=1.0 -> 1.0
@@ -305,7 +311,11 @@ class TestBetSizing:
 
     def test_predict_with_sizing(self):
         """Test combining predictions with sizing."""
-        from src.models.training.meta_labeling import predict_with_sizing, BetSizingConfig, BetSizingStrategy
+        from src.models.training.meta_labeling import (
+            BetSizingConfig,
+            BetSizingStrategy,
+            predict_with_sizing,
+        )
 
         primary = np.array([1, -1, 1, -1])  # Directions
         meta_probs = np.array([0.3, 0.7, 0.9, 0.4])
@@ -340,24 +350,18 @@ class TestBetSizing:
 # TEST: Training Services Integration
 # =============================================================================
 
+
 class TestTrainingServicesIntegration:
     """Test that all training services integrate correctly."""
 
     def test_all_services_importable(self):
         """Test all training services can be imported together."""
         from src.models.training.services import (
-            ModelTrainingService,
-            ModelTrainingRequest,
-            ModelTrainingResult,
-            OOFGenerationService,
-            OOFRequest,
-            HyperparameterTuningService,
-            TuningRequest,
-            TuningResult,
             ArtifactManager,
-            ArtifactSaveRequest,
+            HyperparameterTuningService,
+            ModelTrainingService,
+            OOFGenerationService,
             ParallelTrainingService,
-            ParallelTrainingConfig,
         )
 
         # All imports successful
@@ -369,21 +373,21 @@ class TestTrainingServicesIntegration:
 
     def test_unified_orchestrator_uses_services(self):
         """Test that UnifiedTrainingOrchestrator imports the services."""
-        from src.models.training.unified_orchestrator import UnifiedTrainingOrchestrator
 
         # Check that the module imports are in place
         import src.models.training.unified_orchestrator as uto_module
 
         # The orchestrator should have service imports
         source = open(uto_module.__file__).read()
-        assert 'ModelTrainingService' in source
-        assert 'OOFGenerationService' in source
-        assert 'ArtifactManager' in source
+        assert "ModelTrainingService" in source
+        assert "OOFGenerationService" in source
+        assert "ArtifactManager" in source
 
 
 # =============================================================================
 # TEST: Module Structure
 # =============================================================================
+
 
 class TestModuleStructure:
     """Test that the module structure is correct."""
@@ -391,32 +395,33 @@ class TestModuleStructure:
     def test_core_exports(self):
         """Test src.core exports."""
         from src.core import (
-            PipelineConfig,
             DatasetContract,
+            PipelineConfig,
             SplitDatasetContract,
         )
+
         assert all([PipelineConfig, DatasetContract, SplitDatasetContract])
 
     def test_training_exports(self):
         """Test src.training exports."""
         from src.models.training import (
-            UnifiedTrainingOrchestrator,
-            TrainingRunResult,
             BetSizingStrategy,
-            BetSizingConfig,
-            compute_bet_sizes,
+            TrainingRunResult,
+            UnifiedTrainingOrchestrator,
         )
+
         assert all([UnifiedTrainingOrchestrator, TrainingRunResult, BetSizingStrategy])
 
     def test_ensemble_exports(self):
         """Test src.models.ensemble exports."""
         from src.models.ensemble import (
-            select_diverse_models,
-            filter_correlated_models,
             DiversityAnalysisResult,
+            filter_correlated_models,
+            select_diverse_models,
         )
+
         assert all([select_diverse_models, filter_correlated_models, DiversityAnalysisResult])
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

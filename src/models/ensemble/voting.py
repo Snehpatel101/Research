@@ -385,8 +385,7 @@ class VotingEnsemble(BaseModel):
 
     def _soft_vote(self, X: np.ndarray) -> PredictionOutput:
         """Soft voting: average class probabilities."""
-        n_samples = X.shape[0]
-        n_classes = 3
+        X.shape[0]
 
         # Collect probabilities from all models
         use_parallel = self._config.get("parallel", True)

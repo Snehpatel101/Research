@@ -229,8 +229,7 @@ class MetaLabelGenerator:
             returns = np.asarray(returns).ravel()
             if len(returns) != n:
                 raise ValueError(
-                    f"returns must have same length as labels, "
-                    f"got {len(returns)} vs {n}"
+                    f"returns must have same length as labels, " f"got {len(returns)} vs {n}"
                 )
 
         logger.info(f"Generating meta-labels for {n} samples, horizon={self.config.horizon}")
@@ -278,9 +277,7 @@ class MetaLabelGenerator:
                 correctness_margin[i] = 1.0 if is_correct else -1.0
 
         # Compute quality metrics
-        quality_metrics = self._compute_quality_metrics(
-            meta_labels, y_primary, correctness_margin
-        )
+        quality_metrics = self._compute_quality_metrics(meta_labels, y_primary, correctness_margin)
 
         # Create result
         result = MetaLabelResult(
@@ -408,14 +405,14 @@ class MetaLabelGenerator:
 
         # Accuracy by direction
         if n_long > 0:
-            long_mask = (valid_signals > 0)
+            long_mask = valid_signals > 0
             long_correct = (valid_labels[long_mask] == META_LABEL_CORRECT).sum()
             metrics["long_accuracy"] = long_correct / n_long
         else:
             metrics["long_accuracy"] = 0.0
 
         if n_short > 0:
-            short_mask = (valid_signals < 0)
+            short_mask = valid_signals < 0
             short_correct = (valid_labels[short_mask] == META_LABEL_CORRECT).sum()
             metrics["short_accuracy"] = short_correct / n_short
         else:

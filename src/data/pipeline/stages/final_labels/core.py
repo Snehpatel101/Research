@@ -10,8 +10,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.pipeline.config import TRANSACTION_COSTS
-from src.pipeline.stages.labeling import triple_barrier_numba
+from src.data.pipeline.config import TRANSACTION_COSTS
+from src.data.pipeline.stages.labeling import triple_barrier_numba
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

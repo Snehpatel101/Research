@@ -27,38 +27,38 @@ Usage:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
-from pathlib import Path
-from typing import List, Dict, Optional, Union, Any, TYPE_CHECKING
+
 import json
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.pipeline.data_config import DataConfig
+    from src.data.pipeline.data_config import DataConfig
 
 from src.core.constants import (
-    DEFAULT_HORIZONS,
-    DEFAULT_HORIZON,
-    DEFAULT_SPLIT_RATIOS,
-    DEFAULT_PURGE_BARS,
-    DEFAULT_EMBARGO_BARS,
-    DEFAULT_SEQUENCE_LENGTH,
-    DEFAULT_N_SPLITS,
-    DEFAULT_MTF_TIMEFRAMES,
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_MAX_EPOCHS,
-    DEFAULT_LEARNING_RATE,
-    DEFAULT_EARLY_STOPPING_PATIENCE,
-    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
-    DEFAULT_FEATURE_SELECTION_TRIALS,
-    DEFAULT_FEATURE_PRUNING_TRIALS,
-    DEFAULT_HYPERPARAM_TRIALS,
-    DEFAULT_OPTUNA_RANDOM_STATE,
-    DEFAULT_MIN_FEATURES,
     ALL_MODELS,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_EARLY_STOPPING_PATIENCE,
+    DEFAULT_EMBARGO_BARS,
+    DEFAULT_FEATURE_PRUNING_TRIALS,
+    DEFAULT_FEATURE_SELECTION_TRIALS,
+    DEFAULT_HORIZON,
+    DEFAULT_HYPERPARAM_TRIALS,
+    DEFAULT_LABEL_OPTIMIZATION_TRIALS,
+    DEFAULT_LEARNING_RATE,
+    DEFAULT_MAX_EPOCHS,
+    DEFAULT_MIN_FEATURES,
+    DEFAULT_MTF_TIMEFRAMES,
+    DEFAULT_N_SPLITS,
+    DEFAULT_OPTUNA_RANDOM_STATE,
+    DEFAULT_PURGE_BARS,
+    DEFAULT_SEQUENCE_LENGTH,
+    DEFAULT_SPLIT_RATIOS,
 )
-from src.core.types import TrainingMode, CVMethod, LabelingMethod
-from src.core.validation import validate_model_list, validate_path_exists, ValidationError
+from src.core.types import CVMethod, LabelingMethod, TrainingMode
+from src.core.validation import ValidationError, validate_model_list, validate_path_exists
 
 
 @dataclass
@@ -85,21 +85,21 @@ class PipelineConfig:
     # =========================================================================
 
     symbol: str  # Trading symbol (e.g., "MES", "ES", "NQ")
-    data_path: Union[str, Path]  # Path to 1-min OHLCV parquet
-    output_dir: Union[str, Path]  # Where to save everything
+    data_path: str | Path  # Path to 1-min OHLCV parquet
+    output_dir: str | Path  # Where to save everything
 
     # =========================================================================
     # MODEL CONFIGURATION
     # =========================================================================
 
-    models: List[str] = field(default_factory=lambda: ["xgboost", "lightgbm"])
+    models: list[str] = field(default_factory=lambda: ["xgboost", "lightgbm"])
     # Available models:
     # Boosting: "xgboost", "lightgbm", "catboost"
     # Classical: "random_forest", "logistic", "svm"
     # Neural: "lstm", "gru", "tcn", "transformer", "patchtst", "itransformer",
     #         "tft", "nbeats", "inceptiontime", "resnet1d"
 
-    horizons: List[int] = field(default_factory=lambda: [DEFAULT_HORIZON])
+    horizons: list[int] = field(default_factory=lambda: [DEFAULT_HORIZON])
     # Prediction horizons (in bars). Default: [20]
 
     # =========================================================================
@@ -153,11 +153,11 @@ class PipelineConfig:
     # FEATURE CONFIGURATION
     # =========================================================================
 
-    feature_families: Union[str, List[str]] = "auto"
+    feature_families: str | list[str] = "auto"
     # "auto" = pipeline selects per model type
     # Or specify: ["momentum", "volatility", "volume", "trend", ...]
 
-    mtf_timeframes: List[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
+    mtf_timeframes: list[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
     # MTF timeframes: ["5min", "15min", "60min"]
 
     compute_mtf_features: bool = True  # Whether to compute MTF features
@@ -184,7 +184,7 @@ class PipelineConfig:
     # Label optimization (triple-barrier parameters)
     optimize_labels: bool = True
     label_optimization_trials: int = DEFAULT_LABEL_OPTIMIZATION_TRIALS  # 100
-    target_class_distribution: Optional[Dict[str, float]] = None  # Default: balanced
+    target_class_distribution: dict[str, float] | None = None  # Default: balanced
 
     # Feature optimization
     optimize_features: bool = True
@@ -304,7 +304,7 @@ class PipelineConfig:
         total = self.train_ratio + self.val_ratio + self.test_ratio
         if abs(total - 1.0) > 0.001:
             raise ValidationError(
-                f"Split ratios must sum to 1.0",
+                "Split ratios must sum to 1.0",
                 field="split_ratios",
                 expected=1.0,
                 actual=total,
@@ -327,7 +327,7 @@ class PipelineConfig:
 
             if self.n_regimes not in [2, 3]:
                 raise ValidationError(
-                    f"n_regimes must be 2 or 3",
+                    "n_regimes must be 2 or 3",
                     field="n_regimes",
                     expected=[2, 3],
                     actual=self.n_regimes,
@@ -361,7 +361,7 @@ class PipelineConfig:
             # Validate threshold
             if not 0.0 <= self.meta_labeling_threshold <= 1.0:
                 raise ValidationError(
-                    f"meta_labeling_threshold must be in [0.0, 1.0]",
+                    "meta_labeling_threshold must be in [0.0, 1.0]",
                     field="meta_labeling_threshold",
                     expected="[0.0, 1.0]",
                     actual=self.meta_labeling_threshold,
@@ -371,7 +371,7 @@ class PipelineConfig:
         """Validate that data_path exists (call before running pipeline)."""
         validate_path_exists(self.data_path, must_be_file=True, context="data_path")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert config to dictionary for serialization."""
         d = asdict(self)
         # Convert Path objects to strings
@@ -379,7 +379,7 @@ class PipelineConfig:
         d["output_dir"] = str(d["output_dir"])
         return d
 
-    def save(self, path: Optional[Union[str, Path]] = None) -> Path:
+    def save(self, path: str | Path | None = None) -> Path:
         """
         Save config to JSON file.
 
@@ -401,7 +401,7 @@ class PipelineConfig:
         return path
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "PipelineConfig":
+    def load(cls, path: str | Path) -> PipelineConfig:
         """
         Load config from JSON file.
 
@@ -412,7 +412,7 @@ class PipelineConfig:
             Loaded PipelineConfig instance
         """
         path = Path(path)
-        with open(path, "r") as f:
+        with open(path) as f:
             d = json.load(f)
 
         return cls(**d)
@@ -452,14 +452,14 @@ class PipelineConfig:
             f")"
         )
 
-    def to_data_config(self) -> "DataConfig":
+    def to_data_config(self) -> DataConfig:
         """Convert to DataConfig for PipelineRunner."""
-        from src.pipeline.config_adapter import to_data_config
+        from src.data.pipeline.config_adapter import to_data_config
 
         return to_data_config(self)
 
     # Backward compatibility alias
-    def to_phase1_config(self) -> "DataConfig":
+    def to_phase1_config(self) -> DataConfig:
         """Deprecated: Use to_data_config instead."""
         return self.to_data_config()
 
@@ -471,8 +471,8 @@ class PipelineConfig:
 
 def quick_config(
     symbol: str,
-    data_path: Union[str, Path],
-    output_dir: Union[str, Path],
+    data_path: str | Path,
+    output_dir: str | Path,
 ) -> PipelineConfig:
     """
     Quick configuration for fast iteration.
@@ -498,8 +498,8 @@ def quick_config(
 
 def production_config(
     symbol: str,
-    data_path: Union[str, Path],
-    output_dir: Union[str, Path],
+    data_path: str | Path,
+    output_dir: str | Path,
 ) -> PipelineConfig:
     """
     Production configuration for deployment.
@@ -528,8 +528,8 @@ def production_config(
 
 def research_config(
     symbol: str,
-    data_path: Union[str, Path],
-    output_dir: Union[str, Path],
+    data_path: str | Path,
+    output_dir: str | Path,
 ) -> PipelineConfig:
     """
     Research configuration for experimentation.
@@ -568,8 +568,8 @@ def research_config(
 
 def regime_aware_config(
     symbol: str,
-    data_path: Union[str, Path],
-    output_dir: Union[str, Path],
+    data_path: str | Path,
+    output_dir: str | Path,
 ) -> PipelineConfig:
     """
     Regime-aware configuration for adaptive trading strategies.

@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from .report_schema import EvaluationReport, DatasetMetrics
+from .report_schema import DatasetMetrics, EvaluationReport
 
 
 def generate_markdown_report(report: EvaluationReport) -> str:
     lines = []
 
-    lines.append(f"# Model Evaluation Report")
+    lines.append("# Model Evaluation Report")
     lines.append("")
     lines.append(f"**Run ID:** `{report.run_id}`")
     lines.append(f"**Generated:** {report.generated_at}")

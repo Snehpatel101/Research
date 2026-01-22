@@ -116,7 +116,9 @@ class PipelineConfig:
     walk_forward_min_train: int = 2000
 
     # Regime-aware settings
-    regime_detection_method: str = "volatility_percentile"  # volatility_percentile, trend_adx, combined
+    regime_detection_method: str = (
+        "volatility_percentile"  # volatility_percentile, trend_adx, combined
+    )
     regime_lookback: int = 100
     n_regimes: int = 3
     regime_volatility_window: int = 20
@@ -161,9 +163,9 @@ class PipelineConfig:
     # FEATURES
     # =========================================================================
     feature_mode: str = "full"  # full, minimal, custom
-    feature_families: list[str] = field(default_factory=lambda: [
-        "price", "momentum", "volatility", "volume", "trend"
-    ])
+    feature_families: list[str] = field(
+        default_factory=lambda: ["price", "momentum", "volatility", "volume", "trend"]
+    )
     compute_mtf_features: bool = True
     mtf_timeframes: list[str] = field(default_factory=lambda: ["5min", "15min", "1h"])
 
@@ -259,21 +261,21 @@ class PipelineConfig:
     def summary(self) -> str:
         """Get a human-readable summary of the config."""
         lines = [
-            f"PipelineConfig Summary",
-            f"=" * 50,
+            "PipelineConfig Summary",
+            "=" * 50,
             f"Run ID: {self.run_id}",
             f"Symbol: {self.symbol}",
             f"Data: {self.data_path}",
             f"Output: {self.output_dir}",
-            f"",
+            "",
             f"Models: {', '.join(self.models)}",
             f"Horizons: {self.horizons}",
             f"Ensemble: {self.build_ensemble} ({self.ensemble_method})",
-            f"",
+            "",
             f"Training Mode: {self.training_mode}",
             f"CV Method: {self.cv_method} ({self.n_splits} splits)",
-            f"",
-            f"Optimization:",
+            "",
+            "Optimization:",
             f"  Labels: {self.optimize_labels} ({self.label_optimization_trials} trials)",
             f"  Features: {self.optimize_features} ({self.feature_optimization_trials} trials)",
             f"  Hyperparams: {self.optimize_hyperparams} ({self.hyperparam_optimization_trials} trials)",
@@ -283,6 +285,7 @@ class PipelineConfig:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         from dataclasses import asdict
+
         result = asdict(self)
         # Convert Path objects to strings for serialization
         for key, value in result.items():
@@ -291,29 +294,33 @@ class PipelineConfig:
         return result
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PipelineConfig":
+    def from_dict(cls, data: dict[str, Any]) -> PipelineConfig:
         """Create from dictionary."""
         return cls(**data)
 
     def save(self, path: str | Path) -> None:
         """Save config to file."""
         import json
+
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             json.dump(self.to_dict(), f, indent=2, default=str)
 
     @classmethod
-    def load(cls, path: str | Path) -> "PipelineConfig":
+    def load(cls, path: str | Path) -> PipelineConfig:
         """Load config from file."""
         import json
+
         with open(path) as f:
             data = json.load(f)
         return cls.from_dict(data)
 
+
 # =============================================================================
 # PRESET CONFIGURATIONS
 # =============================================================================
+
 
 def quick_config(symbol: str, **overrides) -> PipelineConfig:
     """Quick iteration config - fast training, minimal optimization."""
@@ -358,8 +365,13 @@ def research_config(symbol: str, **overrides) -> PipelineConfig:
     defaults = {
         "symbol": symbol,
         "models": [
-            "xgboost", "lightgbm", "catboost",
-            "lstm", "gru", "tcn", "transformer",
+            "xgboost",
+            "lightgbm",
+            "catboost",
+            "lstm",
+            "gru",
+            "tcn",
+            "transformer",
         ],
         "horizons": [5, 10, 15, 20, 30, 60],
         "training_mode": "walk_forward",

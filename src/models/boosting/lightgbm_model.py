@@ -24,7 +24,7 @@ except ImportError:
     LIGHTGBM_AVAILABLE = False
     lgb = None
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
@@ -63,7 +63,6 @@ def _check_cuda_available() -> bool:
 
         # Try to create a small dataset with GPU device
         # This will fail if LightGBM wasn't built with GPU support
-        params = {"device": "cuda", "verbose": -1}
         data = lgb.Dataset(np.array([[1.0]]), label=np.array([0]))
         data.construct()
 
@@ -287,7 +286,7 @@ class LightGBMModel(BaseModel):
             },
         )
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -297,7 +296,7 @@ class LightGBMModel(BaseModel):
         class_predictions = self._convert_labels_from_lgb(class_predictions_lgb)
         confidence = np.max(probabilities, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,

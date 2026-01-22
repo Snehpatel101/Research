@@ -161,7 +161,7 @@ def _create_config_from_args(
             # Map preset values to config kwargs
             config_kwargs["target_timeframe"] = preset_config.get("target_timeframe", "5min")
             # Import canonical horizons as fallback
-            from src.common.horizon_config import ACTIVE_HORIZONS
+            from src.core.common.horizon_config import ACTIVE_HORIZONS
 
             config_kwargs["label_horizons"] = preset_config.get("horizons", list(ACTIVE_HORIZONS))
             config_kwargs["max_bars_ahead"] = preset_config.get("max_bars_ahead", 50)
@@ -190,7 +190,7 @@ def _create_config_from_args(
     if symbols is not None:
         config_kwargs["symbols"] = [s.strip().upper() for s in symbols.split(",")]
     elif "symbols" not in config_kwargs:
-        from src.pipeline.config.runtime import detect_available_symbols
+        from src.data.pipeline.config.runtime import detect_available_symbols
 
         detected = detect_available_symbols()
         if detected:

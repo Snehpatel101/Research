@@ -1,64 +1,55 @@
-from .registry import (
-    FeatureDefinition,
-    FEATURE_REGISTRY,
-    get_features_by_families,
-    get_features_by_model,
-    get_feature_families,
-)
-
 # Feature computation (PHASE_1)
+# MTF (Multi-Timeframe) feature computation (PHASE_1)
 from .compute import (
+    DEFAULT_MTF_FEATURES,
+    FEATURE_COMPUTE_MAP,
+    MTFConfig,
+    MTFFeatureComputer,
     compute_all_features,
     compute_features_by_family,
     compute_features_by_names,
+    compute_mtf_features,
     compute_single_feature,
-    FEATURE_COMPUTE_MAP,
     get_all_feature_names,
     get_features_in_family,
-)
-
-# MTF (Multi-Timeframe) feature computation (PHASE_1)
-from .compute import (
-    MTFConfig,
-    MTFFeatureComputer,
-    compute_mtf_features,
     get_mtf_feature_names,
-    validate_mtf_config,
     resample_ohlcv,
-    DEFAULT_MTF_FEATURES,
+    validate_mtf_config,
 )
-
-from .strategies import (
-    ModelFeatureStrategy,
-    MODEL_FEATURE_STRATEGIES,
-    get_strategy_for_model,
-    get_baseline_features,
-)
-
 from .optimization import (
-    OptimizationResult,
     FeatureOptimizer,
+    OptimizationResult,
     optimize_features_for_model,
     suggest_features,
 )
-
-from .strategy_manager import (
-    ResolvedFeatureSet,
-    FeatureStrategyManager,
-    get_features_for_model,
+from .pruning import (
+    FeaturePruner,
+    FeaturePruningResult,
+    prune_correlated_features,
+    prune_features,
 )
-
+from .registry import (
+    FEATURE_REGISTRY,
+    FeatureDefinition,
+    get_feature_families,
+    get_features_by_families,
+    get_features_by_model,
+)
 from .selection import (
     FeatureSelectionResult,
     FeatureSelector,
     select_features,
 )
-
-from .pruning import (
-    FeaturePruningResult,
-    FeaturePruner,
-    prune_features,
-    prune_correlated_features,
+from .strategies import (
+    MODEL_FEATURE_STRATEGIES,
+    ModelFeatureStrategy,
+    get_baseline_features,
+    get_strategy_for_model,
+)
+from .strategy_manager import (
+    FeatureStrategyManager,
+    ResolvedFeatureSet,
+    get_features_for_model,
 )
 
 __all__ = [

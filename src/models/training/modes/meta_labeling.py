@@ -27,8 +27,6 @@ if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
 from src.models import Trainer, TrainerConfig
-from src.models.base import PredictionOutput
-from src.models.registry import ModelRegistry
 
 from ..config import ExperimentConfig
 
@@ -98,9 +96,7 @@ class MetaLabelingResult:
             "primary_metrics": self.primary_metrics,
             "meta_metrics": self.meta_metrics,
             "combined_metrics": self.combined_metrics,
-            "primary_model_path": str(self.primary_model_path)
-            if self.primary_model_path
-            else None,
+            "primary_model_path": str(self.primary_model_path) if self.primary_model_path else None,
             "meta_model_path": str(self.meta_model_path) if self.meta_model_path else None,
             "total_time": self.total_time,
         }
@@ -339,7 +335,7 @@ class MetaLabelingTrainer:
             quality_weights=quality_val,
         )
 
-        logger.info(f"  Meta-label statistics (train):")
+        logger.info("  Meta-label statistics (train):")
         logger.info(f"    Mean: {meta_labels_train.mean():.3f}")
         logger.info(f"    Std:  {meta_labels_train.std():.3f}")
         logger.info(f"    Min:  {meta_labels_train.min():.3f}")
@@ -485,7 +481,7 @@ class MetaLabelingTrainer:
         y_meta_train_discrete = discretize_meta_labels(meta_labels_train)
         y_meta_val_discrete = discretize_meta_labels(meta_labels_val)
 
-        logger.info(f"  Discretized meta-labels (train):")
+        logger.info("  Discretized meta-labels (train):")
         for label, name in [(0, "skip"), (1, "partial"), (2, "full")]:
             count = (y_meta_train_discrete == label).sum()
             pct = 100 * count / len(y_meta_train_discrete)
@@ -556,8 +552,7 @@ class MetaLabelingTrainer:
         if meta_preds.class_probabilities is not None:
             # P(full_bet) + 0.5 * P(partial_bet)
             bet_sizes = (
-                meta_preds.class_probabilities[:, 2]
-                + 0.5 * meta_preds.class_probabilities[:, 1]
+                meta_preds.class_probabilities[:, 2] + 0.5 * meta_preds.class_probabilities[:, 1]
             )
         else:
             # Map discrete predictions to bet sizes
@@ -586,13 +581,11 @@ class MetaLabelingTrainer:
             trade_fraction = 0.0
 
         # Log results
-        logger.info(f"  Test Set Results:")
-        logger.info(f"    Primary Only:")
+        logger.info("  Test Set Results:")
+        logger.info("    Primary Only:")
         logger.info(f"      Accuracy: {primary_correct:.4f}")
-        logger.info(f"      Trades: 100%")
-        logger.info(
-            f"\n    With Meta-Labeling (threshold={self.meta_config.meta_threshold}):"
-        )
+        logger.info("      Trades: 100%")
+        logger.info(f"\n    With Meta-Labeling (threshold={self.meta_config.meta_threshold}):")
         logger.info(f"      Accuracy: {combined_correct:.4f}")
         logger.info(f"      Trades Taken: {trade_fraction*100:.1f}%")
         logger.info(f"      Trades Skipped: {(1-trade_fraction)*100:.1f}%")
@@ -620,18 +613,14 @@ class MetaLabelingTrainer:
         logger.info(f"  Primary model: {result.primary_model}")
         logger.info(f"  Meta model: {result.meta_model}")
         logger.info(f"  Primary Val F1: {result.primary_metrics.get('val_f1', 0):.4f}")
-        logger.info(
-            f"  Primary Val Accuracy: {result.primary_metrics.get('val_accuracy', 0):.4f}"
-        )
+        logger.info(f"  Primary Val Accuracy: {result.primary_metrics.get('val_accuracy', 0):.4f}")
         logger.info(
             f"  Combined Test Accuracy: {result.combined_metrics.get('combined_accuracy', 0):.4f}"
         )
         logger.info(
             f"  Trade Fraction: {result.combined_metrics.get('trade_fraction', 0)*100:.1f}%"
         )
-        logger.info(
-            f"  Improvement: {result.combined_metrics.get('improvement', 0):+.4f}"
-        )
+        logger.info(f"  Improvement: {result.combined_metrics.get('improvement', 0):+.4f}")
         logger.info(f"  Total time: {result.total_time:.1f}s")
 
     def predict(
@@ -663,8 +652,7 @@ class MetaLabelingTrainer:
         # Convert to bet sizes
         if meta_preds.class_probabilities is not None:
             bet_sizes = (
-                meta_preds.class_probabilities[:, 2]
-                + 0.5 * meta_preds.class_probabilities[:, 1]
+                meta_preds.class_probabilities[:, 2] + 0.5 * meta_preds.class_probabilities[:, 1]
             )
         else:
             bet_sizes = np.where(

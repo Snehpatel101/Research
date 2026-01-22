@@ -9,12 +9,12 @@ Legacy import path (still works):
 """
 
 from src.core.coordination import (
+    TimeframeCoordinator,
+    TimeframeData,
     align_to_anchor,
     apply_mtf_lag,
     compute_sequence_offset,
     validate_timestamp_alignment,
-    TimeframeCoordinator,
-    TimeframeData,
 )
 
 __all__ = [

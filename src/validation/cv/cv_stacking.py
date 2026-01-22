@@ -85,7 +85,7 @@ def validate_stacking_consistency(
 
 
 def build_stacking_datasets_from_cv_results(
-    cv_results: dict[tuple[str, int], "CVResult"],
+    cv_results: dict[tuple[str, int], CVResult],
     horizons: list[int],
     cv: PurgedKFold,
     container,
@@ -145,7 +145,7 @@ def build_stacking_datasets_from_cv_results(
 
 
 def analyze_cv_stability(
-    cv_results: dict[tuple[str, int], "CVResult"],
+    cv_results: dict[tuple[str, int], CVResult],
 ) -> pd.DataFrame:
     """
     Analyze stability of models across CV folds.

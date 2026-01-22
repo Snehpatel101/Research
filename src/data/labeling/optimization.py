@@ -19,9 +19,10 @@ Search Spaces:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -44,9 +45,7 @@ from src.core.constants import (
     N_CLASSES,
 )
 from src.core.validation import ValidationError, validate_ohlcv
-
-from src.labeling.triple_barrier import TripleBarrierConfig, TripleBarrierLabeler
-
+from src.data.labeling.triple_barrier import TripleBarrierConfig, TripleBarrierLabeler
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +80,12 @@ class LabelOptimizationResult:
 
     best_config: TripleBarrierConfig
     best_score: float
-    class_distribution: Dict[str, float]
+    class_distribution: dict[str, float]
     n_trials: int
     study: Any  # optuna.Study (Any for optional import)
-    optimization_history: List[Dict[str, Any]]
+    optimization_history: list[dict[str, Any]]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for serialization."""
         return {
             "best_config": self.best_config.to_dict(),
@@ -96,7 +95,7 @@ class LabelOptimizationResult:
             "optimization_history": self.optimization_history,
         }
 
-    def get_param_importance(self) -> Dict[str, float]:
+    def get_param_importance(self) -> dict[str, float]:
         """
         Get parameter importance from Optuna study.
 
@@ -188,7 +187,7 @@ class LabelOptimizer:
     def __init__(
         self,
         n_trials: int = DEFAULT_LABEL_OPTIMIZATION_TRIALS,
-        target_distribution: Optional[Dict[str, float]] = None,
+        target_distribution: dict[str, float] | None = None,
         min_samples_per_class: int = 500,
         use_predictability_score: bool = True,
         random_state: int = DEFAULT_OPTUNA_RANDOM_STATE,
@@ -196,7 +195,7 @@ class LabelOptimizer:
         predictability_weight: float = 0.3,
         sample_penalty_weight: float = 0.1,
         verbose: int = 1,
-        storage_path: Optional[Union[str, Path]] = None,
+        storage_path: str | Path | None = None,
     ) -> None:
         """
         Initialize the label optimizer.
@@ -254,16 +253,16 @@ class LabelOptimizer:
             )
 
         # Internal state
-        self._df: Optional[pd.DataFrame] = None
-        self._feature_df: Optional[pd.DataFrame] = None
-        self._optimization_history: List[Dict[str, Any]] = []
+        self._df: pd.DataFrame | None = None
+        self._feature_df: pd.DataFrame | None = None
+        self._optimization_history: list[dict[str, Any]] = []
 
     def optimize(
         self,
         df: pd.DataFrame,
-        feature_df: Optional[pd.DataFrame] = None,
-        search_space: Optional[Dict[str, Tuple[float, float]]] = None,
-        callbacks: Optional[List[Callable]] = None,
+        feature_df: pd.DataFrame | None = None,
+        search_space: dict[str, tuple[float, float]] | None = None,
+        callbacks: list[Callable] | None = None,
     ) -> LabelOptimizationResult:
         """
         Optimize triple-barrier labeling parameters.
@@ -382,9 +381,7 @@ class LabelOptimizer:
             optimization_history=self._optimization_history,
         )
 
-    def _objective(
-        self, trial: Trial, search_space: Dict[str, Tuple[float, float]]
-    ) -> float:
+    def _objective(self, trial: Trial, search_space: dict[str, tuple[float, float]]) -> float:
         """
         Optuna objective function.
 
@@ -449,9 +446,7 @@ class LabelOptimizer:
 
         # Predictability score (optional)
         if self.use_predictability_score and self._feature_df is not None:
-            predictability_score = self._compute_predictability(
-                self._feature_df, labels, trial
-            )
+            predictability_score = self._compute_predictability(self._feature_df, labels, trial)
         else:
             predictability_score = 0.5  # Neutral if not using
 
@@ -491,7 +486,7 @@ class LabelOptimizer:
 
         return objective_value
 
-    def _compute_balance_score(self, dist: Dict[str, float]) -> float:
+    def _compute_balance_score(self, dist: dict[str, float]) -> float:
         """
         Compute class balance score.
 
@@ -528,7 +523,7 @@ class LabelOptimizer:
         actual_probs = [dist["long"], dist["neutral"], dist["short"]]
 
         # L1 distance (normalized by 2 for max possible distance)
-        l1_distance = sum(abs(a - t) for a, t in zip(actual_probs, target_probs))
+        l1_distance = sum(abs(a - t) for a, t in zip(actual_probs, target_probs, strict=False))
         target_score = 1.0 - (l1_distance / 2.0)
 
         # Combine entropy and target scores
@@ -536,7 +531,7 @@ class LabelOptimizer:
 
         return float(balance_score)
 
-    def _compute_sample_penalty(self, dist: Dict[str, float]) -> float:
+    def _compute_sample_penalty(self, dist: dict[str, float]) -> float:
         """
         Compute penalty for insufficient samples per class.
 
@@ -622,9 +617,7 @@ class LabelOptimizer:
             if n_splits < 2:
                 return 0.0
 
-            scores = cross_val_score(
-                clf, X, y, cv=n_splits, scoring="accuracy", n_jobs=1
-            )
+            scores = cross_val_score(clf, X, y, cv=n_splits, scoring="accuracy", n_jobs=1)
 
             # Normalize score: 0.33 (random) -> 0.0, 1.0 -> 1.0
             avg_score = np.mean(scores)
@@ -638,7 +631,7 @@ class LabelOptimizer:
             logger.debug(f"Predictability scoring failed: {e}")
             return 0.5
 
-    def get_search_space_info(self) -> Dict[str, Any]:
+    def get_search_space_info(self) -> dict[str, Any]:
         """
         Get information about the search space.
 
@@ -672,7 +665,7 @@ class LabelOptimizer:
 
 def optimize_labels(
     df: pd.DataFrame,
-    feature_df: Optional[pd.DataFrame] = None,
+    feature_df: pd.DataFrame | None = None,
     n_trials: int = 100,
     min_samples_per_class: int = 500,
     random_state: int = 42,

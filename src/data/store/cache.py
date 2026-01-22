@@ -281,9 +281,7 @@ class FeatureCache:
                     f"Cache checksum mismatch for {feature_set}/{cache_key}: "
                     f"expected {metadata.parquet_checksum}, got {actual_checksum}"
                 )
-                raise ValueError(
-                    f"Cache integrity check failed for {feature_set}/{cache_key}"
-                )
+                raise ValueError(f"Cache integrity check failed for {feature_set}/{cache_key}")
 
         # Load parquet data
         try:

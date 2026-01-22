@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.common.horizon_config import LOOKBACK_HORIZONS
+from src.core.common.horizon_config import LOOKBACK_HORIZONS
 
 from .charts import generate_all_charts
 from .formatters import save_html_report

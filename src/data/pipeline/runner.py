@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from src.pipeline.data_config import DataConfig
+    from src.data.pipeline.data_config import DataConfig
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -34,22 +34,20 @@ class NumpyEncoder(json.JSONEncoder):
 
 
 from .stage_registry import PipelineStage, get_stage_definitions
-
 from .stages import (
-    run_data_cleaning,
     run_build_datasets,
+    run_create_splits,
+    run_data_cleaning,
+    run_data_generation,
     run_feature_engineering,
+    run_feature_scaling,
     run_final_labels,
     run_ga_optimization,
-    run_data_generation,
-    run_initial_labeling,
     run_generate_report,
+    run_initial_labeling,
     run_scaled_validation,
-    run_feature_scaling,
-    run_create_splits,
     run_validation,
 )
-
 from .utils import StageResult, StageStatus
 
 
@@ -64,7 +62,7 @@ class PipelineRunner:
             config: Pipeline configuration
             resume: Whether to resume from last successful stage
         """
-        from src.common.manifest import ArtifactManifest
+        from src.core.common.manifest import ArtifactManifest
 
         self.config = config
         self.resume = resume
@@ -280,7 +278,7 @@ class PipelineRunner:
 
     def _load_state(self) -> None:
         """Load previous pipeline state for resuming."""
-        from src.common.manifest import ArtifactManifest
+        from src.core.common.manifest import ArtifactManifest
 
         state_path = self.config.run_artifacts_dir / "pipeline_state.json"
 

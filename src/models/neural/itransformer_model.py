@@ -16,7 +16,6 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-import math
 from typing import Any
 
 import numpy as np
@@ -552,7 +551,7 @@ class iTransformerModel(BaseRNNModel):
 
         # L2 norm across d_model dimension gives temporal importance
         # Then average across features (each feature uses same projection)
-        temporal_importance = np.linalg.norm(weights, axis=0)
+        np.linalg.norm(weights, axis=0)
 
         # For feature importance, we use the feature position embeddings
         # Get position embeddings: (1, max_features, d_model)

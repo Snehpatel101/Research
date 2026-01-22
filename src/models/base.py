@@ -5,7 +5,7 @@ All models in the factory must implement this interface to ensure
 consistent training, prediction, and evaluation workflows.
 
 This module provides:
-- PredictionOutput: Standardized prediction container
+- PredictionResult: Standardized prediction container
 - TrainingMetrics: Standardized training metrics container
 - BaseModel: Abstract base class for all models
 """
@@ -20,14 +20,14 @@ from typing import Any
 import numpy as np
 
 # =============================================================================
-# PREDICTION OUTPUT
+# PREDICTION RESULT
 # =============================================================================
 
 
 @dataclass
-class PredictionOutput:
+class PredictionResult:
     """
-    Standardized prediction output for all models.
+    Standardized prediction result for all models.
 
     All models must return predictions in this format to enable
     unified evaluation and ensemble composition.
@@ -39,10 +39,10 @@ class PredictionOutput:
         metadata: Model-specific metadata (feature importance, attention, etc.)
 
     Example:
-        >>> output = model.predict(X_test)
-        >>> print(output.class_predictions.shape)  # (1000,)
-        >>> print(output.class_probabilities.shape)  # (1000, 3)
-        >>> print(output.confidence.mean())  # 0.65
+        >>> result = model.predict(X_test)
+        >>> print(result.class_predictions.shape)  # (1000,)
+        >>> print(result.class_probabilities.shape)  # (1000, 3)
+        >>> print(result.confidence.mean())  # 0.65
     """
 
     class_predictions: np.ndarray
@@ -199,9 +199,9 @@ class BaseModel(ABC):
         ...         # Training implementation
         ...         return TrainingMetrics(...)
         ...
-        ...     def predict(self, X) -> PredictionOutput:
+        ...     def predict(self, X) -> PredictionResult:
         ...         # Prediction implementation
-        ...         return PredictionOutput(...)
+        ...         return PredictionResult(...)
     """
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
@@ -321,7 +321,7 @@ class BaseModel(ABC):
         pass
 
     @abstractmethod
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """
         Generate predictions.
 
@@ -331,7 +331,7 @@ class BaseModel(ABC):
                 - Shape (n_samples, seq_len, n_features) for sequential
 
         Returns:
-            PredictionOutput with predictions and probabilities
+            PredictionResult with predictions and probabilities
 
         Raises:
             RuntimeError: If model is not fitted
@@ -447,7 +447,10 @@ class BaseModel(ABC):
 
 
 __all__ = [
-    "PredictionOutput",
+    "PredictionResult",
     "TrainingMetrics",
     "BaseModel",
 ]
+
+# Backward compatibility alias (deprecated, will be removed in future version)
+PredictionOutput = PredictionResult

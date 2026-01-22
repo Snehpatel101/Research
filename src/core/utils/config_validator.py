@@ -98,7 +98,7 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
         ValidationResult with errors/warnings/suggestions
 
     Example:
-        >>> from src.pipeline.data_config import PipelineConfig
+        >>> from src.data.pipeline.data_config import PipelineConfig
         >>> config = PipelineConfig()
         >>> result = validate_pipeline_config(config)
         >>> if not result.is_valid:
@@ -135,7 +135,7 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
             result.add_suggestion("Single-contract architecture: process one symbol per run")
 
     # Check horizons
-    from src.common.horizon_config import ACTIVE_HORIZONS
+    from src.core.common.horizon_config import ACTIVE_HORIZONS
 
     horizons = config_dict.get("horizons") or config_dict.get("label_horizons")
     if not horizons:
@@ -241,7 +241,7 @@ def validate_trainer_config(config: dict[str, Any]) -> ValidationResult:
         result.add_error(f"Invalid horizon: {horizon}. Must be positive integer")
     else:
         # Check horizon is in standard set
-        from src.common.horizon_config import LABEL_HORIZONS
+        from src.core.common.horizon_config import LABEL_HORIZONS
 
         if horizon not in LABEL_HORIZONS:
             result.add_warning(
@@ -339,7 +339,7 @@ def validate_cv_config(config: dict[str, Any]) -> ValidationResult:
     if purge_bars == 0 and embargo_bars == 0:
         result.add_warning("Both purge and embargo are 0. High risk of data leakage in CV!")
         result.add_suggestion(
-            "Use auto-scaling from src.common.horizon_config.auto_scale_purge_embargo"
+            "Use auto-scaling from src.core.common.horizon_config.auto_scale_purge_embargo"
         )
 
     # Check Optuna config

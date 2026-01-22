@@ -28,8 +28,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
-    from src.models.config.trainer_config import TrainerConfig
     from src.models.base import BaseModel
+    from src.models.config.trainer_config import TrainerConfig
     from src.optimization.feature_selection import FeatureSelectionManager
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,10 @@ class TrainerFeaturesMixin:
     def _setup_feature_selection(self) -> None:
         """Initialize feature selection manager based on model family and config."""
         # Late import to avoid circular dependency
-        from src.optimization.feature_selection import FeatureSelectionConfig, FeatureSelectionManager
+        from src.optimization.feature_selection import (
+            FeatureSelectionConfig,
+            FeatureSelectionManager,
+        )
 
         if not self.config.use_feature_selection:
             self.feature_selector = FeatureSelectionManager.disabled()
@@ -177,7 +180,7 @@ class TrainerFeaturesMixin:
         Returns:
             List of feature column names
         """
-        from src.features.strategy_manager import FeatureStrategyManager
+        from src.data.features.strategy_manager import FeatureStrategyManager
 
         manager = FeatureStrategyManager(df=df)
 
@@ -212,12 +215,11 @@ class TrainerFeaturesMixin:
         Returns:
             List of all feature column names
         """
-        from src.pipeline.utils.constants import METADATA_COLUMNS
-        from src.pipeline.utils.feature_sets import _is_label_column
+        from src.data.pipeline.utils.constants import METADATA_COLUMNS
+        from src.data.pipeline.utils.feature_sets import _is_label_column
 
         return [
-            col for col in df.columns
-            if col not in METADATA_COLUMNS and not _is_label_column(col)
+            col for col in df.columns if col not in METADATA_COLUMNS and not _is_label_column(col)
         ]
 
     def _validate_features_for_model(
@@ -233,8 +235,8 @@ class TrainerFeaturesMixin:
         Returns:
             (is_valid, list_of_warnings)
         """
-        from src.features.strategies import get_strategy_for_model
         from src.core.contracts import get_model_contract
+        from src.data.features.strategies import get_strategy_for_model
 
         warnings = []
         strategy = get_strategy_for_model(self.config.model_name)
@@ -423,9 +425,7 @@ class TrainerFeaturesMixin:
         feature_set_name = FEATURE_SET_ALIASES.get(model_lower)
 
         if not feature_set_name:
-            logger.debug(
-                f"No feature set alias for model '{model_name}', using all features"
-            )
+            logger.debug(f"No feature set alias for model '{model_name}', using all features")
             return None
 
         # Try to load feature list from manifest (produced by Phase 1 pipeline)
@@ -438,17 +438,21 @@ class TrainerFeaturesMixin:
         # Check if container has source_path attribute
         if hasattr(container, "source_path") and container.source_path:
             base = Path(container.source_path)
-            possible_paths.extend([
-                base / "artifacts" / "feature_set_manifest.json",
-                base.parent / "artifacts" / "feature_set_manifest.json",
-                base.parent.parent / "artifacts" / "feature_set_manifest.json",
-            ])
+            possible_paths.extend(
+                [
+                    base / "artifacts" / "feature_set_manifest.json",
+                    base.parent / "artifacts" / "feature_set_manifest.json",
+                    base.parent.parent / "artifacts" / "feature_set_manifest.json",
+                ]
+            )
 
         # Also check common project locations
         project_root = Path(__file__).parent.parent.parent.parent
-        possible_paths.extend([
-            project_root / "runs" / "latest" / "artifacts" / "feature_set_manifest.json",
-        ])
+        possible_paths.extend(
+            [
+                project_root / "runs" / "latest" / "artifacts" / "feature_set_manifest.json",
+            ]
+        )
 
         for path in possible_paths:
             if path.exists():
@@ -474,12 +478,12 @@ class TrainerFeaturesMixin:
 
         # Fallback: resolve feature set from definition (slower but works without manifest)
         logger.debug(
-            f"Manifest not found or feature set missing, falling back to definition-based resolution"
+            "Manifest not found or feature set missing, falling back to definition-based resolution"
         )
 
         # Get sample DataFrame to resolve features
         split_data = container.get_split("train")
-        sample_df = split_data.df[split_data.feature_columns[:1]]  # Just need columns
+        split_data.df[split_data.feature_columns[:1]]  # Just need columns
 
         # Use the existing resolve method with a DataFrame that has all feature columns
         feature_cols_df = pd.DataFrame(columns=split_data.feature_columns)

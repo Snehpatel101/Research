@@ -21,7 +21,7 @@ Key Features:
 
 Usage:
 ------
-    from src.adapters import MultiResolution4DAdapter
+    from src.data.adapters import MultiResolution4DAdapter
 
     # Create adapter for 9-timeframe MTF data
     adapter = MultiResolution4DAdapter(
@@ -58,7 +58,8 @@ import torch
 from torch.utils.data import Dataset
 
 # Import from canonical locations
-from src.common.timeframes import TIMEFRAME_TO_MINUTES
+from src.core.common.timeframes import TIMEFRAME_TO_MINUTES
+
 from .multi_resolution_utils import (
     DEFAULT_MTF_FEATURES,
     DEFAULT_MTF_TIMEFRAMES,
@@ -260,7 +261,7 @@ class MultiResolution4DAdapter:
         weight_column: str | None = None,
         symbol_column: str | None = None,
         auto_prepare: bool = True,
-    ) -> "MultiResolution4DDataset":
+    ) -> MultiResolution4DDataset:
         """
         Create a PyTorch Dataset from the DataFrame.
 

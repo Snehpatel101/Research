@@ -46,10 +46,10 @@ import yaml
 
 from src.config.utils import get_config_value  # noqa: F401 - used in module context
 from src.config.validators import (
-    ValidationResult,
-    validate_config,
-    coerce_types,
     ConfigValidationError,
+    ValidationResult,
+    coerce_types,
+    validate_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,15 @@ class TimeframesSection:
     default_primary: str = "5min"
     canonical_ladder: list[str] = field(
         default_factory=lambda: [
-            "1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"
+            "1min",
+            "5min",
+            "10min",
+            "15min",
+            "20min",
+            "25min",
+            "30min",
+            "45min",
+            "60min",
         ]
     )
     extended: list[str] = field(default_factory=lambda: ["240min", "1440min"])
@@ -85,7 +93,9 @@ class TimeframesSection:
     def from_dict(cls, data: dict[str, Any]) -> TimeframesSection:
         return cls(
             default_primary=data.get("default_primary", "5min"),
-            canonical_ladder=data.get("canonical_ladder", cls.__dataclass_fields__["canonical_ladder"].default_factory()),
+            canonical_ladder=data.get(
+                "canonical_ladder", cls.__dataclass_fields__["canonical_ladder"].default_factory()
+            ),
             extended=data.get("extended", cls.__dataclass_fields__["extended"].default_factory()),
         )
 
@@ -154,9 +164,7 @@ class HorizonsSection:
         # Validate active is subset of supported
         for h in self.active:
             if h not in self.supported:
-                raise ValueError(
-                    f"Active horizon {h} not in supported horizons {self.supported}"
-                )
+                raise ValueError(f"Active horizon {h} not in supported horizons {self.supported}")
 
     @property
     def max_horizon(self) -> int:
@@ -166,7 +174,9 @@ class HorizonsSection:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HorizonsSection:
         return cls(
-            supported=data.get("supported", cls.__dataclass_fields__["supported"].default_factory()),
+            supported=data.get(
+                "supported", cls.__dataclass_fields__["supported"].default_factory()
+            ),
             active=data.get("active", cls.__dataclass_fields__["active"].default_factory()),
             default=data.get("default", cls.__dataclass_fields__["default"].default_factory()),
         )
@@ -194,11 +204,13 @@ class FeatureGenerationSection:
     """Feature generation configuration."""
 
     default: str = "full"
-    modes: dict[str, str] = field(default_factory=lambda: {
-        "full": "Generate complete feature set (~180 features)",
-        "minimal": "Generate only essential features (~50 features)",
-        "custom": "Generate custom feature set (requires feature_toggles)",
-    })
+    modes: dict[str, str] = field(
+        default_factory=lambda: {
+            "full": "Generate complete feature set (~180 features)",
+            "minimal": "Generate only essential features (~50 features)",
+            "custom": "Generate custom feature set (requires feature_toggles)",
+        }
+    )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FeatureGenerationSection:
@@ -224,12 +236,20 @@ class FeaturesSection:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FeaturesSection:
         return cls(
-            sma_periods=data.get("sma_periods", cls.__dataclass_fields__["sma_periods"].default_factory()),
-            ema_periods=data.get("ema_periods", cls.__dataclass_fields__["ema_periods"].default_factory()),
-            atr_periods=data.get("atr_periods", cls.__dataclass_fields__["atr_periods"].default_factory()),
+            sma_periods=data.get(
+                "sma_periods", cls.__dataclass_fields__["sma_periods"].default_factory()
+            ),
+            ema_periods=data.get(
+                "ema_periods", cls.__dataclass_fields__["ema_periods"].default_factory()
+            ),
+            atr_periods=data.get(
+                "atr_periods", cls.__dataclass_fields__["atr_periods"].default_factory()
+            ),
             rsi_period=data.get("rsi_period", 14),
             macd=data.get("macd", cls.__dataclass_fields__["macd"].default_factory()),
-            bollinger=data.get("bollinger", cls.__dataclass_fields__["bollinger"].default_factory()),
+            bollinger=data.get(
+                "bollinger", cls.__dataclass_fields__["bollinger"].default_factory()
+            ),
             selection=FeatureSelectionSection.from_dict(data.get("selection", {})),
             generation=FeatureGenerationSection.from_dict(data.get("generation", {})),
         )
@@ -248,7 +268,10 @@ class MTFSection:
         return cls(
             enabled=data.get("enabled", True),
             default_mode=data.get("default_mode", "indicators"),
-            default_timeframes=data.get("default_timeframes", cls.__dataclass_fields__["default_timeframes"].default_factory()),
+            default_timeframes=data.get(
+                "default_timeframes",
+                cls.__dataclass_fields__["default_timeframes"].default_factory(),
+            ),
         )
 
 
@@ -451,14 +474,16 @@ class ModelConfigSection:
     # NOTE: primary_timeframe, mtf_mode, feature_mode are NOT included here
     # because they are model-specific and should come from ModelContract.
     # This section is for settings that genuinely vary by family.
-    defaults: dict[str, dict[str, Any]] = field(default_factory=lambda: {
-        "boosting": {},
-        "neural": {},
-        "transformer": {},
-        "classical": {},
-        "ensemble": {},
-        "meta_learner": {},
-    })
+    defaults: dict[str, dict[str, Any]] = field(
+        default_factory=lambda: {
+            "boosting": {},
+            "neural": {},
+            "transformer": {},
+            "classical": {},
+            "ensemble": {},
+            "meta_learner": {},
+        }
+    )
 
     # Per-model overrides (model_name -> config dict)
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -482,7 +507,7 @@ class ModelConfigSection:
         return config
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ModelConfigSection":
+    def from_dict(cls, data: dict[str, Any]) -> ModelConfigSection:
         return cls(
             defaults=data.get("defaults", cls.__dataclass_fields__["defaults"].default_factory()),
             overrides=data.get("overrides", {}),
@@ -875,16 +900,14 @@ class UnifiedConfig:
         Example:
             config = unified_config.get_trainer_config_for_model("lstm", horizon=20)
         """
-        from src.models.config.trainer_config import TrainerConfig
         from src.core.contracts import get_model_contract
+        from src.models.config.trainer_config import TrainerConfig
 
         horizon = horizon or self.horizons.max_horizon
         contract = get_model_contract(model_name)
 
         # Get family-level and model-level overrides from model_config section
-        model_overrides = self.model_config.get_model_config(
-            model_name, contract.model_family
-        )
+        model_overrides = self.model_config.get_model_config(model_name, contract.model_family)
 
         # Merge: contract defaults -> model_config overrides -> user overrides
         merged_overrides = {
@@ -938,10 +961,9 @@ class UnifiedConfig:
         -------
         PipelineConfig
         """
-        from src.pipeline.data_config import PipelineConfig
-
         # Parse timeframe minutes for embargo calculation
-        from src.common.timeframes import get_timeframe_minutes
+        from src.core.common.timeframes import get_timeframe_minutes
+        from src.data.pipeline.data_config import PipelineConfig
 
         tf_minutes = get_timeframe_minutes(self.timeframes.default_primary)
         purge_bars = self.purge_embargo.compute_purge_bars(self.horizons.max_horizon)
@@ -1044,7 +1066,7 @@ class UnifiedConfig:
         -------
         HorizonConfig
         """
-        from src.common.horizon_config import HorizonConfig
+        from src.core.common.horizon_config import HorizonConfig
 
         return HorizonConfig(
             horizons=self.horizons.active,

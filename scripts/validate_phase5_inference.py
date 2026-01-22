@@ -33,6 +33,7 @@ sys.path.insert(0, str(project_root))
 @dataclass
 class ComponentTestResult:
     """Result for a single component test."""
+
     component_name: str
     passed: bool
     error: str | None = None
@@ -42,6 +43,7 @@ class ComponentTestResult:
 @dataclass
 class Phase5ValidationReport:
     """Complete validation report for PHASE_5."""
+
     results: list[ComponentTestResult] = field(default_factory=list)
     bundle_versions: dict[str, str] = field(default_factory=dict)
     import_errors: list[str] = field(default_factory=list)
@@ -75,7 +77,7 @@ class Phase5ValidationReport:
         print("=" * 80)
 
         # Summary
-        print(f"\nSUMMARY:")
+        print("\nSUMMARY:")
         print(f"  Total Components Tested: {self.total_tested}")
         print(f"  Passed: {self.total_passed}")
         print(f"  Failed: {self.total_failed}")
@@ -83,7 +85,7 @@ class Phase5ValidationReport:
 
         # Bundle Versions
         if self.bundle_versions:
-            print(f"\nBUNDLE VERSIONS:")
+            print("\nBUNDLE VERSIONS:")
             for name, version in self.bundle_versions.items():
                 print(f"  {name}: {version}")
 
@@ -94,7 +96,7 @@ class Phase5ValidationReport:
                 print(f"  [ERROR] {err}")
 
         # Detailed Results
-        print(f"\nDETAILED RESULTS:")
+        print("\nDETAILED RESULTS:")
         print("-" * 80)
 
         for result in self.results:
@@ -123,8 +125,8 @@ def test_inference_orchestrator(report: Phase5ValidationReport) -> None:
             InferenceOrchestrator,
             PredictionResult,
             load_inference,
-            predict_from_bundle,
             predict_batch_from_bundle,
+            predict_from_bundle,
         )
 
         # Test class instantiation
@@ -173,6 +175,7 @@ def test_inference_orchestrator(report: Phase5ValidationReport) -> None:
 
         # Test PredictionResult dataclass
         import numpy as np
+
         pred_result = PredictionResult(
             class_predictions=np.array([0, 1, -1]),
             class_probabilities=np.array([[0.2, 0.5, 0.3], [0.1, 0.2, 0.7], [0.6, 0.3, 0.1]]),
@@ -188,52 +191,62 @@ def test_inference_orchestrator(report: Phase5ValidationReport) -> None:
         summary = pred_result.summary()
 
         if missing_methods:
-            report.results.append(ComponentTestResult(
-                component_name="InferenceOrchestrator",
-                passed=False,
-                error=f"Missing methods/properties: {missing_methods}",
-                details={
-                    "class_methods_expected": class_methods,
-                    "instance_methods_expected": instance_methods,
-                    "properties_expected": properties,
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="InferenceOrchestrator",
+                    passed=False,
+                    error=f"Missing methods/properties: {missing_methods}",
+                    details={
+                        "class_methods_expected": class_methods,
+                        "instance_methods_expected": instance_methods,
+                        "properties_expected": properties,
+                    },
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="InferenceOrchestrator",
-                passed=True,
-                details={
-                    "factory_methods": len(class_methods),
-                    "prediction_methods": len(instance_methods),
-                    "properties": len(properties),
-                    "PredictionResult": "verified",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="InferenceOrchestrator",
+                    passed=True,
+                    details={
+                        "factory_methods": len(class_methods),
+                        "prediction_methods": len(instance_methods),
+                        "properties": len(properties),
+                        "PredictionResult": "verified",
+                    },
+                )
+            )
 
         # Test convenience functions
-        report.results.append(ComponentTestResult(
-            component_name="InferenceOrchestrator.convenience_functions",
-            passed=True,
-            details={
-                "load_inference": callable(load_inference),
-                "predict_from_bundle": callable(predict_from_bundle),
-                "predict_batch_from_bundle": callable(predict_batch_from_bundle),
-            },
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="InferenceOrchestrator.convenience_functions",
+                passed=True,
+                details={
+                    "load_inference": callable(load_inference),
+                    "predict_from_bundle": callable(predict_from_bundle),
+                    "predict_batch_from_bundle": callable(predict_batch_from_bundle),
+                },
+            )
+        )
 
     except ImportError as e:
         report.import_errors.append(f"InferenceOrchestrator: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="InferenceOrchestrator",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="InferenceOrchestrator",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="InferenceOrchestrator",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="InferenceOrchestrator",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_bundle_builder(report: Phase5ValidationReport) -> None:
@@ -281,45 +294,55 @@ def test_bundle_builder(report: Phase5ValidationReport) -> None:
 
         # Need config to instantiate, just check class attributes
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="BundleBuilder",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="BundleBuilder",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="BundleBuilder",
-                passed=True,
-                details={
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                    "BundleBuildResult": "verified",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="BundleBuilder",
+                    passed=True,
+                    details={
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                        "BundleBuildResult": "verified",
+                    },
+                )
+            )
 
         # Test convenience functions
-        report.results.append(ComponentTestResult(
-            component_name="BundleBuilder.convenience_functions",
-            passed=True,
-            details={
-                "build_bundles": callable(build_bundles),
-                "build_from_run": callable(build_from_run),
-            },
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="BundleBuilder.convenience_functions",
+                passed=True,
+                details={
+                    "build_bundles": callable(build_bundles),
+                    "build_from_run": callable(build_from_run),
+                },
+            )
+        )
 
     except ImportError as e:
         report.import_errors.append(f"BundleBuilder: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="BundleBuilder",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="BundleBuilder",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="BundleBuilder",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="BundleBuilder",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_ensemble_bundle(report: Phase5ValidationReport) -> None:
@@ -328,11 +351,11 @@ def test_ensemble_bundle(report: Phase5ValidationReport) -> None:
 
     try:
         from src.inference.ensemble_bundle import (
-            EnsembleBundle,
-            EnsembleBundleMetadata,
-            EnsembleBundleManifest,
-            AlignmentConfig,
             ENSEMBLE_BUNDLE_VERSION,
+            AlignmentConfig,
+            EnsembleBundle,
+            EnsembleBundleManifest,
+            EnsembleBundleMetadata,
         )
 
         # Record version
@@ -401,38 +424,46 @@ def test_ensemble_bundle(report: Phase5ValidationReport) -> None:
                 missing.append(f"instance:{method}")
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="EnsembleBundle",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="EnsembleBundle",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="EnsembleBundle",
-                passed=True,
-                details={
-                    "version": ENSEMBLE_BUNDLE_VERSION,
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                    "EnsembleBundleMetadata": "verified",
-                    "EnsembleBundleManifest": "verified",
-                    "AlignmentConfig": "verified",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="EnsembleBundle",
+                    passed=True,
+                    details={
+                        "version": ENSEMBLE_BUNDLE_VERSION,
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                        "EnsembleBundleMetadata": "verified",
+                        "EnsembleBundleManifest": "verified",
+                        "AlignmentConfig": "verified",
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"EnsembleBundle: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="EnsembleBundle",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="EnsembleBundle",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="EnsembleBundle",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="EnsembleBundle",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_model_bundle(report: Phase5ValidationReport) -> None:
@@ -441,11 +472,11 @@ def test_model_bundle(report: Phase5ValidationReport) -> None:
 
     try:
         from src.inference.bundle import (
-            ModelBundle,
-            BundleMetadata,
-            BundleManifest,
-            BUNDLE_VERSION,
             BUNDLE_PREPROCESSING_GRAPH_FILE,
+            BUNDLE_VERSION,
+            BundleManifest,
+            BundleMetadata,
+            ModelBundle,
         )
 
         # Record version
@@ -499,38 +530,46 @@ def test_model_bundle(report: Phase5ValidationReport) -> None:
                 missing.append(f"instance:{method}")
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="ModelBundle",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="ModelBundle",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="ModelBundle",
-                passed=True,
-                details={
-                    "version": BUNDLE_VERSION,
-                    "preprocessing_graph_file": BUNDLE_PREPROCESSING_GRAPH_FILE,
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                    "BundleMetadata": "verified",
-                    "BundleManifest": "verified",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="ModelBundle",
+                    passed=True,
+                    details={
+                        "version": BUNDLE_VERSION,
+                        "preprocessing_graph_file": BUNDLE_PREPROCESSING_GRAPH_FILE,
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                        "BundleMetadata": "verified",
+                        "BundleManifest": "verified",
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"ModelBundle: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="ModelBundle",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="ModelBundle",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="ModelBundle",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="ModelBundle",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_preprocessing_graph(report: Phase5ValidationReport) -> None:
@@ -539,16 +578,16 @@ def test_preprocessing_graph(report: Phase5ValidationReport) -> None:
 
     try:
         from src.inference.preprocessing_graph import (
-            PreprocessingGraph,
-            PreprocessingGraphConfig,
+            PREPROCESSING_GRAPH_FILE,
+            PREPROCESSING_GRAPH_VERSION,
             CleaningConfig,
             IndicatorConfig,
             MTFConfig,
-            WaveletConfig,
+            PreprocessingGraph,
+            PreprocessingGraphConfig,
             RegimeConfig,
             ScalingConfig,
-            PREPROCESSING_GRAPH_VERSION,
-            PREPROCESSING_GRAPH_FILE,
+            WaveletConfig,
         )
 
         # Record version
@@ -604,44 +643,52 @@ def test_preprocessing_graph(report: Phase5ValidationReport) -> None:
                 missing.append(f"instance:{method}")
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="PreprocessingGraph",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="PreprocessingGraph",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="PreprocessingGraph",
-                passed=True,
-                details={
-                    "version": PREPROCESSING_GRAPH_VERSION,
-                    "file_constant": PREPROCESSING_GRAPH_FILE,
-                    "config_classes": [
-                        "CleaningConfig",
-                        "IndicatorConfig",
-                        "MTFConfig",
-                        "WaveletConfig",
-                        "RegimeConfig",
-                        "ScalingConfig",
-                    ],
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="PreprocessingGraph",
+                    passed=True,
+                    details={
+                        "version": PREPROCESSING_GRAPH_VERSION,
+                        "file_constant": PREPROCESSING_GRAPH_FILE,
+                        "config_classes": [
+                            "CleaningConfig",
+                            "IndicatorConfig",
+                            "MTFConfig",
+                            "WaveletConfig",
+                            "RegimeConfig",
+                            "ScalingConfig",
+                        ],
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"PreprocessingGraph: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="PreprocessingGraph",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="PreprocessingGraph",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="PreprocessingGraph",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="PreprocessingGraph",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_inference_pipeline(report: Phase5ValidationReport) -> None:
@@ -650,14 +697,20 @@ def test_inference_pipeline(report: Phase5ValidationReport) -> None:
 
     try:
         from src.inference.pipeline import (
+            EnsembleResult,
             InferencePipeline,
             InferenceResult,
-            EnsembleResult,
         )
 
         # Test class methods
         class_methods = ["from_bundle", "from_bundles"]
-        instance_methods = ["predict", "predict_all", "predict_ensemble", "validate", "get_model_info"]
+        instance_methods = [
+            "predict",
+            "predict_all",
+            "predict_ensemble",
+            "validate",
+            "get_model_info",
+        ]
         properties = ["n_models", "model_names", "feature_columns", "horizon"]
 
         missing = []
@@ -671,6 +724,7 @@ def test_inference_pipeline(report: Phase5ValidationReport) -> None:
 
         # Test dataclasses (just verify they can be imported)
         import numpy as np
+
         from src.models.base import PredictionOutput
 
         pred_output = PredictionOutput(
@@ -689,37 +743,45 @@ def test_inference_pipeline(report: Phase5ValidationReport) -> None:
         df = inf_result.to_dataframe()
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="InferencePipeline",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="InferencePipeline",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="InferencePipeline",
-                passed=True,
-                details={
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                    "properties": properties,
-                    "InferenceResult": "verified",
-                    "EnsembleResult": "verified",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="InferencePipeline",
+                    passed=True,
+                    details={
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                        "properties": properties,
+                        "InferenceResult": "verified",
+                        "EnsembleResult": "verified",
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"InferencePipeline: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="InferencePipeline",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="InferencePipeline",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="InferencePipeline",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="InferencePipeline",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_batch_predictor(report: Phase5ValidationReport) -> None:
@@ -760,37 +822,45 @@ def test_batch_predictor(report: Phase5ValidationReport) -> None:
                 missing.append(f"instance:{method}")
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="BatchPredictor",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="BatchPredictor",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="BatchPredictor",
-                passed=True,
-                details={
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                    "BatchProgress": "verified",
-                    "BatchResult": "verified",
-                    "run_batch_inference": callable(run_batch_inference),
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="BatchPredictor",
+                    passed=True,
+                    details={
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                        "BatchProgress": "verified",
+                        "BatchResult": "verified",
+                        "run_batch_inference": callable(run_batch_inference),
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"BatchPredictor: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="BatchPredictor",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="BatchPredictor",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="BatchPredictor",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="BatchPredictor",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_model_server(report: Phase5ValidationReport) -> None:
@@ -828,36 +898,44 @@ def test_model_server(report: Phase5ValidationReport) -> None:
                 missing.append(f"instance:{method}")
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="ModelServer",
-                passed=False,
-                error=f"Missing methods: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="ModelServer",
+                    passed=False,
+                    error=f"Missing methods: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="ModelServer",
-                passed=True,
-                details={
-                    "class_methods": class_methods,
-                    "instance_methods": instance_methods,
-                    "ServerConfig": "verified",
-                    "start_server": callable(start_server),
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="ModelServer",
+                    passed=True,
+                    details={
+                        "class_methods": class_methods,
+                        "instance_methods": instance_methods,
+                        "ServerConfig": "verified",
+                        "start_server": callable(start_server),
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"ModelServer: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="ModelServer",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="ModelServer",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="ModelServer",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="ModelServer",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_integration_pipeline_config(report: Phase5ValidationReport) -> None:
@@ -880,34 +958,42 @@ def test_integration_pipeline_config(report: Phase5ValidationReport) -> None:
         missing = [a for a in attrs if not hasattr(config, a)]
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: PipelineConfig (PHASE_0)",
-                passed=False,
-                error=f"Missing attributes: {missing}",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: PipelineConfig (PHASE_0)",
+                    passed=False,
+                    error=f"Missing attributes: {missing}",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: PipelineConfig (PHASE_0)",
-                passed=True,
-                details={
-                    "attributes_verified": attrs,
-                    "PipelineConfig": "importable",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: PipelineConfig (PHASE_0)",
+                    passed=True,
+                    details={
+                        "attributes_verified": attrs,
+                        "PipelineConfig": "importable",
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"PipelineConfig: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="Integration: PipelineConfig (PHASE_0)",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: PipelineConfig (PHASE_0)",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="Integration: PipelineConfig (PHASE_0)",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: PipelineConfig (PHASE_0)",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_integration_oof_aligner(report: Phase5ValidationReport) -> None:
@@ -915,7 +1001,7 @@ def test_integration_oof_aligner(report: Phase5ValidationReport) -> None:
     print("\nTesting OOFAligner integration (PHASE_2)...")
 
     try:
-        from src.adapters.alignment import OOFAligner, AlignedOOFResult
+        from src.data.adapters.alignment import AlignedOOFResult, OOFAligner
         from src.core.interfaces import OOFResult
 
         # Test that OOFAligner can be imported
@@ -923,36 +1009,44 @@ def test_integration_oof_aligner(report: Phase5ValidationReport) -> None:
 
         # Verify primary method (align) - align_indices may be internal
         if not hasattr(aligner, "align"):
-            report.results.append(ComponentTestResult(
-                component_name="Integration: OOFAligner (PHASE_2)",
-                passed=False,
-                error="Missing align() method",
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: OOFAligner (PHASE_2)",
+                    passed=False,
+                    error="Missing align() method",
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: OOFAligner (PHASE_2)",
-                passed=True,
-                details={
-                    "OOFAligner": "verified",
-                    "AlignedOOFResult": "verified",
-                    "OOFResult": "verified",
-                    "align_method": "present",
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: OOFAligner (PHASE_2)",
+                    passed=True,
+                    details={
+                        "OOFAligner": "verified",
+                        "AlignedOOFResult": "verified",
+                        "OOFResult": "verified",
+                        "align_method": "present",
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"OOFAligner: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="Integration: OOFAligner (PHASE_2)",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: OOFAligner (PHASE_2)",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="Integration: OOFAligner (PHASE_2)",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: OOFAligner (PHASE_2)",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_integration_training_result(report: Phase5ValidationReport) -> None:
@@ -974,45 +1068,56 @@ def test_integration_training_result(report: Phase5ValidationReport) -> None:
 
         # Check attributes exist as class attributes or annotations
         import inspect
+
         sig = inspect.signature(TrainingRunResult)
-        params = list(sig.parameters.keys()) if hasattr(TrainingRunResult, '__init__') else []
+        params = list(sig.parameters.keys()) if hasattr(TrainingRunResult, "__init__") else []
 
         # For dataclasses, check annotations
-        annotations = getattr(TrainingRunResult, '__annotations__', {})
+        annotations = getattr(TrainingRunResult, "__annotations__", {})
         available = set(params) | set(annotations.keys())
 
-        missing = [a for a in expected_attrs if a not in available and not hasattr(TrainingRunResult, a)]
+        missing = [
+            a for a in expected_attrs if a not in available and not hasattr(TrainingRunResult, a)
+        ]
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: TrainingRunResult (PHASE_3)",
-                passed=False,
-                error=f"Missing attributes: {missing}",
-                details={"available": list(available)},
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: TrainingRunResult (PHASE_3)",
+                    passed=False,
+                    error=f"Missing attributes: {missing}",
+                    details={"available": list(available)},
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: TrainingRunResult (PHASE_3)",
-                passed=True,
-                details={
-                    "TrainingRunResult": "verified",
-                    "expected_attrs": expected_attrs,
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: TrainingRunResult (PHASE_3)",
+                    passed=True,
+                    details={
+                        "TrainingRunResult": "verified",
+                        "expected_attrs": expected_attrs,
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"TrainingRunResult: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="Integration: TrainingRunResult (PHASE_3)",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: TrainingRunResult (PHASE_3)",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="Integration: TrainingRunResult (PHASE_3)",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: TrainingRunResult (PHASE_3)",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_integration_ensemble_result(report: Phase5ValidationReport) -> None:
@@ -1034,41 +1139,51 @@ def test_integration_ensemble_result(report: Phase5ValidationReport) -> None:
         ]
 
         # Check attributes
-        annotations = getattr(EnsembleResult, '__annotations__', {})
+        annotations = getattr(EnsembleResult, "__annotations__", {})
         available = set(annotations.keys())
 
-        missing = [a for a in expected_attrs if a not in available and not hasattr(EnsembleResult, a)]
+        missing = [
+            a for a in expected_attrs if a not in available and not hasattr(EnsembleResult, a)
+        ]
 
         if missing:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: EnsembleResult (PHASE_4)",
-                passed=False,
-                error=f"Missing attributes: {missing}",
-                details={"available": list(available)},
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: EnsembleResult (PHASE_4)",
+                    passed=False,
+                    error=f"Missing attributes: {missing}",
+                    details={"available": list(available)},
+                )
+            )
         else:
-            report.results.append(ComponentTestResult(
-                component_name="Integration: EnsembleResult (PHASE_4)",
-                passed=True,
-                details={
-                    "EnsembleResult": "verified",
-                    "expected_attrs": expected_attrs,
-                },
-            ))
+            report.results.append(
+                ComponentTestResult(
+                    component_name="Integration: EnsembleResult (PHASE_4)",
+                    passed=True,
+                    details={
+                        "EnsembleResult": "verified",
+                        "expected_attrs": expected_attrs,
+                    },
+                )
+            )
 
     except ImportError as e:
         report.import_errors.append(f"EnsembleResult: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="Integration: EnsembleResult (PHASE_4)",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: EnsembleResult (PHASE_4)",
+                passed=False,
+                error=str(e),
+            )
+        )
     except Exception as e:
-        report.results.append(ComponentTestResult(
-            component_name="Integration: EnsembleResult (PHASE_4)",
-            passed=False,
-            error=f"{type(e).__name__}: {e}",
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="Integration: EnsembleResult (PHASE_4)",
+                passed=False,
+                error=f"{type(e).__name__}: {e}",
+            )
+        )
 
 
 def test_inference_package_exports(report: Phase5ValidationReport) -> None:
@@ -1077,78 +1192,82 @@ def test_inference_package_exports(report: Phase5ValidationReport) -> None:
 
     try:
         from src.inference import (
-            # Orchestrator (PHASE_5)
-            InferenceOrchestrator,
-            PredictionResult,
-            load_inference,
-            predict_from_bundle,
-            predict_batch_from_bundle,
-            # Builder (PHASE_5)
-            BundleBuilder,
-            BundleBuildResult,
-            build_bundles,
-            build_from_run,
-            # EnsembleBundle (PHASE_5)
-            EnsembleBundle,
-            EnsembleBundleMetadata,
-            EnsembleBundleManifest,
-            AlignmentConfig,
-            ENSEMBLE_BUNDLE_VERSION,
-            # ModelBundle
-            ModelBundle,
-            BundleMetadata,
-            BundleManifest,
-            BUNDLE_VERSION,
             BUNDLE_PREPROCESSING_GRAPH_FILE,
-            # PreprocessingGraph
-            PreprocessingGraph,
-            PreprocessingGraphConfig,
-            CleaningConfig,
-            IndicatorConfig,
-            MTFConfig,
-            WaveletConfig,
-            RegimeConfig,
-            ScalingConfig,
-            PREPROCESSING_GRAPH_VERSION,
+            BUNDLE_VERSION,
+            ENSEMBLE_BUNDLE_VERSION,
             PREPROCESSING_GRAPH_FILE,
-            # Pipeline
-            InferencePipeline,
-            InferenceResult,
-            EnsembleResult,
+            PREPROCESSING_GRAPH_VERSION,
+            AlignmentConfig,
             # Batch
             BatchPredictor,
             BatchProgress,
             BatchResult,
-            run_batch_inference,
+            # Builder (PHASE_5)
+            BundleBuilder,
+            BundleBuildResult,
+            BundleManifest,
+            BundleMetadata,
+            CleaningConfig,
+            # EnsembleBundle (PHASE_5)
+            EnsembleBundle,
+            EnsembleBundleManifest,
+            EnsembleBundleMetadata,
+            EnsembleResult,
+            IndicatorConfig,
+            # Orchestrator (PHASE_5)
+            InferenceOrchestrator,
+            # Pipeline
+            InferencePipeline,
+            InferenceResult,
+            # ModelBundle
+            ModelBundle,
             # Server
             ModelServer,
+            MTFConfig,
+            PredictionResult,
+            # PreprocessingGraph
+            PreprocessingGraph,
+            PreprocessingGraphConfig,
+            RegimeConfig,
+            ScalingConfig,
             ServerConfig,
+            WaveletConfig,
+            build_bundles,
+            build_from_run,
+            load_inference,
+            predict_batch_from_bundle,
+            predict_from_bundle,
+            run_batch_inference,
             start_server,
         )
 
-        report.results.append(ComponentTestResult(
-            component_name="inference package exports",
-            passed=True,
-            details={
-                "orchestrator_exports": 5,
-                "builder_exports": 4,
-                "ensemble_bundle_exports": 5,
-                "model_bundle_exports": 5,
-                "preprocessing_exports": 10,
-                "pipeline_exports": 3,
-                "batch_exports": 4,
-                "server_exports": 3,
-                "total_exports": 39,
-            },
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="inference package exports",
+                passed=True,
+                details={
+                    "orchestrator_exports": 5,
+                    "builder_exports": 4,
+                    "ensemble_bundle_exports": 5,
+                    "model_bundle_exports": 5,
+                    "preprocessing_exports": 10,
+                    "pipeline_exports": 3,
+                    "batch_exports": 4,
+                    "server_exports": 3,
+                    "total_exports": 39,
+                },
+            )
+        )
 
     except ImportError as e:
         report.import_errors.append(f"inference package: {e}")
-        report.results.append(ComponentTestResult(
-            component_name="inference package exports",
-            passed=False,
-            error=str(e),
-        ))
+        report.results.append(
+            ComponentTestResult(
+                component_name="inference package exports",
+                passed=False,
+                error=str(e),
+            )
+        )
 
 
 # =============================================================================

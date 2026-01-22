@@ -32,21 +32,19 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from src.core import (
-    PipelineConfig,
-    MODEL_DATA_RANKS,
     MODEL_ADAPTER_MAP,
-    DataRank,
+    MODEL_DATA_RANKS,
+    PipelineConfig,
 )
 from src.data.adapters import (
-    UnifiedDataPreparation,
     PreparedData,
-    AdapterFactory,
+    UnifiedDataPreparation,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,16 +77,16 @@ class TrainedModelArtifact:
     horizon: int
     data_rank: int
     adapter_type: str
-    feature_names: List[str]
+    feature_names: list[str]
     n_train_samples: int
     n_val_samples: int
-    metrics: Dict[str, float]
+    metrics: dict[str, float]
     training_time_seconds: float
-    model_path: Optional[Path] = None
-    trainer: Optional[Any] = None  # Trainer instance
-    hyperparams: Dict[str, Any] = field(default_factory=dict)
+    model_path: Path | None = None
+    trainer: Any | None = None  # Trainer instance
+    hyperparams: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert artifact to dictionary for serialization."""
         return {
             "model_name": self.model_name,
@@ -168,7 +166,7 @@ class ModelTrainer:
         self._data_prep = UnifiedDataPreparation(config)
 
         # Trained artifacts
-        self._artifacts: Dict[str, TrainedModelArtifact] = {}
+        self._artifacts: dict[str, TrainedModelArtifact] = {}
 
         logger.info("ModelTrainer initialized")
         logger.info(f"  Models: {config.models}")
@@ -179,8 +177,8 @@ class ModelTrainer:
         model_name: str,
         df: pd.DataFrame,
         horizon: int,
-        additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
-        hyperparams: Optional[Dict[str, Any]] = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+        hyperparams: dict[str, Any] | None = None,
     ) -> TrainedModelArtifact:
         """
         Train a single model.
@@ -252,9 +250,7 @@ class ModelTrainer:
 
         # Hyperparameter optimization if enabled and no overrides provided
         if self.config.optimize_hyperparams and hyperparams is None:
-            trainer_config = self._run_hyperparam_optimization(
-                trainer_config, prepared
-            )
+            trainer_config = self._run_hyperparam_optimization(trainer_config, prepared)
 
         trainer = Trainer(trainer_config)
 
@@ -278,9 +274,7 @@ class ModelTrainer:
             )
 
         # Generate feature names for flattened data
-        feature_names = prepared.feature_names or [
-            f"f{i}" for i in range(X_train_2d.shape[1])
-        ]
+        feature_names = prepared.feature_names or [f"f{i}" for i in range(X_train_2d.shape[1])]
 
         # Ensure we have enough feature names for flattened data
         if len(feature_names) < X_train_2d.shape[1]:
@@ -288,9 +282,7 @@ class ModelTrainer:
 
         # Create container with proper column names
         container = TimeSeriesDataContainer(
-            X_train=pd.DataFrame(
-                X_train_2d, columns=feature_names[: X_train_2d.shape[1]]
-            ),
+            X_train=pd.DataFrame(X_train_2d, columns=feature_names[: X_train_2d.shape[1]]),
             y_train=pd.Series(prepared.y_train),
             X_val=pd.DataFrame(X_val_2d, columns=feature_names[: X_val_2d.shape[1]]),
             y_val=pd.Series(prepared.y_val),
@@ -299,9 +291,7 @@ class ModelTrainer:
                 if X_test_2d is not None
                 else None
             ),
-            y_test=(
-                pd.Series(prepared.y_test) if prepared.y_test is not None else None
-            ),
+            y_test=(pd.Series(prepared.y_test) if prepared.y_test is not None else None),
             sample_weights=pd.Series(np.ones(len(prepared.y_train))),
         )
 
@@ -349,8 +339,8 @@ class ModelTrainer:
     def train_all(
         self,
         df: pd.DataFrame,
-        additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
-    ) -> Dict[str, TrainedModelArtifact]:
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> dict[str, TrainedModelArtifact]:
         """
         Train all configured models.
 
@@ -391,6 +381,7 @@ class ModelTrainer:
                     logger.error(f"Failed to train {model_name} for horizon {horizon}: {e}")
                     if self.config.verbose > 0:
                         import traceback
+
                         traceback.print_exc()
                     # Continue with other models
 
@@ -450,9 +441,7 @@ class ModelTrainer:
 
         return trainer_config
 
-    def get_artifact(
-        self, model_name: str, horizon: int
-    ) -> Optional[TrainedModelArtifact]:
+    def get_artifact(self, model_name: str, horizon: int) -> TrainedModelArtifact | None:
         """
         Get trained artifact by model name and horizon.
 
@@ -467,11 +456,11 @@ class ModelTrainer:
         return self._artifacts.get(key)
 
     @property
-    def artifacts(self) -> Dict[str, TrainedModelArtifact]:
+    def artifacts(self) -> dict[str, TrainedModelArtifact]:
         """Get all trained artifacts (copy)."""
         return self._artifacts.copy()
 
-    def save_artifacts_summary(self, path: Optional[Path] = None) -> Path:
+    def save_artifacts_summary(self, path: Path | None = None) -> Path:
         """
         Save summary of all trained artifacts.
 
@@ -516,7 +505,7 @@ class ModelTrainer:
         logger.info(f"Training summary saved: {path}")
         return path
 
-    def load_artifacts_summary(self, path: Optional[Path] = None) -> Dict[str, Any]:
+    def load_artifacts_summary(self, path: Path | None = None) -> dict[str, Any]:
         """
         Load artifacts summary from JSON file.
 
@@ -528,15 +517,15 @@ class ModelTrainer:
         """
         path = path or self.output_dir / "training_summary.json"
 
-        with open(path, "r") as f:
+        with open(path) as f:
             return json.load(f)
 
 
 def train_models(
     config: PipelineConfig,
     df: pd.DataFrame,
-    additional_dfs: Optional[Dict[str, pd.DataFrame]] = None,
-) -> Dict[str, TrainedModelArtifact]:
+    additional_dfs: dict[str, pd.DataFrame] | None = None,
+) -> dict[str, TrainedModelArtifact]:
     """
     Convenience function to train all models.
 

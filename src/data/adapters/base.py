@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -48,7 +48,7 @@ class AdapterResult:
 
     # Metadata
     feature_columns: list[str] = field(default_factory=list)
-    data_contract: "DataContract | None" = None
+    data_contract: DataContract | None = None
     adapter_name: str = ""
 
     def __post_init__(self) -> None:
@@ -74,15 +74,12 @@ class AdapterResult:
 
         # Check X shape matches declared rank
         if self.X.ndim != self.data_rank.value:
-            issues.append(
-                f"X rank mismatch: expected {self.data_rank.value}D, got {self.X.ndim}D"
-            )
+            issues.append(f"X rank mismatch: expected {self.data_rank.value}D, got {self.X.ndim}D")
 
         # Check y length
         if self.y.shape[0] != self.X.shape[0]:
             issues.append(
-                f"y length mismatch: X has {self.X.shape[0]} samples, "
-                f"y has {self.y.shape[0]}"
+                f"y length mismatch: X has {self.X.shape[0]} samples, " f"y has {self.y.shape[0]}"
             )
 
         # Check weights if present
@@ -153,7 +150,7 @@ class BaseAdapter(ABC):
     def transform(
         self,
         df: pd.DataFrame,
-        model_contract: "ModelContract | None" = None,
+        model_contract: ModelContract | None = None,
     ) -> AdapterResult:
         """
         Transform DataFrame to model-specific format.

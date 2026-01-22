@@ -16,9 +16,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from src.core.contracts import DataContract, DataRank
+
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
-from src.core.contracts import DataContract, DataRank
 
 if TYPE_CHECKING:
     from src.core.contracts import ModelContract
@@ -81,7 +82,7 @@ class SequenceAdapter(BaseAdapter):
     def transform(
         self,
         df: pd.DataFrame,
-        model_contract: "ModelContract | None" = None,
+        model_contract: ModelContract | None = None,
     ) -> AdapterResult:
         """
         Transform DataFrame to 3D sequence arrays.
@@ -130,9 +131,7 @@ class SequenceAdapter(BaseAdapter):
                 df, feature_cols, seq_len
             )
         else:
-            X, y, weights, original_indices = self._build_sequences(
-                df, feature_cols, seq_len
-            )
+            X, y, weights, original_indices = self._build_sequences(df, feature_cols, seq_len)
 
         # Handle empty result
         if X.shape[0] == 0:
@@ -293,8 +292,7 @@ class SequenceAdapter(BaseAdapter):
                     weights_list.append(weights_symbol)
 
                 logger.debug(
-                    f"Symbol {symbol}: {X_symbol.shape[0]} sequences from "
-                    f"{len(symbol_df)} rows"
+                    f"Symbol {symbol}: {X_symbol.shape[0]} sequences from " f"{len(symbol_df)} rows"
                 )
 
         # Handle case where no sequences were created

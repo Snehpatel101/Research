@@ -35,9 +35,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
-
-import numpy as np
+from typing import TYPE_CHECKING, Any
 
 from src.core import PipelineConfig
 
@@ -66,23 +64,25 @@ class BundleBuildResult:
         metadata: Additional metadata about the build
     """
 
-    bundle_paths: List[Path] = field(default_factory=list)
-    ensemble_bundle_path: Optional[Path] = None
+    bundle_paths: list[Path] = field(default_factory=list)
+    ensemble_bundle_path: Path | None = None
     n_bundles: int = 0
     total_size_mb: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "bundle_paths": [str(p) for p in self.bundle_paths],
-            "ensemble_bundle_path": str(self.ensemble_bundle_path) if self.ensemble_bundle_path else None,
+            "ensemble_bundle_path": str(self.ensemble_bundle_path)
+            if self.ensemble_bundle_path
+            else None,
             "n_bundles": self.n_bundles,
             "total_size_mb": self.total_size_mb,
             "metadata": self.metadata,
         }
 
-    def save(self, path: Union[str, Path]) -> Path:
+    def save(self, path: str | Path) -> Path:
         """
         Save build result to JSON.
 
@@ -98,7 +98,7 @@ class BundleBuildResult:
         return path
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "BundleBuildResult":
+    def load(cls, path: str | Path) -> BundleBuildResult:
         """
         Load build result from JSON.
 
@@ -114,7 +114,9 @@ class BundleBuildResult:
 
         return cls(
             bundle_paths=[Path(p) for p in data.get("bundle_paths", [])],
-            ensemble_bundle_path=Path(data["ensemble_bundle_path"]) if data.get("ensemble_bundle_path") else None,
+            ensemble_bundle_path=Path(data["ensemble_bundle_path"])
+            if data.get("ensemble_bundle_path")
+            else None,
             n_bundles=data.get("n_bundles", 0),
             total_size_mb=data.get("total_size_mb", 0.0),
             metadata=data.get("metadata", {}),
@@ -193,7 +195,7 @@ class BundleBuilder:
         logger.info(f"  Output: {self.bundles_dir}")
 
     @classmethod
-    def from_config(cls, config: PipelineConfig) -> "BundleBuilder":
+    def from_config(cls, config: PipelineConfig) -> BundleBuilder:
         """
         Create builder from PipelineConfig.
 
@@ -206,7 +208,7 @@ class BundleBuilder:
         return cls(config)
 
     @classmethod
-    def from_training_run(cls, run_path: Union[str, Path]) -> "BundleBuilder":
+    def from_training_run(cls, run_path: str | Path) -> BundleBuilder:
         """
         Create builder from a completed training run.
 
@@ -235,7 +237,7 @@ class BundleBuilder:
 
     def build_from_training_result(
         self,
-        training_result: "TrainingRunResult",
+        training_result: TrainingRunResult,
         include_preprocessing_graph: bool = True,
         include_calibrator: bool = True,
     ) -> BundleBuildResult:
@@ -261,15 +263,15 @@ class BundleBuilder:
         from src.inference.bundle import ModelBundle
         from src.inference.preprocessing_graph import PreprocessingGraph
 
-        bundle_paths: List[Path] = []
-        build_metadata: Dict[str, Any] = {
+        bundle_paths: list[Path] = []
+        build_metadata: dict[str, Any] = {
             "run_id": training_result.run_id,
             "models_bundled": [],
             "models_skipped": [],
         }
 
         # Create preprocessing graph if needed
-        preprocessing_graph: Optional[PreprocessingGraph] = None
+        preprocessing_graph: PreprocessingGraph | None = None
         if include_preprocessing_graph:
             preprocessing_graph = self._create_preprocessing_graph()
 
@@ -328,12 +330,14 @@ class BundleBuilder:
                 bundle.save(bundle_path, overwrite=True)
                 bundle_paths.append(bundle_path)
 
-                build_metadata["models_bundled"].append({
-                    "key": key,
-                    "model_name": model_name,
-                    "horizon": horizon,
-                    "bundle_path": str(bundle_path),
-                })
+                build_metadata["models_bundled"].append(
+                    {
+                        "key": key,
+                        "model_name": model_name,
+                        "horizon": horizon,
+                        "bundle_path": str(bundle_path),
+                    }
+                )
 
                 logger.info(f"Built bundle: {bundle_path}")
 
@@ -354,8 +358,8 @@ class BundleBuilder:
 
     def build_ensemble_bundle(
         self,
-        ensemble_result: "EnsembleResult",
-        base_bundles: Optional[List[Path]] = None,
+        ensemble_result: EnsembleResult,
+        base_bundles: list[Path] | None = None,
     ) -> Path:
         """
         Build ensemble bundle from PHASE_4 EnsembleResult.
@@ -423,8 +427,8 @@ class BundleBuilder:
 
     def build_all(
         self,
-        training_result: Optional["TrainingRunResult"] = None,
-        ensemble_result: Optional["EnsembleResult"] = None,
+        training_result: TrainingRunResult | None = None,
+        ensemble_result: EnsembleResult | None = None,
         include_preprocessing_graph: bool = True,
     ) -> BundleBuildResult:
         """
@@ -445,13 +449,11 @@ class BundleBuilder:
             ValueError: If both training_result and ensemble_result are None
         """
         if training_result is None and ensemble_result is None:
-            raise ValueError(
-                "At least one of training_result or ensemble_result must be provided"
-            )
+            raise ValueError("At least one of training_result or ensemble_result must be provided")
 
-        bundle_paths: List[Path] = []
-        ensemble_path: Optional[Path] = None
-        metadata: Dict[str, Any] = {}
+        bundle_paths: list[Path] = []
+        ensemble_path: Path | None = None
+        metadata: dict[str, Any] = {}
 
         # Build base model bundles
         if training_result is not None:
@@ -538,7 +540,7 @@ class BundleBuilder:
             horizon=self.config.horizons[0] if self.config.horizons else 20,
         )
 
-    def _extract_model(self, trainer: Any) -> Optional[Any]:
+    def _extract_model(self, trainer: Any) -> Any | None:
         """
         Extract model from trainer instance.
 
@@ -563,7 +565,7 @@ class BundleBuilder:
 
         return None
 
-    def _extract_scaler(self, trainer: Any) -> Optional[Any]:
+    def _extract_scaler(self, trainer: Any) -> Any | None:
         """
         Extract scaler from trainer instance.
 
@@ -583,7 +585,7 @@ class BundleBuilder:
         self,
         trainer: Any,
         n_features: int,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Extract feature column names from trainer.
 
@@ -608,10 +610,10 @@ class BundleBuilder:
                 return list(columns)
 
         # Fallback to generic names
-        logger.warning(f"No feature columns found, using generic names")
+        logger.warning("No feature columns found, using generic names")
         return [f"f{i}" for i in range(n_features)]
 
-    def _extract_calibrator(self, trainer: Any) -> Optional[Any]:
+    def _extract_calibrator(self, trainer: Any) -> Any | None:
         """
         Extract probability calibrator from trainer.
 
@@ -627,7 +629,7 @@ class BundleBuilder:
                 return calibrator
         return None
 
-    def _calculate_total_size(self, paths: List[Path]) -> float:
+    def _calculate_total_size(self, paths: list[Path]) -> float:
         """
         Calculate total size of bundles in MB.
 
@@ -641,16 +643,12 @@ class BundleBuilder:
         for path in paths:
             if path.exists():
                 if path.is_dir():
-                    total_bytes += sum(
-                        f.stat().st_size
-                        for f in path.rglob("*")
-                        if f.is_file()
-                    )
+                    total_bytes += sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
                 else:
                     total_bytes += path.stat().st_size
         return total_bytes / (1024 * 1024)
 
-    def validate_bundles(self) -> Dict[str, Any]:
+    def validate_bundles(self) -> dict[str, Any]:
         """
         Validate all bundles in the bundles directory.
 
@@ -659,7 +657,7 @@ class BundleBuilder:
         """
         from src.inference.bundle import ModelBundle
 
-        results: Dict[str, Any] = {
+        results: dict[str, Any] = {
             "valid": True,
             "bundles": {},
             "issues": [],
@@ -706,8 +704,8 @@ class BundleBuilder:
 
 def build_bundles(
     config: PipelineConfig,
-    training_result: "TrainingRunResult",
-    ensemble_result: Optional["EnsembleResult"] = None,
+    training_result: TrainingRunResult,
+    ensemble_result: EnsembleResult | None = None,
 ) -> BundleBuildResult:
     """
     Convenience function to build all bundles.
@@ -734,9 +732,9 @@ def build_bundles(
 
 
 def build_from_run(
-    run_path: Union[str, Path],
-    training_result: "TrainingRunResult",
-    ensemble_result: Optional["EnsembleResult"] = None,
+    run_path: str | Path,
+    training_result: TrainingRunResult,
+    ensemble_result: EnsembleResult | None = None,
 ) -> BundleBuildResult:
     """
     Build bundles from a completed training run.

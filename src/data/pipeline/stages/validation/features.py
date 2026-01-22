@@ -192,7 +192,7 @@ def run_stationarity_tests(df: pd.DataFrame, feature_cols: list[str]) -> list[di
     """
     logger.info("\n3. Stationarity tests (Augmented Dickey-Fuller)...")
 
-    from src.pipeline.config.features import STATIONARITY_TESTS
+    from src.data.pipeline.config.features import STATIONARITY_TESTS
 
     if not STATIONARITY_TESTS.get("enabled", False):
         logger.info("  Stationarity tests disabled by config")

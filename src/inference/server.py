@@ -29,7 +29,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -62,6 +62,7 @@ class ServerConfig:
 
 try:
     from pydantic import BaseModel, Field
+
     PYDANTIC_AVAILABLE = True
 except ImportError:
     PYDANTIC_AVAILABLE = False
@@ -77,13 +78,14 @@ class PredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
     return_probabilities: bool = Field(default=True, description="Return class probabilities")
 
     if not PYDANTIC_AVAILABLE:
+
         def __init__(self, features, calibrate=True, return_probabilities=True):
             self.features = features
             self.calibrate = calibrate
             self.return_probabilities = return_probabilities
 
         @classmethod
-        def from_dict(cls, data: dict[str, Any]) -> "PredictionRequest":
+        def from_dict(cls, data: dict[str, Any]) -> PredictionRequest:
             return cls(
                 features=data["features"],
                 calibrate=data.get("calibrate", True),
@@ -95,15 +97,23 @@ class PredictionResponse(BaseModel if PYDANTIC_AVAILABLE else object):
     """Response format for predictions."""
 
     predictions: list[int] = Field(..., description="Predicted class labels")
-    probabilities: Optional[list[list[float]]] = Field(None, description="Class probabilities")
-    confidence: Optional[list[float]] = Field(None, description="Prediction confidence scores")
+    probabilities: list[list[float]] | None = Field(None, description="Class probabilities")
+    confidence: list[float] | None = Field(None, description="Prediction confidence scores")
     inference_time_ms: float = Field(0.0, description="Inference time in milliseconds")
     model_name: str = Field("", description="Name of the model used")
     horizon: int = Field(0, description="Prediction horizon")
 
     if not PYDANTIC_AVAILABLE:
-        def __init__(self, predictions, probabilities=None, confidence=None,
-                     inference_time_ms=0.0, model_name="", horizon=0):
+
+        def __init__(
+            self,
+            predictions,
+            probabilities=None,
+            confidence=None,
+            inference_time_ms=0.0,
+            model_name="",
+            horizon=0,
+        ):
             self.predictions = predictions
             self.probabilities = probabilities
             self.confidence = confidence
@@ -131,7 +141,9 @@ class EnsemblePredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
     features: list[list[float]] = Field(..., description="2D array of features")
     calibrate: bool = Field(default=True, description="Apply calibration if available")
     return_probabilities: bool = Field(default=True, description="Return class probabilities")
-    voting_method: str = Field(default="soft_vote", description="Voting method: soft_vote or hard_vote")
+    voting_method: str = Field(
+        default="soft_vote", description="Voting method: soft_vote or hard_vote"
+    )
 
 
 class HealthResponse(BaseModel if PYDANTIC_AVAILABLE else object):
@@ -285,7 +297,7 @@ class ModelServer:
                 if len(request.features) > self.config.max_batch_size:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Batch size exceeds maximum ({self.config.max_batch_size})"
+                        detail=f"Batch size exceeds maximum ({self.config.max_batch_size})",
                     )
 
                 # Make predictions
@@ -328,20 +340,15 @@ class ModelServer:
             voting method (soft_vote or hard_vote).
             """
             if self.pipeline.n_models < 2:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Ensemble requires multiple models"
-                )
+                raise HTTPException(status_code=400, detail="Ensemble requires multiple models")
 
-            start_time = time.perf_counter()
+            time.perf_counter()
 
             try:
                 X = np.array(request.features, dtype=np.float32)
 
                 result = self.pipeline.predict_ensemble(
-                    X,
-                    method=request.voting_method,
-                    calibrate=request.calibrate
+                    X, method=request.voting_method, calibrate=request.calibrate
                 )
 
                 response = {
@@ -370,9 +377,7 @@ class ModelServer:
                 raise HTTPException(status_code=404, detail="Metrics disabled")
 
             avg_latency = (
-                self._total_latency_ms / self._request_count
-                if self._request_count > 0
-                else 0
+                self._total_latency_ms / self._request_count if self._request_count > 0 else 0
             )
 
             return {
@@ -405,8 +410,7 @@ class ModelServer:
             import uvicorn
         except ImportError:
             raise ImportError(
-                "uvicorn is required to run the server. "
-                "Install with: pip install uvicorn"
+                "uvicorn is required to run the server. " "Install with: pip install uvicorn"
             )
 
         if self._app is None:

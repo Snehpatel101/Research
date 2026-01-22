@@ -56,7 +56,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .environment import Environment, detect_environment
+from .environment import detect_environment
 from .exceptions import ConfigError
 from .loaders import (
     find_model_config,

@@ -4,11 +4,10 @@ Volume feature computation - OBV, VWAP, TWAP, dollar volume.
 PHASE_1 Unified Features: 15 VOLUME features.
 """
 
-from typing import Callable, Dict
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -222,7 +221,7 @@ def compute_dollar_volume_ratio(df: pd.DataFrame) -> pd.Series:
 # FEATURE MAP
 # =============================================================================
 
-VOLUME_FEATURES: Dict[str, Callable[[pd.DataFrame], pd.Series]] = {
+VOLUME_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # OBV
     "obv": compute_obv,
     "obv_sma_20": compute_obv_sma_20,

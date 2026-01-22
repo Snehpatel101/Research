@@ -55,7 +55,8 @@ from . import (
 # Core classes
 from .base import (
     BaseModel,
-    PredictionOutput,
+    PredictionOutput,  # Deprecated alias, use PredictionResult
+    PredictionResult,
     TrainingMetrics,
 )
 from .config import (
@@ -98,15 +99,9 @@ from .device import (
     print_gpu_info,
     setup_colab,
 )
-from .registry import (
-    ModelRegistry,
-    register,
-)
-from .trainer import (
-    Trainer,
-    compute_classification_metrics,
-    evaluate_model,
-    train_model,
+from .metrics import (
+    compute_metrics_with_regime_breakdown,
+    compute_regime_metrics,
 )
 from .regime_evaluation import (
     RegimeClassifier,
@@ -119,9 +114,9 @@ from .regime_evaluation import (
     evaluate_regime_performance,
     get_regime_summary,
 )
-from .metrics import (
-    compute_regime_metrics,
-    compute_metrics_with_regime_breakdown,
+from .registry import (
+    ModelRegistry,
+    register,
 )
 from .tracking import (
     ExperimentTracker,
@@ -134,6 +129,12 @@ from .trained_registry import (
     TrainedModelEntry,
     TrainedModelRegistry,
 )
+from .trainer import (
+    Trainer,
+    compute_classification_metrics,
+    evaluate_model,
+    train_model,
+)
 
 # Version
 __version__ = "0.1.0"
@@ -145,7 +146,8 @@ __all__ = [
     "__version__",
     # Base classes
     "BaseModel",
-    "PredictionOutput",
+    "PredictionResult",
+    "PredictionOutput",  # Deprecated alias, use PredictionResult
     "TrainingMetrics",
     # Registry
     "ModelRegistry",

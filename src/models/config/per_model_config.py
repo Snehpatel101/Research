@@ -29,7 +29,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.core.contracts import ModelContract
@@ -86,7 +86,7 @@ class PerModelConfig:
         self.name = self.name.lower().strip()
 
     @property
-    def contract(self) -> "ModelContract":
+    def contract(self) -> ModelContract:
         """Get the ModelContract for this model."""
         from src.core.contracts import get_model_contract
 
@@ -168,7 +168,7 @@ class PerModelConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PerModelConfig":
+    def from_dict(cls, data: dict[str, Any]) -> PerModelConfig:
         """Deserialize from dictionary."""
         return cls(
             name=data["name"],
@@ -183,7 +183,7 @@ class PerModelConfig:
         )
 
     @classmethod
-    def from_string(cls, model_name: str) -> "PerModelConfig":
+    def from_string(cls, model_name: str) -> PerModelConfig:
         """Create from just a model name (all defaults from contract)."""
         return cls(name=model_name)
 
@@ -253,8 +253,7 @@ class EnsemblePlan:
         valid_methods = {"soft", "hard"}
         if self.stacking_method not in valid_methods:
             raise ValueError(
-                f"stacking_method must be one of {valid_methods}, "
-                f"got '{self.stacking_method}'"
+                f"stacking_method must be one of {valid_methods}, " f"got '{self.stacking_method}'"
             )
 
     @property
@@ -379,7 +378,7 @@ class EnsemblePlan:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "EnsemblePlan":
+    def from_dict(cls, data: dict[str, Any]) -> EnsemblePlan:
         """Deserialize from dictionary."""
         return cls(
             base_models=[PerModelConfig.from_dict(m) for m in data["base_models"]],
@@ -398,7 +397,7 @@ class EnsemblePlan:
         base_models: list[str],
         meta_learner: str = "ridge_meta",
         **kwargs: Any,
-    ) -> "EnsemblePlan":
+    ) -> EnsemblePlan:
         """
         Create EnsemblePlan from model names (all defaults from contracts).
 

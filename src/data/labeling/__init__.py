@@ -24,7 +24,7 @@ Usage:
         >>> labels = labeler.create_labels(ohlcv_df)
 
     With Optimization:
-        >>> from src.labeling import LabelOptimizer, optimize_labels
+        >>> from src.data.labeling import LabelOptimizer, optimize_labels
         >>> result = optimize_labels(ohlcv_df, feature_df, n_trials=100)
         >>> print(f"Best config: {result.best_config}")
         >>> labels = TripleBarrierLabeler(result.best_config).create_labels(ohlcv_df)
@@ -46,20 +46,17 @@ from .base import (
     LabelingStrategy,
     LabelingType,
 )
-
+from .optimization import (
+    LabelOptimizationResult,
+    LabelOptimizer,
+    optimize_labels,
+)
 from .triple_barrier import (
     TripleBarrierConfig,
     TripleBarrierLabeler,
     triple_barrier_numba,
     triple_barrier_numba_with_costs,
 )
-
-from .optimization import (
-    LabelOptimizationResult,
-    LabelOptimizer,
-    optimize_labels,
-)
-
 
 __all__ = [
     # Base classes

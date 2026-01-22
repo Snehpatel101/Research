@@ -32,30 +32,30 @@ Usage:
     results = meta_trainer.run(container)
 """
 
+from .meta_labeling import (
+    MetaLabelingConfig,
+    MetaLabelingResult,
+    MetaLabelingTrainer,
+    compute_bet_size_labels,
+    compute_directional_meta_labels,
+)
+from .regime_aware import (
+    COMPOSITE_REGIMES,
+    TREND_REGIMES,
+    VOLATILITY_REGIMES,
+    RegimeAwareConfig,
+    RegimeAwareTrainer,
+    RegimeAwareTrainingResult,
+    RegimeTrainingResult,
+    detect_composite_regime,
+    detect_regimes,
+    detect_trend_regime,
+    detect_volatility_regime,
+)
 from .walk_forward import (
     WalkForwardTrainer,
     WalkForwardTrainerConfig,
     WalkForwardTrainingResult,
-)
-from .regime_aware import (
-    RegimeAwareTrainer,
-    RegimeAwareConfig,
-    RegimeAwareTrainingResult,
-    RegimeTrainingResult,
-    detect_regimes,
-    detect_volatility_regime,
-    detect_trend_regime,
-    detect_composite_regime,
-    COMPOSITE_REGIMES,
-    VOLATILITY_REGIMES,
-    TREND_REGIMES,
-)
-from .meta_labeling import (
-    MetaLabelingTrainer,
-    MetaLabelingConfig,
-    MetaLabelingResult,
-    compute_bet_size_labels,
-    compute_directional_meta_labels,
 )
 
 __all__ = [

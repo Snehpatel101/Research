@@ -224,7 +224,9 @@ class ModelRegistry:
             Sorted list of all model names (excluding aliases)
         """
         return sorted(
-            name for name, meta in cls._metadata.items() if name == meta["name"]  # Exclude aliases
+            name
+            for name, meta in cls._metadata.items()
+            if name == meta["name"]  # Exclude aliases
         )
 
     @classmethod
@@ -421,7 +423,7 @@ class ModelRegistry:
         try:
             # Try to instantiate the model
             model_class = cls._models[name.lower().strip()]
-            instance = model_class()
+            model_class()
             return True
         except ImportError:
             # Dependency not available (e.g., CatBoost not installed)

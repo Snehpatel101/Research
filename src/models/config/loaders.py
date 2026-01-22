@@ -251,7 +251,7 @@ def validate_ensemble_base_models(
 
     # Import validator lazily to avoid circular imports
     try:
-        from ..ensemble.validator import validate_ensemble_config, is_heterogeneous_ensemble
+        from ..ensemble.validator import is_heterogeneous_ensemble, validate_ensemble_config
     except ImportError:
         logger.debug("Ensemble validator not available, skipping validation")
         return True, None
@@ -307,8 +307,7 @@ def load_ensemble_config(
         )
         if not is_valid:
             raise ConfigError(
-                f"Ensemble configuration validation failed for '{model_name}':\n"
-                f"{error_msg}"
+                f"Ensemble configuration validation failed for '{model_name}':\n" f"{error_msg}"
             )
 
     return config

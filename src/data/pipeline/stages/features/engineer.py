@@ -14,8 +14,8 @@ import pandas as pd
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
-from .microstructure import add_microstructure_features
 from .entropy import add_entropy_features
+from .microstructure import add_microstructure_features
 from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
 from .moving_averages import add_ema, add_sma
 from .nan_handling import clean_nan_columns
@@ -27,8 +27,10 @@ from .scaling import PeriodScaler, create_period_config
 from .temporal import add_temporal_features
 from .trend import add_adx, add_supertrend
 from .volatility import (
+    ARCH_AVAILABLE,
     add_atr,
     add_bollinger_bands,
+    add_garch_features,
     add_garman_klass_volatility,
     add_higher_moments,
     add_historical_volatility,
@@ -40,7 +42,6 @@ from .volatility import (
 
 # Re-import here for wrapper methods
 from .volume import add_dollar_volume, add_twap_features, add_volume_features, add_vwap
-from .volatility import add_garch_features, ARCH_AVAILABLE
 from .wavelets import PYWT_AVAILABLE, add_wavelet_features
 
 # Configure logging
@@ -280,18 +281,20 @@ class FeatureEngineer:
             df = add_rogers_satchell_volatility(
                 df, self.feature_metadata, period=pc.get("rs_vol", [20])[0]
             )
-            df = add_yang_zhang_volatility(df, self.feature_metadata, period=pc.get("yz_vol", [20])[0])
+            df = add_yang_zhang_volatility(
+                df, self.feature_metadata, period=pc.get("yz_vol", [20])[0]
+            )
             # Add GARCH volatility forecast features (optional - requires arch library)
             if ARCH_AVAILABLE:
-                df = add_garch_features(
-                    df, self.feature_metadata, timeframe=self.timeframe
-                )
+                df = add_garch_features(df, self.feature_metadata, timeframe=self.timeframe)
         else:
             logger.info("Volatility features disabled via config")
 
         # Volume features (conditional on enable_volume_features)
         if self.enable_volume_features:
-            df = add_volume_features(df, self.feature_metadata, period=pc.get("volume_sma", [20])[0])
+            df = add_volume_features(
+                df, self.feature_metadata, period=pc.get("volume_sma", [20])[0]
+            )
             df = add_vwap(df, self.feature_metadata)
             df = add_dollar_volume(df, self.feature_metadata)
             df = add_twap_features(df, self.feature_metadata)
@@ -357,14 +360,12 @@ class FeatureEngineer:
         mtf_skip_reason = None
         if self.enable_mtf and len(df) >= self.mtf_min_rows:
             try:
-                from src.common.timeframes import get_timeframe_minutes, get_timeframe_suffix
+                from src.core.common.timeframes import get_timeframe_minutes, get_timeframe_suffix
 
                 base_minutes = get_timeframe_minutes(self.timeframe)
                 # Filter MTF timeframes to only those strictly greater than base
                 valid_mtf_timeframes = [
-                    tf
-                    for tf in self.mtf_timeframes
-                    if get_timeframe_minutes(tf) > base_minutes
+                    tf for tf in self.mtf_timeframes if get_timeframe_minutes(tf) > base_minutes
                 ]
                 if valid_mtf_timeframes:
                     logger.info(f"Adding MTF features for timeframes: {valid_mtf_timeframes}")
@@ -408,8 +409,11 @@ class FeatureEngineer:
         cols_dropped = nan_audit["cols_dropped"]
 
         # Get MTF column names using standardized suffix detection
-        from src.common.timeframes import get_timeframe_suffix
-        mtf_suffixes = [get_timeframe_suffix(tf) for tf in self.mtf_timeframes] if self.enable_mtf else []
+        from src.core.common.timeframes import get_timeframe_suffix
+
+        mtf_suffixes = (
+            [get_timeframe_suffix(tf) for tf in self.mtf_timeframes] if self.enable_mtf else []
+        )
         mtf_col_names = [c for c in df.columns if any(c.endswith(s) for s in mtf_suffixes)]
 
         # Get microstructure feature names

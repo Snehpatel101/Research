@@ -83,6 +83,9 @@ Example:
 """
 
 from .blending import BlendingEnsemble
+
+# REORG-003: Meta-learners now at top level (flattened from meta_learners/)
+from .calibrated_meta import CalibratedMetaLearner
 from .diversity import (
     DiversityAnalysisResult,
     DiversityAnalyzer,
@@ -104,21 +107,33 @@ from .diversity import (
     filter_correlated_models,
     select_diverse_models,
 )
-# REORG-003: Meta-learners now at top level (flattened from meta_learners/)
-from .calibrated_meta import CalibratedMetaLearner
-from .mlp_meta import MLPMetaLearner
-from .ridge_meta import RidgeMetaLearner
-from .xgboost_meta import XGBoostMeta
+
+# PHASE_4: Heterogeneous stacking dataset builder
+from .heterogeneous_stacking import (
+    HeterogeneousStackingBuilder,
+    StackingFeatures,
+    build_stacking_features,
+)
+
 # PHASE_4: Meta-learner factory for config-driven creation
 from .meta_factory import (
-    MetaLearnerFactory,
-    MetaLearnerConfig,
     META_LEARNER_REGISTRY,
-    get_meta_learner,
+    MetaLearnerConfig,
+    MetaLearnerFactory,
     create_meta_learner_from_config,
+    get_meta_learner,
     list_meta_learners,
     register_meta_learner,
 )
+from .mlp_meta import MLPMetaLearner
+
+# PHASE_4: EnsembleOrchestrator - THE single entry point for ensemble training
+from .orchestrator import (
+    EnsembleOrchestrator,
+    EnsembleResult,
+    build_ensemble,
+)
+from .ridge_meta import RidgeMetaLearner
 from .stacking import StackingEnsemble
 from .validator import (
     HETEROGENEOUS_ENSEMBLE_TYPES,
@@ -131,18 +146,7 @@ from .validator import (
     validate_ensemble_config,
 )
 from .voting import VotingEnsemble
-# PHASE_4: Heterogeneous stacking dataset builder
-from .heterogeneous_stacking import (
-    HeterogeneousStackingBuilder,
-    StackingFeatures,
-    build_stacking_features,
-)
-# PHASE_4: EnsembleOrchestrator - THE single entry point for ensemble training
-from .orchestrator import (
-    EnsembleOrchestrator,
-    EnsembleResult,
-    build_ensemble,
-)
+from .xgboost_meta import XGBoostMeta
 
 __all__ = [
     # Ensemble models

@@ -6,7 +6,7 @@ Import paths:
     from src.validation.evaluation import CVEvaluator
 
     # Legacy (still works, deprecation warning):
-    from src.evaluation import CVEvaluator
+    from src.validation.evaluation import CVEvaluator
 
 Provides model evaluation strategies:
 - cv: Cross-validation with PurgedKFold
@@ -14,9 +14,9 @@ Provides model evaluation strategies:
 - cpcv_pbo: CPCV-PBO (Combinatorially Purged Cross-Validation with Probability of Backtest Overfitting)
 """
 
+from .cpcv_pbo_evaluator import CPCVPBOEvaluator
 from .cv_evaluator import CVEvaluator
 from .walk_forward_evaluator import WalkForwardEvaluator
-from .cpcv_pbo_evaluator import CPCVPBOEvaluator
 
 __all__ = [
     "CVEvaluator",

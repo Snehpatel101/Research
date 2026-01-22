@@ -7,7 +7,7 @@ Provides non-time-based bar construction methods:
 - Time Bars: Standard time-based resampling (wrapper)
 
 Usage:
-    from src.pipeline.stages.clean.bar_builders import (
+    from src.data.pipeline.stages.clean.bar_builders import (
         build_bars,
         VolumeBarBuilder,
         DollarBarBuilder,
@@ -23,19 +23,19 @@ Usage:
     bars = build_bars(df, bar_type='time', target_timeframe='5min')
 """
 
-from src.pipeline.stages.clean.bar_builders.base import (
+from src.data.pipeline.stages.clean.bar_builders.base import (
     BarBuilderRegistry,
     BaseBarBuilder,
 )
-from src.pipeline.stages.clean.bar_builders.dollar_bars import DollarBarBuilder
-from src.pipeline.stages.clean.bar_builders.factory import (
+from src.data.pipeline.stages.clean.bar_builders.dollar_bars import DollarBarBuilder
+from src.data.pipeline.stages.clean.bar_builders.factory import (
     BarConfig,
     build_bars,
     create_builder,
     estimate_bar_count,
 )
-from src.pipeline.stages.clean.bar_builders.time_bars import TimeBarBuilder
-from src.pipeline.stages.clean.bar_builders.volume_bars import VolumeBarBuilder
+from src.data.pipeline.stages.clean.bar_builders.time_bars import TimeBarBuilder
+from src.data.pipeline.stages.clean.bar_builders.volume_bars import VolumeBarBuilder
 
 __all__ = [
     # Base

@@ -330,10 +330,7 @@ class SmartConfig:
         for model in self.models:
             if model not in MODEL_DEFAULTS:
                 available = list(MODEL_DEFAULTS.keys())
-                raise ValueError(
-                    f"Unknown model '{model}'. "
-                    f"Available: {available}"
-                )
+                raise ValueError(f"Unknown model '{model}'. " f"Available: {available}")
 
 
 # =============================================================================
@@ -627,7 +624,9 @@ def train(
     for model_cfg in resolved["models"]:
         logger.info(f"  {model_cfg.name}:")
         logger.info(f"    Timeframe: {model_cfg.timeframe}")
-        logger.info(f"    Features: {model_cfg.features} ({FEATURE_SETS.get(model_cfg.features, 'custom')})")
+        logger.info(
+            f"    Features: {model_cfg.features} ({FEATURE_SETS.get(model_cfg.features, 'custom')})"
+        )
         if model_cfg.sequence_length:
             logger.info(f"    Sequence length: {model_cfg.sequence_length}")
         if model_cfg.batch_size:
@@ -639,8 +638,8 @@ def train(
     logger.info("=" * 60)
 
     # Actually run training via orchestrator
-    from src.training.orchestrator import TrainingOrchestrator
     from src.training.config import ExperimentConfig, ModelConfig
+    from src.training.orchestrator import TrainingOrchestrator
 
     # Convert resolved config to ExperimentConfig
     model_configs = [
@@ -705,11 +704,7 @@ def list_models(family: str | None = None) -> list[str]:
     if family is None:
         return list(MODEL_DEFAULTS.keys())
 
-    return [
-        name
-        for name, defaults in MODEL_DEFAULTS.items()
-        if defaults["family"] == family
-    ]
+    return [name for name, defaults in MODEL_DEFAULTS.items() if defaults["family"] == family]
 
 
 def describe_model(model_name: str) -> str:
@@ -838,14 +833,18 @@ def preview_config(
         # Show sequence length (with override indicator)
         if resolved.sequence_length:
             if resolved.sequence_length != defaults["sequence_length"]:
-                print(f"  Sequence length: {resolved.sequence_length} (overridden from {defaults['sequence_length']})")
+                print(
+                    f"  Sequence length: {resolved.sequence_length} (overridden from {defaults['sequence_length']})"
+                )
             else:
                 print(f"  Sequence length: {resolved.sequence_length}")
 
         # Show batch size
         if resolved.batch_size:
             if resolved.batch_size != defaults["batch_size"]:
-                print(f"  Batch size: {resolved.batch_size} (overridden from {defaults['batch_size']})")
+                print(
+                    f"  Batch size: {resolved.batch_size} (overridden from {defaults['batch_size']})"
+                )
             else:
                 print(f"  Batch size: {resolved.batch_size}")
 
@@ -882,8 +881,12 @@ def quick_compare(models: list[str] | None = None) -> None:
         models = ["xgboost", "lightgbm", "lstm", "gru", "tcn", "patchtst", "itransformer"]
 
     # Header
-    print(f"\n{'Model':<15} {'Family':<11} {'Timeframe':<10} {'Features':<10} {'Seq Len':<8} {'Batch':<6}")
-    print("-" * 15 + " " + "-" * 11 + " " + "-" * 10 + " " + "-" * 10 + " " + "-" * 8 + " " + "-" * 6)
+    print(
+        f"\n{'Model':<15} {'Family':<11} {'Timeframe':<10} {'Features':<10} {'Seq Len':<8} {'Batch':<6}"
+    )
+    print(
+        "-" * 15 + " " + "-" * 11 + " " + "-" * 10 + " " + "-" * 10 + " " + "-" * 8 + " " + "-" * 6
+    )
 
     for model_name in models:
         if model_name not in MODEL_DEFAULTS:

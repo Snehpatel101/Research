@@ -218,7 +218,7 @@ def add_session_id(
     if datetime_column not in df.columns:
         raise ValueError(f"Missing required datetime column: {datetime_column}")
 
-    from src.pipeline.stages.sessions import SessionFilter, SessionName
+    from src.data.pipeline.stages.sessions import SessionFilter, SessionName
 
     df = df.copy()
     session_filter = SessionFilter(datetime_column=datetime_column)
@@ -275,7 +275,7 @@ def resample_ohlcv(
     >>> df_30min = resample_ohlcv(df_5min, '30min')  # Can resample from 5min to 30min
     """
     # Import validation function from config
-    from src.pipeline.config import parse_timeframe_to_minutes, validate_timeframe
+    from src.data.pipeline.config import parse_timeframe_to_minutes, validate_timeframe
 
     # Validate target timeframe
     validate_timeframe(target_timeframe)
@@ -381,7 +381,7 @@ def get_resampling_info(source_timeframe: str, target_timeframe: str) -> dict:
     -------
     ValueError : If target_timeframe is smaller than source_timeframe
     """
-    from src.pipeline.config import parse_timeframe_to_minutes, validate_timeframe
+    from src.data.pipeline.config import parse_timeframe_to_minutes, validate_timeframe
 
     validate_timeframe(source_timeframe)
     validate_timeframe(target_timeframe)

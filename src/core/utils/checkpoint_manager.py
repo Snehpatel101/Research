@@ -31,9 +31,7 @@ import time
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
-
-import numpy as np
+from typing import Any
 
 
 class CheckpointManager:
@@ -42,7 +40,7 @@ class CheckpointManager:
     def __init__(
         self,
         drive_path: str,
-        wandb_project: Optional[str] = None,
+        wandb_project: str | None = None,
         auto_save_interval: int = 1800,  # 30 minutes
         max_checkpoints: int = 3,  # Keep last 3 checkpoints
     ):
@@ -72,16 +70,14 @@ class CheckpointManager:
 
                 self.wandb = wandb
             except ImportError:
-                warnings.warn(
-                    "W&B not installed. Install with: pip install wandb"
-                )
+                warnings.warn("W&B not installed. Install with: pip install wandb")
                 self.wandb_project = None
 
     def init_wandb_run(
         self,
         run_name: str,
-        config: Dict[str, Any],
-        tags: Optional[list] = None,
+        config: dict[str, Any],
+        tags: list | None = None,
     ) -> None:
         """
         Initialize W&B run for experiment tracking.
@@ -104,8 +100,8 @@ class CheckpointManager:
     def save_checkpoint(
         self,
         phase: str,
-        state: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None,
+        state: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
         force: bool = False,
     ) -> Path:
         """
@@ -167,7 +163,7 @@ class CheckpointManager:
             )
             artifact.add_file(str(checkpoint_path))
             self.wandb_run.log_artifact(artifact)
-            print(f"☁️  Checkpoint uploaded to W&B")
+            print("☁️  Checkpoint uploaded to W&B")
 
         # Cleanup old checkpoints
         self._cleanup_old_checkpoints(phase)
@@ -177,7 +173,7 @@ class CheckpointManager:
 
     def load_latest_checkpoint(
         self, phase: str, prefer_wandb: bool = False
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Load latest checkpoint for a phase.
 
@@ -210,12 +206,10 @@ class CheckpointManager:
 
         return checkpoint
 
-    def _load_from_wandb(self, phase: str) -> Optional[Dict[str, Any]]:
+    def _load_from_wandb(self, phase: str) -> dict[str, Any] | None:
         """Load checkpoint from W&B artifacts."""
         try:
-            artifact = self.wandb_run.use_artifact(
-                f"checkpoint_{phase}:latest"
-            )
+            artifact = self.wandb_run.use_artifact(f"checkpoint_{phase}:latest")
             artifact_dir = artifact.download()
             checkpoint_files = list(Path(artifact_dir).glob("*.pkl"))
             if checkpoint_files:
@@ -239,11 +233,9 @@ class CheckpointManager:
 
     def should_auto_save(self) -> bool:
         """Check if auto-save interval has elapsed."""
-        return (
-            time.time() - self.last_save_time
-        ) >= self.auto_save_interval
+        return (time.time() - self.last_save_time) >= self.auto_save_interval
 
-    def log_metrics(self, metrics: Dict[str, Any], step: Optional[int] = None) -> None:
+    def log_metrics(self, metrics: dict[str, Any], step: int | None = None) -> None:
         """Log metrics to W&B."""
         if self.wandb_run:
             self.wandb_run.log(metrics, step=step)
@@ -276,9 +268,7 @@ if __name__ == "__main__":
         # ... train model ...
 
         # Log metrics
-        ckpt_mgr.log_metrics(
-            {"train_loss": 0.5, "val_loss": 0.6}, step=epoch
-        )
+        ckpt_mgr.log_metrics({"train_loss": 0.5, "val_loss": 0.6}, step=epoch)
 
         # Auto-save checkpoint
         if ckpt_mgr.should_auto_save():

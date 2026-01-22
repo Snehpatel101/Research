@@ -190,7 +190,7 @@ def _build_compatibility_error_message(
         msg.append(f"  - For {ensemble_name}: Use only tabular models: {tabular_models}")
     if len(sequence_models) >= 2:
         msg.append(f"  - For {ensemble_name}: Use only sequence models: {sequence_models}")
-    msg.append(f"  - For mixed models: Use stacking ensemble instead")
+    msg.append("  - For mixed models: Use stacking ensemble instead")
 
     msg.extend(["", "For more information, see docs/implementation/PHASE_5_ADAPTERS.md"])
 

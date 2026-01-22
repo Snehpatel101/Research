@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Any
 
+import numpy as np
 import optuna
 import pandas as pd
-import numpy as np
 
 from .strategies import get_strategy_for_model
 
@@ -65,8 +64,9 @@ def optimize_features_for_model(
     Returns:
         OptimizationResult with the optimized feature set.
     """
-    from src.models.registry import ModelRegistry
     from sklearn.metrics import f1_score
+
+    from src.models.registry import ModelRegistry
 
     strategy = get_strategy_for_model(model_name)
     baseline_features = strategy.baseline_features
@@ -99,9 +99,7 @@ def optimize_features_for_model(
             y_val=y_val.values,
         )
         baseline_preds = baseline_model.predict(X_val_baseline.values)
-        baseline_score = f1_score(
-            y_val.values, baseline_preds.class_predictions, average="macro"
-        )
+        baseline_score = f1_score(y_val.values, baseline_preds.class_predictions, average="macro")
     except Exception:
         baseline_score = 0.0
 
@@ -157,9 +155,7 @@ def optimize_features_for_model(
 
     # Calculate improvement
     improvement = (
-        (study.best_value - baseline_score) / baseline_score
-        if baseline_score > 0
-        else 0.0
+        (study.best_value - baseline_score) / baseline_score if baseline_score > 0 else 0.0
     )
 
     return OptimizationResult(
@@ -269,8 +265,9 @@ class FeatureOptimizer:
         Returns:
             OptimizationResult with the optimized feature subset.
         """
+        from sklearn.metrics import accuracy_score, f1_score
+
         from src.models.registry import ModelRegistry
-        from sklearn.metrics import f1_score, accuracy_score
 
         n_features = len(feature_names)
 
@@ -333,7 +330,9 @@ class FeatureOptimizer:
                 unselected = [i for i in range(n_features) if i not in selected_indices]
                 needed = self.min_features - len(selected_indices)
                 np.random.seed(self.random_seed + trial.number)
-                extra = list(np.random.choice(unselected, size=min(needed, len(unselected)), replace=False))
+                extra = list(
+                    np.random.choice(unselected, size=min(needed, len(unselected)), replace=False)
+                )
                 selected_indices.extend(extra)
 
             # Limit to n_selected features (trim if over)
@@ -387,9 +386,7 @@ class FeatureOptimizer:
 
         # Compute improvement vs baseline
         improvement = (
-            (study.best_value - baseline_score) / baseline_score
-            if baseline_score > 0
-            else 0.0
+            (study.best_value - baseline_score) / baseline_score if baseline_score > 0 else 0.0
         )
 
         return OptimizationResult(

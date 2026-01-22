@@ -2,10 +2,10 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.config.global_config import GlobalConfig
+    pass
 
 from .environment import resolve_device
 
@@ -136,9 +136,7 @@ class TrainerConfig:
         # Phase 1 SNwH: Validate new fields
         valid_mtf_modes = {"none", "indicators", "multi_stream"}
         if self.mtf_mode not in valid_mtf_modes:
-            raise ValueError(
-                f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'"
-            )
+            raise ValueError(f"mtf_mode must be one of {valid_mtf_modes}, got '{self.mtf_mode}'")
 
         valid_feature_modes = {"engineered", "raw", "hybrid", "oof_probs"}
         if self.feature_mode not in valid_feature_modes:
@@ -291,7 +289,7 @@ class TrainerConfig:
         Returns:
             ModelFeatureStrategy for the configured model
         """
-        from src.features.strategies import get_strategy_for_model, ModelFeatureStrategy
+        from src.data.features.strategies import get_strategy_for_model
 
         return get_strategy_for_model(self.model_name)
 
@@ -320,7 +318,7 @@ class TrainerConfig:
         Returns:
             List of resolved feature names
         """
-        from src.features.strategy_manager import FeatureStrategyManager
+        from src.data.features.strategy_manager import FeatureStrategyManager
 
         manager = FeatureStrategyManager(available_features=available_features)
         resolved = manager.get_features_for_model(self.model_name, strict=strict)

@@ -12,11 +12,11 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.pipeline.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
-from src.pipeline.config.features import get_drift_config
-from src.pipeline.stages.validation.drift import check_feature_drift
-from src.pipeline.utils.feature_sets import resolve_feature_set
-from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+from src.data.pipeline.config.feature_sets import get_feature_set_definitions, resolve_feature_set_names
+from src.data.pipeline.config.features import get_drift_config
+from src.data.pipeline.stages.validation.drift import check_feature_drift
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
+from src.data.pipeline.utils.feature_sets import resolve_feature_set
 
 if TYPE_CHECKING:
     from manifest import ArtifactManifest

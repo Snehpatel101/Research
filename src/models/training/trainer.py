@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from ..base import PredictionOutput, TrainingMetrics
 from ..calibration import CalibrationConfig, ProbabilityCalibrator
 from ..config import TrainerConfig
 from ..data_preparation import prepare_training_data
@@ -44,13 +43,13 @@ from ..registry import ModelRegistry
 from ..tracking import TrackerConfig, get_tracker
 from ..tracking.base import ExperimentTracker
 from .artifacts import TrainerArtifactsMixin
-from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
+from .evaluation import TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
 
 if TYPE_CHECKING:
+    from src.core.container import TimeSeriesDataContainer
     from src.core.coordination import TimeframeCoordinator
     from src.optimization.feature_selection import FeatureSelectionManager
-    from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +250,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         base_models = self.config.model_config.get("base_model_names", [])
         return is_heterogeneous_ensemble(base_models)
 
-    def _get_coordinator(self) -> "TimeframeCoordinator":
+    def _get_coordinator(self) -> TimeframeCoordinator:
         """
         Get or create a TimeframeCoordinator for multi-timeframe data loading.
 
@@ -269,6 +268,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         if not data_dir.exists():
             # Fall back to current working directory structure
             from pathlib import Path
+
             data_dir = Path("data/splits/scaled")
 
         return TimeframeCoordinator(
@@ -279,7 +279,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
     def _load_data_for_model(
         self,
-        container: "TimeSeriesDataContainer",
+        container: TimeSeriesDataContainer,
         model_name: str | None = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -325,6 +325,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         # Load val data separately
         from src.core.coordination import TimeframeCoordinator
+
         coordinator_val = TimeframeCoordinator(
             data_dir=coordinator.data_dir,
             split="val",
@@ -337,7 +338,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
     def _load_heterogeneous_data(
         self,
-        container: "TimeSeriesDataContainer",
+        container: TimeSeriesDataContainer,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """
         Load data for heterogeneous ensemble with multiple timeframes.
@@ -363,9 +364,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             required_tfs.add(contract.primary_timeframe)
             required_tfs.update(contract.mtf_timeframes)
 
-        logger.info(
-            f"Heterogeneous ensemble requires timeframes: {sorted(required_tfs)}"
-        )
+        logger.info(f"Heterogeneous ensemble requires timeframes: {sorted(required_tfs)}")
 
         # Load all timeframes
         coordinator = self._get_coordinator()

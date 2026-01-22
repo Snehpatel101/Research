@@ -33,12 +33,12 @@ from .config_validator import (
     validate_trainer_config,
 )
 from .memory import (
+    PSUTIL_AVAILABLE,
     CacheConfig,
     CacheEntry,
     CacheManager,
     CacheStats,
     MemoryInfo,
-    PSUTIL_AVAILABLE,
     check_available_memory,
     check_memory_sufficient,
     estimate_array_size,

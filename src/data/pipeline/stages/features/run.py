@@ -26,7 +26,7 @@ from .engineer import FeatureEngineer
 
 # StageResult imports - adjust path based on pipeline structure
 try:
-    from src.pipeline.utils import StageResult, create_failed_result, create_stage_result
+    from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 except ImportError:
     # Fallback for different import paths
     from pipeline.utils import StageResult, create_failed_result, create_stage_result
@@ -138,11 +138,11 @@ def run_feature_engineering(
                 logger.info(f"Loaded {symbol} @ {tf}: {len(df):,} rows")
 
                 # Filter MTF timeframes to only those > current TF (for enrichment)
-                from src.common.timeframes import timeframe_to_minutes
+                from src.core.common.timeframes import timeframe_to_minutes
+
                 current_minutes = timeframe_to_minutes(tf)
                 valid_mtf = [
-                    mtf for mtf in mtf_timeframes
-                    if timeframe_to_minutes(mtf) > current_minutes
+                    mtf for mtf in mtf_timeframes if timeframe_to_minutes(mtf) > current_minutes
                 ]
 
                 # Initialize FeatureEngineer for this timeframe
@@ -162,7 +162,9 @@ def run_feature_engineering(
                 )
 
                 output_file = config.features_dir / f"{symbol}_{tf}_features.parquet"
-                logger.info(f"Processing {symbol} @ {tf} (symbol-isolated, no cross-correlation)...")
+                logger.info(
+                    f"Processing {symbol} @ {tf} (symbol-isolated, no cross-correlation)..."
+                )
 
                 # Engineer features (each symbol processed independently)
                 df_features, feature_info = engineer.engineer_features(df, symbol)
@@ -194,7 +196,9 @@ def run_feature_engineering(
                     },
                 )
 
-                logger.info(f"  {symbol} @ {tf}: {len(df_features):,} rows, {len(feature_cols)} features")
+                logger.info(
+                    f"  {symbol} @ {tf}: {len(df_features):,} rows, {len(feature_cols)} features"
+                )
 
         # Save feature toggles to JSON for reproducibility and downstream stages
         toggles_file = config.features_dir / "feature_toggles.json"

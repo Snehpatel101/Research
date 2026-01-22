@@ -20,8 +20,8 @@ import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 
-from src.common.split_ratios import DEFAULT_TRAIN_RATIO
-from src.pipeline.stages.labeling import triple_barrier_numba
+from src.core.common.split_ratios import DEFAULT_TRAIN_RATIO
+from src.data.pipeline.stages.labeling import triple_barrier_numba
 
 from .fitness import calculate_fitness
 

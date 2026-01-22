@@ -22,16 +22,16 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 
 # Re-export from separate model files for backward compatibility
 from .inceptiontime_model import (
-    InceptionModule,
     InceptionBlock,
-    InceptionTimeNetwork,
+    InceptionModule,
     InceptionTimeModel,
+    InceptionTimeNetwork,
 )
 from .resnet1d_model import (
     ResidualBlock1D,
     ResidualBlock1DBottleneck,
-    ResNet1DNetwork,
     ResNet1DModel,
+    ResNet1DNetwork,
 )
 
 __all__ = [

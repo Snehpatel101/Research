@@ -14,7 +14,7 @@ Key Features:
 - Integrates with stage8_validate.py
 
 Usage:
-    from src.pipeline.stages.scaling import FeatureScaler, scale_splits
+    from src.data.pipeline.stages.scaling import FeatureScaler, scale_splits
 
     # Simple usage with scale_splits convenience function
     train_scaled, val_scaled, test_scaled, scaler = scale_splits(

@@ -14,7 +14,7 @@ def main():
     """
     Example usage of FeatureEngineer.
     """
-    from src.pipeline.config.runtime import detect_available_symbols
+    from src.data.pipeline.config.runtime import detect_available_symbols
 
     parser = argparse.ArgumentParser(description="Stage 3: Feature Engineering")
     parser.add_argument("--input-dir", type=str, default="data/clean", help="Input data directory")

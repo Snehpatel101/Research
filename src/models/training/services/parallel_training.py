@@ -6,10 +6,10 @@ Uses joblib for multiprocessing to train multiple models concurrently.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Callable, Any
 import logging
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from joblib import Parallel, delayed
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ParallelTrainingConfig:
     """Configuration for parallel training."""
+
     n_jobs: int = -1  # -1 = all CPUs
     verbose: int = 10  # Joblib verbosity
     backend: str = "loky"  # "loky", "multiprocessing", "threading"
@@ -57,8 +58,8 @@ class ParallelTrainingService:
 
     def train_models_parallel(
         self,
-        training_requests: List[ModelTrainingRequest],
-    ) -> List[ModelTrainingResult]:
+        training_requests: list[ModelTrainingRequest],
+    ) -> list[ModelTrainingResult]:
         """
         Train multiple models in parallel.
 
@@ -84,10 +85,7 @@ class ParallelTrainingService:
             n_jobs=self.n_jobs,
             verbose=self.verbose,
             backend=self.backend,
-        )(
-            delayed(self._train_single)(request)
-            for request in training_requests
-        )
+        )(delayed(self._train_single)(request) for request in training_requests)
 
         total_time = time.time() - start_time
         logger.info(
@@ -110,9 +108,9 @@ class ParallelTrainingService:
 
     def train_with_callback(
         self,
-        training_requests: List[ModelTrainingRequest],
+        training_requests: list[ModelTrainingRequest],
         on_complete: Callable[[ModelTrainingResult], None] | None = None,
-    ) -> List[ModelTrainingResult]:
+    ) -> list[ModelTrainingResult]:
         """
         Train models in parallel with optional callback on completion.
 
@@ -133,9 +131,9 @@ class ParallelTrainingService:
 
 
 def train_models_parallel(
-    requests: List[ModelTrainingRequest],
+    requests: list[ModelTrainingRequest],
     n_jobs: int = -1,
-) -> List[ModelTrainingResult]:
+) -> list[ModelTrainingResult]:
     """
     Convenience function for parallel training.
 

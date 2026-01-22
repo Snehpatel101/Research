@@ -480,9 +480,7 @@ class BetSizer:
         # Apply confidence filter
         above_threshold = meta_probs >= self.min_confidence
         n_above = above_threshold.sum()
-        logger.info(
-            f"  {n_above} samples above confidence threshold {self.min_confidence:.2%}"
-        )
+        logger.info(f"  {n_above} samples above confidence threshold {self.min_confidence:.2%}")
 
         # Compute raw sizes based on method
         if self.method == BetSizingMethod.CONSTANT:
@@ -540,7 +538,10 @@ class BetSizer:
             if len(vol_values) == 1:
                 vol_values = np.full(n, vol_values[0])
 
-            if self.volatility_scaler is not None and self.method != BetSizingMethod.VOLATILITY_SCALED:
+            if (
+                self.volatility_scaler is not None
+                and self.method != BetSizingMethod.VOLATILITY_SCALED
+            ):
                 position_sizes = self.volatility_scaler.scale(position_sizes, vol_values)
 
         # Clip to max position

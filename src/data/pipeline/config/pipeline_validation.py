@@ -3,12 +3,12 @@
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from src.pipeline.data_config import DataConfig
+    from src.data.pipeline.data_config import DataConfig
 
 
 def validate_timeframe_config(target_timeframe: str) -> list[str]:
     """Validate target timeframe."""
-    from src.pipeline.config import SUPPORTED_TIMEFRAMES
+    from src.data.pipeline.config import SUPPORTED_TIMEFRAMES
 
     issues = []
     if target_timeframe not in SUPPORTED_TIMEFRAMES:
@@ -111,7 +111,7 @@ def validate_feature_params(
 
 def validate_mtf_config(mtf_mode: str, mtf_timeframes: list[str]) -> list[str]:
     """Validate MTF configuration."""
-    from src.pipeline.stages.mtf.constants import MTF_TIMEFRAMES
+    from src.data.pipeline.stages.mtf.constants import MTF_TIMEFRAMES
 
     issues = []
     valid_modes = ["bars", "indicators", "both"]
@@ -200,7 +200,7 @@ def validate_model_config_dict(model_config: dict[str, Any] | None) -> list[str]
 
 def validate_pipeline_config(config: "DataConfig") -> list[str]:
     """Run all validation checks on a DataConfig."""
-    from src.pipeline.config import validate_feature_set_config
+    from src.data.pipeline.config import validate_feature_set_config
 
     issues = []
     issues.extend(validate_timeframe_config(config.target_timeframe))

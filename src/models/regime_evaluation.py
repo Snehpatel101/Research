@@ -25,7 +25,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -135,12 +135,8 @@ class RegimeEvaluationResult:
         """Convert to nested dictionary for serialization."""
         return {
             "overall_metrics": self.overall_metrics,
-            "volatility_breakdown": {
-                k: v.to_dict() for k, v in self.volatility_breakdown.items()
-            },
-            "trend_breakdown": {
-                k: v.to_dict() for k, v in self.trend_breakdown.items()
-            },
+            "volatility_breakdown": {k: v.to_dict() for k, v in self.volatility_breakdown.items()},
+            "trend_breakdown": {k: v.to_dict() for k, v in self.trend_breakdown.items()},
             "time_of_day_breakdown": {
                 k: v.to_dict() for k, v in self.time_of_day_breakdown.items()
             },
@@ -220,7 +216,7 @@ class RegimeEvaluationResult:
 
     def plot_regime_comparison(
         self,
-        save_path: Optional[Path] = None,
+        save_path: Path | None = None,
         figsize: tuple[int, int] = (14, 10),
     ) -> Any:
         """Visualize performance across regimes.
@@ -394,26 +390,22 @@ class RegimeClassifier:
                 f"Insufficient data for volatility classification: "
                 f"{len(returns)} < {self.vol_window}"
             )
-            return pd.Series(
-                VolatilityRegime.NORMAL.value, index=returns.index, dtype="object"
-            )
+            return pd.Series(VolatilityRegime.NORMAL.value, index=returns.index, dtype="object")
 
         # Calculate rolling volatility
         rolling_vol = returns.rolling(window=self.vol_window, min_periods=2).std()
 
         # Calculate rolling percentile thresholds
-        low_threshold = rolling_vol.rolling(
-            window=lookback, min_periods=self.vol_window
-        ).quantile(self.vol_percentiles[0] / 100.0)
+        low_threshold = rolling_vol.rolling(window=lookback, min_periods=self.vol_window).quantile(
+            self.vol_percentiles[0] / 100.0
+        )
 
-        high_threshold = rolling_vol.rolling(
-            window=lookback, min_periods=self.vol_window
-        ).quantile(self.vol_percentiles[1] / 100.0)
+        high_threshold = rolling_vol.rolling(window=lookback, min_periods=self.vol_window).quantile(
+            self.vol_percentiles[1] / 100.0
+        )
 
         # Classify regime
-        regimes = pd.Series(
-            VolatilityRegime.NORMAL.value, index=returns.index, dtype="object"
-        )
+        regimes = pd.Series(VolatilityRegime.NORMAL.value, index=returns.index, dtype="object")
         regimes[rolling_vol < low_threshold] = VolatilityRegime.LOW.value
         regimes[rolling_vol > high_threshold] = VolatilityRegime.HIGH.value
 
@@ -425,9 +417,9 @@ class RegimeClassifier:
     def classify_trend(
         self,
         df: pd.DataFrame,
-        adx_column: Optional[str] = None,
-        plus_di_column: Optional[str] = None,
-        minus_di_column: Optional[str] = None,
+        adx_column: str | None = None,
+        plus_di_column: str | None = None,
+        minus_di_column: str | None = None,
     ) -> pd.Series:
         """Classify trend regime using ADX and directional indicators.
 
@@ -471,9 +463,7 @@ class RegimeClassifier:
         minus_di_series = pd.Series(minus_di, index=df.index)
 
         # Classify regime
-        regimes = pd.Series(
-            TrendRegime.MEAN_REVERTING.value, index=df.index, dtype="object"
-        )
+        regimes = pd.Series(TrendRegime.MEAN_REVERTING.value, index=df.index, dtype="object")
 
         # Strong trend conditions
         is_trending = adx_series > self.adx_trending_threshold
@@ -581,7 +571,7 @@ class RegimeClassifier:
         """
         # Import from existing implementation
         try:
-            from src.pipeline.stages.regime.trend import calculate_adx
+            from src.data.pipeline.stages.regime.trend import calculate_adx
 
             return calculate_adx(high, low, close, self.trend_window)
         except ImportError:
@@ -636,9 +626,7 @@ class RegimeClassifier:
                     plus_dm_smooth[i - 1] - (plus_dm_smooth[i - 1] / period) + plus_dm[i]
                 )
                 minus_dm_smooth[i] = (
-                    minus_dm_smooth[i - 1]
-                    - (minus_dm_smooth[i - 1] / period)
-                    + minus_dm[i]
+                    minus_dm_smooth[i - 1] - (minus_dm_smooth[i - 1] / period) + minus_dm[i]
                 )
 
         # Calculate DI
@@ -696,7 +684,7 @@ class RegimeEvaluator:
 
     def __init__(
         self,
-        classifier: Optional[RegimeClassifier] = None,
+        classifier: RegimeClassifier | None = None,
         min_samples_per_regime: int = 30,
     ):
         """Initialize regime evaluator.
@@ -729,9 +717,7 @@ class RegimeEvaluator:
             RegimeEvaluationResult with performance breakdown
         """
         if len(y_true) != len(y_pred):
-            raise ValueError(
-                f"Length mismatch: y_true ({len(y_true)}) != y_pred ({len(y_pred)})"
-            )
+            raise ValueError(f"Length mismatch: y_true ({len(y_true)}) != y_pred ({len(y_pred)})")
 
         if len(timestamps) != len(y_true):
             raise ValueError(
@@ -745,9 +731,7 @@ class RegimeEvaluator:
                 # Trim to match predictions
                 close_prices = close_prices[-len(y_true) :]
             elif len(close_prices) < len(y_true):
-                raise ValueError(
-                    f"Price data too short: {len(close_prices)} < {len(y_true)}"
-                )
+                raise ValueError(f"Price data too short: {len(close_prices)} < {len(y_true)}")
             returns = np.diff(np.log(close_prices))
             returns = np.insert(returns, 0, 0)  # Pad to match length
         else:
@@ -771,9 +755,7 @@ class RegimeEvaluator:
         tod_regimes = self.classifier.classify_time_of_day(timestamps)
 
         # Calculate overall metrics
-        overall_metrics = self._calculate_metrics(
-            y_true, y_pred, y_proba, returns, "overall"
-        )
+        overall_metrics = self._calculate_metrics(y_true, y_pred, y_proba, returns, "overall")
 
         # Calculate per-regime metrics
         volatility_breakdown = self._calculate_regime_breakdown(
@@ -923,9 +905,7 @@ class RegimeEvaluator:
         # 252 days * 6.5 hours * 12 bars/hour = ~19,656 bars/year
         # For simplicity, use sqrt(252) scaling from daily approximation
         if strategy_returns.std() > 0:
-            sharpe = (
-                strategy_returns.mean() / strategy_returns.std() * np.sqrt(252 * 78)
-            )
+            sharpe = strategy_returns.mean() / strategy_returns.std() * np.sqrt(252 * 78)
         else:
             sharpe = 0.0
 
@@ -999,12 +979,8 @@ class RegimeEvaluator:
             # Remove NaN for correlation
             valid_mask = ~encoded.isna()
             if valid_mask.sum() > 10:
-                corr = np.corrcoef(
-                    correct[valid_mask.values], encoded[valid_mask].values
-                )[0, 1]
-                correlations[f"{name}_correlation"] = (
-                    float(corr) if not np.isnan(corr) else 0.0
-                )
+                corr = np.corrcoef(correct[valid_mask.values], encoded[valid_mask].values)[0, 1]
+                correlations[f"{name}_correlation"] = float(corr) if not np.isnan(corr) else 0.0
             else:
                 correlations[f"{name}_correlation"] = 0.0
 
@@ -1037,8 +1013,7 @@ class RegimeEvaluator:
         for regime_type, breakdown in all_breakdowns:
             for regime_name, metrics in breakdown.items():
                 is_weak = (
-                    metrics.accuracy < accuracy_threshold
-                    or metrics.sharpe_ratio < sharpe_threshold
+                    metrics.accuracy < accuracy_threshold or metrics.sharpe_ratio < sharpe_threshold
                 )
 
                 if is_weak:
@@ -1069,9 +1044,7 @@ class RegimeEvaluator:
         if metrics.accuracy < accuracy_threshold:
             reasons.append(f"low accuracy ({metrics.accuracy:.2%} < {accuracy_threshold:.2%})")
         if metrics.sharpe_ratio < sharpe_threshold:
-            reasons.append(
-                f"low Sharpe ({metrics.sharpe_ratio:.2f} < {sharpe_threshold:.2f})"
-            )
+            reasons.append(f"low Sharpe ({metrics.sharpe_ratio:.2f} < {sharpe_threshold:.2f})")
         return "; ".join(reasons) if reasons else "unknown"
 
 
@@ -1086,7 +1059,7 @@ def evaluate_regime_performance(
     y_proba: np.ndarray,
     prices: pd.DataFrame,
     timestamps: pd.DatetimeIndex,
-    classifier_config: Optional[dict[str, Any]] = None,
+    classifier_config: dict[str, Any] | None = None,
 ) -> RegimeEvaluationResult:
     """Convenience function for regime-conditional evaluation.
 

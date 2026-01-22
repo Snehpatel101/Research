@@ -16,7 +16,7 @@ from typing import Any
 import numpy as np
 import xgboost as xgb
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
@@ -234,7 +234,7 @@ class XGBoostModel(BaseModel):
             },
         )
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -245,7 +245,7 @@ class XGBoostModel(BaseModel):
         class_predictions = self._convert_labels_from_xgb(class_predictions_xgb)
         confidence = np.max(probabilities, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,

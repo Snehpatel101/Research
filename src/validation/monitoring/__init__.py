@@ -6,7 +6,7 @@ Import paths:
     from src.validation.monitoring import DriftResult, AlertHandler
 
     # Legacy (still works, deprecation warning):
-    from src.monitoring import DriftResult, AlertHandler
+    from src.validation.monitoring import DriftResult, AlertHandler
 
 Provides online drift detection and alerting:
 - ADWIN for concept drift (via river library)

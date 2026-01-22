@@ -464,7 +464,7 @@ def compute_deflated_sharpe(
 
 
 def compute_dsr_from_optuna_study(
-    study: "optuna.Study",
+    study: optuna.Study,
     deployment_threshold: float = 0.5,
     config: DSRConfig | None = None,
 ) -> DSRResult:
@@ -650,7 +650,7 @@ def analyze_selection_bias(
 
     # Per-strategy analysis
     strategy_analysis = []
-    for i, (name, sharpe) in enumerate(zip(strategy_names, trial_sharpes)):
+    for i, (name, sharpe) in enumerate(zip(strategy_names, trial_sharpes, strict=False)):
         strategy_analysis.append(
             {
                 "name": name,

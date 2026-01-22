@@ -37,22 +37,22 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import numpy as np
 import optuna
 from optuna.pruners import HyperbandPruner
 from optuna.samplers import TPESampler
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 
 from src.core import (
     ALL_MODELS,
-    MODEL_FAMILIES,
-    MODEL_DATA_RANKS,
     DEFAULT_HYPERPARAM_TRIALS,
     DEFAULT_OPTUNA_RANDOM_STATE,
+    MODEL_DATA_RANKS,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # RESULT DATACLASS
 # =============================================================================
+
 
 @dataclass
 class HyperparameterResult:
@@ -80,14 +81,14 @@ class HyperparameterResult:
     """
 
     model_name: str
-    best_params: Dict[str, Any]
+    best_params: dict[str, Any]
     best_score: float
     default_score: float
     improvement: float
     n_trials: int
     study: optuna.Study
     optimization_time: float = 0.0
-    trial_history: List[Tuple[Dict[str, Any], float]] = field(default_factory=list)
+    trial_history: list[tuple[dict[str, Any], float]] = field(default_factory=list)
 
     def __repr__(self) -> str:
         return (
@@ -97,7 +98,7 @@ class HyperparameterResult:
             f"n_trials={self.n_trials})"
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "model_name": self.model_name,
@@ -115,13 +116,12 @@ class HyperparameterResult:
 # =============================================================================
 
 # Type alias for search space specification
-SearchSpaceType = Dict[str, Tuple[str, ...]]
+SearchSpaceType = dict[str, tuple[str, ...]]
 
-HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
+HYPERPARAMETER_SPACES: dict[str, SearchSpaceType] = {
     # =========================================================================
     # BOOSTING MODELS (3)
     # =========================================================================
-
     "xgboost": {
         "n_estimators": ("int", 100, 1000),
         "max_depth": ("int", 3, 10),
@@ -133,7 +133,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "reg_alpha": ("log_float", 1e-8, 10.0),
         "reg_lambda": ("log_float", 1e-8, 10.0),
     },
-
     "lightgbm": {
         "n_estimators": ("int", 100, 1000),
         "max_depth": ("int", 3, 12),
@@ -146,7 +145,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "reg_alpha": ("log_float", 1e-8, 10.0),
         "reg_lambda": ("log_float", 1e-8, 10.0),
     },
-
     "catboost": {
         "iterations": ("int", 100, 1000),
         "depth": ("int", 4, 10),
@@ -157,11 +155,9 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "border_count": ("int", 32, 255),
         "grow_policy": ("categorical", ["SymmetricTree", "Depthwise", "Lossguide"]),
     },
-
     # =========================================================================
     # CLASSICAL MODELS (3)
     # =========================================================================
-
     "random_forest": {
         "n_estimators": ("int", 100, 500),
         "max_depth": ("int", 5, 30),
@@ -171,7 +167,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "bootstrap": ("categorical", [True, False]),
         "class_weight": ("categorical", ["balanced", "balanced_subsample", None]),
     },
-
     "logistic": {
         "C": ("log_float", 1e-4, 100.0),
         "penalty": ("categorical", ["l1", "l2", "elasticnet"]),
@@ -180,7 +175,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "class_weight": ("categorical", ["balanced", None]),
         "l1_ratio": ("float", 0.0, 1.0),  # Only used with elasticnet
     },
-
     "svm": {
         "C": ("log_float", 1e-3, 100.0),
         "kernel": ("categorical", ["rbf", "poly", "sigmoid"]),
@@ -189,11 +183,9 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "class_weight": ("categorical", ["balanced", None]),
         "probability": ("categorical", [True]),  # Required for predict_proba
     },
-
     # =========================================================================
     # NEURAL RNN/CNN MODELS (10)
     # =========================================================================
-
     "lstm": {
         "hidden_size": ("int", 32, 256),
         "num_layers": ("int", 1, 4),
@@ -204,7 +196,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "weight_decay": ("log_float", 1e-8, 1e-3),
         "gradient_clip": ("float", 0.5, 5.0),
     },
-
     "gru": {
         "hidden_size": ("int", 32, 256),
         "num_layers": ("int", 1, 4),
@@ -215,7 +206,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "weight_decay": ("log_float", 1e-8, 1e-3),
         "gradient_clip": ("float", 0.5, 5.0),
     },
-
     "tcn": {
         "num_channels": ("categorical", [[32, 64], [64, 128], [32, 64, 128], [64, 128, 256]]),
         "kernel_size": ("int", 2, 7),
@@ -225,7 +215,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "weight_decay": ("log_float", 1e-8, 1e-3),
         "dilation_base": ("int", 2, 4),
     },
-
     "transformer": {
         "d_model": ("categorical", [32, 64, 128, 256]),
         "nhead": ("categorical", [2, 4, 8]),
@@ -237,7 +226,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "weight_decay": ("log_float", 1e-8, 1e-3),
         "warmup_steps": ("int", 100, 1000),
     },
-
     "patchtst": {
         "patch_len": ("int", 8, 32),
         "stride": ("int", 4, 16),
@@ -250,7 +238,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "batch_size": ("categorical", [32, 64, 128]),
         "weight_decay": ("log_float", 1e-8, 1e-3),
     },
-
     "itransformer": {
         "d_model": ("categorical", [64, 128, 256]),
         "nhead": ("categorical", [4, 8]),
@@ -262,7 +249,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "weight_decay": ("log_float", 1e-8, 1e-3),
         "use_time_features": ("categorical", [True, False]),
     },
-
     "tft": {
         "hidden_size": ("int", 32, 256),
         "num_attention_heads": ("categorical", [1, 2, 4]),
@@ -273,7 +259,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "weight_decay": ("log_float", 1e-8, 1e-3),
         "gradient_clip": ("float", 0.1, 1.0),
     },
-
     "nbeats": {
         "num_stacks": ("int", 2, 8),
         "num_blocks": ("int", 1, 4),
@@ -285,7 +270,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "batch_size": ("categorical", [32, 64, 128, 256]),
         "weight_decay": ("log_float", 1e-8, 1e-3),
     },
-
     "inceptiontime": {
         "num_blocks": ("int", 1, 6),
         "num_filters": ("int", 16, 64),
@@ -298,7 +282,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "batch_size": ("categorical", [32, 64, 128]),
         "weight_decay": ("log_float", 1e-8, 1e-3),
     },
-
     "resnet1d": {
         "num_blocks": ("int", 2, 8),
         "base_filters": ("int", 32, 128),
@@ -310,18 +293,15 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "batch_size": ("categorical", [32, 64, 128]),
         "weight_decay": ("log_float", 1e-8, 1e-3),
     },
-
     # =========================================================================
     # META-LEARNERS (4)
     # =========================================================================
-
     "ridge_meta": {
         "alpha": ("log_float", 1e-4, 100.0),
         "fit_intercept": ("categorical", [True, False]),
         "normalize": ("categorical", [True, False]),
         "solver": ("categorical", ["auto", "svd", "cholesky", "lsqr", "sparse_cg"]),
     },
-
     "mlp_meta": {
         "hidden_layer_sizes": ("categorical", [(64,), (128,), (64, 32), (128, 64), (128, 64, 32)]),
         "activation": ("categorical", ["relu", "tanh"]),
@@ -332,7 +312,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "early_stopping": ("categorical", [True]),
         "validation_fraction": ("float", 0.1, 0.2),
     },
-
     "xgboost_meta": {
         "n_estimators": ("int", 50, 300),
         "max_depth": ("int", 2, 6),
@@ -342,7 +321,6 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         "reg_alpha": ("log_float", 1e-8, 1.0),
         "reg_lambda": ("log_float", 1e-8, 1.0),
     },
-
     "calibrated_meta": {
         "method": ("categorical", ["isotonic", "sigmoid"]),
         "cv": ("categorical", [3, 5]),
@@ -350,21 +328,17 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
         # Base estimator params (ridge)
         "base_alpha": ("log_float", 1e-4, 100.0),
     },
-
     # =========================================================================
     # ENSEMBLE MODELS (3) - Minimal search spaces
     # =========================================================================
-
     "voting": {
         # Voting ensemble has no hyperparameters to tune
         # The weights could be tuned but are typically derived from OOF scores
     },
-
     "stacking": {
         # Stacking meta-learner params are in the meta-learner spaces above
         "passthrough": ("categorical", [True, False]),
     },
-
     "blending": {
         # Blending uses a simple weighted average, weights from OOF
         "blend_method": ("categorical", ["average", "weighted", "rank"]),
@@ -372,9 +346,9 @@ HYPERPARAMETER_SPACES: Dict[str, SearchSpaceType] = {
 }
 
 # Verify all 23 models have search spaces
-assert len(HYPERPARAMETER_SPACES) == 23, (
-    f"Expected 23 model search spaces, got {len(HYPERPARAMETER_SPACES)}"
-)
+assert (
+    len(HYPERPARAMETER_SPACES) == 23
+), f"Expected 23 model search spaces, got {len(HYPERPARAMETER_SPACES)}"
 
 # Verify all models in ALL_MODELS have search spaces
 missing_models = set(ALL_MODELS) - set(HYPERPARAMETER_SPACES.keys())
@@ -385,11 +359,12 @@ assert not missing_models, f"Missing search spaces for models: {missing_models}"
 # UTILITY FUNCTIONS
 # =============================================================================
 
+
 def suggest_hyperparameters(
     trial: optuna.Trial,
     model_name: str,
-    custom_space: Optional[SearchSpaceType] = None,
-) -> Dict[str, Any]:
+    custom_space: SearchSpaceType | None = None,
+) -> dict[str, Any]:
     """
     Suggest hyperparameters for a model using Optuna trial.
 
@@ -438,7 +413,7 @@ def suggest_hyperparameters(
     return params
 
 
-def get_default_hyperparameters(model_name: str) -> Dict[str, Any]:
+def get_default_hyperparameters(model_name: str) -> dict[str, Any]:
     """
     Get default hyperparameters for a model (middle of search space).
 
@@ -485,6 +460,7 @@ def get_default_hyperparameters(model_name: str) -> Dict[str, Any]:
 # HYPERPARAMETER OPTIMIZER
 # =============================================================================
 
+
 class HyperparameterOptimizer:
     """
     Optuna-based hyperparameter optimizer for ML Factory models.
@@ -519,7 +495,7 @@ class HyperparameterOptimizer:
         scoring: str = "f1_weighted",
         use_pruning: bool = True,
         random_state: int = DEFAULT_OPTUNA_RANDOM_STATE,
-        timeout: Optional[int] = None,
+        timeout: int | None = None,
         verbose: int = 1,
     ):
         self.n_trials = n_trials
@@ -558,12 +534,12 @@ class HyperparameterOptimizer:
         model_name: str,
         X: np.ndarray,
         y: np.ndarray,
-        model_factory: Callable[[Dict[str, Any]], Any],
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-        search_space: Optional[SearchSpaceType] = None,
-        sample_weights: Optional[np.ndarray] = None,
-        storage_path: Optional[str] = None,
+        model_factory: Callable[[dict[str, Any]], Any],
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+        search_space: SearchSpaceType | None = None,
+        sample_weights: np.ndarray | None = None,
+        storage_path: str | None = None,
     ) -> HyperparameterResult:
         """
         Optimize hyperparameters for a single model.
@@ -619,8 +595,10 @@ class HyperparameterOptimizer:
         # Split data if no validation set provided
         if X_val is None or y_val is None:
             from sklearn.model_selection import train_test_split
+
             X_train, X_val, y_train, y_val = train_test_split(
-                X, y,
+                X,
+                y,
                 test_size=0.2,
                 random_state=self.random_state,
                 stratify=y,
@@ -642,8 +620,8 @@ class HyperparameterOptimizer:
         default_score = 0.0
         try:
             default_model = model_factory(default_params)
-            if hasattr(default_model, 'fit'):
-                if sw_train is not None and hasattr(default_model.fit, '__code__'):
+            if hasattr(default_model, "fit"):
+                if sw_train is not None and hasattr(default_model.fit, "__code__"):
                     # Check if fit accepts sample_weight
                     try:
                         default_model.fit(X_train, y_train, sample_weight=sw_train)
@@ -657,7 +635,7 @@ class HyperparameterOptimizer:
             logger.warning(f"Failed to compute default score: {e}")
 
         # Trial history
-        trial_history: List[Tuple[Dict[str, Any], float]] = []
+        trial_history: list[tuple[dict[str, Any], float]] = []
 
         # Define objective
         def objective(trial: optuna.Trial) -> float:
@@ -727,10 +705,7 @@ class HyperparameterOptimizer:
 
         # Calculate improvement
         best_score = study.best_value
-        improvement = (
-            (best_score - default_score) / default_score
-            if default_score > 0 else 0.0
-        )
+        improvement = (best_score - default_score) / default_score if default_score > 0 else 0.0
 
         if self.verbose >= 1:
             print(f"\nOptimization complete for {model_name}:")
@@ -754,13 +729,13 @@ class HyperparameterOptimizer:
 
     def optimize_multiple(
         self,
-        model_names: List[str],
+        model_names: list[str],
         X: np.ndarray,
         y: np.ndarray,
-        model_factories: Dict[str, Callable[[Dict[str, Any]], Any]],
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-    ) -> Dict[str, HyperparameterResult]:
+        model_factories: dict[str, Callable[[dict[str, Any]], Any]],
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
+    ) -> dict[str, HyperparameterResult]:
         """
         Optimize hyperparameters for multiple models.
 

@@ -133,7 +133,7 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         dict : Adjusted barrier parameters with k_up, k_down, max_bars
         """
         try:
-            from src.pipeline.config import get_regime_adjusted_barriers
+            from src.data.pipeline.config import get_regime_adjusted_barriers
 
             return get_regime_adjusted_barriers(
                 symbol=symbol,

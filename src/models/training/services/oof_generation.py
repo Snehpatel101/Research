@@ -1,15 +1,14 @@
 """Service for generating out-of-fold predictions."""
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-import logging
 
 import numpy as np
 import pandas as pd
 
-from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
 from src.data.adapters import PreparedData
+from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
 
 logger = logging.getLogger(__name__)
 

@@ -24,6 +24,30 @@ pip install -e .
 
 Requires Python 3.11+
 
+### Developer Setup
+
+Install development dependencies and pre-commit hooks:
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Install pre-commit hooks (runs automatically on git commit)
+pre-commit install
+
+# Run pre-commit manually on all files
+pre-commit run --all-files
+
+# Run pre-commit on specific files
+pre-commit run --files src/some_file.py
+```
+
+Pre-commit hooks will automatically:
+- Format code with ruff
+- Check for common issues with ruff linting
+- Run type checking with mypy (src/ only)
+- Run quick tests to catch breaking changes
+
 ## Quick Start
 
 ```bash

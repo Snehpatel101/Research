@@ -13,9 +13,10 @@ import logging
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -426,9 +427,7 @@ class CacheManager:
                 return None
 
             if entry.version < min_version:
-                logger.debug(
-                    f"Cache entry '{key}' stale (version {entry.version} < {min_version})"
-                )
+                logger.debug(f"Cache entry '{key}' stale (version {entry.version} < {min_version})")
                 self._stats.misses += 1
                 return None
 

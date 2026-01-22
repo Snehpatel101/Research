@@ -39,32 +39,20 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from src.data.adapters import (
-    AlignedOOFResult,
-    OOFAligner,
-    PreparedData,
-    UnifiedDataPreparation,
-)
-from src.core import (
-    CVMethod,
-    OOFResult,
-    PipelineConfig,
-    TrainingMode,
-)
-from src.validation.cv import (
-    OOFGenerator,
-    OOFPrediction,
-    PurgedKFold,
-    PurgedKFoldConfig,
-    StackingDataset,
-)
+from src.core import CVMethod, OOFResult, PipelineConfig, TrainingMode
+from src.data.adapters import AlignedOOFResult, PreparedData
+from src.validation.cv import OOFPrediction, PurgedKFold, PurgedKFoldConfig, StackingDataset
+
 from .services import (
-    ModelTrainingService,
-    ModelTrainingRequest,
-    OOFGenerationService,
-    OOFRequest,
     ArtifactManager,
     ArtifactSaveRequest,
+    DataPreparer,
+    EnsembleRequest,
+    EnsembleService,
+    ModelTrainingRequest,
+    ModelTrainingService,
+    OOFGenerationService,
+    OOFRequest,
 )
 
 if TYPE_CHECKING:
@@ -151,16 +139,12 @@ class TrainingRunResult:
         if not self.model_results:
             return None
         return max(
-            self.model_results.keys(),
-            key=lambda k: self.model_results[k].metrics.get("val_f1", 0)
+            self.model_results.keys(), key=lambda k: self.model_results[k].metrics.get("val_f1", 0)
         )
 
     def get_metrics_summary(self) -> dict[str, dict[str, float]]:
         """Get summary of all model metrics."""
-        return {
-            key: result.metrics
-            for key, result in self.model_results.items()
-        }
+        return {key: result.metrics for key, result in self.model_results.items()}
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -170,10 +154,7 @@ class TrainingRunResult:
             "best_model": self.best_model,
             "total_time_seconds": self.total_time_seconds,
             "output_dir": str(self.output_dir),
-            "model_results": {
-                key: result.to_dict()
-                for key, result in self.model_results.items()
-            },
+            "model_results": {key: result.to_dict() for key, result in self.model_results.items()},
         }
 
 
@@ -222,24 +203,17 @@ class UnifiedTrainingOrchestrator:
         self.output_dir = config.output_dir / self.run_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize data preparation (PHASE_2)
-        self._data_prep = UnifiedDataPreparation(config)
-
-        # Initialize CV based on config
-        self._cv = self._create_cv()
-
-        # Initialize OOF generator (legacy, used by some training modes)
-        self._oof_generator = OOFGenerator(
-            self._cv,
-            cache_dir=self.output_dir / "oof_cache" if config.save_oof else None,
-        )
-
-        # Initialize services
+        # Initialize services (all heavy lifting is delegated)
+        self._data_preparer = DataPreparer(config)
         self._model_service = ModelTrainingService()
         self._oof_service = OOFGenerationService(
             cache_dir=self.output_dir / "oof_cache" if config.save_oof else None
         )
+        self._ensemble_service = EnsembleService()
         self._artifact_manager = ArtifactManager(self.output_dir)
+
+        # Initialize CV based on config
+        self._cv = self._create_cv()
 
         # Results storage
         self._model_results: dict[str, ModelTrainingResult] = {}
@@ -392,7 +366,7 @@ class UnifiedTrainingOrchestrator:
                 logger.info(f"\nTraining {model_name}...")
 
                 # Prepare data using PHASE_2 adapters
-                prepared = self._data_prep.prepare(
+                prepared = self._data_preparer.prepare(
                     df=df,
                     model_name=model_name,
                     additional_dfs=additional_dfs,
@@ -478,10 +452,7 @@ class UnifiedTrainingOrchestrator:
         df: pd.DataFrame,
     ) -> tuple[AlignedOOFResult | None, StackingDataset | None, ModelTrainingResult | None]:
         """
-        Build ensemble from OOF predictions.
-
-        Aligns OOF predictions from heterogeneous models (2D/3D/4D) and
-        trains a meta-learner on the stacking dataset.
+        Build ensemble from OOF predictions - delegates to EnsembleService.
 
         Args:
             df: Original DataFrame (for label extraction)
@@ -493,161 +464,26 @@ class UnifiedTrainingOrchestrator:
             logger.warning("No OOF predictions available for ensemble")
             return None, None, None
 
-        logger.info(f"Building ensemble from {len(self._oof_predictions)} models...")
-
-        # Convert OOFPrediction dict to OOFResult list for alignment
-        # OOFAligner expects OOFResult format
-        oof_results: list[OOFResult] = []
-
-        for _key, oof_pred in self._oof_predictions.items():
-            # Extract probabilities and predictions
-            probs = oof_pred.get_probabilities()
-            preds = oof_pred.get_class_predictions()
-
-            # Create indices array
-            n_samples = len(probs)
-            indices = np.arange(n_samples)
-
-            # Create fold_ids from fold_info
-            fold_ids = np.zeros(n_samples, dtype=int)
-            # Simple assignment - all samples from same prediction run
-
-            oof_result = OOFResult(
-                predictions=preds.astype(int),
-                probabilities=probs,
-                indices=indices,
-                fold_ids=fold_ids,
-                model_name=oof_pred.model_name,
-                coverage=oof_pred.coverage,
-            )
-            oof_results.append(oof_result)
-
-        if len(oof_results) < 2:
-            logger.warning("Need at least 2 models for ensemble")
-            return None, None, None
-
-        # Align OOF predictions
-        aligner = OOFAligner()
-        try:
-            aligned = aligner.align(oof_results, strategy="intersection")
-        except ValueError as e:
-            logger.error(f"Failed to align OOF predictions: {e}")
-            return None, None, None
-
-        logger.info(f"Aligned {len(aligned.model_names)} models")
-        logger.info(f"Valid samples: {aligned.n_common}")
-
-        # Get y_true for aligned samples
-        # This is a simplification - in practice, would extract from prepared data
-        y_aligned = None
-        for _key, oof_pred in self._oof_predictions.items():
-            if "y_true" in oof_pred.predictions.columns:
-                y_aligned = oof_pred.predictions["y_true"].values[:aligned.n_common]
-                break
-
-        if y_aligned is None:
-            logger.warning("Could not extract aligned labels for meta-learner")
-            return aligned, None, None
-
-        # Build stacking dataset
-        stacking_features = aligned.stacking_features
-
-        stacking_df = pd.DataFrame(
-            stacking_features,
-            columns=aligned.get_feature_names(),
+        # Delegate to EnsembleService
+        request = EnsembleRequest(
+            oof_predictions=self._oof_predictions,
+            config=self.config,
+            df=df,
         )
-        stacking_df["y_true"] = y_aligned
+        result = self._ensemble_service.build_ensemble(request)
 
-        stacking_dataset = StackingDataset(
-            data=stacking_df,
-            model_names=aligned.model_names,
-            horizon=self.config.horizons[0],
-            metadata={
-                "n_common": aligned.n_common,
-                "coverage": aligned.coverage,
-            },
-        )
-
-        logger.info(f"Stacking dataset: {stacking_dataset.n_samples} samples")
-
-        # Train meta-learner
-        ensemble_result = self._train_meta_learner(stacking_dataset)
-
-        return aligned, stacking_dataset, ensemble_result
-
-    def _train_meta_learner(
-        self,
-        stacking_dataset: StackingDataset,
-    ) -> ModelTrainingResult | None:
-        """
-        Train meta-learner on stacking dataset.
-
-        Args:
-            stacking_dataset: StackingDataset with aligned OOF features
-
-        Returns:
-            ModelTrainingResult for meta-learner or None
-        """
-        try:
-            from src.models import Trainer, TrainerConfig
-
-            start = time.time()
-
-            # Get stacking features and labels
-            X_stack = stacking_dataset.get_features()
-            y_stack = stacking_dataset.get_labels()
-
-            # Split into train/val
-            n_samples = len(X_stack)
-            n_train = int(n_samples * 0.8)
-
-            X_train = X_stack.iloc[:n_train]
-            X_val = X_stack.iloc[n_train:]
-            y_train = y_stack.iloc[:n_train]
-            y_val = y_stack.iloc[n_train:]
-
-            # Create meta-learner config
-            meta_config = TrainerConfig(
-                model_name=self.config.meta_learner,
-                horizon=stacking_dataset.horizon,
-                output_dir=self.output_dir / "meta_learner",
-            )
-
-            from src.core.container import TimeSeriesDataContainer
-
-            container = TimeSeriesDataContainer(
-                X_train=X_train,
-                y_train=y_train,
-                X_val=X_val,
-                y_val=y_val,
-                X_test=pd.DataFrame(),
-                y_test=pd.Series(dtype=float),
-                sample_weights=pd.Series(np.ones(len(y_train))),
-            )
-
-            trainer = Trainer(meta_config)
-            results = trainer.run(container)
-
-            training_time = time.time() - start
-
-            logger.info(
-                f"Meta-learner ({self.config.meta_learner}) trained: "
-                f"val_f1={results['evaluation_metrics'].get('val_f1', 0):.4f}"
-            )
-
-            return ModelTrainingResult(
+        # Convert service result to orchestrator result
+        ensemble_result = None
+        if result.meta_learner is not None:
+            ensemble_result = ModelTrainingResult(
                 model_name=f"ensemble_{self.config.meta_learner}",
-                horizon=stacking_dataset.horizon,
-                metrics=results.get("evaluation_metrics", {}),
-                trainer=trainer,
-                training_time_seconds=training_time,
-                n_features=X_stack.shape[1],
-                data_rank=2,
+                horizon=self.config.horizons[0] if self.config.horizons else 20,
+                metrics=result.ensemble_metrics,
+                trainer=result.meta_learner,
+                training_time_seconds=result.training_time_seconds,
             )
 
-        except Exception as e:
-            logger.error(f"Failed to train meta-learner: {e}")
-            return None
+        return result.aligned_oof, result.stacking_dataset, ensemble_result
 
     def _train_walk_forward(
         self,
@@ -669,9 +505,7 @@ class UnifiedTrainingOrchestrator:
         logger.info("Walk-forward training mode")
 
         # Create ExperimentConfig from PipelineConfig
-        model_configs = [
-            ModelConfig(name=m) for m in self.config.models
-        ]
+        model_configs = [ModelConfig(name=m) for m in self.config.models]
 
         exp_config = ExperimentConfig(
             symbol=self.config.symbol,
@@ -696,15 +530,19 @@ class UnifiedTrainingOrchestrator:
         from src.core.container import TimeSeriesDataContainer
 
         # Use first model to prepare data (for basic structure)
-        prepared = self._data_prep.prepare(
+        prepared = self._data_preparer.prepare(
             df=df,
             model_name=self.config.models[0],
             additional_dfs=additional_dfs,
         )
 
         X_train_df = pd.DataFrame(
-            prepared.X_train.reshape(prepared.X_train.shape[0], -1) if prepared.data_rank > 2 else prepared.X_train,
-            columns=prepared.feature_names if prepared.data_rank == 2 else [f"f{i}" for i in range(np.prod(prepared.X_train.shape[1:]))],
+            prepared.X_train.reshape(prepared.X_train.shape[0], -1)
+            if prepared.data_rank > 2
+            else prepared.X_train,
+            columns=prepared.feature_names
+            if prepared.data_rank == 2
+            else [f"f{i}" for i in range(np.prod(prepared.X_train.shape[1:]))],
         )
 
         container = TimeSeriesDataContainer(
@@ -758,7 +596,7 @@ class UnifiedTrainingOrchestrator:
             df: Input DataFrame with OHLCV data
             additional_dfs: Optional additional timeframe DataFrames
         """
-        from .regime_trainer import RegimeAwareTrainer, RegimeTrainingResult
+        from .regime_trainer import RegimeAwareTrainer
 
         logger.info("Regime-aware training mode")
         logger.info(f"  Detection method: {self.config.regime_detection_method}")
@@ -778,7 +616,7 @@ class UnifiedTrainingOrchestrator:
                 logger.info(f"\nTraining regime-aware: {model_name}...")
 
                 # Prepare data using PHASE_2 adapters
-                prepared = self._data_prep.prepare(
+                prepared = self._data_preparer.prepare(
                     df=df,
                     model_name=model_name,
                     additional_dfs=additional_dfs,
@@ -795,7 +633,10 @@ class UnifiedTrainingOrchestrator:
                 )
 
                 # Convert regime results to ModelTrainingResult format
-                for (trained_model_name, regime), regime_model_result in regime_result.regime_results.items():
+                for (
+                    trained_model_name,
+                    regime,
+                ), regime_model_result in regime_result.regime_results.items():
                     if trained_model_name != model_name:
                         continue
 
@@ -916,8 +757,6 @@ class UnifiedTrainingOrchestrator:
         Returns:
             ModelTrainingResult with combined metrics
         """
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.ensemble import RandomForestClassifier
 
         start_time = time.time()
 
@@ -931,7 +770,7 @@ class UnifiedTrainingOrchestrator:
         logger.info("\n  STAGE 1: Preparing data...")
 
         # Prepare data for primary model
-        prepared = self._data_prep.prepare(
+        prepared = self._data_preparer.prepare(
             df=df,
             model_name=primary_model_name,
             additional_dfs=additional_dfs,
@@ -1010,7 +849,7 @@ class UnifiedTrainingOrchestrator:
         meta_model.fit(X_train, meta_labels_train)
 
         # Get meta-model probabilities
-        if hasattr(meta_model, 'predict_proba'):
+        if hasattr(meta_model, "predict_proba"):
             meta_proba_train = meta_model.predict_proba(X_train)[:, 1]
             meta_proba_val = meta_model.predict_proba(X_val)[:, 1]
         else:
@@ -1033,14 +872,13 @@ class UnifiedTrainingOrchestrator:
         threshold = self.config.meta_labeling_threshold
 
         # Apply threshold - only take trades where meta probability >= threshold
-        trades_taken_train = meta_proba_train >= threshold
         trades_taken_val = meta_proba_val >= threshold
 
         # Combined accuracy (only on trades taken)
         if trades_taken_val.sum() > 0:
             combined_val_acc = (
-                (primary_val_classes[trades_taken_val] == y_val[trades_taken_val]).mean()
-            )
+                primary_val_classes[trades_taken_val] == y_val[trades_taken_val]
+            ).mean()
             trade_fraction = trades_taken_val.mean()
         else:
             combined_val_acc = 0.0
@@ -1072,15 +910,19 @@ class UnifiedTrainingOrchestrator:
 
             # Save meta-model (sklearn)
             import pickle
+
             meta_path = models_dir / f"{model_key}_meta.pkl"
-            with open(meta_path, 'wb') as f:
-                pickle.dump({
-                    'meta_model': meta_model,
-                    'primary_model_name': primary_model_name,
-                    'meta_model_name': meta_model_name,
-                    'threshold': threshold,
-                    'feature_names': feature_names,
-                }, f)
+            with open(meta_path, "wb") as f:
+                pickle.dump(
+                    {
+                        "meta_model": meta_model,
+                        "primary_model_name": primary_model_name,
+                        "meta_model_name": meta_model_name,
+                        "threshold": threshold,
+                        "feature_names": feature_names,
+                    },
+                    f,
+                )
             logger.info(f"    Saved meta-model to: {meta_path}")
 
         training_time = time.time() - start_time
@@ -1091,11 +933,9 @@ class UnifiedTrainingOrchestrator:
             "primary_train_accuracy": float(primary_train_acc),
             "primary_val_accuracy": float(primary_val_acc),
             "primary_val_f1": primary_result.metrics.get("val_f1", 0),
-
             # Meta model metrics
             "meta_train_accuracy": float(meta_train_acc),
             "meta_val_accuracy": float(meta_val_acc),
-
             # Combined system metrics
             "combined_accuracy": float(combined_val_acc),
             "primary_accuracy": float(primary_val_acc),  # For comparison
@@ -1104,7 +944,6 @@ class UnifiedTrainingOrchestrator:
             "total_samples": len(y_val),
             "threshold": threshold,
             "improvement": float(improvement),
-
             # For backward compatibility with val_f1 key
             "val_f1": float(combined_val_acc),  # Use combined accuracy as main metric
             "val_accuracy": float(combined_val_acc),
@@ -1136,27 +975,28 @@ class UnifiedTrainingOrchestrator:
         Returns:
             Fitted sklearn-compatible model
         """
-        from sklearn.linear_model import LogisticRegression
         from sklearn.ensemble import RandomForestClassifier
+        from sklearn.linear_model import LogisticRegression
 
         if model_name == "logistic":
             return LogisticRegression(
                 C=1.0,
                 max_iter=1000,
-                class_weight='balanced',
+                class_weight="balanced",
                 random_state=self.config.random_state,
             )
         elif model_name == "random_forest":
             return RandomForestClassifier(
                 n_estimators=100,
                 max_depth=5,
-                class_weight='balanced',
+                class_weight="balanced",
                 random_state=self.config.random_state,
                 n_jobs=self.config.n_jobs,
             )
         elif model_name == "xgboost":
             try:
                 import xgboost as xgb
+
                 return xgb.XGBClassifier(
                     n_estimators=100,
                     max_depth=3,
@@ -1164,7 +1004,7 @@ class UnifiedTrainingOrchestrator:
                     random_state=self.config.random_state,
                     n_jobs=self.config.n_jobs,
                     use_label_encoder=False,
-                    eval_metric='logloss',
+                    eval_metric="logloss",
                 )
             except ImportError:
                 logger.warning("XGBoost not available, falling back to logistic")
@@ -1172,6 +1012,7 @@ class UnifiedTrainingOrchestrator:
         elif model_name == "lightgbm":
             try:
                 import lightgbm as lgb
+
                 return lgb.LGBMClassifier(
                     n_estimators=100,
                     max_depth=3,
@@ -1186,6 +1027,7 @@ class UnifiedTrainingOrchestrator:
         elif model_name == "catboost":
             try:
                 import catboost as cb
+
                 return cb.CatBoostClassifier(
                     n_estimators=100,
                     max_depth=3,
@@ -1318,7 +1160,7 @@ class UnifiedTrainingOrchestrator:
         directions = primary_preds.class_predictions
 
         # Get meta-model probabilities
-        if hasattr(meta_model, 'predict_proba'):
+        if hasattr(meta_model, "predict_proba"):
             probabilities = meta_model.predict_proba(X_arr)[:, 1]
         else:
             probabilities = meta_model.predict(X_arr).astype(float)
@@ -1329,11 +1171,7 @@ class UnifiedTrainingOrchestrator:
         direction_mapped = directions.astype(float) - 1.0
 
         # Position = direction * probability, but 0 if probability < threshold
-        positions = np.where(
-            probabilities >= threshold,
-            direction_mapped * probabilities,
-            0.0
-        )
+        positions = np.where(probabilities >= threshold, direction_mapped * probabilities, 0.0)
 
         return directions, probabilities, positions
 

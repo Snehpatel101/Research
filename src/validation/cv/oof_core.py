@@ -13,11 +13,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from .purged_kfold import PurgedKFold
 from src.models.base import PredictionOutput
 from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
 from src.models.registry import ModelRegistry
+
+from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+from .purged_kfold import PurgedKFold
 
 logger = logging.getLogger(__name__)
 
@@ -206,10 +207,9 @@ class CoreOOFGenerator:
             # Handle sample weights
             if sample_weights is not None:
                 w_train = sample_weights.iloc[train_idx].values
-                w_val = sample_weights.iloc[val_idx].values
+                sample_weights.iloc[val_idx].values
             else:
                 w_train = None
-                w_val = None
 
             # Create and train model
             model = ModelRegistry.create(model_name, config=config)

@@ -3,7 +3,7 @@
 Provides barrier, labeling, and feature set configurations.
 """
 
-from src.common.horizon_config import (
+from src.core.common.horizon_config import (
     ACTIVE_HORIZONS,
     HORIZON_TIMEFRAME_MINUTES,
     HORIZONS,
@@ -15,69 +15,7 @@ from src.common.horizon_config import (
     get_scaled_horizons,
     validate_horizons,
 )
-from src.pipeline.config.barriers_config import (
-    BARRIER_PARAMS,
-    BARRIER_PARAMS_DEFAULT,
-    PERCENTAGE_BARRIER_PARAMS,
-    SLIPPAGE_TICKS,
-    TICK_VALUES,
-    TRANSACTION_COSTS,
-    get_barrier_params,
-    get_max_bars_across_all_params,
-    get_slippage_ticks,
-    get_total_trade_cost,
-    validate_barrier_params,
-)
-from src.pipeline.config.feature_sets import (
-    FEATURE_SET_ALIASES,
-    FEATURE_SET_DEFINITIONS,
-    FeatureSetDefinition,
-    get_feature_set_definitions,
-    resolve_feature_set_name,
-    resolve_feature_set_names,
-    validate_feature_set_config,
-)
-from src.pipeline.config.features import (
-    # Feature thresholds
-    CORRELATION_THRESHOLD,
-    DRIFT_CONFIG,
-    MTF_CONFIG,
-    STATIONARITY_TESTS,
-    # Timeframe config
-    SUPPORTED_TIMEFRAMES,
-    TIMEFRAME_TO_FREQ,
-    VARIANCE_THRESHOLD,
-    get_drift_config,
-    get_mtf_config,
-    get_stationarity_config,
-    parse_timeframe_to_minutes,
-    validate_drift_config,
-    validate_feature_thresholds,
-    validate_mtf_config,
-    validate_stationarity_config,
-    validate_timeframe,
-)
-from src.pipeline.config.labeling_config import (
-    DEFAULT_LABELING_STRATEGY,
-    LABEL_BALANCE_CONSTRAINTS,
-    LABELING_STRATEGY_CONFIGS,
-    MULTI_LABEL_CONFIG,
-    LabelingStrategyType,
-    get_labeling_strategy_config,
-    get_multi_label_config,
-    validate_labeling_config,
-)
-from src.pipeline.config.labels import (
-    ALL_LABEL_TEMPLATES,
-    LABEL_COLUMN_METADATA,
-    OPTIONAL_LABEL_TEMPLATES,
-    REQUIRED_LABEL_TEMPLATES,
-    get_all_label_columns,
-    get_label_metadata,
-    get_optional_label_columns,
-    get_required_label_columns,
-    is_label_column,
-)
+
 # Model config - canonical location: src.models.config.data_requirements
 from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
@@ -94,19 +32,84 @@ from src.models.config.data_requirements import (
     get_models_by_family,
     validate_model_config,
 )
-from src.pipeline.config.multi_model import (
+from src.data.pipeline.config.barriers_config import (
+    BARRIER_PARAMS,
+    BARRIER_PARAMS_DEFAULT,
+    PERCENTAGE_BARRIER_PARAMS,
+    SLIPPAGE_TICKS,
+    TICK_VALUES,
+    TRANSACTION_COSTS,
+    get_barrier_params,
+    get_max_bars_across_all_params,
+    get_slippage_ticks,
+    get_total_trade_cost,
+    validate_barrier_params,
+)
+from src.data.pipeline.config.feature_sets import (
+    FEATURE_SET_ALIASES,
+    FEATURE_SET_DEFINITIONS,
+    FeatureSetDefinition,
+    get_feature_set_definitions,
+    resolve_feature_set_name,
+    resolve_feature_set_names,
+    validate_feature_set_config,
+)
+from src.data.pipeline.config.features import (
+    # Feature thresholds
+    CORRELATION_THRESHOLD,
+    DRIFT_CONFIG,
+    MTF_CONFIG,
+    STATIONARITY_TESTS,
+    VARIANCE_THRESHOLD,
+    get_drift_config,
+    get_mtf_config,
+    get_stationarity_config,
+    validate_drift_config,
+    validate_feature_thresholds,
+    validate_mtf_config,
+    validate_stationarity_config,
+)
+# Timeframe config - now in src.core.common.timeframes
+from src.core.common.timeframes import (
+    SUPPORTED_TIMEFRAMES,
+    TIMEFRAME_TO_FREQ,
+    timeframe_to_minutes as parse_timeframe_to_minutes,
+    validate_timeframe,
+)
+from src.data.pipeline.config.labeling_config import (
+    DEFAULT_LABELING_STRATEGY,
+    LABEL_BALANCE_CONSTRAINTS,
+    LABELING_STRATEGY_CONFIGS,
+    MULTI_LABEL_CONFIG,
+    LabelingStrategyType,
+    get_labeling_strategy_config,
+    get_multi_label_config,
+    validate_labeling_config,
+)
+from src.data.pipeline.config.labels import (
+    ALL_LABEL_TEMPLATES,
+    LABEL_COLUMN_METADATA,
+    OPTIONAL_LABEL_TEMPLATES,
+    REQUIRED_LABEL_TEMPLATES,
+    get_all_label_columns,
+    get_label_metadata,
+    get_optional_label_columns,
+    get_required_label_columns,
+    is_label_column,
+)
+from src.data.pipeline.config.multi_model import (
     MultiModelPipelineConfig,
     build_multi_model_config,
     expand_ensemble_models,
     get_recommended_feature_set,
     validate_multi_model_setup,
 )
-from src.pipeline.config.regime_config import (
+from src.data.pipeline.config.regime_config import (
     REGIME_BARRIER_ADJUSTMENTS,
     REGIME_CONFIG,
     get_regime_adjusted_barriers,
 )
-from src.pipeline.config.runtime import (
+from src.data.pipeline.config.runtime import (
     CONFIG_DIR,
     DATA_DIR,
     EMBARGO_BARS,

@@ -82,17 +82,17 @@ def delete_stale_data() -> None:
     scaled_dir = splits_dir / "scaled"
     if scaled_dir.exists():
         shutil.rmtree(scaled_dir)
-        print(f"✓ Deleted: scaled/")
+        print("✓ Deleted: scaled/")
     else:
-        print(f"⚠ Not found: scaled/")
+        print("⚠ Not found: scaled/")
 
     # Delete datasets directory (will be regenerated)
     datasets_dir = splits_dir / "datasets"
     if datasets_dir.exists():
         shutil.rmtree(datasets_dir)
-        print(f"✓ Deleted: datasets/")
+        print("✓ Deleted: datasets/")
     else:
-        print(f"⚠ Not found: datasets/")
+        print("⚠ Not found: datasets/")
 
     print("\nStale data deletion complete.")
 
@@ -115,7 +115,7 @@ def validate_fix() -> bool:
         val_indices = np.load(splits_dir / "val_indices.npy")
         test_indices = np.load(splits_dir / "test_indices.npy")
 
-        print(f"✓ Loaded indices:")
+        print("✓ Loaded indices:")
         print(f"  Train: {len(train_indices):,}")
         print(f"  Val:   {len(val_indices):,}")
         print(f"  Test:  {len(test_indices):,}")
@@ -125,7 +125,7 @@ def validate_fix() -> bool:
         val_scaled = pd.read_parquet(splits_dir / "scaled" / "val_scaled.parquet")
         test_scaled = pd.read_parquet(splits_dir / "scaled" / "test_scaled.parquet")
 
-        print(f"✓ Loaded scaled data:")
+        print("✓ Loaded scaled data:")
         print(f"  Train: {len(train_scaled):,}")
         print(f"  Val:   {len(val_scaled):,}")
         print(f"  Test:  {len(test_scaled):,}")
@@ -153,7 +153,7 @@ def validate_fix() -> bool:
             return False
 
         # Check label distributions
-        print(f"\n✓ Label distributions:")
+        print("\n✓ Label distributions:")
         for split_name, split_df in [
             ("Train", train_scaled),
             ("Val", val_scaled),
