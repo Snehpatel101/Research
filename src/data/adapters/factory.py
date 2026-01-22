@@ -7,7 +7,7 @@ This factory integrates the existing adapter infrastructure with PipelineConfig
 to provide a unified interface for creating model-appropriate data adapters.
 
 Usage:
-    from src.adapters.factory import AdapterFactory, create_adapter_factory
+    from src.data.adapters.factory import AdapterFactory, create_adapter_factory
     from src.core.config import PipelineConfig
 
     config = PipelineConfig(
@@ -475,7 +475,7 @@ def create_adapter_factory(config: PipelineConfig) -> AdapterFactory:
 
     Example:
         from src.core.config import PipelineConfig
-        from src.adapters.factory import create_adapter_factory
+        from src.data.adapters.factory import create_adapter_factory
 
         config = PipelineConfig(
             symbol="MES",

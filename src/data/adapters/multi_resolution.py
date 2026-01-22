@@ -59,7 +59,7 @@ from torch.utils.data import Dataset
 
 # Import from canonical locations
 from src.common.timeframes import TIMEFRAME_TO_MINUTES
-from src.adapters.multi_resolution_utils import (
+from .multi_resolution_utils import (
     DEFAULT_MTF_FEATURES,
     DEFAULT_MTF_TIMEFRAMES,
     TIMEFRAME_SUFFIX_PATTERNS,
