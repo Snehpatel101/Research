@@ -2,7 +2,55 @@
 
 **Date:** 2026-01-21
 **Status:** Conflict Analysis + Reconciled Implementation Plan
-**Version:** 2.0 (Updated with critical gaps identified during review)
+**Version:** 2.2 (Simplified to ONE config, ONE orchestrator)
+
+---
+
+## THE SIMPLIFIED VISION
+
+> **See `SIMPLIFIED_VISION.md` for the complete simplified architecture.**
+
+### The Goal: ONE Config, ONE Orchestrator
+
+```python
+from src import MLPipeline, PipelineConfig
+
+config = PipelineConfig(
+    symbol="MES",
+    data_path="./data/mes.parquet",
+    output_dir="./experiments",
+    models=["xgboost", "lstm"],
+    build_ensemble=True,
+)
+
+result = MLPipeline(config).run()  # Does EVERYTHING
+```
+
+### What We're Eliminating
+
+| Current State | Target State |
+|---------------|--------------|
+| 7 config classes | **1 config** (`PipelineConfig`) |
+| 4 entry points | **1 orchestrator** (`MLPipeline`) |
+| 71+ duplicate `_get_global_or_default()` functions | **1 centralized** `get_config_value()` |
+| Dead code (MLConfig, UnifiedConfig, SmartConfig) | **Deleted** |
+
+### Dead Code to Remove
+
+| File | Class | Status | Action |
+|------|-------|--------|--------|
+| `src/ml_pipeline/config.py` | MLConfig | 0 imports | **DELETE** |
+| `src/config/smart_config.py` | SmartConfig | 0 imports | **DELETE** |
+| `src/config/unified.py` | UnifiedConfig | 0 imports | **DELETE** |
+
+### Configs to KEEP
+
+| Config | Location | Purpose |
+|--------|----------|---------|
+| `PipelineConfig` | `src/core/config.py` | **THE ONE** user-facing config |
+| `GlobalConfig` | `src/config/global_config.py` | YAML defaults (internal) |
+| `TrainerConfig` | `src/models/config/trainer_config.py` | Per-model settings (internal) |
+| `DataConfig` | `src/pipeline/data_config.py` | Pipeline internals (hidden) |
 
 ---
 
