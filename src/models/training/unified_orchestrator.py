@@ -13,7 +13,7 @@ Delegates to:
 
 Example:
     from src.core import PipelineConfig
-    from src.training import UnifiedTrainingOrchestrator
+    from src.models.training import UnifiedTrainingOrchestrator
 
     config = PipelineConfig(
         symbol="MES",
@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from src.adapters import (
+from src.data.adapters import (
     AlignedOOFResult,
     OOFAligner,
     PreparedData,
@@ -58,7 +58,7 @@ from src.validation.cv import (
     PurgedKFoldConfig,
     StackingDataset,
 )
-from src.training.services import (
+from .services import (
     ModelTrainingService,
     ModelTrainingRequest,
     OOFGenerationService,
@@ -196,7 +196,7 @@ class UnifiedTrainingOrchestrator:
 
     Usage:
         from src.core import PipelineConfig
-        from src.training import UnifiedTrainingOrchestrator
+        from src.models.training import UnifiedTrainingOrchestrator
 
         config = PipelineConfig(
             symbol="MES",
@@ -663,8 +663,8 @@ class UnifiedTrainingOrchestrator:
             df: Input DataFrame
             additional_dfs: Optional additional timeframe DataFrames
         """
-        from src.training.config import ExperimentConfig, ModelConfig
-        from src.training.modes import WalkForwardTrainer, WalkForwardTrainerConfig
+        from .config import ExperimentConfig, ModelConfig
+        from .modes import WalkForwardTrainer, WalkForwardTrainerConfig
 
         logger.info("Walk-forward training mode")
 
@@ -758,7 +758,7 @@ class UnifiedTrainingOrchestrator:
             df: Input DataFrame with OHLCV data
             additional_dfs: Optional additional timeframe DataFrames
         """
-        from src.training.regime_trainer import RegimeAwareTrainer, RegimeTrainingResult
+        from .regime_trainer import RegimeAwareTrainer, RegimeTrainingResult
 
         logger.info("Regime-aware training mode")
         logger.info(f"  Detection method: {self.config.regime_detection_method}")
@@ -1353,7 +1353,7 @@ def train_pipeline(
 
     Usage:
         from src.core import PipelineConfig
-        from src.training import train_pipeline
+        from src.models.training import train_pipeline
 
         config = PipelineConfig(
             symbol="MES",
@@ -1389,7 +1389,7 @@ def train_meta_labeling(
 
     Usage:
         from src.core import PipelineConfig
-        from src.training import train_meta_labeling
+        from src.models.training import train_meta_labeling
 
         config = PipelineConfig(
             symbol="MES",

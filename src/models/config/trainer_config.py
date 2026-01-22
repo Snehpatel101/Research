@@ -252,7 +252,7 @@ class TrainerConfig:
                 max_epochs=200,
             )
         """
-        from src.contracts import get_model_contract
+        from src.core.contracts import get_model_contract
 
         contract = get_model_contract(model_name)
 

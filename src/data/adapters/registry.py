@@ -10,7 +10,7 @@ import logging
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.contracts import ModelContract
+    from src.core.contracts import ModelContract
 
 from .base import BaseAdapter
 
@@ -109,7 +109,7 @@ class AdapterRegistry:
         Returns:
             Adapter instance appropriate for the model
         """
-        from src.contracts import get_model_contract
+        from src.core.contracts import get_model_contract
 
         contract = get_model_contract(model_name)
         return cls.create(contract.adapter_id, **kwargs)

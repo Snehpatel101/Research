@@ -14,7 +14,7 @@ PipelineConfig as the ONLY configuration source.
 
 Example:
     from src.core import PipelineConfig
-    from src.training.regime_trainer import RegimeAwareTrainer
+    from src.models.training.regime_trainer import RegimeAwareTrainer
 
     config = PipelineConfig(
         symbol="MES",
@@ -42,13 +42,13 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from src.training.regime_detector import (
+from .regime_detector import (
     RegimeDetector,
     RegimeResult,
 )
 
 if TYPE_CHECKING:
-    from src.adapters import PreparedData
+    from src.data.adapters import PreparedData
     from src.core import PipelineConfig
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ class RegimeAwareTrainer:
 
     Usage:
         from src.core import PipelineConfig
-        from src.training.regime_trainer import RegimeAwareTrainer
+        from src.models.training.regime_trainer import RegimeAwareTrainer
 
         config = PipelineConfig(
             symbol="MES",

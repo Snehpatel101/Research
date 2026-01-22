@@ -234,7 +234,7 @@ class TrainerFeaturesMixin:
             (is_valid, list_of_warnings)
         """
         from src.features.strategies import get_strategy_for_model
-        from src.contracts import get_model_contract
+        from src.core.contracts import get_model_contract
 
         warnings = []
         strategy = get_strategy_for_model(self.config.model_name)

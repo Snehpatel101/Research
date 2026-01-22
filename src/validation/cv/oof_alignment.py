@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from src.contracts import ModelContract, get_model_contract
+from src.core.contracts import ModelContract, get_model_contract
 
 if TYPE_CHECKING:
     from .oof_core import OOFPrediction

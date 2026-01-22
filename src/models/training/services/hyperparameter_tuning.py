@@ -7,7 +7,7 @@ import logging
 
 import numpy as np
 
-from src.adapters import PreparedData
+from src.data.adapters import PreparedData
 from src.validation.cv import TimeSeriesOptunaTuner
 
 logger = logging.getLogger(__name__)

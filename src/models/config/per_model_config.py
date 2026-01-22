@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.contracts import ModelContract
+    from src.core.contracts import ModelContract
 
 
 @dataclass
@@ -88,7 +88,7 @@ class PerModelConfig:
     @property
     def contract(self) -> "ModelContract":
         """Get the ModelContract for this model."""
-        from src.contracts import get_model_contract
+        from src.core.contracts import get_model_contract
 
         return get_model_contract(self.name)
 
@@ -345,7 +345,7 @@ class EnsemblePlan:
 
         # Check meta-learner is actually a meta-learner family
         try:
-            from src.contracts import get_model_contract
+            from src.core.contracts import get_model_contract
 
             meta_contract = get_model_contract(self.meta_learner)
             if meta_contract.model_family != "meta_learner":

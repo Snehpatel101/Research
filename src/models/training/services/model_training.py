@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from src.adapters import PreparedData
+from src.data.adapters import PreparedData
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class ModelTrainingService:
     def _get_tuning_service(self):
         """Lazy load HyperparameterTuningService to avoid circular imports."""
         if self._tuning_service is None:
-            from src.training.services.hyperparameter_tuning import (
+            from .hyperparameter_tuning import (
                 HyperparameterTuningService,
             )
 
@@ -229,7 +229,7 @@ class ModelTrainingService:
         Returns:
             Updated trainer_config with optimized hyperparameters
         """
-        from src.training.services.hyperparameter_tuning import TuningRequest
+        from .hyperparameter_tuning import TuningRequest
 
         tuning_service = self._get_tuning_service()
 

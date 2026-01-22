@@ -131,7 +131,7 @@ from src.validation.cv.pbo import (
 )
 
 # Phase 5: Feature Store
-from src.feature_store import (
+from src.data.store import (
     CacheMetadata,
     DataSource,
     FeatureCache,
@@ -153,7 +153,7 @@ from src.feature_store import (
 )
 
 # Phase 6: Meta-Labeling (Lopez de Prado AFML approach)
-from src.pipeline.stages.meta_labeling import (
+from src.data.pipeline.stages.meta_labeling import (
     # Primary classifier for high-recall direction prediction
     PrimaryClassifier,
     PrimaryModelConfig,
@@ -173,7 +173,7 @@ from src.pipeline.stages.meta_labeling import (
 )
 
 # Phase 6: Alternative MetaLabeler from labeling module
-from src.pipeline.stages.labeling import (
+from src.data.pipeline.stages.labeling import (
     MetaLabeler,
     BetSizeMethod,
 )

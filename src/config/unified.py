@@ -876,7 +876,7 @@ class UnifiedConfig:
             config = unified_config.get_trainer_config_for_model("lstm", horizon=20)
         """
         from src.models.config.trainer_config import TrainerConfig
-        from src.contracts import get_model_contract
+        from src.core.contracts import get_model_contract
 
         horizon = horizon or self.horizons.max_horizon
         contract = get_model_contract(model_name)

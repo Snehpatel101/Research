@@ -47,7 +47,7 @@ from src.core import (
     PipelineConfig,
 )
 from src.core.interfaces import OOFPredictionProtocol
-from src.adapters import (
+from src.data.adapters import (
     AlignedOOFResult,
     OOFAligner,
     align_oof_predictions,

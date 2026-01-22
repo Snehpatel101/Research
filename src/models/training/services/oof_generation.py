@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
-from src.adapters import PreparedData
+from src.data.adapters import PreparedData
 
 logger = logging.getLogger(__name__)
 

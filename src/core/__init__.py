@@ -252,7 +252,7 @@ from src.core.data_contract import (
 # =============================================================================
 # ABSORBED: src/contracts - Model and data contracts
 # =============================================================================
-from src.contracts import (
+from src.core.contracts import (
     FeatureMode,
     MTFMode,
     DataContractSchema,
@@ -288,7 +288,7 @@ from src.config import (
 # =============================================================================
 # ABSORBED: src/common - Timeframes, horizons, split ratios
 # =============================================================================
-from src.common import (
+from src.core.common import (
     HorizonConfig,
     HORIZONS,
     SUPPORTED_HORIZONS,
@@ -320,7 +320,7 @@ from src.common import (
 # =============================================================================
 # ABSORBED: src/utils - Memory, cache, notebook utilities
 # =============================================================================
-from src.utils import (
+from src.core.utils import (
     CacheManager,
     CacheConfig,
     CacheEntry,
@@ -347,7 +347,7 @@ from src.utils import (
 # =============================================================================
 # ABSORBED: src/coordination - Temporal alignment utilities
 # =============================================================================
-from src.coordination import (
+from src.core.coordination import (
     align_to_anchor,
     apply_mtf_lag,
     compute_sequence_offset,

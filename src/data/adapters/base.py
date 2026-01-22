@@ -14,9 +14,9 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.contracts import DataContract, ModelContract
+    from src.core.contracts import DataContract, ModelContract
 
-from src.contracts import DataRank
+from src.core.contracts import DataRank
 
 
 @dataclass

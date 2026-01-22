@@ -11,8 +11,8 @@ Key responsibilities:
 - Provide data views for different model configurations
 
 Usage:
-    from src.coordination import TimeframeCoordinator
-    from src.contracts import get_model_contract
+    from src.core.coordination import TimeframeCoordinator
+    from src.core.contracts import get_model_contract
 
     coordinator = TimeframeCoordinator(
         data_dir="data/splits/scaled",
@@ -40,12 +40,12 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from src.common.timeframes import (
+from src.core.common.timeframes import (
     CANONICAL_TIMEFRAMES,
     get_timeframe_minutes,
     normalize_timeframe,
 )
-from src.contracts import ModelContract, get_model_contract
+from src.core.contracts import ModelContract, get_model_contract
 
 if TYPE_CHECKING:
     pass

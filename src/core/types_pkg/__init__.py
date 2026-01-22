@@ -34,7 +34,7 @@ from src.core.types import (
 )
 
 # Re-export from contracts
-from src.contracts import (
+from src.core.contracts import (
     FeatureMode,
     MTFMode,
     DataContractSchema,

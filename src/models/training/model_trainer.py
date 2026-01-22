@@ -13,7 +13,7 @@ PHASE_3 Training Orchestration:
 
 Usage:
     from src.core import PipelineConfig
-    from src.training import ModelTrainer
+    from src.models.training import ModelTrainer
 
     config = PipelineConfig(...)
     trainer = ModelTrainer(config)
@@ -43,7 +43,7 @@ from src.core import (
     MODEL_ADAPTER_MAP,
     DataRank,
 )
-from src.adapters import (
+from src.data.adapters import (
     UnifiedDataPreparation,
     PreparedData,
     AdapterFactory,
@@ -137,7 +137,7 @@ class ModelTrainer:
 
     Usage:
         from src.core import PipelineConfig
-        from src.training import ModelTrainer
+        from src.models.training import ModelTrainer
 
         config = PipelineConfig(...)
         trainer = ModelTrainer(config)
@@ -544,7 +544,7 @@ def train_models(
 
     Usage:
         from src.core import PipelineConfig
-        from src.training import train_models
+        from src.models.training import train_models
 
         config = PipelineConfig(...)
         artifacts = train_models(config, df)

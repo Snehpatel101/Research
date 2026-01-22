@@ -650,7 +650,7 @@ class TimeSeriesDataContainer:
         if stride <= 0:
             raise ValueError(f"stride must be positive, got {stride}")
 
-        from src.adapters import MultiResolution4DAdapter
+        from src.data.adapters import MultiResolution4DAdapter
 
         split_data = self.get_split(split)
 

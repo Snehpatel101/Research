@@ -20,7 +20,7 @@ import pandas as pd
 
 from src.core import PipelineConfig, MODEL_DATA_RANKS
 from src.core.interfaces import OOFResult, OOFPredictionProtocol
-from src.adapters import OOFAligner, AlignedOOFResult
+from src.data.adapters import OOFAligner, AlignedOOFResult
 
 # TYPE_CHECKING import to break circular dependency:
 # cross_validation/__init__ -> cv_feature_selection -> oof_generator -> oof_core

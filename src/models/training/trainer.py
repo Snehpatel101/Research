@@ -48,7 +48,7 @@ from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validat
 from .features import TrainerFeaturesMixin
 
 if TYPE_CHECKING:
-    from src.coordination import TimeframeCoordinator
+    from src.core.coordination import TimeframeCoordinator
     from src.optimization.feature_selection import FeatureSelectionManager
     from src.core.container import TimeSeriesDataContainer
 
@@ -261,7 +261,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         Note:
             This is a Phase 3 SNwH method for heterogeneous ensemble support.
         """
-        from src.coordination import TimeframeCoordinator
+        from src.core.coordination import TimeframeCoordinator
 
         # Determine data directory from config
         # Try output_dir parent structure or fall back to standard path
@@ -297,7 +297,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         Returns:
             (train_df, val_df) DataFrames for the model's primary timeframe
         """
-        from src.contracts import get_model_contract
+        from src.core.contracts import get_model_contract
 
         model_name = model_name or self.config.model_name
         contract = get_model_contract(model_name)
@@ -324,7 +324,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         train_df = coordinator.get_timeframe_data(primary_tf).df
 
         # Load val data separately
-        from src.coordination import TimeframeCoordinator
+        from src.core.coordination import TimeframeCoordinator
         coordinator_val = TimeframeCoordinator(
             data_dir=coordinator.data_dir,
             split="val",
@@ -351,8 +351,8 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         Returns:
             (train_df, val_df) for anchor timeframe
         """
-        from src.contracts import get_model_contract
-        from src.coordination import TimeframeCoordinator
+        from src.core.contracts import get_model_contract
+        from src.core.coordination import TimeframeCoordinator
 
         base_models = self.config.model_config.get("base_model_names", [])
 

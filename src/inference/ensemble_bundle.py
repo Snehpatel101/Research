@@ -716,7 +716,7 @@ class EnsembleBundle:
         Returns:
             Stacked feature array ready for meta-learner
         """
-        from src.adapters import OOFAligner
+        from src.data.adapters import OOFAligner
         from src.core import OOFResult
 
         # If predictions are already aligned (same length), simple stack

@@ -199,7 +199,7 @@ class TestParallelTrainingService:
 
     def test_import(self):
         """Test that parallel training can be imported."""
-        from src.training.services import (
+        from src.models.training.services import (
             ParallelTrainingService,
             ParallelTrainingConfig,
             train_models_parallel,
@@ -209,7 +209,7 @@ class TestParallelTrainingService:
 
     def test_service_creation(self):
         """Test creating parallel training service."""
-        from src.training.services import ParallelTrainingService
+        from src.models.training.services import ParallelTrainingService
 
         service = ParallelTrainingService(n_jobs=2, verbose=0)
 
@@ -219,7 +219,7 @@ class TestParallelTrainingService:
 
     def test_config_defaults(self):
         """Test parallel training config defaults."""
-        from src.training.services import ParallelTrainingConfig
+        from src.models.training.services import ParallelTrainingConfig
 
         config = ParallelTrainingConfig()
 
@@ -229,7 +229,7 @@ class TestParallelTrainingService:
 
     def test_empty_request_list(self):
         """Test training with empty request list."""
-        from src.training.services import ParallelTrainingService
+        from src.models.training.services import ParallelTrainingService
 
         service = ParallelTrainingService()
         results = service.train_models_parallel([])
@@ -256,7 +256,7 @@ class TestBetSizing:
 
     def test_import(self):
         """Test that bet sizing can be imported."""
-        from src.training.meta_labeling import (
+        from src.models.training.meta_labeling import (
             BetSizingStrategy,
             BetSizingConfig,
             compute_bet_sizes,
@@ -267,7 +267,7 @@ class TestBetSizing:
 
     def test_binary_sizing(self):
         """Test binary bet sizing strategy."""
-        from src.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
+        from src.models.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
 
         probs = np.array([0.3, 0.5, 0.7, 0.9])
         sizes = compute_bet_sizes(probs, strategy=BetSizingStrategy.BINARY, threshold=0.5)
@@ -280,7 +280,7 @@ class TestBetSizing:
 
     def test_proportional_sizing(self):
         """Test proportional bet sizing strategy."""
-        from src.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
+        from src.models.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
 
         probs = np.array([0.5, 0.75, 1.0])
         sizes = compute_bet_sizes(probs, strategy=BetSizingStrategy.PROPORTIONAL, threshold=0.5)
@@ -292,7 +292,7 @@ class TestBetSizing:
 
     def test_kelly_sizing(self):
         """Test Kelly criterion bet sizing."""
-        from src.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
+        from src.models.training.meta_labeling import compute_bet_sizes, BetSizingStrategy
 
         probs = np.array([0.5, 0.75, 1.0])
         sizes = compute_bet_sizes(probs, strategy=BetSizingStrategy.KELLY, threshold=0.5, kelly_fraction=1.0)
@@ -305,7 +305,7 @@ class TestBetSizing:
 
     def test_predict_with_sizing(self):
         """Test combining predictions with sizing."""
-        from src.training.meta_labeling import predict_with_sizing, BetSizingConfig, BetSizingStrategy
+        from src.models.training.meta_labeling import predict_with_sizing, BetSizingConfig, BetSizingStrategy
 
         primary = np.array([1, -1, 1, -1])  # Directions
         meta_probs = np.array([0.3, 0.7, 0.9, 0.4])
@@ -325,7 +325,7 @@ class TestBetSizing:
 
     def test_all_strategies_exist(self):
         """Test that all strategies are implemented."""
-        from src.training.meta_labeling import BetSizingStrategy, compute_bet_sizes
+        from src.models.training.meta_labeling import BetSizingStrategy, compute_bet_sizes
 
         probs = np.array([0.6, 0.8])
 
@@ -345,7 +345,7 @@ class TestTrainingServicesIntegration:
 
     def test_all_services_importable(self):
         """Test all training services can be imported together."""
-        from src.training.services import (
+        from src.models.training.services import (
             ModelTrainingService,
             ModelTrainingRequest,
             ModelTrainingResult,
@@ -369,10 +369,10 @@ class TestTrainingServicesIntegration:
 
     def test_unified_orchestrator_uses_services(self):
         """Test that UnifiedTrainingOrchestrator imports the services."""
-        from src.training.unified_orchestrator import UnifiedTrainingOrchestrator
+        from src.models.training.unified_orchestrator import UnifiedTrainingOrchestrator
 
         # Check that the module imports are in place
-        import src.training.unified_orchestrator as uto_module
+        import src.models.training.unified_orchestrator as uto_module
 
         # The orchestrator should have service imports
         source = open(uto_module.__file__).read()
@@ -399,7 +399,7 @@ class TestModuleStructure:
 
     def test_training_exports(self):
         """Test src.training exports."""
-        from src.training import (
+        from src.models.training import (
             UnifiedTrainingOrchestrator,
             TrainingRunResult,
             BetSizingStrategy,

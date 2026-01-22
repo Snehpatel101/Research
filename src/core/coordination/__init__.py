@@ -9,7 +9,7 @@ This package provides utilities for:
 - TimeframeCoordinator for multi-timeframe data loading and alignment
 
 Usage:
-    from src.coordination import (
+    from src.core.coordination import (
         # Alignment utilities
         align_to_anchor,
         apply_mtf_lag,

@@ -18,10 +18,10 @@ import pandas as pd
 
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
-from src.contracts import DataContract, DataRank
+from src.core.contracts import DataContract, DataRank
 
 if TYPE_CHECKING:
-    from src.contracts import ModelContract
+    from src.core.contracts import ModelContract
 
 logger = logging.getLogger(__name__)
 

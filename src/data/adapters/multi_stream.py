@@ -19,11 +19,11 @@ import pandas as pd
 
 from .base import BaseAdapter, AdapterResult
 from .registry import AdapterRegistry
-from src.contracts import DataRank
+from src.core.contracts import DataRank
 from src.common.timeframes import normalize_timeframe, get_timeframe_minutes
 
 if TYPE_CHECKING:
-    from src.contracts import ModelContract, DataContract
+    from src.core.contracts import ModelContract, DataContract
 
 logger = logging.getLogger(__name__)
 
