@@ -2,6 +2,28 @@
 
 **Date:** 2026-01-21
 **Status:** Conflict Analysis + Reconciled Implementation Plan
+**Version:** 2.0 (Updated with critical gaps identified during review)
+
+---
+
+## CRITICAL NOTE: Current Codebase State
+
+> **Important:** This plan was created to reconcile two architectural proposals (1.md and 2.md). However, review against the actual codebase reveals:
+>
+> | Aspect | Plan Assumes | Actual State |
+> |--------|--------------|--------------|
+> | Entry Point | MLPipeline should become primary | **MLFactory IS already primary** (940 lines) |
+> | MLPipeline | To be created in `pipeline/orchestrator.py` | **Already exists but DEPRECATED** in `ml_pipeline/unified.py` |
+> | pipeline/phases/ | To be created | **Does not exist** |
+> | Consolidations | Not started | **Not started** (feature_selection/, cross_validation/ still separate) |
+> | unified_orchestrator.py | 1,599 lines to refactor | **Still 1,599 lines** (unchanged) |
+> | Module count | 24 modules | **Still 24 modules** |
+>
+> **Decision Required:** This plan proposes REVERSING the current direction (MLFactory → MLPipeline). The team must decide:
+> 1. **Option A:** Follow this plan (deprecate MLFactory, elevate MLPipeline)
+> 2. **Option B:** Update this plan to keep MLFactory as primary and adjust accordingly
+>
+> This document proceeds with **Option A** as written, but implementation should not begin until this decision is confirmed.
 
 ---
 
@@ -229,16 +251,34 @@ src/
 
 ## Part 5: Reconciled Implementation Plan
 
-### Phase 0: Preparation (Day 1)
+### Phase 0: Preparation (Days 1-2)
 
 | Task | Description | Deliverable |
 |------|-------------|-------------|
 | 0.1 | Create feature branch `refactor/unified-pipeline` | Branch created |
 | 0.2 | Document current import graph | `docs/import_graph_before.md` |
-| 0.3 | Run full test suite, establish baseline | All tests pass |
-| 0.4 | Create rollback plan | `docs/rollback.md` |
+| 0.3 | Run full test suite, establish baseline | All tests pass, coverage baseline |
+| 0.4 | Create rollback plan (see Part 9) | `docs/rollback.md` |
+| 0.5 | Run performance baseline benchmarks | `docs/performance_baseline.md` |
+| 0.6 | Audit pickle/checkpoint compatibility | `docs/artifact_compatibility.md` |
+| 0.7 | Create import cycle detection script | `scripts/detect_import_cycles.py` |
 
-### Phase 1: Entry Point Unification (Days 2-4)
+### Phase 0.5: Developer Experience Tooling (Days 3-4)
+
+| Task | Description | Deliverable |
+|------|-------------|-------------|
+| 0.5.1 | Build import detection script | `scripts/detect_affected_files.py` |
+| 0.5.2 | Build automated migration script | `scripts/migrate_imports.py` |
+| 0.5.3 | Create migration verification script | `scripts/verify_migration.py` |
+| 0.5.4 | Create pickle unpickler shim for old paths | `src/compat/unpickler_shim.py` |
+| 0.5.5 | Create stack trace mapping document | `docs/stack_trace_mapping.md` |
+| 0.5.6 | Document IDE configuration updates | `docs/ide_setup.md` |
+| 0.5.7 | Create common pitfalls guide | `docs/COMMON_PITFALLS.md` |
+| 0.5.8 | Set up pre-commit hooks for deprecated imports | `.pre-commit-config.yaml` |
+
+**Exit Criteria:** All migration tooling tested, documentation complete, team can run `scripts/detect_affected_files.py` successfully
+
+### Phase 1: Entry Point Unification (Days 5-7)
 
 | Task | Description | Files Affected |
 |------|-------------|----------------|
@@ -252,7 +292,7 @@ src/
 
 **Exit Criteria:** `from src import MLPipeline; MLPipeline(...).run()` works end-to-end
 
-### Phase 2: Configuration Consolidation (Days 5-7)
+### Phase 2: Configuration Consolidation (Days 8-10)
 
 | Task | Description | Files Affected |
 |------|-------------|----------------|
@@ -265,7 +305,7 @@ src/
 
 **Exit Criteria:** Single `UnifiedConfig` used everywhere, old configs still work with warnings
 
-### Phase 3: Feature Consolidation (Days 8-12)
+### Phase 3: Feature Consolidation (Days 11-16)
 
 | Task | Description | Files Affected |
 |------|-------------|----------------|
@@ -280,7 +320,7 @@ src/
 
 **Exit Criteria:** All feature-related code in `src/features/`, old imports work with warnings
 
-### Phase 4: Training Consolidation (Days 13-17)
+### Phase 4: Training Consolidation (Days 17-22)
 
 | Task | Description | Files Affected |
 |------|-------------|----------------|
@@ -297,7 +337,7 @@ src/
 
 **Exit Criteria:** `unified_orchestrator.py` <600 lines (extracting ~1000 lines total), all training logic in `src/training/`
 
-### Phase 5: Small Module Consolidation (Days 18-20)
+### Phase 5: Small Module Consolidation (Days 23-26)
 
 | Task | Description | Files Affected |
 |------|-------------|----------------|
@@ -309,7 +349,7 @@ src/
 
 **Exit Criteria:** 16 focused modules, no empty directories
 
-### Phase 6: Cleanup & Documentation (Days 21-25)
+### Phase 6: Cleanup & Documentation (Days 27-35)
 
 | Task | Description | Deliverable |
 |------|-------------|-------------|
@@ -325,19 +365,231 @@ src/
 
 ---
 
-## Part 6: Risk Mitigation
+## Part 6: Risk Mitigation (Expanded)
+
+### Known Risks
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Breaking external scripts | High | High | 2-version deprecation period with clear warnings |
-| Circular imports after merge | Medium | High | Careful import ordering, lazy imports, test after each phase |
+| Circular imports after merge | High | High | Run `scripts/detect_import_cycles.py` after each phase |
 | Test failures | Medium | Medium | Run tests after each task, not just each phase |
 | Missing edge cases | Medium | Medium | Shadow test: run old and new in parallel |
-| Documentation drift | Low | Medium | Update docs in same commit as code |
+| Documentation drift | High | Medium | Automated doc validation in CI |
+
+### CRITICAL RISKS (Previously Unidentified)
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| **Pickle/Checkpoint Incompatibility** | High | **CRITICAL** | Python's pickle stores full import paths. Moving modules breaks deserialization of ALL trained models. **Mitigation:** Create `UnpicklerShim` in Phase 0.5 that remaps old paths. Test loading ALL existing `.pkl`/`.joblib` files. |
+| **PipelineState Schema Breaking** | High | High | Existing `experiments/runs/*/pipeline_state.json` files reference old phase names. **Mitigation:** Create state migration script. Version the schema. |
+| **Checkpoint Path Orphaning** | High | High | Artifacts in `experiments/runs/*/checkpoints/` use old phase naming. **Mitigation:** Audit all checkpoint references, create path migration map. |
+| **Memory Regression from Shims** | Medium | Medium | Deprecation shims import both old and new modules. **Mitigation:** Profile memory before/after, set <5% regression target. |
+| **Test Coverage Degradation** | High | High | 6837 test files may import from old paths. **Mitigation:** Run coverage diff after each phase, no decrease allowed. |
+| **Rollback Impossibility** | Medium | **CRITICAL** | After file deletion (Phase 5), git revert won't cleanly restore. **Mitigation:** Tag stable points, test rollback in staging before each phase. |
+
+### Contingency Plans
+
+**If Phase 3 (Feature Consolidation) Fails:**
+```
+Option A: Rollback
+  - Revert to tag `v2.0-pre-phase3`
+  - Run state migration reversal script
+  - Post-mortem within 48 hours
+
+Option B: Partial Completion
+  - Keep feature_selection/ as-is
+  - Add re-export shims in features/selection/
+  - Document hybrid state, revisit next quarter
+
+Option C: Pivot
+  - Abandon module consolidation
+  - Focus only on MLPipeline entry point
+  - Accept 20+ modules instead of 16
+```
+
+**Trigger Criteria:** Phase not complete by scheduled end date + 2 buffer days
+
+### Metrics to Detect Risk Materialization
+
+```python
+# Run before each phase:
+import_cycle_count = detect_cycles(codebase)      # Must be 0
+orphaned_imports = find_broken_imports()           # Must be 0
+deprecation_warnings = count_warnings()            # Should decrease
+
+# Run after each phase:
+test_pass_rate = run_tests()                       # Must be 100%
+coverage_delta = coverage_diff(baseline)           # Must be >= -1%
+memory_usage_mb = profile_import_memory()          # Must be < baseline + 5%
+pickle_load_success = test_all_artifacts()         # Must be 100%
+```
 
 ---
 
-## Part 7: Success Criteria
+## Part 7: Testing Strategy
+
+### Per-Phase Test Requirements
+
+| Phase | Required Tests | Coverage Target |
+|-------|---------------|-----------------|
+| 0 | Baseline all existing tests | Record baseline |
+| 0.5 | Test migration scripts on sample imports | 100% script coverage |
+| 1 | Integration tests for MLPipeline entry point | New tests pass |
+| 2 | Config adapter tests, backward compat tests | No regression |
+| 3 | Feature module consolidation tests | No regression |
+| 4 | Training orchestrator unit tests for extracted modules | >80% on new files |
+| 5 | Import tests for merged modules | No regression |
+| 6 | Full regression suite | >= baseline coverage |
+
+### Test Types Required
+
+1. **Unit Tests:** Each extracted module (cv_integration.py, etc.)
+2. **Integration Tests:** MLPipeline end-to-end
+3. **Regression Tests:** All existing tests must pass
+4. **Compatibility Tests:** Load old pickles, old configs, old state files
+5. **Performance Tests:** Pipeline init time, memory usage
+
+---
+
+## Part 8: CI/CD Impact
+
+### Required CI/CD Updates
+
+| Component | Change Required |
+|-----------|----------------|
+| `.github/workflows/` | Update Python paths, add migration verification step |
+| `setup.py` / `pyproject.toml` | Update package structure, entry points |
+| Pre-commit hooks | Add deprecated import checker |
+| Docker/container | Update paths in Dockerfile |
+| Linting config | Update import sorting rules |
+
+### New CI Jobs
+
+```yaml
+# Add to CI pipeline:
+- name: Check deprecated imports
+  run: python scripts/detect_affected_files.py --fail-on-deprecated
+
+- name: Verify migration artifacts
+  run: python scripts/verify_migration.py
+
+- name: Test pickle compatibility
+  run: python scripts/test_pickle_compat.py
+```
+
+---
+
+## Part 9: Rollback Procedures
+
+### Phase-Specific Rollback
+
+| Phase | Rollback Command | Time Estimate |
+|-------|-----------------|---------------|
+| 1 | `git revert HEAD~N` (where N = phase 1 commits) | 30 min |
+| 2 | `git revert HEAD~N` + restore old configs | 1 hour |
+| 3 | `git checkout v2.0-pre-phase3 -- src/feature*` | 2 hours |
+| 4 | `git checkout v2.0-pre-phase4 -- src/training/` | 2 hours |
+| 5 | **Cannot cleanly rollback** - deleted files | Restore from tag |
+| 6 | N/A (docs only) | N/A |
+
+### Rollback Decision Criteria
+
+Initiate rollback if ANY of:
+- Test pass rate drops below 95%
+- Production errors increase by >10%
+- More than 3 critical bugs discovered
+- Team consensus after post-mortem
+
+### Stable Checkpoints (Tags)
+
+Create git tags at these points:
+- `v2.0-pre-phase1` - Before any changes
+- `v2.0-post-phase2` - After config consolidation (safe rollback point)
+- `v2.0-post-phase4` - After training refactor
+- `v2.0-rc1` - Release candidate
+
+---
+
+## Part 10: Performance Considerations
+
+### Baseline Metrics to Capture (Phase 0)
+
+| Metric | How to Measure | Target |
+|--------|---------------|--------|
+| `MLFactory` init time | `timeit` 100 iterations | Record baseline |
+| Full pipeline runtime | End-to-end benchmark | Record baseline |
+| Import time (`import src`) | `python -X importtime` | Record baseline |
+| Memory usage | `memory_profiler` | Record baseline |
+
+### Acceptable Regression Thresholds
+
+| Metric | Maximum Regression |
+|--------|-------------------|
+| Init time | +10% |
+| Pipeline runtime | +5% |
+| Import time | +20% (due to deprecation shims) |
+| Memory usage | +5% |
+
+### Performance Risks
+
+1. **Lazy imports in `__init__.py`:** May delay errors, confuse users
+2. **Shim overhead:** Each deprecated path adds indirection
+3. **Larger `__init__.py` files:** More parsing at import time
+
+---
+
+## Part 11: Developer Experience
+
+### Common Pitfalls (Document in `docs/COMMON_PITFALLS.md`)
+
+```markdown
+### 1. Mixed import styles
+❌ DON'T: Use both old and new imports in same file
+from src.factory import MLFactory  # old
+from src import MLPipeline         # new
+
+✅ DO: Use new imports only
+from src import MLPipeline
+
+### 2. Forgetting pickle compatibility
+❌ PROBLEM: Loading old models fails with ImportError
+✅ SOLUTION: Ensure UnpicklerShim is registered before loading
+
+### 3. IDE autocomplete shows old paths
+❌ PROBLEM: IDE still suggests feature_selection
+✅ SOLUTION: Clear Python cache, restart IDE, update settings
+
+### 4. Test patches reference old paths
+❌ DON'T: @patch('src.feature_selection.PurgedSelector')
+✅ DO: @patch('src.features.selection.PurgedSelector')
+
+### 5. Stack traces look different
+❌ CONFUSION: unified_orchestrator.py line numbers changed
+✅ SOLUTION: See docs/stack_trace_mapping.md
+```
+
+### IDE Configuration Updates
+
+After refactoring, developers must:
+1. Clear Python cache: `find . -name __pycache__ -exec rm -r {} +`
+2. Restart IDE / language server
+3. Update `.vscode/settings.json` Python paths (if applicable)
+4. Update PyCharm source roots (if applicable)
+
+### Debugging After Refactor
+
+Stack traces will change. Key mappings:
+| Old Location | New Location |
+|--------------|--------------|
+| `unified_orchestrator.py:100-400` | `cv_integration.py` |
+| `unified_orchestrator.py:400-700` | `artifact_manager.py` |
+| `unified_orchestrator.py:700-900` | `metrics_reporter.py` |
+| `unified_orchestrator.py:900-1050` | `mode_handlers.py` |
+
+---
+
+## Part 12: Success Criteria
 
 ### Quantitative
 
@@ -363,7 +615,97 @@ src/
 
 ---
 
-## Part 8: Decision Log
+## Part 13: Migration Tooling
+
+### Required Scripts (Create in Phase 0.5)
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `scripts/detect_affected_files.py` | Find all files using deprecated imports | `python scripts/detect_affected_files.py` |
+| `scripts/migrate_imports.py` | Auto-update imports using AST parsing | `python scripts/migrate_imports.py --dry-run` |
+| `scripts/verify_migration.py` | Validate migration completeness | `python scripts/verify_migration.py` |
+| `scripts/test_pickle_compat.py` | Test all pickle/joblib files load | `python scripts/test_pickle_compat.py` |
+| `scripts/detect_import_cycles.py` | Check for circular imports | `python scripts/detect_import_cycles.py` |
+
+### Unpickler Shim (Critical for Model Compatibility)
+
+```python
+# src/compat/unpickler_shim.py
+import pickle
+import sys
+
+class MigrationUnpickler(pickle.Unpickler):
+    """Unpickler that remaps old module paths to new paths."""
+
+    REMAP = {
+        'src.feature_selection': 'src.features.selection',
+        'src.feature_store': 'src.features.store',
+        'src.cross_validation': 'src.training.cv',
+        'src.ml_pipeline': 'src.pipeline',
+        'src.factory': 'src.pipeline',
+    }
+
+    def find_class(self, module, name):
+        for old, new in self.REMAP.items():
+            if module.startswith(old):
+                module = module.replace(old, new, 1)
+                break
+        return super().find_class(module, name)
+
+def load_with_compat(filepath):
+    """Load pickle file with backward compatibility."""
+    with open(filepath, 'rb') as f:
+        return MigrationUnpickler(f).load()
+```
+
+### Pre-commit Hook Configuration
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: local
+    hooks:
+      - id: check-deprecated-imports
+        name: Block deprecated imports
+        entry: python scripts/detect_affected_files.py --fail-on-new
+        language: python
+        files: \.py$
+```
+
+---
+
+## Part 14: Timeline Summary
+
+### Updated Timeline (35 Working Days / 7 Weeks)
+
+| Phase | Days | Duration | Cumulative |
+|-------|------|----------|------------|
+| Phase 0: Preparation | 1-2 | 2 days | Day 2 |
+| Phase 0.5: DX Tooling | 3-4 | 2 days | Day 4 |
+| Phase 1: Entry Point | 5-7 | 3 days | Day 7 |
+| Phase 2: Config | 8-10 | 3 days | Day 10 |
+| Phase 3: Features | 11-16 | 6 days | Day 16 |
+| Phase 4: Training | 17-22 | 6 days | Day 22 |
+| Phase 5: Small Modules | 23-26 | 4 days | Day 26 |
+| Phase 6: Cleanup & Docs | 27-35 | 9 days | Day 35 |
+
+**Buffer:** Built into Phase 6 (extra time for unexpected issues)
+
+### Milestones
+
+| Milestone | Day | Gate |
+|-----------|-----|------|
+| Tooling Ready | 4 | Migration scripts work, team trained |
+| Entry Point Live | 7 | `from src import MLPipeline` works |
+| Config Unified | 10 | Single UnifiedConfig used |
+| Features Consolidated | 16 | No more feature_selection/, feature_store/ |
+| Training Refactored | 22 | unified_orchestrator.py <600 lines |
+| Code Complete | 26 | All consolidation done |
+| Release Ready | 35 | Docs, tests, release candidate |
+
+---
+
+## Part 15: Decision Log
 
 | Decision | Options Considered | Chosen | Rationale |
 |----------|-------------------|--------|-----------|
@@ -373,6 +715,7 @@ src/
 | `monitoring/` fate | Keep separate, merge into common | Keep | First-class concern |
 | Config unification | Keep multiple, full merge | Full merge with adapters | Clean architecture |
 | Deprecation period | 1 version, 2 versions | 2 versions | User safety |
+| Timeline | 25 days, 35 days | 35 days | Account for DX tooling, buffer |
 
 ---
 
@@ -414,5 +757,27 @@ ml status
 
 ---
 
-*Last Updated: 2026-01-21*
+## Changelog
+
+### v2.0 (2026-01-21)
+- Added critical note about codebase state mismatch (MLFactory vs MLPipeline direction)
+- Added Phase 0.5: Developer Experience Tooling (2 days)
+- Expanded Risk Mitigation with 6 critical risks (pickle/checkpoint compatibility, etc.)
+- Added Part 7: Testing Strategy
+- Added Part 8: CI/CD Impact
+- Added Part 9: Rollback Procedures (detailed phase-specific rollback)
+- Added Part 10: Performance Considerations (metrics and thresholds)
+- Added Part 11: Developer Experience (pitfalls, IDE, debugging)
+- Added Part 13: Migration Tooling (scripts, unpickler shim)
+- Added Part 14: Timeline Summary (updated from 25 to 35 days)
+- Added contingency plans for phase failures
+- Added metrics for detecting risk materialization
+
+### v1.0 (2026-01-21)
+- Initial reconciled plan from 1.md and 2.md
+
+---
+
+*Last Updated: 2026-01-21 (v2.0)*
+*Status: Ready for Team Review and Decision on MLFactory vs MLPipeline Direction*
 *Status: Ready for Implementation*
