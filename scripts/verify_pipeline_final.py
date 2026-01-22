@@ -177,8 +177,8 @@ def verify_label_distribution(splits: dict[str, pd.DataFrame]) -> bool:
             labels = df[col].dropna()
 
             # Get distribution
-            counts = labels.value_counts().sort_index()
-            total = len(labels)
+            labels.value_counts().sort_index()
+            len(labels)
 
             # Check for -99 (invalid markers)
             invalid_count = (labels == -99).sum()

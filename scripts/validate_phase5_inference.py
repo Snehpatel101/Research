@@ -187,8 +187,8 @@ def test_inference_orchestrator(report: Phase5ValidationReport) -> None:
         )
 
         # Test PredictionResult methods
-        df = pred_result.to_dataframe()
-        summary = pred_result.summary()
+        pred_result.to_dataframe()
+        pred_result.summary()
 
         if missing_methods:
             report.results.append(
@@ -271,8 +271,8 @@ def test_bundle_builder(report: Phase5ValidationReport) -> None:
         )
 
         # Test methods
-        result_dict = result.to_dict()
-        summary = result.summary()
+        result.to_dict()
+        result.summary()
 
         # Test BundleBuilder class methods
         class_methods = [
@@ -369,7 +369,7 @@ def test_ensemble_bundle(report: Phase5ValidationReport) -> None:
             sequence_lengths={"xgboost": 0, "lstm": 60},
         )
         align_dict = align_config.to_dict()
-        align_loaded = AlignmentConfig.from_dict(align_dict)
+        AlignmentConfig.from_dict(align_dict)
 
         # Test EnsembleBundleMetadata
         metadata = EnsembleBundleMetadata(
@@ -386,7 +386,7 @@ def test_ensemble_bundle(report: Phase5ValidationReport) -> None:
             metrics={"accuracy": 0.65},
         )
         meta_dict = metadata.to_dict()
-        meta_loaded = EnsembleBundleMetadata.from_dict(meta_dict)
+        EnsembleBundleMetadata.from_dict(meta_dict)
 
         # Test EnsembleBundleManifest
         manifest = EnsembleBundleManifest(
@@ -395,7 +395,7 @@ def test_ensemble_bundle(report: Phase5ValidationReport) -> None:
             checksums={"metadata.json": "abc123"},
         )
         manifest_dict = manifest.to_dict()
-        manifest_loaded = EnsembleBundleManifest.from_dict(manifest_dict)
+        EnsembleBundleManifest.from_dict(manifest_dict)
 
         # Test EnsembleBundle class methods
         class_methods = [
@@ -498,7 +498,7 @@ def test_model_bundle(report: Phase5ValidationReport) -> None:
             symbol="MES",
         )
         meta_dict = metadata.to_dict()
-        meta_loaded = BundleMetadata.from_dict(meta_dict)
+        BundleMetadata.from_dict(meta_dict)
 
         # Test BundleManifest
         manifest = BundleManifest(
@@ -507,7 +507,7 @@ def test_model_bundle(report: Phase5ValidationReport) -> None:
             checksums={"metadata.json": "abc123"},
         )
         manifest_dict = manifest.to_dict()
-        manifest_loaded = BundleManifest.from_dict(manifest_dict)
+        BundleManifest.from_dict(manifest_dict)
 
         # Test ModelBundle class methods
         class_methods = ["from_training", "load"]
@@ -602,7 +602,7 @@ def test_preprocessing_graph(report: Phase5ValidationReport) -> None:
         scaling = ScalingConfig()
 
         # Test serialization
-        for cfg, name in [
+        for cfg, _name in [
             (cleaning, "CleaningConfig"),
             (indicators, "IndicatorConfig"),
             (mtf, "MTFConfig"),
@@ -612,7 +612,7 @@ def test_preprocessing_graph(report: Phase5ValidationReport) -> None:
         ]:
             cfg_dict = cfg.to_dict()
             cfg_class = type(cfg)
-            cfg_loaded = cfg_class.from_dict(cfg_dict)
+            cfg_class.from_dict(cfg_dict)
 
         # Test PreprocessingGraphConfig
         config = PreprocessingGraphConfig(
@@ -626,8 +626,8 @@ def test_preprocessing_graph(report: Phase5ValidationReport) -> None:
             regime=regime,
             scaling=scaling,
         )
-        config_dict = config.to_dict()
-        config_hash = config.compute_hash()
+        config.to_dict()
+        config.compute_hash()
 
         # Test PreprocessingGraph class methods
         class_methods = ["from_pipeline_config", "from_training_run", "load", "from_dict"]
@@ -696,7 +696,7 @@ def test_inference_pipeline(report: Phase5ValidationReport) -> None:
     print("\nTesting InferencePipeline...")
 
     try:
-        from src.inference.pipeline import (
+        from src.inference.pipeline import (  # noqa: F401
             EnsembleResult,
             InferencePipeline,
             InferenceResult,
@@ -740,7 +740,7 @@ def test_inference_pipeline(report: Phase5ValidationReport) -> None:
             horizon=20,
             n_samples=2,
         )
-        df = inf_result.to_dataframe()
+        inf_result.to_dataframe()
 
         if missing:
             report.results.append(
@@ -789,7 +789,7 @@ def test_batch_predictor(report: Phase5ValidationReport) -> None:
     print("\nTesting BatchPredictor...")
 
     try:
-        from src.inference.batch import (
+        from src.inference.batch import (  # noqa: F401
             BatchPredictor,
             BatchProgress,
             BatchResult,
@@ -797,7 +797,7 @@ def test_batch_predictor(report: Phase5ValidationReport) -> None:
         )
 
         # Test BatchProgress
-        progress = BatchProgress(
+        BatchProgress(
             total_samples=10000,
             processed_samples=5000,
             current_batch=5,
@@ -805,8 +805,6 @@ def test_batch_predictor(report: Phase5ValidationReport) -> None:
             elapsed_seconds=30.0,
             samples_per_second=166.67,
         )
-        pct = progress.progress_pct
-        eta = progress.eta_seconds
 
         # Test class methods
         class_methods = ["from_bundle", "from_bundles"]
@@ -875,7 +873,7 @@ def test_model_server(report: Phase5ValidationReport) -> None:
         )
 
         # Test ServerConfig
-        config = ServerConfig(
+        ServerConfig(
             host="0.0.0.0",
             port=8080,
             debug=False,
@@ -1001,8 +999,8 @@ def test_integration_oof_aligner(report: Phase5ValidationReport) -> None:
     print("\nTesting OOFAligner integration (PHASE_2)...")
 
     try:
-        from src.data.adapters.alignment import AlignedOOFResult, OOFAligner
-        from src.core.interfaces import OOFResult
+        from src.core.interfaces import OOFResult  # noqa: F401
+        from src.data.adapters.alignment import AlignedOOFResult, OOFAligner  # noqa: F401
 
         # Test that OOFAligner can be imported
         aligner = OOFAligner(n_classes=3)
@@ -1191,7 +1189,7 @@ def test_inference_package_exports(report: Phase5ValidationReport) -> None:
     print("\nTesting inference package exports...")
 
     try:
-        from src.inference import (
+        from src.inference import (  # noqa: F401
             BUNDLE_PREPROCESSING_GRAPH_FILE,
             BUNDLE_VERSION,
             ENSEMBLE_BUNDLE_VERSION,

@@ -164,7 +164,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
 
         loader = importlib.util.LazyLoader(spec.loader)
         spec.loader = loader
-        module = importlib.util.module_from_spec(spec)
+        importlib.util.module_from_spec(spec)
 
         # Just check the file exists and has the expected structure
         import ast
@@ -530,7 +530,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
         cpcv = CombinatorialPurgedCV(config)
 
         path_count = 0
-        for train_idx, test_idx, path_id in cpcv.split(X, y):
+        for _train_idx, _test_idx, _path_id in cpcv.split(X, y):
             path_count += 1
 
         coverage = cpcv.validate_coverage(X)
@@ -556,7 +556,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
             columns=[f"f{i}" for i in range(n_features)],
             index=pd.date_range("2020-01-01", periods=n_samples, freq="5min"),
         )
-        y = pd.Series(np.random.randint(0, 3, n_samples), index=X.index)
+        pd.Series(np.random.randint(0, 3, n_samples), index=X.index)
 
         config = WalkForwardConfig(
             n_windows=4, window_type="expanding", min_train_pct=0.4, test_pct=0.1
@@ -588,7 +588,7 @@ def run_phase3_validation() -> Phase3ValidationReport:
         config = PBOConfig(n_partitions=8)
         result = compute_pbo(performance_matrix, config)
 
-        analysis = analyze_overfitting_risk(
+        analyze_overfitting_risk(
             performance_matrix,
             strategy_names=[f"strategy_{i}" for i in range(n_strategies)],
         )

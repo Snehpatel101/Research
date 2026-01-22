@@ -214,7 +214,7 @@ def main():
     # Benchmark individual models
     print("\n[2/3] Benchmarking individual models...")
     individual_results = {}
-    for i, (name, model) in enumerate(zip(trained_names, models, strict=False)):
+    for _i, (name, model) in enumerate(zip(trained_names, models, strict=False)):
         results = benchmark_single_model(
             model,
             X_test,

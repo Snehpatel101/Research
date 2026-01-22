@@ -27,6 +27,7 @@ Examples:
 Usage:
     python scripts/train_model.py --help
 """
+
 from __future__ import annotations
 
 import sys
@@ -36,7 +37,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.cli.commands.train import train_app
+from src.cli.commands.train import train_app  # noqa: E402
 
 
 def main() -> int:

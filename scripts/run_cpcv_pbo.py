@@ -18,6 +18,7 @@ Usage:
     # Strict PBO thresholds
     python scripts/run_cpcv_pbo.py --models xgboost --pbo-warn 0.4 --pbo-block 0.7
 """
+
 from __future__ import annotations
 
 import sys
@@ -27,7 +28,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.cli.commands.evaluate import run_cpcv_pbo
+from src.cli.commands.evaluate import run_cpcv_pbo  # noqa: E402
 
 
 def main() -> int:

@@ -168,12 +168,11 @@ def validate_fix() -> bool:
                 print(f"    {label_name:7s} ({label:2d}): {count:8,} ({pct:5.1f}%)")
 
                 # Validate distribution is balanced (within 5% of expected 48-50%)
-                if label in [-1, 1]:  # Check Short and Long
-                    if pct < 40 or pct > 55:
-                        print(
-                            f"    ⚠ WARNING: {label_name} percentage {pct:.1f}% "
-                            f"outside expected range (40-55%)"
-                        )
+                if label in [-1, 1] and (pct < 40 or pct > 55):  # Check Short and Long
+                    print(
+                        f"    ⚠ WARNING: {label_name} percentage {pct:.1f}% "
+                        f"outside expected range (40-55%)"
+                    )
 
         print(f"\n{'='*80}")
         print("✓ VALIDATION PASSED")

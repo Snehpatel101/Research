@@ -936,7 +936,6 @@ def add_mlops_to_notebook(notebook_path):
     print(f"  Deployment Gate: {deployment_gate_idx}")
 
     # Create new cells
-    new_cells = []
 
     # Insert cells in reverse order (so indices don't shift)
     insertions = [

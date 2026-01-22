@@ -20,6 +20,7 @@ Usage:
     # All models, all horizons
     python scripts/run_walk_forward.py --models all --horizons all
 """
+
 from __future__ import annotations
 
 import sys
@@ -29,7 +30,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.cli.commands.evaluate import run_walk_forward
+from src.cli.commands.evaluate import run_walk_forward  # noqa: E402
 
 
 def main() -> int:
