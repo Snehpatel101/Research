@@ -1,18 +1,15 @@
 """
-UnifiedTrainingOrchestrator - THE single entry point for all training.
+UnifiedTrainingOrchestrator - Thin coordinator for training workflows.
 
-Uses PipelineConfig from src/core as the ONLY configuration source.
-Integrates with PHASE_2 adapters for data preparation.
+NOW focuses ONLY on:
+- Routing to training modes
+- Coordinating services
+- Managing workflow state
 
-PHASE_3: Training Orchestration
-
-This module provides the unified training orchestrator that:
-1. Uses PipelineConfig as the ONLY configuration source
-2. Integrates with UnifiedDataPreparation from PHASE_2 adapters
-3. Routes to appropriate training mode (standard, walk_forward, regime_aware, meta_labeling)
-4. Generates OOF predictions and aligns them using OOFAligner
-5. Builds heterogeneous ensembles with proper OOF alignment
-6. Returns structured TrainingRunResult
+Delegates to:
+- ModelTrainingService: Individual model training
+- OOFGenerationService: Out-of-fold prediction generation
+- ArtifactManager: Saving results
 
 Example:
     from src.core import PipelineConfig
@@ -32,7 +29,6 @@ Example:
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -61,7 +57,14 @@ from src.cross_validation import (
     PurgedKFold,
     PurgedKFoldConfig,
     StackingDataset,
-    TimeSeriesOptunaTuner,
+)
+from src.training.services import (
+    ModelTrainingService,
+    ModelTrainingRequest,
+    OOFGenerationService,
+    OOFRequest,
+    ArtifactManager,
+    ArtifactSaveRequest,
 )
 
 if TYPE_CHECKING:
@@ -225,11 +228,18 @@ class UnifiedTrainingOrchestrator:
         # Initialize CV based on config
         self._cv = self._create_cv()
 
-        # Initialize OOF generator
+        # Initialize OOF generator (legacy, used by some training modes)
         self._oof_generator = OOFGenerator(
             self._cv,
             cache_dir=self.output_dir / "oof_cache" if config.save_oof else None,
         )
+
+        # Initialize services
+        self._model_service = ModelTrainingService()
+        self._oof_service = OOFGenerationService(
+            cache_dir=self.output_dir / "oof_cache" if config.save_oof else None
+        )
+        self._artifact_manager = ArtifactManager(self.output_dir)
 
         # Results storage
         self._model_results: dict[str, ModelTrainingResult] = {}
@@ -419,107 +429,31 @@ class UnifiedTrainingOrchestrator:
         prepared: PreparedData,
         horizon: int,
     ) -> ModelTrainingResult:
-        """
-        Train a single model with prepared data.
-
-        Args:
-            model_name: Name of the model to train
-            prepared: PreparedData from PHASE_2 adapter
-            horizon: Prediction horizon
-
-        Returns:
-            ModelTrainingResult with metrics and trained model
-        """
-        from src.models import Trainer, TrainerConfig
-
-        start = time.time()
-
-        # Create trainer config
-        trainer_config = TrainerConfig(
+        """Train a single model - delegates to ModelTrainingService."""
+        request = ModelTrainingRequest(
             model_name=model_name,
             horizon=horizon,
+            prepared_data=prepared,
             sequence_length=self.config.sequence_length,
             output_dir=self.output_dir / f"h{horizon}",
+            optimize_hyperparams=self.config.optimize_hyperparams,
+            n_splits=self.config.n_splits,
+            hyperparam_trials=self.config.hyperparam_trials,
         )
+        result = self._model_service.train_model(request)
 
-        # Hyperparameter optimization if enabled
-        if self.config.optimize_hyperparams:
-            trainer_config = self._optimize_hyperparams(
-                trainer_config, prepared
-            )
+        # Store for later use
+        self._trained_models[f"{model_name}_h{horizon}"] = result.trainer
 
-        # Create trainer and run
-        trainer = Trainer(trainer_config)
-
-        # Build container from prepared data
-        from src.core.container import TimeSeriesDataContainer
-
-        # Handle different data ranks
-        if prepared.data_rank == 2:
-            # Tabular: (n_samples, n_features)
-            X_train_df = pd.DataFrame(
-                prepared.X_train,
-                columns=prepared.feature_names,
-            )
-            X_val_df = pd.DataFrame(
-                prepared.X_val,
-                columns=prepared.feature_names,
-            )
-            X_test_df = pd.DataFrame(
-                prepared.X_test,
-                columns=prepared.feature_names,
-            ) if prepared.has_test else None
-        else:
-            # Sequence (3D/4D): Flatten for container, model handles reshaping
-            n_train = prepared.X_train.shape[0]
-            n_val = prepared.X_val.shape[0]
-            n_features = np.prod(prepared.X_train.shape[1:])
-
-            X_train_df = pd.DataFrame(
-                prepared.X_train.reshape(n_train, -1),
-                columns=[f"f{i}" for i in range(n_features)],
-            )
-            X_val_df = pd.DataFrame(
-                prepared.X_val.reshape(n_val, -1),
-                columns=[f"f{i}" for i in range(n_features)],
-            )
-            if prepared.has_test:
-                n_test = prepared.X_test.shape[0]
-                X_test_df = pd.DataFrame(
-                    prepared.X_test.reshape(n_test, -1),
-                    columns=[f"f{i}" for i in range(n_features)],
-                )
-            else:
-                X_test_df = None
-
-        container = TimeSeriesDataContainer(
-            X_train=X_train_df,
-            y_train=pd.Series(prepared.y_train),
-            X_val=X_val_df,
-            y_val=pd.Series(prepared.y_val),
-            X_test=X_test_df if X_test_df is not None else pd.DataFrame(),
-            y_test=pd.Series(prepared.y_test) if prepared.has_test else pd.Series(dtype=float),
-            sample_weights=pd.Series(
-                prepared.train_weights if prepared.has_weights
-                else np.ones(len(prepared.y_train))
-            ),
-        )
-
-        training_results = trainer.run(container)
-
-        training_time = time.time() - start
-
-        # Store trained model for inference
-        self._trained_models[f"{model_name}_h{horizon}"] = trainer
-
+        # Convert service result to orchestrator result
         return ModelTrainingResult(
-            model_name=model_name,
-            horizon=horizon,
-            metrics=training_results.get("evaluation_metrics", {}),
-            trainer=trainer,
-            training_time_seconds=training_time,
-            n_features=prepared.n_features,
-            data_rank=prepared.data_rank,
+            model_name=result.model_name,
+            horizon=result.horizon,
+            metrics=result.metrics,
+            trainer=result.trainer,
+            training_time_seconds=result.training_time_seconds,
+            n_features=result.n_features,
+            data_rank=result.data_rank,
         )
 
     def _generate_oof(
@@ -528,42 +462,16 @@ class UnifiedTrainingOrchestrator:
         prepared: PreparedData,
         horizon: int,
     ) -> OOFPrediction | None:
-        """
-        Generate OOF predictions for a model.
-
-        Args:
-            model_name: Name of the model
-            prepared: PreparedData from PHASE_2
-            horizon: Prediction horizon
-
-        Returns:
-            OOFPrediction or None if generation fails
-        """
-        try:
-            # Flatten to 2D for OOF generation
-            if prepared.data_rank > 2:
-                X_train_2d = prepared.X_train.reshape(prepared.X_train.shape[0], -1)
-            else:
-                X_train_2d = prepared.X_train
-
-            X_train_df = pd.DataFrame(
-                X_train_2d,
-                columns=[f"f{i}" for i in range(X_train_2d.shape[1])],
-            )
-            y_train = pd.Series(prepared.y_train)
-
-            oof_predictions = self._oof_generator.generate_oof_predictions(
-                X=X_train_df,
-                y=y_train,
-                model_configs={model_name: {}},
-                use_cache=True,
-            )
-
-            return oof_predictions.get(model_name)
-
-        except Exception as e:
-            logger.warning(f"Failed to generate OOF for {model_name}: {e}")
-            return None
+        """Generate OOF predictions - delegates to OOFGenerationService."""
+        request = OOFRequest(
+            model_name=model_name,
+            horizon=horizon,
+            prepared_data=prepared,
+            n_splits=self.config.n_splits,
+            purge_bars=self.config.purge_bars,
+            embargo_bars=self.config.embargo_bars,
+        )
+        return self._oof_service.generate_oof(request)
 
     def _build_ensemble(
         self,
@@ -1292,91 +1200,18 @@ class UnifiedTrainingOrchestrator:
             logger.warning(f"Unknown meta model: {model_name}, using logistic")
             return self._create_meta_model("logistic")
 
-    def _optimize_hyperparams(
-        self,
-        trainer_config: Any,
-        prepared: PreparedData,
-    ) -> Any:
-        """
-        Run Optuna hyperparameter optimization.
-
-        Args:
-            trainer_config: TrainerConfig to update with best params
-            prepared: PreparedData with training data
-
-        Returns:
-            Updated trainer_config with optimized hyperparameters
-        """
-        logger.info("  Running hyperparameter optimization...")
-
-        tuner = TimeSeriesOptunaTuner(
-            model_name=trainer_config.model_name,
-            horizon=trainer_config.horizon,
-            n_splits=self.config.n_splits,
-        )
-
-        # Flatten to 2D for tuning
-        X_train_2d = (
-            prepared.X_train.reshape(prepared.X_train.shape[0], -1)
-            if prepared.X_train.ndim > 2
-            else prepared.X_train
-        )
-
-        best_params = tuner.optimize(
-            X=X_train_2d,
-            y=prepared.y_train,
-            n_trials=self.config.hyperparam_trials,
-        )
-
-        logger.info(f"  Best params: {best_params}")
-
-        for param, value in best_params.items():
-            setattr(trainer_config, param, value)
-
-        return trainer_config
-
     def _save_results(self) -> None:
-        """Save all results to disk."""
-        logger.info(f"\nSaving results to: {self.output_dir}")
-
-        # Save config
-        self.config.save(self.output_dir / "config.json")
-
-        # Save metrics summary
-        metrics_summary: dict[str, Any] = {}
-        for key, result in self._model_results.items():
-            metrics_summary[key] = {
-                "model_name": result.model_name,
-                "horizon": result.horizon,
-                "metrics": result.metrics,
-                "training_time": result.training_time_seconds,
-                "n_features": result.n_features,
-                "data_rank": result.data_rank,
-            }
-
-        with open(self.output_dir / "metrics_summary.json", "w") as f:
-            json.dump(metrics_summary, f, indent=2)
-
-        # Save OOF predictions if available
-        if self._oof_predictions and self.config.save_oof:
-            oof_dir = self.output_dir / "oof"
-            oof_dir.mkdir(exist_ok=True)
-
-            for key, oof in self._oof_predictions.items():
-                oof.predictions.to_parquet(oof_dir / f"{key}_oof.parquet")
-
-        # Save trained models if enabled
-        if self.config.save_models:
-            models_dir = self.output_dir / "models"
-            models_dir.mkdir(exist_ok=True)
-
-            for key, trainer in self._trained_models.items():
-                try:
-                    trainer.save(models_dir / f"{key}.pkl")
-                except Exception as e:
-                    logger.warning(f"Failed to save model {key}: {e}")
-
-        logger.info(f"Results saved to: {self.output_dir}")
+        """Save all results - delegates to ArtifactManager."""
+        request = ArtifactSaveRequest(
+            output_dir=self.output_dir,
+            config=self.config,
+            model_results=self._model_results,
+            oof_predictions=self._oof_predictions,
+            trained_models=self._trained_models,
+            save_models=self.config.save_models,
+            save_oof=self.config.save_oof,
+        )
+        self._artifact_manager.save_all(request)
 
     def get_trained_model(self, model_key: str) -> Any | None:
         """
