@@ -17,7 +17,8 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
@@ -29,11 +30,27 @@ from .checksums import ArtifactIntegrityManager
 # Canonical location: src.models.config.data_requirements
 try:
     from src.models.config import MODEL_DATA_REQUIREMENTS
+    from src.models.config.data_requirements import ModelDataRequirements
 except ImportError:
-    MODEL_DATA_REQUIREMENTS = None
+    MODEL_DATA_REQUIREMENTS: dict[str, Any] | None = None  # type: ignore[no-redef]
+
+
+class _TrainerProtocol(Protocol):
+    """Protocol defining the interface expected by TrainerArtifactsMixin."""
+
+    config: Any  # TrainerConfig
+    model: Any  # Model instance
+    run_id: str
+    output_path: Path
+    feature_selector: Any | None
+    calibrator: Any | None
+
+    def _is_feature_selection_enabled(self) -> bool: ...
+
 
 if TYPE_CHECKING:
-    pass
+    from src.models.config import TrainerConfig
+    from src.models.config.data_requirements import ModelDataRequirements
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +68,18 @@ class TrainerArtifactsMixin:
     - self.calibrator: ProbabilityCalibrator instance (optional)
     - self._is_feature_selection_enabled(): Method to check if feature selection is enabled
     """
+
+    # Type hints for mixin attributes (provided by the class this is mixed into)
+    config: Any  # TrainerConfig
+    model: Any  # Model instance
+    run_id: str
+    output_path: Path
+    feature_selector: Any | None
+    calibrator: Any | None
+
+    def _is_feature_selection_enabled(self) -> bool:
+        """Check if feature selection is enabled. Must be implemented by subclass."""
+        raise NotImplementedError
 
     def _save_config(self) -> None:
         """Save training configuration and environment information."""

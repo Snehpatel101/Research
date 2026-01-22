@@ -63,7 +63,7 @@ class NBEATSBlock(nn.Module):
         self.theta_size = theta_size
 
         # Build FC stack
-        layers = []
+        layers: list[nn.Module] = []
         for i in range(n_layers):
             in_features = input_size if i == 0 else hidden_size
             layers.append(nn.Linear(in_features, hidden_size))
@@ -164,8 +164,10 @@ class TrendBasis(nn.Module):
         # theta: (batch, degree+1)
         # basis: (degree+1, size)
         # output: (batch, size)
-        backcast = torch.matmul(theta_backcast, self.backcast_basis)
-        forecast = torch.matmul(theta_forecast, self.forecast_basis)
+        backcast_basis: torch.Tensor = self.backcast_basis  # type: ignore[assignment]
+        forecast_basis: torch.Tensor = self.forecast_basis  # type: ignore[assignment]
+        backcast = torch.matmul(theta_backcast, backcast_basis)
+        forecast = torch.matmul(theta_forecast, forecast_basis)
         return backcast, forecast
 
 
@@ -217,8 +219,10 @@ class SeasonalityBasis(nn.Module):
         # theta: (batch, 2*n_harmonics)
         # basis: (2*n_harmonics, size)
         # output: (batch, size)
-        backcast = torch.matmul(theta_backcast, self.backcast_basis)
-        forecast = torch.matmul(theta_forecast, self.forecast_basis)
+        backcast_basis: torch.Tensor = self.backcast_basis  # type: ignore[assignment]
+        forecast_basis: torch.Tensor = self.forecast_basis  # type: ignore[assignment]
+        backcast = torch.matmul(theta_backcast, backcast_basis)
+        forecast = torch.matmul(theta_forecast, forecast_basis)
         return backcast, forecast
 
 
@@ -269,7 +273,7 @@ class NBEATSStack(nn.Module):
             forecast: Sum of all block forecasts, shape (batch, forecast_size)
         """
         residual = x
-        forecast = None
+        forecast: torch.Tensor | None = None
 
         for block in self.blocks:
             backcast, block_forecast = block(residual)
@@ -280,6 +284,9 @@ class NBEATSStack(nn.Module):
             else:
                 forecast = forecast + block_forecast
 
+        # forecast is guaranteed to be set after loop if blocks is non-empty
+        if forecast is None:
+            forecast = torch.zeros_like(x)
         return residual, forecast
 
 
@@ -477,7 +484,8 @@ class NBEATSNetwork(nn.Module):
 
         if return_components:
             return logits, stack_forecasts
-        return logits
+        result: torch.Tensor = logits
+        return result
 
 
 # =============================================================================
@@ -592,9 +600,10 @@ class NBEATSModel(BaseRNNModel):
 
     def _create_network(self, input_size: int) -> nn.Module:
         """Create the N-BEATS network."""
+        seq_len = self._seq_len if self._seq_len is not None else 60
         return NBEATSNetwork(
             input_size=input_size,
-            seq_len=self._seq_len,
+            seq_len=seq_len,
             n_stacks=self._config.get("n_stacks", 3),
             n_blocks_per_stack=self._config.get("n_blocks_per_stack", 3),
             hidden_size=self._config.get("hidden_size", 256),
@@ -723,18 +732,25 @@ class NBEATSModel(BaseRNNModel):
             logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
-        self._model.eval()
+        nbeats_network = self._model
+        if not isinstance(nbeats_network, NBEATSNetwork):
+            return None
+        nbeats_network.eval()
         X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
             self._device
         )
 
         with torch.no_grad():
-            _, stack_forecasts = self._model(X_tensor, return_components=True)
+            output = nbeats_network(X_tensor, return_components=True)
+            if isinstance(output, tuple):
+                _, stack_forecasts = output
+            else:
+                return None
 
         stack_types = self._config.get("stack_types", ["generic", "trend", "seasonality"])
         self._config.get("n_stacks", 3)
 
-        result = {}
+        result: dict[str, np.ndarray] = {}
         for i, forecast in enumerate(stack_forecasts):
             stack_name = stack_types[i] if i < len(stack_types) else f"stack_{i}"
             result[stack_name] = forecast[0].cpu().numpy()

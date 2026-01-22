@@ -9,6 +9,7 @@ Handles:
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -106,12 +107,16 @@ def validate_ohlcv_relationships(
     if copy:
         df = df.copy()
 
-    validation_report = {
+    validation_report: dict[str, Any] = {
         "total_rows": len(df),
         "violations": {},
         "fixes_applied": {},
         "mode": "dry_run" if dry_run else ("auto_fix" if auto_fix else "report_only"),
     }
+    violations: dict[str, int] = {}
+    fixes_applied: dict[str, int] = {}
+    validation_report["violations"] = violations
+    validation_report["fixes_applied"] = fixes_applied
 
     should_fix = auto_fix and not dry_run
 
@@ -120,11 +125,11 @@ def validate_ohlcv_relationships(
     n_violations = high_low_violations.sum()
     if n_violations > 0:
         logger.warning(f"Found {n_violations} rows where high < low")
-        validation_report["violations"]["high_lt_low"] = int(n_violations)
+        violations["high_lt_low"] = int(n_violations)
         if should_fix:
             mask = high_low_violations
             df.loc[mask, ["high", "low"]] = df.loc[mask, ["low", "high"]].values
-            validation_report["fixes_applied"]["high_lt_low"] = int(n_violations)
+            fixes_applied["high_lt_low"] = int(n_violations)
             logger.info(f"  Fixed {n_violations} rows by swapping high/low values")
         elif dry_run:
             logger.info(f"  [DRY RUN] Would fix {n_violations} rows by swapping high/low values")
@@ -134,12 +139,12 @@ def validate_ohlcv_relationships(
     n_violations = high_open_violations.sum()
     if n_violations > 0:
         logger.warning(f"Found {n_violations} rows where high < open")
-        validation_report["violations"]["high_lt_open"] = int(n_violations)
+        violations["high_lt_open"] = int(n_violations)
         if should_fix:
             df.loc[high_open_violations, "high"] = df.loc[
                 high_open_violations, ["high", "open"]
             ].max(axis=1)
-            validation_report["fixes_applied"]["high_lt_open"] = int(n_violations)
+            fixes_applied["high_lt_open"] = int(n_violations)
             logger.info(f"  Fixed {n_violations} rows by setting high = max(high, open)")
         elif dry_run:
             logger.info(
@@ -151,12 +156,12 @@ def validate_ohlcv_relationships(
     n_violations = high_close_violations.sum()
     if n_violations > 0:
         logger.warning(f"Found {n_violations} rows where high < close")
-        validation_report["violations"]["high_lt_close"] = int(n_violations)
+        violations["high_lt_close"] = int(n_violations)
         if should_fix:
             df.loc[high_close_violations, "high"] = df.loc[
                 high_close_violations, ["high", "close"]
             ].max(axis=1)
-            validation_report["fixes_applied"]["high_lt_close"] = int(n_violations)
+            fixes_applied["high_lt_close"] = int(n_violations)
             logger.info(f"  Fixed {n_violations} rows by setting high = max(high, close)")
         elif dry_run:
             logger.info(
@@ -168,12 +173,12 @@ def validate_ohlcv_relationships(
     n_violations = low_open_violations.sum()
     if n_violations > 0:
         logger.warning(f"Found {n_violations} rows where low > open")
-        validation_report["violations"]["low_gt_open"] = int(n_violations)
+        violations["low_gt_open"] = int(n_violations)
         if should_fix:
             df.loc[low_open_violations, "low"] = df.loc[low_open_violations, ["low", "open"]].min(
                 axis=1
             )
-            validation_report["fixes_applied"]["low_gt_open"] = int(n_violations)
+            fixes_applied["low_gt_open"] = int(n_violations)
             logger.info(f"  Fixed {n_violations} rows by setting low = min(low, open)")
         elif dry_run:
             logger.info(
@@ -185,12 +190,12 @@ def validate_ohlcv_relationships(
     n_violations = low_close_violations.sum()
     if n_violations > 0:
         logger.warning(f"Found {n_violations} rows where low > close")
-        validation_report["violations"]["low_gt_close"] = int(n_violations)
+        violations["low_gt_close"] = int(n_violations)
         if should_fix:
             df.loc[low_close_violations, "low"] = df.loc[
                 low_close_violations, ["low", "close"]
             ].min(axis=1)
-            validation_report["fixes_applied"]["low_gt_close"] = int(n_violations)
+            fixes_applied["low_gt_close"] = int(n_violations)
             logger.info(f"  Fixed {n_violations} rows by setting low = min(low, close)")
         elif dry_run:
             logger.info(
@@ -204,10 +209,10 @@ def validate_ohlcv_relationships(
     n_violations = negative_price_mask.sum()
     if n_violations > 0:
         logger.warning(f"Found {n_violations} rows with negative or zero prices")
-        validation_report["violations"]["negative_prices"] = int(n_violations)
+        violations["negative_prices"] = int(n_violations)
         if should_fix:
             df = df[~negative_price_mask]
-            validation_report["fixes_applied"]["negative_prices"] = int(n_violations)
+            fixes_applied["negative_prices"] = int(n_violations)
             logger.info(f"  Fixed by removing {n_violations} rows with negative/zero prices")
         elif dry_run:
             logger.info(f"  [DRY RUN] Would remove {n_violations} rows with negative/zero prices")
@@ -218,16 +223,16 @@ def validate_ohlcv_relationships(
         n_violations = negative_volume.sum()
         if n_violations > 0:
             logger.warning(f"Found {n_violations} rows with negative volume")
-            validation_report["violations"]["negative_volume"] = int(n_violations)
+            violations["negative_volume"] = int(n_violations)
             if should_fix:
                 df.loc[negative_volume, "volume"] = 0
-                validation_report["fixes_applied"]["negative_volume"] = int(n_violations)
+                fixes_applied["negative_volume"] = int(n_violations)
                 logger.info(f"  Fixed {n_violations} rows by setting negative volume to 0")
             elif dry_run:
                 logger.info(f"  [DRY RUN] Would set {n_violations} negative volume values to 0")
 
     validation_report["rows_after_validation"] = len(df)
-    validation_report["total_fixes_applied"] = sum(validation_report["fixes_applied"].values())
+    validation_report["total_fixes_applied"] = sum(fixes_applied.values())
 
     if dry_run:
         logger.info("Validation complete (DRY RUN). No changes applied.")

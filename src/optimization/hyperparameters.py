@@ -37,10 +37,10 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 import optuna
@@ -115,8 +115,17 @@ class HyperparameterResult:
 # HYPERPARAMETER SEARCH SPACES - ALL 23 MODELS
 # =============================================================================
 
-# Type alias for search space specification
-SearchSpaceType = dict[str, tuple[str, ...]]
+# Type aliases for search space specification
+# Each parameter can be one of:
+#   - ("int", min, max) for integer range
+#   - ("float", min, max) for float range
+#   - ("log_float", min, max) for log-scale float range
+#   - ("categorical", [choices]) for categorical options
+#
+# We use tuple[Any, ...] to allow variable length tuples with different
+# element types. The runtime code validates the actual structure.
+ParamSpec = tuple[Any, ...]
+SearchSpaceType = dict[str, ParamSpec]
 
 HYPERPARAMETER_SPACES: dict[str, SearchSpaceType] = {
     # =========================================================================
@@ -387,24 +396,31 @@ def suggest_hyperparameters(
             raise ValueError(f"Unknown model: {model_name}")
         return {}
 
-    params = {}
+    params: dict[str, Any] = {}
     for param_name, spec in space.items():
         param_type = spec[0]
 
         if param_type == "int":
-            _, low, high = spec
-            params[param_name] = trial.suggest_int(param_name, low, high)
+            # spec is ("int", min, max)
+            int_low = int(spec[1])
+            int_high = int(spec[2])
+            params[param_name] = trial.suggest_int(param_name, int_low, int_high)
 
         elif param_type == "float":
-            _, low, high = spec
-            params[param_name] = trial.suggest_float(param_name, low, high)
+            # spec is ("float", min, max)
+            float_low = float(spec[1])
+            float_high = float(spec[2])
+            params[param_name] = trial.suggest_float(param_name, float_low, float_high)
 
         elif param_type == "log_float":
-            _, low, high = spec
-            params[param_name] = trial.suggest_float(param_name, low, high, log=True)
+            # spec is ("log_float", min, max)
+            log_low = float(spec[1])
+            log_high = float(spec[2])
+            params[param_name] = trial.suggest_float(param_name, log_low, log_high, log=True)
 
         elif param_type == "categorical":
-            _, choices = spec
+            # spec is ("categorical", [choices])
+            choices = list(spec[1])
             params[param_name] = trial.suggest_categorical(param_name, choices)
 
         else:
@@ -432,25 +448,32 @@ def get_default_hyperparameters(model_name: str) -> dict[str, Any]:
     if not space:
         return {}
 
-    defaults = {}
+    defaults: dict[str, Any] = {}
     for param_name, spec in space.items():
         param_type = spec[0]
 
         if param_type == "int":
-            _, low, high = spec
-            defaults[param_name] = (low + high) // 2
+            # spec is ("int", min, max)
+            int_low = int(spec[1])
+            int_high = int(spec[2])
+            defaults[param_name] = (int_low + int_high) // 2
 
         elif param_type == "float":
-            _, low, high = spec
-            defaults[param_name] = (low + high) / 2
+            # spec is ("float", min, max)
+            float_low = float(spec[1])
+            float_high = float(spec[2])
+            defaults[param_name] = (float_low + float_high) / 2
 
         elif param_type == "log_float":
-            _, low, high = spec
+            # spec is ("log_float", min, max)
+            log_low = float(spec[1])
+            log_high = float(spec[2])
             # Geometric mean for log-scale
-            defaults[param_name] = np.sqrt(low * high)
+            defaults[param_name] = float(np.sqrt(log_low * log_high))
 
         elif param_type == "categorical":
-            _, choices = spec
+            # spec is ("categorical", [choices])
+            choices = spec[1]
             defaults[param_name] = choices[0]
 
     return defaults
@@ -517,11 +540,11 @@ class HyperparameterOptimizer:
     def _get_score_fn(self) -> Callable[[np.ndarray, np.ndarray], float]:
         """Get scoring function based on metric name."""
         if self.scoring == "accuracy":
-            return accuracy_score
+            return lambda y_true, y_pred: float(accuracy_score(y_true, y_pred))
         elif self.scoring == "f1_weighted":
-            return lambda y_true, y_pred: f1_score(y_true, y_pred, average="weighted")
+            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="weighted"))
         elif self.scoring == "f1_macro":
-            return lambda y_true, y_pred: f1_score(y_true, y_pred, average="macro")
+            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="macro"))
         else:
             raise ValueError(f"Unknown scoring metric: {self.scoring}")
 

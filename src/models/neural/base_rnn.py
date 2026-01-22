@@ -102,7 +102,7 @@ class RNNNetwork(nn.Module):
         self.num_directions = 2 if bidirectional else 1
 
         # RNN layer placeholder - subclasses set this
-        self.rnn: nn.Module | None = None
+        self.rnn: nn.RNNBase | None = None
 
         # Output dimension from RNN
         rnn_output_size = hidden_size * self.num_directions
@@ -140,6 +140,8 @@ class RNNNetwork(nn.Module):
         # RNN forward pass
         # output: (batch, seq_len, hidden_size * num_directions)
         # hidden: tuple for LSTM, tensor for GRU
+        if self.rnn is None:
+            raise RuntimeError("RNN layer not initialized")
         output, hidden = self.rnn(x)
 
         # Take last timestep output
@@ -187,7 +189,7 @@ class BaseRNNModel(BaseModel):
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
-        self._model: nn.Module | None = None
+        self._model: nn.Module = None  # type: ignore[assignment]
         self._n_classes: int = 3
         self._n_features: int | None = None
         self._bidirectional_warning_logged: bool = False
@@ -405,6 +407,7 @@ class BaseRNNModel(BaseModel):
         # Checkpoint manager for periodic saving and best model tracking
         checkpoint_interval = train_config.get("checkpoint_interval", 10)
         checkpoint_dir = train_config.get("checkpoint_dir", None)
+        self._checkpoint_manager: CheckpointManager | None = None
         if checkpoint_dir:
             ckpt_config = CheckpointConfig(
                 checkpoint_dir=Path(checkpoint_dir),
@@ -416,8 +419,6 @@ class BaseRNNModel(BaseModel):
                 metric_mode="min",
             )
             self._checkpoint_manager = CheckpointManager(ckpt_config)
-        else:
-            self._checkpoint_manager = None
 
         # OOM recovery manager for graceful batch size reduction on CUDA OOM
         oom_config = OOMConfig(
@@ -707,10 +708,10 @@ class BaseRNNModel(BaseModel):
 
         def lr_lambda(step: int) -> float:
             if step < warmup_steps:
-                return step / max(warmup_steps, 1)
+                return float(step / max(warmup_steps, 1))
             else:
                 progress = (step - warmup_steps) / max(total_steps - warmup_steps, 1)
-                return 0.5 * (1 + np.cos(np.pi * progress))
+                return float(0.5 * (1 + np.cos(np.pi * progress)))
 
         return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 

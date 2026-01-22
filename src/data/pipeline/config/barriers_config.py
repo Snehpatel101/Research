@@ -19,6 +19,16 @@ To add symbol-specific parameters for a new symbol, add entries to:
 4. TICK_VALUES - Dollar value per tick
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from typing import Callable
+
+# Type alias for barrier parameter dictionaries
+BarrierParamsDict = dict[str, float | int | str]
+
 # =============================================================================
 # TRANSACTION COSTS - Critical for realistic fitness evaluation
 # =============================================================================
@@ -232,14 +242,14 @@ BARRIER_PARAMS_DEFAULT = {
 # Alternative: Percentage-based barriers (ATR-independent)
 # Useful when ATR calculation is inconsistent across instruments
 # NOTE: Also uses asymmetric barriers to correct long bias (pct_up > pct_down)
-PERCENTAGE_BARRIER_PARAMS = {
+PERCENTAGE_BARRIER_PARAMS: dict[int, dict[str, float | int]] = {
     1: {"pct_up": 0.0015, "pct_down": 0.0015, "max_bars": 5},  # 0.15% symmetric (H1 not traded)
     5: {"pct_up": 0.0030, "pct_down": 0.0020, "max_bars": 15},  # 0.30%/0.20% asymmetric
     20: {"pct_up": 0.0060, "pct_down": 0.0042, "max_bars": 60},  # 0.60%/0.42% asymmetric
 }
 
 
-def get_barrier_params(symbol: str, horizon: int, get_default_for_horizon: callable = None) -> dict:
+def get_barrier_params(symbol: str, horizon: int, get_default_for_horizon: "Callable[[int], dict] | None" = None) -> dict:
     """
     Get barrier parameters for a specific symbol and horizon.
 
@@ -305,20 +315,26 @@ def validate_barrier_params() -> list[str]:
     # Validate symbol-specific barrier params
     for symbol, horizons in BARRIER_PARAMS.items():
         for horizon, params in horizons.items():
-            if params.get("k_up", 0) <= 0:
+            k_up = params.get("k_up", 0)
+            k_down = params.get("k_down", 0)
+            max_bars = params.get("max_bars", 0)
+            if isinstance(k_up, (int, float)) and k_up <= 0:
                 errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['k_up'] must be positive")
-            if params.get("k_down", 0) <= 0:
+            if isinstance(k_down, (int, float)) and k_down <= 0:
                 errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['k_down'] must be positive")
-            if params.get("max_bars", 0) <= 0:
+            if isinstance(max_bars, int) and max_bars <= 0:
                 errors.append(f"BARRIER_PARAMS['{symbol}'][{horizon}]['max_bars'] must be positive")
 
     # Validate default barrier params
     for horizon, params in BARRIER_PARAMS_DEFAULT.items():
-        if params.get("k_up", 0) <= 0:
+        k_up = params.get("k_up", 0)
+        k_down = params.get("k_down", 0)
+        max_bars = params.get("max_bars", 0)
+        if isinstance(k_up, (int, float)) and k_up <= 0:
             errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['k_up'] must be positive")
-        if params.get("k_down", 0) <= 0:
+        if isinstance(k_down, (int, float)) and k_down <= 0:
             errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['k_down'] must be positive")
-        if params.get("max_bars", 0) <= 0:
+        if isinstance(max_bars, int) and max_bars <= 0:
             errors.append(f"BARRIER_PARAMS_DEFAULT[{horizon}]['max_bars'] must be positive")
 
     # Validate transaction costs
@@ -439,26 +455,29 @@ def get_max_bars_across_all_params() -> tuple[int, str]:
         (max_max_bars, source) - The maximum value and its source location
     """
     max_max_bars = 0
-    max_bars_source = None
+    max_bars_source: str = ""
 
     # Check symbol-specific barrier params
     for symbol, horizons in BARRIER_PARAMS.items():
         for horizon, params in horizons.items():
-            mb = params.get("max_bars", 0)
+            mb_val = params.get("max_bars", 0)
+            mb = mb_val if isinstance(mb_val, int) else 0
             if mb > max_max_bars:
                 max_max_bars = mb
                 max_bars_source = f"BARRIER_PARAMS['{symbol}'][{horizon}]"
 
     # Check default barrier params
     for horizon, params in BARRIER_PARAMS_DEFAULT.items():
-        mb = params.get("max_bars", 0)
+        mb_val = params.get("max_bars", 0)
+        mb = mb_val if isinstance(mb_val, int) else 0
         if mb > max_max_bars:
             max_max_bars = mb
             max_bars_source = f"BARRIER_PARAMS_DEFAULT[{horizon}]"
 
     # Check percentage barrier params
-    for horizon, params in PERCENTAGE_BARRIER_PARAMS.items():
-        mb = params.get("max_bars", 0)
+    for horizon, pct_params in PERCENTAGE_BARRIER_PARAMS.items():
+        mb_val = pct_params.get("max_bars", 0)
+        mb = mb_val if isinstance(mb_val, int) else 0
         if mb > max_max_bars:
             max_max_bars = mb
             max_bars_source = f"PERCENTAGE_BARRIER_PARAMS[{horizon}]"

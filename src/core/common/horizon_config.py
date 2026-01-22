@@ -109,7 +109,7 @@ MIN_EMBARGO_BARS = 1440  # Deprecated: use compute_embargo_bars() instead
 # =============================================================================
 # HORIZON VALIDATION
 # =============================================================================
-def validate_horizons(horizons: list[int], data_length: int = None) -> None:
+def validate_horizons(horizons: list[int], data_length: int | None = None) -> None:
     """
     Validate horizons against supported values and optionally against data length.
 
@@ -222,7 +222,7 @@ def get_scaled_horizons(horizons: list[int], source_tf: str, target_tf: str) -> 
 # =============================================================================
 def compute_embargo_bars(
     timeframe: str,
-    embargo_time_minutes: int = None,
+    embargo_time_minutes: int | None = None,
 ) -> int:
     """
     Compute embargo bars for a given timeframe to achieve a consistent time buffer.
@@ -277,8 +277,8 @@ def compute_embargo_bars(
 # =============================================================================
 def auto_scale_purge_embargo(
     horizons: list[int],
-    purge_multiplier: float = None,
-    embargo_multiplier: float = None,
+    purge_multiplier: float | None = None,
+    embargo_multiplier: float | None = None,
     timeframe: str | None = None,
     embargo_time_minutes: int | None = None,
 ) -> tuple[int, int]:

@@ -32,6 +32,7 @@ import logging
 import warnings
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from src.core.container import TimeSeriesDataContainer
 
@@ -75,7 +76,7 @@ class TrainingOrchestrator:
         result = orchestrator.train(df)
     """
 
-    def __init__(self, config: dict | ExperimentConfig):
+    def __init__(self, config: dict[str, Any] | ExperimentConfig):
         """
         Initialize orchestrator with configuration.
 
@@ -83,6 +84,9 @@ class TrainingOrchestrator:
             config: Validated configuration dict or ExperimentConfig
         """
         _emit_deprecation_warning()
+
+        self.experiment_config: ExperimentConfig | None
+        self.config: dict[str, Any] | None
 
         if isinstance(config, ExperimentConfig):
             self.experiment_config = config
@@ -96,8 +100,8 @@ class TrainingOrchestrator:
             self.experiment_name = config["experiment"]["name"]
             self.output_dir = Path(config["output"]["save_dir"]) / self._generate_run_id()
 
-        self.results = {}
-        self.trained_models = {}
+        self.results: dict[str, dict[str, Any]] = {}
+        self.trained_models: dict[str, Any] = {}
         self.feature_selector = FeatureSelector()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -122,17 +126,27 @@ class TrainingOrchestrator:
         else:
             return self._run_with_dict_config()
 
-    def _run_with_experiment_config(self) -> dict:
+    def _run_with_experiment_config(self) -> dict[str, Any]:
         cfg = self.experiment_config
+        if cfg is None:
+            raise RuntimeError("experiment_config is None")
 
         for horizon in cfg.horizons:
             logger.info(f"\n{'='*60}")
             logger.info(f"TRAINING HORIZON: {horizon}")
             logger.info(f"{'='*60}")
 
-            horizon_results = {}
+            horizon_results: dict[str, Any] = {}
 
-            for model_cfg in cfg.models:
+            # Convert models to ModelConfig if they are strings
+            model_configs: list[ModelConfig] = []
+            for m in cfg.models:
+                if isinstance(m, str):
+                    model_configs.append(ModelConfig(name=m))
+                else:
+                    model_configs.append(m)
+
+            for model_cfg in model_configs:
                 logger.info(f"\nTraining model: {model_cfg.name}")
 
                 timeframe = model_cfg.timeframe or "5min"
@@ -209,7 +223,15 @@ class TrainingOrchestrator:
         Returns:
             New container with filtered features
         """
-        X_train_df, y_train, w_train = container.get_sklearn_arrays("train", return_df=True)
+        import pandas as pd
+
+        X_train_result, y_train, w_train = container.get_sklearn_arrays("train", return_df=True)
+        # Ensure we have a DataFrame
+        X_train_df = (
+            X_train_result
+            if isinstance(X_train_result, pd.DataFrame)
+            else pd.DataFrame(X_train_result)
+        )
 
         # Use feature selector to filter
         X_train_filtered = self.feature_selector.select_features(X_train_df, mode=feature_mode)
@@ -242,12 +264,16 @@ class TrainingOrchestrator:
         Returns:
             New container with filtered feature set
         """
+        import pandas as pd
+
         from src.core.container import TimeSeriesDataContainer
 
-        split_dfs = {}
+        split_dfs: dict[str, pd.DataFrame] = {}
 
         for split in container.available_splits:
-            X_df, y, w = container.get_sklearn_arrays(split, return_df=True)
+            X_result, y, w = container.get_sklearn_arrays(split, return_df=True)
+            # Ensure we have a DataFrame
+            X_df = X_result if isinstance(X_result, pd.DataFrame) else pd.DataFrame(X_result)
 
             X_filtered = X_df[feature_list]
 
@@ -283,6 +309,8 @@ class TrainingOrchestrator:
             TimeSeriesDataContainer with train/val/test splits
         """
         cfg = self.experiment_config
+        if cfg is None:
+            raise RuntimeError("experiment_config is None")
         data_dir = cfg.data_dir / timeframe
 
         if not data_dir.exists():
@@ -294,9 +322,14 @@ class TrainingOrchestrator:
         logger.info(f"Loading data: {data_dir}, horizon={horizon}")
         container = TimeSeriesDataContainer.from_parquet_dir(data_dir, horizon=horizon)
 
+        # Get shapes from the new container API
+        train_split = container.get_split("train")
+        val_split = container.get_split("val")
+        test_split = container.get_split("test")
         logger.info(
-            f"Data loaded: Train={container.X_train.shape}, "
-            f"Val={container.X_val.shape}, Test={container.X_test.shape}"
+            f"Data loaded: Train={train_split.n_samples}x{train_split.n_features}, "
+            f"Val={val_split.n_samples}x{val_split.n_features}, "
+            f"Test={test_split.n_samples}x{test_split.n_features}"
         )
 
         return container
@@ -306,7 +339,7 @@ class TrainingOrchestrator:
         container: TimeSeriesDataContainer,
         model_cfg: ModelConfig,
         horizon: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Train single model with new ModelConfig interface.
 
@@ -320,11 +353,15 @@ class TrainingOrchestrator:
         """
         from src.models.config import TrainerConfig
 
-        trainer_config = TrainerConfig(
-            model_name=model_cfg.name,
-            horizon=horizon,
-            sequence_length=model_cfg.sequence_length,
-        )
+        # Build trainer config with proper type handling
+        trainer_kwargs: dict[str, Any] = {
+            "model_name": model_cfg.name,
+            "horizon": horizon,
+        }
+        if model_cfg.sequence_length is not None:
+            trainer_kwargs["sequence_length"] = model_cfg.sequence_length
+
+        trainer_config = TrainerConfig(**trainer_kwargs)
 
         if model_cfg.optimize_hyperparams:
             logger.info(f"  Hyperparameter optimization enabled for {model_cfg.name}")
@@ -346,9 +383,9 @@ class TrainingOrchestrator:
     def _optimize_hyperparams_simple(
         self,
         container: TimeSeriesDataContainer,
-        trainer_config,
+        trainer_config: Any,
         model_cfg: ModelConfig,
-    ):
+    ) -> Any:
         """
         Run hyperparameter optimization for ModelConfig-based training.
 
@@ -360,21 +397,41 @@ class TrainingOrchestrator:
         Returns:
             Updated trainer config with best params
         """
+        import pandas as pd
+
         logger.info("    Running Optuna hyperparameter optimization...")
 
         from src.validation.cv.cv_tuner import TimeSeriesOptunaTuner
+        from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
+
+        # Get training data from container using the new API
+        X_train_result, y_train_result, _ = container.get_sklearn_arrays("train", return_df=True)
+
+        # Ensure DataFrame/Series types for tuner
+        X_train = (
+            X_train_result
+            if isinstance(X_train_result, pd.DataFrame)
+            else pd.DataFrame(X_train_result)
+        )
+        y_train = (
+            y_train_result
+            if isinstance(y_train_result, pd.Series)
+            else pd.Series(y_train_result)
+        )
+
+        # Create purged CV splitter
+        cv_config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=10)
+        cv = PurgedKFold(cv_config)
 
         tuner = TimeSeriesOptunaTuner(
             model_name=trainer_config.model_name,
-            horizon=trainer_config.horizon,
-            n_splits=5,
-        )
-
-        best_params = tuner.optimize(
-            X=container.X_train,
-            y=container.y_train,
+            cv=cv,
             n_trials=model_cfg.hyperparam_opt_trials,
         )
+
+        # Use tune() method instead of optimize()
+        result = tuner.tune(X=X_train, y=y_train)
+        best_params = result.get("best_params", {})
 
         logger.info(f"    Best params: {best_params}")
 
@@ -386,10 +443,10 @@ class TrainingOrchestrator:
     def _build_ensemble_simple(
         self,
         container: TimeSeriesDataContainer,
-        horizon_results: dict,
+        horizon_results: dict[str, Any],
         horizon: int,
         cfg: ExperimentConfig,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Build ensemble from trained models using ExperimentConfig.
 
@@ -412,11 +469,14 @@ class TrainingOrchestrator:
         base_model_names = list(horizon_results.keys())
 
         if ensemble_method == "stacking":
+            # Pass ensemble-specific config via model_config dict
             ensemble_config = TrainerConfig(
                 model_name="stacking",
                 horizon=horizon,
-                base_models=base_model_names,
-                meta_learner=meta_learner,
+                model_config={
+                    "base_models": base_model_names,
+                    "meta_learner": meta_learner,
+                },
             )
 
             ensemble_trainer = Trainer(ensemble_config)
@@ -434,7 +494,10 @@ class TrainingOrchestrator:
 
         return {}
 
-    def _run_with_dict_config(self) -> dict:
+    def _run_with_dict_config(self) -> dict[str, Any]:
+        if self.config is None:
+            raise RuntimeError("config is None")
+
         for horizon in self.config["data"]["horizons"]:
             logger.info(f"\n{'='*60}")
             logger.info(f"TRAINING HORIZON: {horizon}")
@@ -443,7 +506,7 @@ class TrainingOrchestrator:
             container = self._load_data(horizon)
             container = self._apply_feature_selection(container)
 
-            horizon_results = {}
+            horizon_results: dict[str, Any] = {}
 
             for model_config in self.config["models"]["model_list"]:
                 model_name = model_config["name"]
@@ -472,13 +535,22 @@ class TrainingOrchestrator:
 
     def _load_data(self, horizon: int) -> TimeSeriesDataContainer:
         """Load data for given horizon."""
+        if self.config is None:
+            raise RuntimeError("config is None")
+
         data_dir = self.config["data"]["data_dir"]
         logger.info(f"Loading data from: {data_dir}, horizon: {horizon}")
 
         container = TimeSeriesDataContainer.from_parquet_dir(data_dir, horizon=horizon)
 
+        # Get shapes from the new container API
+        train_split = container.get_split("train")
+        val_split = container.get_split("val")
+        test_split = container.get_split("test")
         logger.info(
-            f"Data loaded: Train={container.X_train.shape}, Val={container.X_val.shape}, Test={container.X_test.shape}"
+            f"Data loaded: Train={train_split.n_samples}x{train_split.n_features}, "
+            f"Val={val_split.n_samples}x{val_split.n_features}, "
+            f"Test={test_split.n_samples}x{test_split.n_features}"
         )
 
         return container
@@ -487,41 +559,68 @@ class TrainingOrchestrator:
         self, container: TimeSeriesDataContainer
     ) -> TimeSeriesDataContainer:
         """Apply feature selection based on config mode."""
+        import pandas as pd
+
+        if self.config is None:
+            raise RuntimeError("config is None")
+
         feature_mode = self.config["features"]["mode"]
         mtf_strategy = self.config["features"].get("mtf_strategy", "indicators")
 
         logger.info(f"Applying feature selection: mode={feature_mode}, mtf_strategy={mtf_strategy}")
 
+        # Get data using the new API
+        X_train_result, y_train, w_train = container.get_sklearn_arrays("train", return_df=True)
+        X_val_result, y_val, w_val = container.get_sklearn_arrays("val", return_df=True)
+        X_test_result, y_test, w_test = container.get_sklearn_arrays("test", return_df=True)
+
+        # Ensure DataFrames
+        X_train_df = X_train_result if isinstance(X_train_result, pd.DataFrame) else pd.DataFrame(X_train_result)
+        X_val_df = X_val_result if isinstance(X_val_result, pd.DataFrame) else pd.DataFrame(X_val_result)
+        X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
+
         X_train_selected = self.feature_selector.select_features(
-            container.X_train, mode=feature_mode, mtf_strategy=mtf_strategy
+            X_train_df, mode=feature_mode, mtf_strategy=mtf_strategy
         )
         X_val_selected = self.feature_selector.select_features(
-            container.X_val, mode=feature_mode, mtf_strategy=mtf_strategy
+            X_val_df, mode=feature_mode, mtf_strategy=mtf_strategy
         )
         X_test_selected = self.feature_selector.select_features(
-            container.X_test, mode=feature_mode, mtf_strategy=mtf_strategy
+            X_test_df, mode=feature_mode, mtf_strategy=mtf_strategy
         )
 
         logger.info(
-            f"Features selected: {len(X_train_selected.columns)} (from {len(container.X_train.columns)})"
+            f"Features selected: {len(X_train_selected.columns)} (from {len(X_train_df.columns)})"
         )
 
-        return TimeSeriesDataContainer(
-            X_train=X_train_selected,
-            y_train=container.y_train,
-            X_val=X_val_selected,
-            y_val=container.y_val,
-            X_test=X_test_selected,
-            y_test=container.y_test,
-            sample_weights=container.sample_weights,
+        # Build split DataFrames with labels and weights
+        horizon = container.horizon
+        train_df = X_train_selected.copy()
+        train_df[f"label_h{horizon}"] = y_train.values if hasattr(y_train, "values") else y_train
+        train_df[f"sample_weight_h{horizon}"] = w_train.values if hasattr(w_train, "values") else w_train
+
+        val_df = X_val_selected.copy()
+        val_df[f"label_h{horizon}"] = y_val.values if hasattr(y_val, "values") else y_val
+        val_df[f"sample_weight_h{horizon}"] = w_val.values if hasattr(w_val, "values") else w_val
+
+        test_df = X_test_selected.copy()
+        test_df[f"label_h{horizon}"] = y_test.values if hasattr(y_test, "values") else y_test
+        test_df[f"sample_weight_h{horizon}"] = w_test.values if hasattr(w_test, "values") else w_test
+
+        return TimeSeriesDataContainer.from_dataframes(
+            train_df=train_df,
+            val_df=val_df,
+            test_df=test_df,
+            horizon=horizon,
+            feature_columns=list(X_train_selected.columns),
         )
 
     def _train_single_model(
         self,
         container: TimeSeriesDataContainer,
-        model_config: dict,
+        model_config: dict[str, Any],
         horizon: int,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Train a single model."""
         model_name = model_config["name"]
 
@@ -544,25 +643,49 @@ class TrainingOrchestrator:
             "config": trainer_config,
         }
 
-    def _optimize_hyperparams(self, container, trainer_config, model_config):
+    def _optimize_hyperparams(
+        self,
+        container: TimeSeriesDataContainer,
+        trainer_config: Any,
+        model_config: dict[str, Any],
+    ) -> Any:
         """Run hyperparameter optimization with Optuna."""
+        import pandas as pd
+
         logger.info("    Running Optuna hyperparameter optimization...")
 
         n_trials = model_config.get("optimization", {}).get("n_trials", 100)
 
         from src.validation.cv.cv_tuner import TimeSeriesOptunaTuner
+        from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
+
+        # Get training data using the new API
+        X_train_result, y_train_result, _ = container.get_sklearn_arrays("train", return_df=True)
+
+        # Ensure DataFrame/Series types for tuner
+        X_train = (
+            X_train_result
+            if isinstance(X_train_result, pd.DataFrame)
+            else pd.DataFrame(X_train_result)
+        )
+        y_train = (
+            y_train_result
+            if isinstance(y_train_result, pd.Series)
+            else pd.Series(y_train_result)
+        )
+
+        # Create purged CV splitter
+        cv_config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=10)
+        cv = PurgedKFold(cv_config)
 
         tuner = TimeSeriesOptunaTuner(
             model_name=trainer_config.model_name,
-            horizon=trainer_config.horizon,
-            n_splits=5,
-        )
-
-        best_params = tuner.optimize(
-            X=container.X_train,
-            y=container.y_train,
+            cv=cv,
             n_trials=n_trials,
         )
+
+        result = tuner.tune(X=X_train, y=y_train)
+        best_params = result.get("best_params", {})
 
         logger.info(f"    Best params: {best_params}")
 
@@ -571,8 +694,16 @@ class TrainingOrchestrator:
 
         return trainer_config
 
-    def _build_ensemble(self, container, model_results, horizon):
+    def _build_ensemble(
+        self,
+        container: TimeSeriesDataContainer,
+        model_results: dict[str, Any],
+        horizon: int,
+    ) -> dict[str, Any]:
         """Build ensemble from trained models."""
+        if self.config is None:
+            raise RuntimeError("config is None")
+
         ensemble_method = self.config["ensemble"]["method"]
         meta_learner = self.config["ensemble"].get("meta_learner", "ridge_meta")
 
@@ -585,11 +716,14 @@ class TrainingOrchestrator:
 
             from .trainer import Trainer
 
+            # Pass ensemble-specific config via model_config dict
             ensemble_config = TrainerConfig(
                 model_name="stacking",
                 horizon=horizon,
-                base_models=base_model_names,
-                meta_learner=meta_learner,
+                model_config={
+                    "base_models": base_model_names,
+                    "meta_learner": meta_learner,
+                },
             )
 
             ensemble_trainer = Trainer(ensemble_config)
@@ -607,13 +741,13 @@ class TrainingOrchestrator:
 
         return {}
 
-    def _save_results(self):
+    def _save_results(self) -> None:
         """Save all results to disk."""
         logger.info(f"\nSaving results to: {self.output_dir}")
 
         results_path = self.output_dir / "results.json"
 
-        serializable_results = {}
+        serializable_results: dict[str, dict[str, Any]] = {}
         for key, value in self.results.items():
             serializable_results[key] = {}
             for model_name, model_data in value.items():
@@ -630,8 +764,12 @@ class TrainingOrchestrator:
 
         for model_key, trainer in self.trained_models.items():
             model_path = self.output_dir / f"{model_key}.pkl"
-            trainer.save(model_path)
-            logger.info(f"Model saved: {model_path}")
+            # Trainer has model attribute, not direct save method
+            if hasattr(trainer, "model") and hasattr(trainer.model, "save"):
+                trainer.model.save(model_path)
+                logger.info(f"Model saved: {model_path}")
+            else:
+                logger.warning(f"Could not save model for {model_key}")
 
     def display_results(self):
         """Display results summary (for notebook use)."""

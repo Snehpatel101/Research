@@ -71,6 +71,7 @@ class ResidualBlock1D(nn.Module):
         self.bn2 = nn.BatchNorm1d(out_channels)
 
         # Shortcut connection
+        self.shortcut: nn.Module
         if in_channels != out_channels or stride != 1:
             self.shortcut = nn.Sequential(
                 nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
@@ -100,9 +101,9 @@ class ResidualBlock1D(nn.Module):
         out = self.bn2(out)
 
         out = out + identity
-        out = self.relu(out)
+        result: torch.Tensor = self.relu(out)
 
-        return out
+        return result
 
 
 class ResidualBlock1DBottleneck(nn.Module):
@@ -153,6 +154,7 @@ class ResidualBlock1DBottleneck(nn.Module):
         self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
         # Shortcut
+        self.shortcut: nn.Module
         if in_channels != out_channels or stride != 1:
             self.shortcut = nn.Sequential(
                 nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
@@ -177,9 +179,9 @@ class ResidualBlock1DBottleneck(nn.Module):
         out = self.bn3(out)
 
         out = out + identity
-        out = self.relu(out)
+        result: torch.Tensor = self.relu(out)
 
-        return out
+        return result
 
 
 class ResNet1DNetwork(nn.Module):
@@ -199,8 +201,8 @@ class ResNet1DNetwork(nn.Module):
     def __init__(
         self,
         input_size: int,
-        n_blocks: list[int] = (2, 2, 2, 2),
-        channels: list[int] = (64, 128, 256, 512),
+        n_blocks: tuple[int, ...] | list[int] = (2, 2, 2, 2),
+        channels: tuple[int, ...] | list[int] = (64, 128, 256, 512),
         kernel_size: int = 3,
         stem_kernel_size: int = 7,
         use_bottleneck: bool = False,
@@ -234,14 +236,14 @@ class ResNet1DNetwork(nn.Module):
         for i, (n_block, out_channels) in enumerate(zip(n_blocks, channels, strict=False)):
             stride = 2 if i > 0 else 1  # Downsample after first stage
 
-            blocks = []
+            blocks: list[nn.Module] = []
             for j in range(n_block):
                 block_stride = stride if j == 0 else 1
                 block_in_channels = in_channels if j == 0 else out_channels
 
                 if use_bottleneck:
                     bottleneck_ch = out_channels // 4
-                    block = ResidualBlock1DBottleneck(
+                    block: nn.Module = ResidualBlock1DBottleneck(
                         in_channels=block_in_channels,
                         bottleneck_channels=bottleneck_ch,
                         out_channels=out_channels,
@@ -306,7 +308,7 @@ class ResNet1DNetwork(nn.Module):
         x = self.avgpool(x)  # (batch, channels, 1)
         x = x.squeeze(-1)  # (batch, channels)
         x = self.dropout(x)
-        logits = self.fc(x)
+        logits: torch.Tensor = self.fc(x)
 
         return logits
 
@@ -535,7 +537,11 @@ class ResNet1DModel(BaseRNNModel):
 
         self._validate_input_shape(X, "X")
 
-        self._model.eval()
+        resnet_network = self._model
+        if not isinstance(resnet_network, ResNet1DNetwork):
+            return None
+
+        resnet_network.eval()
         X_tensor = torch.tensor(X, dtype=torch.float32).to(self._device)
 
         with torch.no_grad():
@@ -543,18 +549,19 @@ class ResNet1DModel(BaseRNNModel):
             x = X_tensor.transpose(1, 2)
 
             # Stem
-            x = self._model.stem(x)
+            x = resnet_network.stem(x)
 
             # Pass through stages up to stage_idx
-            n_stages = len(self._model.stages)
+            n_stages = len(resnet_network.stages)
             target_idx = stage_idx if stage_idx >= 0 else n_stages + stage_idx
 
-            for i, stage in enumerate(self._model.stages):
+            for i, stage in enumerate(resnet_network.stages):
                 x = stage(x)
                 if i == target_idx:
                     break
 
-            return x.cpu().numpy()
+            result: np.ndarray = x.cpu().numpy()
+            return result
 
 
 __all__ = [

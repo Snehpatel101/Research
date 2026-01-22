@@ -1,11 +1,25 @@
 """Persistence functions for PipelineConfig."""
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
+
+class HasPipelineDirs(Protocol):
+    """Protocol for classes that have pipeline directories."""
+
+    run_config_dir: Path
+
+    def create_directories(self) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +111,11 @@ def load_config_from_run_id(cls: type[T], run_id: str, project_root: Path | None
 class PipelinePersistenceMixin:
     """Mixin providing save/load methods for PipelineConfig."""
 
-    def save_config(self, path: Path | None = None) -> Path:
+    # Type hints for mixin - expected to be provided by the class this is mixed into
+    run_config_dir: Path
+    create_directories: Any  # Method provided by the target class
+
+    def save_config(self: HasPipelineDirs, path: Path | None = None) -> Path:
         """
         Save configuration to JSON file.
 

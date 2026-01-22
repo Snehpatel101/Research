@@ -11,6 +11,10 @@ NOTE: Timeframe definitions are imported from src.core.common.timeframes.
 Do not redefine timeframe constants here - use the common module instead.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 # =============================================================================
 # TIMEFRAME CONFIGURATION
 # =============================================================================
@@ -250,7 +254,7 @@ def is_cross_asset_feature(feature_name: str) -> bool:
 # Example: At 10:05 (5min bar), the 15min bar for 10:00-10:15 is incomplete.
 # We use the PREVIOUS completed 15min bar (09:45-10:00) for features.
 
-MTF_CONFIG = {
+MTF_CONFIG: dict[str, Any] = {
     # Master enable/disable for MTF features
     "enabled": True,
     # Base timeframe of the input data
@@ -331,7 +335,8 @@ def get_mtf_base_timeframe(target_tf: str | None = None) -> str:
     not from ["5min", "10min", "15min"].
     """
     if target_tf is None:
-        return MTF_CONFIG["base_timeframe"]
+        base_tf = MTF_CONFIG["base_timeframe"]
+        return str(base_tf) if base_tf is not None else "1min"
 
     # Validate the target timeframe using the common module
     if is_valid_timeframe(target_tf, allow_extended=True):
@@ -341,11 +346,12 @@ def get_mtf_base_timeframe(target_tf: str | None = None) -> str:
     import logging
 
     logger = logging.getLogger(__name__)
+    base_tf = MTF_CONFIG["base_timeframe"]
     logger.warning(
         f"Invalid target_tf '{target_tf}' provided to get_mtf_base_timeframe(). "
-        f"Falling back to default: {MTF_CONFIG['base_timeframe']}"
+        f"Falling back to default: {base_tf}"
     )
-    return MTF_CONFIG["base_timeframe"]
+    return str(base_tf) if base_tf is not None else "1min"
 
 
 def get_mtf_config() -> dict:
@@ -366,7 +372,7 @@ def get_mtf_config() -> dict:
     return copy.deepcopy(MTF_CONFIG)
 
 
-def validate_mtf_config(config: dict = None) -> list[str]:
+def validate_mtf_config(config: dict[str, Any] | None = None) -> list[str]:
     """
     Validate MTF configuration values.
 

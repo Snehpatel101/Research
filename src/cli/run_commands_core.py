@@ -6,15 +6,16 @@ for pipeline execution commands.
 """
 
 from pathlib import Path
+from typing import Any
 
 from .utils import show_info
 
-_pipeline_config = None
-_pipeline_runner = None
-_presets_module = None
+_pipeline_config: Any = None
+_pipeline_runner: Any = None
+_presets_module: Any = None
 
 
-def _get_pipeline_config():
+def _get_pipeline_config() -> Any:
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
@@ -24,7 +25,7 @@ def _get_pipeline_config():
     return _pipeline_config
 
 
-def _get_pipeline_runner():
+def _get_pipeline_runner() -> Any:
     """Lazy import pipeline module."""
     global _pipeline_runner
     if _pipeline_runner is None:
@@ -34,7 +35,7 @@ def _get_pipeline_runner():
     return _pipeline_runner
 
 
-def _get_presets_module():
+def _get_presets_module() -> Any:
     """Lazy import presets module."""
     global _presets_module
     if _presets_module is None:
@@ -85,9 +86,9 @@ def _create_config_from_args(
     sequence_length: int | None,
     # Common
     project_root_path: Path,
-    pipeline_config,
-    presets_mod,
-):
+    pipeline_config: Any,
+    presets_mod: Any,
+) -> Any:
     """
     Create pipeline config from CLI arguments, applying preset if specified.
 
@@ -146,7 +147,7 @@ def _create_config_from_args(
         If preset is invalid or configuration is invalid
     """
     # Start with base config kwargs
-    config_kwargs = {
+    config_kwargs: dict[str, Any] = {
         "project_root": project_root_path,
     }
 
@@ -307,7 +308,7 @@ def _create_config_from_args(
         config_kwargs["scaler_type"] = scaler_type
 
     # Model selection (Phase 2+ - stored for downstream use)
-    model_config_data = {}
+    model_config_data: dict[str, Any] = {}
     if model_type is not None:
         model_config_data["model_type"] = model_type
     if base_models is not None:

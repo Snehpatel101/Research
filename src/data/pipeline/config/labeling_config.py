@@ -5,7 +5,10 @@ This module contains configuration for various labeling strategies
 including triple-barrier, directional, threshold, regression, and meta-labeling.
 """
 
+from __future__ import annotations
+
 from enum import Enum
+from typing import Any
 
 
 class LabelingStrategyType(Enum):
@@ -23,7 +26,7 @@ class LabelingStrategyType(Enum):
 DEFAULT_LABELING_STRATEGY = LabelingStrategyType.TRIPLE_BARRIER
 
 # Strategy-specific default configurations
-LABELING_STRATEGY_CONFIGS = {
+LABELING_STRATEGY_CONFIGS: dict[LabelingStrategyType, dict[str, Any]] = {
     # Triple-barrier defaults are in BARRIER_PARAMS and BARRIER_PARAMS_DEFAULT
     LabelingStrategyType.TRIPLE_BARRIER: {
         "atr_column": "atr_14",
@@ -130,7 +133,7 @@ def get_labeling_strategy_config(strategy: LabelingStrategyType | str) -> dict:
 # 2. Multi-task learning with multiple prediction targets
 # 3. Ensemble labeling where models vote on different labels
 
-MULTI_LABEL_CONFIG = {
+MULTI_LABEL_CONFIG: dict[str, Any] = {
     # Enable multi-label generation
     "enabled": False,
     # List of strategies to apply

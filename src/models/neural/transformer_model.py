@@ -71,8 +71,10 @@ class PositionalEncoding(nn.Module):
         Returns:
             Tensor with positional encoding added, shape (batch, seq_len, d_model)
         """
-        x = x + self.pe[:, : x.size(1), :]
-        return self.dropout(x)
+        pe_tensor: torch.Tensor = self.pe  # type: ignore[assignment]
+        x = x + pe_tensor[:, : x.size(1), :]
+        result: torch.Tensor = self.dropout(x)
+        return result
 
 
 # =============================================================================
@@ -463,7 +465,10 @@ class TransformerModel(BaseRNNModel):
             return None
 
         # Get input projection weights: (d_model, input_size)
-        weights = self._model.input_projection.weight.detach().cpu().numpy()
+        transformer_network = self._model
+        if not isinstance(transformer_network, TransformerNetwork):
+            return None
+        weights = transformer_network.input_projection.weight.detach().cpu().numpy()
 
         # Compute L2 norm across d_model dimension for each feature
         importance = np.linalg.norm(weights, axis=0)
@@ -474,7 +479,9 @@ class TransformerModel(BaseRNNModel):
         # Return as dict with feature indices
         return {f"feature_{i}": float(imp) for i, imp in enumerate(importance)}
 
-    def get_attention_weights(self, X: np.ndarray, sample_idx: int = 0) -> np.ndarray | None:
+    def get_attention_weights(  # type: ignore[override]
+        self, X: np.ndarray, sample_idx: int = 0
+    ) -> np.ndarray | None:
         """
         Extract attention weights for interpretability.
 
@@ -495,14 +502,17 @@ class TransformerModel(BaseRNNModel):
             logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
-        self._model.eval()
+        transformer_network = self._model
+        if not isinstance(transformer_network, TransformerNetwork):
+            return None
+        transformer_network.eval()
         X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
             self._device
         )
 
         with torch.no_grad():
             # Extract attention weights
-            attention = self._model.get_attention_weights(X_tensor)
+            attention = transformer_network.get_attention_weights(X_tensor)
             # Shape: (n_layers, 1, n_heads, seq_len, seq_len)
             return attention[:, 0, :, :, :].cpu().numpy()
 
@@ -564,7 +574,8 @@ class TransformerModel(BaseRNNModel):
 
         # Select layer and average across heads
         layer_attention = attention[layer_idx]  # (n_heads, seq_len, seq_len)
-        return layer_attention.mean(axis=0)  # (seq_len, seq_len)
+        result: np.ndarray = layer_attention.mean(axis=0)  # (seq_len, seq_len)
+        return result
 
 
 __all__ = [

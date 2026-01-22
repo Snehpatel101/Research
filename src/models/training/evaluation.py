@@ -10,6 +10,7 @@ Contains methods for:
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -80,6 +81,32 @@ class TrainerEvaluationMixin:
     - self._apply_feature_set_filter(): Method to apply feature set filtering
     - self._get_sequence_model_feature_columns(): Method to get sequence model features
     """
+
+    # Type hints for mixin attributes (provided by the class this is mixed into)
+    config: Any  # TrainerConfig
+    model: Any  # Model instance
+    feature_selector: Any | None
+    _feature_set_columns: list[str] | None
+
+    def _is_feature_selection_enabled(self) -> bool:
+        """Check if feature selection is enabled. Must be implemented by subclass."""
+        raise NotImplementedError
+
+    def _is_heterogeneous_ensemble(self) -> bool:
+        """Check for heterogeneous ensembles. Must be implemented by subclass."""
+        raise NotImplementedError
+
+    def _apply_feature_set_filter(
+        self, X_df: pd.DataFrame, feature_columns: list[str]
+    ) -> pd.DataFrame:
+        """Apply feature set filtering. Must be implemented by subclass."""
+        raise NotImplementedError
+
+    def _get_sequence_model_feature_columns(
+        self, model_name: str, container: TimeSeriesDataContainer
+    ) -> list[str] | None:
+        """Get sequence model features. Must be implemented by subclass."""
+        raise NotImplementedError
 
     def _evaluate_test_set(
         self,
@@ -264,7 +291,7 @@ class TrainerEvaluationMixin:
         # For heterogeneous stacking, pass both tabular and sequence data
         if self._is_heterogeneous_ensemble() and X_test_seq is not None:
             # Heterogeneous stacking models accept X_seq as keyword argument
-            test_predictions = self.model.predict(X_test, X_seq=X_test_seq)  # type: ignore[call-arg]
+            test_predictions = self.model.predict(X_test, X_seq=X_test_seq)
         else:
             test_predictions = self.model.predict(X_test)
 

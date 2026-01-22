@@ -79,16 +79,14 @@ class GatedResidualNetwork(nn.Module):
         self.context_dim = context_dim
 
         # Skip connection projection if input != output dims
+        self.skip_proj: nn.Linear | None = None
         if input_dim != output_dim:
             self.skip_proj = nn.Linear(input_dim, output_dim)
-        else:
-            self.skip_proj = None
 
         # Context projection if context is provided
+        self.context_proj: nn.Linear | None = None
         if context_dim is not None:
             self.context_proj = nn.Linear(context_dim, hidden_dim, bias=False)
-        else:
-            self.context_proj = None
 
         # Main transformation
         self.fc1 = nn.Linear(input_dim, hidden_dim)
@@ -132,7 +130,7 @@ class GatedResidualNetwork(nn.Module):
 
         # GLU and residual
         gated = self.glu(hidden)
-        output = self.layer_norm(skip + gated)
+        output: torch.Tensor = self.layer_norm(skip + gated)
 
         return output
 
@@ -213,13 +211,13 @@ class VariableSelectionNetwork(nn.Module):
                 context = context.view(batch_size * seq_len, -1)
 
         # Apply GRN to each feature
-        transformed = []
+        transformed_list: list[torch.Tensor] = []
         for i, grn in enumerate(self.feature_grns):
             xi = x[:, i, :]  # (batch, input_dim)
-            transformed.append(grn(xi, context))
+            transformed_list.append(grn(xi, context))
 
         # Stack: (batch, n_features, hidden_dim)
-        transformed = torch.stack(transformed, dim=1)
+        transformed = torch.stack(transformed_list, dim=1)
 
         # Compute variable weights
         # Flatten for weight computation
@@ -321,7 +319,7 @@ class InterpretableMultiHeadAttention(nn.Module):
         # Reshape and project
         context = context.transpose(1, 2).contiguous()
         context = context.view(batch_size, seq_len_q, self.d_model)
-        output = self.out_proj(context)
+        output: torch.Tensor = self.out_proj(context)
 
         return output
 
@@ -485,7 +483,11 @@ class TFTNetwork(nn.Module):
 
     def get_attention_weights(self) -> list[torch.Tensor | None]:
         """Return attention weights from all attention layers."""
-        return [layer.get_attention_weights() for layer in self.attention_layers_list]
+        weights: list[torch.Tensor | None] = []
+        for layer in self.attention_layers_list:
+            if isinstance(layer, InterpretableMultiHeadAttention):
+                weights.append(layer.get_attention_weights())
+        return weights
 
 
 @register(
@@ -698,7 +700,10 @@ class TFTModel(BaseRNNModel):
             return None
 
         # Get variable weights from last forward pass
-        var_weights = self._model.get_variable_weights()
+        tft_network = self._model
+        if not isinstance(tft_network, TFTNetwork):
+            return None
+        var_weights = tft_network.get_variable_weights()
 
         if var_weights is None:
             # Need to run a forward pass first
@@ -717,7 +722,9 @@ class TFTModel(BaseRNNModel):
 
         return {f"feature_{i}": float(imp) for i, imp in enumerate(importance)}
 
-    def get_temporal_attention(self, X: np.ndarray, sample_idx: int = 0) -> list[np.ndarray] | None:
+    def get_temporal_attention(
+        self, X: np.ndarray, sample_idx: int = 0
+    ) -> list[np.ndarray | None] | None:
         """
         Extract temporal attention weights for interpretability.
 
@@ -750,11 +757,15 @@ class TFTModel(BaseRNNModel):
             _ = self._model(X_tensor)
 
             # Extract attention weights
-            attention_weights = self._model.get_attention_weights()
+            tft_network = self._model
+            if not isinstance(tft_network, TFTNetwork):
+                return None
+            attention_weights = tft_network.get_attention_weights()
 
-            return [
+            result: list[np.ndarray | None] = [
                 attn[0].cpu().numpy() if attn is not None else None for attn in attention_weights
             ]
+            return result
 
     def get_variable_selection_weights(self, X: np.ndarray) -> np.ndarray | None:
         """
@@ -778,7 +789,10 @@ class TFTModel(BaseRNNModel):
         with torch.no_grad():
             # Forward pass to compute variable weights
             _ = self._model(X_tensor)
-            var_weights = self._model.get_variable_weights()
+            tft_network = self._model
+            if not isinstance(tft_network, TFTNetwork):
+                return None
+            var_weights = tft_network.get_variable_weights()
 
             if var_weights is not None:
                 return var_weights.cpu().numpy()

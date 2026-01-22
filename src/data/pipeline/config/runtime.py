@@ -26,7 +26,7 @@ RUNS_DIR = PROJECT_ROOT / "runs"
 CONFIG_DIR = PROJECT_ROOT / "config"
 
 
-def detect_available_symbols(raw_dir: Path = None) -> list[str]:
+def detect_available_symbols(raw_dir: Path | None = None) -> list[str]:
     """
     Auto-detect available symbols from raw data directory.
 
@@ -82,9 +82,13 @@ def validate_config() -> None:
     max_max_bars = 0
     for horizons in BARRIER_PARAMS.values():
         for params in horizons.values():
-            max_max_bars = max(max_max_bars, params.get("max_bars", 0))
+            mb = params.get("max_bars", 0)
+            if isinstance(mb, int):
+                max_max_bars = max(max_max_bars, mb)
     for params in BARRIER_PARAMS_DEFAULT.values():
-        max_max_bars = max(max_max_bars, params.get("max_bars", 0))
+        mb = params.get("max_bars", 0)
+        if isinstance(mb, int):
+            max_max_bars = max(max_max_bars, mb)
 
     if max_max_bars > PURGE_BARS:
         raise ValueError(

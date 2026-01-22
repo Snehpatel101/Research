@@ -25,7 +25,7 @@ def create_default_config(
     """
     from src.data.pipeline.data_config import DataConfig
 
-    config_kwargs = {}
+    config_kwargs: dict[str, Any] = {}
 
     if symbols is not None:
         config_kwargs["symbols"] = symbols

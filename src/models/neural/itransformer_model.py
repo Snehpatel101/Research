@@ -108,7 +108,8 @@ class FeaturePositionalEncoding(nn.Module):
             Position-encoded tokens, shape (batch, n_features, d_model)
         """
         x = x + self.pe[:, : x.size(1), :]
-        return self.dropout(x)
+        result: torch.Tensor = self.dropout(x)
+        return result
 
 
 class iTransformerNetwork(nn.Module):
@@ -409,7 +410,7 @@ class iTransformerModel(BaseRNNModel):
         Returns:
             Dict with metadata for TrainingMetrics
         """
-        n_features = self._n_features
+        n_features = self._n_features if self._n_features is not None else 0
 
         logger.info(
             f"iTransformer: seq_len={seq_len}, n_features={n_features}, "
@@ -442,7 +443,7 @@ class iTransformerModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         # Validate sequence length matches training
-        if X.shape[1] != self._seq_len:
+        if self._seq_len is not None and X.shape[1] != self._seq_len:
             raise ValueError(
                 f"Input sequence length ({X.shape[1]}) does not match "
                 f"training sequence length ({self._seq_len}). "
@@ -546,8 +547,12 @@ class iTransformerModel(BaseRNNModel):
         if not self._is_fitted:
             return None
 
+        itransformer_network = self._model
+        if not isinstance(itransformer_network, iTransformerNetwork):
+            return None
+
         # Get temporal projection weights: (d_model, seq_len)
-        weights = self._model.temporal_embed.temporal_proj.weight.detach().cpu().numpy()
+        weights = itransformer_network.temporal_embed.temporal_proj.weight.detach().cpu().numpy()
 
         # L2 norm across d_model dimension gives temporal importance
         # Then average across features (each feature uses same projection)
@@ -555,7 +560,7 @@ class iTransformerModel(BaseRNNModel):
 
         # For feature importance, we use the feature position embeddings
         # Get position embeddings: (1, max_features, d_model)
-        pos_embed = self._model.feature_pos.pe.detach().cpu().numpy()[0]
+        pos_embed = itransformer_network.feature_pos.pe.detach().cpu().numpy()[0]
 
         # Only use embeddings for actual features
         pos_embed = pos_embed[: self._n_features]
@@ -592,13 +597,16 @@ class iTransformerModel(BaseRNNModel):
             logger.warning(f"sample_idx {sample_idx} >= n_samples {len(X)}, using idx 0")
             sample_idx = 0
 
-        self._model.eval()
+        itransformer_network = self._model
+        if not isinstance(itransformer_network, iTransformerNetwork):
+            return None
+        itransformer_network.eval()
         X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
             self._device
         )
 
         with torch.no_grad():
-            attention = self._model.get_feature_attention(X_tensor)
+            attention = itransformer_network.get_feature_attention(X_tensor)
             # Shape: (n_layers, 1, n_heads, n_features, n_features)
             return attention[:, 0, :, :, :].cpu().numpy()
 

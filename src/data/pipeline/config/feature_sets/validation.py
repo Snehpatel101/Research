@@ -4,7 +4,10 @@ Validation functions for feature sets.
 Contains functions to resolve, validate, and get feature set columns.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 from .core import FEATURE_SET_ALIASES, FeatureSetDefinition
 from .definitions import FEATURE_SET_DEFINITIONS
@@ -110,7 +113,7 @@ def validate_feature_set_coverage(
     """
     logger = logging.getLogger(__name__)
 
-    result = {
+    result: dict[str, Any] = {
         "valid": True,
         "matched_columns": [],
         "matched_count": 0,
@@ -217,4 +220,5 @@ def get_feature_set_columns(
     canonical = resolve_feature_set_name(feature_set_name)
     feature_set = FEATURE_SET_DEFINITIONS[canonical]
     result = validate_feature_set_coverage(df_columns, feature_set, raise_on_empty=False)
-    return result["matched_columns"]
+    matched_columns: list[str] = result["matched_columns"]
+    return matched_columns

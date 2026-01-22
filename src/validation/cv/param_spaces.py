@@ -67,7 +67,7 @@ def get_max_leaves_for_depth(max_depth: int) -> int:
     """
     if max_depth <= 0:
         return 1024  # Reasonable default for unlimited depth
-    return 2**max_depth
+    return int(2**max_depth)
 
 
 # =============================================================================

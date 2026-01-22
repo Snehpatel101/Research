@@ -36,6 +36,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -202,7 +203,11 @@ class RegimeAwareTrainer:
             config: PipelineConfig with regime-aware settings
         """
         self.config = config
-        self.output_dir = config.output_dir / "regime_aware"
+        # Ensure output_dir is a Path
+        base_output_dir = (
+            Path(config.output_dir) if isinstance(config.output_dir, str) else config.output_dir
+        )
+        self.output_dir: Path = base_output_dir / "regime_aware"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize regime detector
@@ -389,15 +394,22 @@ class RegimeAwareTrainer:
                             columns=[f"f{i}" for i in range(n_features)],
                         )
 
-                    # Create container
-                    container = TimeSeriesDataContainer(
-                        X_train=X_train_df,
-                        y_train=pd.Series(y_train_regime),
-                        X_val=X_val_df,
-                        y_val=pd.Series(y_val),
-                        X_test=pd.DataFrame(),
-                        y_test=pd.Series(dtype=float),
-                        sample_weights=pd.Series(np.ones(len(y_train_regime))),
+                    # Create container using from_dataframes
+                    feature_columns = list(X_train_df.columns)
+                    train_df = X_train_df.copy()
+                    train_df[f"label_h{horizon}"] = y_train_regime
+                    train_df[f"sample_weight_h{horizon}"] = np.ones(len(y_train_regime))
+
+                    val_container_df = X_val_df.copy()
+                    val_container_df[f"label_h{horizon}"] = y_val
+                    val_container_df[f"sample_weight_h{horizon}"] = np.ones(len(y_val))
+
+                    container = TimeSeriesDataContainer.from_dataframes(
+                        train_df=train_df,
+                        val_df=val_container_df,
+                        test_df=None,
+                        horizon=horizon,
+                        feature_columns=feature_columns,
                     )
 
                     # Create trainer config
@@ -424,7 +436,8 @@ class RegimeAwareTrainer:
                     if save_models:
                         model_path = model_dir / f"{model_name}.pkl"
                         try:
-                            trainer.save(model_path)
+                            if hasattr(trainer, "model") and hasattr(trainer.model, "save"):
+                                trainer.model.save(model_path)
                         except Exception as e:
                             logger.warning(f"Failed to save model: {e}")
 
@@ -530,15 +543,22 @@ class RegimeAwareTrainer:
             model_start = time.time()
 
             try:
-                # Create container
-                container = TimeSeriesDataContainer(
-                    X_train=X_train_augmented,
-                    y_train=pd.Series(prepared.y_train),
-                    X_val=X_val_augmented,
-                    y_val=pd.Series(prepared.y_val),
-                    X_test=pd.DataFrame(),
-                    y_test=pd.Series(dtype=float),
-                    sample_weights=pd.Series(np.ones(len(prepared.y_train))),
+                # Create container using from_dataframes
+                feature_columns = list(X_train_augmented.columns)
+                train_df = X_train_augmented.copy()
+                train_df[f"label_h{horizon}"] = prepared.y_train
+                train_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_train))
+
+                val_container_df = X_val_augmented.copy()
+                val_container_df[f"label_h{horizon}"] = prepared.y_val
+                val_container_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_val))
+
+                container = TimeSeriesDataContainer.from_dataframes(
+                    train_df=train_df,
+                    val_df=val_container_df,
+                    test_df=None,
+                    horizon=horizon,
+                    feature_columns=feature_columns,
                 )
 
                 # Create trainer config
@@ -565,7 +585,8 @@ class RegimeAwareTrainer:
                 if save_models:
                     model_path = model_dir / f"{model_name}.pkl"
                     try:
-                        trainer.save(model_path)
+                        if hasattr(trainer, "model") and hasattr(trainer.model, "save"):
+                            trainer.model.save(model_path)
                     except Exception as e:
                         logger.warning(f"Failed to save model: {e}")
 

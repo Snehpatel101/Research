@@ -87,7 +87,8 @@ class PatchEmbedding(nn.Module):
         patches = patches.view(batch_size, n_patches, -1)
 
         # Project to d_model
-        return self.projection(patches)
+        result: torch.Tensor = self.projection(patches)
+        return result
 
 
 class LearnablePositionalEncoding(nn.Module):
@@ -117,7 +118,8 @@ class LearnablePositionalEncoding(nn.Module):
             Position-encoded embeddings, shape (batch, n_patches, d_model)
         """
         x = x + self.pe[:, : x.size(1), :]
-        return self.dropout(x)
+        result: torch.Tensor = self.dropout(x)
+        return result
 
 
 class PatchTSTNetwork(nn.Module):
@@ -373,7 +375,11 @@ class PatchTSTModel(BaseRNNModel):
         """
         patch_len = train_config.get("patch_len", 16)
         stride = train_config.get("stride", 8)
-        n_patches = self._model.get_n_patches(seq_len)
+        patchtst_network = self._model
+        if not isinstance(patchtst_network, PatchTSTNetwork):
+            n_patches = (seq_len - patch_len) // stride + 1
+        else:
+            n_patches = patchtst_network.get_n_patches(seq_len)
 
         logger.info(
             f"PatchTST: seq_len={seq_len}, patch_len={patch_len}, "
@@ -456,13 +462,17 @@ class PatchTSTModel(BaseRNNModel):
         if not self._is_fitted:
             return None
 
+        patchtst_network = self._model
+        if not isinstance(patchtst_network, PatchTSTNetwork):
+            return None
+
         # Get patch projection weights: (d_model, patch_len * input_size)
-        weights = self._model.patch_embed.projection.weight.detach().cpu().numpy()
+        weights = patchtst_network.patch_embed.projection.weight.detach().cpu().numpy()
 
         # Reshape to (d_model, patch_len, input_size)
-        patch_len = self._model.patch_len
-        input_size = self._model.input_size
-        weights = weights.reshape(self._model.d_model, patch_len, input_size)
+        patch_len = patchtst_network.patch_len
+        input_size = patchtst_network.input_size
+        weights = weights.reshape(patchtst_network.d_model, patch_len, input_size)
 
         # Compute importance per feature across all timesteps and d_model dims
         # Sum L2 norms across d_model and patch_len dimensions

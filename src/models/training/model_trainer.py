@@ -159,7 +159,10 @@ class ModelTrainer:
             config: PipelineConfig instance with all training settings
         """
         self.config = config
-        self.output_dir = config.output_dir
+        # Ensure output_dir is a Path
+        self.output_dir: Path = (
+            Path(config.output_dir) if isinstance(config.output_dir, str) else config.output_dir
+        )
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize data preparation (PHASE_2)
@@ -231,22 +234,23 @@ class ModelTrainer:
         model_output_dir.mkdir(parents=True, exist_ok=True)
 
         # Build trainer config from PipelineConfig + optional overrides
-        trainer_config_kwargs = {
-            "model_name": model_name,
-            "horizon": horizon,
-            "sequence_length": self.config.sequence_length,
-            "output_dir": model_output_dir,
-            "batch_size": self.config.batch_size,
-            "max_epochs": self.config.max_epochs,
-            "early_stopping_patience": self.config.early_stopping_patience,
-            "random_seed": self.config.random_state,
-        }
+        # Use explicit typing to avoid mypy variance issues
+        trainer_config = TrainerConfig(
+            model_name=model_name,
+            horizon=horizon,
+            sequence_length=self.config.sequence_length,
+            output_dir=model_output_dir,
+            batch_size=self.config.batch_size,
+            max_epochs=self.config.max_epochs,
+            early_stopping_patience=self.config.early_stopping_patience,
+            random_seed=self.config.random_state,
+        )
 
         # Apply hyperparameter overrides if provided
         if hyperparams:
-            trainer_config_kwargs.update(hyperparams)
-
-        trainer_config = TrainerConfig(**trainer_config_kwargs)
+            for key, value in hyperparams.items():
+                if hasattr(trainer_config, key):
+                    setattr(trainer_config, key, value)
 
         # Hyperparameter optimization if enabled and no overrides provided
         if self.config.optimize_hyperparams and hyperparams is None:
@@ -280,19 +284,29 @@ class ModelTrainer:
         if len(feature_names) < X_train_2d.shape[1]:
             feature_names = [f"f{i}" for i in range(X_train_2d.shape[1])]
 
-        # Create container with proper column names
-        container = TimeSeriesDataContainer(
-            X_train=pd.DataFrame(X_train_2d, columns=feature_names[: X_train_2d.shape[1]]),
-            y_train=pd.Series(prepared.y_train),
-            X_val=pd.DataFrame(X_val_2d, columns=feature_names[: X_val_2d.shape[1]]),
-            y_val=pd.Series(prepared.y_val),
-            X_test=(
-                pd.DataFrame(X_test_2d, columns=feature_names[: X_test_2d.shape[1]])
-                if X_test_2d is not None
-                else None
-            ),
-            y_test=(pd.Series(prepared.y_test) if prepared.y_test is not None else None),
-            sample_weights=pd.Series(np.ones(len(prepared.y_train))),
+        # Create container using from_dataframes
+        # Build DataFrames with labels and weights included
+        train_feature_names = feature_names[: X_train_2d.shape[1]]
+        train_df = pd.DataFrame(X_train_2d, columns=train_feature_names)
+        train_df[f"label_h{horizon}"] = prepared.y_train
+        train_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_train))
+
+        val_df = pd.DataFrame(X_val_2d, columns=train_feature_names)
+        val_df[f"label_h{horizon}"] = prepared.y_val
+        val_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_val))
+
+        test_df: pd.DataFrame | None = None
+        if X_test_2d is not None and prepared.y_test is not None:
+            test_df = pd.DataFrame(X_test_2d, columns=train_feature_names)
+            test_df[f"label_h{horizon}"] = prepared.y_test
+            test_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_test))
+
+        container = TimeSeriesDataContainer.from_dataframes(
+            train_df=train_df,
+            val_df=val_df,
+            test_df=test_df,
+            horizon=horizon,
+            feature_columns=train_feature_names,
         )
 
         # Run training
@@ -392,9 +406,9 @@ class ModelTrainer:
 
     def _run_hyperparam_optimization(
         self,
-        trainer_config,
+        trainer_config: Any,
         prepared: PreparedData,
-    ):
+    ) -> Any:
         """
         Run Optuna hyperparameter optimization.
 
@@ -409,13 +423,18 @@ class ModelTrainer:
             Updated TrainerConfig with optimized parameters
         """
         from src.validation.cv import TimeSeriesOptunaTuner
+        from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
         logger.info("  Running hyperparameter optimization...")
 
+        # Create purged CV splitter
+        cv_config = PurgedKFoldConfig(n_splits=self.config.n_splits, purge_bars=60, embargo_bars=10)
+        cv = PurgedKFold(cv_config)
+
         tuner = TimeSeriesOptunaTuner(
             model_name=trainer_config.model_name,
-            horizon=trainer_config.horizon,
-            n_splits=self.config.n_splits,
+            cv=cv,
+            n_trials=self.config.hyperparam_trials,
         )
 
         # Flatten for Optuna (works with 2D)
@@ -423,11 +442,12 @@ class ModelTrainer:
         if X_train_2d.ndim > 2:
             X_train_2d = X_train_2d.reshape(X_train_2d.shape[0], -1)
 
-        best_params = tuner.optimize(
-            X=X_train_2d,
-            y=prepared.y_train,
-            n_trials=self.config.hyperparam_trials,
-        )
+        # Convert to DataFrame/Series for tuner API
+        X_train_df = pd.DataFrame(X_train_2d)
+        y_train_series = pd.Series(prepared.y_train)
+
+        result = tuner.tune(X=X_train_df, y=y_train_series)
+        best_params = result.get("best_params", {})
 
         logger.info(f"    Best params: {best_params}")
 
@@ -473,7 +493,7 @@ class ModelTrainer:
         Returns:
             Path to saved summary file
         """
-        path = path or self.output_dir / "training_summary.json"
+        resolved_path: Path = path if path is not None else self.output_dir / "training_summary.json"
 
         summary = {
             "config": {
@@ -499,11 +519,11 @@ class ModelTrainer:
                 "model_path": str(artifact.model_path) if artifact.model_path else None,
             }
 
-        with open(path, "w") as f:
+        with open(resolved_path, "w") as f:
             json.dump(summary, f, indent=2)
 
-        logger.info(f"Training summary saved: {path}")
-        return path
+        logger.info(f"Training summary saved: {resolved_path}")
+        return resolved_path
 
     def load_artifacts_summary(self, path: Path | None = None) -> dict[str, Any]:
         """
@@ -515,10 +535,11 @@ class ModelTrainer:
         Returns:
             Dictionary with summary data
         """
-        path = path or self.output_dir / "training_summary.json"
+        resolved_path: Path = path if path is not None else self.output_dir / "training_summary.json"
 
-        with open(path) as f:
-            return json.load(f)
+        with open(resolved_path) as f:
+            result: dict[str, Any] = json.load(f)
+            return result
 
 
 def train_models(

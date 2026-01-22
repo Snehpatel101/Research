@@ -47,7 +47,7 @@ TIMEZONE_MAP: dict[str, str] = {
 
 
 def standardize_columns(
-    df: pd.DataFrame, column_mappings: dict[str, str] = None, copy: bool = True
+    df: pd.DataFrame, column_mappings: dict[str, str] | None = None, copy: bool = True
 ) -> pd.DataFrame:
     """
     Standardize column names to expected format.
@@ -97,7 +97,7 @@ def standardize_columns(
 def handle_timezone(
     df: pd.DataFrame,
     source_timezone: str = "UTC",
-    timezone_map: dict[str, str] = None,
+    timezone_map: dict[str, str] | None = None,
     copy: bool = True,
 ) -> pd.DataFrame:
     """

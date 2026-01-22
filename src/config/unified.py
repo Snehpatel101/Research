@@ -91,12 +91,14 @@ class TimeframesSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TimeframesSection:
+        default_canonical_ladder = [
+            "1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"
+        ]
+        default_extended = ["240min", "1440min"]
         return cls(
             default_primary=data.get("default_primary", "5min"),
-            canonical_ladder=data.get(
-                "canonical_ladder", cls.__dataclass_fields__["canonical_ladder"].default_factory()
-            ),
-            extended=data.get("extended", cls.__dataclass_fields__["extended"].default_factory()),
+            canonical_ladder=data.get("canonical_ladder") or default_canonical_ladder,
+            extended=data.get("extended") or default_extended,
         )
 
 
@@ -173,12 +175,13 @@ class HorizonsSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HorizonsSection:
+        default_supported = [1, 5, 10, 15, 20, 30, 60, 120]
+        default_active = [5, 10, 15, 20]
+        default_default = [5, 10, 15, 20]
         return cls(
-            supported=data.get(
-                "supported", cls.__dataclass_fields__["supported"].default_factory()
-            ),
-            active=data.get("active", cls.__dataclass_fields__["active"].default_factory()),
-            default=data.get("default", cls.__dataclass_fields__["default"].default_factory()),
+            supported=data.get("supported") or default_supported,
+            active=data.get("active") or default_active,
+            default=data.get("default") or default_default,
         )
 
 
@@ -214,9 +217,14 @@ class FeatureGenerationSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FeatureGenerationSection:
+        default_modes = {
+            "full": "Generate complete feature set (~180 features)",
+            "minimal": "Generate only essential features (~50 features)",
+            "custom": "Generate custom feature set (requires feature_toggles)",
+        }
         return cls(
             default=data.get("default", "full"),
-            modes=data.get("modes", cls.__dataclass_fields__["modes"].default_factory()),
+            modes=data.get("modes") or default_modes,
         )
 
 
@@ -235,21 +243,18 @@ class FeaturesSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FeaturesSection:
+        default_sma_periods = [10, 20, 50, 100, 200]
+        default_ema_periods = [9, 21, 50]
+        default_atr_periods = [7, 14, 21]
+        default_macd: dict[str, int] = {"fast": 12, "slow": 26, "signal": 9}
+        default_bollinger: dict[str, float | int] = {"period": 20, "std": 2.0}
         return cls(
-            sma_periods=data.get(
-                "sma_periods", cls.__dataclass_fields__["sma_periods"].default_factory()
-            ),
-            ema_periods=data.get(
-                "ema_periods", cls.__dataclass_fields__["ema_periods"].default_factory()
-            ),
-            atr_periods=data.get(
-                "atr_periods", cls.__dataclass_fields__["atr_periods"].default_factory()
-            ),
+            sma_periods=data.get("sma_periods") or default_sma_periods,
+            ema_periods=data.get("ema_periods") or default_ema_periods,
+            atr_periods=data.get("atr_periods") or default_atr_periods,
             rsi_period=data.get("rsi_period", 14),
-            macd=data.get("macd", cls.__dataclass_fields__["macd"].default_factory()),
-            bollinger=data.get(
-                "bollinger", cls.__dataclass_fields__["bollinger"].default_factory()
-            ),
+            macd=data.get("macd") or default_macd,
+            bollinger=data.get("bollinger") or default_bollinger,
             selection=FeatureSelectionSection.from_dict(data.get("selection", {})),
             generation=FeatureGenerationSection.from_dict(data.get("generation", {})),
         )
@@ -265,13 +270,11 @@ class MTFSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MTFSection:
+        default_timeframes = ["1min", "15min", "60min"]
         return cls(
             enabled=data.get("enabled", True),
             default_mode=data.get("default_mode", "indicators"),
-            default_timeframes=data.get(
-                "default_timeframes",
-                cls.__dataclass_fields__["default_timeframes"].default_factory(),
-            ),
+            default_timeframes=data.get("default_timeframes") or default_timeframes,
         )
 
 
@@ -508,8 +511,16 @@ class ModelConfigSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ModelConfigSection:
+        default_defaults: dict[str, dict[str, Any]] = {
+            "boosting": {},
+            "neural": {},
+            "transformer": {},
+            "classical": {},
+            "ensemble": {},
+            "meta_learner": {},
+        }
         return cls(
-            defaults=data.get("defaults", cls.__dataclass_fields__["defaults"].default_factory()),
+            defaults=data.get("defaults") or default_defaults,
             overrides=data.get("overrides", {}),
         )
 
