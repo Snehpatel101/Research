@@ -250,6 +250,113 @@ from src.core.data_contract import (
 )
 
 # =============================================================================
+# ABSORBED: src/contracts - Model and data contracts
+# =============================================================================
+from src.contracts import (
+    FeatureMode,
+    MTFMode,
+    DataContractSchema,
+    DATA_SCHEMA,
+    MODEL_CONTRACTS,
+    get_model_contract,
+    list_model_contracts,
+    get_models_by_rank,
+    get_models_requiring_scaling,
+    get_models_by_mtf_mode,
+    ArtifactManifest,
+)
+
+# =============================================================================
+# ABSORBED: src/config - Unified configuration
+# =============================================================================
+from src.config import (
+    UnifiedConfig,
+    get_unified_config,
+    set_unified_config,
+    reset_unified_config,
+    get_config_value,
+    get_config_value_strict,
+    validate_config,
+    validate_config_file,
+    GlobalConfig,
+    load_global_config,
+    get_global_config,
+    TrainerConfig,
+    detect_environment,
+)
+
+# =============================================================================
+# ABSORBED: src/common - Timeframes, horizons, split ratios
+# =============================================================================
+from src.common import (
+    HorizonConfig,
+    HORIZONS,
+    SUPPORTED_HORIZONS,
+    ACTIVE_HORIZONS,
+    LABEL_HORIZONS,
+    LOOKBACK_HORIZONS,
+    validate_horizons,
+    get_scaled_horizons,
+    auto_scale_purge_embargo,
+    get_default_barrier_params_for_horizon,
+    ALL_CANONICAL_TIMEFRAMES,
+    EXTENDED_TIMEFRAMES,
+    FULL_9TF_LADDER,
+    SUPPORTED_TIMEFRAMES,
+    TIMEFRAME_ALIASES,
+    TIMEFRAME_TO_FREQ,
+    TIMEFRAME_TO_MINUTES,
+    get_timeframe_minutes,
+    is_valid_timeframe,
+    normalize_timeframe,
+    normalize_timeframe_list,
+    timeframe_to_minutes,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+    DEFAULT_TEST_RATIO,
+    validate_split_ratios,
+)
+
+# =============================================================================
+# ABSORBED: src/utils - Memory, cache, notebook utilities
+# =============================================================================
+from src.utils import (
+    CacheManager,
+    CacheConfig,
+    CacheEntry,
+    CacheStats,
+    MemoryInfo,
+    check_available_memory,
+    check_memory_sufficient,
+    estimate_array_size,
+    estimate_object_size,
+    get_memory_info,
+    log_memory_usage,
+    memory_logged,
+    get_global_cache,
+    DataCache,
+    DataCacheConfig,
+    cached_result,
+    get_global_data_cache,
+    CheckpointManager,
+    is_colab,
+    setup_environment,
+    setup_colab_environment,
+)
+
+# =============================================================================
+# ABSORBED: src/coordination - Temporal alignment utilities
+# =============================================================================
+from src.coordination import (
+    align_to_anchor,
+    apply_mtf_lag,
+    compute_sequence_offset,
+    validate_timestamp_alignment,
+    TimeframeCoordinator,
+    TimeframeData,
+)
+
+# =============================================================================
 # ALL EXPORTS
 # =============================================================================
 __all__ = [
@@ -433,4 +540,101 @@ __all__ = [
     # =========================================================================
     "DatasetContract",
     "SplitDatasetContract",
+
+    # =========================================================================
+    # ABSORBED: src/contracts
+    # =========================================================================
+    "FeatureMode",
+    "MTFMode",
+    "DataContractSchema",
+    "DATA_SCHEMA",
+    "MODEL_CONTRACTS",
+    "get_model_contract",
+    "list_model_contracts",
+    "get_models_by_rank",
+    "get_models_requiring_scaling",
+    "get_models_by_mtf_mode",
+    "ArtifactManifest",
+
+    # =========================================================================
+    # ABSORBED: src/config
+    # =========================================================================
+    "UnifiedConfig",
+    "get_unified_config",
+    "set_unified_config",
+    "reset_unified_config",
+    "get_config_value",
+    "get_config_value_strict",
+    "validate_config",
+    "validate_config_file",
+    "GlobalConfig",
+    "load_global_config",
+    "get_global_config",
+    "TrainerConfig",
+    "detect_environment",
+
+    # =========================================================================
+    # ABSORBED: src/common
+    # =========================================================================
+    "HorizonConfig",
+    "HORIZONS",
+    "SUPPORTED_HORIZONS",
+    "ACTIVE_HORIZONS",
+    "LABEL_HORIZONS",
+    "LOOKBACK_HORIZONS",
+    "validate_horizons",
+    "get_scaled_horizons",
+    "auto_scale_purge_embargo",
+    "get_default_barrier_params_for_horizon",
+    "ALL_CANONICAL_TIMEFRAMES",
+    "EXTENDED_TIMEFRAMES",
+    "FULL_9TF_LADDER",
+    "SUPPORTED_TIMEFRAMES",
+    "TIMEFRAME_ALIASES",
+    "TIMEFRAME_TO_FREQ",
+    "TIMEFRAME_TO_MINUTES",
+    "get_timeframe_minutes",
+    "is_valid_timeframe",
+    "normalize_timeframe",
+    "normalize_timeframe_list",
+    "timeframe_to_minutes",
+    "DEFAULT_TRAIN_RATIO",
+    "DEFAULT_VAL_RATIO",
+    "DEFAULT_TEST_RATIO",
+    "validate_split_ratios",
+
+    # =========================================================================
+    # ABSORBED: src/utils
+    # =========================================================================
+    "CacheManager",
+    "CacheConfig",
+    "CacheEntry",
+    "CacheStats",
+    "MemoryInfo",
+    "check_available_memory",
+    "check_memory_sufficient",
+    "estimate_array_size",
+    "estimate_object_size",
+    "get_memory_info",
+    "log_memory_usage",
+    "memory_logged",
+    "get_global_cache",
+    "DataCache",
+    "DataCacheConfig",
+    "cached_result",
+    "get_global_data_cache",
+    "CheckpointManager",
+    "is_colab",
+    "setup_environment",
+    "setup_colab_environment",
+
+    # =========================================================================
+    # ABSORBED: src/coordination
+    # =========================================================================
+    "align_to_anchor",
+    "apply_mtf_lag",
+    "compute_sequence_offset",
+    "validate_timestamp_alignment",
+    "TimeframeCoordinator",
+    "TimeframeData",
 ]

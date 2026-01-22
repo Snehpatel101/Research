@@ -1,0 +1,108 @@
+"""
+Inference Backtesting - Re-export from src.backtesting.
+
+New import path:
+    from src.inference.backtesting import Backtester, BacktestConfig
+
+Legacy import path (still works):
+    from src.backtesting import Backtester, BacktestConfig
+"""
+
+from src.backtesting import (
+    # Backtester
+    Backtester,
+    BacktestConfig,
+    BacktestResult,
+    ExecutionModel,
+    Position,
+    run_backtest,
+    run_walk_forward_backtest,
+    # Transaction costs
+    TransactionCosts,
+    SlippageModel,
+    BaseSlippageModel,
+    FixedSlippage,
+    LinearSlippage,
+    SquareRootSlippage,
+    VolatilityScaledSlippage,
+    CostCalculator,
+    create_cost_calculator,
+    # Position sizing
+    PositionSizingMethod,
+    BasePositionSizer,
+    KellyCriterion,
+    FixedFractional,
+    VolatilityTargeted,
+    EqualWeight,
+    FixedContracts,
+    PositionSizerConfig,
+    create_position_sizer,
+    # Metrics
+    calculate_sharpe_ratio,
+    calculate_sortino_ratio,
+    calculate_max_drawdown,
+    calculate_max_drawdown_duration,
+    calculate_calmar_ratio,
+    calculate_win_rate,
+    calculate_profit_factor,
+    calculate_expectancy,
+    calculate_expectancy_ratio,
+    calculate_payoff_ratio,
+    calculate_var,
+    calculate_cvar,
+    calculate_ulcer_index,
+    calculate_ulcer_performance_index,
+    PerformanceMetrics,
+    calculate_all_metrics,
+    # Equity curve
+    Trade,
+    EquityCurve,
+    create_equity_curve_from_trades,
+)
+
+__all__ = [
+    "Backtester",
+    "BacktestConfig",
+    "BacktestResult",
+    "ExecutionModel",
+    "Position",
+    "run_backtest",
+    "run_walk_forward_backtest",
+    "TransactionCosts",
+    "SlippageModel",
+    "BaseSlippageModel",
+    "FixedSlippage",
+    "LinearSlippage",
+    "SquareRootSlippage",
+    "VolatilityScaledSlippage",
+    "CostCalculator",
+    "create_cost_calculator",
+    "PositionSizingMethod",
+    "BasePositionSizer",
+    "KellyCriterion",
+    "FixedFractional",
+    "VolatilityTargeted",
+    "EqualWeight",
+    "FixedContracts",
+    "PositionSizerConfig",
+    "create_position_sizer",
+    "calculate_sharpe_ratio",
+    "calculate_sortino_ratio",
+    "calculate_max_drawdown",
+    "calculate_max_drawdown_duration",
+    "calculate_calmar_ratio",
+    "calculate_win_rate",
+    "calculate_profit_factor",
+    "calculate_expectancy",
+    "calculate_expectancy_ratio",
+    "calculate_payoff_ratio",
+    "calculate_var",
+    "calculate_cvar",
+    "calculate_ulcer_index",
+    "calculate_ulcer_performance_index",
+    "PerformanceMetrics",
+    "calculate_all_metrics",
+    "Trade",
+    "EquityCurve",
+    "create_equity_curve_from_trades",
+]
