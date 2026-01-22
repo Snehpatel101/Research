@@ -8,7 +8,7 @@ import logging
 import numpy as np
 
 from src.adapters import PreparedData
-from src.cross_validation import TimeSeriesOptunaTuner
+from src.validation.cv import TimeSeriesOptunaTuner
 
 logger = logging.getLogger(__name__)
 

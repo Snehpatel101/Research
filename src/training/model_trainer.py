@@ -417,7 +417,7 @@ class ModelTrainer:
         Returns:
             Updated TrainerConfig with optimized parameters
         """
-        from src.cross_validation import TimeSeriesOptunaTuner
+        from src.validation.cv import TimeSeriesOptunaTuner
 
         logger.info("  Running hyperparameter optimization...")
 

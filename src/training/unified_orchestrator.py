@@ -51,7 +51,7 @@ from src.core import (
     PipelineConfig,
     TrainingMode,
 )
-from src.cross_validation import (
+from src.validation.cv import (
     OOFGenerator,
     OOFPrediction,
     PurgedKFold,

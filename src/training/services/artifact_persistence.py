@@ -7,7 +7,7 @@ from typing import Any
 import json
 import logging
 
-from src.cross_validation import OOFPrediction
+from src.validation.cv import OOFPrediction
 from src.core import PipelineConfig
 
 logger = logging.getLogger(__name__)

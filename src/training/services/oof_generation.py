@@ -8,7 +8,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from src.cross_validation import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
+from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
 from src.adapters import PreparedData
 
 logger = logging.getLogger(__name__)

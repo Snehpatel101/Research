@@ -58,7 +58,7 @@ from src.adapters import (
 # -> models.base -> models/__init__ -> models.ensemble -> orchestrator
 # -> cross_validation (CIRCULAR)
 if TYPE_CHECKING:
-    from src.cross_validation import OOFPrediction, StackingDataset
+    from src.validation.cv import OOFPrediction, StackingDataset
     from src.training.unified_orchestrator import TrainingRunResult
 else:
     # At runtime, use Protocol for type hints (structural typing)
