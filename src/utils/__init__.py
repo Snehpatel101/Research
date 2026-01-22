@@ -1,67 +1,19 @@
 """
-Utility modules for the ML Model Factory.
+DEPRECATED: Import from 'src.core.utils' instead.
 
-This package provides helper functions for notebooks, visualization,
-configuration validation, memory management, caching, and common operations.
+This module will be removed in v2.0.0.
+
+Migration:
+    # Old (deprecated)
+    from src.utils import CacheManager, CheckpointManager
+
+    # New (preferred)
+    from src.core.utils import CacheManager, CheckpointManager
 """
 
-from src.utils.cache import (
-    CacheMetadata,
-    DataCache,
-    DataCacheConfig,
-    cached_result,
-    get_global_data_cache,
-)
-from src.utils.checkpoint_manager import CheckpointManager
-from src.utils.colab_setup import (
-    ensure_data_in_workspace,
-    get_colab_dataloader_kwargs,
-    get_trainer_for_colab,
-    is_colab,
-    setup_colab_environment,
-    setup_environment,
-    train_ensemble_colab,
-)
-from src.utils.config_validator import (
-    ValidationResult,
-    generate_validation_report,
-    quick_validate,
-    run_all_validations,
-    validate_cv_config,
-    validate_ensemble_config,
-    validate_pipeline_config,
-    validate_trainer_config,
-)
-from src.utils.memory import (
-    CacheConfig,
-    CacheEntry,
-    CacheManager,
-    CacheStats,
-    MemoryInfo,
-    PSUTIL_AVAILABLE,
-    check_available_memory,
-    check_memory_sufficient,
-    estimate_array_size,
-    estimate_object_size,
-    get_global_cache,
-    get_memory_info,
-    log_memory_usage,
-    memory_logged,
-)
-from src.utils.notebook import (
-    create_progress_callback,
-    display_metrics,
-    download_sample_data,
-    get_sample_config,
-    install_dependencies,
-    mount_drive,
-    plot_confusion_matrix,
-    plot_model_comparison,
-    plot_training_history,
-    setup_notebook,
-)
+import warnings
 
-__all__ = [
+_UTILS_EXPORTS = [
     # Colab & Environment setup
     "is_colab",
     "setup_environment",
@@ -72,7 +24,7 @@ __all__ = [
     "ensure_data_in_workspace",
     # Checkpoint management
     "CheckpointManager",
-    # Memory management (MOD-007)
+    # Memory management
     "MemoryInfo",
     "CacheEntry",
     "CacheStats",
@@ -87,7 +39,7 @@ __all__ = [
     "memory_logged",
     "get_global_cache",
     "PSUTIL_AVAILABLE",
-    # Data caching (MOD-007)
+    # Data caching
     "CacheMetadata",
     "DataCacheConfig",
     "DataCache",
@@ -114,3 +66,23 @@ __all__ = [
     "generate_validation_report",
     "quick_validate",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import to avoid circular imports."""
+    if name in _UTILS_EXPORTS:
+        warnings.warn(
+            f"Importing '{name}' from 'src.utils' is deprecated. "
+            f"Use 'from src.core.utils import {name}' instead. "
+            "This will be removed in v2.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from src.core import utils as utils_module
+
+        return getattr(utils_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return _UTILS_EXPORTS

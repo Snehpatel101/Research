@@ -1,29 +1,19 @@
 """
-Core Utils - Re-export from src.utils and src.coordination.
+Utility modules for the ML Model Factory.
 
-This subpackage consolidates utility functions from:
-- src.utils (memory, cache, notebook, colab setup)
-- src.coordination (temporal alignment, MTF coordination)
-
-New import path:
-    from src.core.utils import CacheManager, TimeframeCoordinator
-
-Legacy import paths (still work):
-    from src.utils import CacheManager
-    from src.coordination import TimeframeCoordinator
+This package provides helper functions for notebooks, visualization,
+configuration validation, memory management, caching, and common operations.
 """
 
-# Re-export from utils
-from src.utils import (
-    # Cache
+from .cache import (
     CacheMetadata,
     DataCache,
     DataCacheConfig,
     cached_result,
     get_global_data_cache,
-    # Checkpoint
-    CheckpointManager,
-    # Colab setup
+)
+from .checkpoint_manager import CheckpointManager
+from .colab_setup import (
     ensure_data_in_workspace,
     get_colab_dataloader_kwargs,
     get_trainer_for_colab,
@@ -31,7 +21,8 @@ from src.utils import (
     setup_colab_environment,
     setup_environment,
     train_ensemble_colab,
-    # Config validation
+)
+from .config_validator import (
     ValidationResult,
     generate_validation_report,
     quick_validate,
@@ -40,7 +31,8 @@ from src.utils import (
     validate_ensemble_config,
     validate_pipeline_config,
     validate_trainer_config,
-    # Memory
+)
+from .memory import (
     CacheConfig,
     CacheEntry,
     CacheManager,
@@ -55,7 +47,8 @@ from src.utils import (
     get_memory_info,
     log_memory_usage,
     memory_logged,
-    # Notebook
+)
+from .notebook import (
     create_progress_callback,
     display_metrics,
     download_sample_data,
@@ -68,73 +61,56 @@ from src.utils import (
     setup_notebook,
 )
 
-# Re-export from coordination
-from src.coordination import (
-    align_to_anchor,
-    apply_mtf_lag,
-    compute_sequence_offset,
-    validate_timestamp_alignment,
-    TimeframeCoordinator,
-    TimeframeData,
-)
-
 __all__ = [
-    # Cache
-    "CacheMetadata",
-    "DataCache",
-    "DataCacheConfig",
-    "cached_result",
-    "get_global_data_cache",
-    # Checkpoint
-    "CheckpointManager",
-    # Colab setup
-    "ensure_data_in_workspace",
-    "get_colab_dataloader_kwargs",
-    "get_trainer_for_colab",
+    # Colab & Environment setup
     "is_colab",
-    "setup_colab_environment",
     "setup_environment",
+    "setup_colab_environment",
+    "get_trainer_for_colab",
     "train_ensemble_colab",
-    # Config validation
-    "ValidationResult",
-    "generate_validation_report",
-    "quick_validate",
-    "run_all_validations",
-    "validate_cv_config",
-    "validate_ensemble_config",
-    "validate_pipeline_config",
-    "validate_trainer_config",
-    # Memory
-    "CacheConfig",
-    "CacheEntry",
-    "CacheManager",
-    "CacheStats",
+    "get_colab_dataloader_kwargs",
+    "ensure_data_in_workspace",
+    # Checkpoint management
+    "CheckpointManager",
+    # Memory management (MOD-007)
     "MemoryInfo",
-    "PSUTIL_AVAILABLE",
-    "check_available_memory",
-    "check_memory_sufficient",
+    "CacheEntry",
+    "CacheStats",
+    "CacheConfig",
+    "CacheManager",
     "estimate_array_size",
     "estimate_object_size",
-    "get_global_cache",
     "get_memory_info",
+    "check_available_memory",
+    "check_memory_sufficient",
     "log_memory_usage",
     "memory_logged",
-    # Notebook
-    "create_progress_callback",
-    "display_metrics",
-    "download_sample_data",
-    "get_sample_config",
+    "get_global_cache",
+    "PSUTIL_AVAILABLE",
+    # Data caching (MOD-007)
+    "CacheMetadata",
+    "DataCacheConfig",
+    "DataCache",
+    "cached_result",
+    "get_global_data_cache",
+    # Notebook utilities
+    "setup_notebook",
     "install_dependencies",
     "mount_drive",
+    "download_sample_data",
+    "display_metrics",
     "plot_confusion_matrix",
-    "plot_model_comparison",
     "plot_training_history",
-    "setup_notebook",
-    # Coordination
-    "align_to_anchor",
-    "apply_mtf_lag",
-    "compute_sequence_offset",
-    "validate_timestamp_alignment",
-    "TimeframeCoordinator",
-    "TimeframeData",
+    "plot_model_comparison",
+    "get_sample_config",
+    "create_progress_callback",
+    # Configuration validation
+    "ValidationResult",
+    "validate_pipeline_config",
+    "validate_trainer_config",
+    "validate_cv_config",
+    "validate_ensemble_config",
+    "run_all_validations",
+    "generate_validation_report",
+    "quick_validate",
 ]

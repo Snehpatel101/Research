@@ -1,70 +1,19 @@
 """
-Contracts package - Canonical contracts for data, models, and artifacts.
+DEPRECATED: Import from 'src.core.contracts' instead.
 
-This package defines the foundational contracts that ensure
-compatibility and reproducibility across the ML pipeline.
+This module will be removed in v2.0.0.
 
-Phase 0 of the SNwH (Unified Multi-Timeframe Model Factory) implementation.
+Migration:
+    # Old (deprecated)
+    from src.contracts import DataContract, ModelContract
 
-Usage:
-    from src.contracts import (
-        # Data contract
-        DataRank,
-        FeatureMode,
-        MTFMode,
-        DataContract,
-        DATA_SCHEMA,
-
-        # Model contract
-        ModelContract,
-        MODEL_CONTRACTS,
-        get_model_contract,
-
-        # Artifact manifest
-        ArtifactManifest,
-    )
-
-Example:
-    >>> from src.contracts import get_model_contract, DataContract, DataRank
-    >>>
-    >>> # Get contract for a model
-    >>> contract = get_model_contract("xgboost")
-    >>> print(contract.input_rank)  # DataRank.TABULAR_2D
-    >>> print(contract.requires_scaling)  # False
-    >>>
-    >>> # Create data contract from array
-    >>> import numpy as np
-    >>> X = np.random.randn(1000, 100)
-    >>> data_contract = DataContract.from_array(
-    ...     X, symbol="MES", timeframe="15min", horizon=20, split="train"
-    ... )
-    >>>
-    >>> # Validate compatibility
-    >>> is_valid, issues = contract.validate_data_contract(data_contract)
+    # New (preferred)
+    from src.core.contracts import DataContract, ModelContract
 """
 
-from .data_contract import (
-    DataRank,
-    FeatureMode,
-    MTFMode,
-    DataContractSchema,
-    DATA_SCHEMA,
-    DataContract,
-)
-from .model_contract import (
-    ModelContract,
-    MODEL_CONTRACTS,
-    get_model_contract,
-    list_model_contracts,
-    get_models_by_rank,
-    get_models_requiring_scaling,
-    get_models_by_mtf_mode,
-)
-from .artifact_manifest import (
-    ArtifactManifest,
-)
+import warnings
 
-__all__ = [
+_CONTRACTS_EXPORTS = [
     # Data contract
     "DataRank",
     "FeatureMode",
@@ -83,3 +32,23 @@ __all__ = [
     # Artifact manifest
     "ArtifactManifest",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import to avoid circular imports."""
+    if name in _CONTRACTS_EXPORTS:
+        warnings.warn(
+            f"Importing '{name}' from 'src.contracts' is deprecated. "
+            f"Use 'from src.core.contracts import {name}' instead. "
+            "This will be removed in v2.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from src.core import contracts as contracts_module
+
+        return getattr(contracts_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    return _CONTRACTS_EXPORTS
