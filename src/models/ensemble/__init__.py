@@ -84,6 +84,7 @@ Example:
 
 from .blending import BlendingEnsemble
 from .diversity import (
+    DiversityAnalysisResult,
     DiversityAnalyzer,
     DiversityMetrics,
     compute_average_disagreement,
@@ -96,9 +97,12 @@ from .diversity import (
     compute_entropy_of_votes,
     compute_kl_divergence,
     compute_kl_diversity_penalty,
+    compute_mcc_diversity_matrix,
     compute_pairwise_correlation,
     compute_pairwise_correlation_matrix,
     compute_q_statistic,
+    filter_correlated_models,
+    select_diverse_models,
 )
 # REORG-003: Meta-learners now at top level (flattened from meta_learners/)
 from .calibrated_meta import CalibratedMetaLearner
@@ -159,6 +163,7 @@ __all__ = [
     "list_meta_learners",
     "register_meta_learner",
     # Diversity analysis
+    "DiversityAnalysisResult",
     "DiversityAnalyzer",
     "DiversityMetrics",
     "compute_pairwise_correlation",
@@ -174,6 +179,9 @@ __all__ = [
     "compute_average_kl_divergence",
     "compute_diversity_score",
     "compute_kl_diversity_penalty",
+    "compute_mcc_diversity_matrix",
+    "select_diverse_models",
+    "filter_correlated_models",
     # Validators
     "validate_ensemble_config",
     "validate_base_model_compatibility",

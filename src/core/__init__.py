@@ -54,6 +54,10 @@ Usage:
         TimeSeriesDataContainer,
         DataContainerConfig,
         SplitData,
+
+        # Data Contract
+        DatasetContract,
+        SplitDatasetContract,
     )
 """
 
@@ -238,6 +242,14 @@ from src.core.container import (
 )
 
 # =============================================================================
+# DATA CONTRACT - Explicit data passing between pipeline stages
+# =============================================================================
+from src.core.data_contract import (
+    DatasetContract,
+    SplitDatasetContract,
+)
+
+# =============================================================================
 # ALL EXPORTS
 # =============================================================================
 __all__ = [
@@ -415,4 +427,10 @@ __all__ = [
     "SplitData",
     "VALID_SPLITS",
     "INVALID_LABEL",
+
+    # =========================================================================
+    # DATA CONTRACT - Explicit data passing between pipeline stages
+    # =========================================================================
+    "DatasetContract",
+    "SplitDatasetContract",
 ]

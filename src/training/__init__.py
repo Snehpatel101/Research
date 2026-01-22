@@ -90,6 +90,15 @@ from .regime_trainer import (
     RegimeModelResult,
 )
 
+# PHASE_3: Meta-labeling components
+from .meta_labeling import (
+    BetSizingStrategy,
+    BetSizingConfig,
+    compute_bet_sizes,
+    predict_with_sizing,
+    get_strategy_description,
+)
+
 __all__ = [
     # PHASE_3: Unified Training Orchestrator (THE entry point)
     "UnifiedTrainingOrchestrator",
@@ -106,6 +115,12 @@ __all__ = [
     "RegimeAwareTrainer",
     "RegimeTrainingResult",
     "RegimeModelResult",
+    # PHASE_3: Meta-labeling components
+    "BetSizingStrategy",
+    "BetSizingConfig",
+    "compute_bet_sizes",
+    "predict_with_sizing",
+    "get_strategy_description",
     # PHASE_3: Unified model trainer
     "ModelTrainer",
     "TrainedModelArtifact",

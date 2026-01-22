@@ -6,6 +6,7 @@ Provides modular services extracted from UnifiedTrainingOrchestrator:
 - HyperparameterTuningService: Optuna-based hyperparameter optimization
 - ModelTrainingService: Train individual models
 - OOFGenerationService: Generate out-of-fold predictions
+- ParallelTrainingService: Train multiple models in parallel
 """
 
 from .artifact_persistence import ArtifactManager, ArtifactSaveRequest
@@ -20,6 +21,11 @@ from .model_training import (
     ModelTrainingService,
 )
 from .oof_generation import OOFGenerationService, OOFRequest
+from .parallel_training import (
+    ParallelTrainingConfig,
+    ParallelTrainingService,
+    train_models_parallel,
+)
 
 __all__ = [
     # Artifact persistence
@@ -36,4 +42,8 @@ __all__ = [
     # OOF generation
     "OOFGenerationService",
     "OOFRequest",
+    # Parallel training
+    "ParallelTrainingConfig",
+    "ParallelTrainingService",
+    "train_models_parallel",
 ]

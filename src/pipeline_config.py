@@ -186,6 +186,7 @@ class PipelineConfig:
     max_epochs: int = 100
     early_stopping_patience: int = 10
     device: str = "auto"  # auto, cpu, cuda, mps
+    parallel_training: bool = False  # Enable parallel model training
     n_jobs: int = -1  # -1 = all cores
 
     # Neural network specific
