@@ -1,7 +1,7 @@
 # ML Pipeline Architecture
 
 **Status:** Implemented
-**Date:** 2026-01-21
+**Date:** 2026-01-22
 
 ---
 
@@ -27,9 +27,9 @@ ONE config. ONE orchestrator. Done.
 
 | File | Purpose |
 |------|---------|
-| `src/pipeline_config.py` | PipelineConfig - all settings in one place |
-| `src/orchestrator.py` | MLPipeline - orchestrates everything |
-| `src/__init__.py` | Exports: `MLPipeline`, `PipelineConfig` |
+| `src/pipeline_config.py` | PipelineConfig - all settings |
+| `src/orchestrator.py` | MLPipeline - runs everything |
+| `src/__init__.py` | Exports |
 
 ---
 
@@ -40,7 +40,7 @@ REQUIRED:
   symbol                    # "MES", "ES", etc.
 
 DATA:
-  data_path                 # Path to parquet (auto-resolved if None)
+  data_path                 # Path to parquet
   output_dir                # Where outputs go
 
 MODELS:
@@ -87,21 +87,9 @@ OPTIMIZATION:
 ```python
 from src import quick_config, production_config, research_config
 
-quick_config("MES")       # Fast iteration, no optimization
-production_config("MES")  # Full optimization, 4 models
-research_config("MES")    # Many models, walk-forward
-```
-
----
-
-## Backward Compatibility
-
-```python
-# OLD (deprecated, shows warning)
-from src import MLFactory
-
-# NEW (use this)
-from src import MLPipeline, PipelineConfig
+quick_config("MES")       # Fast iteration
+production_config("MES")  # Full optimization
+research_config("MES")    # Many models
 ```
 
 ---
@@ -114,13 +102,12 @@ User Code
     ▼
 MLPipeline (src/orchestrator.py)
     │
-    ├── PipelineRunner (data phases)
-    ├── UnifiedTrainingOrchestrator (training)
-    ├── EnsembleOrchestrator (ensemble)
-    └── InferenceOrchestrator (bundling)
+    ├── Phase 1-4: Data prep
+    ├── Phase 5-6: Training + Ensemble
+    ├── Phase 7: Evaluation
+    ├── Phase 8: Backtest
+    └── Phase 9: Bundling
     │
     ▼
 PipelineResult
 ```
-
-The old configs (UnifiedConfig, MLConfig, SmartConfig, etc.) still exist for internal use but users only need `PipelineConfig`.
