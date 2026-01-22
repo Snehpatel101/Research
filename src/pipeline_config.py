@@ -310,41 +310,6 @@ class PipelineConfig:
             data = json.load(f)
         return cls.from_dict(data)
 
-    # =========================================================================
-    # CONVERSION TO INTERNAL CONFIGS (for backward compatibility)
-    # =========================================================================
-
-    def to_data_config(self) -> Any:
-        """Convert to DataConfig for pipeline stages."""
-        from src.pipeline.data_config import DataConfig
-        return DataConfig(
-            run_id=self.run_id,
-            symbol=self.symbol,
-            horizons=self.horizons,
-            train_ratio=self.train_ratio,
-            val_ratio=self.val_ratio,
-            test_ratio=self.test_ratio,
-            purge_bars=self.purge_bars,
-            embargo_bars=self.embargo_bars,
-            random_seed=self.random_seed,
-            n_jobs=self.n_jobs,
-        )
-
-    def to_trainer_config(self, model_name: str) -> Any:
-        """Convert to TrainerConfig for model training."""
-        from src.models.config.trainer_config import TrainerConfig
-        return TrainerConfig(
-            model_name=model_name,
-            batch_size=self.batch_size,
-            max_epochs=self.max_epochs,
-            early_stopping_patience=self.early_stopping_patience,
-            device=self.device,
-            random_seed=self.random_seed,
-            sequence_length=self.sequence_length,
-            learning_rate=self.learning_rate,
-        )
-
-
 # =============================================================================
 # PRESET CONFIGURATIONS
 # =============================================================================
