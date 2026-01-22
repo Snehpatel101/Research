@@ -292,18 +292,62 @@ src/
 
 **Exit Criteria:** `from src import MLPipeline; MLPipeline(...).run()` works end-to-end
 
+### CRITICAL: Two-Tier Configuration Architecture
+
+Before Phase 2, understand the actual config system:
+
+**Tier 1: Global Defaults (`/config/` - root level)**
+```
+config/
+├── global.yaml                 # THE foundation - all defaults
+├── models/                     # 26 model-specific configs
+│   ├── xgboost.yaml, lstm.yaml, patchtst.yaml, ...
+├── pipeline/training.yaml      # Pipeline defaults
+├── optimization/               # Optuna configs
+├── features/                   # Feature engineering configs
+└── ensembles/                  # Ensemble definitions
+```
+
+**Tier 2: Source Config (`/src/config/`)**
+```
+src/config/
+├── global_config.py            # GlobalConfig class (loads global.yaml)
+├── unified.py                  # UnifiedConfig (1117 lines - ALREADY EXISTS!)
+├── smart_config.py             # SmartConfig (ML for Dummies API)
+└── __init__.py                 # Facade exporting all configs
+```
+
+**The Confusion: TWO PipelineConfig Classes Exist!**
+
+| Class | Location | Purpose | Action |
+|-------|----------|---------|--------|
+| `PipelineConfig` | `src/core/config.py` | Full orchestration (625 lines) | **DEPRECATE** → use UnifiedConfig |
+| `PipelineConfig` | `src/pipeline/data_config.py` | Data prep only (350 lines) | **RENAME** to `DataConfig` (keep) |
+
+**Target State:**
+- `UnifiedConfig` = THE ONE config for users (loads from `config/global.yaml`)
+- `DataConfig` = Internal data prep config (renamed, not user-facing)
+- `GlobalConfig` = Deprecated shim → delegates to `UnifiedConfig`
+
 ### Phase 2: Configuration Consolidation (Days 8-10)
 
 | Task | Description | Files Affected |
 |------|-------------|----------------|
-| 2.1 | Audit all config classes, create mapping document | `docs/config_mapping.md` |
-| 2.2 | Extend `UnifiedConfig` to cover all fields from other configs | `config/unified.py` |
-| 2.3 | Create `config/adapters.py` for backward compat | New file |
-| 2.4 | Update `MLPipeline` to accept both styles | `orchestrator.py` |
-| 2.5 | Deprecate `PipelineConfig`, `TrainerConfig`, `MLConfig` | Multiple files |
-| 2.6 | Remove `src/ml_pipeline/config.py` | Delete file |
+| 2.1 | Audit config classes, document 7+ existing configs | `docs/config_mapping.md` |
+| 2.2 | **Verify** UnifiedConfig coverage (already 1117 lines, 16 sections) | `src/config/unified.py` |
+| 2.3 | **Verify** existing adapters: `to_trainer_config()`, `to_pipeline_config()` | `src/config/unified.py` |
+| 2.4 | Update `MLPipeline` to accept `UnifiedConfig` or kwargs | `orchestrator.py` |
+| 2.5 | Deprecate `src/core/config.py:PipelineConfig` with shim | `src/core/config.py` |
+| 2.6 | **Rename** `src/pipeline/data_config.py:PipelineConfig` to `DataConfig` | `src/pipeline/data_config.py` |
+| 2.7 | Add deprecation shim to `GlobalConfig` → delegates to `UnifiedConfig` | `src/config/global_config.py` |
+| 2.8 | Add schema validation: `config/global.yaml` ↔ `UnifiedConfig` sync | `src/config/validators.py` |
+| 2.9 | Remove `src/ml_pipeline/config.py` (MLConfig) | Delete file |
 
-**Exit Criteria:** Single `UnifiedConfig` used everywhere, old configs still work with warnings
+**Exit Criteria:**
+- `UnifiedConfig` is THE user-facing config
+- `DataConfig` is internal (renamed from PipelineConfig #2)
+- Old configs work with deprecation warnings
+- Schema validation prevents YAML ↔ dataclass drift
 
 ### Phase 3: Feature Consolidation (Days 11-16)
 
@@ -387,6 +431,8 @@ src/
 | **Memory Regression from Shims** | Medium | Medium | Deprecation shims import both old and new modules. **Mitigation:** Profile memory before/after, set <5% regression target. |
 | **Test Coverage Degradation** | High | High | 6837 test files may import from old paths. **Mitigation:** Run coverage diff after each phase, no decrease allowed. |
 | **Rollback Impossibility** | Medium | **CRITICAL** | After file deletion (Phase 5), git revert won't cleanly restore. **Mitigation:** Tag stable points, test rollback in staging before each phase. |
+| **Config Schema Drift** | High | High | `config/global.yaml` and `UnifiedConfig` dataclass can diverge. **Mitigation:** Add schema validation test in CI that fails if YAML keys don't match dataclass fields. Task 2.8 addresses this. |
+| **Two PipelineConfig Confusion** | High | Medium | Two classes named `PipelineConfig` in different locations. **Mitigation:** Rename `src/pipeline/data_config.py:PipelineConfig` to `DataConfig` (Task 2.6). |
 
 ### Contingency Plans
 
@@ -597,7 +643,7 @@ Stack traces will change. Key mappings:
 |--------|--------|-------|-------------|
 | Top-level modules | ~24* | 16 | Pending |
 | Entry points | 4 | 1 (`MLPipeline`) | Pending |
-| Config classes | 5+ | 1 (`UnifiedConfig`) | Pending |
+| Config classes | 7+ | 2 (`UnifiedConfig` + `DataConfig`) | Pending |
 | Feature modules | 3 | 1 (`features/`) | Pending |
 | Max file size | 1,599 lines | <800 lines | Pending |
 | `unified_orchestrator.py` | 1,599 lines | <600 lines | Pending |
@@ -759,6 +805,18 @@ ml status
 
 ## Changelog
 
+### v2.1 (2026-01-21)
+**Two-Tier Config Architecture Update:**
+- Added "CRITICAL: Two-Tier Configuration Architecture" section before Phase 2
+- Documented Tier 1 (`config/global.yaml` + YAML files) vs Tier 2 (`src/config/` classes)
+- Clarified TWO PipelineConfig classes exist - documented which to deprecate vs rename
+- Updated Phase 2 tasks to reflect UnifiedConfig ALREADY EXISTS (1117 lines)
+- Added Task 2.6: Rename `data_config.py:PipelineConfig` to `DataConfig`
+- Added Task 2.7: GlobalConfig deprecation shim
+- Added Task 2.8: Schema validation (YAML ↔ dataclass sync)
+- Updated success criteria: Config classes 7+ → 2 (not 5+ → 1)
+- Added risks: Config Schema Drift, Two PipelineConfig Confusion
+
 ### v2.0 (2026-01-21)
 - Added critical note about codebase state mismatch (MLFactory vs MLPipeline direction)
 - Added Phase 0.5: Developer Experience Tooling (2 days)
@@ -778,6 +836,5 @@ ml status
 
 ---
 
-*Last Updated: 2026-01-21 (v2.0)*
-*Status: Ready for Team Review and Decision on MLFactory vs MLPipeline Direction*
-*Status: Ready for Implementation*
+*Last Updated: 2026-01-21 (v2.1)*
+*Status: Ready for Team Review - Decision Required on MLFactory vs MLPipeline Direction*
