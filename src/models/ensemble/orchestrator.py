@@ -356,7 +356,7 @@ class EnsembleOrchestrator:
 
         # Create stacking dataset for output
         # Lazy import to avoid circular dependency
-        from src.cross_validation.oof_stacking import StackingDataset
+        from src.validation.cv.oof_stacking import StackingDataset
 
         feature_names = aligned.get_feature_names()
         stacking_df = pd.DataFrame(stacking_X, columns=feature_names)
@@ -551,7 +551,7 @@ class EnsembleOrchestrator:
         Convert OOFPrediction dict to list of OOFResult for OOFAligner.
 
         OOFAligner expects OOFResult format from src.core.interfaces,
-        while OOFGenerator produces OOFPrediction from src.cross_validation.
+        while OOFGenerator produces OOFPrediction from src.validation.cv.
 
         Args:
             oof_predictions: Dict mapping model_name -> OOFPrediction

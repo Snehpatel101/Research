@@ -21,8 +21,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
-from src.feature_selection.result import FeatureSelectionResult
-from src.feature_selection.ohlcv_selector import (
+from .result import FeatureSelectionResult
+from .ohlcv_selector import (
     OHLCVFeatureSelector,
     get_feature_categories,
 )
@@ -40,7 +40,7 @@ class PurgedFeatureSelector:
     - Proper embargo bars after test set (breaks serial correlation)
 
     Example:
-        >>> from src.cross_validation import PurgedKFold, PurgedKFoldConfig
+        >>> from src.validation.cv import PurgedKFold, PurgedKFoldConfig
         >>> from src.feature_selection import PurgedFeatureSelector
         >>>
         >>> cv_config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=1440)

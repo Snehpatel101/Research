@@ -14,7 +14,7 @@ Key concepts:
 - PBO threshold: PBO > 0.5 suggests overfitting; PBO > 0.8 is severe
 
 Example:
-    >>> from src.cross_validation.pbo import compute_pbo, PBOResult
+    >>> from .pbo import compute_pbo, PBOResult
     >>> # performance_matrix: (n_strategies, n_paths) matrix of returns/metrics
     >>> result = compute_pbo(performance_matrix, n_partitions=16)
     >>> print(f"PBO: {result.pbo:.3f}, Overfit: {result.is_overfit}")

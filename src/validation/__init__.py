@@ -33,7 +33,7 @@ from src.inference.backtesting import (
     run_backtest,
     run_walk_forward_backtest,
 )
-from src.cross_validation.walk_forward import (
+from src.validation.cv.walk_forward import (
     WalkForwardConfig,
     WalkForwardEvaluator,
     WalkForwardResult,
@@ -112,7 +112,7 @@ from src.validation.statistical_tests import (
 )
 
 # Phase 5: CPCV (Combinatorial Purged Cross-Validation)
-from src.cross_validation.cpcv import (
+from src.validation.cv.cpcv import (
     CombinatorialPurgedCV,
     CPCVConfig,
     CPCVPathResult,
@@ -121,7 +121,7 @@ from src.cross_validation.cpcv import (
 )
 
 # Phase 5: PBO (Probability of Backtest Overfitting)
-from src.cross_validation.pbo import (
+from src.validation.cv.pbo import (
     PBOConfig,
     PBOResult,
     analyze_overfitting_risk,

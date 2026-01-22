@@ -44,7 +44,7 @@ from src.pipeline_config import PipelineConfig
 
 if TYPE_CHECKING:
     from src.training.unified_orchestrator import TrainingRunResult, UnifiedTrainingOrchestrator
-    from src.backtesting.backtest import Backtester, BacktestConfig, BacktestResult
+    from src.inference.backtesting.backtest import Backtester, BacktestConfig, BacktestResult
     from src.inference.builder import BundleBuilder, BundleBuildResult
 
 logger = logging.getLogger(__name__)
@@ -487,7 +487,7 @@ class MLPipeline:
             )
 
         try:
-            from src.backtesting import Backtester, BacktestConfig
+            from src.inference.backtesting import Backtester, BacktestConfig
 
             # Get predictions from training result
             # Use ensemble if available, otherwise use best model

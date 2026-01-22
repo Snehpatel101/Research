@@ -13,10 +13,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from src.cross_validation.oof_core import OOFPrediction
-from src.cross_validation.purged_kfold import PurgedKFold
-from src.cross_validation.sequence_cv import SequenceCVBuilder
+from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+from .oof_core import OOFPrediction
+from .purged_kfold import PurgedKFold
+from .sequence_cv import SequenceCVBuilder
 from src.models.base import PredictionOutput
 from src.models.registry import ModelRegistry
 

@@ -27,7 +27,7 @@ from scipy.stats import spearmanr
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
-from src.feature_selection.result import FeatureSelectionResult
+from .result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +237,7 @@ def get_feature_categories(feature_names: list[str]) -> dict[str, list[str]]:
 # RESULT DATACLASSES
 # =============================================================================
 
-# FeatureSelectionResult is imported from src.cross_validation.feature_selector
+# FeatureSelectionResult is imported from src.validation.cv.feature_selector
 # (canonical location for all feature selection result types)
 
 

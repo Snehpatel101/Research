@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
     from src.models.config.trainer_config import TrainerConfig
     from src.models.base import BaseModel
-    from src.feature_selection import FeatureSelectionManager
+    from src.optimization.feature_selection import FeatureSelectionManager
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class TrainerFeaturesMixin:
     def _setup_feature_selection(self) -> None:
         """Initialize feature selection manager based on model family and config."""
         # Late import to avoid circular dependency
-        from src.feature_selection import FeatureSelectionConfig, FeatureSelectionManager
+        from src.optimization.feature_selection import FeatureSelectionConfig, FeatureSelectionManager
 
         if not self.config.use_feature_selection:
             self.feature_selector = FeatureSelectionManager.disabled()
@@ -129,7 +129,7 @@ class TrainerFeaturesMixin:
 
         # Override n_features if explicitly set to 0 (use family default)
         if self.config.feature_selection_n_features == 0:
-            from src.feature_selection import ModelFamilyDefaults
+            from src.optimization.feature_selection import ModelFamilyDefaults
 
             defaults = ModelFamilyDefaults.get_defaults(self.model.model_family)
             fs_config.n_features = defaults.get("n_features", 50)

@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.monitoring.drift_detector import DriftResult, DriftSeverity, DriftType
+from .drift_detector import DriftResult, DriftSeverity, DriftType
 
 logger = logging.getLogger(__name__)
 

@@ -237,7 +237,7 @@ def get_feature_categories(feature_names: list[str]) -> dict[str, list[str]]:
 # RESULT DATACLASSES
 # =============================================================================
 
-# FeatureSelectionResult is imported from src.cross_validation.feature_selector
+# FeatureSelectionResult is imported from src.validation.cv.feature_selector
 # (canonical location for all feature selection result types)
 
 

@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
-from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 from src.utils.memory import estimate_array_size
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics

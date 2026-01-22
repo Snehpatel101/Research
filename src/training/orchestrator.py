@@ -322,7 +322,7 @@ class TrainingOrchestrator:
         """
         logger.info("    Running Optuna hyperparameter optimization...")
 
-        from src.cross_validation.cv_tuner import TimeSeriesOptunaTuner
+        from src.validation.cv.cv_tuner import TimeSeriesOptunaTuner
 
         tuner = TimeSeriesOptunaTuner(
             model_name=trainer_config.model_name,
@@ -510,7 +510,7 @@ class TrainingOrchestrator:
 
         n_trials = model_config.get("optimization", {}).get("n_trials", 100)
 
-        from src.cross_validation.cv_tuner import TimeSeriesOptunaTuner
+        from src.validation.cv.cv_tuner import TimeSeriesOptunaTuner
 
         tuner = TimeSeriesOptunaTuner(
             model_name=trainer_config.model_name,

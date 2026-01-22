@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.oof_core import OOFPrediction
+from .oof_core import OOFPrediction
 
 logger = logging.getLogger(__name__)
 

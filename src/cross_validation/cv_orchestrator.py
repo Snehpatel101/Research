@@ -26,10 +26,10 @@ import numpy as np
 import pandas as pd
 
 from src.core import CVMethod, PipelineConfig, MODEL_DATA_RANKS
-from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
-from src.cross_validation.cpcv import CombinatorialPurgedCV, CPCVConfig
-from src.cross_validation.walk_forward import WalkForwardEvaluator, WalkForwardConfig
-from src.cross_validation.pbo import compute_pbo, PBOConfig, PBOResult
+from .purged_kfold import PurgedKFold, PurgedKFoldConfig
+from .cpcv import CombinatorialPurgedCV, CPCVConfig
+from .walk_forward import WalkForwardEvaluator, WalkForwardConfig
+from .pbo import compute_pbo, PBOConfig, PBOResult
 
 logger = logging.getLogger(__name__)
 

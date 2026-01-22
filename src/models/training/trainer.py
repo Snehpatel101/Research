@@ -49,7 +49,7 @@ from .features import TrainerFeaturesMixin
 
 if TYPE_CHECKING:
     from src.coordination import TimeframeCoordinator
-    from src.feature_selection import FeatureSelectionManager
+    from src.optimization.feature_selection import FeatureSelectionManager
     from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)

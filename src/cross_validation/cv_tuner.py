@@ -12,12 +12,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.param_spaces import (
+from .param_spaces import (
     PARAM_SPACES,
     get_max_leaves_for_depth,
     validate_lightgbm_params,
 )
-from src.cross_validation.purged_kfold import PurgedKFold
+from .purged_kfold import PurgedKFold
 from src.models.registry import ModelRegistry
 from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
 

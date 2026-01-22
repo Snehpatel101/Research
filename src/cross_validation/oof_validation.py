@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.cross_validation.oof_core import OOFPrediction
+from .oof_core import OOFPrediction
 
 logger = logging.getLogger(__name__)
 

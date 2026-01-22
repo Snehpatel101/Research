@@ -251,7 +251,7 @@ def _compute_real_pnl_metrics(
     - Exit on signal reversal or neutral
     - Calculate actual P&L with costs
     """
-    from src.backtesting.metrics import (
+    from src.inference.backtesting.metrics import (
         calculate_calmar_ratio,
         calculate_expectancy,
         calculate_max_drawdown,
@@ -398,7 +398,7 @@ def compute_backtest_metrics(
     Returns:
         Dict with comprehensive backtest metrics
     """
-    from src.backtesting import BacktestConfig, Backtester
+    from src.inference.backtesting import BacktestConfig, Backtester
 
     config = BacktestConfig(
         initial_equity=initial_equity,

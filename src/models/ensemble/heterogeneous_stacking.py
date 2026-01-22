@@ -31,7 +31,7 @@ from src.adapters import OOFAligner, AlignedOOFResult
 # capability without the import cycle. The TYPE_CHECKING block provides full type
 # hints for static analysis (mypy, pyright).
 if TYPE_CHECKING:
-    from src.cross_validation.oof_core import OOFPrediction
+    from src.validation.cv.oof_core import OOFPrediction
 else:
     # At runtime, use the Protocol for isinstance checks if needed
     OOFPrediction = OOFPredictionProtocol

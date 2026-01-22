@@ -12,7 +12,7 @@ Key Features:
 - Proper purging for sequence models
 
 Usage:
-    from src.cross_validation.sequence_cv import SequenceCVBuilder
+    from .sequence_cv import SequenceCVBuilder
 
     builder = SequenceCVBuilder(
         X=X_df,

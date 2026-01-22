@@ -17,12 +17,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.oof_alignment import (
+from .oof_alignment import (
     OOFAlignmentResult,
     OOFAlignmentValidator,
 )
-from src.cross_validation.oof_core import OOFPrediction
-from src.cross_validation.timestamp_alignment import (
+from .oof_core import OOFPrediction
+from .timestamp_alignment import (
     align_predictions_on_datetime,
     get_datetime_alignment_report,
     validate_datetime_alignment,

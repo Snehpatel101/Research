@@ -10,7 +10,7 @@ import json
 import logging
 from pathlib import Path
 
-from src.cross_validation.oof_stacking import StackingDataset
+from .oof_stacking import StackingDataset
 
 logger = logging.getLogger(__name__)
 

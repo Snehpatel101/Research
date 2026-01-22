@@ -24,22 +24,22 @@ from typing import Any
 import pandas as pd
 
 # Import from specialized modules
-from src.cross_validation.oof_cache import OOFCache, compute_data_hash
-from src.cross_validation.oof_core import (
+from .oof_cache import OOFCache, compute_data_hash
+from .oof_core import (
     CoreOOFGenerator,
     OOFPrediction,
 )
-from src.cross_validation.oof_io import OOFDatasetIO
-from src.cross_validation.oof_sequence import (
+from .oof_io import OOFDatasetIO
+from .oof_sequence import (
     DEFAULT_SEQUENCE_LENGTH,
     SequenceOOFGenerator,
 )
-from src.cross_validation.oof_stacking import (
+from .oof_stacking import (
     StackingDataset,
     StackingDatasetBuilder,
 )
-from src.cross_validation.oof_validation import OOFValidator, _grade_diversity
-from src.cross_validation.purged_kfold import PurgedKFold
+from .oof_validation import OOFValidator, _grade_diversity
+from .purged_kfold import PurgedKFold
 from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)

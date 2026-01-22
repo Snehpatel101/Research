@@ -17,11 +17,11 @@ import pandas as pd
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.metrics import accuracy_score, f1_score
 
-from src.cross_validation.cv_dataclasses import FoldMetrics
+from .cv_dataclasses import FoldMetrics
 # Import OOFPrediction directly from oof_core (where it's defined)
 # to reduce import chain length and avoid going through oof_generator
-from src.cross_validation.oof_core import OOFPrediction
-from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+from .oof_core import OOFPrediction
+from .purged_kfold import PurgedKFold, PurgedKFoldConfig
 from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ def run_cv_with_per_fold_feature_selection(
             inner_cv = PurgedKFold(inner_cv_config)
 
             # Import here to avoid circular dependency
-            from src.cross_validation.cv_tuner import TimeSeriesOptunaTuner
+            from .cv_tuner import TimeSeriesOptunaTuner
 
             tuner = TimeSeriesOptunaTuner(
                 model_name=model_name,

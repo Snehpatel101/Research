@@ -168,7 +168,7 @@ class FeatureSelectionResult:
         Requires OHLCV category utilities from feature_selection package.
         """
         try:
-            from src.feature_selection.ohlcv_selector import get_feature_categories
+            from .ohlcv_selector import get_feature_categories
 
             return {
                 cat: len(feats)

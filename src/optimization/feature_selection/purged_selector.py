@@ -40,7 +40,7 @@ class PurgedFeatureSelector:
     - Proper embargo bars after test set (breaks serial correlation)
 
     Example:
-        >>> from src.cross_validation import PurgedKFold, PurgedKFoldConfig
+        >>> from src.validation.cv import PurgedKFold, PurgedKFoldConfig
         >>> from src.feature_selection import PurgedFeatureSelector
         >>>
         >>> cv_config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=1440)

@@ -13,11 +13,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from src.cross_validation.oof_generator import OOFGenerator, OOFPrediction, StackingDataset
-from src.cross_validation.purged_kfold import PurgedKFold
+from .oof_generator import OOFGenerator, OOFPrediction, StackingDataset
+from .purged_kfold import PurgedKFold
 
 if TYPE_CHECKING:
-    from src.cross_validation.cv_dataclasses import CVResult
+    from .cv_dataclasses import CVResult
 
 logger = logging.getLogger(__name__)
 

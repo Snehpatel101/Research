@@ -22,8 +22,8 @@ import pandas as pd
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
-from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from src.cross_validation.walk_forward import (
+from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+from src.validation.cv.walk_forward import (
     WalkForwardConfig,
     WalkForwardEvaluator,
     WalkForwardResult,

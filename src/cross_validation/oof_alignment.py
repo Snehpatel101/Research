@@ -25,7 +25,7 @@ import numpy as np
 from src.contracts import ModelContract, get_model_contract
 
 if TYPE_CHECKING:
-    from src.cross_validation.oof_core import OOFPrediction
+    from .oof_core import OOFPrediction
 
 logger = logging.getLogger(__name__)
 
