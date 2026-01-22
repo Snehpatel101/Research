@@ -1,76 +1,79 @@
 """
-Training package - Modular trainer implementation.
+Training package - Unified training orchestration system.
 
-This package provides the Trainer class and related mixins for model training:
+This package provides a configuration-driven interface for training
+any combination of models, features, optimization, and ensembles.
 
+Main Components:
+- UnifiedTrainingOrchestrator: THE single entry point (PHASE_3)
+- ModelTrainer: PHASE_3 unified model trainer with adapter integration
 - Trainer: Main orchestrator for model training workflow
 - TrainerFeaturesMixin: Feature selection and feature set resolution
 - TrainerEvaluationMixin: Test set evaluation functionality
 - TrainerArtifactsMixin: Artifact saving (configs, metrics, models)
 
-Additionally, re-exports from src/training for the new module structure:
-- UnifiedTrainingOrchestrator: THE single entry point (PHASE_3)
-- train_pipeline: Convenience function for full pipeline training
-
-Example:
-    >>> from src.models.training import Trainer
-    >>> from src.models.config import TrainerConfig
-    >>> config = TrainerConfig(model_name="xgboost", horizon=20)
-    >>> trainer = Trainer(config)
-    >>> results = trainer.run(container)
-
-New import path:
+Usage:
     from src.models.training import UnifiedTrainingOrchestrator, train_pipeline
 
-Legacy import path (still works):
-    from src.training import UnifiedTrainingOrchestrator, train_pipeline
+    config = PipelineConfig(
+        symbol="MES",
+        data_path="./data/mes_1min.parquet",
+        output_dir="./experiments/exp_001",
+        models=["xgboost", "lightgbm", "lstm"],
+        build_ensemble=True,
+    )
+
+    result = train_pipeline(config, df)
 """
 
+# Local trainer classes
 from .artifacts import TrainerArtifactsMixin
 from .checksums import ArtifactChecksum, ArtifactIntegrityManager, compute_file_checksum
 from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
 from .trainer import Trainer
 
-# Re-exports from src.training are loaded lazily to avoid circular imports
-_TRAINING_EXPORTS = [
-    "UnifiedTrainingOrchestrator",
-    "TrainingRunResult",
-    "ModelTrainingResult",
-    "train_pipeline",
-    "train_meta_labeling",
-    "RegimeDetector",
-    "RegimeDetectorConfig",
-    "RegimeResult",
-    "RegimeDetectionMethod",
-    "detect_regimes",
-    "RegimeAwareTrainer",
-    "RegimeTrainingResult",
-    "RegimeModelResult",
-    "BetSizingStrategy",
-    "BetSizingConfig",
-    "compute_bet_sizes",
-    "predict_with_sizing",
-    "get_strategy_description",
-    "ModelTrainer",
-    "TrainedModelArtifact",
-    "train_models",
-    "TrainingOrchestrator",
-    "ExperimentConfig",
-    "ModelConfig",
-    "ConfigLoader",
-    "load_config_from_params",
-    "load_config_from_yaml",
-]
+# Config and loading
+from .config import ExperimentConfig, ModelConfig
+from .config_loader import ConfigLoader, load_config_from_params, load_config_from_yaml
 
+# Legacy orchestrator
+from .orchestrator import TrainingOrchestrator
 
-def __getattr__(name):
-    """Lazy import for src.training exports to avoid circular imports."""
-    if name in _TRAINING_EXPORTS:
-        import src.training as training_module
-        return getattr(training_module, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+# PHASE_3: Unified model trainer with adapter integration
+from .model_trainer import ModelTrainer, TrainedModelArtifact, train_models
 
+# PHASE_3: Unified Training Orchestrator - THE single entry point
+from .unified_orchestrator import (
+    UnifiedTrainingOrchestrator,
+    TrainingRunResult,
+    ModelTrainingResult,
+    train_pipeline,
+    train_meta_labeling,
+)
+
+# PHASE_3: Regime-aware training components
+from .regime_detector import (
+    RegimeDetector,
+    RegimeDetectorConfig,
+    RegimeResult,
+    RegimeDetectionMethod,
+    detect_regimes,
+)
+from .regime_trainer import (
+    RegimeAwareTrainer,
+    RegimeTrainingResult,
+    RegimeModelResult,
+)
+
+# PHASE_3: Meta-labeling components
+from .meta_labeling import (
+    BetSizingStrategy,
+    BetSizingConfig,
+    compute_bet_sizes,
+    predict_with_sizing,
+    get_strategy_description,
+)
 
 __all__ = [
     # Local trainer classes
@@ -84,5 +87,36 @@ __all__ = [
     "ArtifactChecksum",
     "ArtifactIntegrityManager",
     "compute_file_checksum",
-    # Re-exports from src.training (lazy loaded)
-] + _TRAINING_EXPORTS
+    # PHASE_3: Unified Training Orchestrator (THE entry point)
+    "UnifiedTrainingOrchestrator",
+    "TrainingRunResult",
+    "ModelTrainingResult",
+    "train_pipeline",
+    "train_meta_labeling",
+    # PHASE_3: Regime-aware training
+    "RegimeDetector",
+    "RegimeDetectorConfig",
+    "RegimeResult",
+    "RegimeDetectionMethod",
+    "detect_regimes",
+    "RegimeAwareTrainer",
+    "RegimeTrainingResult",
+    "RegimeModelResult",
+    # PHASE_3: Meta-labeling components
+    "BetSizingStrategy",
+    "BetSizingConfig",
+    "compute_bet_sizes",
+    "predict_with_sizing",
+    "get_strategy_description",
+    # PHASE_3: Unified model trainer
+    "ModelTrainer",
+    "TrainedModelArtifact",
+    "train_models",
+    # Legacy orchestrator
+    "TrainingOrchestrator",
+    "ExperimentConfig",
+    "ModelConfig",
+    "ConfigLoader",
+    "load_config_from_params",
+    "load_config_from_yaml",
+]
