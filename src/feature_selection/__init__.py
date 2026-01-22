@@ -1,156 +1,23 @@
 """
-Feature Selection Package for OHLCV Time-Series ML.
+DEPRECATED: Import from 'src.optimization.feature_selection' instead.
 
-This is the canonical location for all feature selection functionality.
-The package consolidates code from multiple locations:
-- src/cross_validation/feature_selector.py (WalkForwardFeatureSelector, FeatureSelectionResult)
-- src/models/feature_selection/ (FeatureSelectionManager, config, PersistedFeatureSelection)
-- src/phase1/utils/feature_selection.py (filtering functions, FEATURE_PRIORITY)
+This module will be removed in v2.0.0.
 
-Main Components:
-    Result Classes:
-        FeatureSelectionResult: Canonical result container for all selection operations
-        PersistedFeatureSelection: Persisted result for model artifacts
+Migration:
+    # Old (deprecated)
+    from src.feature_selection import WalkForwardFeatureSelector
 
-    Configuration:
-        FeatureSelectionConfig: Per-model feature selection configuration
-        FeatureSelectorConfig: Walk-forward selector configuration
-        ModelFamilyDefaults: Default settings per model family
-
-    Selectors:
-        WalkForwardFeatureSelector: Walk-forward feature selection with MDA/MDI
-        CVIntegratedFeatureSelector: CV-integrated feature selection
-        OHLCVFeatureSelector: Enhanced selector with stability, correlation, and regime support
-        PurgedFeatureSelector: Selector integrated with PurgedKFold CV
-        FeatureSelectionManager: High-level manager for model training integration
-
-    Filtering Functions:
-        filter_low_variance: Remove near-constant features
-        filter_correlated_features: Remove highly correlated features
-        select_features: Main feature selection function
-        apply_feature_selection: Apply selection to DataFrame
-
-    Priority & Categories:
-        FEATURE_PRIORITY: Feature interpretability rankings
-        FEATURE_CATEGORIES: OHLCV feature category patterns
-        get_feature_priority: Get priority score for a feature
-        categorize_feature: Categorize a feature by name pattern
-
-Key Features:
-    - Time-series aware MDA (walk-forward, no lookahead)
-    - Stability scoring (ranking consistency across folds)
-    - Correlation filtering (hierarchical clustering)
-    - Regime-conditional importance (market state aware)
-    - OHLCV category filtering (momentum, volatility, volume, etc.)
-    - PurgedKFold integration (purge + embargo for label leakage prevention)
-    - Model-family-aware configuration (boosting, neural, classical)
-
-Example:
-    >>> from src.feature_selection import (
-    ...     FeatureSelectionManager,
-    ...     WalkForwardFeatureSelector,
-    ...     filter_ohlcv_features,
-    ...     select_features,
-    ... )
-    >>>
-    >>> # High-level: Use manager for model training integration
-    >>> manager = FeatureSelectionManager.from_model_family("boosting")
-    >>> result = manager.select_features(X_train_df, y_train, sample_weights)
-    >>> X_selected = manager.apply_selection(X_train_df)
-    >>>
-    >>> # Mid-level: Use walk-forward selector directly
-    >>> selector = WalkForwardFeatureSelector(n_features_to_select=50)
-    >>> cv_splits = list(cv.split(X, y))
-    >>> result = selector.select_features_walkforward(X, y, cv_splits)
-    >>>
-    >>> # Low-level: Use filtering functions
-    >>> result = select_features(df, correlation_threshold=0.85)
-    >>> filtered = filter_ohlcv_features(features, exclude_categories=['mtf'])
-
-Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
+    # New (preferred)
+    from src.optimization.feature_selection import WalkForwardFeatureSelector
 """
 
-# Result classes - these have no external dependencies
-from src.feature_selection.result import (
-    FeatureSelectionResult,
-    PersistedFeatureSelection,
-)
+from __future__ import annotations
 
-# Configuration - these have no external dependencies
-from src.feature_selection.config import (
-    FeatureSelectionConfig,
-    FeatureSelectorConfig,
-    ModelFamilyDefaults,
-)
+import warnings
+from typing import TYPE_CHECKING
 
-# Priority - no external dependencies
-from src.feature_selection.priority import (
-    DEFAULT_PRIORITY,
-    FEATURE_PRIORITY,
-    get_feature_priority,
-)
-
-# Walk-forward selectors - minimal external dependencies
-from src.feature_selection.walk_forward import (
-    CVIntegratedFeatureSelector,
-    WalkForwardFeatureSelector,
-)
-
-# OHLCV-specific selectors
-from src.feature_selection.ohlcv_selector import (
-    FEATURE_CATEGORIES,
-    OHLCVFeatureSelector,
-    StabilityMetrics,
-    categorize_feature,
-    create_ohlcv_selector,
-    filter_ohlcv_features,
-    get_feature_categories,
-)
-
-# Purged selector
-from src.feature_selection.purged_selector import (
-    PurgedFeatureSelector,
-    create_purged_selector,
-)
-
-# Filtering functions
-from src.feature_selection.filtering import (
-    apply_feature_selection,
-    build_correlation_groups,
-    filter_correlated_features,
-    filter_low_variance,
-    identify_feature_columns,
-    save_feature_selection_report,
-    select_features,
-    select_from_correlated_group,
-)
-
-# Optimization
-from src.feature_selection.optimization import (
-    FeatureOptimizer,
-    optimize_feature_subset_simple,
-)
-
-# Lazy import for FeatureSelectionManager to avoid circular dependency
-# (it imports from src.cross_validation which can trigger src.models imports)
-_FeatureSelectionManager = None
-
-
-def __getattr__(name):
-    """Lazy import for classes with complex dependencies."""
-    global _FeatureSelectionManager
-
-    if name == "FeatureSelectionManager":
-        if _FeatureSelectionManager is None:
-            from src.feature_selection.manager import FeatureSelectionManager
-
-            _FeatureSelectionManager = FeatureSelectionManager
-        return _FeatureSelectionManager
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = [
+# Names that will be lazily loaded from src.optimization.feature_selection
+_FEATURE_SELECTION_EXPORTS = [
     # Result classes
     "FeatureSelectionResult",
     "PersistedFeatureSelection",
@@ -192,3 +59,28 @@ __all__ = [
     "FeatureOptimizer",
     "optimize_feature_subset_simple",
 ]
+
+
+def __getattr__(name: str):
+    """Lazy import to avoid circular imports."""
+    if name in _FEATURE_SELECTION_EXPORTS:
+        # Show deprecation warning
+        warnings.warn(
+            f"Importing '{name}' from 'src.feature_selection' is deprecated. "
+            f"Use 'from src.optimization.feature_selection import {name}' instead. "
+            "This will be removed in v2.0.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        # Import from new location
+        from src.optimization import feature_selection as fs_module
+        return getattr(fs_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__():
+    """Return list of available names."""
+    return _FEATURE_SELECTION_EXPORTS
+
+
+__all__ = _FEATURE_SELECTION_EXPORTS

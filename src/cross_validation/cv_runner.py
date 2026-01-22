@@ -88,7 +88,7 @@ from src.cross_validation.cv_stacking import (
     validate_stacking_consistency,
 )
 from src.cross_validation.cv_tuner import TimeSeriesOptunaTuner
-from src.feature_selection import WalkForwardFeatureSelector
+from src.optimization.feature_selection import WalkForwardFeatureSelector
 from src.cross_validation.oof_generator import OOFGenerator, OOFPrediction, StackingDataset
 from src.cross_validation.param_spaces import (
     PARAM_SPACES,

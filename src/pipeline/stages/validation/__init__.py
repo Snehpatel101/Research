@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.feature_selection import (
+from src.optimization.feature_selection import (
     FeatureSelectionResult,
     save_feature_selection_report,
     select_features,

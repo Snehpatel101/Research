@@ -9,7 +9,7 @@ regime-conditional evaluation, production backtesting,
 walk-forward validation, CPCV, PBO, and feature store.
 """
 
-from src.backtesting import (
+from src.inference.backtesting import (
     BacktestConfig,
     BacktestResult,
     Backtester,

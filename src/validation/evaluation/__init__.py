@@ -1,18 +1,22 @@
 """
-Validation Evaluation - Re-export from src.evaluation.
+Evaluation methods package.
 
-New import path:
-    from src.validation.evaluation import CVEvaluator, WalkForwardEvaluator
+Import paths:
+    # New (preferred):
+    from src.validation.evaluation import CVEvaluator
 
-Legacy import path (still works):
-    from src.evaluation import CVEvaluator, WalkForwardEvaluator
+    # Legacy (still works, deprecation warning):
+    from src.evaluation import CVEvaluator
+
+Provides model evaluation strategies:
+- cv: Cross-validation with PurgedKFold
+- walk_forward: Walk-forward validation
+- cpcv_pbo: CPCV-PBO (Combinatorially Purged Cross-Validation with Probability of Backtest Overfitting)
 """
 
-from src.evaluation import (
-    CVEvaluator,
-    WalkForwardEvaluator,
-    CPCVPBOEvaluator,
-)
+from .cv_evaluator import CVEvaluator
+from .walk_forward_evaluator import WalkForwardEvaluator
+from .cpcv_pbo_evaluator import CPCVPBOEvaluator
 
 __all__ = [
     "CVEvaluator",

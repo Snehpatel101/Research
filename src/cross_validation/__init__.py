@@ -54,7 +54,7 @@ from src.cross_validation.cv_stacking import (
     validate_stacking_consistency,
 )
 from src.cross_validation.cv_tuner import TimeSeriesOptunaTuner
-from src.feature_selection import WalkForwardFeatureSelector
+from src.optimization.feature_selection import WalkForwardFeatureSelector
 from src.cross_validation.oof_core import OOFPrediction
 from src.cross_validation.oof_generator import OOFGenerator, StackingDataset
 from src.cross_validation.oof_sequence import SequenceOOFGenerator
