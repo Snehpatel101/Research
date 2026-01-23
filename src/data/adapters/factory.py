@@ -37,7 +37,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -148,7 +148,7 @@ class AdapterFactory:
             )
 
         # Build kwargs based on adapter type
-        kwargs: dict[str, any] = {
+        kwargs: dict[str, Any] = {
             "feature_columns": feature_columns,
             "label_column": label_column,
             "weight_column": weight_column,
@@ -327,7 +327,7 @@ class AdapterFactory:
 
         return results
 
-    def get_model_info(self, model_name: str) -> dict[str, any]:
+    def get_model_info(self, model_name: str) -> dict[str, Any]:
         """
         Get adapter info for a model without creating an adapter.
 

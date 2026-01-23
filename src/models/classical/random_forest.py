@@ -176,6 +176,9 @@ class RandomForestModel(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+
         probabilities = self._model.predict_proba(X)
         class_predictions_sk = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_sklearn(class_predictions_sk)
@@ -192,7 +195,12 @@ class RandomForestModel(BaseModel):
         """Return raw class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
-        return self._model.predict_proba(X)
+
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+
+        result: np.ndarray = self._model.predict_proba(X)
+        return result
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""
@@ -232,7 +240,7 @@ class RandomForestModel(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances (Gini importance)."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         importance = self._model.feature_importances_
@@ -254,6 +262,8 @@ class RandomForestModel(BaseModel):
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
         y_pred_sk = self._model.predict(X)
         y_pred = self._convert_labels_from_sklearn(y_pred_sk)
 

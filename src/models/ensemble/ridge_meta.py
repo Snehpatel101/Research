@@ -183,6 +183,9 @@ class RidgeMetaLearner(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
+
         # Scale if scaler was used during training
         X_scaled = X
         if self._scaler is not None:
@@ -253,7 +256,7 @@ class RidgeMetaLearner(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return coefficient magnitudes as feature importance."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         # Average absolute coefficients across classes
@@ -268,6 +271,8 @@ class RidgeMetaLearner(BaseModel):
 
     def _compute_loss(self, X: np.ndarray, y: np.ndarray) -> float:
         """Compute hinge-like loss from decision function."""
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
         decision = self._model.decision_function(X)
         # Use negative log softmax as loss proxy
         probs = softmax(decision)
@@ -275,6 +280,8 @@ class RidgeMetaLearner(BaseModel):
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
         y_pred_sk = self._model.predict(X)
         y_pred = map_classes_to_labels(y_pred_sk)
 

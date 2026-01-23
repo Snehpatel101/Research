@@ -224,6 +224,9 @@ class MLPMetaLearner(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
+
         X_scaled = X
         if self._scaler is not None:
             X_scaled = self._scaler.transform(X)
@@ -289,7 +292,7 @@ class MLPMetaLearner(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return input layer weight magnitudes as feature importance."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         # Get first layer weights: shape (n_features, hidden_size)
@@ -307,6 +310,8 @@ class MLPMetaLearner(BaseModel):
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
         y_pred_sk = self._model.predict(X)
         y_pred = map_classes_to_labels(y_pred_sk)
 

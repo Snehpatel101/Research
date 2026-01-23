@@ -252,28 +252,30 @@ class PurgedFeatureSelector:
             importance = dict(zip(feature_names, result.importances_mean, strict=False))
             fold_importances.append(importance)
 
-            logger.debug(f"Fold {fold_idx}: top feature = {max(importance, key=importance.get)}")
+            logger.debug(
+                f"Fold {fold_idx}: top feature = {max(importance, key=lambda f: importance[f])}"
+            )
 
         return fold_importances
 
     def _get_n_splits(self) -> int:
         """Get number of splits from CV."""
         if hasattr(self.cv, "config") and hasattr(self.cv.config, "n_splits"):
-            return self.cv.config.n_splits
+            return int(self.cv.config.n_splits)
         elif hasattr(self.cv, "n_splits"):
-            return self.cv.n_splits
+            return int(self.cv.n_splits)
         return 5
 
     def _get_purge_bars(self) -> int:
         """Get purge bars from CV."""
         if hasattr(self.cv, "config") and hasattr(self.cv.config, "purge_bars"):
-            return self.cv.config.purge_bars
+            return int(self.cv.config.purge_bars)
         return 60
 
     def _get_embargo_bars(self) -> int:
         """Get embargo bars from CV."""
         if hasattr(self.cv, "config") and hasattr(self.cv.config, "embargo_bars"):
-            return self.cv.config.embargo_bars
+            return int(self.cv.config.embargo_bars)
         return 1440
 
 

@@ -67,6 +67,7 @@ class InceptionModule(nn.Module):
         self.kernel_sizes = kernel_sizes
 
         # Bottleneck layer
+        self.bottleneck: nn.Conv1d | None
         if self.use_bottleneck:
             self.bottleneck = nn.Conv1d(in_channels, bottleneck_channels, kernel_size=1, bias=False)
             conv_in_channels = bottleneck_channels
@@ -95,6 +96,7 @@ class InceptionModule(nn.Module):
         total_filters = n_filters * (len(kernel_sizes) + 1)  # +1 for maxpool branch
         self.batch_norm = nn.BatchNorm1d(total_filters)
 
+        self.activation: nn.ReLU | nn.GELU
         if activation == "relu":
             self.activation = nn.ReLU()
         elif activation == "gelu":
@@ -115,7 +117,7 @@ class InceptionModule(nn.Module):
         seq_len = x.size(2)
 
         # Bottleneck
-        if self.use_bottleneck:
+        if self.use_bottleneck and self.bottleneck is not None:
             x_bottleneck = self.bottleneck(x)
         else:
             x_bottleneck = x
@@ -142,9 +144,9 @@ class InceptionModule(nn.Module):
 
         # Batch norm and activation
         out = self.batch_norm(out)
-        out = self.activation(out)
+        result: torch.Tensor = self.activation(out)
 
-        return out
+        return result
 
 
 class InceptionBlock(nn.Module):
@@ -185,15 +187,14 @@ class InceptionBlock(nn.Module):
             self.modules_list.append(module)
 
         # Residual connection with 1x1 conv if dimensions don't match
+        self.residual_conv: nn.Conv1d | None = None
+        self.residual_bn: nn.BatchNorm1d | None = None
         if use_residual:
             if in_channels != self.out_channels:
                 self.residual_conv = nn.Conv1d(
                     in_channels, self.out_channels, kernel_size=1, bias=False
                 )
                 self.residual_bn = nn.BatchNorm1d(self.out_channels)
-            else:
-                self.residual_conv = None
-                self.residual_bn = None
 
         self.activation = nn.ReLU()
 
@@ -217,7 +218,7 @@ class InceptionBlock(nn.Module):
 
         # Residual connection
         if self.use_residual:
-            if self.residual_conv is not None:
+            if self.residual_conv is not None and self.residual_bn is not None:
                 residual = self.residual_conv(residual)
                 residual = self.residual_bn(residual)
             out = out + residual
@@ -298,7 +299,7 @@ class InceptionTimeNetwork(nn.Module):
 
         # Classification
         x = self.dropout(x)
-        logits = self.fc(x)
+        logits: torch.Tensor = self.fc(x)
 
         return logits
 
@@ -471,6 +472,9 @@ class InceptionTimeModel(BaseRNNModel):
         """
         self._validate_fitted()
         self._validate_input_shape(X, "X")
+
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
 
         self._model.eval()
         amp_dtype = self._amp_dtype

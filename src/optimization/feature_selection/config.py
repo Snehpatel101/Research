@@ -103,7 +103,7 @@ class ModelFamilyDefaults:
         """Check if feature selection is enabled by default for a model family."""
         try:
             defaults = cls.get_defaults(model_family)
-            return defaults.get("enabled", False)
+            return bool(defaults.get("enabled", False))
         except ValueError:
             return False
 

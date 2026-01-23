@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 try:
-    from hmmlearn import hmm
+    from hmmlearn import hmm  # type: ignore[import-not-found]
 
     HMM_AVAILABLE = True
 except ImportError:
@@ -272,8 +272,8 @@ class HMMRegimeDetector(RegimeDetector):
         )
         self.expanding = expanding
         self.retrain_interval = max(1, retrain_interval)
-        self._fitted_model = None
-        self._state_mapping = None
+        self._fitted_model: Any = None
+        self._state_mapping: dict[int, int] | None = None
 
     def get_required_columns(self) -> list[str]:
         """Required columns for detection."""
@@ -403,11 +403,15 @@ class HMMRegimeDetector(RegimeDetector):
                             raw_prob = current_model.predict_proba(clean_window)[-1]
 
                             # Apply state mapping
-                            states[i] = current_mapping.get(raw_state, raw_state)
-                            reordered_p = np.zeros(self.config.n_states)
-                            for old_state, new_state in current_mapping.items():
-                                reordered_p[new_state] = raw_prob[old_state]
-                            probs[i] = reordered_p
+                            if current_mapping is not None:
+                                states[i] = current_mapping.get(raw_state, raw_state)
+                                reordered_p = np.zeros(self.config.n_states)
+                                for old_state, new_state in current_mapping.items():
+                                    reordered_p[new_state] = raw_prob[old_state]
+                                probs[i] = reordered_p
+                            else:
+                                states[i] = raw_state
+                                probs[i] = raw_prob
 
                     except Exception as e:
                         logger.debug(f"HMM expanding predict failed at index {i}: {e}")
@@ -440,7 +444,7 @@ class HMMRegimeDetector(RegimeDetector):
         # Convert to labels
         state_labels = self._get_state_labels()
         regimes = pd.Series(
-            [state_labels.get(s, np.nan) for s in states],
+            [state_labels.get(int(s), np.nan) for s in states],
             index=df.index,
             dtype="object",
         )
@@ -485,7 +489,7 @@ class HMMRegimeDetector(RegimeDetector):
         """
         if self._fitted_model is None:
             return None
-        return self._fitted_model.transmat_
+        return np.asarray(self._fitted_model.transmat_)
 
     def get_state_means(self) -> np.ndarray | None:
         """
@@ -496,7 +500,7 @@ class HMMRegimeDetector(RegimeDetector):
         """
         if self._fitted_model is None:
             return None
-        return self._fitted_model.means_
+        return np.asarray(self._fitted_model.means_)
 
     def get_state_variances(self) -> np.ndarray | None:
         """
@@ -509,9 +513,9 @@ class HMMRegimeDetector(RegimeDetector):
             return None
 
         if self._fitted_model.covariance_type == "spherical":
-            return self._fitted_model.covars_
+            return np.asarray(self._fitted_model.covars_)
         elif self._fitted_model.covariance_type == "diag":
-            return self._fitted_model.covars_.mean(axis=1)
+            return np.asarray(self._fitted_model.covars_.mean(axis=1))
         elif self._fitted_model.covariance_type == "full":
             return np.array([np.trace(c) for c in self._fitted_model.covars_])
         else:

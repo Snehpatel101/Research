@@ -28,7 +28,7 @@ from itertools import combinations
 from typing import Any
 
 import numpy as np
-from scipy import stats
+from scipy import stats  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 

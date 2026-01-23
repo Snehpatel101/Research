@@ -11,7 +11,7 @@ import logging
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from src.models.base import PredictionOutput
 from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
@@ -85,17 +85,19 @@ class OOFPrediction:
 
     def get_probabilities(self) -> np.ndarray:
         """Get probability matrix (n_samples, 3)."""
-        return self.predictions[
+        result: np.ndarray = self.predictions[
             [
                 f"{self.model_name}_prob_short",
                 f"{self.model_name}_prob_neutral",
                 f"{self.model_name}_prob_long",
             ]
         ].values
+        return result
 
     def get_class_predictions(self) -> np.ndarray:
         """Get predicted classes (-1, 0, 1)."""
-        return self.predictions[f"{self.model_name}_pred"].values
+        result: np.ndarray = self.predictions[f"{self.model_name}_pred"].values
+        return result
 
     def get_aligned_probabilities(
         self,
@@ -314,7 +316,10 @@ class CoreOOFGenerator:
             valid_y = y_array[valid_mask]
 
             # Fit and apply calibrator
-            cal_config = CalibrationConfig(method=calibration_method)
+            from typing import Literal, cast
+
+            cal_method = cast(Literal["isotonic", "sigmoid", "auto"], calibration_method)
+            cal_config = CalibrationConfig(method=cal_method)
             calibrator = ProbabilityCalibrator(cal_config)
             metrics = calibrator.fit(valid_y, valid_probs)
 

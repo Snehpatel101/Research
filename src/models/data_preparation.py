@@ -8,14 +8,21 @@ into formats suitable for different model types (tabular vs sequential).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
 
 if TYPE_CHECKING:
-    from torch.utils.data import Dataset
-
     from src.core.container import TimeSeriesDataContainer
+
+
+class SizedDataset(Protocol):
+    """Protocol for datasets that have __len__ and __getitem__."""
+
+    def __len__(self) -> int: ...
+
+    def __getitem__(self, index: int) -> tuple[Any, Any, Any]: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +70,8 @@ def prepare_training_data(
             )
 
         # Convert to numpy arrays
-        X_train, y_train, w_train = dataset_to_arrays(train_dataset)
-        X_val, y_val, _ = dataset_to_arrays(val_dataset)
+        X_train, y_train, w_train = dataset_to_arrays(cast(SizedDataset, train_dataset))
+        X_val, y_val, _ = dataset_to_arrays(cast(SizedDataset, val_dataset))
 
     else:
         # Get tabular data for non-sequential models
@@ -102,7 +109,7 @@ def prepare_test_data(
             feature_columns=feature_columns,
         )
         # Convert to numpy arrays
-        X_test, y_test, w_test = dataset_to_arrays(test_dataset)
+        X_test, y_test, w_test = dataset_to_arrays(cast(SizedDataset, test_dataset))
     else:
         # Get tabular data for non-sequential models
         X_test, y_test, w_test = container.get_sklearn_arrays("test")
@@ -111,7 +118,7 @@ def prepare_test_data(
 
 
 def dataset_to_arrays(
-    dataset: Dataset,
+    dataset: SizedDataset,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Convert PyTorch dataset to numpy arrays.

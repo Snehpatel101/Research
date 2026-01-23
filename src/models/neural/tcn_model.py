@@ -13,7 +13,7 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -53,7 +53,7 @@ class CausalConv1d(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = self.conv(x)
+        out: torch.Tensor = self.conv(x)
         if self.padding > 0:
             out = out[:, :, : -self.padding]
         return out
@@ -78,6 +78,7 @@ class TemporalBlock(nn.Module):
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
 
+        self.downsample: nn.Conv1d | None
         if n_inputs != n_outputs:
             self.downsample = weight_norm(nn.Conv1d(n_inputs, n_outputs, 1))
         else:
@@ -88,7 +89,8 @@ class TemporalBlock(nn.Module):
         out = self.dropout1(self.relu1(self.conv1(x)))
         out = self.dropout2(self.relu2(self.conv2(out)))
         res = x if self.downsample is None else self.downsample(x)
-        return self.relu_out(out + res)
+        result: torch.Tensor = self.relu_out(out + res)
+        return result
 
 
 class TCNNetwork(nn.Module):
@@ -133,7 +135,8 @@ class TCNNetwork(nn.Module):
         x = x.transpose(1, 2)  # (batch, seq, feat) -> (batch, feat, seq)
         x = self.network(x)
         x = x.mean(dim=2)  # Global average pooling
-        return self.fc(x)
+        result: torch.Tensor = self.fc(x)
+        return result
 
     @property
     def receptive_field(self) -> int:
@@ -238,7 +241,11 @@ class TCNModel(BaseRNNModel):
         Returns:
             Dict with receptive_field metadata for TrainingMetrics
         """
-        rf = self._model.receptive_field
+        if self._model is None:
+            raise RuntimeError("Model is not initialized")
+        # Cast to TCNNetwork to access receptive_field property
+        model = cast(TCNNetwork, self._model)
+        rf = model.receptive_field
         logger.info(f"TCN receptive field: {rf} timesteps (seq_len={seq_len})")
 
         if rf < seq_len:

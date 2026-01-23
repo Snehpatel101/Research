@@ -253,6 +253,9 @@ def filter_correlated_features(
         groups_as_lists.append(sorted(group))
         selected, removed = select_from_correlated_group(group)
 
+        if selected is None:
+            continue
+
         for feat in removed:
             features_to_remove.add(feat)
             removed_features[feat] = (

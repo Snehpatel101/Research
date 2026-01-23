@@ -53,33 +53,47 @@ class HyperparameterTuningService:
         Returns:
             TuningResult with best parameters and score
         """
+        import pandas as pd
+
+        from src.validation.cv import PurgedKFold, PurgedKFoldConfig
+
         logger.info("  Running hyperparameter optimization...")
+
+        # Create purged K-fold CV
+        cv_config = PurgedKFoldConfig(
+            n_splits=request.n_splits,
+            embargo_bars=request.horizon * 2,  # Use horizon for embargo
+        )
+        cv = PurgedKFold(cv_config)
 
         tuner = TimeSeriesOptunaTuner(
             model_name=request.model_name,
-            horizon=request.horizon,
-            n_splits=request.n_splits,
+            cv=cv,
+            n_trials=request.n_trials,
         )
 
         # Flatten to 2D for tuning
         X_train = request.prepared_data.X_train
         X_train_2d = X_train.reshape(X_train.shape[0], -1) if X_train.ndim > 2 else X_train
 
-        best_params = tuner.optimize(
-            X=X_train_2d,
-            y=request.prepared_data.y_train,
-            n_trials=request.n_trials,
+        # Convert to pandas for tuner API
+        X_df = pd.DataFrame(X_train_2d)
+        y_series = pd.Series(request.prepared_data.y_train)
+
+        result = tuner.tune(
+            X=X_df,
+            y=y_series,
         )
 
-        logger.info(f"  Best params: {best_params}")
+        logger.info(f"  Best params: {result.get('best_params', {})}")
 
-        # Get the best score from the tuner's study if available
-        best_score = float("nan")
-        if hasattr(tuner, "study") and tuner.study is not None:
-            best_score = tuner.study.best_value
+        # Get the best score from the result
+        best_score = result.get("best_value", float("nan"))
+        if best_score is None:
+            best_score = float("nan")
 
         return TuningResult(
-            best_params=best_params,
-            best_score=best_score,
+            best_params=result.get("best_params", {}),
+            best_score=float(best_score) if best_score is not None else float("nan"),
             n_trials_completed=request.n_trials,
         )

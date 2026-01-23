@@ -346,6 +346,8 @@ class BlendingEnsemble(BaseModel):
             meta_features = np.hstack([X, base_predictions])
 
         # Get meta-learner predictions
+        if self._meta_learner is None:
+            raise RuntimeError("Meta-learner is not fitted")
         output = self._meta_learner.predict(meta_features)
 
         return PredictionOutput(
@@ -377,6 +379,8 @@ class BlendingEnsemble(BaseModel):
 
         # Save meta-learner
         meta_dir = path / "meta_learner"
+        if self._meta_learner is None:
+            raise RuntimeError("Meta-learner is not fitted")
         self._meta_learner.save(meta_dir)
 
         # Save ensemble metadata
@@ -436,7 +440,7 @@ class BlendingEnsemble(BaseModel):
         if not all_importances:
             return None
 
-        all_features = set()
+        all_features: set[str] = set()
         for imp in all_importances:
             all_features.update(imp.keys())
 

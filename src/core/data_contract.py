@@ -42,7 +42,7 @@ class DatasetContract:
     split: str = "train"  # "train", "val", "test"
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate contract consistency."""
         # Check feature/label length match
         if len(self.features) != len(self.labels):
@@ -84,6 +84,8 @@ class DatasetContract:
 
     def filter_by_indices(self, indices: pd.Index) -> DatasetContract:
         """Filter dataset to specific indices (for OOF alignment)."""
+        if self.indices is None:
+            raise ValueError("Cannot filter by indices when indices is None")
         mask = self.indices.isin(indices)
 
         return DatasetContract(
@@ -102,7 +104,7 @@ class DatasetContract:
         return DatasetContract(
             features=self.features.copy(),
             labels=self.labels.copy(),
-            indices=self.indices.copy(),
+            indices=self.indices.copy() if self.indices is not None else None,
             label_end_times=self.label_end_times.copy()
             if self.label_end_times is not None
             else None,

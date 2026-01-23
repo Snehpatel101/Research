@@ -531,7 +531,7 @@ class TripleBarrierLabeler(LabelingStrategy):
         for i in range(1, len(true_range)):
             atr[i] = alpha * true_range[i] + (1 - alpha) * atr[i - 1]
 
-        return atr
+        return np.asarray(atr)
 
     def _compute_volatility_scaling(self, df: pd.DataFrame) -> np.ndarray:
         """

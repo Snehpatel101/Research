@@ -4,6 +4,7 @@ Data integrity validation checks.
 
 import logging
 import re
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -11,7 +12,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def check_duplicate_timestamps(df: pd.DataFrame, issues_found: list[str]) -> dict:
+def check_duplicate_timestamps(df: pd.DataFrame, issues_found: list[str]) -> dict[str, int]:
     """
     Check for duplicate timestamps per symbol.
 
@@ -25,7 +26,7 @@ def check_duplicate_timestamps(df: pd.DataFrame, issues_found: list[str]) -> dic
     logger.info("\n1. Checking for duplicate timestamps...")
 
     if "symbol" in df.columns:
-        dup_counts = {}
+        dup_counts: dict[str, int] = {}
         for symbol in df["symbol"].unique():
             symbol_df = df[df["symbol"] == symbol]
             dups = symbol_df["datetime"].duplicated().sum()
@@ -46,7 +47,7 @@ def check_duplicate_timestamps(df: pd.DataFrame, issues_found: list[str]) -> dic
         return {"total": dups}
 
 
-def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
+def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict[str, int]:
     """
     Check for NaN values in the DataFrame.
 
@@ -77,8 +78,8 @@ def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
         n_symbols = df["symbol"].nunique() if "symbol" in df.columns else 1
 
         # Separate expected forward return NaNs from unexpected NaNs
-        expected_forward_return_nans = {}
-        regular_nans = {}
+        expected_forward_return_nans: dict[str, int] = {}
+        regular_nans: dict[str, int] = {}
 
         for col, count in nan_cols.items():
             horizon = _forward_return_horizon(col)
@@ -117,7 +118,7 @@ def check_nan_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
         return {}
 
 
-def check_infinite_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
+def check_infinite_values(df: pd.DataFrame, issues_found: list[str]) -> dict[str, int]:
     """
     Check for infinite values in numeric columns.
 
@@ -131,7 +132,7 @@ def check_infinite_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
     logger.info("\n3. Checking for infinite values...")
 
     numeric_cols = df.select_dtypes(include=[np.number]).columns
-    inf_counts = {}
+    inf_counts: dict[str, int] = {}
 
     for col in numeric_cols:
         inf_count = np.isinf(df[col]).sum()
@@ -146,7 +147,7 @@ def check_infinite_values(df: pd.DataFrame, issues_found: list[str]) -> dict:
     return inf_counts
 
 
-def analyze_time_gaps(df: pd.DataFrame) -> list[dict]:
+def analyze_time_gaps(df: pd.DataFrame) -> list[dict[str, Any]]:
     """
     Analyze time gaps in the data.
 
@@ -158,7 +159,7 @@ def analyze_time_gaps(df: pd.DataFrame) -> list[dict]:
     """
     logger.info("\n4. Analyzing time gaps...")
 
-    gaps = []
+    gaps: list[dict[str, Any]] = []
 
     if "symbol" in df.columns:
         for symbol in df["symbol"].unique():
@@ -193,7 +194,7 @@ def analyze_time_gaps(df: pd.DataFrame) -> list[dict]:
     return gaps
 
 
-def verify_date_range(df: pd.DataFrame) -> dict:
+def verify_date_range(df: pd.DataFrame) -> dict[str, Any]:
     """
     Verify and report the date range of the data.
 
@@ -220,7 +221,7 @@ def verify_date_range(df: pd.DataFrame) -> dict:
     return date_range
 
 
-def check_data_integrity(df: pd.DataFrame, issues_found: list[str]) -> dict:
+def check_data_integrity(df: pd.DataFrame, issues_found: list[str]) -> dict[str, Any]:
     """
     Run all data integrity checks.
 

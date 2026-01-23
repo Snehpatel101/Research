@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .environment import Environment, detect_environment
 from .exceptions import ConfigError
@@ -63,7 +63,7 @@ def load_yaml_config(
         return {}
 
     logger.debug(f"Loaded config from {path}: {len(config)} keys")
-    return config
+    return dict(config)
 
 
 def load_model_config(
@@ -212,7 +212,7 @@ def get_environment_overrides(
         Environment.LOCAL_GPU: "local_gpu",
         Environment.LOCAL_CPU: "local_cpu",
     }
-    return environments.get(env_map.get(env, ""), {})
+    return dict(environments.get(env_map.get(env, ""), {}))
 
 
 def validate_ensemble_base_models(

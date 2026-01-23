@@ -15,14 +15,15 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.data.pipeline.utils import create_failed_result, create_stage_result
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
-from .optimization import run_ga_optimization, run_ga_optimization_safe
+from .optimization import run_ga_optimization as _run_ga_optimization_core
+from .optimization import run_ga_optimization_safe
 from .plotting import plot_convergence
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +177,7 @@ def run_ga_optimization(
                         logger.warning(
                             "    Only use this for research when you understand the implications."
                         )
-                        results, logbook = run_ga_optimization(
+                        results, logbook = _run_ga_optimization_core(
                             df,
                             horizon,
                             symbol=symbol,

@@ -100,7 +100,7 @@ class ArtifactManifest:
         stage: str = "unknown",
         metadata: dict[str, Any] | None = None,
         compute_checksum: bool = True,
-    ):
+    ) -> None:
         """
         Add an artifact to the manifest.
 
@@ -142,7 +142,7 @@ class ArtifactManifest:
 
     def add_stage_artifacts(
         self, stage: str, files: list[Path], metadata: dict[str, Any] | None = None
-    ):
+    ) -> None:
         """
         Add multiple artifacts from a pipeline stage.
 
@@ -266,7 +266,7 @@ class ArtifactManifest:
         """
         return self.config_snapshot
 
-    def save(self, path: Path | None = None):
+    def save(self, path: Path | None = None) -> None:
         """
         Save manifest to JSON file.
 
@@ -396,7 +396,7 @@ class ArtifactManifest:
             "created_at": self.metadata.get("created_at"),
         }
 
-    def print_summary(self):
+    def print_summary(self) -> None:
         """Print a human-readable summary of the manifest."""
         summary = self.get_summary()
 

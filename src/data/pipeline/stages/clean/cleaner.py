@@ -241,7 +241,7 @@ class DataCleaner:
             return np.zeros(len(series), dtype=bool)
 
         z_scores = np.abs((series - mean) / std)
-        return z_scores > threshold
+        return np.asarray(z_scores > threshold)
 
     def detect_outliers_iqr(self, series: pd.Series, multiplier: float = 3.0) -> np.ndarray:
         """
@@ -263,7 +263,7 @@ class DataCleaner:
         lower_bound = Q1 - multiplier * IQR
         upper_bound = Q3 + multiplier * IQR
 
-        return (series < lower_bound) | (series > upper_bound)
+        return np.asarray((series < lower_bound) | (series > upper_bound))
 
     def detect_spikes_atr(
         self, df: pd.DataFrame, threshold: float = 5.0, period: int = 14
@@ -293,7 +293,7 @@ class DataCleaner:
         atr_threshold = threshold * atr / df["close"].values
         spikes = close_changes > atr_threshold
 
-        return spikes.fillna(False).values
+        return np.asarray(spikes.fillna(False).values)
 
     def clean_outliers(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         """
@@ -371,12 +371,13 @@ class DataCleaner:
         large_gap_threshold = 0.10  # 10% gap
         potential_rolls = price_changes > large_gap_threshold
 
-        roll_report = {"potential_rolls": int(potential_rolls.sum()), "details": []}
+        details: list[dict[str, str | float]] = []
+        roll_report = {"potential_rolls": int(potential_rolls.sum()), "details": details}
 
         if potential_rolls.any():
             roll_indices = np.where(potential_rolls)[0]
             for idx in roll_indices:
-                roll_report["details"].append(
+                details.append(
                     {
                         "datetime": str(df.iloc[idx]["datetime"]),
                         "price_change_pct": float(price_changes.iloc[idx] * 100),

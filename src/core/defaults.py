@@ -62,7 +62,7 @@ class GlobalDefaults:
     # LABELING DEFAULTS
     # ==========================================================================
     DEFAULT_HORIZON: int = 20
-    DEFAULT_LABEL_HORIZONS: tuple = (5, 10, 15, 20)
+    DEFAULT_LABEL_HORIZONS: tuple[int, ...] = (5, 10, 15, 20)
 
     # ==========================================================================
     # PURGE/EMBARGO (for leakage prevention)

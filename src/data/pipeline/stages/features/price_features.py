@@ -96,7 +96,7 @@ def add_price_ratios(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.D
 
 
 def add_autocorrelation(
-    df: pd.DataFrame, feature_metadata: dict[str, str], lags: list = None, period: int = 20
+    df: pd.DataFrame, feature_metadata: dict[str, str], lags: list | None = None, period: int = 20
 ) -> pd.DataFrame:
     """
     Add rolling autocorrelation of returns at specified lags.

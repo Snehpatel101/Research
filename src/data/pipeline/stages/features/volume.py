@@ -162,7 +162,7 @@ def add_obv(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:
 
 
 def add_dollar_volume(
-    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list = None
+    df: pd.DataFrame, feature_metadata: dict[str, str], periods: list | None = None
 ) -> pd.DataFrame:
     """
     Add dollar volume features (price × volume).

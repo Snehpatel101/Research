@@ -11,25 +11,21 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
 # Import from local modules
-from .engineer import FeatureEngineer
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
-# StageResult imports - adjust path based on pipeline structure
-try:
-    from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
-except ImportError:
-    # Fallback for different import paths
-    from pipeline.utils import StageResult, create_failed_result, create_stage_result
+from .engineer import FeatureEngineer
 
 
 def run_feature_engineering(
@@ -104,8 +100,8 @@ def run_feature_engineering(
         }
 
         # Process each symbol independently (no cross-symbol correlation)
-        artifacts = []
-        feature_metadata = {}
+        artifacts: list[Path] = []
+        feature_metadata: dict[str, dict[str, Any]] = {}
 
         # OHLCV columns to exclude from feature count
         ohlcv_cols = {

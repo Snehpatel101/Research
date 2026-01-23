@@ -24,7 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..base import PredictionOutput
+from ..base import PredictionOutput, TrainingMetrics
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -628,7 +628,7 @@ class NBEATSModel(BaseRNNModel):
         y_val: np.ndarray,
         sample_weights: np.ndarray | None = None,
         config: dict[str, Any] | None = None,
-    ):
+    ) -> TrainingMetrics:
         """Train the N-BEATS model with early stopping."""
         # Store sequence length for network creation
         self._seq_len = X_train.shape[1]
@@ -672,6 +672,9 @@ class NBEATSModel(BaseRNNModel):
         """
         self._validate_fitted()
         self._validate_input_shape(X, "X")
+
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
 
         self._model.eval()
         amp_dtype = self._amp_dtype

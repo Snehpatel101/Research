@@ -411,6 +411,9 @@ class PatchTSTModel(BaseRNNModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+
         self._model.eval()
         amp_dtype = self._amp_dtype
 

@@ -66,7 +66,7 @@ class CheckpointManager:
         # Initialize W&B if provided
         if self.wandb_project:
             try:
-                import wandb
+                import wandb  # type: ignore[import-not-found]
 
                 self.wandb = wandb
             except ImportError:
@@ -77,7 +77,7 @@ class CheckpointManager:
         self,
         run_name: str,
         config: dict[str, Any],
-        tags: list | None = None,
+        tags: list[str] | None = None,
     ) -> None:
         """
         Initialize W&B run for experiment tracking.
@@ -95,7 +95,8 @@ class CheckpointManager:
                 tags=tags or [],
                 resume="allow",  # Allow resuming if run exists
             )
-            print(f"✅ W&B run initialized: {self.wandb_run.url}")
+            if self.wandb_run is not None:
+                print(f"✅ W&B run initialized: {self.wandb_run.url}")
 
     def save_checkpoint(
         self,
@@ -103,7 +104,7 @@ class CheckpointManager:
         state: dict[str, Any],
         metadata: dict[str, Any] | None = None,
         force: bool = False,
-    ) -> Path:
+    ) -> Path | None:
         """
         Save checkpoint to Drive (and optionally W&B).
 
@@ -114,7 +115,7 @@ class CheckpointManager:
             force: Force save even if auto_save_interval not elapsed
 
         Returns:
-            Path to saved checkpoint
+            Path to saved checkpoint, or None if skipped
         """
         # Check if auto-save interval elapsed
         time_since_last_save = time.time() - self.last_save_time
@@ -202,22 +203,25 @@ class CheckpointManager:
         print(f"📂 Loading checkpoint: {latest_checkpoint}")
 
         with open(latest_checkpoint, "rb") as f:
-            checkpoint = pickle.load(f)
+            checkpoint: dict[str, Any] = pickle.load(f)
 
         return checkpoint
 
     def _load_from_wandb(self, phase: str) -> dict[str, Any] | None:
         """Load checkpoint from W&B artifacts."""
+        if self.wandb_run is None:
+            return None
         try:
             artifact = self.wandb_run.use_artifact(f"checkpoint_{phase}:latest")
             artifact_dir = artifact.download()
             checkpoint_files = list(Path(artifact_dir).glob("*.pkl"))
             if checkpoint_files:
                 with open(checkpoint_files[0], "rb") as f:
-                    return pickle.load(f)
+                    result: dict[str, Any] = pickle.load(f)
+                    return result
         except Exception as e:
             print(f"⚠️  Failed to load from W&B: {e}")
-            return None
+        return None
 
     def _cleanup_old_checkpoints(self, phase: str) -> None:
         """Keep only the N most recent checkpoints."""

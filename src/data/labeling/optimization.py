@@ -35,9 +35,9 @@ try:
     OPTUNA_AVAILABLE = True
 except ImportError:
     OPTUNA_AVAILABLE = False
-    optuna = None
-    TPESampler = None
-    Trial = None
+    optuna = None  # type: ignore
+    TPESampler = None  # type: ignore
+    Trial = None  # type: ignore
 
 from src.core.constants import (
     DEFAULT_LABEL_OPTIMIZATION_TRIALS,
@@ -410,13 +410,13 @@ class LabelOptimizer:
         )
         horizon = trial.suggest_int(
             "horizon",
-            search_space["horizon"][0],
-            search_space["horizon"][1],
+            int(search_space["horizon"][0]),
+            int(search_space["horizon"][1]),
         )
         atr_period = trial.suggest_int(
             "atr_period",
-            search_space["atr_period"][0],
-            search_space["atr_period"][1],
+            int(search_space["atr_period"][0]),
+            int(search_space["atr_period"][1]),
         )
 
         # Create config and labels

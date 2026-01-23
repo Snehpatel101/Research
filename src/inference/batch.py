@@ -194,8 +194,8 @@ class BatchPredictor:
             time.time()
 
             try:
-                result = self.pipeline.predict(batch_df, calibrate=calibrate)
-                batch_preds = self._format_predictions(result, batch_df, batch_idx)
+                inference_result = self.pipeline.predict(batch_df, calibrate=calibrate)
+                batch_preds = self._format_predictions(inference_result, batch_df, batch_idx)
                 all_predictions.append(batch_preds)
 
             except Exception as e:

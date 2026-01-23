@@ -551,6 +551,8 @@ class ModelBundle:
 
     def _apply_calibration(self, output: PredictionOutput) -> PredictionOutput:
         """Apply probability calibration to predictions."""
+        if self.calibrator is None:
+            return output
         calibrated_probs = self.calibrator.calibrate(output.class_probabilities)
 
         return PredictionOutput(

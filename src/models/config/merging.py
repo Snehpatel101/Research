@@ -344,7 +344,7 @@ def create_trainer_config(
     model_config = result.config
 
     # Extract trainer-level settings from model config
-    trainer_kwargs = {
+    trainer_kwargs: dict[str, Any] = {
         "model_name": model_name,
         "horizon": horizon,
     }

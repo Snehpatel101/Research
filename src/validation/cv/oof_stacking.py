@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from .oof_alignment import (
     OOFAlignmentResult,
@@ -66,12 +66,12 @@ class StackingDataset:
     @property
     def n_original_samples(self) -> int:
         """Original sample count before NaN removal."""
-        return self.metadata.get("n_original_samples", len(self.data))
+        return int(self.metadata.get("n_original_samples", len(self.data)))
 
     @property
     def n_dropped_samples(self) -> int:
         """Number of samples dropped due to NaN values."""
-        return self.metadata.get("n_dropped_samples", 0)
+        return int(self.metadata.get("n_dropped_samples", 0))
 
     def get_features(self) -> pd.DataFrame:
         """Get feature columns for meta-learner."""

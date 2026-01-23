@@ -28,7 +28,7 @@ from itertools import combinations
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 

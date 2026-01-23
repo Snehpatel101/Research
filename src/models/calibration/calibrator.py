@@ -257,7 +257,8 @@ class ProbabilityCalibrator:
             # Re-normalize after clipping
             calibrated = calibrated / calibrated.sum(axis=1, keepdims=True)
 
-        return calibrated
+        result: np.ndarray = calibrated
+        return result
 
     def save(self, path: Path) -> None:
         """

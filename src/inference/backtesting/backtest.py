@@ -73,9 +73,9 @@ class BacktestConfig:
     max_holding_period: int = 0
 
     @classmethod
-    def for_mes(cls, **kwargs) -> BacktestConfig:
+    def for_mes(cls, **kwargs: Any) -> BacktestConfig:
         """Create config for Micro E-mini S&P 500."""
-        defaults = {
+        defaults: dict[str, Any] = {
             "tick_value": 1.25,
             "tick_size": 0.25,
             "point_value": 5.0,
@@ -84,9 +84,9 @@ class BacktestConfig:
         return cls(**defaults)
 
     @classmethod
-    def for_mgc(cls, **kwargs) -> BacktestConfig:
+    def for_mgc(cls, **kwargs: Any) -> BacktestConfig:
         """Create config for Micro Gold."""
-        defaults = {
+        defaults: dict[str, Any] = {
             "tick_value": 1.00,
             "tick_size": 0.10,
             "point_value": 10.0,
@@ -354,16 +354,16 @@ class Backtester:
         model = self.config.execution_model
 
         if model == ExecutionModel.MARKET_ON_CLOSE:
-            return bar["close"]
+            return float(bar["close"])
         elif model == ExecutionModel.MARKET_ON_OPEN:
-            return bar["open"]
+            return float(bar["open"])
         elif model == ExecutionModel.FILL_AT_SIGNAL:
-            return bar["close"]
+            return float(bar["close"])
         elif model == ExecutionModel.VWAP:
             # Approximate VWAP as midpoint
-            return (bar["high"] + bar["low"]) / 2
+            return float((bar["high"] + bar["low"]) / 2)
         else:
-            return bar["close"]
+            return float(bar["close"])
 
     def _calculate_position_size(
         self,
@@ -628,7 +628,7 @@ def run_backtest(
     predictions: pd.DataFrame,
     prices: pd.DataFrame,
     config: BacktestConfig | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> BacktestResult:
     """
     Convenience function to run a backtest.

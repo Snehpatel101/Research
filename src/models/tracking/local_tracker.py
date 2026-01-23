@@ -189,7 +189,7 @@ class LocalTracker(ExperimentTracker):
             return
 
         # Create metrics entry
-        entry = {
+        entry: dict[str, Any] = {
             "timestamp": datetime.now().isoformat(),
             "step": step,
             "metrics": {},

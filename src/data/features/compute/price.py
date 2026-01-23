@@ -33,7 +33,7 @@ def _rolling_autocorr(series: pd.Series, lag: int, window: int = 20) -> pd.Serie
         x_clean = x[~np.isnan(x)]
         if len(x_clean) <= lag:
             return np.nan
-        return np.corrcoef(x_clean[:-lag], x_clean[lag:])[0, 1]
+        return float(np.corrcoef(x_clean[:-lag], x_clean[lag:])[0, 1])
 
     return series.rolling(window=window, min_periods=window).apply(
         lambda x: autocorr_lag(x.values), raw=False

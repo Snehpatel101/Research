@@ -154,7 +154,12 @@ class LogisticModel(BaseModel):
 
         # Get number of iterations used
         n_iter = getattr(self._model, "n_iter_", [0])
-        n_iterations = n_iter[0] if isinstance(n_iter, np.ndarray) else n_iter
+        if isinstance(n_iter, np.ndarray):
+            n_iterations = int(n_iter[0])
+        elif isinstance(n_iter, list):
+            n_iterations = int(n_iter[0]) if n_iter else 0
+        else:
+            n_iterations = int(n_iter)
 
         logger.info(
             f"Training complete: iterations={n_iterations}, "
@@ -169,17 +174,17 @@ class LogisticModel(BaseModel):
             val_accuracy=val_metrics["accuracy"],
             train_f1=train_metrics["f1"],
             val_f1=val_metrics["f1"],
-            epochs_trained=int(n_iterations),
+            epochs_trained=n_iterations,
             training_time_seconds=training_time,
-            early_stopped=int(n_iterations) < train_config.get("max_iter", 500),
+            early_stopped=n_iterations < train_config.get("max_iter", 500),
             best_epoch=None,
             history={},
             metadata={
                 "n_features": X_train.shape[1],
                 "n_train_samples": len(X_train),
                 "n_val_samples": len(X_val),
-                "n_iterations": int(n_iterations),
-                "converged": int(n_iterations) < train_config.get("max_iter", 500),
+                "n_iterations": n_iterations,
+                "converged": n_iterations < train_config.get("max_iter", 500),
             },
         )
 
@@ -187,6 +192,9 @@ class LogisticModel(BaseModel):
         """Generate predictions with class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
+
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
 
         probabilities = self._model.predict_proba(X)
         class_predictions_sk = np.argmax(probabilities, axis=1)
@@ -204,7 +212,12 @@ class LogisticModel(BaseModel):
         """Return raw class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
-        return self._model.predict_proba(X)
+
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+
+        result: np.ndarray = self._model.predict_proba(X)
+        return result
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""
@@ -244,7 +257,7 @@ class LogisticModel(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances (absolute coefficient values)."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         # For multi-class, average absolute coefficients across classes
@@ -264,7 +277,7 @@ class LogisticModel(BaseModel):
         Returns:
             Dict with 'coef' (n_classes, n_features) and 'intercept' (n_classes,)
         """
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         return {
@@ -282,6 +295,8 @@ class LogisticModel(BaseModel):
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
         y_pred_sk = self._model.predict(X)
         y_pred = self._convert_labels_from_sklearn(y_pred_sk)
 

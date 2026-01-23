@@ -63,7 +63,7 @@ def _shannon_entropy(x: np.ndarray, n_bins: int = 10) -> float:
     # Shannon entropy
     entropy = -np.sum(probs * np.log2(probs + 1e-10))
 
-    return entropy
+    return float(entropy)
 
 
 def _lempel_ziv_complexity(binary_seq: np.ndarray) -> float:
@@ -112,7 +112,7 @@ def _lempel_ziv_complexity(binary_seq: np.ndarray) -> float:
     return normalized
 
 
-def _approximate_entropy(x: np.ndarray, m: int = 2, r: float = None) -> float:
+def _approximate_entropy(x: np.ndarray, m: int = 2, r: float | None = None) -> float:
     """
     Calculate Approximate Entropy (ApEn).
 
@@ -149,10 +149,10 @@ def _approximate_entropy(x: np.ndarray, m: int = 2, r: float = None) -> float:
 
         return np.mean(np.log(counts + 1e-10))
 
-    return _phi(m) - _phi(m + 1)
+    return float(_phi(m) - _phi(m + 1))
 
 
-def _sample_entropy(x: np.ndarray, m: int = 2, r: float = None) -> float:
+def _sample_entropy(x: np.ndarray, m: int = 2, r: float | None = None) -> float:
     """
     Calculate Sample Entropy (SampEn).
 
@@ -255,7 +255,7 @@ def _hurst_exponent(x: np.ndarray) -> float:
     # Hurst exponent is the slope
     slope = np.polyfit(log_sizes, log_rs, 1)[0]
 
-    return slope
+    return float(slope)
 
 
 # =============================================================================

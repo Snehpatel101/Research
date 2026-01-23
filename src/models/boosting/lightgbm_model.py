@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import pickle
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ try:
     LIGHTGBM_AVAILABLE = True
 except ImportError:
     LIGHTGBM_AVAILABLE = False
-    lgb = None
+    lgb: Any = None  # type: ignore
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
@@ -226,7 +227,7 @@ class LightGBMModel(BaseModel):
 
         evals_result: dict[str, dict[str, list[float]]] = {}
 
-        callbacks = [
+        callbacks: list[Callable[..., Any]] = [
             lgb.early_stopping(stopping_rounds=early_stopping, verbose=False),
             lgb.log_evaluation(period=50 if train_config.get("verbosity", -1) >= 0 else 0),
             lgb.record_evaluation(evals_result),
@@ -291,6 +292,8 @@ class LightGBMModel(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         probabilities = self._model.predict(X, num_iteration=self._model.best_iteration)
         class_predictions_lgb = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_lgb(class_predictions_lgb)
@@ -298,7 +301,9 @@ class LightGBMModel(BaseModel):
 
         return PredictionResult(
             class_predictions=class_predictions,
-            class_probabilities=probabilities,
+            class_probabilities=np.array(probabilities)
+            if not isinstance(probabilities, np.ndarray)
+            else probabilities,
             confidence=confidence,
             metadata={"model": "lightgbm"},
         )
@@ -309,6 +314,8 @@ class LightGBMModel(BaseModel):
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         self._model.save_model(str(path / "model.txt"))
 
         metadata = {
@@ -346,7 +353,7 @@ class LightGBMModel(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances by gain."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         importance = self._model.feature_importance(importance_type="gain")
@@ -417,6 +424,8 @@ class LightGBMModel(BaseModel):
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         probabilities = self._model.predict(X, num_iteration=self._model.best_iteration)
         y_pred_lgb = np.argmax(probabilities, axis=1)
         y_pred = self._convert_labels_from_lgb(y_pred_lgb)

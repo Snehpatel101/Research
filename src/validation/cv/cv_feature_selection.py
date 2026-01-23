@@ -13,9 +13,9 @@ from collections import Counter
 from typing import Any
 
 import numpy as np
-import pandas as pd
-from sklearn.feature_selection import mutual_info_classif
-from sklearn.metrics import accuracy_score, f1_score
+import pandas as pd  # type: ignore[import-untyped]
+from sklearn.feature_selection import mutual_info_classif  # type: ignore[import-untyped]
+from sklearn.metrics import accuracy_score, f1_score  # type: ignore[import-untyped]
 
 from src.models.registry import ModelRegistry
 
@@ -192,7 +192,7 @@ def run_cv_with_per_fold_feature_selection(
         )
 
     # Aggregate selected features: keep features that appear in >= 60% of folds
-    feature_counts = Counter()
+    feature_counts: Counter[str] = Counter()
     for fold_features in fold_selected_features:
         feature_counts.update(fold_features)
 
@@ -249,7 +249,7 @@ def compute_feature_stability(
     Returns:
         List of stable feature names
     """
-    feature_counts = Counter()
+    feature_counts: Counter[str] = Counter()
     for fold_features in fold_selected_features:
         feature_counts.update(fold_features)
 

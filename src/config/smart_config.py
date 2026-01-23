@@ -721,7 +721,7 @@ def describe_model(model_name: str) -> str:
     if model_name not in MODEL_DEFAULTS:
         raise ValueError(f"Unknown model '{model_name}'")
 
-    return MODEL_DEFAULTS[model_name]["description"]
+    return str(MODEL_DEFAULTS[model_name]["description"])
 
 
 def show_defaults(model_name: str) -> dict[str, Any]:

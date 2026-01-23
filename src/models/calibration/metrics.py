@@ -25,7 +25,7 @@ class ReliabilityBins:
     bin_counts: np.ndarray
     n_bins: int
 
-    def to_dict(self) -> dict[str, list]:
+    def to_dict(self) -> dict[str, list[float] | int]:
         """Convert to serializable dict."""
         return {
             "bin_centers": self.bin_centers.tolist(),

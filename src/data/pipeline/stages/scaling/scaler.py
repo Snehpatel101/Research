@@ -13,7 +13,7 @@ import logging
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -92,7 +92,7 @@ class FeatureScaler:
         # State (populated during fit)
         self.is_fitted: bool = False
         self.feature_names: list[str] = []
-        self.scalers: dict[str, Union] = {}
+        self.scalers: dict[str, Any] = {}
         self.configs: dict[str, FeatureScalingConfig] = {}
         self.statistics: dict[str, ScalingStatistics] = {}
         self.log_shifts: dict[str, float] = {}
@@ -221,9 +221,13 @@ class FeatureScaler:
                 scaled_data = col_data
             else:
                 scaler = create_scaler(config.scaler_type, self.robust_quantile_range)
-                scaler.fit(col_data.reshape(-1, 1))
-                self.scalers[fname] = scaler
-                scaled_data = scaler.transform(col_data.reshape(-1, 1)).ravel()
+                if scaler is not None:
+                    scaler.fit(col_data.reshape(-1, 1))
+                    self.scalers[fname] = scaler
+                    scaled_data = scaler.transform(col_data.reshape(-1, 1)).ravel()
+                else:
+                    self.scalers[fname] = None
+                    scaled_data = col_data
 
             # Compute statistics
             original_data = train_df[fname].values.astype(np.float64)

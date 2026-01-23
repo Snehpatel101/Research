@@ -113,17 +113,17 @@ class MetaLabelResult:
     @property
     def n_valid(self) -> int:
         """Number of valid (non-excluded) samples."""
-        return (self.meta_labels != META_LABEL_INVALID).sum()
+        return int((self.meta_labels != META_LABEL_INVALID).sum())
 
     @property
     def n_correct(self) -> int:
         """Number of correct predictions."""
-        return (self.meta_labels == META_LABEL_CORRECT).sum()
+        return int((self.meta_labels == META_LABEL_CORRECT).sum())
 
     @property
     def n_incorrect(self) -> int:
         """Number of incorrect predictions."""
-        return (self.meta_labels == META_LABEL_INCORRECT).sum()
+        return int((self.meta_labels == META_LABEL_INCORRECT).sum())
 
     @property
     def accuracy(self) -> float:

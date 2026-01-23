@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -71,7 +72,7 @@ class GRUNetwork(RNNNetwork):
         num_layers: int,
         dropout: float,
         bidirectional: bool,
-    ) -> nn.Module:
+    ) -> nn.GRU:
         """Initialize the GRU layer."""
         return nn.GRU(
             input_size=input_size,
@@ -162,7 +163,7 @@ class GRUModel(BaseRNNModel):
             or None if model is not fitted
         """
 
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         self._model.eval()
@@ -170,8 +171,12 @@ class GRUModel(BaseRNNModel):
 
         with torch.no_grad():
             # Get RNN output (hidden states at each timestep)
-            output, _ = self._model.rnn(X_tensor)
-            return output.cpu().numpy()
+            # Access rnn attribute from the underlying GRUNetwork
+            rnn_network = self._model
+            if isinstance(rnn_network, GRUNetwork) and rnn_network.rnn is not None:
+                output, _ = rnn_network.rnn(X_tensor)
+                return np.asarray(output.cpu().numpy())
+            return None
 
     def get_gate_values(self, X: np.ndarray) -> dict[str, np.ndarray] | None:
         """

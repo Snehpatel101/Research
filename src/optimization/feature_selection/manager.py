@@ -427,7 +427,8 @@ class FeatureSelectionManager:
                 f"Available: {all_features[:5]}..."
             )
 
-        return X_values[:, indices]
+        result: np.ndarray = X_values[:, indices]
+        return result
 
     def apply_selection_df(self, X: pd.DataFrame) -> pd.DataFrame:
         """

@@ -25,6 +25,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+# Type alias for config dictionaries
+ConfigDict = dict[str, Any]
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,9 +61,9 @@ class DataSource:
     date_start: datetime
     date_end: datetime
     created_at: datetime = field(default_factory=datetime.now)
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "path": self.path,
@@ -75,7 +78,7 @@ class DataSource:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> DataSource:
+    def from_dict(cls, data: dict[str, Any]) -> DataSource:
         """Create from dictionary."""
         return cls(
             path=data["path"],
@@ -101,15 +104,15 @@ class Transformation:
 
     type: TransformationType
     name: str  # Human-readable name (e.g., "add_rsi", "add_macd")
-    config: dict  # Parameters used
+    config: dict[str, Any]  # Parameters used
     config_hash: str  # Hash of config for comparison
     input_columns: list[str]  # Columns consumed
     output_columns: list[str]  # Columns produced
     executed_at: datetime = field(default_factory=datetime.now)
     duration_seconds: float = 0.0
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "type": self.type.value,
@@ -124,7 +127,7 @@ class Transformation:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> Transformation:
+    def from_dict(cls, data: dict[str, Any]) -> Transformation:
         """Create from dictionary."""
         return cls(
             type=TransformationType(data["type"]),
@@ -166,7 +169,7 @@ class FeatureLineage:
     output_checksum: str = ""
     created_at: datetime = field(default_factory=datetime.now)
     parent_lineages: list[str] = field(default_factory=list)  # IDs of parent lineages
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def lineage_id(self) -> str:
@@ -178,11 +181,11 @@ class FeatureLineage:
         self,
         type: TransformationType,
         name: str,
-        config: dict,
+        config: dict[str, Any],
         input_columns: list[str],
         output_columns: list[str],
         duration_seconds: float = 0.0,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Transformation:
         """
         Add a transformation step to the lineage.
@@ -236,7 +239,7 @@ class FeatureLineage:
         row_count: int,
         date_start: datetime,
         date_end: datetime,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> DataSource:
         """
         Set the data source for this lineage.
@@ -278,7 +281,7 @@ class FeatureLineage:
         logger.debug(f"Set source for lineage {self.lineage_id}: {path}")
         return self.source
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "lineage_id": self.lineage_id,
@@ -295,7 +298,7 @@ class FeatureLineage:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> FeatureLineage:
+    def from_dict(cls, data: dict[str, Any]) -> FeatureLineage:
         """Create from dictionary."""
         lineage = cls(
             feature_set=data["feature_set"],
@@ -389,7 +392,7 @@ class LineageTracker:
         version: str,
         symbol: str,
         parent_lineages: list[str] | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> FeatureLineage:
         """
         Create a new lineage record.

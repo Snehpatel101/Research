@@ -162,7 +162,8 @@ class EquityCurve:
         if len(self.equity_values) < 2:
             return np.array([])
         equity = np.array(self.equity_values)
-        return np.diff(equity) / equity[:-1]
+        result: np.ndarray = np.diff(equity) / equity[:-1]
+        return result
 
     @property
     def trade_returns(self) -> np.ndarray:
@@ -175,7 +176,8 @@ class EquityCurve:
         if len(equity) == 0:
             return np.array([])
         running_max = np.maximum.accumulate(equity)
-        return (equity - running_max) / running_max
+        result: np.ndarray = (equity - running_max) / running_max
+        return result
 
     def get_metrics(
         self,
@@ -484,7 +486,7 @@ class EquityCurve:
         fig, ax = plt.subplots(figsize=figsize)
 
         # Create heatmap
-        cmap = plt.cm.RdYlGn
+        cmap = plt.cm.RdYlGn  # type: ignore[attr-defined]
         norm = mcolors.TwoSlopeNorm(vmin=monthly.values.min(), vcenter=0, vmax=monthly.values.max())
 
         im = ax.imshow(monthly.values * 100, cmap=cmap, norm=norm, aspect="auto")

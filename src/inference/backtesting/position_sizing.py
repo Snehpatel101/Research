@@ -13,6 +13,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 import numpy as np
 
@@ -34,7 +35,7 @@ class BasePositionSizer(ABC):
     def calculate_position_size(
         self,
         account_equity: float,
-        **kwargs,
+        **kwargs: Any,
     ) -> int:
         """
         Calculate position size in contracts.
@@ -119,7 +120,7 @@ class KellyCriterion(BasePositionSizer):
         avg_win: float = 100.0,
         avg_loss: float = 100.0,
         current_price: float = 5000.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> int:
         """
         Calculate position size using Kelly criterion.
@@ -206,7 +207,7 @@ class KellyCriterion(BasePositionSizer):
                 return 0.0
 
             # For normal returns: f* = mu / sigma^2
-            return mean_return / var_return
+            return float(mean_return / var_return)
 
         return 0.0
 
@@ -237,7 +238,7 @@ class FixedFractional(BasePositionSizer):
         self,
         account_equity: float,
         stop_distance: float = 10.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> int:
         """
         Calculate position size based on stop distance.
@@ -303,7 +304,7 @@ class VolatilityTargeted(BasePositionSizer):
         account_equity: float,
         current_volatility: float = 0.15,
         current_price: float = 5000.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> int:
         """
         Calculate volatility-adjusted position size.
@@ -365,7 +366,7 @@ class VolatilityTargeted(BasePositionSizer):
         # Annualize
         annualized_vol = daily_vol * np.sqrt(self.trading_days)
 
-        return annualized_vol
+        return float(annualized_vol)
 
 
 @dataclass
@@ -389,7 +390,7 @@ class EqualWeight(BasePositionSizer):
         self,
         account_equity: float,
         current_price: float = 5000.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> int:
         """
         Calculate equal-weighted position size.
@@ -431,7 +432,7 @@ class FixedContracts(BasePositionSizer):
     def calculate_position_size(
         self,
         account_equity: float,
-        **kwargs,
+        **kwargs: Any,
     ) -> int:
         """Return fixed number of contracts."""
         return self.contracts
@@ -454,7 +455,7 @@ class PositionSizerConfig:
 
 def create_position_sizer(
     method: str | PositionSizingMethod = "fixed_fractional",
-    **kwargs,
+    **kwargs: Any,
 ) -> BasePositionSizer:
     """
     Factory function to create a position sizer.

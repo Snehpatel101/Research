@@ -58,12 +58,12 @@ class AdapterResult:
     @property
     def n_samples(self) -> int:
         """Number of samples in the dataset."""
-        return self.data.shape[0]
+        return int(self.data.shape[0])
 
     @property
     def n_features(self) -> int:
         """Number of features (last dimension)."""
-        return self.data.shape[-1]
+        return int(self.data.shape[-1])
 
     @property
     def rank(self) -> int:
@@ -71,7 +71,7 @@ class AdapterResult:
         return self.data.ndim
 
     @property
-    def shape(self) -> tuple:
+    def shape(self) -> tuple[int, ...]:
         """Full data shape."""
         return self.data.shape
 
@@ -109,12 +109,12 @@ class PredictionResult:
 
     @property
     def n_classes(self) -> int:
-        return self.class_probabilities.shape[1]
+        return int(self.class_probabilities.shape[1])
 
     @property
     def confidence(self) -> np.ndarray:
         """Maximum probability per sample."""
-        return self.class_probabilities.max(axis=1)
+        return np.asarray(self.class_probabilities.max(axis=1))
 
 
 @dataclass
@@ -173,7 +173,7 @@ class OOFResult:
 
     @property
     def n_classes(self) -> int:
-        return self.probabilities.shape[1]
+        return int(self.probabilities.shape[1])
 
     def align_to(self, target_indices: np.ndarray) -> OOFResult:
         """
@@ -288,7 +288,7 @@ class DataContract(ABC):
 
     @property
     @abstractmethod
-    def feature_bounds(self) -> tuple:
+    def feature_bounds(self) -> tuple[int, int]:
         """
         (min_features, max_features) tuple.
 

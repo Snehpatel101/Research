@@ -372,6 +372,8 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         # Return anchor timeframe data (smallest)
         anchor_tf = coordinator.anchor_timeframe
+        if anchor_tf is None:
+            raise RuntimeError("No anchor timeframe available from coordinator")
         train_df = coordinator.get_timeframe_data(anchor_tf).df
 
         # Load val data
@@ -381,7 +383,10 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             horizon=self.config.horizon,
         )
         coordinator_val.load_timeframes(list(required_tfs))
-        val_df = coordinator_val.get_timeframe_data(anchor_tf).df
+        val_anchor_tf = coordinator_val.anchor_timeframe
+        if val_anchor_tf is None:
+            raise RuntimeError("No anchor timeframe available from validation coordinator")
+        val_df = coordinator_val.get_timeframe_data(val_anchor_tf).df
 
         return train_df, val_df
 
@@ -435,7 +440,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         # Validate pipeline lineage if pipeline_run_id is specified
         lineage_validated = True
-        lineage_issues = []
+        lineage_issues: list[str] = []
         if self.config.pipeline_run_id:
             lineage_validated, lineage_issues = self._validate_pipeline_lineage()
 
@@ -617,9 +622,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 and self.feature_selector is not None
                 and self.feature_selector.is_fitted
             ):
-                self.model.set_feature_names(self.feature_selector.selected_features)  # type: ignore[union-attr]
+                self.model.set_feature_names(self.feature_selector.selected_features)
             else:
-                self.model.set_feature_names(feature_names)  # type: ignore[union-attr]
+                self.model.set_feature_names(feature_names)
 
         # Train model (pass label_end_times for ensemble models with internal CV)
         logger.info(f"Training {self.config.model_name}...")
@@ -650,7 +655,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # For heterogeneous stacking, pass both tabular and sequence data
         if self._is_heterogeneous_ensemble() and X_val_seq is not None:
             # Heterogeneous stacking models accept X_seq as keyword argument
-            val_predictions = self.model.predict(X_val, X_seq=X_val_seq)  # type: ignore[call-arg]
+            val_predictions = self.model.predict(X_val, X_seq=X_val_seq)
         else:
             val_predictions = self.model.predict(X_val)
 
@@ -704,7 +709,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             calibration_method = self.config.calibration_method
             if calibration_method not in ("isotonic", "sigmoid", "auto"):
                 calibration_method = "auto"
-            cal_config = CalibrationConfig(method=calibration_method)  # type: ignore[arg-type]
+            cal_config = CalibrationConfig(method=calibration_method)
             self.calibrator = ProbabilityCalibrator(cal_config)
             calibration_metrics = self.calibrator.fit(
                 y_true=y_val_aligned,

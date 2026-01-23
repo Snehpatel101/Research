@@ -18,7 +18,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import numpy as np
 import pandas as pd
@@ -478,9 +478,16 @@ class RegimeAwareTrainer:
         """
         model_start = time.time()
 
-        # Get training data
-        X_train, y_train, w_train = container.get_sklearn_arrays("train", return_df=True)
-        X_val, y_val, _ = container.get_sklearn_arrays("val", return_df=True)
+        # Get training data - cast to pd.DataFrame/Series since return_df=True
+        X_train_raw, y_train_raw, w_train_raw = container.get_sklearn_arrays(
+            "train", return_df=True
+        )
+        X_val_raw, y_val_raw, _ = container.get_sklearn_arrays("val", return_df=True)
+        X_train = cast(pd.DataFrame, X_train_raw)
+        y_train = cast(pd.Series, y_train_raw)
+        w_train = cast(pd.Series, w_train_raw) if w_train_raw is not None else None
+        X_val = cast(pd.DataFrame, X_val_raw)
+        y_val = cast(pd.Series, y_val_raw)
 
         # Detect regimes
         train_regimes = detect_regimes(
@@ -650,9 +657,16 @@ class RegimeAwareTrainer:
         """
         model_start = time.time()
 
-        # Get training data
-        X_train, y_train, w_train = container.get_sklearn_arrays("train", return_df=True)
-        X_val, y_val, _ = container.get_sklearn_arrays("val", return_df=True)
+        # Get training data - cast to pd.DataFrame/Series since return_df=True
+        X_train_raw, y_train_raw, w_train_raw = container.get_sklearn_arrays(
+            "train", return_df=True
+        )
+        X_val_raw, y_val_raw, _ = container.get_sklearn_arrays("val", return_df=True)
+        X_train = cast(pd.DataFrame, X_train_raw)
+        y_train = cast(pd.Series, y_train_raw)
+        w_train = cast(pd.Series, w_train_raw) if w_train_raw is not None else None
+        X_val = cast(pd.DataFrame, X_val_raw)
+        y_val = cast(pd.Series, y_val_raw)
 
         # Detect regimes
         train_regimes = detect_regimes(
@@ -787,7 +801,7 @@ class RegimeAwareTrainer:
 
     def _build_summary(self, results: dict[str, RegimeAwareTrainingResult]) -> dict[str, Any]:
         """Build summary from all results."""
-        summary = {
+        summary: dict[str, Any] = {
             "n_models": len(results),
             "regime_type": self.regime_config.regime_type,
             "train_separate_models": self.regime_config.train_separate_models,

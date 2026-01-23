@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from .oof_core import OOFPrediction
 

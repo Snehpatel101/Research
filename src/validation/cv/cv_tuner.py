@@ -10,7 +10,7 @@ import logging
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from src.models.registry import ModelRegistry
 from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
@@ -109,7 +109,7 @@ class TimeSeriesOptunaTuner:
             mean_score = np.mean(scores)
             std_score = np.std(scores)
             penalty = 0.1 * std_score
-            return mean_score - penalty
+            return float(mean_score - penalty)
 
         # Run optimization
         optuna.logging.set_verbosity(optuna.logging.WARNING)

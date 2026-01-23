@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -32,6 +32,7 @@ from src.core.constants import (
     MODEL_DATA_RANKS,
 )
 
+from .multi_stream import MultiStreamAdapter
 from .registry import get_adapter
 from .scaling import AdapterScaler, ScalerConfig
 
@@ -105,22 +106,22 @@ class PreparedData:
     @property
     def n_train(self) -> int:
         """Number of training samples."""
-        return self.X_train.shape[0]
+        return int(self.X_train.shape[0])
 
     @property
     def n_val(self) -> int:
         """Number of validation samples."""
-        return self.X_val.shape[0]
+        return int(self.X_val.shape[0])
 
     @property
     def n_test(self) -> int:
         """Number of test samples (0 if no test set)."""
-        return self.X_test.shape[0] if self.X_test is not None else 0
+        return int(self.X_test.shape[0]) if self.X_test is not None else 0
 
     @property
     def n_features(self) -> int:
         """Number of features (last dimension of X)."""
-        return self.X_train.shape[-1]
+        return int(self.X_train.shape[-1])
 
     @property
     def has_test(self) -> bool:
@@ -148,10 +149,11 @@ class PreparedData:
             )
         if self.X_val.shape[0] != self.y_val.shape[0]:
             issues.append(f"Val X/y length mismatch: X={self.X_val.shape[0]}, y={len(self.y_val)}")
-        if self.has_test and self.X_test.shape[0] != self.y_test.shape[0]:
-            issues.append(
-                f"Test X/y length mismatch: X={self.X_test.shape[0]}, y={len(self.y_test)}"
-            )
+        if self.has_test and self.X_test is not None and self.y_test is not None:
+            if self.X_test.shape[0] != self.y_test.shape[0]:
+                issues.append(
+                    f"Test X/y length mismatch: X={self.X_test.shape[0]}, y={len(self.y_test)}"
+                )
 
         # Check weights length if present
         if self.train_weights is not None:
@@ -167,7 +169,7 @@ class PreparedData:
             if np.isinf(arr).any():
                 issues.append(f"{name} contains Inf values")
 
-        if self.has_test:
+        if self.has_test and self.X_test is not None:
             if np.isnan(self.X_test).any():
                 issues.append("X_test contains NaN values")
             if np.isinf(self.X_test).any():
@@ -320,10 +322,11 @@ class UnifiedDataPreparation:
                 self._split_additional_dfs(additional_dfs, "test") if test_df is not None else None
             )
 
-            train_result = adapter.transform(train_df, additional_dfs=train_additional)
-            val_result = adapter.transform(val_df, additional_dfs=val_additional)
+            ms_adapter = cast(MultiStreamAdapter, adapter)
+            train_result = ms_adapter.transform(train_df, additional_dfs=train_additional)
+            val_result = ms_adapter.transform(val_df, additional_dfs=val_additional)
             test_result = (
-                adapter.transform(test_df, additional_dfs=test_additional)
+                ms_adapter.transform(test_df, additional_dfs=test_additional)
                 if test_df is not None
                 else None
             )

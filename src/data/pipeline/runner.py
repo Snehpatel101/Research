@@ -66,6 +66,9 @@ class PipelineRunner:
 
         self.config = config
         self.resume = resume
+        # Ensure project_root is set before using it
+        if config.project_root is None:
+            raise ValueError("config.project_root must be set before creating PipelineRunner")
         self.manifest = ArtifactManifest(config.run_id, config.project_root)
 
         # Set up logging
@@ -294,7 +297,10 @@ class PipelineRunner:
 
         # Load manifest if exists
         try:
-            self.manifest = ArtifactManifest.load(self.config.run_id, self.config.project_root)
+            if self.config.project_root is None:
+                self.logger.warning("project_root is None, cannot load previous manifest")
+            else:
+                self.manifest = ArtifactManifest.load(self.config.run_id, self.config.project_root)
         except FileNotFoundError:
             self.logger.warning("No previous manifest found.")
 
@@ -321,6 +327,10 @@ class PipelineRunner:
         # Import from canonical location (src/core/)
         from src.core.lineage import PipelineLineage, create_dataset_checksum
 
+        if self.config.project_root is None:
+            self.logger.warning("project_root is None, cannot save lineage")
+            return
+
         lineage_dir = self.config.project_root / "data" / "lineage"
         lineage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -328,7 +338,7 @@ class PipelineRunner:
 
         for tf in getattr(self.config, "output_timeframes", [self.config.target_timeframe]):
             tf_suffix = f"_{tf}" if len(getattr(self.config, "output_timeframes", [])) > 1 else ""
-            scaled_dir = self.config.data_splits_dir / "scaled" / (tf if tf_suffix else "")
+            scaled_dir = self.config.splits_dir / "scaled" / (tf if tf_suffix else "")
 
             dataset_files = {
                 f"train{tf_suffix}": scaled_dir / "train_scaled.parquet",

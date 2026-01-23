@@ -3,6 +3,7 @@ Feature normalization validation checks.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -60,7 +61,7 @@ def get_feature_columns(df: pd.DataFrame) -> list[str]:
 
 def compute_feature_statistics(
     df: pd.DataFrame, feature_cols: list[str], warnings_found: list[str]
-) -> tuple[list[dict], list[dict], list[dict]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Compute distribution statistics for all features.
 
@@ -168,7 +169,7 @@ def compute_feature_statistics(
 
 def detect_outliers(
     df: pd.DataFrame, feature_cols: list[str], warnings_found: list[str], z_threshold: float = 3.0
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Detect outliers using z-score analysis.
 
@@ -243,7 +244,7 @@ def detect_outliers(
 
 def analyze_feature_ranges(
     df: pd.DataFrame, feature_cols: list[str], issues_found: list[str], warnings_found: list[str]
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """
     Analyze feature value ranges for issues.
 
@@ -314,10 +315,10 @@ def analyze_feature_ranges(
 
 
 def generate_recommendations(
-    unnormalized_features: list[dict],
-    high_skew_features: list[dict],
-    extreme_outlier_features: list[dict],
-) -> list[dict]:
+    unnormalized_features: list[dict[str, Any]],
+    high_skew_features: list[dict[str, Any]],
+    extreme_outlier_features: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Generate normalization recommendations.
 
@@ -381,7 +382,7 @@ def check_feature_normalization(
     warnings_found: list[str],
     z_threshold: float = 3.0,
     extreme_threshold: float = 5.0,
-) -> dict:
+) -> dict[str, Any]:
     """
     Run all feature normalization checks.
 
@@ -399,7 +400,7 @@ def check_feature_normalization(
     logger.info("FEATURE NORMALIZATION CHECKS")
     logger.info("=" * 60)
 
-    results = {}
+    results: dict[str, Any] = {}
 
     # Identify feature columns
     feature_cols = get_feature_columns(df)

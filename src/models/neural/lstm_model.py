@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -66,7 +67,7 @@ class LSTMNetwork(RNNNetwork):
         num_layers: int,
         dropout: float,
         bidirectional: bool,
-    ) -> nn.Module:
+    ) -> nn.RNNBase:
         """Initialize the LSTM layer."""
         return nn.LSTM(
             input_size=input_size,
@@ -154,13 +155,20 @@ class LSTMModel(BaseRNNModel):
         if not self._is_fitted:
             return None
 
+        if self._model.rnn is None:
+            return None
+
         self._model.eval()
         X_tensor = torch.tensor(X, dtype=torch.float32).to(self._device)
 
         with torch.no_grad():
             # Get RNN output (hidden states at each timestep)
-            output, _ = self._model.rnn(X_tensor)
-            return output.cpu().numpy()
+            # Note: rnn is nn.RNNBase which is callable via Module.__call__
+            rnn = self._model.rnn
+            assert rnn is not None  # Already checked above
+            output, _ = rnn(X_tensor)  # type: ignore[operator]
+            result: np.ndarray = np.asarray(output.cpu().numpy())
+            return result
 
 
 __all__ = ["LSTMModel", "LSTMNetwork"]

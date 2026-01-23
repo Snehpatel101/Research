@@ -637,7 +637,8 @@ class EnsembleBundle:
             Probability array of shape (n_samples, n_classes)
         """
         output = self.predict(base_predictions, calibrate=False)
-        return output.class_probabilities
+        result: np.ndarray = output.class_probabilities
+        return result
 
     def predict_classes(
         self,
@@ -653,7 +654,8 @@ class EnsembleBundle:
             Class prediction array of shape (n_samples,)
         """
         output = self.predict(base_predictions, calibrate=False)
-        return output.class_predictions
+        result: np.ndarray = output.class_predictions
+        return result
 
     def predict_from_base_features(
         self,

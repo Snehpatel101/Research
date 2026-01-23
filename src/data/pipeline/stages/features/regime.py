@@ -138,15 +138,20 @@ def _add_advanced_regime_features(
     pd.DataFrame
         DataFrame with advanced regime features added
     """
+    regime_add_fn = None
     try:
         from src.data.pipeline.stages.regime import (
             add_regime_features_to_dataframe,
         )
+
+        regime_add_fn = add_regime_features_to_dataframe
     except ImportError:
         try:
-            from stages.regime import (
-                add_regime_features_to_dataframe,
+            from src.data.pipeline.stages.regime import (
+                add_regime_features_to_dataframe as _add_regime_fn,
             )
+
+            regime_add_fn = _add_regime_fn
         except ImportError as e:
             logger.warning(
                 f"Advanced regime detection not available: {e}. "
@@ -154,12 +159,13 @@ def _add_advanced_regime_features(
             )
             return _add_basic_regime_features(df, feature_metadata)
 
+    if regime_add_fn is None:
+        return _add_basic_regime_features(df, feature_metadata)
+
     logger.info("Using advanced regime detection...")
 
     # Use the convenience function which handles everything
-    df = add_regime_features_to_dataframe(
-        df, config=regime_config, feature_metadata=feature_metadata
-    )
+    df = regime_add_fn(df, config=regime_config, feature_metadata=feature_metadata)
 
     return df
 
@@ -266,16 +272,26 @@ def add_structure_regime(
     """
     logger.info("Adding structure regime...")
 
+    structure_detector_cls = None
     try:
         from src.data.pipeline.stages.regime import MarketStructureDetector
+
+        structure_detector_cls = MarketStructureDetector
     except ImportError:
         try:
-            from stages.regime import MarketStructureDetector
+            from src.data.pipeline.stages.regime import (
+                MarketStructureDetector as _StructureDetector,
+            )
+
+            structure_detector_cls = _StructureDetector
         except ImportError as e:
             logger.warning(f"Structure regime not available: {e}")
             return df
 
-    detector = MarketStructureDetector(lookback=lookback)
+    if structure_detector_cls is None:
+        return df
+
+    detector = structure_detector_cls(lookback=lookback)
     regimes = detector.detect(df)
 
     # ANTI-LOOKAHEAD: Shift by 1 bar to prevent using current bar data

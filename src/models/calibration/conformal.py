@@ -401,7 +401,8 @@ class ConformalPredictor:
             true_probs = probabilities[np.arange(n_samples), y_true]
             scores = 1 - true_probs
 
-        return scores
+        result: np.ndarray = scores
+        return result
 
     def _compute_metrics(
         self,

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    pass
 
 
 class HasPipelineDirs(Protocol):
@@ -109,13 +109,13 @@ def load_config_from_run_id(cls: type[T], run_id: str, project_root: Path | None
 
 
 class PipelinePersistenceMixin:
-    """Mixin providing save/load methods for PipelineConfig."""
+    """Mixin providing save/load methods for PipelineConfig.
 
-    # Type hints for mixin - expected to be provided by the class this is mixed into
-    run_config_dir: Path
-    create_directories: Any  # Method provided by the target class
+    Note: This mixin assumes the target class also inherits from PipelinePathMixin
+    which provides run_config_dir property and create_directories() method.
+    """
 
-    def save_config(self: HasPipelineDirs, path: Path | None = None) -> Path:
+    def save_config(self, path: Path | None = None) -> Path:
         """
         Save configuration to JSON file.
 
@@ -126,18 +126,18 @@ class PipelinePersistenceMixin:
             Path where config was saved
         """
         if path is None:
-            self.create_directories()
-            path = self.run_config_dir / "config.json"
+            # Access attributes from PipelinePathMixin (co-mixin)
+            # Type ignore needed because mypy can't see co-mixin attributes
+            self.create_directories()  # type: ignore[attr-defined]
+            path = self.run_config_dir / "config.json"  # type: ignore[attr-defined]
         return save_config_to_file(self, path)
 
     @classmethod
-    def load_config(cls, path: Path) -> "PipelinePersistenceMixin":
+    def load_config(cls: type[T], path: Path) -> T:
         """Load configuration from JSON file."""
         return load_config_from_file(cls, path)
 
     @classmethod
-    def load_from_run_id(
-        cls, run_id: str, project_root: Path | None = None
-    ) -> "PipelinePersistenceMixin":
+    def load_from_run_id(cls: type[T], run_id: str, project_root: Path | None = None) -> T:
         """Load configuration from a run ID."""
         return load_config_from_run_id(cls, run_id, project_root)

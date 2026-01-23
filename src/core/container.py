@@ -35,7 +35,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -98,7 +98,7 @@ def _is_label_column(name: str) -> bool:
     return any(name.startswith(prefix) for prefix in _LABEL_PREFIXES)
 
 
-def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict:
+def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any]:
     """Validate DataFrame columns against metadata schema."""
     columns_set = set(df_columns)
     metadata_found = columns_set & METADATA_COLUMNS
@@ -249,7 +249,7 @@ class TimeSeriesDataContainer:
         self,
         config: DataContainerConfig,
         splits: dict[str, SplitData],
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize TimeSeriesDataContainer.
@@ -753,9 +753,9 @@ class TimeSeriesDataContainer:
     # UTILITIES
     # =========================================================================
 
-    def describe(self) -> dict:
+    def describe(self) -> dict[str, Any]:
         """Return summary statistics for the container."""
-        summary = {
+        summary: dict[str, Any] = {
             "horizon": self.config.horizon,
             "n_features": self.n_features,
             "label_column": self.config.label_column,

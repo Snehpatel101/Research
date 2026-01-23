@@ -56,6 +56,7 @@ class TabularAdapter(BaseAdapter):
         self,
         df: pd.DataFrame,
         model_contract: ModelContract | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> AdapterResult:
         """
         Transform DataFrame to 2D arrays for tabular models.

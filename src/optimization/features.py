@@ -257,11 +257,14 @@ class FeatureOptimizer:
         if self.scoring == "accuracy":
             from sklearn.metrics import accuracy_score
 
-            return accuracy_score
+            def acc_fn(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+                return float(accuracy_score(y_true, y_pred))
+
+            return acc_fn
         elif self.scoring == "f1_weighted":
-            return lambda y_true, y_pred: f1_score(y_true, y_pred, average="weighted")
+            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="weighted"))
         elif self.scoring == "f1_macro":
-            return lambda y_true, y_pred: f1_score(y_true, y_pred, average="macro")
+            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="macro"))
         else:
             raise ValueError(f"Unknown scoring metric: {self.scoring}")
 
@@ -279,7 +282,7 @@ class FeatureOptimizer:
             model = model_factory({})
             model.fit(X_train, y_train)
             preds = model.predict(X_val)
-            return score_fn(y_val, preds)
+            return float(score_fn(y_val, preds))
         except Exception as e:
             logger.warning(f"Baseline score computation failed: {e}")
             return 0.0
@@ -691,8 +694,11 @@ class FeatureOptimizer:
         Returns:
             Tuple of (FeatureSelectionResult, FeaturePruningResult)
         """
-        selection_result = None
-        pruning_result = None
+        if method not in ["selection", "pruning", "both"]:
+            raise ValueError(f"Invalid method: {method}. Must be 'selection', 'pruning', or 'both'")
+
+        selection_result: FeatureSelectionResult | None = None
+        pruning_result: FeaturePruningResult | None = None
 
         if method in ["selection", "both"]:
             selection_result = self.optimize_selection(
@@ -703,6 +709,9 @@ class FeatureOptimizer:
             pruning_result = self.optimize_pruning(
                 X_train, y_train, feature_names, model_factory, X_val, y_val
             )
+
+        if selection_result is None or pruning_result is None:
+            raise ValueError(f"Method '{method}' requires both selection and pruning to be run")
 
         return selection_result, pruning_result
 

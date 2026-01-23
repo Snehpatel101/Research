@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from .oof_core import OOFPrediction
 
@@ -39,18 +39,20 @@ class OOFValidator:
         Returns:
             Validation result dict with passed status and any issues
         """
-        validation = {"passed": True, "issues": [], "coverage": {}}
+        issues: list[dict[str, Any]] = []
+        coverage_dict: dict[str, float] = {}
+        validation: dict[str, Any] = {"passed": True, "issues": issues, "coverage": coverage_dict}
 
         for model_name, oof_pred in oof_predictions.items():
             # Check for NaN predictions
             nan_count = oof_pred.predictions[f"{model_name}_pred"].isna().sum()
             coverage = 1.0 - (nan_count / len(original_index))
 
-            validation["coverage"][model_name] = coverage
+            coverage_dict[model_name] = coverage
 
             if nan_count > 0:
                 validation["passed"] = False
-                validation["issues"].append(
+                issues.append(
                     {
                         "model": model_name,
                         "missing_samples": int(nan_count),

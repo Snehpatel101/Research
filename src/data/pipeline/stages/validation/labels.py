@@ -3,13 +3,14 @@ Label sanity validation checks.
 """
 
 import logging
+from typing import Any
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def check_label_distribution(df: pd.DataFrame, label_col: str) -> dict:
+def check_label_distribution(df: pd.DataFrame, label_col: str) -> dict[str, dict[str, int | float]]:
     """
     Calculate label distribution for a horizon.
 
@@ -21,7 +22,7 @@ def check_label_distribution(df: pd.DataFrame, label_col: str) -> dict:
         Dictionary with label distribution
     """
     label_counts = df[label_col].value_counts().sort_index()
-    label_dist = {}
+    label_dist: dict[str, dict[str, int | float]] = {}
 
     for label, count in label_counts.items():
         label_name = {-1: "short", 0: "neutral", 1: "long"}.get(label, str(label))
@@ -32,7 +33,9 @@ def check_label_distribution(df: pd.DataFrame, label_col: str) -> dict:
     return label_dist
 
 
-def check_label_balance(label_dist: dict, horizon: int, warnings_found: list[str]) -> None:
+def check_label_balance(
+    label_dist: dict[str, dict[str, Any]], horizon: int, warnings_found: list[str]
+) -> None:
     """
     Check if labels are balanced, add warnings if not.
 
@@ -52,7 +55,9 @@ def check_label_balance(label_dist: dict, horizon: int, warnings_found: list[str
             warnings_found.append(f"h{horizon} {label_name}: high representation ({pct:.1f}%)")
 
 
-def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
+def check_per_symbol_distribution(
+    df: pd.DataFrame, label_col: str
+) -> dict[str, dict[str, int | float]]:
     """
     Calculate label distribution per symbol.
 
@@ -63,7 +68,7 @@ def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
     Returns:
         Dictionary with per-symbol statistics
     """
-    symbol_stats = {}
+    symbol_stats: dict[str, dict[str, int | float]] = {}
 
     for symbol in df["symbol"].unique():
         symbol_df = df[df["symbol"] == symbol]
@@ -93,7 +98,7 @@ def check_per_symbol_distribution(df: pd.DataFrame, label_col: str) -> dict:
     return symbol_stats
 
 
-def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> dict:
+def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> dict[str, float]:
     """
     Calculate bars-to-hit statistics.
 
@@ -132,7 +137,7 @@ def check_bars_to_hit(df: pd.DataFrame, label_col: str, bars_col: str) -> dict:
     return bars_stats
 
 
-def check_quality_scores(df: pd.DataFrame, quality_col: str) -> dict:
+def check_quality_scores(df: pd.DataFrame, quality_col: str) -> dict[str, float]:
     """
     Calculate quality score statistics.
 
@@ -160,7 +165,9 @@ def check_quality_scores(df: pd.DataFrame, quality_col: str) -> dict:
     return quality_stats
 
 
-def check_label_sanity(df: pd.DataFrame, horizons: list[int], warnings_found: list[str]) -> dict:
+def check_label_sanity(
+    df: pd.DataFrame, horizons: list[int], warnings_found: list[str]
+) -> dict[str, Any]:
     """
     Run all label sanity checks.
 
@@ -176,7 +183,7 @@ def check_label_sanity(df: pd.DataFrame, horizons: list[int], warnings_found: li
     logger.info("LABEL SANITY CHECKS")
     logger.info("=" * 60)
 
-    results = {}
+    results: dict[str, Any] = {}
 
     for horizon in horizons:
         label_col = f"label_h{horizon}"
@@ -189,7 +196,7 @@ def check_label_sanity(df: pd.DataFrame, horizons: list[int], warnings_found: li
 
         logger.info(f"\nHorizon {horizon}:")
 
-        horizon_results = {}
+        horizon_results: dict[str, Any] = {}
 
         # Label distribution
         label_dist = check_label_distribution(df, label_col)

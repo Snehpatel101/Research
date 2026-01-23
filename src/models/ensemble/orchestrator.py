@@ -181,7 +181,7 @@ class EnsembleOrchestrator:
             ValueError: If config.meta_learner is not a valid meta-learner
         """
         self.config = config
-        self.output_dir = config.output_dir
+        self.output_dir = Path(config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Validate meta-learner
@@ -272,7 +272,9 @@ class EnsembleOrchestrator:
             XGBoostMeta,
         )
 
-        meta_learner_map = {
+        meta_learner_map: dict[
+            str, type[RidgeMetaLearner | MLPMetaLearner | XGBoostMeta | CalibratedMetaLearner]
+        ] = {
             "ridge_meta": RidgeMetaLearner,
             "mlp_meta": MLPMetaLearner,
             "xgboost_meta": XGBoostMeta,
@@ -491,7 +493,7 @@ class EnsembleOrchestrator:
 
         # Generate ensemble predictions
         output = self._ensemble.predict(stacking_X)
-        return output.class_predictions
+        return np.asarray(output.class_predictions)
 
     def predict_proba(
         self,
@@ -534,7 +536,7 @@ class EnsembleOrchestrator:
         stacking_X = aligned.stacking_features
 
         output = self._ensemble.predict(stacking_X)
-        return output.class_probabilities
+        return np.asarray(output.class_probabilities)
 
     def _convert_to_oof_results(
         self,
@@ -643,7 +645,9 @@ class EnsembleOrchestrator:
             XGBoostMeta,
         )
 
-        meta_learner_map = {
+        meta_learner_map: dict[
+            str, type[RidgeMetaLearner | MLPMetaLearner | XGBoostMeta | CalibratedMetaLearner]
+        ] = {
             "ridge_meta": RidgeMetaLearner,
             "mlp_meta": MLPMetaLearner,
             "xgboost_meta": XGBoostMeta,

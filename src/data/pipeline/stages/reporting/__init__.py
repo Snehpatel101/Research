@@ -70,7 +70,7 @@ class Phase1ReportGenerator:
         if path and path.exists():
             logger.info(f"Loading {path}")
             with open(path) as f:
-                return json.load(f)
+                return dict(json.load(f))
         return None
 
     def _load_backtest_results(self, results_dir: Path | None) -> dict[int, dict[str, Any]]:
@@ -237,11 +237,11 @@ def generate_phase1_report(
     json_path = output_dir / "phase1_summary.json"
     generator.generate_json_export(json_path)
 
-    output_files = {
+    output_files: dict[str, Path] = {
         "markdown": md_path,
         "html": html_path,
         "json": json_path,
-        "charts_dir": generator.charts_dir,
+        "charts_dir": generator.charts_dir or output_dir / "charts",
     }
 
     logger.info("\n" + "=" * 70)

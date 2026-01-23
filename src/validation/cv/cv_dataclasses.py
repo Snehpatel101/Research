@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 
 @dataclass
@@ -72,15 +72,15 @@ class CVResult:
 
     @property
     def mean_accuracy(self) -> float:
-        return np.mean([m.accuracy for m in self.fold_metrics])
+        return float(np.mean([m.accuracy for m in self.fold_metrics]))
 
     @property
     def mean_f1(self) -> float:
-        return np.mean([m.f1 for m in self.fold_metrics])
+        return float(np.mean([m.f1 for m in self.fold_metrics]))
 
     @property
     def std_f1(self) -> float:
-        return np.std([m.f1 for m in self.fold_metrics])
+        return float(np.std([m.f1 for m in self.fold_metrics]))
 
     def get_stability_score(self) -> float:
         """Coefficient of variation for F1 score (lower = more stable)."""

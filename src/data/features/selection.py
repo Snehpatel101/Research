@@ -497,7 +497,7 @@ class FeatureSelector:
                 selected_indices.extend(indices)
 
         # Ensure minimum features by adding random families
-        families_added = set()
+        families_added: set[str] = set()
         while len(selected_indices) < min_features and len(families_added) < len(
             self._feature_families
         ):

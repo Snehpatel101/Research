@@ -21,10 +21,11 @@ import pandas as pd
 
 # Import MODEL_DATA_REQUIREMENTS for feature_set validation (MOD-005)
 # Canonical location: src.models.config.data_requirements
+_MODEL_DATA_REQUIREMENTS: dict[str, Any] | None
 try:
-    from src.models.config import MODEL_DATA_REQUIREMENTS
+    from src.models.config import MODEL_DATA_REQUIREMENTS as _MODEL_DATA_REQUIREMENTS
 except ImportError:
-    MODEL_DATA_REQUIREMENTS = None
+    _MODEL_DATA_REQUIREMENTS = None
 
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
@@ -66,18 +67,18 @@ class TrainerFeaturesMixin:
         recommended set for this model type. This is advisory only - the
         trainer will still proceed with the configured feature_set.
         """
-        if MODEL_DATA_REQUIREMENTS is None:
+        if _MODEL_DATA_REQUIREMENTS is None:
             return  # Skip if module not available
 
         model_name = self.config.model_name.lower()
-        if model_name not in MODEL_DATA_REQUIREMENTS:
+        if model_name not in _MODEL_DATA_REQUIREMENTS:
             logger.debug(
                 f"Model '{model_name}' not in MODEL_DATA_REQUIREMENTS, "
                 "skipping feature_set validation"
             )
             return
 
-        requirements = MODEL_DATA_REQUIREMENTS[model_name]
+        requirements = _MODEL_DATA_REQUIREMENTS[model_name]
         recommended_feature_set = requirements.feature_set
         configured_feature_set = self.config.feature_set
 
@@ -339,7 +340,7 @@ class TrainerFeaturesMixin:
             f"(from {len(df.columns)} total columns)"
         )
 
-        return feature_columns
+        return list(feature_columns)
 
     def _apply_feature_set_filter(
         self,
@@ -472,7 +473,7 @@ class TrainerFeaturesMixin:
                             f"Sequence model '{model_name}' using feature set "
                             f"'{feature_set_name}': {len(features)} features"
                         )
-                        return features
+                        return list(features)
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to load feature set manifest: {e}")
 

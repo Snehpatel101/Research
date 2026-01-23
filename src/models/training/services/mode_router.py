@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.core import TrainingMode
 
@@ -28,7 +28,7 @@ class ModeHandler:
     """Handler for a specific training mode."""
 
     mode: TrainingMode
-    handler: Callable
+    handler: Callable[..., Any]
     description: str
 
 
@@ -53,7 +53,7 @@ class ModeRouter:
     def register(
         self,
         mode: TrainingMode,
-        handler: Callable,
+        handler: Callable[..., Any],
         description: str = "",
     ) -> None:
         """

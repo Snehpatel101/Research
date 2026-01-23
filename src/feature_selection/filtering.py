@@ -255,9 +255,10 @@ def filter_correlated_features(
 
         for feat in removed:
             features_to_remove.add(feat)
-            removed_features[feat] = (
-                f"correlated with {selected} (priority: {get_feature_priority(selected)} > {get_feature_priority(feat)})"
-            )
+            if selected is not None:
+                removed_features[feat] = (
+                    f"correlated with {selected} (priority: {get_feature_priority(selected)} > {get_feature_priority(feat)})"
+                )
 
     # Keep features not in any removed set
     features_to_keep = [f for f in feature_cols if f not in features_to_remove]

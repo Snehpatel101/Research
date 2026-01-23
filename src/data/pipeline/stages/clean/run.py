@@ -14,13 +14,13 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -151,14 +151,9 @@ def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValida
 
 
 # Import from local modules
-from . import clean_symbol_data, clean_symbol_data_multi_timeframe
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
-# StageResult imports - adjust path based on pipeline structure
-try:
-    from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
-except ImportError:
-    # Fallback for different import paths
-    from pipeline.utils import StageResult, create_failed_result, create_stage_result
+from . import clean_symbol_data, clean_symbol_data_multi_timeframe
 
 
 def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") -> "StageResult":
@@ -202,7 +197,7 @@ def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") ->
         logger.info(f"Max gap fill: {max_gap_minutes} minutes")
 
         artifacts = []
-        cleaning_metadata = {}
+        cleaning_metadata: dict[str, Any] = {}
 
         for symbol in config.symbols:
             # Look for validated data first, fall back to raw if not found

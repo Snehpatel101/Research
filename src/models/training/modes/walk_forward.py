@@ -14,7 +14,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -293,8 +293,12 @@ class WalkForwardTrainer:
         """
         model_start = time.time()
 
-        # Get training data
-        X, y, weights = container.get_sklearn_arrays("train", return_df=True)
+        # Get training data (as DataFrames since return_df=True)
+        X_result, y_result, weights_result = container.get_sklearn_arrays("train", return_df=True)
+        # Cast to pandas types since we know return_df=True returns DataFrames/Series
+        X = cast(pd.DataFrame, X_result)
+        y = cast(pd.Series, y_result)
+        weights = cast(pd.Series, weights_result)
 
         # Get label end times for purging
         label_end_times = container.get_label_end_times("train")
@@ -451,20 +455,22 @@ class WalkForwardTrainer:
 
     def _build_summary(self, results: dict[str, WalkForwardTrainingResult]) -> dict[str, Any]:
         """Build summary from all model results."""
-        summary = {
-            "n_models": len(results),
-            "n_windows": self.wf_config.n_windows,
-            "window_type": self.wf_config.window_type,
-            "models": {},
-        }
+        models_summary: dict[str, dict[str, float]] = {}
 
         for model_name, result in results.items():
-            summary["models"][model_name] = {
+            models_summary[model_name] = {
                 "mean_accuracy": result.aggregated_metrics.get("mean_accuracy", 0),
                 "std_accuracy": result.aggregated_metrics.get("std_accuracy", 0),
                 "mean_f1": result.aggregated_metrics.get("mean_f1", 0),
                 "total_time": result.total_time,
             }
+
+        summary: dict[str, Any] = {
+            "n_models": len(results),
+            "n_windows": self.wf_config.n_windows,
+            "window_type": self.wf_config.window_type,
+            "models": models_summary,
+        }
 
         return summary
 

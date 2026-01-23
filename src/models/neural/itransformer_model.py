@@ -22,7 +22,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..base import PredictionOutput
+from ..base import PredictionOutput, TrainingMetrics
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -377,7 +377,7 @@ class iTransformerModel(BaseRNNModel):
         y_val: np.ndarray,
         sample_weights: np.ndarray | None = None,
         config: dict[str, Any] | None = None,
-    ):
+    ) -> TrainingMetrics:
         """
         Train the iTransformer model.
 
@@ -486,7 +486,7 @@ class iTransformerModel(BaseRNNModel):
             },
         )
 
-    def save(self, path) -> None:
+    def save(self, path: str | Any) -> None:
         """Save model with sequence length metadata."""
         self._validate_fitted()
         from pathlib import Path
@@ -507,7 +507,7 @@ class iTransformerModel(BaseRNNModel):
 
         logger.info(f"Saved iTransformer model to {path}")
 
-    def load(self, path) -> None:
+    def load(self, path: str | Any) -> None:
         """Load model with sequence length metadata."""
         from pathlib import Path
 

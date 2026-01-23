@@ -5,6 +5,8 @@ Centralizes all label-related column naming conventions and templates
 used across the pipeline stages for consistency.
 """
 
+from typing import Any
+
 # =============================================================================
 # LABEL COLUMN TEMPLATES
 # =============================================================================
@@ -110,7 +112,7 @@ def is_label_column(column_name: str) -> bool:
 # LABEL METADATA
 # =============================================================================
 
-LABEL_COLUMN_METADATA: dict[str, dict] = {
+LABEL_COLUMN_METADATA: dict[str, dict[str, Any]] = {
     "label_h{h}": {
         "description": "Primary triple-barrier label",
         "dtype": "int8",
@@ -173,7 +175,7 @@ LABEL_COLUMN_METADATA: dict[str, dict] = {
 }
 
 
-def get_label_metadata(column_template: str, horizon: int) -> dict:
+def get_label_metadata(column_template: str, horizon: int) -> dict[str, Any]:
     """
     Get metadata for a specific label column.
 

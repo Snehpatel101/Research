@@ -1,6 +1,7 @@
 """Model instantiation factory."""
 
 import logging
+from typing import Any
 
 from src.models import ModelRegistry, TrainerConfig
 
@@ -11,7 +12,7 @@ class ModelFactory:
     """Creates model instances from configuration."""
 
     @staticmethod
-    def create_trainer(model_config: dict, horizon: int) -> TrainerConfig:
+    def create_trainer(model_config: dict[str, Any], horizon: int) -> TrainerConfig:
         """
         Create TrainerConfig from model configuration.
 
@@ -47,7 +48,7 @@ class ModelFactory:
     def get_model_family(model_name: str) -> str:
         """Get model family for given model."""
         model_info = ModelRegistry.get_model_info(model_name)
-        return model_info["family"]
+        return str(model_info["family"])
 
 
 __all__ = ["ModelFactory"]

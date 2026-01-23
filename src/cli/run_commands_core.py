@@ -19,7 +19,7 @@ def _get_pipeline_config() -> Any:
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
-        from ..pipeline import data_config as pipeline_config
+        from src.data.pipeline import data_config as pipeline_config
 
         _pipeline_config = pipeline_config
     return _pipeline_config
@@ -29,7 +29,7 @@ def _get_pipeline_runner() -> Any:
     """Lazy import pipeline module."""
     global _pipeline_runner
     if _pipeline_runner is None:
-        from .. import pipeline
+        from src.data import pipeline
 
         _pipeline_runner = pipeline
     return _pipeline_runner
@@ -39,7 +39,7 @@ def _get_presets_module() -> Any:
     """Lazy import presets module."""
     global _presets_module
     if _presets_module is None:
-        from ..pipeline import presets
+        from src.data.pipeline import presets
 
         _presets_module = presets
     return _presets_module

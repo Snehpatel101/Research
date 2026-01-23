@@ -11,20 +11,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
 # Import from local modules
-from . import DataIngestor
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
-# StageResult imports - adjust path based on pipeline structure
-try:
-    from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
-except ImportError:
-    # Fallback for different import paths
-    from pipeline.utils import StageResult, create_failed_result, create_stage_result
+from . import DataIngestor
 
 
 def run_data_generation(config: "PipelineConfig", manifest: "ArtifactManifest") -> "StageResult":

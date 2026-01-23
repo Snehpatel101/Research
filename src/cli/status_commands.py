@@ -21,7 +21,7 @@ def _get_pipeline_config():
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
-        from ..phase1 import pipeline_config
+        from src.pipeline import data_config as pipeline_config  # type: ignore[import-not-found]
 
         _pipeline_config = pipeline_config
     return _pipeline_config
@@ -31,7 +31,7 @@ def _get_manifest():
     """Lazy import manifest module."""
     global _manifest
     if _manifest is None:
-        from ..common import manifest
+        from src.core.common import manifest
 
         _manifest = manifest
     return _manifest

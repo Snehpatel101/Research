@@ -13,7 +13,7 @@ import logging
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
 
-from .core import FeatureCategory, ScalerType
+from .core import FeatureCategory, ScalerType, ScalingStatistics
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -89,7 +89,7 @@ def create_scaler(
 
 def compute_statistics(
     data: np.ndarray, scaled_data: np.ndarray, feature_name: str
-) -> "ScalingStatistics":
+) -> ScalingStatistics:
     """Compute statistics for a feature before and after scaling."""
     from .core import ScalingStatistics
 

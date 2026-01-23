@@ -151,6 +151,7 @@ class BaseAdapter(ABC):
         self,
         df: pd.DataFrame,
         model_contract: ModelContract | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> AdapterResult:
         """
         Transform DataFrame to model-specific format.
@@ -158,6 +159,7 @@ class BaseAdapter(ABC):
         Args:
             df: Source DataFrame with features, labels, weights
             model_contract: Optional contract for validation
+            additional_dfs: Optional additional DataFrames for multi-stream adapters
 
         Returns:
             AdapterResult with transformed arrays
@@ -228,7 +230,7 @@ class BaseAdapter(ABC):
     def _get_weights(self, df: pd.DataFrame) -> np.ndarray | None:
         """Get sample weights from DataFrame."""
         if self.weight_column and self.weight_column in df.columns:
-            return df[self.weight_column].values.astype(np.float32)
+            return np.asarray(df[self.weight_column].values.astype(np.float32))
         return None
 
 

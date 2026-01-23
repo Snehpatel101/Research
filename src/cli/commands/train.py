@@ -51,7 +51,7 @@ def _load_phase3_stacking_data(
         FileNotFoundError: If stacking data does not exist
         ValueError: If data format is invalid
     """
-    import pandas as pd
+    import pandas as pd  # type: ignore[import-untyped]
 
     logger = logging.getLogger(__name__)
 
@@ -452,13 +452,16 @@ def train_model(
 
     logger.info(f"Starting training: model={model}, horizon={horizon}")
 
-    if stacking_data_dict:
+    if stacking_data_dict and stacking_data:
         # Phase 3->4 workflow: Train directly on stacking data
         results = _train_on_stacking_data(
             stacking_data_dict, trainer_config, skip_save, stacking_data
         )
     else:
         # Standard workflow: Use container
+        if container is None:
+            show_error("No data available for training")
+            raise typer.Exit(1) from None
         trainer = Trainer(trainer_config)
         try:
             results = trainer.run(container, skip_save=skip_save)
@@ -478,7 +481,7 @@ def _train_on_stacking_data(
     stacking_source: str,
 ) -> dict:
     """Train meta-learner on Phase 3 OOF predictions."""
-    from sklearn.model_selection import train_test_split
+    from sklearn.model_selection import train_test_split  # type: ignore[import-untyped]
 
     from src.models.trainer import Trainer, compute_classification_metrics
 

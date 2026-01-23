@@ -37,8 +37,8 @@ from .meta_labeler import MetaLabelGenerator
 from .primary_model import PrimaryClassifier
 
 if TYPE_CHECKING:
-    from src.data.pipeline.data_config import PipelineConfig
-    from src.data.pipeline.manifest import ArtifactManifest
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
     from src.data.pipeline.utils import StageResult
 
 logger = logging.getLogger(__name__)
@@ -268,7 +268,7 @@ def _compute_bet_sizes(
         volatility=vol,
     )
 
-    return result.position_sizes, result.metadata
+    return result.position_sizes, result.metadata or {}
 
 
 # =============================================================================

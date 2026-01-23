@@ -61,7 +61,7 @@ class ServerConfig:
 # =============================================================================
 
 try:
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field  # type: ignore[import-not-found]
 
     PYDANTIC_AVAILABLE = True
 except ImportError:
@@ -70,7 +70,7 @@ except ImportError:
     Field = lambda *args, **kwargs: None
 
 
-class PredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
+class PredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Request format for predictions."""
 
     features: list[list[float]] = Field(..., description="2D array of features")
@@ -93,7 +93,7 @@ class PredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
             )
 
 
-class PredictionResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+class PredictionResponse(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Response format for predictions."""
 
     predictions: list[int] = Field(..., description="Predicted class labels")
@@ -135,7 +135,7 @@ class PredictionResponse(BaseModel if PYDANTIC_AVAILABLE else object):
             return result
 
 
-class EnsemblePredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
+class EnsemblePredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Request format for ensemble predictions."""
 
     features: list[list[float]] = Field(..., description="2D array of features")
@@ -146,13 +146,13 @@ class EnsemblePredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):
     )
 
 
-class HealthResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+class HealthResponse(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Health check response."""
 
     status: str = Field(..., description="Server status")
 
 
-class ModelInfoResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+class ModelInfoResponse(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Model information response."""
 
     models: list[dict[str, Any]] = Field(..., description="Information about loaded models")
@@ -161,7 +161,7 @@ class ModelInfoResponse(BaseModel if PYDANTIC_AVAILABLE else object):
     feature_columns: list[str] = Field(..., description="Feature column names")
 
 
-class MetricsResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+class MetricsResponse(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Server metrics response."""
 
     request_count: int = Field(..., description="Total number of requests")
@@ -170,7 +170,7 @@ class MetricsResponse(BaseModel if PYDANTIC_AVAILABLE else object):
     average_latency_ms: float = Field(..., description="Average latency in milliseconds")
 
 
-class ErrorResponse(BaseModel if PYDANTIC_AVAILABLE else object):
+class ErrorResponse(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]
     """Error response."""
 
     error: str = Field(..., description="Error message")
@@ -251,8 +251,8 @@ class ModelServer:
             ImportError: If FastAPI is not installed
         """
         try:
-            from fastapi import FastAPI, HTTPException
-            from fastapi.responses import JSONResponse
+            from fastapi import FastAPI, HTTPException  # type: ignore[import-not-found]
+            from fastapi.responses import JSONResponse  # type: ignore[import-not-found]
         except ImportError:
             raise ImportError(
                 "FastAPI is required for model serving. "
@@ -407,7 +407,7 @@ class ModelServer:
             workers: Number of worker processes
         """
         try:
-            import uvicorn
+            import uvicorn  # type: ignore[import-not-found]
         except ImportError:
             raise ImportError(
                 "uvicorn is required to run the server. " "Install with: pip install uvicorn"

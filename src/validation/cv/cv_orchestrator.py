@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from src.core import MODEL_DATA_RANKS, CVMethod, PipelineConfig
 
@@ -281,27 +281,27 @@ class CVOrchestrator:
             ValueError: If cv_method is unknown
         """
         if self.cv_method == CVMethod.PURGED_KFOLD:
-            cv_config = PurgedKFoldConfig(
+            pkf_config = PurgedKFoldConfig(
                 n_splits=self.n_splits,
                 purge_bars=self.purge_bars,
                 embargo_bars=self.embargo_bars,
             )
-            return PurgedKFold(cv_config)
+            return PurgedKFold(pkf_config)
 
         elif self.cv_method == CVMethod.CPCV:
             # Convert bars to percentages for CPCV
             # CPCV uses percentage-based purge/embargo
-            cv_config = CPCVConfig(
+            cpcv_config = CPCVConfig(
                 n_groups=self.n_groups,
                 n_test_groups=self.n_test_groups,
                 max_combinations=self.max_combinations,
                 purge_pct=0.01,  # 1% default, will be adjusted in split()
                 embargo_pct=0.01,  # 1% default, will be adjusted in split()
             )
-            return CombinatorialPurgedCV(cv_config)
+            return CombinatorialPurgedCV(cpcv_config)
 
         elif self.cv_method == CVMethod.WALK_FORWARD:
-            cv_config = WalkForwardConfig(
+            wf_config = WalkForwardConfig(
                 n_windows=self.n_windows,
                 window_type=self.window_type,
                 min_train_pct=self.min_train_pct,
@@ -309,18 +309,18 @@ class CVOrchestrator:
                 embargo_bars=self.embargo_bars,
                 gap_bars=self.purge_bars,  # Use purge_bars as gap
             )
-            return WalkForwardEvaluator(cv_config)
+            return WalkForwardEvaluator(wf_config)
 
         elif self.cv_method == CVMethod.PBO:
             # PBO uses CPCV underneath for generating paths
-            cv_config = CPCVConfig(
+            pbo_config = CPCVConfig(
                 n_groups=self.n_groups,
                 n_test_groups=self.n_test_groups,
                 max_combinations=self.max_combinations,
                 purge_pct=0.01,
                 embargo_pct=0.01,
             )
-            return CombinatorialPurgedCV(cv_config)
+            return CombinatorialPurgedCV(pbo_config)
 
         else:
             raise ValueError(f"Unknown CV method: {self.cv_method}")
@@ -387,11 +387,11 @@ class CVOrchestrator:
             Number of CV splits/folds/paths
         """
         if self.cv_method in (CVMethod.CPCV, CVMethod.PBO):
-            return self._cv.get_n_splits(X, y, groups)
+            return int(self._cv.get_n_splits(X, y, groups))
         elif self.cv_method == CVMethod.WALK_FORWARD:
             return self.n_windows
         else:
-            return self._cv.get_n_splits(X, y, groups)
+            return int(self._cv.get_n_splits(X, y, groups))
 
     def get_split_info(
         self,

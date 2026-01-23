@@ -191,6 +191,9 @@ class SVMModel(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+
         # Check if probability estimation is enabled
         if hasattr(self._model, "predict_proba"):
             probabilities = self._model.predict_proba(X)
@@ -216,13 +219,18 @@ class SVMModel(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+
         if hasattr(self._model, "predict_proba"):
-            return self._model.predict_proba(X)
+            result: np.ndarray = self._model.predict_proba(X)
+            return result
         else:
             # Fallback using decision function
             decision = self._model.decision_function(X)
             exp_decision = np.exp(decision - decision.max(axis=1, keepdims=True))
-            return exp_decision / exp_decision.sum(axis=1, keepdims=True)
+            result_fallback: np.ndarray = exp_decision / exp_decision.sum(axis=1, keepdims=True)
+            return result_fallback
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""
@@ -268,7 +276,7 @@ class SVMModel(BaseModel):
         is not directly available. Returns None in these cases.
         For linear kernel, returns absolute coefficient values.
         """
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         # Only linear kernel has interpretable coefficients
@@ -288,15 +296,17 @@ class SVMModel(BaseModel):
 
     def get_support_vectors(self) -> np.ndarray | None:
         """Return the support vectors."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
-        return self._model.support_vectors_
+        result: np.ndarray = self._model.support_vectors_
+        return result
 
     def get_support_indices(self) -> np.ndarray | None:
         """Return indices of support vectors."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
-        return self._model.support_
+        result: np.ndarray = self._model.support_
+        return result
 
     def _convert_labels_to_sklearn(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from -1,0,1 to 0,1,2."""
@@ -308,6 +318,8 @@ class SVMModel(BaseModel):
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
         y_pred_sk = self._model.predict(X)
         y_pred = self._convert_labels_from_sklearn(y_pred_sk)
 

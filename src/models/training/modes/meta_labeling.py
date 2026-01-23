@@ -145,7 +145,7 @@ def compute_bet_size_labels(
     else:
         bet_size = correct
 
-    return np.clip(bet_size, 0.0, 1.0)
+    return np.asarray(np.clip(bet_size, 0.0, 1.0))
 
 
 def compute_directional_meta_labels(
@@ -183,7 +183,7 @@ def compute_directional_meta_labels(
     if quality_weights is not None:
         bet_size = bet_size * quality_weights
 
-    return np.clip(bet_size, 0.0, 1.0)
+    return np.asarray(np.clip(bet_size, 0.0, 1.0))
 
 
 # =============================================================================
@@ -286,7 +286,7 @@ class MetaLabelingTrainer:
 
         # Get quality weights
         if self.meta_config.use_quality_weights and w_train is not None:
-            quality_train = w_train.values
+            quality_train = np.asarray(w_train)
             quality_val = np.ones(len(X_val))
             quality_test = np.ones(len(X_test))
         else:
@@ -669,8 +669,8 @@ class MetaLabelingTrainer:
         # Could optionally set skipped trades to neutral: predictions[~trade_mask] = 0
 
         if return_details:
-            return predictions, bet_sizes, trade_mask
-        return predictions
+            return np.asarray(predictions), np.asarray(bet_sizes), np.asarray(trade_mask)
+        return np.asarray(predictions)
 
     def get_position_sizes(
         self,
@@ -699,4 +699,4 @@ class MetaLabelingTrainer:
         # Zero out skipped trades
         position_sizes[~trade_mask] = 0.0
 
-        return position_sizes
+        return np.asarray(position_sizes)

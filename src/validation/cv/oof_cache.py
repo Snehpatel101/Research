@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -151,18 +151,19 @@ class OOFCache:
 
         Converts non-JSON-serializable types and sorts keys.
         """
-        normalized = {}
+        normalized: dict[str, Any] = {}
         for key, value in sorted(config.items()):
             if isinstance(value, dict):
                 normalized[key] = self._normalize_config(value)
             elif isinstance(value, (list, tuple)):
-                normalized[key] = [
+                list_result: list[Any] = [
                     self._normalize_config(v) if isinstance(v, dict) else v for v in value
                 ]
+                normalized[key] = list_result
             elif isinstance(value, np.ndarray):
                 normalized[key] = value.tolist()
             elif isinstance(value, (np.integer, np.floating)):
-                normalized[key] = value.item()
+                normalized[key] = float(value.item())
             elif isinstance(value, Path):
                 normalized[key] = str(value)
             else:

@@ -86,6 +86,7 @@ class FeatureDriftMonitor:
 
         self._detectors = {}
         for i, name in enumerate(self._feature_names):
+            detector: PSIDetector | KSDetector
             if self.method == "psi":
                 detector = PSIDetector(
                     n_bins=self.n_bins,
@@ -148,7 +149,7 @@ class FeatureDriftMonitor:
         results = self.check_drift(X_current)
 
         drifted = [r for r in results if r.drift_detected]
-        severity_counts = {}
+        severity_counts: dict[str, int] = {}
         for r in results:
             sev = r.severity.value
             severity_counts[sev] = severity_counts.get(sev, 0) + 1

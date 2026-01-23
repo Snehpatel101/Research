@@ -92,7 +92,15 @@ class TimeframesSection:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TimeframesSection:
         default_canonical_ladder = [
-            "1min", "5min", "10min", "15min", "20min", "25min", "30min", "45min", "60min"
+            "1min",
+            "5min",
+            "10min",
+            "15min",
+            "20min",
+            "25min",
+            "30min",
+            "45min",
+            "60min",
         ]
         default_extended = ["240min", "1440min"]
         return cls(
@@ -1032,7 +1040,7 @@ class UnifiedConfig:
         -------
         MLConfig
         """
-        from src.ml_pipeline.config import MLConfig
+        from src.ml_pipeline.config import MLConfig  # type: ignore[import-not-found]
 
         return MLConfig(
             run_id=self.run_id,

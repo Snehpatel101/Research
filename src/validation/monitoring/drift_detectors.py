@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from scipy import stats
+from scipy import stats  # type: ignore[import-untyped]
 
 from .drift_types import (
     BaseDriftDetector,
@@ -71,7 +71,7 @@ class ADWINDetector(BaseDriftDetector):
     def _init_adwin(self) -> None:
         """Initialize or reset ADWIN instance."""
         try:
-            from river.drift import ADWIN
+            from river.drift import ADWIN  # type: ignore[import-not-found]
 
             self._adwin = ADWIN(delta=self.delta)
         except ImportError:
@@ -141,12 +141,12 @@ class ADWINDetector(BaseDriftDetector):
         _, p_value = stats.ttest_ind(self._fallback_window[:mid], self._fallback_window[mid:])
 
         if p_value < self.delta:
-            severity = self._compute_severity(first_half, second_half)
+            severity = self._compute_severity(float(first_half), float(second_half))
             return DriftResult(
                 drift_detected=True,
                 drift_type=DriftType.CONCEPT,
                 severity=severity,
-                metric_value=second_half,
+                metric_value=float(second_half),
                 threshold=self.delta,
                 details={
                     "p_value": p_value,
@@ -186,9 +186,9 @@ class ADWINDetector(BaseDriftDetector):
     def current_mean(self) -> float | None:
         """Current estimated mean."""
         if self._adwin is not None:
-            return self._adwin.estimation
+            return float(self._adwin.estimation)
         elif self._fallback_window:
-            return np.mean(self._fallback_window)
+            return float(np.mean(self._fallback_window))
         return None
 
     @property

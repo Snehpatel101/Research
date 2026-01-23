@@ -22,8 +22,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-import pandas as pd
-from scipy import stats
+import pandas as pd  # type: ignore[import-untyped]
+from scipy import stats  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -393,7 +393,7 @@ def check_information_leakage(
     Returns:
         LeakageReport with mutual information analysis
     """
-    from sklearn.feature_selection import mutual_info_classif
+    from sklearn.feature_selection import mutual_info_classif  # type: ignore[import-untyped]
 
     if isinstance(features, pd.DataFrame):
         if feature_names is None:

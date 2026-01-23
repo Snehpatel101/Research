@@ -350,7 +350,7 @@ class CVIntegratedFeatureSelector:
             List of selected feature names
         """
         importance = self.selector._compute_importance(X_train, y_train, sample_weights)
-        return importance.nlargest(self.n_features).index.tolist()
+        return list(importance.nlargest(self.n_features).index.tolist())
 
 
 __all__ = [

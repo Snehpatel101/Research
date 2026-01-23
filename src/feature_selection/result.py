@@ -125,7 +125,7 @@ class FeatureSelectionResult:
 
     # === Correlation/Variance Filtering Methods ===
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert to dictionary for JSON serialization.
 

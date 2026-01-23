@@ -23,7 +23,7 @@ class MetaLearner:
         meta_model_params: dict[str, Any] | None = None,
     ):
         self.primary_model = primary_model
-        self.meta_model = None
+        self.meta_model: RandomForestClassifier | None = None
         self.meta_model_type = meta_model_type
         self.meta_model_params = meta_model_params or {
             "n_estimators": 100,
@@ -31,7 +31,7 @@ class MetaLearner:
             "random_state": 42,
             "class_weight": "balanced",
         }
-        self.meta_labeler = None
+        self.meta_labeler: MetaLabeler | None = None
 
     def train(
         self,
@@ -103,6 +103,8 @@ class MetaLearner:
             self.meta_model.fit(X_meta, y_meta_valid)
 
         # 4. Evaluate on Train (just for sanity)
+        if self.meta_model is None:
+            raise RuntimeError("Meta model failed to train")
         preds = self.meta_model.predict(X_meta)
         return {
             "accuracy": accuracy_score(y_meta_valid, preds),

@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 import typer
 
 from src.cli.utils import (
@@ -105,9 +105,9 @@ def run_cv(
 
     # Import CV modules
     from src.core.container import TimeSeriesDataContainer
-    from src.cross_validation.cv_runner import CrossValidationRunner, analyze_cv_stability
-    from src.cross_validation.oof_generator import analyze_prediction_correlation
-    from src.cross_validation.purged_kfold import PurgedKFold, PurgedKFoldConfig
+    from src.validation.cv.cv_runner import CrossValidationRunner, analyze_cv_stability
+    from src.validation.cv.oof_generator import analyze_prediction_correlation
+    from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
     # Generate unique run ID for this CV run
     cv_run_id = output_name if output_name else generate_run_id()
@@ -245,7 +245,12 @@ def run_cv(
 
 def _compute_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Compute classification metrics."""
-    from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+    from sklearn.metrics import (  # type: ignore[import-untyped]
+        accuracy_score,
+        f1_score,
+        precision_score,
+        recall_score,
+    )
 
     return {
         "accuracy": float(accuracy_score(y_true, y_pred)),
@@ -262,14 +267,14 @@ def _run_walk_forward_for_model(
     label_end_times=None,
 ):
     """Run walk-forward evaluation for a single model."""
-    from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-    from src.cross_validation.walk_forward import (
+    from src.models.base import PredictionOutput
+    from src.models.registry import ModelRegistry
+    from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+    from src.validation.cv.walk_forward import (
         WalkForwardEvaluator,
         WalkForwardResult,
         WindowMetrics,
     )
-    from src.models.base import PredictionOutput
-    from src.models.registry import ModelRegistry
 
     logger = logging.getLogger(__name__)
     start_time = time.time()
@@ -447,7 +452,7 @@ def run_walk_forward(
 
     # Import modules
     from src.core.container import TimeSeriesDataContainer
-    from src.cross_validation.walk_forward import WalkForwardConfig, WalkForwardResult
+    from src.validation.cv.walk_forward import WalkForwardConfig, WalkForwardResult
 
     # Build config
     config = WalkForwardConfig(
@@ -578,10 +583,10 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
     """Run CPCV evaluation for a single model."""
     from sklearn.metrics import accuracy_score, f1_score
 
-    from src.cross_validation.cpcv import CombinatorialPurgedCV, CPCVPathResult, CPCVResult
-    from src.cross_validation.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
     from src.models.base import PredictionOutput
     from src.models.registry import ModelRegistry
+    from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVPathResult, CPCVResult
+    from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 
     logger = logging.getLogger(__name__)
 
@@ -664,7 +669,7 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
 
 def _compute_model_pbo(cpcv_results: dict, pbo_config):
     """Compute PBO from multiple model CPCV results."""
-    from src.cross_validation.pbo import PBOResult, compute_pbo
+    from src.validation.cv.pbo import PBOResult, compute_pbo
 
     model_names = list(cpcv_results.keys())
     n_models = len(model_names)
@@ -751,8 +756,8 @@ def run_cpcv_pbo(
 
     # Import modules
     from src.core.container import TimeSeriesDataContainer
-    from src.cross_validation.cpcv import CPCVConfig, CPCVResult
-    from src.cross_validation.pbo import PBOConfig, pbo_gate
+    from src.validation.cv.cpcv import CPCVConfig, CPCVResult
+    from src.validation.cv.pbo import PBOConfig, pbo_gate
 
     # Build configs
     cpcv_config = CPCVConfig(

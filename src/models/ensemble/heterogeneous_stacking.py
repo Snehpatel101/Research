@@ -262,7 +262,7 @@ class HeterogeneousStackingBuilder:
     def _extract_probability_features(
         self,
         aligned: AlignedOOFResult,
-    ) -> tuple:
+    ) -> tuple[np.ndarray, list[str]]:
         """Extract probability features from aligned OOF."""
         feature_names = []
         features_list = []
@@ -287,7 +287,7 @@ class HeterogeneousStackingBuilder:
     def _compute_derived_features(
         self,
         aligned: AlignedOOFResult,
-    ) -> tuple:
+    ) -> tuple[np.ndarray, list[str]]:
         """Compute derived ensemble diversity features."""
         n_samples = aligned.n_common
         len(aligned.model_names)
@@ -370,7 +370,7 @@ class HeterogeneousStackingBuilder:
                 f"Label alignment error: max_idx={max_idx}, y_true length={len(y_true)}"
             )
 
-        return y_true[common_indices]
+        return np.asarray(y_true[common_indices])
 
     def get_model_coverage_report(
         self,

@@ -83,6 +83,7 @@ class SequenceAdapter(BaseAdapter):
         self,
         df: pd.DataFrame,
         model_contract: ModelContract | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> AdapterResult:
         """
         Transform DataFrame to 3D sequence arrays.

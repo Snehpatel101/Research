@@ -17,13 +17,20 @@ class PipelinePathMixin:
     """
 
     # These attributes are defined in PipelineConfig dataclass
-    project_root: Path
+    # Using Any to avoid conflicts with subclass field definitions
+    project_root: Path | None
     run_id: str
+
+    def _get_project_root(self) -> Path:
+        """Get project_root with type safety."""
+        if self.project_root is None:
+            raise ValueError("project_root is not set")
+        return self.project_root
 
     @property
     def data_dir(self) -> Path:
         """Global data directory (for source/raw data only)."""
-        return self.project_root / "data"
+        return self._get_project_root() / "data"
 
     @property
     def raw_data_dir(self) -> Path:
@@ -33,7 +40,7 @@ class PipelinePathMixin:
     @property
     def run_dir(self) -> Path:
         """Directory for this specific run - all outputs go here."""
-        return self.project_root / "runs" / self.run_id
+        return self._get_project_root() / "runs" / self.run_id
 
     @property
     def run_data_dir(self) -> Path:
@@ -78,7 +85,7 @@ class PipelinePathMixin:
     @property
     def results_dir(self) -> Path:
         """Results directory."""
-        return self.project_root / "results"
+        return self._get_project_root() / "results"
 
     def create_directories(self) -> None:
         """Create all required directories for this run."""

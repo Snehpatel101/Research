@@ -15,6 +15,7 @@ This is the CANONICAL location for model data requirements. Import from here:
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class ModelFamily(str, Enum):
@@ -735,7 +736,7 @@ def get_models_by_family(family: ModelFamily) -> list[str]:
     return [name for name, req in MODEL_DATA_REQUIREMENTS.items() if req.family == family]
 
 
-def get_combined_requirements(model_names: list[str]) -> dict:
+def get_combined_requirements(model_names: list[str]) -> dict[str, Any]:
     """
     Get combined data requirements for multiple models.
 

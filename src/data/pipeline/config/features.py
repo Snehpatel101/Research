@@ -25,10 +25,10 @@ from src.core.common.timeframes import (
 
 
 def auto_scale_purge_embargo(
-    horizons: list,
+    horizons: list[int],
     purge_multiplier: float | None = None,
     embargo_multiplier: float | None = None,
-) -> tuple:
+) -> tuple[int, int]:
     """
     Auto-scale purge and embargo bars based on label horizons.
 
@@ -44,7 +44,7 @@ def auto_scale_purge_embargo(
     )
 
 
-def validate_horizons(horizons: list, data_length: int | None = None) -> list:
+def validate_horizons(horizons: list[int], data_length: int | None = None) -> list[str]:
     """
     Validate label horizons and optionally check against data length.
 
@@ -354,7 +354,7 @@ def get_mtf_base_timeframe(target_tf: str | None = None) -> str:
     return str(base_tf) if base_tf is not None else "1min"
 
 
-def get_mtf_config() -> dict:
+def get_mtf_config() -> dict[str, Any]:
     """
     Get the MTF configuration dictionary.
 
@@ -448,7 +448,7 @@ STATIONARITY_TESTS = {
 }
 
 
-def get_stationarity_config() -> dict:
+def get_stationarity_config() -> dict[str, Any]:
     """Get a copy of the stationarity test configuration."""
     import copy
 
@@ -476,7 +476,7 @@ DRIFT_CONFIG = {
 }
 
 
-def get_drift_config() -> dict:
+def get_drift_config() -> dict[str, Any]:
     """Get a copy of the drift configuration."""
     import copy
 

@@ -261,7 +261,7 @@ class TrainedModelRegistry:
         # Sort if specified
         if query and query.sort_metric:
             results.sort(
-                key=lambda e: e.metrics.get(query.sort_metric, float("-inf")),
+                key=lambda e: e.metrics.get(query.sort_metric or "", float("-inf")),
                 reverse=query.sort_descending,
             )
 
@@ -390,8 +390,8 @@ class TrainedModelRegistry:
         if not self._entries:
             return {"count": 0}
 
-        model_counts = {}
-        horizon_counts = {}
+        model_counts: dict[str, int] = {}
+        horizon_counts: dict[int, int] = {}
         metrics_ranges: dict[str, dict[str, float]] = {}
 
         for entry in self._entries.values():
@@ -454,7 +454,7 @@ class TrainedModelRegistry:
 
             info = ModelRegistry.get_model_info(model_name)
             if info:
-                return info.get("family", "unknown")
+                return str(info.get("family", "unknown"))
         except Exception:
             pass
 

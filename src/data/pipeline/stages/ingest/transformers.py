@@ -9,7 +9,7 @@ Handles:
 import logging
 
 import pandas as pd
-import pytz
+import pytz  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

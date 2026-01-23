@@ -138,17 +138,17 @@ class FeatureOptimizer:
             f"{self.metric}={self.best_score:.4f}"
         )
 
-        feature_scores = {
+        feature_importances = {
             feature: 1.0 if feature in self.best_features else 0.0 for feature in feature_names
         }
 
         return FeatureSelectionResult(
             selected_features=self.best_features,
-            feature_scores=feature_scores,
-            n_features_original=len(feature_names),
-            n_features_selected=len(self.best_features),
-            selection_method="optuna",
-            metadata={
+            feature_importances=feature_importances,
+            original_count=len(feature_names),
+            final_count=len(self.best_features),
+            selection_metadata={
+                "selection_method": "optuna",
                 "n_trials": self.n_trials,
                 "best_trial": best_trial.number,
                 "best_score": self.best_score,

@@ -156,11 +156,11 @@ class FeatureEngineer:
         # Period scaling configuration
         self.scale_periods = scale_periods
         self.base_timeframe = base_timeframe
+        self.period_scaler: PeriodScaler | None = None
         if scale_periods:
             self.period_scaler = PeriodScaler(timeframe, base_timeframe)
             self.period_config = self.period_scaler.config
         else:
-            self.period_scaler = None
             self.period_config = create_period_config(base_timeframe, base_timeframe)
 
         # MTF configuration

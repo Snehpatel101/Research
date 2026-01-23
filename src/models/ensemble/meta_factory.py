@@ -39,6 +39,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -75,7 +76,7 @@ class MetaLearnerConfig:
     # Ridge parameters
     alphas: list[float] = field(default_factory=lambda: [0.1, 1.0, 10.0, 100.0])
     # MLP parameters
-    hidden_layers: tuple = (64, 32)
+    hidden_layers: tuple[int, ...] = (64, 32)
     dropout: float = 0.2
     learning_rate: float = 0.001
     max_iter: int = 500
@@ -132,7 +133,7 @@ META_LEARNER_REGISTRY: dict[str, type] = {}
 _REGISTRY_INITIALIZED = False
 
 
-def register_meta_learner(name: str):
+def register_meta_learner(name: str) -> Callable[[type], type]:
     """
     Decorator to register a meta-learner class.
 
@@ -148,7 +149,7 @@ def register_meta_learner(name: str):
             ...
     """
 
-    def decorator(cls):
+    def decorator(cls: type) -> type:
         META_LEARNER_REGISTRY[name] = cls
         logger.debug(f"Registered meta-learner: {name}")
         return cls

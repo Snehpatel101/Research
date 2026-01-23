@@ -31,7 +31,10 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader as _DataLoader
+
+# Type alias for DataLoader with Any type parameter to satisfy mypy strict mode
+DataLoader = _DataLoader[Any]
 
 logger = logging.getLogger(__name__)
 
@@ -336,7 +339,7 @@ class LRFinder:
             suggested_lr = float(lrs_arr[min_grad_idx])
 
             # Safety: use LR before the steepest point (typically more stable)
-            safe_idx = max(0, min_grad_idx - 2)
+            safe_idx = int(max(0, int(min_grad_idx) - 2))
             suggested_lr = float(lrs_arr[safe_idx])
 
             return suggested_lr, "steepest"

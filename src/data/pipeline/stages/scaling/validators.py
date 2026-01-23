@@ -14,9 +14,24 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    # Protocol for validators that have validation_results, warnings_found, issues_found
+    from typing import Protocol
+
+    from . import FeatureScaler
+
+    class DataValidator(Protocol):
+        """Protocol for data validators used in stage validation."""
+
+        validation_results: dict[str, Any]
+        warnings_found: list[str]
+        issues_found: list[str]
+
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -29,7 +44,7 @@ def validate_scaling(
     test_df: pd.DataFrame,
     feature_cols: list[str],
     z_threshold: float = 5.0,
-) -> dict:
+) -> dict[str, Any]:
     """
     Validate that scaling was done correctly.
 
@@ -50,7 +65,7 @@ def validate_scaling(
     Returns:
         Validation report dictionary
     """
-    report = {
+    report: dict[str, Any] = {
         "is_valid": True,
         "timestamp": datetime.now().isoformat(),
         "issues": [],
@@ -92,10 +107,8 @@ def validate_scaling(
         if len(train_clean) > 0 and len(val_clean) > 0:
             train_mean, train_std = np.mean(train_clean), np.std(train_clean)
             val_mean, val_std = np.mean(val_clean), np.std(val_clean)
-            test_mean, test_std = (
-                np.mean(test_clean),
-                (np.std(test_clean) if len(test_clean) > 0 else (0, 0)),
-            )
+            test_mean = np.mean(test_clean) if len(test_clean) > 0 else 0.0
+            test_std = np.std(test_clean) if len(test_clean) > 0 else 0.0
 
             # Check if val/test means are within z_threshold of train
             if train_std > 0:
@@ -123,7 +136,7 @@ def validate_scaling(
 
 def validate_no_leakage(
     train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame, scaler: "FeatureScaler"
-) -> dict:
+) -> dict[str, Any]:
     """
     Validate that no data leakage occurred during scaling.
 
@@ -139,7 +152,7 @@ def validate_no_leakage(
     Returns:
         Leakage validation report
     """
-    report = {"leakage_detected": False, "checks": [], "issues": []}
+    report: dict[str, Any] = {"leakage_detected": False, "checks": [], "issues": []}
 
     for fname in scaler.feature_names:
         train_data = train_df[fname].values.astype(np.float64)
@@ -193,7 +206,7 @@ def validate_scaling_for_splits(
     feature_cols: list[str] | None = None,
     scaler_type: str = "robust",
     output_path: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Validate that scaling works correctly for train/val/test splits.
 
@@ -327,7 +340,7 @@ def add_scaling_validation_to_stage8(
     test_df: pd.DataFrame,
     feature_cols: list[str],
     scaler_type: str = "robust",
-) -> dict:
+) -> dict[str, Any]:
     """
     Add scaling validation results to a Stage 8 DataValidator.
 

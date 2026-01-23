@@ -27,8 +27,8 @@ from src.data.pipeline.stages.scaling import (
 from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -310,6 +310,8 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
         # Pipeline outputs to runs/{run_id}/data/splits/scaled/
         # Training scripts default to data/splits/scaled/
         # For multi-TF mode, copy the target_timeframe's data to maintain backward compat
+        if config.project_root is None:
+            raise ValueError("project_root is required for scaling stage")
         global_scaled_dir = config.project_root / "data" / "splits" / "scaled"
         global_scaled_dir.mkdir(parents=True, exist_ok=True)
 

@@ -15,7 +15,7 @@ class Environment(Enum):
 def detect_environment() -> Environment:
     """Detect execution environment (Colab/GPU/CPU)."""
     try:
-        import google.colab  # noqa: F401
+        import google.colab  # type: ignore[import-not-found]  # noqa: F401
 
         return Environment.COLAB
     except ImportError:

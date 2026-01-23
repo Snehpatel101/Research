@@ -512,7 +512,9 @@ class OHLCVFeatureSelector:
             importance = dict(zip(feature_names, result.importances_mean, strict=False))
             fold_importances.append(importance)
 
-            logger.debug(f"Fold {fold_idx}: top feature = {max(importance, key=importance.get)}")
+            logger.debug(
+                f"Fold {fold_idx}: top feature = {max(importance, key=lambda f: importance.get(f, 0.0))}"
+            )
 
         return fold_importances
 
@@ -721,7 +723,7 @@ class OHLCVFeatureSelector:
 
             logger.debug(
                 f"Regime {regime_id}: {n_regime_samples} samples, "
-                f"top feature = {max(importance, key=importance.get)}"
+                f"top feature = {max(importance, key=lambda f: importance.get(f, 0.0))}"
             )
 
         return regime_importances

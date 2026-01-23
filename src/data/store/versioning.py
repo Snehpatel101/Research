@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import total_ordering
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -138,9 +138,9 @@ class VersionInfo:
     description: str = ""
     schema_hash: str = ""  # Hash of column names + dtypes
     config_hash: str = ""  # Hash of feature config
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "version": str(self.version),
@@ -152,7 +152,7 @@ class VersionInfo:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> VersionInfo:
+    def from_dict(cls, data: dict[str, Any]) -> VersionInfo:
         """Create from dictionary."""
         return cls(
             version=SemanticVersion.parse(data["version"]),
@@ -210,7 +210,7 @@ class VersionManager:
         description: str = "",
         schema_hash: str = "",
         config_hash: str = "",
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
         created_at: datetime | None = None,
     ) -> VersionInfo:
         """
@@ -358,7 +358,7 @@ class VersionManager:
         logger.info("No schema or config changes, suggesting patch version bump")
         return base.bump_patch()
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "feature_set": self.feature_set,
@@ -366,7 +366,7 @@ class VersionManager:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> VersionManager:
+    def from_dict(cls, data: dict[str, Any]) -> VersionManager:
         """Create from dictionary."""
         manager = cls(data["feature_set"])
         for version_str, info_dict in data.get("versions", {}).items():
@@ -423,7 +423,7 @@ def compute_schema_hash(columns: list[str], dtypes: dict[str, str] | None = None
     return hashlib.sha256(schema_str.encode()).hexdigest()[:16]
 
 
-def compute_config_hash(config: dict) -> str:
+def compute_config_hash(config: dict[str, Any]) -> str:
     """
     Compute hash of feature configuration.
 

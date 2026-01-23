@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy import stats
+from scipy import stats  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +223,7 @@ def _bca_interval(
         denom = 1 - a * num
         if denom == 0:
             return z_alpha
-        return stats.norm.cdf(z0 + num / denom)
+        return float(stats.norm.cdf(z0 + num / denom))
 
     p_lower = bca_percentile(z_alpha_lower) * 100
     p_upper = bca_percentile(z_alpha_upper) * 100
@@ -269,7 +269,7 @@ def bootstrap_sharpe_ratio(
     def sharpe_fn(r: np.ndarray) -> float:
         if np.std(r, ddof=1) == 0:
             return 0.0
-        return np.mean(r) / np.std(r, ddof=1) * np.sqrt(periods_per_year)
+        return float(np.mean(r) / np.std(r, ddof=1) * np.sqrt(periods_per_year))
 
     return bootstrap_metric(
         returns,
@@ -389,7 +389,7 @@ def bootstrap_f1_score(
     Returns:
         BootstrapResult for F1 score
     """
-    from sklearn.metrics import f1_score
+    from sklearn.metrics import f1_score  # type: ignore[import-untyped]
 
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)

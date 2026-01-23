@@ -79,7 +79,7 @@ class DiversityMetrics:
     model_pair_correlations: dict[tuple[str, str], float] = field(default_factory=dict)
     recommendations: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, float | dict | list]:
+    def to_dict(self) -> dict[str, float | dict[str, float] | list[str]]:
         """Convert metrics to dictionary for logging/serialization."""
         return {
             "pairwise_correlation": self.pairwise_correlation,
@@ -888,18 +888,18 @@ def select_diverse_models(
     diversity_matrix = compute_mcc_diversity_matrix(predictions)
 
     # Get accuracies/scores for each model (prefer better models)
-    scores = []
+    scores: list[float] = []
     for name in model_names:
         oof = oof_predictions[name]
         if hasattr(oof, "metrics") and isinstance(oof.metrics, dict):
             score = oof.metrics.get("val_f1", oof.metrics.get("accuracy", 0.5))
         else:
             score = 0.5
-        scores.append(score)
-    scores = np.array(scores)
+        scores.append(float(score) if score is not None else 0.5)
+    scores_array = np.array(scores)
 
     # Start with best model
-    selected_indices = [int(np.argmax(scores))]
+    selected_indices = [int(np.argmax(scores_array))]
     logger.info(f"Starting with best model: {model_names[selected_indices[0]]}")
 
     # Greedily add diverse models

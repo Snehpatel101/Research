@@ -154,7 +154,7 @@ def mount_drive(mount_path: str = "/content/drive") -> bool:
         return False
 
     try:
-        from google.colab import drive
+        from google.colab import drive  # type: ignore[import-not-found]
 
         drive.mount(mount_path)
         print(f"Google Drive mounted at {mount_path}")
@@ -469,19 +469,21 @@ def plot_model_comparison(
 
     # Sort by value
     sorted_pairs = sorted(zip(models, values, strict=False), key=lambda x: x[1], reverse=True)
-    models, values = zip(*sorted_pairs, strict=False)
+    sorted_models, sorted_values = zip(*sorted_pairs, strict=False)
+    models_list = list(sorted_models)
+    values_list = list(sorted_values)
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(models)))
-    bars = ax.barh(models, values, color=colors)
+    colors = plt.get_cmap("viridis")(np.linspace(0.3, 0.9, len(models_list)))
+    bars = ax.barh(models_list, values_list, color=colors)
 
     ax.set_xlabel(metric.replace("_", " ").title())
     ax.set_title(title)
     ax.grid(True, axis="x", alpha=0.3)
 
     # Add value labels
-    for bar, value in zip(bars, values, strict=False):
+    for bar, value in zip(bars, values_list, strict=False):
         ax.text(
             value + 0.005,
             bar.get_y() + bar.get_height() / 2,

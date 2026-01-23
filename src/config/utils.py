@@ -66,7 +66,7 @@ class ConfigAccessLog:
     _instance: ConfigAccessLog | None = None
     _lock = threading.Lock()
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._entries: list[ConfigAccessEntry] = []
         self._entry_lock = threading.Lock()
         self._enabled = True
@@ -286,7 +286,7 @@ def get_config_value(attr_path: str, fallback: T, log_access: bool = True) -> T:
                 fallback_used=False,
             )
 
-        return value
+        return value  # type: ignore[no-any-return]
 
     except Exception as e:
         # Log the error but don't crash - return fallback
@@ -403,7 +403,7 @@ def list_config_paths(prefix: str = "") -> list[str]:
     if config is None:
         return []
 
-    paths = []
+    paths: list[str] = []
     _collect_paths(config, "", paths)
 
     if prefix:

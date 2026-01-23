@@ -14,14 +14,14 @@ import pandas as pd
 # =============================================================================
 
 
-def _ema(series: pd.Series, span: int, min_periods: int = None) -> pd.Series:
+def _ema(series: pd.Series, span: int, min_periods: int | None = None) -> pd.Series:
     """Exponential moving average."""
     if min_periods is None:
         min_periods = span
     return series.ewm(span=span, min_periods=min_periods, adjust=False).mean()
 
 
-def _sma(series: pd.Series, window: int, min_periods: int = None) -> pd.Series:
+def _sma(series: pd.Series, window: int, min_periods: int | None = None) -> pd.Series:
     """Simple moving average."""
     if min_periods is None:
         min_periods = window

@@ -197,7 +197,7 @@ class AlignedOOFResult:
         # Reshape and check across all models/classes
         probs_reshaped = self.probabilities.reshape(self.n_common, self.n_models, self.n_classes)
         # Valid if no NaN in any model/class
-        return ~np.any(np.isnan(probs_reshaped), axis=(1, 2))
+        return np.asarray(~np.any(np.isnan(probs_reshaped), axis=(1, 2)))
 
     def drop_incomplete(self) -> AlignedOOFResult:
         """

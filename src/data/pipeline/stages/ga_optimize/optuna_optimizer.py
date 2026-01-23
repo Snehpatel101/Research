@@ -359,7 +359,7 @@ def run_optuna_optimization(
     best_k_up = best_trial.params["k_up"]
     best_k_down = best_trial.params["k_down"]
     best_max_bars_mult = best_trial.params["max_bars_mult"]
-    best_fitness = -best_trial.value  # Negate back to positive fitness
+    best_fitness = -(best_trial.value or 0.0)  # Negate back to positive fitness
 
     logger.info("\n  OPTIMIZATION COMPLETE (Optuna TPE)")
     logger.info(f"  Best fitness: {best_fitness:.4f}")

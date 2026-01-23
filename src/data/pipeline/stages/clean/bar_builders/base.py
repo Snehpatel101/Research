@@ -230,7 +230,7 @@ class BaseBarBuilder(ABC):
             compression_ratio=len(df_input) / max(len(df_output), 1),
             min_bars_per_output=min(bars_per_output) if bars_per_output else 0,
             max_bars_per_output=max(bars_per_output) if bars_per_output else 0,
-            avg_bars_per_output=np.mean(bars_per_output) if bars_per_output else 0,
+            avg_bars_per_output=float(np.mean(bars_per_output)) if bars_per_output else 0.0,
         )
 
     def __repr__(self) -> str:

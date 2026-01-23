@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -615,7 +616,7 @@ def get_mtf_feature_names(
     return names
 
 
-def validate_mtf_config(config: MTFConfig) -> dict[str, any]:
+def validate_mtf_config(config: MTFConfig) -> dict[str, Any]:
     """
     Validate MTF configuration and return diagnostics.
 

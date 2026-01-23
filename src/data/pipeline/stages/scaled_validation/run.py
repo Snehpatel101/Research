@@ -8,7 +8,7 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -22,8 +22,8 @@ from src.data.pipeline.utils import StageResult, create_failed_result, create_st
 from src.data.pipeline.utils.feature_sets import resolve_feature_set
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ def run_scaled_validation(config: "PipelineConfig", manifest: "ArtifactManifest"
         definitions = get_feature_set_definitions()
         feature_set_names = resolve_feature_set_names(config.feature_generation)
 
-        drift_report: dict[str, dict] = {
+        drift_report_full: dict[str, Any] = {
             "run_id": config.run_id,
             "created_at": datetime.now().isoformat(),
             "enabled": True,
@@ -131,7 +131,7 @@ def run_scaled_validation(config: "PipelineConfig", manifest: "ArtifactManifest"
                 max_features=drift_config.get("max_features", 200),
             )
 
-            drift_report["feature_sets"][set_name] = {
+            drift_report_full["feature_sets"][set_name] = {
                 "feature_count": len(feature_cols),
                 "val_drift": val_drift,
                 "test_drift": test_drift,
@@ -148,7 +148,7 @@ def run_scaled_validation(config: "PipelineConfig", manifest: "ArtifactManifest"
         report_path = config.run_artifacts_dir / f"scaled_drift_report_{config.run_id}.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         with open(report_path, "w") as f:
-            json.dump(drift_report, f, indent=2)
+            json.dump(drift_report_full, f, indent=2)
 
         manifest.add_artifact(
             name="scaled_drift_report",

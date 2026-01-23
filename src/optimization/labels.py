@@ -362,7 +362,7 @@ class LabelOptimizer:
         error = 0.0
         for k in [-1, 0, 1]:
             error += (achieved.get(k, 0) - target.get(k, 0.333)) ** 2
-        return np.sqrt(error)
+        return float(np.sqrt(error))
 
     def optimize(
         self,

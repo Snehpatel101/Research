@@ -75,17 +75,22 @@ class DataPreparer:
         logger.debug(f"  Data prepared: {prepared.summary()}")
         return prepared
 
-    def get_feature_names(self, model_name: str) -> list[str]:
+    def get_feature_names(self, model_name: str, df: pd.DataFrame) -> list[str]:
         """
-        Get feature names for a specific model.
+        Get feature names for a specific model by preparing data.
+
+        Note: This prepares the data to get the feature names. For production
+        use, prefer calling prepare() and accessing feature_names from the result.
 
         Args:
             model_name: Name of the model
+            df: DataFrame to extract features from
 
         Returns:
             List of feature names
         """
-        return self._data_prep.get_feature_names(model_name)
+        prepared = self._data_prep.prepare(df=df, model_name=model_name)
+        return prepared.feature_names
 
     @property
     def data_prep(self) -> UnifiedDataPreparation:

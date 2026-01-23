@@ -77,7 +77,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 # Re-export ModelRegistry for backward compatibility
 from src.models.registry import ModelRegistry
@@ -421,7 +421,8 @@ class CrossValidationRunner:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Save CV results summary
-        summary = {
+        results_dict: dict[str, Any] = {}
+        summary: dict[str, Any] = {
             "models": self.models,
             "horizons": self.horizons,
             "cv_config": {
@@ -429,12 +430,12 @@ class CrossValidationRunner:
                 "purge_bars": self.cv.config.purge_bars,
                 "embargo_bars": self.cv.config.embargo_bars,
             },
-            "results": {},
+            "results": results_dict,
         }
 
         for (model_name, horizon), result in cv_results.items():
             key = f"{model_name}_h{horizon}"
-            summary["results"][key] = result.to_dict()
+            results_dict[key] = result.to_dict()
 
         with open(output_dir / "cv_results.json", "w") as f:
             json.dump(summary, f, indent=2)

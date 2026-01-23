@@ -19,6 +19,7 @@ Created: 2025-12-22
 import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -53,12 +54,12 @@ class SessionVolatilityStats:
     min_volatility: float
     max_volatility: float
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "SessionVolatilityStats":
+    def from_dict(cls, d: dict[str, Any]) -> "SessionVolatilityStats":
         """Create from dictionary."""
         return cls(**d)
 
@@ -70,10 +71,10 @@ class NormalizationReport:
     timestamp: str
     n_samples: int
     n_features_normalized: int
-    sessions_stats: dict[str, dict]
+    sessions_stats: dict[str, dict[str, Any]]
     warnings: list[str]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -128,7 +129,7 @@ class SessionNormalizer:
 
         # Statistics per session
         self._session_stats: dict[SessionName, SessionVolatilityStats] = {}
-        self._feature_stats: dict[SessionName, dict[str, dict]] = {}
+        self._feature_stats: dict[SessionName, dict[str, dict[str, Any]]] = {}
 
     @property
     def is_fitted(self) -> bool:
@@ -195,12 +196,12 @@ class SessionNormalizer:
 
     def _compute_feature_stats_for_session(
         self, df: pd.DataFrame, feature_cols: list[str], session_name: SessionName
-    ) -> dict[str, dict]:
+    ) -> dict[str, dict[str, Any]]:
         """Compute feature statistics for a session."""
         mask = self._get_session_mask(df, session_name)
         session_df = df.loc[mask]
 
-        stats = {}
+        stats: dict[str, dict[str, Any]] = {}
         for col in feature_cols:
             if col not in df.columns:
                 continue
@@ -382,7 +383,7 @@ class SessionNormalizer:
         self.fit(df, feature_cols, volatility_col)
         return self.transform(df, suffix)
 
-    def get_session_stats(self) -> dict[str, dict]:
+    def get_session_stats(self) -> dict[str, dict[str, Any]]:
         """
         Get volatility statistics for all sessions.
 
@@ -407,11 +408,11 @@ class SessionNormalizer:
 
         # Check for features with missing stats
         for session_name, feature_stats in self._feature_stats.items():
-            for fname, stats in feature_stats.items():
-                if stats.get("n_samples", 0) < 10:
+            for fname, feat_stats in feature_stats.items():
+                if feat_stats.get("n_samples", 0) < 10:
                     warnings.append(
                         f"Feature '{fname}' in session {session_name.value} "
-                        f"has only {stats.get('n_samples', 0)} samples"
+                        f"has only {feat_stats.get('n_samples', 0)} samples"
                     )
 
         return NormalizationReport(

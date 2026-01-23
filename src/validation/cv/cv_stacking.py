@@ -11,7 +11,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from .oof_generator import OOFGenerator, OOFPrediction, StackingDataset
 from .purged_kfold import PurgedKFold

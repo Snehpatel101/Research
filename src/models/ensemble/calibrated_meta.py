@@ -203,6 +203,9 @@ class CalibratedMetaLearner(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
+
         X_scaled = X
         if self._scaler is not None:
             X_scaled = self._scaler.transform(X)
@@ -318,6 +321,8 @@ class CalibratedMetaLearner(BaseModel):
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""
+        if self._model is None:
+            raise RuntimeError("Meta model is not fitted")
         y_pred_sk = self._model.predict(X)
         y_pred = map_classes_to_labels(y_pred_sk)
 

@@ -185,7 +185,7 @@ def clean_symbol_data_multi_timeframe(
     input_path: Path,
     output_dir: Path,
     symbol: str,
-    timeframes: list[str] = None,
+    timeframes: list[str] | None = None,
     include_timeframe_metadata: bool = True,
     max_gap_minutes: int = 30,
     include_session_metadata: bool = True,

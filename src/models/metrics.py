@@ -143,7 +143,7 @@ def compute_trading_metrics(
         max_consecutive_losses = 0
 
     # Build base metrics
-    metrics = {
+    metrics: dict[str, Any] = {
         "long_signals": long_signals,
         "short_signals": short_signals,
         "neutral_signals": neutral_signals,
@@ -269,9 +269,9 @@ def _compute_real_pnl_metrics(
         signals = y_pred
 
     # Calculate trade returns
-    trade_returns = []
-    gross_returns = []
-    costs_list = []
+    trade_returns_list: list[float] = []
+    gross_returns_list: list[float] = []
+    costs_list: list[float] = []
 
     position = 0  # Current position: -1, 0, 1
     entry_price = 0.0
@@ -290,8 +290,8 @@ def _compute_real_pnl_metrics(
                 gross_pnl = position * price_change * point_value
                 net_pnl = gross_pnl - cost_per_contract
 
-                trade_returns.append(net_pnl)
-                gross_returns.append(gross_pnl)
+                trade_returns_list.append(net_pnl)
+                gross_returns_list.append(gross_pnl)
                 costs_list.append(cost_per_contract)
 
             # Open new position
@@ -308,13 +308,13 @@ def _compute_real_pnl_metrics(
         gross_pnl = position * price_change * point_value
         net_pnl = gross_pnl - cost_per_contract
 
-        trade_returns.append(net_pnl)
-        gross_returns.append(gross_pnl)
+        trade_returns_list.append(net_pnl)
+        gross_returns_list.append(gross_pnl)
         costs_list.append(cost_per_contract)
 
     # Calculate metrics from trade returns
-    trade_returns = np.array(trade_returns)
-    gross_returns = np.array(gross_returns)
+    trade_returns = np.array(trade_returns_list)
+    gross_returns = np.array(gross_returns_list)
 
     if len(trade_returns) == 0:
         return {
@@ -549,7 +549,7 @@ def compute_metrics_with_regime_breakdown(
         timestamps=timestamps,
     )
 
-    result = {
+    result: dict[str, Any] = {
         "classification": classification_metrics,
         "trading": trading_metrics,
     }

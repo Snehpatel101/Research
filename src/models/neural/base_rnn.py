@@ -22,7 +22,11 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader as _DataLoader
+from torch.utils.data import TensorDataset
+
+# Type alias for DataLoader with Any type parameter
+DataLoader = _DataLoader[Any]
 
 from src.core.reproducibility import set_all_seeds
 
@@ -580,6 +584,9 @@ class BaseRNNModel(BaseModel):
         """Generate predictions with class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
+
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
 
         self._model.eval()
         amp_dtype = self._amp_dtype

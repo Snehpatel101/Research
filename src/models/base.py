@@ -74,7 +74,7 @@ class PredictionResult:
     @property
     def n_classes(self) -> int:
         """Number of classes."""
-        return self.class_probabilities.shape[1]
+        return int(self.class_probabilities.shape[1])
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""

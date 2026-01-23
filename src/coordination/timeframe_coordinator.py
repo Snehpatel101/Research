@@ -485,6 +485,9 @@ class TimeframeCoordinator:
             return dfs
 
         anchor_tf = self._anchor_timeframe
+        if anchor_tf is None:
+            logger.warning("No anchor timeframe set; returning unaligned DataFrames")
+            return dfs
         anchor_minutes = get_timeframe_minutes(anchor_tf)
 
         aligned = {}

@@ -87,7 +87,7 @@ class BetSizingResult:
     @property
     def n_active(self) -> int:
         """Number of non-zero positions."""
-        return (self.position_sizes != 0).sum()
+        return int((self.position_sizes != 0).sum())
 
     @property
     def avg_size(self) -> float:
@@ -354,7 +354,7 @@ class VolatilityScaler:
         # Array of volatilities
         volatility = np.asarray(volatility)
         scales = np.array([self.compute_scale_factor(float(v)) for v in volatility])
-        return base_sizes * scales
+        return np.asarray(base_sizes * scales)
 
 
 # =============================================================================
@@ -491,16 +491,18 @@ class BetSizer:
             # Rescale confidence to [0, 1] above threshold
             conf_rescaled = (meta_probs - self.min_confidence) / (1.0 - self.min_confidence)
             conf_rescaled = np.clip(conf_rescaled, 0, 1)
-            raw_sizes = conf_rescaled * self.max_position
+            raw_sizes = np.asarray(conf_rescaled * self.max_position, dtype=np.float32)
             raw_sizes[~above_threshold] = 0.0
 
         elif self.method == BetSizingMethod.KELLY:
             # Kelly criterion sizing
+            if self.kelly is None:
+                raise RuntimeError("Kelly criterion not initialized")
             fractions = self.kelly.compute_fractions_array(
                 win_probs=meta_probs,
                 win_loss_ratios=win_loss_ratio,
             )
-            raw_sizes = fractions * self.max_position
+            raw_sizes = np.asarray(fractions * self.max_position, dtype=np.float32)
             raw_sizes[~above_threshold] = 0.0
 
         elif self.method == BetSizingMethod.RISK_PARITY:

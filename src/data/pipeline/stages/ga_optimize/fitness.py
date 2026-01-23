@@ -90,19 +90,19 @@ def calculate_fitness(
     if neutral_pct < min_neutral_pct:
         # Return extremely negative value - no recovery possible
         # Scale: -10000 base, plus small gradient to guide optimization
-        return -10000.0 + (neutral_pct * 10.0)
+        return float(-10000.0 + (neutral_pct * 10.0))
 
     # HARD CONSTRAINT 2: Maximum neutral percentage (not enough signals)
     if neutral_pct > max_neutral_pct:
-        return -10000.0 + ((1.0 - neutral_pct) * 10.0)
+        return float(-10000.0 + ((1.0 - neutral_pct) * 10.0))
 
     # HARD CONSTRAINT 3: Minimum long/short percentages
     if long_pct < min_long_pct or short_pct < min_short_pct:
-        return -10000.0 + ((long_pct + short_pct) * 10.0)
+        return float(-10000.0 + ((long_pct + short_pct) * 10.0))
 
     # HARD CONSTRAINT 4: Any class below absolute minimum (fail-safe)
     if long_pct < min_any_class_pct or short_pct < min_any_class_pct:
-        return -10000.0 + (min(long_pct, short_pct) * 10.0)
+        return float(-10000.0 + (min(long_pct, short_pct) * 10.0))
 
     # HARD CONSTRAINT 5: Long/short signal ratio balance
     signal_count = n_long + n_short
@@ -112,7 +112,7 @@ def calculate_fitness(
         max_short_ratio = LABEL_BALANCE_CONSTRAINTS["max_short_signal_ratio"]
         if short_signal_ratio < min_short_ratio or short_signal_ratio > max_short_ratio:
             distance = abs(short_signal_ratio - 0.5)
-            return -10000.0 + ((1.0 - distance) * 10.0)
+            return float(-10000.0 + ((1.0 - distance) * 10.0))
 
     # ==========================================================================
     # 1. NEUTRAL SCORE (HIGH WEIGHT - target 20-30% neutral)
@@ -276,7 +276,7 @@ def calculate_fitness(
         + class_balance_penalty
     )
 
-    return fitness
+    return float(fitness)
 
 
 def evaluate_individual(

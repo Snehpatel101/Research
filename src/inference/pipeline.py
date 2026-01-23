@@ -344,18 +344,21 @@ class InferencePipeline:
         weights: list[float] | None,
     ) -> PredictionResult:
         """Average probabilities across models."""
+        weights_list: list[float]
         if weights is None:
-            weights = [1.0] * len(results)
+            weights_list = [1.0] * len(results)
+        else:
+            weights_list = weights
 
         # Normalize weights
-        weights = np.array(weights) / sum(weights)
+        weights_array: np.ndarray = np.array(weights_list) / sum(weights_list)
 
         # Average probabilities
         n_samples = results[0].predictions.n_samples
         n_classes = results[0].predictions.n_classes
         avg_probs = np.zeros((n_samples, n_classes))
 
-        for result, w in zip(results, weights, strict=False):
+        for result, w in zip(results, weights_array, strict=False):
             avg_probs += w * result.predictions.class_probabilities
 
         # Get predictions from averaged probabilities

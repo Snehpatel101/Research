@@ -51,7 +51,7 @@ def train_model(
     # Import here to avoid circular dependency
     from .trainer import Trainer
 
-    config_kwargs = {
+    config_kwargs: dict[str, Any] = {
         "model_name": model_name,
         "horizon": horizon,
     }
@@ -90,8 +90,10 @@ def evaluate_model(
     if model.requires_sequences:
         dataset = container.get_pytorch_sequences(split, seq_len=60, symbol_isolated=True)
         # Convert to arrays (simplified - in practice use DataLoader)
-        X_list, y_list = [], []
-        for i in range(len(dataset)):
+        X_list: list[Any] = []
+        y_list: list[Any] = []
+        dataset_len = len(dataset)  # type: ignore[arg-type]
+        for i in range(dataset_len):
             X_i, y_i, _ = dataset[i]
             X_list.append(X_i)
             y_list.append(y_i)

@@ -106,7 +106,7 @@ def calculate_hurst_exponent(prices: np.ndarray, min_lag: int = 2, max_lag: int 
     hurst = (n_points * sum_xy - sum_x * sum_y) / denominator
 
     # Clip to valid range
-    return np.clip(hurst, 0.0, 1.0)
+    return float(np.clip(hurst, 0.0, 1.0))
 
 
 def calculate_rolling_hurst(

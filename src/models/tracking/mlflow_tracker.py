@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Lazy import MLflow to make it optional
 try:
-    import mlflow
-    from mlflow.tracking import MlflowClient
+    import mlflow  # type: ignore[import-not-found]
+    from mlflow.tracking import MlflowClient  # type: ignore[import-not-found]
 
     MLFLOW_AVAILABLE = True
 except ImportError:
@@ -84,7 +84,7 @@ class MLflowTracker(ExperimentTracker):
     @property
     def experiment_id(self) -> str:
         """Get experiment ID."""
-        return self._experiment_id
+        return str(self._experiment_id)
 
     def start_run(
         self,

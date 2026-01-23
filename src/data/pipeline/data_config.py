@@ -88,7 +88,7 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
         default_factory=lambda: _get_global_or_default("timeframes.default_primary", "5min")
     )
     output_timeframes: list[str] | None = None
-    bar_resolution: str = field(default=None)
+    bar_resolution: str | None = field(default=None)
     # MTF-P1-002: When True, process all 9 canonical timeframes (1m-1h) through pipeline
     # This enables heterogeneous ensembles where each base model trains on its preferred TF
     process_all_timeframes: bool = False
@@ -195,7 +195,7 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     model_config: dict[str, Any] | None = None
 
     # Paths (auto-generated from run_id)
-    project_root: Path = field(default=None)
+    project_root: Path | None = field(default=None)
 
     def __post_init__(self):
         """Validate configuration after initialization."""

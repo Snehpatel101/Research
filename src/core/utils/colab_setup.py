@@ -28,6 +28,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def is_colab() -> bool:
@@ -53,7 +54,7 @@ def setup_environment(
     mount_drive: bool = True,
     use_gpu: bool = True,
     repo_url: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Unified environment setup for Colab-hosted or local runtimes.
 
@@ -86,7 +87,7 @@ def setup_environment(
     # Drive mount (Colab-hosted only)
     if is_colab_runtime and mount_drive:
         try:
-            from google.colab import drive
+            from google.colab import drive  # type: ignore[import-not-found]
 
             drive.mount("/content/drive")
             env_info["drive_mounted"] = True
@@ -118,12 +119,13 @@ def setup_environment(
             capture_output=True,
         )
 
-    env_info["repo_root"] = resolved_root.resolve()
+    repo_root_path = resolved_root.resolve()
+    env_info["repo_root"] = repo_root_path
 
     # Add repo to path and chdir
-    if str(env_info["repo_root"]) not in sys.path:
-        sys.path.insert(0, str(env_info["repo_root"]))
-    os.chdir(env_info["repo_root"])
+    if str(repo_root_path) not in sys.path:
+        sys.path.insert(0, str(repo_root_path))
+    os.chdir(repo_root_path)
 
     # GPU detection
     if use_gpu:
@@ -149,7 +151,7 @@ def setup_colab_environment(
     mount_drive: bool = True,
     use_gpu: bool = True,
     repo_url: str = "https://github.com/Snehpatel101/Research.git",
-) -> dict:
+) -> dict[str, Any]:
     """
     Configure environment for Google Colab compatibility.
 
@@ -239,15 +241,18 @@ def get_trainer_for_colab(
     from src.models.trainer import Trainer
 
     # Set Colab-friendly defaults
+    output_dir_path: Path
     if output_dir is None:
-        output_dir = Path("/content/experiments") if is_colab() else Path("experiments/runs")
+        output_dir_path = Path("/content/experiments") if is_colab() else Path("experiments/runs")
+    else:
+        output_dir_path = Path(output_dir)
 
     # Create config with Colab settings
     config = TrainerConfig(
         model_name=model_name,
         horizon=horizon,
-        output_dir=Path(output_dir),
-        feature_set=feature_set,
+        output_dir=output_dir_path,
+        feature_set=feature_set if feature_set is not None else "",
         evaluate_test_set=True,
         use_calibration=True,
         **trainer_kwargs,
@@ -312,7 +317,7 @@ def train_ensemble_colab(
 
 
 # Colab-specific DataLoader wrapper
-def get_colab_dataloader_kwargs() -> dict:
+def get_colab_dataloader_kwargs() -> dict[str, Any]:
     """
     Get DataLoader kwargs optimized for Colab.
 

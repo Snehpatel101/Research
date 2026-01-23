@@ -285,7 +285,7 @@ class XGBoostMeta(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances by gain."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         importance = self._model.get_score(importance_type="gain")
@@ -301,7 +301,7 @@ class XGBoostMeta(BaseModel):
                     result[key] = value
             return result
 
-        return importance
+        return dict(importance)
 
     def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""

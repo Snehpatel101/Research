@@ -121,7 +121,7 @@ def _calculate_shannon_entropy(bin_counts: np.ndarray) -> float:
     # Shannon entropy: -sum(p * log2(p))
     entropy = -np.sum(probs * np.log2(probs))
 
-    return entropy
+    return float(entropy)
 
 
 def _rolling_shannon_entropy(returns: np.ndarray, window: int, n_bins: int) -> np.ndarray:
@@ -321,7 +321,7 @@ def _normalized_lz_complexity(complexity: int, n: int) -> float:
     if max_complexity == 0:
         return np.nan
 
-    return complexity / max_complexity
+    return float(complexity / max_complexity)
 
 
 def _rolling_lz_complexity(binary_changes: np.ndarray, window: int) -> np.ndarray:
@@ -468,7 +468,7 @@ def _phi_correlation(data: np.ndarray, m: int, r: float) -> float:
     # Avoid log(0)
     proportions = np.clip(proportions, 1e-10, 1.0)
 
-    return np.mean(np.log(proportions))
+    return int(float(np.mean(np.log(proportions))))
 
 
 def _approximate_entropy(data: np.ndarray, m: int, r_fraction: float) -> float:
@@ -731,7 +731,7 @@ def _calculate_hurst_rs(prices: np.ndarray) -> float:
 
         # Clip to reasonable range
         hurst = np.clip(hurst, 0.0, 1.0)
-        return hurst
+        return int(float(hurst))
     except Exception:
         return np.nan
 
@@ -937,7 +937,7 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
     if A == 0:
         return np.inf  # Will be clipped to a large value
 
-    return -np.log(A / B)
+    return int(float(-np.log(A / B)))
 
 
 def _rolling_sample_entropy(data: np.ndarray, window: int, m: int, r: float) -> np.ndarray:

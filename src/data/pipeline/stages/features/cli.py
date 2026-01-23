@@ -66,7 +66,7 @@ def main():
 
         if symbol_files:
             # Process each symbol independently (no cross-asset features)
-            results = engineer.process_multi_symbol(symbol_files)
+            results = engineer.process_multi_symbol(dict(symbol_files))
         else:
             print("No files found for specified symbols")
             results = {}

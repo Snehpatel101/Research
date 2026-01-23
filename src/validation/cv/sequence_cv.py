@@ -32,9 +32,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -299,7 +300,9 @@ class SequenceCVBuilder:
         sorted_indices = np.sort(fold_indices)
 
         # Build set for fast fold membership check
-        fold_set = set(sorted_indices.tolist()) if not allow_lookback_outside else None
+        fold_set: set[Any] | None = (
+            set(sorted_indices.tolist()) if not allow_lookback_outside else None
+        )
 
         sequences = []
         labels = []
@@ -317,7 +320,7 @@ class SequenceCVBuilder:
                 continue
 
             # Check 2: If not allowing lookback outside, verify all lookback in fold
-            if not allow_lookback_outside:
+            if not allow_lookback_outside and fold_set is not None:
                 lookback_in_fold = all(idx in fold_set for idx in range(start_idx, target_idx))
                 if not lookback_in_fold:
                     n_dropped += 1

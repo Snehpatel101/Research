@@ -58,9 +58,9 @@ class SequenceConfig:
 
     seq_len: int
     stride: int = 1
-    feature_columns: list[str] = None
+    feature_columns: list[str] | None = None
     label_column: str = "label_h20"
-    weight_column: str = "sample_weight_h20"
+    weight_column: str | None = "sample_weight_h20"
     symbol_column: str | None = "symbol"
 
     def __post_init__(self) -> None:
@@ -348,7 +348,7 @@ class SequenceDataset(Dataset):
     @property
     def n_features(self) -> int:
         """Number of features per time step."""
-        return len(self.config.feature_columns)
+        return len(self.config.feature_columns or [])
 
     @property
     def seq_len(self) -> int:
@@ -363,14 +363,14 @@ class SequenceDataset(Dataset):
     def get_all_labels(self) -> np.ndarray:
         """Get all labels for the valid sequences (for stratification)."""
         target_indices = self._indices + self.config.seq_len - 1
-        return self._labels[target_indices]
+        return np.asarray(self._labels[target_indices])
 
     def get_all_weights(self) -> np.ndarray:
         """Get all weights for the valid sequences."""
         target_indices = self._indices + self.config.seq_len - 1
-        return self._weights[target_indices]
+        return np.asarray(self._weights[target_indices])
 
-    def get_label_distribution(self) -> dict:
+    def get_label_distribution(self) -> dict[int, int]:
         """Get label value counts for valid sequences."""
         labels = self.get_all_labels()
         unique, counts = np.unique(labels, return_counts=True)

@@ -401,7 +401,7 @@ class RegimeDetector:
             if len(x) < 2:
                 return 50.0
             last_val = x.iloc[-1]
-            return 100 * (x < last_val).sum() / len(x)
+            return float(100 * (x < last_val).sum() / len(x))
 
         pct_rank = volatility.rolling(lookback, min_periods=lookback // 2).apply(
             percentile_rank, raw=False

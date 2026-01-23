@@ -88,7 +88,9 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         self._volatility_regime_col = volatility_regime_col
         self._trend_regime_col = trend_regime_col
         self._structure_regime_col = structure_regime_col
-        self._symbol = symbol
+        # Override parent's _symbol with the provided value or use parent's default
+        if symbol is not None:
+            self._symbol = symbol
 
     @property
     def labeling_type(self) -> LabelingType:
@@ -202,6 +204,9 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         k_up: float | None = None,
         k_down: float | None = None,
         max_bars: int | None = None,
+        apply_transaction_costs: bool | None = None,
+        symbol: str | None = None,
+        volatility_regime: str | None = None,
         **kwargs: Any,
     ) -> LabelingResult:
         """
@@ -421,17 +426,12 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
         # Compute quality metrics
         result.quality_metrics = self.get_quality_metrics(result)
 
-        # Add regime distribution to quality metrics
-        total_counted = sum(regime_counts.values())
-        if total_counted > 0:
-            top_regimes = sorted(regime_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-            result.quality_metrics["regime_distribution"] = {
-                k: v / total_counted * 100 for k, v in top_regimes
-            }
-
-        # Log statistics
-        self._log_label_statistics(result, horizon)
+        # Log regime distribution (metadata dict expects np.ndarray values, so we only log)
         self._log_regime_distribution(regime_counts)
+        logger.info(
+            f"AdaptiveTripleBarrier labels computed: "
+            f"horizon={horizon}, valid={int((result.labels != -99).sum())}"
+        )
 
         return result
 

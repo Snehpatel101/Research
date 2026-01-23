@@ -10,7 +10,10 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import torch
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ logger = logging.getLogger(__name__)
 def is_colab() -> bool:
     """Detect if running in Google Colab."""
     try:
-        import google.colab  # noqa: F401
+        import google.colab  # type: ignore[import-not-found]  # noqa: F401
 
         return True
     except ImportError:
@@ -38,7 +41,7 @@ def is_kaggle() -> bool:
 def is_notebook() -> bool:
     """Detect if running in a Jupyter notebook."""
     try:
-        from IPython import get_ipython
+        from IPython import get_ipython  # type: ignore[import-not-found]
 
         shell = get_ipython()
         if shell is None:
@@ -59,9 +62,11 @@ def get_environment_info() -> dict[str, Any]:
     }
 
 
-def setup_colab(mount_drive: bool = False, install_packages: list | None = None) -> dict[str, Any]:
+def setup_colab(
+    mount_drive: bool = False, install_packages: list[str] | None = None
+) -> dict[str, Any]:
     """Setup Google Colab environment for ML training."""
-    results = {
+    results: dict[str, Any] = {
         "is_colab": is_colab(),
         "drive_mounted": False,
         "packages_installed": [],
@@ -218,7 +223,8 @@ def get_best_gpu() -> GPUInfo | None:
     n_gpus = get_gpu_count()
     if n_gpus == 0:
         return None
-    best_gpu, best_free = None, -1
+    best_gpu: GPUInfo | None = None
+    best_free: float = -1.0
     for i in range(n_gpus):
         info = get_gpu_info(i)
         if info and info.free_memory_gb > best_free:
@@ -240,7 +246,7 @@ def get_device(prefer_gpu: bool = True) -> str:
 # =============================================================================
 
 
-def get_amp_dtype(gpu_info: GPUInfo | None = None):
+def get_amp_dtype(gpu_info: GPUInfo | None = None) -> torch.dtype:
     """Get appropriate AMP dtype: bfloat16 for Ampere+, float16 for Volta/Turing, float32 otherwise."""
     import torch
 
@@ -370,7 +376,7 @@ def estimate_memory_requirements(
     n_features: int,
     hidden_size: int = 128,
     num_layers: int = 2,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Estimate GPU memory requirements for training."""
     family = model_family.lower()
     if family == "boosting":
@@ -524,12 +530,12 @@ class DeviceManager:
         return self._gpu_info
 
     @property
-    def amp_dtype(self):
+    def amp_dtype(self) -> torch.dtype:
         return self._amp_dtype
 
     @property
     def amp_enabled(self) -> bool:
-        return self._mp_config["enabled"]
+        return bool(self._mp_config["enabled"])
 
     @property
     def scaler(self) -> torch.amp.GradScaler | None:
@@ -539,7 +545,7 @@ class DeviceManager:
     def mixed_precision_config(self) -> dict[str, Any]:
         return self._mp_config.copy()
 
-    def autocast(self):
+    def autocast(self) -> torch.amp.autocast:
         """Get autocast context manager for mixed precision."""
         import torch
 

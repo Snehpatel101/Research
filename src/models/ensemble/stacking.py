@@ -341,7 +341,7 @@ class StackingEnsemble(BaseModel):
 
         if use_default_for_oof:
             # Use empty configs (defaults) for OOF to prevent leakage
-            oof_base_configs: dict[str, dict] = {}
+            oof_base_configs: dict[str, dict[str, Any]] = {}
             logger.info("Using DEFAULT configs for OOF generation (leakage prevention enabled)")
         else:
             # Legacy behavior: use provided configs (NOT RECOMMENDED)
@@ -526,7 +526,7 @@ class StackingEnsemble(BaseModel):
         X_train: np.ndarray,
         y_train: np.ndarray,
         base_model_names: list[str],
-        base_model_configs: dict[str, dict],
+        base_model_configs: dict[str, dict[str, Any]],
         sample_weights: np.ndarray | None,
         use_probabilities: bool,
         label_end_times: pd.Series | None = None,
@@ -644,11 +644,11 @@ class StackingEnsemble(BaseModel):
             X_fold_val = X_train[val_idx]
             y_fold_val = y_train[val_idx]
 
-            # Initialize sequence fold variables (may be set below if heterogeneous)
-            X_seq_fold_train_cache: np.ndarray | None = None
-            X_seq_fold_val_cache: np.ndarray | None = None
-            y_seq_fold_train: np.ndarray | None = None
-            y_seq_fold_val: np.ndarray | None = None
+            # Reset sequence fold variables for this fold
+            X_seq_fold_train_cache = None
+            X_seq_fold_val_cache = None
+            y_seq_fold_train = None
+            y_seq_fold_val = None
 
             # Sequence data slicing (only if heterogeneous and seq data provided)
             # Must adjust indices by offset since sequence data is shorter
@@ -880,11 +880,11 @@ class StackingEnsemble(BaseModel):
                 predictions[:, start_col:end_col] = probs
             else:
                 # For class predictions, use voting
-                all_preds = []
+                all_preds_list: list[np.ndarray] = []
                 for model in models:
                     output = model.predict(model_X)
-                    all_preds.append(output.class_predictions)
-                all_preds = np.array(all_preds)
+                    all_preds_list.append(output.class_predictions)
+                all_preds = np.array(all_preds_list)
                 # Mode across folds
                 from scipy import stats
 
@@ -1254,13 +1254,13 @@ class StackingEnsemble(BaseModel):
                 model_X = X_val
 
             # Average predictions across folds
-            all_preds = []
+            all_preds_list = []
             for model in self._base_models[model_idx]:
                 output = model.predict(model_X)
-                all_preds.append(output.class_predictions)
+                all_preds_list.append(output.class_predictions)
 
             # Mode across folds for final prediction
-            all_preds = np.array(all_preds)
+            all_preds = np.array(all_preds_list)
             from scipy import stats as sp_stats
 
             mode_result = sp_stats.mode(all_preds, axis=0, keepdims=False)

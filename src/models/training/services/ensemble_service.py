@@ -40,7 +40,7 @@ class EnsembleServiceResult:
 
     aligned_oof: AlignedOOFResult | None
     stacking_dataset: StackingDataset | None
-    ensemble_metrics: dict[str, float]
+    ensemble_metrics: dict[str, Any]
     meta_learner: Any | None = None
     training_time_seconds: float = 0.0
 
@@ -202,14 +202,14 @@ class EnsembleService:
                 # Align to common indices
                 if aligned.common_indices is not None:
                     valid_indices = aligned.common_indices[aligned.common_indices < len(y_full)]
-                    return y_full[valid_indices]
+                    return np.asarray(y_full[valid_indices])
         return None
 
     def _train_meta_learner(
         self,
         stacking_dataset: StackingDataset,
         config: PipelineConfig,
-    ) -> tuple[Any, dict[str, float]]:
+    ) -> tuple[Any, dict[str, Any]]:
         """Train meta-learner on stacking dataset."""
         import time
 
@@ -237,14 +237,20 @@ class EnsembleService:
 
             from src.core.container import TimeSeriesDataContainer
 
-            container = TimeSeriesDataContainer(
-                X_train=X_train,
-                y_train=y_train,
-                X_val=X_val,
-                y_val=y_val,
-                X_test=pd.DataFrame(),
-                y_test=pd.Series(dtype=float),
-                sample_weights=pd.Series(np.ones(len(y_train))),
+            # Build train and val DataFrames for container
+            train_df = X_train.copy()
+            train_df[f"label_h{stacking_dataset.horizon}"] = y_train.values
+            train_df[f"sample_weight_h{stacking_dataset.horizon}"] = np.ones(len(y_train))
+
+            val_df = X_val.copy()
+            val_df[f"label_h{stacking_dataset.horizon}"] = y_val.values
+
+            container = TimeSeriesDataContainer.from_dataframes(
+                train_df=train_df,
+                val_df=val_df,
+                test_df=None,
+                horizon=stacking_dataset.horizon,
+                feature_columns=list(X_train.columns),
             )
 
             trainer = Trainer(meta_config)

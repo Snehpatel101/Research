@@ -56,6 +56,7 @@ Updated: 2025-12-24 - Added model-family scaling documentation
 import logging
 from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -98,7 +99,7 @@ class ScalerConfig:
     clip_outliers: bool = True
     clip_range: tuple[float, float] = (-5.0, 5.0)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "scaler_type": self.scaler_type,
             "clip_outliers": self.clip_outliers,
@@ -106,7 +107,7 @@ class ScalerConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "ScalerConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "ScalerConfig":
         return cls(
             scaler_type=d.get("scaler_type", "robust"),
             clip_outliers=d.get("clip_outliers", True),
@@ -261,7 +262,7 @@ class FeatureScalingConfig:
     apply_log_transform: bool = False
     log_shift: float = 0.0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "feature_name": self.feature_name,
             "category": self.category.value,
@@ -271,7 +272,7 @@ class FeatureScalingConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "FeatureScalingConfig":
+    def from_dict(cls, d: dict[str, Any]) -> "FeatureScalingConfig":
         return cls(
             feature_name=d["feature_name"],
             category=FeatureCategory(d["category"]),
@@ -300,11 +301,11 @@ class ScalingStatistics:
     nan_count: int = 0
     inf_count: int = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: dict) -> "ScalingStatistics":
+    def from_dict(cls, d: dict[str, Any]) -> "ScalingStatistics":
         return cls(**d)
 
 
@@ -318,9 +319,9 @@ class ScalingReport:
     scaler_type: str
     features_by_category: dict[str, list[str]]
     features_by_scaler: dict[str, list[str]]
-    statistics: dict[str, dict]
+    statistics: dict[str, dict[str, Any]]
     warnings: list[str]
     errors: list[str]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)

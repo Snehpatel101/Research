@@ -250,7 +250,7 @@ class AlertHandler:
     def get_alert_counts(
         self,
         window_seconds: float | None = None,
-    ) -> dict[str, int]:
+    ) -> dict[str, Any]:
         """
         Get alert counts by type and severity.
 
@@ -265,25 +265,29 @@ class AlertHandler:
 
         recent = [r for r in self._history if r.timestamp >= cutoff]
 
-        counts = {
+        by_type: dict[str, int] = {}
+        by_severity: dict[str, int] = {}
+        by_feature: dict[str, int] = {}
+
+        counts: dict[str, Any] = {
             "total": len(recent),
-            "by_type": {},
-            "by_severity": {},
-            "by_feature": {},
+            "by_type": by_type,
+            "by_severity": by_severity,
+            "by_feature": by_feature,
         }
 
         for record in recent:
             # By type
             dtype = record.result.drift_type.value
-            counts["by_type"][dtype] = counts["by_type"].get(dtype, 0) + 1
+            by_type[dtype] = by_type.get(dtype, 0) + 1
 
             # By severity
             sev = record.result.severity.value
-            counts["by_severity"][sev] = counts["by_severity"].get(sev, 0) + 1
+            by_severity[sev] = by_severity.get(sev, 0) + 1
 
             # By feature
             feat = record.result.feature_name or "unknown"
-            counts["by_feature"][feat] = counts["by_feature"].get(feat, 0) + 1
+            by_feature[feat] = by_feature.get(feat, 0) + 1
 
         return counts
 
@@ -382,12 +386,12 @@ class DriftAlertAggregator:
         max_sev = max(self._alerts, key=lambda r: severity_order.index(r.severity))
 
         # Group by feature
-        features = {}
+        features: dict[str, dict[str, float]] = {}
         for alert in self._alerts:
             feat = alert.feature_name or "unknown"
             if feat not in features:
-                features[feat] = {"count": 0, "max_metric": 0}
-            features[feat]["count"] += 1
+                features[feat] = {"count": 0.0, "max_metric": 0.0}
+            features[feat]["count"] += 1.0
             features[feat]["max_metric"] = max(features[feat]["max_metric"], alert.metric_value)
 
         return {

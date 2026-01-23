@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -47,5 +48,5 @@ def to_data_config(config: PipelineConfig) -> DataConfig:
         random_seed=config.random_state,
         feature_toggles=feature_toggles if feature_toggles else None,
         barrier_overrides=barrier_overrides,
-        project_root=config.output_dir.parent,
+        project_root=Path(config.output_dir).parent,
     )

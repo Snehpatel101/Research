@@ -125,13 +125,13 @@ class FeatureSelectionResult:
 
     # === Correlation/Variance Filtering Methods ===
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert to dictionary for JSON serialization.
 
         Used by phase1 validation pipeline for reporting.
         """
-        result = {
+        result: dict[str, Any] = {
             "selected_features": self.selected_features,
             "removed_features": self.removed_features,
             "original_count": self.original_count,

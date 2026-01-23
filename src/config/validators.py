@@ -315,7 +315,7 @@ def validate_enum_values(
 
         # Navigate to the value
         keys = path.split(".")
-        value = data
+        value: Any = data
         found = True
 
         for key in keys:
@@ -328,7 +328,7 @@ def validate_enum_values(
         if not found:
             continue
 
-        if value not in valid_values:
+        if not isinstance(value, dict) and value not in valid_values:
             result.add_error(
                 field=path,
                 message=f"Invalid value '{value}'. Must be one of: {valid_values}",

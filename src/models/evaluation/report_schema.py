@@ -184,7 +184,7 @@ class EvaluationReport:
             best_epoch=data["training_info"].get("best_epoch"),
         )
 
-        def _metrics_from_dict(m: dict) -> ModelMetrics:
+        def _metrics_from_dict(m: dict[str, Any]) -> ModelMetrics:
             return ModelMetrics(
                 accuracy=m["accuracy"],
                 precision=m["precision"],

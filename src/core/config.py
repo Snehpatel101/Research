@@ -251,7 +251,7 @@ class PipelineConfig:
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     version: str = "1.0.0"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate and normalize configuration after initialization."""
         # Convert paths to Path objects
         self.data_path = Path(self.data_path)
@@ -390,8 +390,9 @@ class PipelineConfig:
             Path to saved config file
         """
         if path is None:
-            self.output_dir.mkdir(parents=True, exist_ok=True)
-            path = self.output_dir / "config.json"
+            output_path = Path(self.output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+            path = output_path / "config.json"
         else:
             path = Path(path)
 

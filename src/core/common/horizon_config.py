@@ -28,19 +28,16 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 
-def _get_global_or_default(attr_path: str, fallback):
+def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
     try:
         from src.config.global_config import get_global_config
 
         config = get_global_config()
         parts = attr_path.split(".")
-        value = config
+        value: Any = config
         for part in parts:
             value = getattr(value, part)
         return value if value is not None else fallback
@@ -373,7 +370,7 @@ def auto_scale_purge_embargo(
 # =============================================================================
 # DEFAULT BARRIER PARAMETER GENERATION
 # =============================================================================
-def get_default_barrier_params_for_horizon(horizon: int) -> dict:
+def get_default_barrier_params_for_horizon(horizon: int) -> dict[str, Any]:
     """
     Generate default barrier parameters for a non-standard horizon.
 

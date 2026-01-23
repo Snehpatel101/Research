@@ -14,13 +14,13 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from src.data.pipeline.utils import create_failed_result, create_stage_result
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 from .core import apply_optimized_labels, generate_labeling_report
 
 if TYPE_CHECKING:
-    from manifest import ArtifactManifest
-    from pipeline_config import PipelineConfig
+    from src.core.common.manifest import ArtifactManifest
+    from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +70,13 @@ def run_final_labels(
     try:
         from src.data.pipeline.config import TRANSACTION_COSTS
 
+        pkg_version: str | None = None
         try:
-            from src import __version__ as src_version
+            from src import __version__ as _pkg_version
+
+            pkg_version = _pkg_version
         except ImportError:
             logger.debug("src.__version__ not available")
-            src_version = None
 
         # GA results directory (run-scoped for reproducibility)
         ga_results_dir = config.run_artifacts_dir / "ga_results"
@@ -255,8 +257,12 @@ def run_final_labels(
                 "tail_nan_bars": "horizon",
             },
             "code_version": {
-                "src_version": src_version,
-                "git_commit": _get_git_commit_hash(config.project_root),
+                "src_version": pkg_version,
+                "git_commit": (
+                    _get_git_commit_hash(config.project_root)
+                    if config.project_root is not None
+                    else None
+                ),
             },
         }
 

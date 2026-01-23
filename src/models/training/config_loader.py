@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -12,7 +13,7 @@ class ConfigLoader:
     """Loads and validates training configurations."""
 
     @staticmethod
-    def load_from_yaml(path: str | Path) -> dict:
+    def load_from_yaml(path: str | Path) -> dict[str, Any]:
         """Load config from YAML file."""
         path = Path(path)
         if not path.exists():
@@ -22,10 +23,10 @@ class ConfigLoader:
             config = yaml.safe_load(f)
 
         ConfigLoader.validate(config)
-        return config
+        return dict(config) if config else {}
 
     @staticmethod
-    def load_from_params(**kwargs) -> dict:
+    def load_from_params(**kwargs: Any) -> dict[str, Any]:
         """Create config dict from parameters."""
         config = {
             "experiment": {
@@ -111,7 +112,7 @@ class ConfigLoader:
         return config
 
     @staticmethod
-    def validate(config: dict) -> bool:
+    def validate(config: dict[str, Any]) -> bool:
         """Validate config structure."""
         required_keys = ["data", "models", "features"]
         for key in required_keys:
@@ -138,12 +139,12 @@ class ConfigLoader:
         return True
 
 
-def load_config_from_yaml(path: str | Path) -> dict:
+def load_config_from_yaml(path: str | Path) -> dict[str, Any]:
     """Convenience function to load config from YAML."""
     return ConfigLoader.load_from_yaml(path)
 
 
-def load_config_from_params(**kwargs) -> dict:
+def load_config_from_params(**kwargs: Any) -> dict[str, Any]:
     """Convenience function to create config from parameters."""
     return ConfigLoader.load_from_params(**kwargs)
 

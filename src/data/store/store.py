@@ -731,7 +731,7 @@ class FeatureStore:
         list[str]
             List of feature set names
         """
-        feature_sets = set()
+        feature_sets: set[str] = set()
 
         # From version managers
         feature_sets.update(self._version_managers.keys())

@@ -18,7 +18,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -485,11 +485,11 @@ class ModelAwareCV:
 
     def get_tuning_trials(self) -> int:
         """Return appropriate number of Optuna trials for model family."""
-        return self.strategy["tuning_trials"]
+        return int(self.strategy["tuning_trials"])
 
     def get_n_splits(self) -> int:
         """Return number of CV splits for this model family."""
-        return self.strategy["n_splits"]
+        return int(self.strategy["n_splits"])
 
 
 __all__ = [

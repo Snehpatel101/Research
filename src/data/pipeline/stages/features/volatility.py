@@ -501,7 +501,7 @@ def add_yang_zhang_volatility(
 
 # Try to import arch library for GARCH models
 try:
-    from arch import arch_model
+    from arch import arch_model  # type: ignore[import-not-found]
 
     ARCH_AVAILABLE = True
 except ImportError:

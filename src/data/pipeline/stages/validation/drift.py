@@ -2,6 +2,8 @@
 Feature drift checks for scaled datasets.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -41,7 +43,7 @@ def check_feature_drift(
     bins: int = 10,
     psi_threshold: float = 0.2,
     max_features: int = 200,
-) -> dict:
+) -> dict[str, Any]:
     """
     Compute drift metrics between train and a comparison split.
     """

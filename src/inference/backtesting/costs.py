@@ -12,6 +12,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 import numpy as np
 
@@ -269,7 +270,7 @@ class SquareRootSlippage(BaseSlippageModel):
         impact = self.impact_coefficient * np.sqrt(participation_rate) * vol * price
 
         # Round to tick size
-        return np.ceil(impact / self.tick_size) * self.tick_size
+        return float(np.ceil(impact / self.tick_size) * self.tick_size)
 
 
 @dataclass
@@ -320,7 +321,7 @@ class VolatilityScaledSlippage(BaseSlippageModel):
         # Clamp to bounds
         scaled_ticks = np.clip(scaled_ticks, self.min_slippage_ticks, self.max_slippage_ticks)
 
-        return scaled_ticks * self.tick_size
+        return float(scaled_ticks * self.tick_size)
 
 
 @dataclass
@@ -342,7 +343,7 @@ class CostCalculator:
         exit_price: float,
         entry_volatility: float | None = None,
         exit_volatility: float | None = None,
-    ) -> dict:
+    ) -> dict[str, float]:
         """
         Calculate total cost for a complete trade (round-trip).
 
@@ -407,7 +408,7 @@ class CostCalculator:
         include_costs: bool = True,
         entry_volatility: float | None = None,
         exit_volatility: float | None = None,
-    ) -> dict:
+    ) -> dict[str, float]:
         """
         Calculate P&L for a trade including costs.
 
@@ -459,7 +460,7 @@ class CostCalculator:
 def create_cost_calculator(
     symbol: str = "MES",
     slippage_model: str = "fixed",
-    **kwargs,
+    **kwargs: Any,
 ) -> CostCalculator:
     """
     Factory function to create cost calculator for a symbol.
@@ -487,6 +488,7 @@ def create_cost_calculator(
     tick_size = tx_costs.tick_size
     slippage_model_lower = slippage_model.lower()
 
+    slip_model: BaseSlippageModel
     if slippage_model_lower == "fixed":
         slip_model = FixedSlippage(
             ticks=kwargs.get("slippage_ticks", 1.0),

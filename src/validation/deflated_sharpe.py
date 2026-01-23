@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from scipy import stats
+from scipy import stats  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     import optuna

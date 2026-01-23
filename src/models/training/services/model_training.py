@@ -1,16 +1,21 @@
 # src/training/services/model_training.py
 """Service for training individual models."""
 
+from __future__ import annotations
+
 import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
 from src.data.adapters import PreparedData
+
+if TYPE_CHECKING:
+    from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +65,9 @@ class ModelTrainingService:
 
     def __init__(self) -> None:
         """Initialize ModelTrainingService."""
-        self._tuning_service = None
+        self._tuning_service: Any = None
 
-    def _get_tuning_service(self):
+    def _get_tuning_service(self) -> Any:
         """Lazy load HyperparameterTuningService to avoid circular imports."""
         if self._tuning_service is None:
             from .hyperparameter_tuning import (
@@ -96,7 +101,8 @@ class ModelTrainingService:
         if output_dir is not None:
             model_output_dir = output_dir / f"h{horizon}"
         else:
-            model_output_dir = None
+            # Default output directory if none provided
+            model_output_dir = Path("./output") / model_name / f"h{horizon}"
 
         # Create trainer config
         trainer_config = TrainerConfig(
@@ -114,7 +120,7 @@ class ModelTrainingService:
         trainer = Trainer(trainer_config)
 
         # Build container from prepared data
-        container = self._build_container(prepared)
+        container = self._build_container(prepared, horizon)
 
         training_results = trainer.run(container)
 
@@ -130,7 +136,7 @@ class ModelTrainingService:
             data_rank=prepared.data_rank,
         )
 
-    def _build_container(self, prepared: PreparedData) -> "TimeSeriesDataContainer":
+    def _build_container(self, prepared: PreparedData, horizon: int) -> TimeSeriesDataContainer:
         """
         Build TimeSeriesDataContainer from PreparedData.
 
@@ -139,6 +145,7 @@ class ModelTrainingService:
 
         Args:
             prepared: PreparedData from adapter
+            horizon: Label horizon for column naming
 
         Returns:
             TimeSeriesDataContainer ready for training
@@ -178,7 +185,7 @@ class ModelTrainingService:
                 prepared.X_val.reshape(n_val, -1),
                 columns=[f"f{i}" for i in range(n_features)],
             )
-            if prepared.has_test:
+            if prepared.has_test and prepared.X_test is not None:
                 n_test = prepared.X_test.shape[0]
                 X_test_df = pd.DataFrame(
                     prepared.X_test.reshape(n_test, -1),
@@ -193,17 +200,60 @@ class ModelTrainingService:
         else:
             sample_weights = pd.Series(np.ones(len(prepared.y_train)))
 
-        container = TimeSeriesDataContainer(
-            X_train=X_train_df,
-            y_train=pd.Series(prepared.y_train),
-            X_val=X_val_df,
-            y_val=pd.Series(prepared.y_val),
-            X_test=X_test_df if X_test_df is not None else pd.DataFrame(),
-            y_test=(pd.Series(prepared.y_test) if prepared.has_test else pd.Series(dtype=float)),
-            sample_weights=sample_weights,
+        container = TimeSeriesDataContainer.from_dataframes(
+            train_df=self._build_container_df(
+                X_train_df,
+                pd.Series(prepared.y_train),
+                sample_weights,
+                horizon,
+            ),
+            val_df=self._build_container_df(
+                X_val_df,
+                pd.Series(prepared.y_val),
+                None,
+                horizon,
+            ),
+            test_df=self._build_container_df(
+                X_test_df,
+                pd.Series(prepared.y_test) if prepared.has_test else None,
+                None,
+                horizon,
+            )
+            if prepared.has_test and X_test_df is not None
+            else None,
+            horizon=horizon,
+            feature_columns=list(X_train_df.columns),
         )
 
         return container
+
+    def _build_container_df(
+        self,
+        X_df: pd.DataFrame | None,
+        y_series: pd.Series | None,
+        weights_series: pd.Series | None,
+        horizon: int,
+    ) -> pd.DataFrame | None:
+        """
+        Build a DataFrame suitable for TimeSeriesDataContainer.from_dataframes.
+
+        Args:
+            X_df: Feature DataFrame
+            y_series: Label series
+            weights_series: Sample weights series (optional)
+            horizon: Label horizon for column naming
+
+        Returns:
+            Combined DataFrame with features, labels, and weights, or None
+        """
+        if X_df is None or y_series is None:
+            return None
+
+        df = X_df.copy()
+        df[f"label_h{horizon}"] = y_series.values
+        if weights_series is not None:
+            df[f"sample_weight_h{horizon}"] = weights_series.values
+        return df
 
     def _optimize_hyperparams(
         self,

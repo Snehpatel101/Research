@@ -3,6 +3,7 @@ Feature quality validation checks.
 """
 
 import logging
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -66,7 +67,7 @@ def check_feature_correlations(
     feature_cols: list[str],
     warnings_found: list[str],
     threshold: float = 0.85,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """
     Check for highly correlated feature pairs.
 
@@ -82,7 +83,7 @@ def check_feature_correlations(
     logger.info("\n1. Correlation analysis...")
 
     corr_matrix = feature_df.corr()
-    high_corr_pairs = []
+    high_corr_pairs: list[dict[str, Any]] = []
 
     for i in range(len(corr_matrix.columns)):
         for j in range(i + 1, len(corr_matrix.columns)):
@@ -119,7 +120,7 @@ def compute_feature_importance(
     label_col: str,
     seed: int = 42,
     sample_size: int = 10000,
-) -> tuple[list[dict], bool]:
+) -> tuple[list[dict[str, Any]], bool]:
     """
     Compute feature importance using Random Forest.
 
@@ -165,7 +166,7 @@ def compute_feature_importance(
         importances = rf.feature_importances_
         top_indices = np.argsort(importances)[-20:][::-1]
 
-        top_features = []
+        top_features: list[dict[str, Any]] = []
         logger.info("  Top 20 most important features:")
         for idx in top_indices:
             feat_info = {"feature": feature_cols[idx], "importance": float(importances[idx])}
@@ -179,7 +180,7 @@ def compute_feature_importance(
         return [], False
 
 
-def run_stationarity_tests(df: pd.DataFrame, feature_cols: list[str]) -> list[dict]:
+def run_stationarity_tests(df: pd.DataFrame, feature_cols: list[str]) -> list[dict[str, Any]]:
     """
     Run Augmented Dickey-Fuller tests on selected features.
 
@@ -205,7 +206,7 @@ def run_stationarity_tests(df: pd.DataFrame, feature_cols: list[str]) -> list[di
 
     from statsmodels.tsa.stattools import adfuller
 
-    stationarity_results = []
+    stationarity_results: list[dict[str, Any]] = []
 
     max_features = STATIONARITY_TESTS.get("max_features", 5)
     # Select features likely to be tested for stationarity
@@ -240,7 +241,7 @@ def check_feature_quality(
     warnings_found: list[str],
     seed: int = 42,
     max_features: int = 50,
-) -> dict:
+) -> dict[str, Any]:
     """
     Run all feature quality checks.
 
@@ -258,7 +259,7 @@ def check_feature_quality(
     logger.info("FEATURE QUALITY CHECKS")
     logger.info("=" * 60)
 
-    results = {}
+    results: dict[str, Any] = {}
 
     # Identify feature columns
     feature_cols = get_feature_columns(df)

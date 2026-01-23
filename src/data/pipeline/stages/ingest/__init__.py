@@ -17,6 +17,7 @@ Public API:
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -140,7 +141,7 @@ class DataIngestor:
 
     def validate_ohlcv_relationships(
         self, df: pd.DataFrame, auto_fix: bool = True, dry_run: bool = False, copy: bool = True
-    ) -> tuple[pd.DataFrame, dict]:
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
         """Validate OHLC relationships (high >= low, etc.)."""
         return validate_ohlcv_relationships(df, auto_fix, dry_run, copy)
 
@@ -154,7 +155,7 @@ class DataIngestor:
 
     def ingest_file(
         self, file_path: str | Path, symbol: str | None = None, validate: bool = True
-    ) -> tuple[pd.DataFrame, dict]:
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
         """
         Complete ingestion pipeline for a single file.
 
@@ -178,7 +179,7 @@ class DataIngestor:
         logger.info(f"Starting ingestion for symbol: {symbol}")
         logger.info(f"{'='*60}\n")
 
-        metadata = {
+        metadata: dict[str, Any] = {
             "symbol": symbol,
             "source_file": str(file_path),
             "ingestion_timestamp": datetime.now().isoformat(),

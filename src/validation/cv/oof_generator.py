@@ -21,7 +21,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import pandas as pd  # type: ignore[import-untyped]
 
 from src.models.registry import ModelRegistry
 

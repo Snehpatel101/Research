@@ -243,7 +243,7 @@ def main() -> int:
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s: %(message)s"
     )
-    from src.data.pipeline.stages.datasets.container import TimeSeriesDataContainer
+    from src.core.container import TimeSeriesDataContainer
 
     path = Path(args.path)
     if not path.is_dir():
@@ -269,8 +269,8 @@ def main() -> int:
     print("=" * 70)
     if result.errors:
         print(f"\nERRORS ({len(result.errors)}):")
-        for e in result.errors:
-            print(f"  [ERROR] {e}")
+        for err in result.errors:
+            print(f"  [ERROR] {err}")
     if result.warnings:
         print(f"\nWARNINGS ({len(result.warnings)}):")
         for w in result.warnings:

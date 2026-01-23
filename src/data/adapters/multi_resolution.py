@@ -527,12 +527,12 @@ class MultiResolution4DDataset(Dataset):
     def get_all_labels(self) -> np.ndarray:
         """Get all labels for valid sequences (for stratification)."""
         target_indices = self._indices + self._seq_len - 1
-        return self._labels[target_indices]
+        return np.asarray(self._labels[target_indices])
 
     def get_all_weights(self) -> np.ndarray:
         """Get all weights for valid sequences."""
         target_indices = self._indices + self._seq_len - 1
-        return self._weights[target_indices]
+        return np.asarray(self._weights[target_indices])
 
     def get_label_distribution(self) -> dict:
         """Get label value counts for valid sequences."""

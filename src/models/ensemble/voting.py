@@ -19,7 +19,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import joblib
 import numpy as np
@@ -358,7 +358,7 @@ class VotingEnsemble(BaseModel):
         n_workers = min(n_workers, len(self._base_models))
 
         start = time.perf_counter()
-        outputs = [None] * len(self._base_models)
+        outputs: list[PredictionOutput | None] = [None] * len(self._base_models)
 
         def predict_model(idx: int) -> tuple[int, PredictionOutput]:
             return idx, self._base_models[idx].predict(X)
@@ -370,7 +370,8 @@ class VotingEnsemble(BaseModel):
                 outputs[idx] = output
 
         elapsed_ms = (time.perf_counter() - start) * 1000
-        return outputs, elapsed_ms
+        # Filter out None values (all should be populated)
+        return cast(list[PredictionOutput], outputs), elapsed_ms
 
     def _collect_predictions_sequential(
         self, X: np.ndarray
@@ -540,7 +541,7 @@ class VotingEnsemble(BaseModel):
             return None
 
         # Get all unique features
-        all_features = set()
+        all_features: set[str] = set()
         for imp in all_importances:
             all_features.update(imp.keys())
 

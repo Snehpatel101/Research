@@ -255,7 +255,7 @@ class TrainerConfig:
         contract = get_model_contract(model_name)
 
         # Build kwargs from contract (normalize model_name to lowercase)
-        contract_kwargs = {
+        contract_kwargs: dict[str, Any] = {
             "model_name": model_name.lower().strip(),
             "horizon": horizon,
             "primary_timeframe": contract.primary_timeframe,
@@ -282,7 +282,7 @@ class TrainerConfig:
     # Phase 5 SNwH: Feature Strategy Integration
     # =========================================================================
 
-    def get_feature_strategy(self) -> "ModelFeatureStrategy":
+    def get_feature_strategy(self) -> Any:
         """
         Get the feature strategy for this model.
 
@@ -301,7 +301,7 @@ class TrainerConfig:
             List of baseline feature names
         """
         strategy = self.get_feature_strategy()
-        return strategy.baseline_features.copy()
+        return list(strategy.baseline_features)
 
     def resolve_features(
         self,

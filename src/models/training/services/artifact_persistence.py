@@ -191,7 +191,7 @@ class ArtifactManager:
         """
         path = metrics_path or (self.output_dir / "metrics_summary.json")
         with open(path) as f:
-            return json.load(f)
+            return dict(json.load(f))
 
     def list_saved_models(self) -> list[str]:
         """

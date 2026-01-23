@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import yaml
@@ -17,16 +18,17 @@ class FeatureSelector:
         self.config_path = Path(feature_config_path)
         self.feature_config = self._load_feature_config()
 
-    def _load_feature_config(self) -> dict:
+    def _load_feature_config(self) -> dict[str, Any]:
         """Load feature configuration from YAML."""
         if not self.config_path.exists():
             logger.warning(f"Feature config not found: {self.config_path}, using defaults")
             return self._default_config()
 
         with open(self.config_path) as f:
-            return yaml.safe_load(f)
+            config: dict[str, Any] = yaml.safe_load(f)
+            return config
 
-    def _default_config(self) -> dict:
+    def _default_config(self) -> dict[str, Any]:
         """Default feature configuration if file missing."""
         return {
             "modes": {

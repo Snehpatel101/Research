@@ -4,6 +4,7 @@ Core splitting logic with purging and embargo.
 
 import logging
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -92,8 +93,8 @@ def validate_label_distribution(
     train_indices: np.ndarray,
     val_indices: np.ndarray,
     test_indices: np.ndarray,
-    horizons: list[int] = None,
-) -> dict:
+    horizons: list[int] | None = None,
+) -> dict[str, Any]:
     """
     Validate label distribution across splits, excluding invalid labels.
 
@@ -114,7 +115,7 @@ def validate_label_distribution(
 
     splits = {"train": train_indices, "val": val_indices, "test": test_indices}
 
-    distribution = {}
+    distribution: dict[str, Any] = {}
 
     for horizon in horizons:
         label_col = f"label_h{horizon}"

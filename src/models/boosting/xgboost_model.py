@@ -11,7 +11,7 @@ import logging
 import pickle
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import xgboost as xgb
@@ -240,6 +240,8 @@ class XGBoostModel(BaseModel):
         self._validate_input_shape(X, "X")
 
         dmatrix = xgb.DMatrix(X)
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         probabilities = self._model.predict(dmatrix)
         class_predictions_xgb = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_xgb(class_predictions_xgb)
@@ -258,6 +260,8 @@ class XGBoostModel(BaseModel):
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         self._model.save_model(str(path / "model.json"))
 
         metadata = {
@@ -295,23 +299,31 @@ class XGBoostModel(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances by gain."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         importance = self._model.get_score(importance_type="gain")
 
         if self._feature_names:
-            result = {}
+            result: dict[str, float] = {}
             for key, value in importance.items():
+                # Convert value to float (XGBoost can return list for some settings)
+                float_value = float(value[0]) if isinstance(value, list) else float(value)
                 if key.startswith("f"):
                     idx = int(key[1:])
                     if idx < len(self._feature_names):
-                        result[self._feature_names[idx]] = value
+                        result[self._feature_names[idx]] = float_value
                 else:
-                    result[key] = value
+                    result[key] = float_value
             return result
 
-        return importance
+        return cast(
+            dict[str, float],
+            {
+                k: float(v) if not isinstance(v, list) else float(v[0])
+                for k, v in importance.items()
+            },
+        )
 
     def set_feature_names(self, names: list[str]) -> None:
         """Set feature names for interpretability."""
@@ -356,6 +368,8 @@ class XGBoostModel(BaseModel):
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         probabilities = self._model.predict(dmatrix)
         y_pred_xgb = np.argmax(probabilities, axis=1)
         y_pred = self._convert_labels_from_xgb(y_pred_xgb)

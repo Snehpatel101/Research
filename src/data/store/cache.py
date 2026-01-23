@@ -60,9 +60,9 @@ class CacheMetadata:
     created_at: datetime = field(default_factory=datetime.now)
     parquet_checksum: str = ""  # Checksum of parquet file
     compression: str = "snappy"
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "cache_key": self.cache_key,
@@ -83,7 +83,7 @@ class CacheMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> CacheMetadata:
+    def from_dict(cls, data: dict[str, Any]) -> CacheMetadata:
         """Create from dictionary."""
         return cls(
             cache_key=data["cache_key"],
@@ -310,7 +310,7 @@ class FeatureCache:
         date_start: str | datetime,
         date_end: str | datetime,
         cache_key: str | None = None,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> CacheMetadata:
         """
         Store features in cache.
@@ -335,7 +335,7 @@ class FeatureCache:
             End of data date range
         cache_key : str, optional
             Cache key (computed if not provided)
-        metadata : dict, optional
+        metadata : dict[str, Any], optional
             Additional metadata
 
         Returns
@@ -469,7 +469,7 @@ class FeatureCache:
         list[CacheMetadata]
             List of cache metadata entries
         """
-        entries = []
+        entries: list[CacheMetadata] = []
 
         if feature_set:
             search_path = self.cache_dir / feature_set
@@ -505,7 +505,7 @@ class FeatureCache:
         """
         total_size = 0
         total_entries = 0
-        feature_sets: dict[str, dict] = {}
+        feature_sets: dict[str, dict[str, Any]] = {}
 
         for fs_path in self.cache_dir.iterdir():
             if not fs_path.is_dir():

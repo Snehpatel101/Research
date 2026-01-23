@@ -20,8 +20,8 @@ import logging
 from dataclasses import dataclass
 
 import numpy as np
-import pandas as pd
-from sklearn.preprocessing import RobustScaler, StandardScaler
+import pandas as pd  # type: ignore[import-untyped]
+from sklearn.preprocessing import RobustScaler, StandardScaler  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 

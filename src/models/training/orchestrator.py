@@ -45,7 +45,7 @@ from .trainer import Trainer
 logger = logging.getLogger(__name__)
 
 
-def _emit_deprecation_warning():
+def _emit_deprecation_warning() -> None:
     """Emit deprecation warning for TrainingOrchestrator."""
     warnings.warn(
         "TrainingOrchestrator is deprecated. Use UnifiedTrainingOrchestrator instead. "
@@ -116,7 +116,7 @@ class TrainingOrchestrator:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"run_{timestamp}"
 
-    def run(self) -> dict:
+    def run(self) -> dict[str, Any]:
         logger.info(f"\n{'='*60}")
         logger.info(f"STARTING EXPERIMENT: {self.experiment_name}")
         logger.info(f"{'='*60}\n")
@@ -414,9 +414,7 @@ class TrainingOrchestrator:
             else pd.DataFrame(X_train_result)
         )
         y_train = (
-            y_train_result
-            if isinstance(y_train_result, pd.Series)
-            else pd.Series(y_train_result)
+            y_train_result if isinstance(y_train_result, pd.Series) else pd.Series(y_train_result)
         )
 
         # Create purged CV splitter
@@ -575,9 +573,19 @@ class TrainingOrchestrator:
         X_test_result, y_test, w_test = container.get_sklearn_arrays("test", return_df=True)
 
         # Ensure DataFrames
-        X_train_df = X_train_result if isinstance(X_train_result, pd.DataFrame) else pd.DataFrame(X_train_result)
-        X_val_df = X_val_result if isinstance(X_val_result, pd.DataFrame) else pd.DataFrame(X_val_result)
-        X_test_df = X_test_result if isinstance(X_test_result, pd.DataFrame) else pd.DataFrame(X_test_result)
+        X_train_df = (
+            X_train_result
+            if isinstance(X_train_result, pd.DataFrame)
+            else pd.DataFrame(X_train_result)
+        )
+        X_val_df = (
+            X_val_result if isinstance(X_val_result, pd.DataFrame) else pd.DataFrame(X_val_result)
+        )
+        X_test_df = (
+            X_test_result
+            if isinstance(X_test_result, pd.DataFrame)
+            else pd.DataFrame(X_test_result)
+        )
 
         X_train_selected = self.feature_selector.select_features(
             X_train_df, mode=feature_mode, mtf_strategy=mtf_strategy
@@ -597,7 +605,9 @@ class TrainingOrchestrator:
         horizon = container.horizon
         train_df = X_train_selected.copy()
         train_df[f"label_h{horizon}"] = y_train.values if hasattr(y_train, "values") else y_train
-        train_df[f"sample_weight_h{horizon}"] = w_train.values if hasattr(w_train, "values") else w_train
+        train_df[f"sample_weight_h{horizon}"] = (
+            w_train.values if hasattr(w_train, "values") else w_train
+        )
 
         val_df = X_val_selected.copy()
         val_df[f"label_h{horizon}"] = y_val.values if hasattr(y_val, "values") else y_val
@@ -605,7 +615,9 @@ class TrainingOrchestrator:
 
         test_df = X_test_selected.copy()
         test_df[f"label_h{horizon}"] = y_test.values if hasattr(y_test, "values") else y_test
-        test_df[f"sample_weight_h{horizon}"] = w_test.values if hasattr(w_test, "values") else w_test
+        test_df[f"sample_weight_h{horizon}"] = (
+            w_test.values if hasattr(w_test, "values") else w_test
+        )
 
         return TimeSeriesDataContainer.from_dataframes(
             train_df=train_df,
@@ -669,9 +681,7 @@ class TrainingOrchestrator:
             else pd.DataFrame(X_train_result)
         )
         y_train = (
-            y_train_result
-            if isinstance(y_train_result, pd.Series)
-            else pd.Series(y_train_result)
+            y_train_result if isinstance(y_train_result, pd.Series) else pd.Series(y_train_result)
         )
 
         # Create purged CV splitter
@@ -771,7 +781,7 @@ class TrainingOrchestrator:
             else:
                 logger.warning(f"Could not save model for {model_key}")
 
-    def display_results(self):
+    def display_results(self) -> None:
         """Display results summary (for notebook use)."""
         print(f"\n{'='*60}")
         print(f"EXPERIMENT RESULTS: {self.experiment_name}")

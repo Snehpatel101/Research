@@ -93,7 +93,7 @@ class ParallelTrainingService:
             f"({total_time/n_models:.1f}s avg per model)"
         )
 
-        return results
+        return list(results) if results else []
 
     @staticmethod
     def _train_single(request: ModelTrainingRequest) -> ModelTrainingResult:

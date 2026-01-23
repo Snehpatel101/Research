@@ -36,7 +36,7 @@ def _build_config(
     config_path: Path | None,
 ):
     """Build MLConfig from arguments."""
-    from src.ml_pipeline import MLConfig, ModelConfig
+    from src.ml_pipeline import MLConfig, ModelConfig  # type: ignore[import-not-found]
 
     if config_path:
         return MLConfig.from_yaml(config_path)

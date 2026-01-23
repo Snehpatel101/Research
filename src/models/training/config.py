@@ -39,7 +39,7 @@ class ExperimentConfig:
     parallel_training: bool = False
     n_jobs: int = -1
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if isinstance(self.data_dir, str):
             self.data_dir = Path(self.data_dir)
         if isinstance(self.output_dir, str):

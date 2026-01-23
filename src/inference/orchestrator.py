@@ -575,7 +575,7 @@ class InferenceOrchestrator:
             PredictionOutput from ensemble
         """
         # If we have a dedicated ensemble bundle, use it directly
-        if hasattr(self._ensemble_bundle, "predict"):
+        if self._ensemble_bundle is not None and hasattr(self._ensemble_bundle, "predict"):
             return self._ensemble_bundle.predict(X, calibrate=calibrate)
 
         # Otherwise, collect base model predictions and combine
@@ -660,7 +660,7 @@ class InferenceOrchestrator:
             }
 
             meta_class = meta_learner_map.get(meta_type, RidgeMetaLearner)
-            self._ensemble_bundle = meta_class()
+            self._ensemble_bundle = meta_class()  # type: ignore[abstract]
             self._ensemble_bundle.load(ensemble_path)
             logger.info(f"Loaded meta-learner: {meta_type}")
 
@@ -679,11 +679,11 @@ class InferenceOrchestrator:
         """Get prediction horizon from loaded bundle."""
         if self._bundles:
             first_bundle = next(iter(self._bundles.values()))
-            return first_bundle.metadata.horizon
+            return int(first_bundle.metadata.horizon)
         if self._ensemble_bundle is not None and hasattr(self._ensemble_bundle, "metadata"):
-            return self._ensemble_bundle.metadata.horizon
+            return int(self._ensemble_bundle.metadata.horizon)
         if self.config is not None and self.config.horizons:
-            return self.config.horizons[0]
+            return int(self.config.horizons[0])
         return 0
 
     @property

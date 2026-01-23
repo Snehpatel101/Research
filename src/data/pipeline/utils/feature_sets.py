@@ -3,6 +3,7 @@ Feature set resolution utilities.
 """
 
 from collections.abc import Sequence
+from typing import Any
 
 import pandas as pd
 
@@ -77,11 +78,11 @@ def resolve_feature_set(df: pd.DataFrame, definition: FeatureSetDefinition) -> l
 
 def build_feature_set_manifest(
     df: pd.DataFrame, definitions: dict[str, FeatureSetDefinition]
-) -> dict[str, dict]:
+) -> dict[str, dict[str, Any]]:
     """
     Build a manifest of all feature sets against a reference DataFrame.
     """
-    manifest: dict[str, dict] = {}
+    manifest: dict[str, dict[str, Any]] = {}
     for name, definition in definitions.items():
         features = resolve_feature_set(df, definition)
         mtf_count = sum(1 for col in features if _is_mtf_column(col))

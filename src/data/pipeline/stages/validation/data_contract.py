@@ -20,15 +20,15 @@ class DataContract:
     """Defines expected schema and constraints for pipeline data."""
 
     # Required OHLCV columns
-    REQUIRED_OHLCV: set[str] = None  # Initialized in __post_init__
+    REQUIRED_OHLCV: set[str] | None = None  # Initialized in __post_init__
 
     # Valid label values (excluding sentinel)
-    VALID_LABELS: set[int] = None  # Initialized in __post_init__
+    VALID_LABELS: set[int] | None = None  # Initialized in __post_init__
 
     INVALID_LABEL_SENTINEL: int = -99
 
     # Numeric columns that must be positive
-    POSITIVE_COLUMNS: set[str] = None  # Initialized in __post_init__
+    POSITIVE_COLUMNS: set[str] | None = None  # Initialized in __post_init__
 
     def __post_init__(self):
         """Initialize class-level sets."""

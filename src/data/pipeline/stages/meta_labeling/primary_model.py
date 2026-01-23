@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import LogisticRegression
@@ -400,14 +401,14 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
         else:
             raise ValueError(f"Unknown base_model: {self.base_model}")
 
-    def _convert_to_binary(self, y: np.ndarray) -> np.ndarray:
+    def _convert_to_binary(self, y: np.ndarray) -> npt.NDArray[np.int_]:
         """
         Convert multi-class labels to binary (has signal vs no signal).
 
         Maps: {-1, 1} -> 1 (has signal), {0} -> 0 (no signal)
         """
-        y = np.asarray(y).ravel()
-        return (y != 0).astype(int)
+        y_arr = np.asarray(y).ravel()
+        return np.asarray((y_arr != 0).astype(int))
 
     def fit(
         self,
@@ -521,9 +522,11 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
         X = np.asarray(X)
 
         proba = self.base_model_.predict_proba(X)[:, 1]
+        if self.recall_optimizer_ is None:
+            raise RuntimeError("Model not fitted yet")
         return self.recall_optimizer_.apply_threshold(proba)
 
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X: np.ndarray) -> npt.NDArray[np.float64]:
         """
         Predict class probabilities.
 
@@ -536,7 +539,7 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
         """
         self._check_is_fitted()
         X = np.asarray(X)
-        return self.base_model_.predict_proba(X)
+        return np.asarray(self.base_model_.predict_proba(X))
 
     def predict_side(
         self,
@@ -591,9 +594,15 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
             Dictionary with threshold, recall, and precision
         """
         self._check_is_fitted()
+        if self.recall_optimizer_ is None:
+            raise RuntimeError("Model not fitted yet")
+        # Provide defaults for optional float values (set after fit())
+        threshold = self.recall_optimizer_.optimal_threshold
+        recall = self.recall_optimizer_.achieved_recall
+        precision = self.recall_optimizer_.achieved_precision
         return {
-            "optimal_threshold": self.recall_optimizer_.optimal_threshold,
-            "achieved_recall": self.recall_optimizer_.achieved_recall,
-            "achieved_precision": self.recall_optimizer_.achieved_precision,
+            "optimal_threshold": float(threshold) if threshold is not None else 0.5,
+            "achieved_recall": float(recall) if recall is not None else 0.0,
+            "achieved_precision": float(precision) if precision is not None else 0.0,
             "recall_target": self.recall_target,
         }

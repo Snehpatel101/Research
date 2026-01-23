@@ -200,7 +200,7 @@ class UnifiedTrainingOrchestrator:
         """
         self.config = config
         self.run_id = self._generate_run_id()
-        self.output_dir = config.output_dir / self.run_id
+        self.output_dir = Path(config.output_dir) / self.run_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize services (all heavy lifting is delegated)
@@ -511,7 +511,7 @@ class UnifiedTrainingOrchestrator:
             symbol=self.config.symbol,
             horizons=self.config.horizons,
             models=model_configs,
-            data_dir=self.config.data_path.parent,
+            data_dir=Path(self.config.data_path).parent,
             output_dir=self.output_dir,
         )
 
@@ -545,14 +545,17 @@ class UnifiedTrainingOrchestrator:
             else [f"f{i}" for i in range(np.prod(prepared.X_train.shape[1:]))],
         )
 
-        container = TimeSeriesDataContainer(
-            X_train=X_train_df,
-            y_train=pd.Series(prepared.y_train),
-            X_val=pd.DataFrame(),
-            y_val=pd.Series(dtype=float),
-            X_test=pd.DataFrame(),
-            y_test=pd.Series(dtype=float),
-            sample_weights=pd.Series(np.ones(len(prepared.y_train))),
+        # Build train DataFrame for container
+        train_df = X_train_df.copy()
+        train_df[f"label_h{self.config.horizons[0]}"] = prepared.y_train
+        train_df[f"sample_weight_h{self.config.horizons[0]}"] = np.ones(len(prepared.y_train))
+
+        container = TimeSeriesDataContainer.from_dataframes(
+            train_df=train_df,
+            val_df=None,
+            test_df=None,
+            horizon=self.config.horizons[0],
+            feature_columns=list(X_train_df.columns),
         )
 
         results = trainer.run(container)
@@ -1026,7 +1029,7 @@ class UnifiedTrainingOrchestrator:
                 return self._create_meta_model("logistic")
         elif model_name == "catboost":
             try:
-                import catboost as cb
+                import catboost as cb  # type: ignore[import-not-found]
 
                 return cb.CatBoostClassifier(
                     n_estimators=100,

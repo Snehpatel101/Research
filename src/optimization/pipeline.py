@@ -246,9 +246,9 @@ class OptimizationPipeline:
         self.verbose = verbose
 
         # Initialize sub-optimizers
-        self._label_optimizer = None
-        self._feature_optimizer = None
-        self._hyperparam_optimizer = None
+        self._label_optimizer: LabelOptimizer | None = None
+        self._feature_optimizer: FeatureOptimizer | None = None
+        self._hyperparam_optimizer: HyperparameterOptimizer | None = None
 
     @classmethod
     def from_config(cls, config: PipelineConfig) -> OptimizationPipeline:

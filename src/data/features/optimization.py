@@ -141,7 +141,7 @@ def optimize_features_for_model(
         predictions = model.predict(X_val_subset.values)
         score = f1_score(y_val.values, predictions.class_predictions, average="macro")
 
-        return score
+        return float(score)
 
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
@@ -291,7 +291,7 @@ class FeatureOptimizer:
         else:
             # Default to f1_weighted
             def score_fn(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-                return f1_score(y_true, y_pred, average="weighted")
+                return float(f1_score(y_true, y_pred, average="weighted"))
 
         # Compute baseline score with all features
         baseline_score = 0.0
@@ -366,7 +366,7 @@ class FeatureOptimizer:
                 # Evaluate
                 predictions = model.predict(X_val_subset)
                 score = score_fn(y_val, predictions.class_predictions)
-                return score
+                return float(score)
             except Exception:
                 return 0.0
 

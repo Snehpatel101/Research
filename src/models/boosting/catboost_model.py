@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Check if CatBoost is available
 try:
-    from catboost import CatBoostClassifier, Pool
+    from catboost import CatBoostClassifier, Pool  # type: ignore[import-not-found]
 
     CATBOOST_AVAILABLE = True
 except ImportError:
@@ -186,7 +186,7 @@ class CatBoostModel(BaseModel):
         train_losses = evals_result.get("learn", {}).get("MultiClass", [])
         val_losses = evals_result.get("validation", {}).get("MultiClass", [])
 
-        best_iteration = self._model.get_best_iteration()
+        best_iteration = self._model.get_best_iteration() if self._model is not None else 0
         epochs_trained = best_iteration + 1 if best_iteration is not None else len(train_losses)
 
         # Compute accuracy and F1
@@ -226,6 +226,8 @@ class CatBoostModel(BaseModel):
         self._validate_fitted()
         self._validate_input_shape(X, "X")
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         probabilities = self._model.predict_proba(X)
         class_predictions_cat = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_cat(class_predictions_cat)
@@ -244,6 +246,8 @@ class CatBoostModel(BaseModel):
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         self._model.save_model(str(path / "model.cbm"))
 
         metadata = {
@@ -251,7 +255,7 @@ class CatBoostModel(BaseModel):
             "feature_names": self._feature_names,
             "n_classes": self._n_classes,
             "use_gpu": self._use_gpu,
-            "best_iteration": self._model.get_best_iteration(),
+            "best_iteration": self._model.get_best_iteration() if self._model is not None else 0,
         }
         with open(path / "metadata.pkl", "wb") as f:
             pickle.dump(metadata, f)
@@ -282,7 +286,7 @@ class CatBoostModel(BaseModel):
 
     def get_feature_importance(self) -> dict[str, float] | None:
         """Return feature importances."""
-        if not self._is_fitted:
+        if not self._is_fitted or self._model is None:
             return None
 
         importance = self._model.get_feature_importance()
@@ -334,6 +338,8 @@ class CatBoostModel(BaseModel):
         """Compute accuracy and F1 for a dataset."""
         from sklearn.metrics import accuracy_score, f1_score
 
+        if self._model is None:
+            raise RuntimeError("Model not fitted")
         probabilities = self._model.predict_proba(X)
         y_pred_cat = np.argmax(probabilities, axis=1)
         y_pred = self._convert_labels_from_cat(y_pred_cat)
@@ -350,12 +356,14 @@ if CATBOOST_AVAILABLE:
     from ..registry import register
 
     # Apply the decorator manually to register the class
-    CatBoostModel = register(
+    # Use a temporary variable to avoid mypy type narrowing issues
+    _registered_class = register(
         name="catboost",
         family="boosting",
         description="CatBoost gradient boosting with GPU support",
         aliases=["cat"],
     )(CatBoostModel)
+    CatBoostModel = _registered_class  # type: ignore[assignment,misc]
 
 
 __all__ = ["CatBoostModel", "CATBOOST_AVAILABLE"]
