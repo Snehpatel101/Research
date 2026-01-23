@@ -362,7 +362,7 @@ def evaluate_individual(
     max_bars = max(horizon * 2, min(max_bars, horizon * 3))
 
     labels, bars_to_hit, mae, mfe, _ = triple_barrier_numba(
-        close, high, low, open_prices, atr, k_up, k_down, max_bars
+        close, high, low, atr, k_up, k_down, max_bars
     )
 
     atr_mean = np.mean(atr[atr > 0]) if np.any(atr > 0) else 1.0

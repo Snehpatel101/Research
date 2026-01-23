@@ -249,7 +249,6 @@ def run_initial_labeling(
                         df["close"].values,
                         df["high"].values,
                         df["low"].values,
-                        df["open"].values,
                         df[atr_col].values,
                         k_up,
                         k_down,

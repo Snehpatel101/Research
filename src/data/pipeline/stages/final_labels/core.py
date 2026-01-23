@@ -286,7 +286,6 @@ def apply_optimized_labels(
     close = df["close"].values
     high = df["high"].values
     low = df["low"].values
-    open_prices = df["open"].values
     atr = df[atr_column].values
 
     # Apply labeling
@@ -294,7 +293,6 @@ def apply_optimized_labels(
         close,
         high,
         low,
-        open_prices,
         atr,
         best_params["k_up"],
         best_params["k_down"],

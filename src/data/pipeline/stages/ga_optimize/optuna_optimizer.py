@@ -220,7 +220,7 @@ def create_objective(
         # Run triple-barrier labeling
         try:
             labels, bars_to_hit, mae, mfe, _ = triple_barrier_numba(
-                close, high, low, open_prices, atr, k_up, k_down, max_bars
+                close, high, low, atr, k_up, k_down, max_bars
             )
         except Exception as e:
             logger.warning(f"Triple barrier failed: {e}")
@@ -374,13 +374,12 @@ def run_optuna_optimization(
     full_close = df["close"].values
     full_high = df["high"].values
     full_low = df["low"].values
-    full_open = df["open"].values
     full_atr = df[atr_column].values
 
     max_bars = int(horizon * best_max_bars_mult)
 
     val_labels, val_bars, val_mae, val_mfe, _ = triple_barrier_numba(
-        full_close, full_high, full_low, full_open, full_atr, best_k_up, best_k_down, max_bars
+        full_close, full_high, full_low, full_atr, best_k_up, best_k_down, max_bars
     )
 
     n_total = len(val_labels)
