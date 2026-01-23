@@ -153,6 +153,78 @@ sample_weights = train_df['sample_weight_h5'].values
     return report
 
 
+def _get_feature_cols(df: pd.DataFrame) -> list[str]:
+    """
+    Extract feature column names from a DataFrame.
+
+    Args:
+        df: DataFrame with all columns
+
+    Returns:
+        List of feature column names (excluding labels, metadata, OHLCV)
+    """
+    excluded_prefixes = (
+        "label_",
+        "bars_to_hit_",
+        "mae_",
+        "mfe_",
+        "quality_",
+        "sample_weight_",
+        "touch_type_",
+        "pain_to_gain_",
+        "time_weighted_dd_",
+        "fwd_return_",
+        "fwd_return_log_",
+        "time_to_hit_",
+    )
+    feature_cols = [
+        c
+        for c in df.columns
+        if c
+        not in [
+            "datetime",
+            "symbol",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "timeframe",
+            "session_id",
+            "missing_bar",
+            "roll_event",
+            "roll_window",
+            "filled",
+        ]
+        and not any(c.startswith(prefix) for prefix in excluded_prefixes)
+    ]
+    return feature_cols
+
+
+def _get_label_stats(df: pd.DataFrame, label_horizons: list[int]) -> dict[int, dict[str, int]]:
+    """
+    Compute label distribution statistics.
+
+    Args:
+        df: DataFrame with label columns
+        label_horizons: List of label horizons to analyze
+
+    Returns:
+        Dictionary mapping horizon to label counts
+    """
+    label_stats = {}
+    for horizon in label_horizons:
+        col = f"label_h{horizon}"
+        if col in df.columns:
+            counts = df[col].value_counts().sort_index()
+            label_stats[horizon] = {
+                "short": int(counts.get(-1, 0)),
+                "neutral": int(counts.get(0, 0)),
+                "long": int(counts.get(1, 0)),
+            }
+    return label_stats
+
+
 def run_generate_report(
     config: "PipelineConfig", manifest: "ArtifactManifest", stage_results: dict[str, StageResult]
 ) -> StageResult:
@@ -165,6 +237,8 @@ def run_generate_report(
     - Split statistics
     - Pipeline execution summary
     - Phase 2 preparation guidance
+
+    Supports multi-TF mode by aggregating data from all timeframes or using primary timeframe.
 
     Args:
         config: Pipeline configuration
@@ -180,58 +254,37 @@ def run_generate_report(
     logger.info("=" * 70)
 
     try:
-        combined_path = config.final_data_dir / "combined_final_labeled.parquet"
+        # Get effective output timeframes (supports multi-TF mode)
+        output_timeframes = config.effective_output_timeframes
+        is_multi_tf = len(output_timeframes) > 1
+
+        logger.info(f"Output timeframes: {output_timeframes}")
+        logger.info(f"Multi-TF mode: {is_multi_tf}")
+
+        # Determine paths based on multi-TF mode
+        # For reporting, use primary timeframe (target_timeframe) data for the main report
+        primary_tf = config.target_timeframe
+
+        if is_multi_tf:
+            combined_path = config.final_data_dir / f"combined_{primary_tf}_final_labeled.parquet"
+            split_config_path = config.splits_dir / primary_tf / "split_config.json"
+        else:
+            combined_path = config.final_data_dir / "combined_final_labeled.parquet"
+            split_config_path = config.splits_dir / "split_config.json"
+
+        if not combined_path.exists():
+            raise FileNotFoundError(f"Combined labeled data not found: {combined_path}")
+
         combined_df = pd.read_parquet(combined_path)
 
-        with open(config.splits_dir / "split_config.json") as f:
+        if not split_config_path.exists():
+            raise FileNotFoundError(f"Split config not found: {split_config_path}")
+
+        with open(split_config_path) as f:
             split_config = json.load(f)
 
-        excluded_prefixes = (
-            "label_",
-            "bars_to_hit_",
-            "mae_",
-            "mfe_",
-            "quality_",
-            "sample_weight_",
-            "touch_type_",
-            "pain_to_gain_",
-            "time_weighted_dd_",
-            "fwd_return_",
-            "fwd_return_log_",
-            "time_to_hit_",
-        )
-        feature_cols = [
-            c
-            for c in combined_df.columns
-            if c
-            not in [
-                "datetime",
-                "symbol",
-                "open",
-                "high",
-                "low",
-                "close",
-                "volume",
-                "timeframe",
-                "session_id",
-                "missing_bar",
-                "roll_event",
-                "roll_window",
-                "filled",
-            ]
-            and not any(c.startswith(prefix) for prefix in excluded_prefixes)
-        ]
-
-        label_stats = {}
-        for horizon in config.label_horizons:
-            col = f"label_h{horizon}"
-            if col in combined_df.columns:
-                counts = combined_df[col].value_counts().sort_index()
-                label_stats[horizon] = {
-                    "short": int(counts.get(-1, 0)),
-                    "neutral": int(counts.get(0, 0)),
-                    "long": int(counts.get(1, 0)),
-                }
+        feature_cols = _get_feature_cols(combined_df)
+        label_stats = _get_label_stats(combined_df, config.label_horizons)
 
         report = generate_report_content(
             config=config,
@@ -241,6 +294,36 @@ def run_generate_report(
             label_stats=label_stats,
             stage_results=stage_results,
         )
+
+        # Add multi-TF summary section if applicable
+        if is_multi_tf:
+            mtf_section = f"""
+---
+
+## Multi-Timeframe Summary
+
+This run processed **{len(output_timeframes)} timeframes**: {', '.join(output_timeframes)}
+
+The statistics above are for the primary timeframe ({primary_tf}).
+Each timeframe has its own:
+- `combined_{{tf}}_final_labeled.parquet` in `data/final/`
+- Split indices and config in `data/splits/{{tf}}/`
+- Scaled data in `data/splits/{{tf}}/scaled/`
+
+### Per-Timeframe Files
+| Timeframe | Combined Data | Split Config |
+|-----------|---------------|--------------|
+"""
+            for tf in output_timeframes:
+                mtf_section += f"| {tf} | combined_{tf}_final_labeled.parquet | splits/{tf}/split_config.json |\n"
+
+            # Insert before the "Next Steps" section
+            if "## Next Steps: Phase 2" in report:
+                report = report.replace(
+                    "## Next Steps: Phase 2", mtf_section + "\n## Next Steps: Phase 2"
+                )
+            else:
+                report += mtf_section
 
         # Run-scoped output for reproducibility
         report_path = config.run_artifacts_dir / f"PHASE1_COMPLETION_REPORT_{config.run_id}.md"
@@ -253,14 +336,25 @@ def run_generate_report(
             name="completion_report",
             file_path=report_path,
             stage="generate_report",
-            metadata={"total_samples": len(combined_df), "num_features": len(feature_cols)},
+            metadata={
+                "total_samples": len(combined_df),
+                "num_features": len(feature_cols),
+                "multi_tf_mode": is_multi_tf,
+                "output_timeframes": output_timeframes,
+                "primary_timeframe": primary_tf,
+            },
         )
 
         return create_stage_result(
             stage_name="generate_report",
             start_time=start_time,
             artifacts=[report_path],
-            metadata={"total_samples": len(combined_df), "num_features": len(feature_cols)},
+            metadata={
+                "total_samples": len(combined_df),
+                "num_features": len(feature_cols),
+                "multi_tf_mode": is_multi_tf,
+                "output_timeframes": output_timeframes,
+            },
         )
 
     except Exception as e:

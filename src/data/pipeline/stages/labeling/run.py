@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+# Import barrier config for symbol/horizon-specific defaults
+from src.data.pipeline.config.barriers_config import get_barrier_params
 from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
 from .triple_barrier import triple_barrier_numba
@@ -171,6 +173,18 @@ def run_initial_labeling(
     logger.info("STAGE 4: Initial Triple-Barrier Labeling")
     logger.info("=" * 70)
 
+    # Early validation: Check if ATR dependency might be missing due to feature toggles
+    # This provides a clear error before processing any data (Issue #1: LBL-001)
+    feature_toggles = getattr(config, "feature_toggles", None) or {}
+    volatility_enabled = feature_toggles.get("volatility", True)
+    if not volatility_enabled:
+        raise ValueError(
+            "Labeling stage requires 'atr_14' column but volatility features are disabled "
+            "via feature_toggles['volatility']=False. Triple-barrier labeling uses ATR for "
+            "dynamic barrier calculation (barriers are ATR multiples). Either enable "
+            "volatility features or ensure 'atr_14' is available through another source."
+        )
+
     try:
         # Create labels directory for GA input (run-scoped)
         labels_dir = config.run_data_dir / "labels"
@@ -228,18 +242,32 @@ def run_initial_labeling(
                 # Apply initial labeling with default parameters for each horizon
                 for horizon in config.label_horizons:
                     # Determine barrier source and values (LBL-002: provenance tracking)
-                    # Use barrier_overrides if specified, otherwise use defaults
+                    # Priority order:
+                    # 1. barrier_overrides from config (explicit user override)
+                    # 2. Symbol/horizon-specific defaults from barriers_config
+                    # 3. Hard-coded fallbacks (only if barriers_config has no entry)
+                    #
                     # Defaults will be optimized by GA in later stages
                     override_applied = bool(barrier_overrides)
-                    k_up = barrier_overrides.get("k_up", 2.0)
-                    k_down = barrier_overrides.get("k_down", 1.0)
-                    max_bars = barrier_overrides.get("max_bars", horizon * 3)
 
-                    # Determine barrier source for provenance
                     if override_applied:
+                        # Use explicit barrier overrides from config
+                        k_up = barrier_overrides.get("k_up", 2.0)
+                        k_down = barrier_overrides.get("k_down", 1.0)
+                        max_bars = barrier_overrides.get("max_bars", horizon * 3)
                         barrier_source = "config_override"
                     else:
-                        barrier_source = "defaults"
+                        # Use symbol/horizon-specific defaults from barriers_config
+                        barrier_defaults = get_barrier_params(symbol, horizon)
+                        k_up = barrier_defaults.get("k_up", 2.0)
+                        k_down = barrier_defaults.get("k_down", 1.0)
+                        max_bars = barrier_defaults.get("max_bars", horizon * 3)
+                        barrier_source = "barriers_config"
+
+                    # Enforce max_bars_ahead cap if configured (Issue #2)
+                    # max_bars should not exceed the pipeline's max_bars_ahead setting
+                    if hasattr(config, "max_bars_ahead") and config.max_bars_ahead is not None:
+                        max_bars = min(max_bars, config.max_bars_ahead)
 
                     logger.info(
                         f"  Horizon {horizon}: k_up={k_up}, k_down={k_down}, max_bars={max_bars}"

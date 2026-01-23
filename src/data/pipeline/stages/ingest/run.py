@@ -10,16 +10,15 @@ import traceback
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
+
+from . import DataIngestor
+
 if TYPE_CHECKING:
     from src.core.common.manifest import ArtifactManifest
     from src.data.pipeline.data_config import DataConfig as PipelineConfig
 
 logger = logging.getLogger(__name__)
-
-# Import from local modules
-from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
-
-from . import DataIngestor
 
 
 def run_data_generation(config: "PipelineConfig", manifest: "ArtifactManifest") -> "StageResult":
@@ -80,7 +79,7 @@ def run_data_generation(config: "PipelineConfig", manifest: "ArtifactManifest") 
         ingestor = DataIngestor(
             raw_data_dir=config.raw_data_dir,
             output_dir=validated_data_dir,
-            source_timezone="UTC",
+            source_timezone=config.source_timezone,
             symbol_col="symbol",
         )
 

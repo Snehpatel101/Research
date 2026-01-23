@@ -18,6 +18,10 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
+
+from . import clean_symbol_data, clean_symbol_data_multi_timeframe
+
 if TYPE_CHECKING:
     from src.core.common.manifest import ArtifactManifest
     from src.data.pipeline.data_config import DataConfig as PipelineConfig
@@ -150,12 +154,6 @@ def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValida
     return result
 
 
-# Import from local modules
-from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
-
-from . import clean_symbol_data, clean_symbol_data_multi_timeframe
-
-
 def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") -> "StageResult":
     """
     Stage 2: Data Cleaning - Multi-Timeframe aware.
@@ -249,6 +247,8 @@ def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") ->
                     timeframes=output_timeframes,
                     include_timeframe_metadata=True,
                     max_gap_minutes=max_gap_minutes,
+                    start_date=config.start_date,
+                    end_date=config.end_date,
                 )
 
                 # Register each timeframe output
@@ -288,6 +288,8 @@ def run_data_cleaning(config: "PipelineConfig", manifest: "ArtifactManifest") ->
                     target_timeframe=target_timeframe,
                     include_timeframe_metadata=True,
                     max_gap_minutes=max_gap_minutes,
+                    start_date=config.start_date,
+                    end_date=config.end_date,
                 )
 
                 if output_path.exists():

@@ -517,4 +517,157 @@ $ python -m src.cli status --help # ✅ Status command available
 
 ---
 
-*Document updated - January 22, 2026*
+## Data Pipeline Fixes (January 23, 2026)
+
+Following a comprehensive pipeline review, 13 issues were identified and fixed across Critical, High, and Medium priority categories.
+
+### Critical Fixes
+
+#### 1. MTF Mode Invalid Value (config_adapter.py)
+**Issue:** `mtf_mode="aligned"` was invalid; valid values are `["bars", "indicators", "both"]`
+**Fix:** Changed to `mtf_mode="bars"` in `create_data_config_from_core()`
+
+```python
+# Before
+mtf_mode="aligned"  # Invalid!
+
+# After
+mtf_mode="bars"  # Valid value
+```
+
+#### 2. CLI Pipeline Missing Module (cli/commands/pipeline.py)
+**Issue:** Imported from non-existent `src.ml_pipeline` module
+**Fix:** Refactored to use existing infrastructure:
+- `src.orchestrator.MLPipeline` for ML pipeline
+- `src.data.pipeline.runner.PipelineRunner` for data pipeline
+
+#### 3. Project Root Default (data_config.py)
+**Issue:** `project_root` defaulted to `src/` instead of repo root (3 parents instead of 4)
+**Fix:** Changed path resolution from 3 to 4 parent levels:
+
+```python
+# Before: Goes to src/ (wrong)
+self.project_root = Path(__file__).parent.parent.parent.resolve()
+
+# After: Goes to repo root (correct)
+self.project_root = Path(__file__).parent.parent.parent.parent.resolve()
+```
+
+### High Priority Fixes
+
+#### 4. Gap Filling Zero-Volume Synthetic Bars (clean/utils.py)
+**Issue:** Synthetic bars had forward-filled volume instead of 0
+**Fix:** Added explicit zero-volume assignment for synthetic bars:
+
+```python
+# Mark synthetic bars before filling
+synthetic_mask = ~df.index.isin(original_index)
+df["missing_bar"] = synthetic_mask.astype(int)
+
+# Forward-fill OHLC only, then set volume=0 for synthetic
+df[available_ohlc] = df[available_ohlc].ffill(limit=max_gap_minutes)
+if "volume" in df.columns:
+    df["volume"] = df["volume"].ffill(limit=max_gap_minutes)
+    df.loc[synthetic_mask, "volume"] = 0
+```
+
+#### 5. Date Filtering in Cleaning Stage (clean/pipeline.py, clean/run.py)
+**Issue:** `start_date` and `end_date` from config were ignored
+**Fix:** Added date filtering after data load in both single and multi-TF modes
+
+#### 6. Multi-TF Support in Stages 7.7, 8, 9
+**Issue:** Stages assumed single-TF mode, failing in multi-TF pipelines
+**Files Fixed:**
+- `src/data/pipeline/stages/scaled_validation/run.py`
+- `src/data/pipeline/stages/validation/run.py`
+- `src/data/pipeline/stages/reporting/run.py`
+
+**Fix:** Added timeframe iteration and TF-aware file paths
+
+#### 7. ATR Dependency Validation (labeling/run.py)
+**Issue:** Labeling could fail silently if ATR missing due to feature toggles
+**Fix:** Added early validation with clear error message:
+
+```python
+feature_toggles = getattr(config, "feature_toggles", None) or {}
+volatility_enabled = feature_toggles.get("volatility", True)
+if not volatility_enabled:
+    raise ValueError(
+        "Labeling stage requires 'atr_14' column but volatility features are disabled..."
+    )
+```
+
+### Medium Priority Fixes
+
+#### 8. Enforce max_bars_ahead in Labeling (labeling/run.py)
+**Issue:** `max_bars_ahead` config option was not enforced
+**Fix:** Added cap enforcement:
+
+```python
+if hasattr(config, "max_bars_ahead") and config.max_bars_ahead is not None:
+    max_bars = min(max_bars, config.max_bars_ahead)
+```
+
+#### 9. Use barriers_config Defaults (labeling/run.py)
+**Issue:** Initial labeling used hardcoded defaults instead of `barriers_config`
+**Fix:** Import and use symbol/horizon-specific defaults:
+
+```python
+from src.data.pipeline.config.barriers_config import get_barrier_params
+
+if override_applied:
+    barrier_source = "config_override"
+else:
+    barrier_defaults = get_barrier_params(symbol, horizon)
+    k_up = barrier_defaults.get("k_up", 2.0)
+    k_down = barrier_defaults.get("k_down", 1.0)
+    max_bars = barrier_defaults.get("max_bars", horizon * 3)
+    barrier_source = "barriers_config"
+```
+
+#### 10. Configurable Source Timezone (ingest/run.py, data_config.py)
+**Issue:** Timezone was hardcoded to "UTC"
+**Fix:** Added `source_timezone` field to DataConfig and use in ingestion:
+
+```python
+# data_config.py
+source_timezone: str = "UTC"
+
+# ingest/run.py
+ingestor = DataIngestor(
+    source_timezone=config.source_timezone,  # Previously hardcoded
+    ...
+)
+```
+
+#### 11. Config Adapter Passthrough (config_adapter.py)
+**Issue:** `target_timeframe` and `scaler_type` hardcoded instead of using config values
+**Fix:** Use config values with sensible defaults:
+
+```python
+# target_timeframe: Use first MTF timeframe or fallback
+target_timeframe=getattr(config, "mtf_timeframes", ["5min"])[0]
+
+# scaler_type: Use config value or default to "robust"
+scaler_type=getattr(config, "scaler_type", "robust")
+```
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `src/data/pipeline/config_adapter.py` | MTF mode, target_timeframe, scaler_type |
+| `src/data/pipeline/data_config.py` | project_root fix, source_timezone field |
+| `src/cli/commands/pipeline.py` | Complete refactor to use existing infra |
+| `src/data/pipeline/stages/clean/utils.py` | Zero-volume synthetic bars |
+| `src/data/pipeline/stages/clean/pipeline.py` | Date filtering |
+| `src/data/pipeline/stages/clean/run.py` | Pass date config |
+| `src/data/pipeline/stages/scaled_validation/run.py` | Multi-TF support |
+| `src/data/pipeline/stages/validation/run.py` | Multi-TF support |
+| `src/data/pipeline/stages/reporting/run.py` | Multi-TF support |
+| `src/data/pipeline/stages/labeling/run.py` | ATR validation, max_bars_ahead, barriers_config |
+| `src/data/pipeline/stages/ingest/run.py` | Configurable timezone |
+
+---
+
+*Document updated - January 23, 2026*

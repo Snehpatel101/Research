@@ -136,14 +136,25 @@ def detect_gaps_simple(df: pd.DataFrame, freq: str = "1min") -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def fill_gaps_simple(df: pd.DataFrame, max_gap_minutes: int = 60) -> pd.DataFrame:
+def fill_gaps_simple(
+    df: pd.DataFrame,
+    max_gap_minutes: int = 60,
+    trading_hours: tuple[int, int] | None = None,
+) -> pd.DataFrame:
     """
     Forward-fill small gaps in data (simple version).
+
+    Synthetic bars created to fill gaps have:
+    - Volume set to 0 (not forward-filled)
+    - missing_bar flag set to 1
 
     Parameters:
     -----------
     df : Input DataFrame
     max_gap_minutes : Maximum gap to fill (in minutes)
+    trading_hours : Optional tuple of (start_hour, end_hour) in UTC to respect.
+        If provided, only creates synthetic bars within these hours.
+        E.g., (14, 21) for 14:00-21:00 UTC (US equity hours).
 
     Returns:
     --------
@@ -158,19 +169,51 @@ def fill_gaps_simple(df: pd.DataFrame, max_gap_minutes: int = 60) -> pd.DataFram
     # Create complete datetime index
     full_index = pd.date_range(start=df.index.min(), end=df.index.max(), freq="1min")
 
-    # Reindex and forward fill
+    # Optionally filter to trading hours
+    if trading_hours is not None:
+        start_hour, end_hour = trading_hours
+        if start_hour < end_hour:
+            # Same-day range (e.g., 9-16)
+            mask = (full_index.hour >= start_hour) & (full_index.hour < end_hour)
+        else:
+            # Overnight range (e.g., 18-17 means 18:00 to next day 17:00)
+            mask = (full_index.hour >= start_hour) | (full_index.hour < end_hour)
+        full_index = full_index[mask]
+        logger.info(f"Restricted gap filling to trading hours {start_hour}:00-{end_hour}:00 UTC")
+
+    # Reindex to full index
     df = df.reindex(full_index)
-    df["missing_bar"] = (~df.index.isin(original_index)).astype(int)
 
-    # Only fill small gaps
-    df = df.ffill(limit=max_gap_minutes)
+    # Mark synthetic bars BEFORE forward-filling
+    synthetic_mask = ~df.index.isin(original_index)
+    df["missing_bar"] = synthetic_mask.astype(int)
 
-    # Drop remaining NaNs
+    # Forward-fill OHLC columns only (not volume) for small gaps
+    ohlc_cols = ["open", "high", "low", "close"]
+    available_ohlc = [col for col in ohlc_cols if col in df.columns]
+    df[available_ohlc] = df[available_ohlc].ffill(limit=max_gap_minutes)
+
+    # Set volume to 0 for synthetic bars (do NOT forward-fill volume)
+    if "volume" in df.columns:
+        # First forward-fill volume to handle the ffill limit logic consistently
+        df["volume"] = df["volume"].ffill(limit=max_gap_minutes)
+        # Then set synthetic bars to 0 volume
+        df.loc[synthetic_mask, "volume"] = 0
+
+    # Forward-fill any other columns (metadata, etc.)
+    other_cols = [col for col in df.columns if col not in ohlc_cols + ["volume", "missing_bar"]]
+    if other_cols:
+        df[other_cols] = df[other_cols].ffill(limit=max_gap_minutes)
+
+    # Drop remaining NaNs (gaps larger than max_gap_minutes)
     df = df.dropna()
 
     df = df.reset_index().rename(columns={"index": "datetime"})
 
-    logger.info(f"After gap filling: {len(df):,} rows")
+    synthetic_count = df["missing_bar"].sum()
+    logger.info(
+        f"After gap filling: {len(df):,} rows ({synthetic_count:,} synthetic bars with volume=0)"
+    )
     return df
 
 

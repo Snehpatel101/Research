@@ -82,6 +82,8 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     symbols: list[str] = field(default_factory=list)
     start_date: str | None = None  # YYYY-MM-DD format
     end_date: str | None = None  # YYYY-MM-DD format
+    # Timezone of source data (e.g., data vendor's timezone). Used during ingestion.
+    source_timezone: str = "UTC"
 
     # Timeframe configuration
     target_timeframe: str = field(
@@ -208,7 +210,8 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
 
         # Set project_root if not provided
         if self.project_root is None:
-            self.project_root = Path(__file__).parent.parent.parent.resolve()
+            # Go up 4 levels: data_config.py -> pipeline -> data -> src -> repo_root
+            self.project_root = Path(__file__).parent.parent.parent.parent.resolve()
         if isinstance(self.project_root, str):
             self.project_root = Path(self.project_root)
 
@@ -292,7 +295,9 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
                 try:
                     datetime.strptime(date_val, "%Y-%m-%d")
                 except ValueError:
-                    raise ValueError(f"{name} must be in YYYY-MM-DD format, got {date_val}")
+                    raise ValueError(
+                        f"{name} must be in YYYY-MM-DD format, got {date_val}"
+                    ) from None
 
         # Validate symbols
         if not self.symbols:
@@ -404,7 +409,7 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
             if field_name == "run_id":
                 # Preserve run_id exactly as-is
                 setattr(result, field_name, value)
-            elif isinstance(value, (list, dict)):
+            elif isinstance(value, list | dict):
                 setattr(result, field_name, copy.deepcopy(value, memo))
             elif isinstance(value, Path):
                 # Path objects are immutable, no need to deepcopy

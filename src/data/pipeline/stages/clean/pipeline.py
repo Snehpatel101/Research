@@ -41,6 +41,8 @@ def clean_symbol_data(
     include_session_metadata: bool = True,
     roll_gap_threshold: float = DEFAULT_ROLL_GAP_THRESHOLD,
     roll_window_bars: int = DEFAULT_ROLL_WINDOW_BARS,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> pd.DataFrame:
     """
     Complete cleaning pipeline for a single symbol.
@@ -74,6 +76,10 @@ def clean_symbol_data(
         Percent gap threshold to flag contract rolls (default: 0.10).
     roll_window_bars : int
         Number of bars on each side of a roll event to flag.
+    start_date : str | None
+        If provided, filter data to rows >= start_date (YYYY-MM-DD format).
+    end_date : str | None
+        If provided, filter data to rows <= end_date (YYYY-MM-DD format).
 
     Returns:
     --------
@@ -142,6 +148,21 @@ def clean_symbol_data(
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.sort_values("datetime").reset_index(drop=True)
 
+    # Apply date filtering if configured
+    initial_rows = len(df)
+    if start_date is not None:
+        start_dt = pd.to_datetime(start_date)
+        df = df[df["datetime"] >= start_dt]
+        logger.info(f"Filtered to start_date >= {start_date}: {initial_rows:,} -> {len(df):,} rows")
+        initial_rows = len(df)
+
+    if end_date is not None:
+        end_dt = pd.to_datetime(end_date)
+        df = df[df["datetime"] <= end_dt]
+        logger.info(f"Filtered to end_date <= {end_date}: {initial_rows:,} -> {len(df):,} rows")
+
+    df = df.reset_index(drop=True)
+
     # Step 1: Validate OHLC
     df = validate_ohlc(df)
 
@@ -191,6 +212,8 @@ def clean_symbol_data_multi_timeframe(
     include_session_metadata: bool = True,
     roll_gap_threshold: float = DEFAULT_ROLL_GAP_THRESHOLD,
     roll_window_bars: int = DEFAULT_ROLL_WINDOW_BARS,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> dict[str, pd.DataFrame]:
     """
     Clean and resample data to multiple timeframes at once.
@@ -218,6 +241,10 @@ def clean_symbol_data_multi_timeframe(
         Percent gap threshold to flag contract rolls (default: 0.10).
     roll_window_bars : int
         Number of bars on each side of a roll event to flag.
+    start_date : str | None
+        If provided, filter data to rows >= start_date (YYYY-MM-DD format).
+    end_date : str | None
+        If provided, filter data to rows <= end_date (YYYY-MM-DD format).
 
     Returns:
     --------
@@ -268,6 +295,21 @@ def clean_symbol_data_multi_timeframe(
 
     df["datetime"] = pd.to_datetime(df["datetime"])
     df = df.sort_values("datetime").reset_index(drop=True)
+
+    # Apply date filtering if configured
+    initial_rows = len(df)
+    if start_date is not None:
+        start_dt = pd.to_datetime(start_date)
+        df = df[df["datetime"] >= start_dt]
+        logger.info(f"Filtered to start_date >= {start_date}: {initial_rows:,} -> {len(df):,} rows")
+        initial_rows = len(df)
+
+    if end_date is not None:
+        end_dt = pd.to_datetime(end_date)
+        df = df[df["datetime"] <= end_dt]
+        logger.info(f"Filtered to end_date <= {end_date}: {initial_rows:,} -> {len(df):,} rows")
+
+    df = df.reset_index(drop=True)
 
     # Clean once
     df = validate_ohlc(df)
