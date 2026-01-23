@@ -270,6 +270,7 @@ class UnifiedTrainingOrchestrator:
         self,
         df: pd.DataFrame,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
+        generate_financial_report: bool = True,
     ) -> TrainingRunResult:
         """
         Execute complete training pipeline.
@@ -280,6 +281,8 @@ class UnifiedTrainingOrchestrator:
             df: Raw OHLCV DataFrame (features will be computed via adapters)
             additional_dfs: Optional dict of additional timeframe DataFrames
                 for multi-stream models (e.g., {"5min": df_5min})
+            generate_financial_report: Whether to generate financial report
+                with visualizations after training (default: True)
 
         Returns:
             TrainingRunResult with all training outputs
@@ -329,6 +332,10 @@ class UnifiedTrainingOrchestrator:
         logger.info(f"Total time: {total_time:.1f}s")
         logger.info(f"Models trained: {len(self._model_results)}")
         logger.info(f"Output: {self.output_dir}")
+
+        # Generate financial report if requested
+        if generate_financial_report and self._model_results:
+            self._generate_financial_reports(df)
 
         return TrainingRunResult(
             run_id=self.run_id,
@@ -1057,6 +1064,90 @@ class UnifiedTrainingOrchestrator:
             save_oof=self.config.save_oof,
         )
         self._artifact_manager.save_all(request)
+
+    def _generate_financial_reports(self, df: pd.DataFrame) -> None:
+        """
+        Generate financial reports with visualizations for trained models.
+
+        This method generates comprehensive financial reports including
+        equity curves, trade statistics, and performance visualizations.
+
+        Args:
+            df: Original input DataFrame with prices and labels
+        """
+        try:
+            from src.models.evaluation.financial_report import (
+                FinancialReportConfig,
+                generate_financial_report,
+            )
+        except ImportError:
+            logger.warning("Financial report generation not available - missing dependencies")
+            return
+
+        logger.info("\n" + "=" * 60)
+        logger.info("GENERATING FINANCIAL REPORTS")
+        logger.info("=" * 60)
+
+        reports_dir = self.output_dir / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+
+        # Get price data from input DataFrame
+        if "close" not in df.columns:
+            logger.warning("Cannot generate financial report - 'close' column not found")
+            return
+
+        prices = df["close"].values
+        timestamps = df.index if isinstance(df.index, pd.DatetimeIndex) else None
+        if timestamps is None and "datetime" in df.columns:
+            timestamps = pd.to_datetime(df["datetime"])
+
+        # Configure based on symbol
+        config = FinancialReportConfig(
+            initial_equity=100000.0,
+            commission_per_trade=2.50,
+            slippage_ticks=1.0,
+            tick_value=1.25 if self.config.symbol == "MES" else 0.10,  # MES or MGC
+        )
+
+        # Generate report for each trained model
+        for model_key, result in self._model_results.items():
+            # Get OOF predictions if available
+            oof = self._oof_predictions.get(model_key)
+            if oof is None:
+                logger.info(f"Skipping {model_key} - no OOF predictions available")
+                continue
+
+            # Extract predictions and true labels
+            predictions = oof.predictions
+            y_true = oof.y_true if hasattr(oof, "y_true") else None
+
+            # Try to get true labels from DataFrame
+            if y_true is None:
+                label_col = f"label_h{result.horizon}"
+                if label_col in df.columns:
+                    y_true = df[label_col].values[: len(predictions)]
+
+            if y_true is None:
+                logger.warning(f"Skipping {model_key} - no true labels available")
+                continue
+
+            # Generate report for this model
+            try:
+                model_report_dir = reports_dir / model_key
+                generate_financial_report(
+                    model_name=result.model_name,
+                    horizon=result.horizon,
+                    predictions=predictions,
+                    y_true=y_true,
+                    prices=prices[: len(predictions)],
+                    timestamps=timestamps[: len(predictions)] if timestamps is not None else None,
+                    output_dir=model_report_dir,
+                    run_id=self.run_id,
+                    config=config,
+                )
+                logger.info(f"Generated financial report for {model_key}")
+            except Exception as e:
+                logger.error(f"Failed to generate report for {model_key}: {e}")
 
     def get_trained_model(self, model_key: str) -> Any | None:
         """

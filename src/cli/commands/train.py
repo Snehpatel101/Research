@@ -171,6 +171,82 @@ def _build_config_overrides(
     return overrides
 
 
+def _generate_post_training_report(
+    results: dict,
+    trainer_config: Any,
+    container: Any,
+) -> None:
+    """Generate financial report after training completion."""
+    logger = logging.getLogger(__name__)
+
+    try:
+        import numpy as np
+
+        from src.models.evaluation import generate_financial_report
+
+        # Get predictions and true labels from results
+        val_predictions = results.get("val_predictions")
+        val_true = results.get("val_true")
+
+        if val_predictions is None or val_true is None:
+            logger.warning("No predictions available for financial report generation")
+            return
+
+        # Get price data for trade simulation
+        val_split = container.get_split("val")
+        prices = None
+        timestamps = None
+
+        if hasattr(val_split, "df"):
+            val_df = val_split.df
+            # Try to get close prices
+            price_col = None
+            for col in ["close", "Close", "price", "Price"]:
+                if col in val_df.columns:
+                    price_col = col
+                    break
+
+            if price_col:
+                # Align prices with predictions (may have been trimmed)
+                if len(val_df) > len(val_predictions):
+                    offset = len(val_df) - len(val_predictions)
+                    prices = val_df[price_col].iloc[offset:].values
+                    if val_df.index is not None:
+                        timestamps = val_df.index[offset:]
+                else:
+                    prices = val_df[price_col].values
+                    timestamps = val_df.index
+
+        # Use dummy prices if none available
+        if prices is None:
+            prices = np.cumsum(np.random.randn(len(val_predictions)) * 0.001) + 100
+            logger.warning("No price data found, using simulated prices for report")
+
+        # Generate report
+        output_path = PROJECT_ROOT / results["output_path"] / "reports"
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        report = generate_financial_report(
+            model_name=results["model_name"],
+            horizon=results["horizon"],
+            predictions=np.asarray(val_predictions),
+            y_true=np.asarray(val_true),
+            prices=np.asarray(prices),
+            timestamps=timestamps,
+            output_dir=output_path,
+            run_id=results["run_id"],
+        )
+
+        console.print("\n[bold green]Financial Report Generated:[/bold green]")
+        console.print(f"  HTML: {report.html_path}")
+        console.print(f"  JSON: {report.json_path}")
+        console.print(f"  Charts: {report.charts_dir}")
+
+    except Exception as e:
+        logger.warning(f"Failed to generate financial report: {e}")
+        console.print(f"[yellow]Warning: Could not generate financial report: {e}[/yellow]")
+
+
 def _list_models() -> None:
     """Print all available models."""
     import src.models  # noqa: F401
@@ -288,6 +364,7 @@ def train_model(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     skip_save: bool = typer.Option(False, "--skip-save", help="Skip saving artifacts"),
+    no_report: bool = typer.Option(False, "--no-report", help="Skip financial report generation"),
 ):
     """
     Train any registered model from the Model Factory.
@@ -468,6 +545,10 @@ def train_model(
         except Exception as e:
             logger.exception(f"Training failed: {e}")
             raise typer.Exit(1) from None
+
+    # Generate financial report if not skipped
+    if not no_report and not skip_save:
+        _generate_post_training_report(results, trainer_config, container)
 
     # Print results
     _print_training_results(results, skip_save)
@@ -668,6 +749,7 @@ def train_ensemble(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose logging"),
     skip_save: bool = typer.Option(False, "--skip-save", help="Skip saving artifacts"),
+    no_report: bool = typer.Option(False, "--no-report", help="Skip financial report generation"),
 ):
     """
     Train heterogeneous stacking ensembles.
@@ -801,6 +883,10 @@ def train_ensemble(
     except Exception as e:
         logger.exception(f"Training failed: {e}")
         raise typer.Exit(1) from None
+
+    # Generate financial report if not skipped
+    if not no_report and not skip_save:
+        _generate_post_training_report(results, trainer_config, container)
 
     # Print results
     console.print("\n" + "=" * 70)
