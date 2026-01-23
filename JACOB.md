@@ -223,6 +223,11 @@ src/
 │   │   ├── stacking.py
 │   │   └── diversity.py
 │   ├── neural/             # Neural network models
+│   ├── evaluation/         # Post-training evaluation & reports
+│   │   ├── __init__.py
+│   │   ├── charts.py       # Chart generation functions
+│   │   ├── financial_report.py  # Financial report generator
+│   │   └── report_generator.py  # Basic evaluation reports
 │   └── training/           # Training orchestration
 │       ├── __init__.py
 │       ├── unified_orchestrator.py
@@ -233,6 +238,13 @@ src/
 │       │   ├── parallel_training.py
 │       │   └── artifact_manager.py
 │       └── meta_labeling/  # Meta-labeling & bet sizing
+│
+├── inference/               # Inference & backtesting (depends on: core, models)
+│   ├── __init__.py
+│   ├── backtesting/
+│   │   ├── equity_curve.py  # EquityCurve, Trade classes
+│   │   └── metrics.py       # PerformanceMetrics
+│   └── server.py            # Inference server
 │
 ├── optimization/            # Optimization layer (depends on: models)
 │   ├── __init__.py
@@ -363,6 +375,21 @@ UnifiedTrainingOrchestrator
 | `UnifiedTrainingOrchestrator` | `src/models/training/` | Main training orchestrator |
 | `MLPipeline` | `src/ml_pipeline/` | High-level pipeline API |
 | `PipelineState` | `src/ml_pipeline/` | Checkpoint/resume support |
+| `FinancialReport` | `src/models/evaluation/` | Post-training financial report |
+| `FinancialReportConfig` | `src/models/evaluation/` | Report configuration |
+| `EquityCurve` | `src/inference/backtesting/` | Trade tracking & equity simulation |
+| `PerformanceMetrics` | `src/inference/backtesting/` | Financial performance metrics |
+
+### Evaluation Functions
+
+| Function | Location | Purpose |
+|----------|----------|---------|
+| `generate_financial_report()` | `src/models/evaluation/` | Generate full HTML/JSON report |
+| `simulate_trades()` | `src/models/evaluation/` | Convert predictions to trades |
+| `generate_all_charts()` | `src/models/evaluation/` | Generate all report charts |
+| `plot_confusion_matrix()` | `src/models/evaluation/` | Classification confusion matrix |
+| `plot_rolling_sharpe()` | `src/models/evaluation/` | Rolling Sharpe ratio chart |
+| `plot_trade_analysis()` | `src/models/evaluation/` | Trade direction analysis |
 
 ### Factory Functions
 
