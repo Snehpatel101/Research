@@ -670,4 +670,93 @@ scaler_type=getattr(config, "scaler_type", "robust")
 
 ---
 
+## Post-Training Financial Reports (January 23, 2026)
+
+Added comprehensive financial reporting system that automatically generates visualizations and metrics after model training completes.
+
+### New Modules
+
+| File | Purpose |
+|------|---------|
+| `src/models/evaluation/charts.py` | Chart generation functions |
+| `src/models/evaluation/financial_report.py` | Report generator with HTML rendering |
+
+### Features
+
+**Chart Generation (`charts.py`):**
+- `plot_confusion_matrix()` - Classification performance matrix
+- `plot_rolling_sharpe()` - Rolling Sharpe ratio over time
+- `plot_trade_analysis()` - Trade direction and P&L analysis
+- `plot_feature_importance()` - Top feature importance bars
+- `generate_all_charts()` - Generates all 6 charts in one call
+
+**Report Generation (`financial_report.py`):**
+- `FinancialReport` dataclass with 40+ metrics
+- `FinancialReportConfig` for customization
+- `simulate_trades()` - Converts predictions to trades with costs
+- `generate_financial_report()` - End-to-end report generation
+- `render_html_report()` - HTML with embedded base64 charts
+
+### Report Contents
+
+**Performance Metrics:**
+- Sharpe Ratio, Sortino Ratio, Calmar Ratio
+- Total Return, Annual Return (CAGR)
+- Max Drawdown (%), Max Drawdown Duration
+- VaR (95%), CVaR (95%)
+
+**Trade Statistics:**
+- Total Trades, Win Rate, Profit Factor
+- Expectancy, Average Win/Loss
+- Max Consecutive Wins/Losses
+- Long vs Short performance breakdown
+
+**Classification Metrics:**
+- Accuracy, Precision, Recall, F1 Score
+
+**Charts Generated:**
+1. Equity Curve with drawdown panel
+2. Monthly Returns Heatmap
+3. Returns Distribution
+4. Confusion Matrix
+5. Rolling Sharpe Ratio
+6. Trade Analysis (by direction)
+
+### Integration Points
+
+**Modified Files:**
+- `src/models/training/unified_orchestrator.py` - Added `_generate_financial_reports()` hook
+- `src/cli/commands/train.py` - Added `--no-report` flag to `train model` and `train ensemble`
+- `src/models/evaluation/__init__.py` - Exported new modules
+
+### Usage
+
+```bash
+# Default: generates financial report after training
+ml train model --model xgboost --horizon 20
+
+# Skip report generation
+ml train model --model xgboost --horizon 20 --no-report
+```
+
+### Output Structure
+
+```
+output_dir/
+├── reports/
+│   ├── financial_report.html   # Main HTML report
+│   ├── financial_report.json   # Metrics in JSON format
+│   ├── equity_curve.csv        # Raw equity curve data
+│   ├── trades.csv              # Trade-by-trade data
+│   └── charts/
+│       ├── equity_curve.png
+│       ├── monthly_returns.png
+│       ├── returns_distribution.png
+│       ├── confusion_matrix.png
+│       ├── rolling_sharpe.png
+│       └── trade_analysis.png
+```
+
+---
+
 *Document updated - January 23, 2026*
