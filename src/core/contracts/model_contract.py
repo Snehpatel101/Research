@@ -369,8 +369,8 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
     ),
     "patchtst": ModelContract(
         model_name="patchtst",
-        model_family="neural",
-        input_rank=DataRank.SEQUENCE_3D,
+        model_family="transformer",
+        input_rank=DataRank.MULTI_TF_4D,  # 4D: (N, T, seq_len, features)
         feature_mode=FeatureMode.RAW,  # PatchTST learns from raw data
         mtf_mode=MTFMode.MULTI_STREAM,
         primary_timeframe="1min",
@@ -388,8 +388,8 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
     # =========================================================================
     "itransformer": ModelContract(
         model_name="itransformer",
-        model_family="neural",
-        input_rank=DataRank.SEQUENCE_3D,
+        model_family="transformer",
+        input_rank=DataRank.MULTI_TF_4D,  # 4D: (N, T, seq_len, features)
         feature_mode=FeatureMode.RAW,
         mtf_mode=MTFMode.MULTI_STREAM,
         primary_timeframe="1min",

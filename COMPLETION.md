@@ -4,6 +4,51 @@
 
 ---
 
+## Phase 2: 4D Infrastructure | 2026-01-24 | COMPLETE
+
+**Impact:** +958 lines added (9 files modified, 1 new file)
+**Commit:** [pending]
+
+### Tasks
+
+| ID | Task | Status |
+|----|------|--------|
+| 2A | Create `raw_mtf_store.py` - Raw MTF OHLCV storage | ✅ |
+| 2B | MTF generator saves raw OHLCV to store | ✅ |
+| 2C | PatchTST/iTransformer contracts → `MULTI_TF_4D` | ✅ |
+| 2D | `MultiStreamAdapter` + `from_store()` factory | ✅ |
+| 2E | Verify adapter registration | ✅ |
+| 2F | Wire `UnifiedDataPreparation` for multi_stream | ✅ |
+| 2G | Add `TimeSeriesDataContainer.get_multi_stream_4d()` | ✅ |
+
+### New Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/data/store/raw_mtf_store.py` | 445 | Save/load raw OHLCV at 9 timeframes |
+
+### Key Changes
+
+| Component | Change |
+|-----------|--------|
+| Raw MTF Store | 9 timeframes: 1m, 3m, 5m, 10m, 15m, 30m, 60m, 2h, 4h |
+| PatchTST/iTransformer | `input_rank` → `DataRank.MULTI_TF_4D` |
+| MultiStreamAdapter | Added `from_store(symbol, split)` factory method |
+| Container | Added `get_multi_stream_4d()` method |
+
+### Verification
+- 7 sequential agents: **ALL PASS**
+- All imports verified
+- 4D flow: PatchTST/iTransformer → multi_stream adapter → 4D tensor
+- Ruff: 202 pre-existing issues (none new)
+
+### Lessons Learned
+1. Decorator-based registry (`@AdapterRegistry.register`) cleaner than dict
+2. Factory methods (`from_store`) simplify store integration
+3. Separate 4D methods from existing 3D to avoid breaking changes
+
+---
+
 ## Phase 1: Contract Enforcement | 2026-01-23 | COMPLETE
 
 **Impact:** +616 lines added (14 files modified)

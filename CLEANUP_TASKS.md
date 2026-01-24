@@ -1,14 +1,16 @@
 # ML Factory Cleanup Tasks - Active Work
 
-**Last Updated:** 2026-01-23
-**Status:** Phase 0 Complete | Phase 1 Complete | Phase 2 Ready
+**Last Updated:** 2026-01-24
+**Status:** Phase 0 Complete | Phase 1 Complete | Phase 2 Complete | Phase 3 Ready
 **Phase 0 Impact:** -5,336 lines removed | 7 naming conflicts resolved
 **Phase 1 Impact:** +616 lines added | 7 new exceptions | Commit 7f71b52
+**Phase 2 Impact:** +958 lines added | 9 files modified | 4D models enabled
 
 ---
 
 ## Table of Contents
-- [Phase 2: 4D Infrastructure](#phase-2-4d-infrastructure) ← NEXT
+- [Phase 3: 5-Dimension Optuna](#phase-3-5-dimension-optuna) ← NEXT
+- [Completed: Phase 2](#completed-phase-2-4d-infrastructure)
 - [Completed: Phase 1](#completed-phase-1-contract-enforcement)
 - [Completed: Phase 0](#completed-phase-0-deduplication)
 - [False Positives](#false-positives)
@@ -17,15 +19,49 @@
 
 ---
 
-## Phase 2: 4D Infrastructure
+## Phase 3: 5-Dimension Optuna
 
-**Source:** CLEANUP_PLAN.md Phase 2
+**Source:** CLEANUP_PLAN.md Phase 3
 **Status:** Ready to Execute
-**Target:** Enable 4D models (PatchTST, iTransformer, TFT, N-BEATS)
+**Target:** Optuna optimizes all 5 dimensions (barriers, features, params, timeframes, hyperparams)
 **Estimated Effort:** 5-7 days
-**Blocked By:** Phase 1 (COMPLETE)
+**Blocked By:** Phase 2 (COMPLETE)
 
-See `CLEANUP_PLAN.md` for detailed Phase 2 tasks (2A-2G).
+See `CLEANUP_PLAN.md` for detailed Phase 3 tasks (3A-3F).
+
+---
+
+## Completed: Phase 2 4D Infrastructure
+
+**Status:** ✅ COMPLETE (2026-01-24)
+**Commit:** [pending]
+**Impact:** +958 lines, 9 files modified, 1 new file
+
+### Tasks
+
+| ID | Task | Status |
+|----|------|--------|
+| 2A | Create `raw_mtf_store.py` (445 lines) | ✅ |
+| 2B | MTF generator saves to store | ✅ |
+| 2C | PatchTST/iTransformer → MULTI_TF_4D | ✅ |
+| 2D | MultiStreamAdapter + `from_store()` | ✅ |
+| 2E | Verify adapter registration | ✅ |
+| 2F | Wire UnifiedDataPreparation | ✅ |
+| 2G | Add `get_multi_stream_4d()` | ✅ |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/data/store/raw_mtf_store.py` | NEW (+445 lines) |
+| `src/data/store/__init__.py` | Exports |
+| `src/data/pipeline/stages/mtf/generator.py` | Save to store |
+| `src/data/pipeline/stages/mtf/convenience.py` | Config params |
+| `src/core/contracts/model_contract.py` | DataRank.MULTI_TF_4D |
+| `src/data/adapters/multi_stream.py` | `from_store()` factory |
+| `src/data/adapters/__init__.py` | Exports |
+| `src/data/adapters/preparation.py` | multi_stream routing |
+| `src/core/container.py` | `get_multi_stream_4d()` |
 
 ---
 
@@ -742,10 +778,11 @@ pytest tests/ -x --tb=short
 
 | Date | Phase | Task | Impact | Commit |
 |------|-------|------|--------|--------|
+| 2026-01-24 | 2 | All (2A-2G) | +958 lines, 4D enabled | [pending] |
 | 2026-01-23 | 1 | All (1A-1G) | +616 lines, 7 exceptions | 7f71b52 |
 | 2026-01-23 | 0 | All (0A-0G) | -5,336 lines | 3262996 |
 
 ---
 
-*Next: Execute Phase 2 tasks (4D Infrastructure)*
+*Next: Execute Phase 3 tasks (5-Dimension Optuna)*
 *Full cleanup plan: `CLEANUP_PLAN.md`*

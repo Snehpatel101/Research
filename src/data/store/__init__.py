@@ -7,6 +7,7 @@ This module provides a unified interface for:
 3. **Lineage Tracking**: Full audit trail from raw data to computed features
 4. **Point-in-Time Retrieval**: Backtesting-safe feature queries
 5. **Integrity Validation**: SHA256 checksums for data integrity
+6. **Raw MTF Storage**: Multi-timeframe OHLCV data for 4D model training
 
 Main Components
 ---------------
@@ -100,6 +101,22 @@ from .lineage import (
 from .lineage import (
     compute_file_checksum as compute_lineage_checksum,
 )
+
+# Raw MTF storage for 4D models
+from .raw_mtf_store import (
+    TIMEFRAMES,
+    VALID_SPLITS,
+    InvalidSplitError,
+    InvalidTimeframeError,
+    RawMTFStoreError,
+    TimeframeNotFoundError,
+    delete_raw_mtf,
+    get_mtf_path,
+    list_available_timeframes,
+    load_all_timeframes,
+    load_raw_mtf,
+    save_raw_mtf,
+)
 from .store import (
     FeatureIntegrityError,
     FeatureNotFoundError,
@@ -133,10 +150,24 @@ __all__ = [
     "DataSource",
     "Transformation",
     "TransformationType",
+    "compute_lineage_checksum",
     # Versioning
     "SemanticVersion",
     "VersionInfo",
     "VersionManager",
     "compute_schema_hash",
     "compute_config_hash",
+    # Raw MTF storage
+    "TIMEFRAMES",
+    "VALID_SPLITS",
+    "RawMTFStoreError",
+    "TimeframeNotFoundError",
+    "InvalidTimeframeError",
+    "InvalidSplitError",
+    "get_mtf_path",
+    "save_raw_mtf",
+    "load_raw_mtf",
+    "load_all_timeframes",
+    "list_available_timeframes",
+    "delete_raw_mtf",
 ]

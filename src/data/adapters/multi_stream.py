@@ -6,6 +6,25 @@ Phase 2 SNwH Implementation.
 This adapter transforms multiple timeframe DataFrames into 4D arrays
 with shape (n_samples, n_timeframes, seq_len, n_features) for models
 that support multi-stream MTF mode like PatchTST and iTransformer.
+
+Integration with Raw MTF Store
+-------------------------------
+This adapter can load multi-timeframe data directly from the raw MTF store
+(created during pipeline execution). When `symbol` and `split` are provided
+and `additional_dfs` is not, the adapter will automatically load all
+required timeframes from the store.
+
+Usage with Store:
+    >>> adapter = MultiStreamAdapter(
+    ...     symbol="MES",
+    ...     split="train",
+    ...     timeframes=["1min", "5min", "15min"],
+    ... )
+    >>> result = adapter.transform(df)  # df is anchor, others loaded from store
+
+Usage with additional_dfs (legacy):
+    >>> adapter = MultiStreamAdapter(timeframes=["1min", "5min", "15min"])
+    >>> result = adapter.transform(df, additional_dfs={"5min": df_5, "15min": df_15})
 """
 
 from __future__ import annotations
@@ -19,6 +38,8 @@ import pandas as pd
 
 from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
 from src.core.contracts import DataContract, DataRank
+from src.data.store import TIMEFRAMES as STORE_TIMEFRAMES
+from src.data.store import load_all_timeframes, load_raw_mtf
 
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
@@ -45,11 +66,26 @@ class MultiStreamAdapter(BaseAdapter):
     PatchTST and iTransformer that benefit from seeing raw OHLCV data
     at multiple resolutions simultaneously.
 
+    Integration with Raw MTF Store:
+        When `symbol` and `split` are provided, the adapter can automatically
+        load timeframe data from the raw MTF store (data/canonical/raw_mtf/).
+        This is the recommended approach for 4D models.
+
     Attributes:
         adapter_id: Registry identifier ("multi_stream")
         output_rank: Output data rank (DataRank.MULTI_TF_4D)
 
-    Example:
+    Example with store (recommended):
+        >>> adapter = MultiStreamAdapter(
+        ...     symbol="MES",
+        ...     split="train",
+        ...     timeframes=["1min", "5min", "15min"],
+        ...     sequence_length=60,
+        ... )
+        >>> result = adapter.transform(df_anchor)
+        >>> result.X.shape  # (n_sequences, 3, 60, 5)
+
+    Example with additional_dfs (legacy):
         >>> adapter = MultiStreamAdapter(
         ...     feature_columns=["open", "high", "low", "close"],
         ...     timeframes=["1min", "5min", "15min"],
@@ -78,6 +114,9 @@ class MultiStreamAdapter(BaseAdapter):
         stride: int = 1,
         timeframes: list[str] | None = None,
         data_dir: Path | str | None = None,
+        symbol: str | None = None,
+        split: str | None = None,
+        base_path: str | Path = "data/canonical",
     ):
         """
         Initialize the multi-stream adapter.
@@ -93,7 +132,10 @@ class MultiStreamAdapter(BaseAdapter):
             timeframes: List of timeframes to use. First is anchor (smallest).
                 Defaults to ["1min", "5min", "15min"].
             data_dir: Directory to load additional timeframe parquet files from
-                if not provided in additional_dfs.
+                if not provided in additional_dfs (legacy mode).
+            symbol: Trading symbol (e.g., "MES") for loading from raw MTF store.
+            split: Data split ("train", "val", "test") for loading from raw MTF store.
+            base_path: Base path for the raw MTF store. Default: "data/canonical".
         """
         # Use raw OHLCV by default for multi-stream models
         if feature_columns is None:
@@ -113,6 +155,11 @@ class MultiStreamAdapter(BaseAdapter):
             else self.DEFAULT_TIMEFRAMES.copy()
         )
         self.data_dir = Path(data_dir) if data_dir else None
+
+        # Raw MTF store integration
+        self.symbol = symbol
+        self.split = split
+        self.base_path = Path(base_path)
 
     def transform(
         self,
@@ -243,6 +290,12 @@ class MultiStreamAdapter(BaseAdapter):
         """
         Collect DataFrames for all timeframes.
 
+        Tries loading in this order:
+        1. Primary DataFrame (for anchor timeframe)
+        2. additional_dfs if provided
+        3. Raw MTF store if symbol and split are configured
+        4. Legacy data_dir fallback
+
         Args:
             df: Primary DataFrame (anchor timeframe).
             anchor_tf: Anchor timeframe string.
@@ -266,8 +319,18 @@ class MultiStreamAdapter(BaseAdapter):
             elif tf in additional_dfs:
                 # Provided in additional_dfs
                 tf_dfs[tf] = additional_dfs[tf]
+            elif self.symbol is not None and self.split is not None:
+                # Load from raw MTF store
+                tf_df = self._load_timeframe_from_store(tf)
+                if tf_df is not None:
+                    tf_dfs[tf] = tf_df
+                else:
+                    raise ValueError(
+                        f"Cannot find data for timeframe '{tf}' in raw MTF store. "
+                        f"Expected at: {self.base_path}/raw_mtf/{self.symbol}_{tf}_{self.split}.parquet"
+                    )
             elif self.data_dir is not None:
-                # Try to load from data_dir
+                # Legacy: Try to load from data_dir
                 tf_df = self._load_timeframe_from_dir(tf, feature_cols)
                 if tf_df is not None:
                     tf_dfs[tf] = tf_df
@@ -279,7 +342,10 @@ class MultiStreamAdapter(BaseAdapter):
                     )
             else:
                 raise ValueError(
-                    f"No data for timeframe '{tf}'. " f"Provide in additional_dfs or set data_dir."
+                    f"No data for timeframe '{tf}'. Options: "
+                    f"1) Provide in additional_dfs, "
+                    f"2) Set symbol and split for raw MTF store, "
+                    f"3) Set data_dir for legacy loading."
                 )
 
             # Validate feature columns exist in this timeframe's DataFrame
@@ -289,6 +355,38 @@ class MultiStreamAdapter(BaseAdapter):
                 raise ValueError(f"Timeframe '{tf}' DataFrame missing feature columns: {missing}")
 
         return tf_dfs
+
+    def _load_timeframe_from_store(self, timeframe: str) -> pd.DataFrame | None:
+        """
+        Load a timeframe DataFrame from the raw MTF store.
+
+        Uses the raw_mtf_store module to load pre-saved OHLCV data
+        for the specified timeframe, symbol, and split.
+
+        Args:
+            timeframe: Timeframe string (e.g., "5min", "15min").
+
+        Returns:
+            DataFrame if found, None otherwise.
+        """
+        if self.symbol is None or self.split is None:
+            return None
+
+        try:
+            df = load_raw_mtf(
+                symbol=self.symbol,
+                timeframe=timeframe,
+                split=self.split,
+                base_path=self.base_path,
+            )
+            logger.info(
+                f"Loaded timeframe '{timeframe}' from raw MTF store: "
+                f"{self.symbol}/{self.split} ({len(df)} rows)"
+            )
+            return df
+        except Exception as e:
+            logger.debug(f"Failed to load {timeframe} from raw MTF store: {e}")
+            return None
 
     def _load_timeframe_from_dir(
         self, timeframe: str, feature_cols: list[str]
@@ -597,7 +695,96 @@ class MultiStreamAdapter(BaseAdapter):
         # Default horizon
         return 20
 
+    @classmethod
+    def from_store(
+        cls,
+        symbol: str,
+        split: str,
+        timeframes: list[str] | None = None,
+        sequence_length: int = 60,
+        base_path: str | Path = "data/canonical",
+        **kwargs,
+    ) -> MultiStreamAdapter:
+        """
+        Create a MultiStreamAdapter configured to load from the raw MTF store.
+
+        This is the recommended factory method for 4D models (PatchTST, iTransformer)
+        that need multi-timeframe OHLCV data.
+
+        Args:
+            symbol: Trading symbol (e.g., "MES", "MGC").
+            split: Data split ("train", "val", "test").
+            timeframes: List of timeframes to use. If None, uses all standard
+                timeframes from the store: ["1min", "3min", "5min", "10min",
+                "15min", "30min", "60min", "2h", "4h"].
+            sequence_length: Length of each sequence window.
+            base_path: Base path for the raw MTF store.
+            **kwargs: Additional arguments passed to constructor.
+
+        Returns:
+            Configured MultiStreamAdapter instance.
+
+        Example:
+            >>> adapter = MultiStreamAdapter.from_store(
+            ...     symbol="MES",
+            ...     split="train",
+            ...     timeframes=["1min", "5min", "15min", "60min"],
+            ...     sequence_length=60,
+            ... )
+            >>> result = adapter.transform(anchor_df)
+        """
+        # Use all store timeframes if not specified
+        if timeframes is None:
+            timeframes = STORE_TIMEFRAMES.copy()
+
+        return cls(
+            symbol=symbol,
+            split=split,
+            timeframes=timeframes,
+            sequence_length=sequence_length,
+            base_path=base_path,
+            **kwargs,
+        )
+
+    def load_all_from_store(self) -> dict[str, pd.DataFrame]:
+        """
+        Load all configured timeframes from the raw MTF store.
+
+        This is useful when you want to pre-load all data before calling transform().
+
+        Returns:
+            Dictionary mapping timeframe -> DataFrame.
+
+        Raises:
+            ValueError: If symbol or split not configured.
+            TimeframeNotFoundError: If any timeframe is missing from store.
+
+        Example:
+            >>> adapter = MultiStreamAdapter.from_store("MES", "train")
+            >>> all_data = adapter.load_all_from_store()
+            >>> print(list(all_data.keys()))
+            ['1min', '3min', '5min', ...]
+        """
+        if self.symbol is None or self.split is None:
+            raise ValueError(
+                "Cannot load from store: symbol and split must be configured. "
+                "Use MultiStreamAdapter.from_store() to create a store-configured adapter."
+            )
+
+        return load_all_timeframes(
+            symbol=self.symbol,
+            split=self.split,
+            base_path=self.base_path,
+            timeframes=self.timeframes,
+            missing_ok=False,
+        )
+
+
+# Re-export store timeframes for convenience
+MTF_TIMEFRAMES = STORE_TIMEFRAMES
+
 
 __all__ = [
     "MultiStreamAdapter",
+    "MTF_TIMEFRAMES",
 ]

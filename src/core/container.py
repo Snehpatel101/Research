@@ -690,6 +690,78 @@ class TimeSeriesDataContainer:
             symbol_column=split_data.symbol_column if symbol_isolated else None,
         )
 
+    def get_multi_stream_4d(
+        self,
+        symbol: str,
+        split: str,
+        timeframes: list[str] | None = None,
+        sequence_length: int = 60,
+        base_path: str | Path = "data/canonical",
+    ) -> np.ndarray:
+        """
+        Get multi-timeframe data in 4D format from raw MTF store.
+
+        Loads raw OHLCV data from the raw MTF store for multiple timeframes
+        and returns a 4D numpy array suitable for PatchTST, iTransformer,
+        and other multi-stream 4D models.
+
+        This method is for models that need raw OHLCV at multiple resolutions,
+        using data from the raw MTF store (created during pipeline execution).
+
+        Args:
+            symbol: Trading symbol (e.g., "MES", "MGC")
+            split: Data split ("train", "val", "test")
+            timeframes: List of timeframes to include. If None, uses all
+                standard timeframes from the raw MTF store.
+            sequence_length: Length of each sequence window (default 60)
+            base_path: Base path for the raw MTF store (default "data/canonical")
+
+        Returns:
+            4D numpy array of shape (n_samples, n_timeframes, seq_len, n_features)
+            where n_features is typically 5 (OHLCV)
+
+        Raises:
+            ValueError: If split not found or if MTF data not available
+            TimeframeNotFoundError: If requested timeframe data doesn't exist
+
+        Example:
+            >>> container = TimeSeriesDataContainer.from_parquet_dir(
+            ...     "data/splits/scaled", horizon=20
+            ... )
+            >>> X_4d = container.get_multi_stream_4d(
+            ...     symbol="MES",
+            ...     split="train",
+            ...     timeframes=["1min", "5min", "15min", "60min"],
+            ...     sequence_length=60,
+            ... )
+            >>> X_4d.shape  # (n_samples, 4, 60, 5)
+        """
+        from src.data.adapters import MultiStreamAdapter
+
+        # Validate split exists in container
+        _validate_split_name(split)
+        if split not in self.splits:
+            raise KeyError(f"Split '{split}' not loaded. Available: {list(self.splits.keys())}")
+
+        split_data = self.get_split(split)
+
+        # Create adapter configured to load from raw MTF store
+        adapter = MultiStreamAdapter.from_store(
+            symbol=symbol,
+            split=split,
+            timeframes=timeframes,
+            sequence_length=sequence_length,
+            base_path=base_path,
+            label_column=split_data.label_column,
+            weight_column=split_data.weight_column,
+        )
+
+        # Transform using the split's DataFrame as anchor
+        # The adapter will load other timeframes from the store
+        result = adapter.transform(split_data.df)
+
+        return result.X
+
     # =========================================================================
     # NEURALFORECAST FORMAT
     # =========================================================================

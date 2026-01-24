@@ -251,6 +251,9 @@ class UnifiedDataPreparation:
         weight_column: str | None = None,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
         apply_scaling: bool = True,
+        symbol: str | None = None,
+        split: str | None = None,
+        base_path: str = "data/canonical",
     ) -> PreparedData:
         """
         Prepare data for a single model - NO BYPASS.
@@ -270,6 +273,10 @@ class UnifiedDataPreparation:
             additional_dfs: For multi-stream models, dictionary mapping timeframe
                            strings to DataFrames (e.g., {"5min": df_5min}).
             apply_scaling: Whether to apply scaling. Default True.
+            symbol: Trading symbol (e.g., "MES") for auto-loading multi-stream data
+                   from raw MTF store when additional_dfs is not provided.
+            split: Data split ("train", "val", "test") for raw MTF store loading.
+            base_path: Base path for raw MTF store. Default "data/canonical".
 
         Returns:
             PreparedData containing scaled, adapter-transformed data ready
@@ -314,22 +321,77 @@ class UnifiedDataPreparation:
         adapter = get_adapter(adapter_id=adapter_type, **adapter_kwargs)
 
         # Transform each split through the adapter
-        if adapter_type == "multi_stream" and additional_dfs:
-            # Multi-stream needs additional timeframe DataFrames
-            train_additional = self._split_additional_dfs(additional_dfs, "train")
-            val_additional = self._split_additional_dfs(additional_dfs, "val")
-            test_additional = (
-                self._split_additional_dfs(additional_dfs, "test") if test_df is not None else None
-            )
+        if adapter_type == "multi_stream":
+            if additional_dfs:
+                # Multi-stream with explicit additional DataFrames
+                train_additional = self._split_additional_dfs(additional_dfs, "train")
+                val_additional = self._split_additional_dfs(additional_dfs, "val")
+                test_additional = (
+                    self._split_additional_dfs(additional_dfs, "test")
+                    if test_df is not None
+                    else None
+                )
 
-            ms_adapter = cast(MultiStreamAdapter, adapter)
-            train_result = ms_adapter.transform(train_df, additional_dfs=train_additional)
-            val_result = ms_adapter.transform(val_df, additional_dfs=val_additional)
-            test_result = (
-                ms_adapter.transform(test_df, additional_dfs=test_additional)
-                if test_df is not None
-                else None
-            )
+                ms_adapter = cast(MultiStreamAdapter, adapter)
+                train_result = ms_adapter.transform(train_df, additional_dfs=train_additional)
+                val_result = ms_adapter.transform(val_df, additional_dfs=val_additional)
+                test_result = (
+                    ms_adapter.transform(test_df, additional_dfs=test_additional)
+                    if test_df is not None
+                    else None
+                )
+            elif symbol is not None and split is not None:
+                # Auto-load from raw MTF store for 4D models
+                logger.info(
+                    f"Auto-loading multi-stream data from raw MTF store: "
+                    f"symbol={symbol}, base_path={base_path}"
+                )
+
+                # Create store-aware adapters for each split
+                train_adapter = MultiStreamAdapter.from_store(
+                    symbol=symbol,
+                    split="train",
+                    timeframes=self.config.mtf_timeframes,
+                    sequence_length=self.config.sequence_length,
+                    base_path=base_path,
+                    feature_columns=feature_columns,
+                    label_column=label_column,
+                    weight_column=weight_column,
+                )
+                val_adapter = MultiStreamAdapter.from_store(
+                    symbol=symbol,
+                    split="val",
+                    timeframes=self.config.mtf_timeframes,
+                    sequence_length=self.config.sequence_length,
+                    base_path=base_path,
+                    feature_columns=feature_columns,
+                    label_column=label_column,
+                    weight_column=weight_column,
+                )
+
+                train_result = train_adapter.transform(train_df)
+                val_result = val_adapter.transform(val_df)
+
+                if test_df is not None:
+                    test_adapter = MultiStreamAdapter.from_store(
+                        symbol=symbol,
+                        split="test",
+                        timeframes=self.config.mtf_timeframes,
+                        sequence_length=self.config.sequence_length,
+                        base_path=base_path,
+                        feature_columns=feature_columns,
+                        label_column=label_column,
+                        weight_column=weight_column,
+                    )
+                    test_result = test_adapter.transform(test_df)
+                else:
+                    test_result = None
+            else:
+                raise ValueError(
+                    f"Model '{model_name}' requires multi-stream adapter (4D data). "
+                    f"Either provide additional_dfs or set symbol and split to "
+                    f"auto-load from raw MTF store."
+                )
         else:
             train_result = adapter.transform(train_df)
             val_result = adapter.transform(val_df)

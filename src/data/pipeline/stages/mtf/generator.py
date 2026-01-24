@@ -22,6 +22,7 @@ Key Design Decisions:
 """
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -70,6 +71,10 @@ class MTFFeatureGenerator:
         Use mode='bars' or mode='both' instead
     include_indicators : bool, optional (deprecated)
         Use mode='indicators' or mode='both' instead
+    save_raw_mtf_store : bool, default False
+        If True, save raw OHLCV data for each timeframe to the MTF store.
+        Requires symbol, split, and optionally store_base_path to be provided
+        when calling generate_mtf_features().
     """
 
     def __init__(
@@ -79,10 +84,12 @@ class MTFFeatureGenerator:
         mode: MTFMode | str = DEFAULT_MTF_MODE,
         include_ohlcv: bool | None = None,
         include_indicators: bool | None = None,
+        save_raw_mtf_store: bool = False,
     ):
         """Initialize MTF feature generator with validation."""
         self.base_timeframe = base_timeframe
         self.mtf_timeframes = mtf_timeframes or DEFAULT_MTF_TIMEFRAMES
+        self.save_raw_mtf_store = save_raw_mtf_store
 
         # Handle mode parameter
         if isinstance(mode, str):
@@ -111,7 +118,8 @@ class MTFFeatureGenerator:
 
         logger.info(
             f"Initialized MTFFeatureGenerator: base={base_timeframe}, "
-            f"mtf={self.mtf_timeframes}, mode={self.mode.value}"
+            f"mtf={self.mtf_timeframes}, mode={self.mode.value}, "
+            f"save_raw_mtf_store={self.save_raw_mtf_store}"
         )
 
     @property
@@ -318,7 +326,13 @@ class MTFFeatureGenerator:
         result = df_base_idx.join(aligned)
         return result.reset_index()
 
-    def generate_mtf_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def generate_mtf_features(
+        self,
+        df: pd.DataFrame,
+        symbol: str | None = None,
+        split: str | None = None,
+        store_base_path: str | Path | None = None,
+    ) -> pd.DataFrame:
         """
         Generate all MTF features for the input data.
 
@@ -326,11 +340,24 @@ class MTFFeatureGenerator:
         ----------
         df : pd.DataFrame
             Base timeframe OHLCV data with 'datetime' column
+        symbol : str, optional
+            Trading symbol (e.g., "MES"). Required if save_raw_mtf_store=True.
+        split : str, optional
+            Data split ("train", "val", "test"). Required if save_raw_mtf_store=True.
+        store_base_path : str or Path, optional
+            Base directory for raw MTF storage. Defaults to "data/canonical".
+            Only used if save_raw_mtf_store=True.
 
         Returns
         -------
         pd.DataFrame
             DataFrame with base data + all MTF features
+
+        Notes
+        -----
+        If save_raw_mtf_store was enabled during initialization and symbol/split
+        are provided, raw OHLCV data for each timeframe will be persisted to the
+        MTF store for later use by 4D models (PatchTST, iTransformer, etc.).
         """
         validate_ohlcv_dataframe(df)
 
@@ -340,8 +367,20 @@ class MTFFeatureGenerator:
                 f"Need at least {MIN_BASE_BARS} rows."
             )
 
+        # Validate save_raw_mtf_store requirements
+        should_save = self.save_raw_mtf_store and symbol is not None and split is not None
+        if self.save_raw_mtf_store and (symbol is None or split is None):
+            logger.warning(
+                "save_raw_mtf_store=True but symbol or split not provided. "
+                "Raw MTF data will NOT be saved to store."
+            )
+
+        # Import save_raw_mtf lazily to avoid circular imports
+        if should_save:
+            from src.data.store import save_raw_mtf
+
         result = df.copy()
-        logger.info(f"Generating MTF features for {len(df)} rows " f"(mode={self.mode.value})")
+        logger.info(f"Generating MTF features for {len(df)} rows (mode={self.mode.value})")
 
         for tf in self.mtf_timeframes:
             logger.info(f"Processing timeframe: {tf}")
@@ -352,6 +391,17 @@ class MTFFeatureGenerator:
             if len(df_tf) < MIN_MTF_BARS:
                 logger.warning(f"  Insufficient {tf} bars ({len(df_tf)}). Skipping this timeframe.")
                 continue
+
+            # Save raw OHLCV to MTF store if enabled
+            if should_save:
+                self._save_raw_ohlcv_to_store(
+                    df_tf=df_tf,
+                    timeframe=tf,
+                    symbol=symbol,  # type: ignore[arg-type]
+                    split=split,  # type: ignore[arg-type]
+                    base_path=store_base_path,
+                    save_func=save_raw_mtf,
+                )
 
             mtf_columns = []
             tf_suffix = self._get_tf_suffix(tf)
@@ -379,6 +429,58 @@ class MTFFeatureGenerator:
         logger.info(f"Total MTF features added: {total_mtf_cols}")
 
         return result
+
+    def _save_raw_ohlcv_to_store(
+        self,
+        df_tf: pd.DataFrame,
+        timeframe: str,
+        symbol: str,
+        split: str,
+        base_path: str | Path | None,
+        save_func,
+    ) -> None:
+        """
+        Save raw OHLCV data to the MTF store.
+
+        Parameters
+        ----------
+        df_tf : pd.DataFrame
+            Resampled OHLCV data at the target timeframe
+        timeframe : str
+            Timeframe string (e.g., "5min", "15min")
+        symbol : str
+            Trading symbol (e.g., "MES")
+        split : str
+            Data split ("train", "val", "test")
+        base_path : str or Path or None
+            Base directory for storage. If None, uses default.
+        save_func : callable
+            The save_raw_mtf function from src.data.store
+        """
+        # Extract only OHLCV columns for raw storage
+        ohlcv_cols = ["datetime", "open", "high", "low", "close", "volume"]
+        available_cols = [c for c in ohlcv_cols if c in df_tf.columns]
+        raw_ohlcv = df_tf[available_cols].copy()
+
+        try:
+            if base_path is not None:
+                save_func(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    split=split,
+                    df=raw_ohlcv,
+                    base_path=base_path,
+                )
+            else:
+                save_func(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    split=split,
+                    df=raw_ohlcv,
+                )
+            logger.info(f"  Saved raw {timeframe} OHLCV to MTF store ({len(raw_ohlcv)} rows)")
+        except Exception as e:
+            logger.warning(f"  Failed to save raw {timeframe} OHLCV to store: {e}")
 
     def validate_no_lookahead(self, df: pd.DataFrame, verbose: bool = False) -> bool:
         """

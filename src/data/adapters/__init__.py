@@ -43,7 +43,7 @@ from .multi_resolution_utils import (
     DEFAULT_MTF_FEATURES,
     DEFAULT_MTF_TIMEFRAMES,
 )
-from .multi_stream import MultiStreamAdapter
+from .multi_stream import MTF_TIMEFRAMES, MultiStreamAdapter
 
 # PHASE_2: Unified data preparation (split + transform + scale)
 from .preparation import PreparedData, UnifiedDataPreparation, prepare_for_model
@@ -74,6 +74,8 @@ __all__ = [
     "create_multi_resolution_dataset",
     "DEFAULT_MTF_FEATURES",
     "DEFAULT_MTF_TIMEFRAMES",
+    # Multi-Stream 4D (from raw MTF store)
+    "MTF_TIMEFRAMES",
     # PHASE_2: Factory
     "AdapterFactory",
     "create_adapter_factory",
