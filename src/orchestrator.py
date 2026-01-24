@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,13 @@ from typing import Any
 import pandas as pd
 
 from src.pipeline_config import PipelineConfig
+
+warnings.warn(
+    "src.orchestrator is deprecated. Use src.factory.MLFactory instead. "
+    "This module will be removed in a future version.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +92,9 @@ class PipelineResult:
 
 class MLPipeline:
     """
+    .. deprecated::
+        Use :class:`src.factory.MLFactory` instead.
+
     THE single entry point for the ML pipeline.
 
     Delegates heavy lifting to:
@@ -134,9 +145,6 @@ class MLPipeline:
 
         # Phase 3: Backtest (optional)
         backtest_metrics: dict[str, float] = {}
-        # Backtest disabled for now - config.run_backtest doesn't exist
-        # if self.config.run_backtest:
-        #     backtest_metrics = self._backtest(df)
 
         # Phase 4: Bundle (optional)
         bundle_path = None
@@ -273,10 +281,13 @@ class MLPipeline:
 
                 core_config = CorePipelineConfig(
                     symbol=self.config.symbol,
+                    data_path=str(self.config.data_path),
                     output_dir=self._run_dir,
                 )
                 builder = BundleBuilder(core_config)
-            except ImportError:
+            except (ImportError, TypeError):
+                # ImportError: core config not available
+                # TypeError: config incompatibility (missing required fields)
                 builder = BundleBuilder(self.config)
 
             bundle_result = builder.build_from_training_result(self._training_result)

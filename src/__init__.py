@@ -38,6 +38,7 @@ __all__ = [
 def __getattr__(name: str):
     """Lazy imports."""
     if name == "MLPipeline":
+        # DEPRECATED: Use src.factory.MLFactory instead
         from src.orchestrator import MLPipeline
 
         return MLPipeline
@@ -48,6 +49,7 @@ def __getattr__(name: str):
         return PipelineConfig
 
     if name == "PipelineResult":
+        # DEPRECATED: Use src.factory.ExperimentResult instead
         from src.orchestrator import PipelineResult
 
         return PipelineResult

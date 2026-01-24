@@ -468,9 +468,19 @@ def create_5d_objective(
                 )
         else:
             raise ValueError(
-                "val_data must be a DataFrame with OHLCV columns when generate_labels_per_trial=True. "
+                "val_data must be a DataFrame with OHLCV columns when generate_labels_per_trial=False. "
                 "Either provide a DataFrame or set generate_labels_per_trial=False."
             )
+
+        # Pre-compute ATR on train and val data ONCE before trials start
+        # This avoids recomputing ATR inside each trial (significant speedup)
+        atr_col = f"atr_{atr_period}"
+        if atr_col not in train_data.columns:
+            train_data = train_data.copy()
+            train_data[atr_col] = _compute_atr(train_data, atr_period)
+        if atr_col not in val_data.columns:
+            val_data = val_data.copy()
+            val_data[atr_col] = _compute_atr(val_data, atr_period)
 
     def objective(trial: optuna.Trial) -> float:
         """
@@ -503,7 +513,8 @@ def create_5d_objective(
             # Ensure minimum features
             if len(selected_features) < min_features:
                 # Add features to meet minimum (deterministically based on trial)
-                remaining = [f for f in searchable_features if f not in selected_features]
+                # Use set difference for O(1) lookup instead of O(n) list comprehension
+                remaining = list(set(searchable_features) - set(selected_features))
                 np.random.seed(trial.number)
                 np.random.shuffle(remaining)
                 needed = min_features - len(selected_features)

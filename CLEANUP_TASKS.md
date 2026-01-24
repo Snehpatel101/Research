@@ -1,7 +1,7 @@
 # ML Factory - Remaining Tasks
 
 **Last Updated:** 2026-01-24
-**Status:** Phases 0-5 Complete | Advanced Models Pending
+**Status:** Phases 0-6 Complete | All Models Implemented
 
 ---
 
@@ -15,105 +15,60 @@
 | Phase 3 | +2,298 lines (5D Optuna) |
 | Phase 4 | +50 lines (validation wiring) |
 | Phase 5 | +1,281 lines (MLFactory + ExperimentConfig) |
+| Phase 6 | +3,690 lines (6 advanced neural models) |
 
 ---
 
-## Remaining: Advanced Models
+## Completed: Advanced Models (Phase 6)
 
 | Model | Status |
 |-------|--------|
-| InceptionTime | ⬜ |
-| 1D ResNet | ⬜ |
-| PatchTST | ⬜ |
-| iTransformer | ⬜ |
-| TFT | ⬜ |
-| N-BEATS | ⬜ |
+| InceptionTime | ✅ |
+| 1D ResNet | ✅ |
+| PatchTST | ✅ |
+| iTransformer | ✅ |
+| TFT | ✅ |
+| N-BEATS | ✅ |
 
 ---
 
 ### 3D Models (Sequence Adapter)
 
-#### InceptionTime ⬜
-**Location:** `src/models/neural/inception_time.py`
+#### InceptionTime ✅
+**Location:** `src/models/neural/inceptiontime_model.py`
 **Contract:** `DataRank.SEQUENCE_3D`, `FeatureMode.ENGINEERED`
+**Status:** Implemented (~500 lines)
 
-```python
-# Implementation pattern
-class InceptionTimeModel(BaseNeuralModel):
-    """InceptionTime for time series classification."""
-    # Multiple inception modules with different kernel sizes
-    # Residual connections
-    # Global average pooling
-```
-
-#### 1D ResNet ⬜
-**Location:** `src/models/neural/resnet_1d.py`
+#### 1D ResNet ✅
+**Location:** `src/models/neural/resnet1d_model.py`
 **Contract:** `DataRank.SEQUENCE_3D`, `FeatureMode.ENGINEERED`
-
-```python
-# Implementation pattern
-class ResNet1DModel(BaseNeuralModel):
-    """1D ResNet for time series classification."""
-    # Residual blocks with 1D convolutions
-    # Batch normalization
-    # Skip connections
-```
+**Status:** Implemented (~550 lines)
 
 ---
 
 ### 4D Models (MultiStream Adapter)
 
-#### PatchTST ⬜
-**Location:** `src/models/neural/patchtst.py`
+#### PatchTST ✅
+**Location:** `src/models/neural/patchtst_model.py`
 **Contract:** `DataRank.MULTI_TF_4D`, `FeatureMode.RAW`
+**Status:** Implemented (~480 lines)
 
-```python
-# Implementation pattern
-class PatchTSTModel(BaseNeuralModel):
-    """Patch Time Series Transformer."""
-    # Patching mechanism
-    # Channel-independent processing
-    # Transformer encoder
-```
-
-#### iTransformer ⬜
-**Location:** `src/models/neural/itransformer.py`
+#### iTransformer ✅
+**Location:** `src/models/neural/itransformer_model.py`
 **Contract:** `DataRank.MULTI_TF_4D`, `FeatureMode.RAW`
+**Status:** Implemented (~620 lines)
 
-```python
-# Implementation pattern
-class iTransformerModel(BaseNeuralModel):
-    """Inverted Transformer - attention over features."""
-    # Inverted attention (variate tokens)
-    # Feed-forward on time dimension
-```
+### 3D Models (Sequence Adapter) - Continued
 
-#### TFT (Temporal Fusion Transformer) ⬜
-**Location:** `src/models/neural/tft.py`
-**Contract:** `DataRank.MULTI_TF_4D`, `FeatureMode.RAW`
+#### TFT (Temporal Fusion Transformer) ✅
+**Location:** `src/models/neural/tft_model.py`
+**Contract:** `DataRank.SEQUENCE_3D`, `FeatureMode.ENGINEERED`
+**Status:** Implemented (~780 lines)
 
-```python
-# Implementation pattern
-class TFTModel(BaseNeuralModel):
-    """Temporal Fusion Transformer."""
-    # Variable selection networks
-    # LSTM encoder
-    # Multi-head attention
-    # Gated residual connections
-```
-
-#### N-BEATS ⬜
-**Location:** `src/models/neural/nbeats.py`
-**Contract:** `DataRank.MULTI_TF_4D`, `FeatureMode.RAW`
-
-```python
-# Implementation pattern
-class NBEATSModel(BaseNeuralModel):
-    """Neural Basis Expansion Analysis."""
-    # Stacks of blocks
-    # Trend and seasonality decomposition
-    # Fully connected layers
-```
+#### N-BEATS ✅
+**Location:** `src/models/neural/nbeats_model.py`
+**Contract:** `DataRank.SEQUENCE_3D`, `FeatureMode.ENGINEERED`
+**Status:** Implemented (~760 lines)
 
 ---
 

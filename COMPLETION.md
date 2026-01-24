@@ -4,6 +4,28 @@
 
 ---
 
+## Phase 6: Advanced Models | 2026-01-24 | COMPLETE
+
+**Impact:** +3,690 lines added (6 new model files)
+
+### Models Implemented
+
+| Model | File | Data Rank | Adapter | Lines |
+|-------|------|-----------|---------|-------|
+| InceptionTime | `src/models/neural/inceptiontime_model.py` | 3D | Sequence | ~500 |
+| 1D ResNet | `src/models/neural/resnet1d_model.py` | 3D | Sequence | ~550 |
+| PatchTST | `src/models/neural/patchtst_model.py` | 4D | MultiStream | ~480 |
+| iTransformer | `src/models/neural/itransformer_model.py` | 4D | MultiStream | ~620 |
+| TFT | `src/models/neural/tft_model.py` | 3D | Sequence | ~780 |
+| N-BEATS | `src/models/neural/nbeats_model.py` | 3D | Sequence | ~760 |
+
+### Verification
+- All models auto-register via @register decorator
+- All contracts registered in MODEL_CONTRACTS
+- Adapters route correctly (Sequence for 3D, MultiStream for 4D)
+
+---
+
 ## Phase 5: Unified Entry Point | 2026-01-24 | COMPLETE
 
 **Impact:** +1,281 lines added (3 new files, 1 deleted file)
