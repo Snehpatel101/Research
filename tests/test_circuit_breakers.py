@@ -104,7 +104,7 @@ class TestMaxDrawdownCircuitBreaker:
 
         # Verify drawdown was significant enough to potentially trigger
         # (exact trigger depends on trade timing)
-        assert result.metrics.max_drawdown > 0, "Should have some drawdown"
+        assert result.metrics.max_drawdown < 0, "Should have some drawdown (negative value)"
 
 
 class TestDailyLossCircuitBreaker:

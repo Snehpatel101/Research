@@ -91,8 +91,8 @@ class TestBacktesterBasicRun:
         assert np.isfinite(metrics.sharpe_ratio) or metrics.total_trades == 0
         assert metrics.win_rate >= 0.0
         assert metrics.win_rate <= 1.0
-        assert metrics.max_drawdown >= 0.0
-        assert metrics.max_drawdown <= 1.0
+        assert metrics.max_drawdown <= 0.0  # Drawdown is negative
+        assert metrics.max_drawdown >= -1.0  # Can't lose more than 100%
 
     def test_backtest_config_for_mes(self):
         """Test MES-specific configuration factory."""

@@ -106,10 +106,6 @@ from .lineage import (
 from .raw_mtf_store import (
     TIMEFRAMES,
     VALID_SPLITS,
-    InvalidSplitError,
-    InvalidTimeframeError,
-    RawMTFStoreError,
-    TimeframeNotFoundError,
     delete_raw_mtf,
     get_mtf_path,
     list_available_timeframes,
@@ -117,12 +113,18 @@ from .raw_mtf_store import (
     load_raw_mtf,
     save_raw_mtf,
 )
-from .store import (
+
+# Import exceptions from core (consolidated in Phase 12F)
+from src.core.exceptions import (
     FeatureIntegrityError,
     FeatureNotFoundError,
-    FeatureStore,
     FeatureStoreError,
+    InvalidSplitError,
+    InvalidTimeframeError,
+    RawMTFStoreError,
+    TimeframeNotFoundError,
 )
+from .store import FeatureStore
 
 # Version management
 from .versioning import (
