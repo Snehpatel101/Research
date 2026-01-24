@@ -364,7 +364,7 @@ class FeaturePruner:
             score_before=score,
             score_after=score,
             improvement=0.0,
-            feature_importance={f: 1.0 for f in feature_names},
+            feature_importance=dict.fromkeys(feature_names, 1.0),
         )
 
     def _get_feature_importance(
@@ -424,7 +424,7 @@ class FeaturePruner:
 
         except Exception as e:
             logger.warning(f"Failed to compute feature importance: {e}")
-            return {f: 1.0 for f in feature_names}
+            return dict.fromkeys(feature_names, 1.0)
 
     def _importance_pruning(
         self,

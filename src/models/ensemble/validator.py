@@ -17,6 +17,8 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
+from src.core.exceptions import EnsembleCompatibilityError
+
 from ..registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
@@ -26,12 +28,6 @@ HETEROGENEOUS_ENSEMBLE_TYPES: set[str] = {"stacking"}
 
 # Ensemble types that require homogeneous base models (same input shape)
 HOMOGENEOUS_ENSEMBLE_TYPES: set[str] = {"voting", "blending"}
-
-
-class EnsembleCompatibilityError(ValueError):
-    """Raised when incompatible models are combined in an ensemble."""
-
-    pass
 
 
 def validate_ensemble_config(

@@ -56,6 +56,9 @@ class Trade:
     label: int | None = None
     prediction: int | None = None
     confidence: float | None = None
+    initial_risk_1r: float = 0.0
+    r_multiple: float = 0.0
+    stop_loss_price: float | None = None
 
     @property
     def is_winner(self) -> bool:
@@ -68,6 +71,31 @@ class Trade:
         if hasattr(self.exit_time, "timestamp") and hasattr(self.entry_time, "timestamp"):
             return int((self.exit_time - self.entry_time).total_seconds())
         return 0
+
+    def calculate_r_multiple(self, point_value: float = 5.0) -> None:
+        """
+        Calculate R-multiple from stop loss.
+
+        R-multiple = Net P&L / Initial Risk (1R)
+        where 1R = distance to stop loss in dollars
+
+        Args:
+            point_value: Dollar value per point (default 5.0 for MES)
+        """
+        if self.stop_loss_price is None or self.stop_loss_price == 0:
+            self.r_multiple = 0.0
+            self.initial_risk_1r = 0.0
+            return
+
+        # Calculate initial risk per contract
+        risk_per_contract = abs(self.entry_price - self.stop_loss_price) * point_value
+        self.initial_risk_1r = risk_per_contract * self.contracts
+
+        # Calculate R-multiple
+        if self.initial_risk_1r > 0:
+            self.r_multiple = self.net_pnl / self.initial_risk_1r
+        else:
+            self.r_multiple = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         """Convert trade to dictionary."""
@@ -86,6 +114,9 @@ class Trade:
             "prediction": self.prediction,
             "confidence": self.confidence,
             "is_winner": self.is_winner,
+            "initial_risk_1r": self.initial_risk_1r,
+            "r_multiple": self.r_multiple,
+            "stop_loss_price": self.stop_loss_price,
         }
 
 

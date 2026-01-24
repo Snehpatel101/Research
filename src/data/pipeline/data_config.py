@@ -142,6 +142,12 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     mtf_timeframes: list[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
     mtf_mode: str = field(default_factory=lambda: DEFAULT_MTF_MODE.value)
 
+    # Pipeline stage timeout configuration (12D-3)
+    # Timeout in seconds for each pipeline stage. 0 = no timeout.
+    # Prevents stuck stages from blocking the entire pipeline.
+    stage_timeout_seconds: int = 3600  # 1 hour default
+    enable_stage_timeouts: bool = False  # Disabled by default for backward compatibility
+
     # Labeling parameters - Dynamic Horizon Configuration
     horizon_config: HorizonConfig | None = None
     label_horizons: list[int] = field(default_factory=lambda: list(ACTIVE_HORIZONS))

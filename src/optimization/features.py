@@ -344,7 +344,7 @@ class FeatureOptimizer:
         )
 
         # Track feature inclusion across trials
-        feature_inclusion_counts = {f: 0 for f in feature_names}
+        feature_inclusion_counts = dict.fromkeys(feature_names, 0)
         n_completed_trials = 0
 
         def objective(trial: optuna.Trial) -> float:

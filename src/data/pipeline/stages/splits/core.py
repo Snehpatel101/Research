@@ -14,17 +14,12 @@ from src.core.common.split_ratios import (
     DEFAULT_TRAIN_RATIO,
     DEFAULT_VAL_RATIO,
 )
+from src.core.exceptions import ChronologicalSortError
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 INVALID_LABEL_SENTINEL = -99
-
-
-class ChronologicalSortError(Exception):
-    """Raised when data is not chronologically sorted."""
-
-    pass
 
 
 def _verify_chronological_order(df: pd.DataFrame, datetime_col: str) -> None:

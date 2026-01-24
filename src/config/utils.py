@@ -27,6 +27,8 @@ from enum import Enum
 from pathlib import Path  # noqa: F401 - used for type hints in docstrings
 from typing import Any, TypeVar
 
+from src.core.exceptions import ConfigValueError
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -356,12 +358,6 @@ def get_config_value_strict(attr_path: str) -> Any:
         raise
     except Exception as e:
         raise ConfigValueError(f"Error accessing '{attr_path}': {e}") from e
-
-
-class ConfigValueError(Exception):
-    """Raised when a required configuration value cannot be retrieved."""
-
-    pass
 
 
 def validate_config_path(attr_path: str) -> tuple[bool, str | None]:

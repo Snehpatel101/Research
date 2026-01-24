@@ -113,7 +113,7 @@ class XGBoostModel(BaseModel):
             "early_stopping_rounds": 50,
             "eval_metric": "mlogloss",
             "tree_method": "hist",
-            "use_gpu": False,
+            "use_gpu": True,  # Phase 12A-8: Enable GPU by default
             "random_state": 42,
             "n_jobs": -1,
             "verbosity": 1,

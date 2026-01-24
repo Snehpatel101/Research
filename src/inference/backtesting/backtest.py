@@ -17,6 +17,7 @@ import pandas as pd
 
 from .costs import CostCalculator, TransactionCosts
 from .equity_curve import EquityCurve, Trade
+from .execution import MarketHoursFilter
 from .metrics import PerformanceMetrics
 from .position_sizing import BasePositionSizer, create_position_sizer
 
@@ -71,6 +72,11 @@ class BacktestConfig:
     fixed_contracts: int = 1
     min_holding_period: int = 1
     max_holding_period: int = 0
+    max_drawdown_threshold: float = 0.10
+    daily_loss_threshold: float = 0.02
+    consecutive_loss_limit: int = 5
+    enable_market_hours_filter: bool = True
+    contract_symbol: str = "MES"
 
     @classmethod
     def for_mes(cls, **kwargs: Any) -> BacktestConfig:
@@ -244,11 +250,21 @@ class Backtester:
         else:
             self.position_sizer = position_sizer
 
+        # Create market hours filter
+        self.market_hours_filter = MarketHoursFilter(
+            contract=self.config.contract_symbol,
+            enable_market_hours_filter=self.config.enable_market_hours_filter,
+            enable_adverse_selection=True,
+        )
+
         # State variables
         self._current_position: Position | None = None
         self._equity = self.config.initial_equity
         self._trades: list[Trade] = []
         self._equity_history: list[tuple[datetime, float]] = []
+        self._halt_trading = False
+        self._day_start_equity = self.config.initial_equity
+        self._consecutive_losses = 0
 
     def _validate_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validate and normalize predictions DataFrame."""
@@ -398,6 +414,7 @@ class Backtester:
         label: int | None = None,
         prediction: int | None = None,
         confidence: float | None = None,
+        atr: float | None = None,
     ) -> None:
         """Open a new position."""
         contracts = self._calculate_position_size(price)
@@ -405,12 +422,23 @@ class Backtester:
         if contracts <= 0:
             return
 
+        # Calculate stop loss (2% default or 2 ATR if available)
+        stop_loss = None
+        if atr is not None and atr > 0:
+            stop_distance_atr = 2.0
+            stop_loss = price - direction * stop_distance_atr * atr
+        else:
+            # Default 2% stop
+            stop_distance_pct = 0.02
+            stop_loss = price * (1 - direction * stop_distance_pct)
+
         self._current_position = Position(
             direction=direction,
             contracts=contracts,
             entry_price=price,
             entry_time=timestamp,
             entry_bar=bar_idx,
+            stop_loss=stop_loss,
             label=label,
             prediction=prediction,
             confidence=confidence,
@@ -452,11 +480,22 @@ class Backtester:
             label=pos.label,
             prediction=pos.prediction,
             confidence=pos.confidence,
+            stop_loss_price=pos.stop_loss,
         )
+
+        # Calculate R-multiple
+        trade.calculate_r_multiple(point_value=self.config.point_value)
 
         # Update equity
         self._equity += trade.net_pnl
         self._trades.append(trade)
+
+        # Track consecutive losses for circuit breaker
+        if trade.net_pnl <= 0:
+            self._consecutive_losses += 1
+        else:
+            self._consecutive_losses = 0
+
         self._current_position = None
 
         return trade
@@ -550,6 +589,10 @@ class Backtester:
 
             # If no position, check for entry
             if self._current_position is None:
+                # Check if tradeable time (market hours filter)
+                if not self.market_hours_filter.is_tradeable_time(timestamp):
+                    continue
+
                 if prediction == 1:
                     # Long signal
                     entry_price = self._get_execution_price(bar, 1, is_entry=True)
@@ -583,6 +626,65 @@ class Backtester:
                 current_equity += unrealized
 
             self._equity_history.append((timestamp, current_equity))
+
+            # Circuit Breaker: Check max drawdown
+            if len(self._equity_history) > 1:
+                equity_values = [e for _, e in self._equity_history]
+                running_max = max(equity_values)
+                current_drawdown = (
+                    (current_equity - running_max) / running_max if running_max > 0 else 0
+                )
+
+                if abs(current_drawdown) > self.config.max_drawdown_threshold:
+                    import logging
+
+                    logger = logging.getLogger(__name__)
+                    logger.critical(
+                        f"CIRCUIT BREAKER TRIGGERED: "
+                        f"Drawdown {current_drawdown:.2%} exceeds threshold {self.config.max_drawdown_threshold:.2%}"
+                    )
+                    self._halt_trading = True
+                    if self._current_position is not None:
+                        self._close_position(close_price, timestamp)
+                    break
+
+            # Circuit Breaker: Check daily loss limit
+            if i > 0:
+                prev_timestamp = data.iloc[i - 1]["timestamp"]
+                if timestamp.date() != prev_timestamp.date():
+                    # New day started
+                    daily_return = (
+                        (self._equity - self._day_start_equity) / self._day_start_equity
+                        if self._day_start_equity > 0
+                        else 0
+                    )
+                    if daily_return < -self.config.daily_loss_threshold:
+                        import logging
+
+                        logger = logging.getLogger(__name__)
+                        logger.critical(f"DAILY LOSS LIMIT: {daily_return:.2%}")
+                        self._halt_trading = True
+                        if self._current_position is not None:
+                            self._close_position(close_price, timestamp)
+                        break
+                    self._day_start_equity = self._equity
+
+            # Circuit Breaker: Check consecutive losses
+            if self._consecutive_losses >= self.config.consecutive_loss_limit:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.critical(
+                    f"CONSECUTIVE LOSS LIMIT: {self._consecutive_losses} losses in a row"
+                )
+                self._halt_trading = True
+                if self._current_position is not None:
+                    self._close_position(close_price, timestamp)
+                break
+
+            # Skip trading if halted
+            if self._halt_trading:
+                continue
 
         # Close any remaining position at the end
         if self._current_position is not None:

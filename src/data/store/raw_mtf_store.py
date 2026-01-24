@@ -31,6 +31,12 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.core.exceptions import (
+    InvalidSplitError,
+    InvalidTimeframeError,
+    TimeframeNotFoundError,
+)
+
 logger = logging.getLogger(__name__)
 
 # Standard timeframes for MTF analysis
@@ -52,30 +58,6 @@ VALID_SPLITS: list[str] = ["train", "val", "test"]
 
 # Default compression for parquet files
 DEFAULT_COMPRESSION: str = "snappy"
-
-
-class RawMTFStoreError(Exception):
-    """Base exception for raw MTF store errors."""
-
-    pass
-
-
-class TimeframeNotFoundError(RawMTFStoreError):
-    """Raised when a requested timeframe is not found."""
-
-    pass
-
-
-class InvalidTimeframeError(RawMTFStoreError):
-    """Raised when an invalid timeframe is specified."""
-
-    pass
-
-
-class InvalidSplitError(RawMTFStoreError):
-    """Raised when an invalid split is specified."""
-
-    pass
 
 
 def _validate_timeframe(timeframe: str) -> None:

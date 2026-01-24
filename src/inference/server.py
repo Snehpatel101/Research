@@ -37,6 +37,27 @@ from src.inference.pipeline import InferencePipeline
 
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# PROMETHEUS METRICS
+# =============================================================================
+
+try:
+    from prometheus_client import Counter, Gauge, Histogram, generate_latest
+
+    PROMETHEUS_AVAILABLE = True
+
+    # Prometheus metrics
+    request_count = Counter(
+        "inference_requests_total", "Total inference requests", ["model_name", "status"]
+    )
+    latency_histogram = Histogram("inference_latency_seconds", "Inference latency", ["model_name"])
+    drift_gauge = Gauge("feature_drift_psi", "PSI drift metric", ["feature_name"])
+    accuracy_gauge = Gauge("model_accuracy", "Current model accuracy")
+
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    logger.info("prometheus-client not available. Install with: pip install prometheus-client")
+
 
 # =============================================================================
 # SERVER CONFIGURATION
@@ -291,6 +312,7 @@ class ModelServer:
             with optional probabilities and confidence scores.
             """
             start_time = time.perf_counter()
+            model_name = self.pipeline.model_names[0]
 
             try:
                 # Validate batch size
@@ -305,12 +327,13 @@ class ModelServer:
                 result = self.pipeline.predict(X, calibrate=request.calibrate)
 
                 inference_time = (time.perf_counter() - start_time) * 1000
+                inference_time_seconds = inference_time / 1000.0
 
                 # Build response
                 response = {
                     "predictions": result.predictions.class_predictions.tolist(),
                     "inference_time_ms": inference_time,
-                    "model_name": self.pipeline.model_names[0],
+                    "model_name": model_name,
                     "horizon": self.pipeline.horizon,
                 }
 
@@ -322,12 +345,21 @@ class ModelServer:
                 self._request_count += 1
                 self._total_latency_ms += inference_time
 
+                # Update Prometheus metrics
+                if PROMETHEUS_AVAILABLE:
+                    request_count.labels(model_name=model_name, status="success").inc()
+                    latency_histogram.labels(model_name=model_name).observe(inference_time_seconds)
+
                 return response
 
             except HTTPException:
+                if PROMETHEUS_AVAILABLE:
+                    request_count.labels(model_name=model_name, status="error").inc()
                 raise
             except Exception as e:
                 self._error_count += 1
+                if PROMETHEUS_AVAILABLE:
+                    request_count.labels(model_name=model_name, status="error").inc()
                 logger.error(f"Prediction error: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
@@ -386,6 +418,39 @@ class ModelServer:
                 "error_rate": self._error_count / max(self._request_count, 1),
                 "average_latency_ms": avg_latency,
             }
+
+        @app.get("/prometheus-metrics", tags=["Metrics"])
+        async def prometheus_metrics():
+            """
+            Prometheus metrics endpoint.
+
+            Returns metrics in Prometheus exposition format for scraping.
+            Includes:
+            - inference_requests_total: Counter of total requests by model and status
+            - inference_latency_seconds: Histogram of inference latencies
+            - feature_drift_psi: Gauge for PSI drift metrics
+            - model_accuracy: Gauge for current model accuracy
+
+            Example:
+                # Configure Prometheus to scrape this endpoint
+                # prometheus.yml:
+                #   scrape_configs:
+                #     - job_name: 'ml_model_server'
+                #       static_configs:
+                #         - targets: ['localhost:8080']
+                #       metrics_path: '/prometheus-metrics'
+            """
+            if not PROMETHEUS_AVAILABLE:
+                raise HTTPException(
+                    status_code=501,
+                    detail="Prometheus metrics not available. "
+                    "Install with: pip install prometheus-client",
+                )
+
+            from fastapi.responses import Response
+
+            metrics_output = generate_latest()
+            return Response(content=metrics_output, media_type="text/plain")
 
         self._app = app
         return app

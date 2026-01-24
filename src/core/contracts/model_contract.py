@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from src.core.exceptions import ContractViolation
 from src.core.types import DataRank
 
 from .data_contract import FeatureMode, MTFMode
@@ -20,13 +21,17 @@ if TYPE_CHECKING:
     from .data_contract import DataContract
 
 
-class ModelContractViolation(Exception):
+class ModelContractViolation(ContractViolation):
     """Raised when data violates model contract requirements."""
 
     def __init__(self, model_name: str, issues: list[str]):
         self.model_name = model_name
         self.issues = issues
-        super().__init__(f"Model '{model_name}' contract violations: {issues}")
+        super().__init__(
+            f"Model '{model_name}' contract violations",
+            contract_name=model_name,
+            violation_details=str(issues),
+        )
 
 
 @dataclass(frozen=True)

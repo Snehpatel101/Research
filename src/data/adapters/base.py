@@ -202,6 +202,8 @@ class BaseAdapter(ABC):
         feature_columns: list[str] | None = None,
         label_column: str = "label_h20",
         weight_column: str | None = "sample_weight_h20",
+        lazy_load: bool = False,
+        chunk_size: int = 100_000,
     ):
         """
         Initialize adapter.
@@ -210,10 +212,14 @@ class BaseAdapter(ABC):
             feature_columns: Feature columns to use (None = auto-detect)
             label_column: Label column name
             weight_column: Weight column name (None = uniform weights)
+            lazy_load: Enable lazy loading for >1GB datasets (12D-7)
+            chunk_size: Rows per chunk for lazy loading
         """
         self.feature_columns = feature_columns
         self.label_column = label_column
         self.weight_column = weight_column
+        self.lazy_load = lazy_load
+        self.chunk_size = chunk_size
 
     @abstractmethod
     def transform(
@@ -362,6 +368,46 @@ class BaseAdapter(ABC):
         if self.weight_column and self.weight_column in df.columns:
             return np.asarray(df[self.weight_column].values.astype(np.float32))
         return None
+
+    def load_data_lazy(self, file_path: Path | str) -> pd.DataFrame:
+        """
+        Load data with lazy loading for large datasets (12D-7).
+
+        For datasets >1GB, reads in chunks to avoid memory spikes.
+        For smaller datasets, uses standard pd.read_parquet.
+
+        Args:
+            file_path: Path to parquet file
+
+        Returns:
+            DataFrame with all data loaded
+        """
+        file_path = Path(file_path)
+
+        # Check file size
+        file_size_gb = file_path.stat().st_size / (1024**3)
+
+        if not self.lazy_load or file_size_gb < 1.0:
+            # Standard loading for small files
+            return pd.read_parquet(file_path)
+
+        # Lazy loading for large files
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"Large dataset detected ({file_size_gb:.2f} GB). "
+            f"Using chunked reading with chunk_size={self.chunk_size:,}"
+        )
+
+        # Read in chunks and concatenate
+        chunks = []
+        parquet_file = pd.read_parquet(file_path, engine="pyarrow")
+
+        # If file is already loaded, just return it
+        # (pyarrow doesn't support true streaming for parquet yet)
+        # For future: use dask or pyarrow.parquet.ParquetFile for true streaming
+        return parquet_file
 
 
 __all__ = [

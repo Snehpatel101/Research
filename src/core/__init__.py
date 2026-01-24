@@ -221,6 +221,20 @@ from src.core.data_contract import (
 from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
 
 # =============================================================================
+# EXCEPTIONS - Unified exception hierarchy (Phase 8B)
+# =============================================================================
+from src.core.exceptions import (
+    ConfigError,
+    ContractViolation,
+    DataError,
+    InferenceError,
+    LeakageError,
+    LookaheadError,
+    MLFactoryError,
+    TrainingError,
+)
+
+# =============================================================================
 # INTERFACES - Abstract contracts
 # =============================================================================
 from src.core.interfaces import (
@@ -338,20 +352,6 @@ from src.core.validation import (
     # Timeframe validation
     validate_timeframe,
     validate_timeframe_list,
-)
-
-# =============================================================================
-# EXCEPTIONS - Unified exception hierarchy (Phase 8B)
-# =============================================================================
-from src.core.exceptions import (
-    ConfigError,
-    ContractViolation,
-    DataError,
-    InferenceError,
-    LeakageError,
-    LookaheadError,
-    MLFactoryError,
-    TrainingError,
 )
 
 # =============================================================================

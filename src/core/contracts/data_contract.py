@@ -26,15 +26,16 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.exceptions import ContractViolation
 from src.core.types import DataRank
 
 
-class DataContractViolation(Exception):
+class DataContractViolation(ContractViolation):
     """Raised when data violates contract."""
 
     def __init__(self, issues: list[str]):
         self.issues = issues
-        super().__init__(f"Contract violations: {issues}")
+        super().__init__("Contract violations", violation_details=str(issues))
 
 
 class FeatureMode(str, Enum):

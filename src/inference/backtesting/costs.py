@@ -334,7 +334,8 @@ class CostCalculator:
     """
 
     transaction_costs: TransactionCosts = field(default_factory=TransactionCosts.for_mes)
-    slippage_model: BaseSlippageModel = field(default_factory=FixedSlippage)
+    # Phase 12A-2: Use VolatilityScaledSlippage as default for more realistic costs
+    slippage_model: BaseSlippageModel = field(default_factory=VolatilityScaledSlippage)
 
     def calculate_trade_cost(
         self,

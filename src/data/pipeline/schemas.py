@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from src.core.exceptions import StageValidationError
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,16 +84,6 @@ STAGE_SCHEMAS: dict[str, StageSchema] = {
 }
 
 
-class StageValidationError(ValueError):
-    """Raised when stage output validation fails."""
-
-    def __init__(self, stage_name: str, issues: list[str]) -> None:
-        self.stage_name = stage_name
-        self.issues = issues
-        issue_str = "\n".join(f"  - {issue}" for issue in issues)
-        super().__init__(f"Stage '{stage_name}' validation failed:\n{issue_str}")
-
-
 def validate_stage_output(
     df: pd.DataFrame,
     stage_name: str,
@@ -149,8 +141,7 @@ def validate_stage_output(
     is_valid = len(issues) == 0
     if is_valid:
         logger.debug(
-            f"Stage '{stage_name}' validation passed: "
-            f"{len(df)} rows, {len(df.columns)} columns"
+            f"Stage '{stage_name}' validation passed: " f"{len(df)} rows, {len(df.columns)} columns"
         )
     else:
         logger.warning(f"Stage '{stage_name}' validation failed: {issues}")

@@ -40,6 +40,7 @@ import numpy as np
 import pandas as pd
 
 from src.core import CVMethod, PipelineConfig, TrainingMode
+from src.core.exceptions import PreTrainingValidationError
 from src.data.adapters import AlignedOOFResult, PreparedData
 from src.validation.cv import OOFPrediction, PurgedKFold, PurgedKFoldConfig, StackingDataset
 
@@ -53,6 +54,7 @@ from .services import (
     ModelTrainingService,
     OOFGenerationService,
     OOFRequest,
+    ParallelTrainingService,  # Phase 12A-6: Add parallel training support
 )
 
 if TYPE_CHECKING:
@@ -64,31 +66,6 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # EXCEPTIONS
 # =============================================================================
-
-
-class PreTrainingValidationError(Exception):
-    """
-    Raised when pre-training validation fails.
-
-    This exception is raised when any of the following validation checks fail:
-    - Data contract validation (strict mode)
-    - Leakage detection (check_leakage enabled)
-    - Lookahead audit (check_lookahead enabled)
-
-    The validation settings are controlled via PipelineConfig:
-    - strict_validation: Enable/disable data contract validation
-    - check_leakage: Enable/disable leakage detection
-    - check_lookahead: Enable/disable lookahead audit
-
-    Example:
-        try:
-            orchestrator.train(df)
-        except PreTrainingValidationError as e:
-            print(f"Validation failed: {e}")
-            # Inspect the specific issues and fix them
-    """
-
-    pass
 
 
 # =============================================================================
@@ -235,7 +212,9 @@ class UnifiedTrainingOrchestrator:
 
         # Initialize services (all heavy lifting is delegated)
         self._data_preparer = DataPreparer(config)
+        # Phase 12A-6: Use ParallelTrainingService for multi-model training
         self._model_service = ModelTrainingService()
+        self._parallel_service = ParallelTrainingService(n_jobs=config.n_jobs)
         self._oof_service = OOFGenerationService(
             cache_dir=self.output_dir / "oof_cache" if config.save_oof else None
         )

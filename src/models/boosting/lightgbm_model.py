@@ -145,7 +145,7 @@ class LightGBMModel(BaseModel):
             "reg_lambda": 1.0,
             "early_stopping_rounds": 50,
             "boosting_type": "gbdt",
-            "use_gpu": False,
+            "use_gpu": True,  # Phase 12A-8: Enable GPU by default
             "random_state": 42,
             "n_jobs": -1,
             "verbosity": -1,

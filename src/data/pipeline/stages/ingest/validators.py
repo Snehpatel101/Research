@@ -13,14 +13,10 @@ from typing import Any
 
 import pandas as pd
 
+from src.core.exceptions import SecurityError
+
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-class SecurityError(Exception):
-    """Exception raised for security violations such as path traversal attempts."""
-
-    pass
 
 
 def validate_path(file_path: Path, allowed_dirs: list[Path]) -> Path:

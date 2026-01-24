@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from src.core.exceptions import FeatureSchemaError
 from src.data.pipeline.config.feature_sets import (
     get_feature_set_definitions,
     resolve_feature_set_names,
@@ -28,12 +29,6 @@ from src.data.pipeline.utils.feature_sets import (
     resolve_feature_set,
     validate_feature_set_columns,
 )
-
-
-class FeatureSchemaError(ValueError):
-    """Raised when feature schemas are inconsistent across DataFrames."""
-
-    pass
 
 
 def validate_feature_schema(

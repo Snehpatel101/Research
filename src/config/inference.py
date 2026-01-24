@@ -268,6 +268,7 @@ class BacktestConfig(BaseConfig):
     max_position_size: float = 1.0
     max_positions: int = 1
     allow_short: bool = True
+    max_leverage: float = 1.0
 
     # Risk management
     stop_loss: float | None = None

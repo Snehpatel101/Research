@@ -27,6 +27,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.core.exceptions import ConfigError
+
 logger = logging.getLogger(__name__)
 
 
@@ -156,7 +158,7 @@ class ValidationResult:
         return f"Configuration {status}: {', '.join(parts)}"
 
 
-class ConfigValidationError(Exception):
+class ConfigValidationError(ConfigError):
     """Raised when configuration validation fails."""
 
     def __init__(self, result: ValidationResult):

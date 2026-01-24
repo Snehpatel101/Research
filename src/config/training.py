@@ -395,7 +395,7 @@ class ExperimentConfig(BaseConfig):
     description: str = ""
     tags: dict[str, str] = field(default_factory=dict)
     tracking_enabled: bool = True
-    tracking_backend: str = "local"
+    tracking_backend: str = "mlflow"
     tracking_uri: str | None = None
 
     # Run configuration

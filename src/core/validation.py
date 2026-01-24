@@ -20,7 +20,6 @@ Functions:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,41 +30,11 @@ from src.core.constants import (
     N_CLASSES,
     OHLCV_COLUMNS,
 )
+from src.core.exceptions import ValidationError
 
 # =============================================================================
 # VALIDATION ERROR
 # =============================================================================
-
-
-class ValidationError(ValueError):
-    """
-    Validation error with actionable message.
-
-    Attributes:
-        field: The field/parameter that failed validation
-        expected: What was expected
-        actual: What was received
-    """
-
-    def __init__(
-        self,
-        message: str,
-        field: str | None = None,
-        expected: Any | None = None,
-        actual: Any | None = None,
-    ):
-        self.field = field
-        self.expected = expected
-        self.actual = actual
-
-        # Build detailed message
-        full_message = message
-        if field:
-            full_message = f"[{field}] {message}"
-        if expected is not None and actual is not None:
-            full_message += f" (expected: {expected}, got: {actual})"
-
-        super().__init__(full_message)
 
 
 # =============================================================================

@@ -47,10 +47,8 @@ def _check_cuda_available() -> bool:
         # Check if CUDA is available via torch (more reliable)
         import torch
 
-        if not torch.cuda.is_available():
-            return False
         # CatBoost has excellent GPU support when CUDA is available
-        return True
+        return torch.cuda.is_available()
     except ImportError:
         # Fallback: assume GPU available if use_gpu=True in config
         return True
@@ -104,7 +102,7 @@ class CatBoostModel(BaseModel):
             "random_strength": 1.0,
             "bagging_temperature": 1.0,
             "early_stopping_rounds": 50,
-            "use_gpu": False,
+            "use_gpu": True,  # Phase 12A-8: Enable GPU by default
             "devices": "0",
             "random_state": 42,
             "thread_count": -1,

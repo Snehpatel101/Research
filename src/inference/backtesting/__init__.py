@@ -101,6 +101,14 @@ from .equity_curve import (
     create_equity_curve_from_trades,
 )
 
+# Execution (Phase 12A-3: Market Hours Filtering)
+from .execution import (
+    NY_SESSION_END,
+    NY_SESSION_START,
+    MarketHoursFilter,
+    create_market_hours_filter,
+)
+
 # Performance metrics
 from .metrics import (
     PerformanceMetrics,
@@ -188,4 +196,9 @@ __all__ = [
     "Trade",
     "EquityCurve",
     "create_equity_curve_from_trades",
+    # Execution (Phase 12A-3)
+    "MarketHoursFilter",
+    "create_market_hours_filter",
+    "NY_SESSION_START",
+    "NY_SESSION_END",
 ]

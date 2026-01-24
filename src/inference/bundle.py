@@ -749,6 +749,94 @@ class ModelBundle:
             metadata={**output.metadata, "calibrated": True},
         )
 
+    def validate_distribution(
+        self,
+        X_current: pd.DataFrame,
+        method: str = "ks",
+        threshold: float = 0.05,
+    ) -> tuple[bool, list[str]]:
+        """
+        Compare feature distributions to training data.
+
+        Detects distribution shift between current inference data and training data.
+        Uses statistical tests to identify features that have drifted significantly.
+
+        Args:
+            X_current: Current inference data
+            method: Statistical test ("ks", "psi", or "quantile")
+            threshold: p-value threshold (for KS) or PSI threshold
+
+        Returns:
+            Tuple of (is_valid, list_of_warnings)
+
+        Example:
+            bundle = ModelBundle.load('models/xgboost_h20/')
+            X_new = pd.DataFrame(...)
+            is_valid, warnings = bundle.validate_distribution(X_new, method='ks')
+            if not is_valid:
+                for warning in warnings:
+                    print(f"Warning: {warning}")
+        """
+        if not hasattr(self, "_training_stats"):
+            return True, ["No training stats available for comparison"]
+
+        warnings = []
+
+        for i, feature_name in enumerate(self.feature_columns):
+            if feature_name not in X_current.columns:
+                continue
+
+            current_values = X_current[feature_name].dropna()
+            train_stats = self._training_stats.get(feature_name, {})
+
+            if not train_stats:
+                continue
+
+            if method == "ks":
+                try:
+                    from scipy.stats import ks_2samp
+
+                    # Compare to training distribution
+                    train_mean = train_stats.get("mean", 0)
+                    train_std = train_stats.get("std", 1)
+
+                    # Standardize current data using training stats
+                    current_std = (current_values - train_mean) / (train_std + 1e-8)
+
+                    # KS test against standard normal (since training was standardized)
+                    stat, p_value = ks_2samp(current_std, np.random.randn(1000))
+
+                    if p_value < threshold:
+                        warnings.append(
+                            f"{feature_name}: Distribution shift detected "
+                            f"(KS p={p_value:.4f} < {threshold})"
+                        )
+                except ImportError:
+                    warnings.append("scipy not available for KS test")
+                    break
+
+            elif method == "psi":
+                # Population Stability Index
+                train_quantiles = train_stats.get("quantiles", [])
+                if len(train_quantiles) >= 5:
+                    # Calculate PSI
+                    try:
+                        current_quantiles = current_values.quantile(
+                            [0.05, 0.25, 0.5, 0.75, 0.95]
+                        ).tolist()
+                        # Simple PSI approximation
+                        psi_value = sum(
+                            abs(c - t) for c, t in zip(current_quantiles, train_quantiles)
+                        ) / len(train_quantiles)
+                        if psi_value > threshold:
+                            warnings.append(
+                                f"{feature_name}: PSI drift detected (PSI={psi_value:.4f} > {threshold})"
+                            )
+                    except Exception as e:
+                        logger.debug(f"PSI calculation failed for {feature_name}: {e}")
+
+        return len(warnings) == 0, warnings
+
     def validate(self) -> dict[str, Any]:
         """
         Validate bundle integrity.

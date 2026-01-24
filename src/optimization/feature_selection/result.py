@@ -349,7 +349,7 @@ class PersistedFeatureSelection:
             selection_method="passthrough",
             n_features_original=len(all_features),
             n_features_selected=len(all_features),
-            stability_scores={f: 1.0 for f in all_features},
+            stability_scores=dict.fromkeys(all_features, 1.0),
             importance_scores={},
             metadata={"passthrough": True},
         )

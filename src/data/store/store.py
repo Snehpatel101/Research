@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from src.core.exceptions import FeatureIntegrityError, FeatureNotFoundError
+
 from .cache import CacheMetadata, FeatureCache, compute_dataframe_checksum, compute_file_checksum
 from .lineage import (
     FeatureLineage,
@@ -60,24 +62,6 @@ if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-
-class FeatureStoreError(Exception):
-    """Base exception for FeatureStore errors."""
-
-    pass
-
-
-class FeatureNotFoundError(FeatureStoreError):
-    """Raised when requested features are not found."""
-
-    pass
-
-
-class FeatureIntegrityError(FeatureStoreError):
-    """Raised when feature data fails integrity checks."""
-
-    pass
 
 
 class FeatureStore:

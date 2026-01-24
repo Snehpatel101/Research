@@ -538,7 +538,7 @@ class OHLCVFeatureSelector:
         """
         if len(fold_importances) < 2:
             # Not enough folds for stability calculation
-            return {f: 1.0 for f in feature_names}
+            return dict.fromkeys(feature_names, 1.0)
 
         n_folds = len(fold_importances)
 

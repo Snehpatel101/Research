@@ -20,10 +20,12 @@ from typing import Literal
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.exceptions import LookaheadError
+
 logger = logging.getLogger(__name__)
 
 
-class LookaheadBiasError(Exception):
+class LookaheadBiasError(LookaheadError):
     """Raised when lookahead bias is detected and blocking mode is enabled.
 
     This exception is raised by lookahead audit functions when:

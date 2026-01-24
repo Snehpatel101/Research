@@ -370,7 +370,7 @@ class FeatureSelectionManager:
             selection_method=self.config.method,
             n_features_original=n_features_original,
             n_features_selected=len(selected_features),
-            stability_scores={f: 1.0 for f in selected_features},
+            stability_scores=dict.fromkeys(selected_features, 1.0),
             importance_scores=importance.to_dict(),
             metadata={
                 "single_fold": True,

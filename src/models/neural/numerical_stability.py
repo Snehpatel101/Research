@@ -12,24 +12,18 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
 import torch.nn as nn
 
+from src.core.exceptions import NumericalInstabilityError
+
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-
-class NumericalInstabilityError(RuntimeError):
-    """Raised when numerical instability is detected during training."""
-
-    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
-        super().__init__(message)
-        self.details = details or {}
 
 
 @dataclass

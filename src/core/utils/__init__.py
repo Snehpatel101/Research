@@ -32,6 +32,21 @@ from .config_validator import (
     validate_pipeline_config,
     validate_trainer_config,
 )
+
+# Device utilities (Phase 8A)
+from .device_utils import (
+    check_cuda_available,
+    get_device_string,
+    get_torch_device,
+)
+
+# Math utilities (Phase 8A)
+from .math_utils import (
+    ema,
+    normalize_series,
+    safe_divide,
+    sma,
+)
 from .memory import (
     PSUTIL_AVAILABLE,
     CacheConfig,
@@ -59,21 +74,6 @@ from .notebook import (
     plot_model_comparison,
     plot_training_history,
     setup_notebook,
-)
-
-# Math utilities (Phase 8A)
-from .math_utils import (
-    ema,
-    normalize_series,
-    safe_divide,
-    sma,
-)
-
-# Device utilities (Phase 8A)
-from .device_utils import (
-    check_cuda_available,
-    get_device_string,
-    get_torch_device,
 )
 
 __all__ = [

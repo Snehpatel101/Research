@@ -18,6 +18,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.exceptions import ScalerFitError
+
 from .core import FeatureScalingConfig, ScalerConfig, ScalerType, ScalingStatistics
 from .scalers import (
     categorize_feature,
@@ -29,12 +31,6 @@ from .scalers import (
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
-
-
-class ScalerFitError(Exception):
-    """Raised when scaler fit is called on non-training data."""
-
-    pass
 
 
 class FeatureScaler:

@@ -25,10 +25,12 @@ import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 from scipy import stats  # type: ignore[import-untyped]
 
+from src.core.exceptions import LeakageError
+
 logger = logging.getLogger(__name__)
 
 
-class LeakageDetectedError(Exception):
+class LeakageDetectedError(LeakageError):
     """Raised when data leakage is detected and blocking mode is enabled.
 
     This exception is raised by leakage detection functions when:

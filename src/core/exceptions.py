@@ -180,6 +180,108 @@ class LookaheadError(MLFactoryError):
     pass
 
 
+class FeatureStoreError(MLFactoryError):
+    """Raised when feature store operations fail."""
+
+    pass
+
+
+class FeatureNotFoundError(FeatureStoreError):
+    """Raised when requested feature is not found in store."""
+
+    pass
+
+
+class FeatureIntegrityError(FeatureStoreError):
+    """Raised when feature integrity check fails."""
+
+    pass
+
+
+class RawMTFStoreError(MLFactoryError):
+    """Raised when raw MTF store operations fail."""
+
+    pass
+
+
+class TimeframeNotFoundError(RawMTFStoreError):
+    """Raised when requested timeframe is not found."""
+
+    pass
+
+
+class InvalidTimeframeError(RawMTFStoreError):
+    """Raised when timeframe specification is invalid."""
+
+    pass
+
+
+class InvalidSplitError(RawMTFStoreError):
+    """Raised when split specification is invalid."""
+
+    pass
+
+
+class NumericalInstabilityError(MLFactoryError):
+    """Raised when numerical instability is detected in neural network operations."""
+
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.details = details or {}
+
+
+class ScalerFitError(MLFactoryError):
+    """Raised when scaler fitting fails."""
+
+    pass
+
+
+class ChronologicalSortError(MLFactoryError):
+    """Raised when chronological sorting fails or data is not sorted."""
+
+    pass
+
+
+class FeatureSchemaError(MLFactoryError):
+    """Raised when feature schema validation fails."""
+
+    pass
+
+
+class EnsembleCompatibilityError(MLFactoryError):
+    """Raised when ensemble models are incompatible."""
+
+    pass
+
+
+class SecurityError(MLFactoryError):
+    """Raised when security validation fails (e.g., path traversal)."""
+
+    pass
+
+
+class StageValidationError(MLFactoryError):
+    """Raised when pipeline stage validation fails."""
+
+    def __init__(self, stage_name: str, issues: list[str]) -> None:
+        self.stage_name = stage_name
+        self.issues = issues
+        issue_str = "\n".join(f"  - {issue}" for issue in issues)
+        super().__init__(f"Stage '{stage_name}' validation failed:\n{issue_str}")
+
+
+class ConfigValueError(MLFactoryError):
+    """Raised when configuration value is invalid."""
+
+    pass
+
+
+class PreTrainingValidationError(MLFactoryError):
+    """Raised when pre-training validation fails."""
+
+    pass
+
+
 __all__ = [
     "MLFactoryError",
     "ValidationError",
@@ -190,4 +292,20 @@ __all__ = [
     "InferenceError",
     "LeakageError",
     "LookaheadError",
+    "FeatureStoreError",
+    "FeatureNotFoundError",
+    "FeatureIntegrityError",
+    "RawMTFStoreError",
+    "TimeframeNotFoundError",
+    "InvalidTimeframeError",
+    "InvalidSplitError",
+    "NumericalInstabilityError",
+    "ScalerFitError",
+    "ChronologicalSortError",
+    "FeatureSchemaError",
+    "EnsembleCompatibilityError",
+    "SecurityError",
+    "StageValidationError",
+    "ConfigValueError",
+    "PreTrainingValidationError",
 ]

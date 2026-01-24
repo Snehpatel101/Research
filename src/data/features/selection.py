@@ -426,7 +426,7 @@ class FeatureSelector:
             n_total=len(feature_names),
             selection_ratio=1.0,
             best_score=score,
-            feature_importance={f: 1.0 for f in feature_names},
+            feature_importance=dict.fromkeys(feature_names, 1.0),
             study=study,
             baseline_score=score,
             improvement=0.0,
@@ -591,7 +591,7 @@ class FeatureSelector:
         completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
 
         if not completed_trials:
-            return {name: 0.0 for name in feature_names}
+            return dict.fromkeys(feature_names, 0.0)
 
         completed_trials.sort(key=lambda t: t.value or 0, reverse=True)
 

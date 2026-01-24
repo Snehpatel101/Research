@@ -434,14 +434,59 @@ def create_5d_objective(
     # Limit search space for efficiency
     searchable_features = base_features[:max_features_to_search]
 
-    # Default metric function (F1 weighted)
+    # Default metric function (Sharpe ratio-based for trading profitability)
+    # CRITICAL: Optimize for Sharpe ratio, not F1 score (Phase 12A-1)
     if metric_fn is None:
-        from sklearn.metrics import f1_score
 
-        def default_metric(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-            return float(f1_score(y_true, y_pred, average="weighted"))
+        def default_metric_sharpe(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+            """
+            Sharpe-like metric for trading profitability optimization.
 
-        metric_fn = default_metric
+            Instead of optimizing F1 (classification accuracy), we optimize a
+            Sharpe-like metric that rewards:
+            - Higher directional accuracy
+            - Consistent returns (low variance)
+            - Selective trading (not over-trading)
+
+            Returns:
+                Sharpe-like ratio (mean return / std return), annualized.
+            """
+            # Penalize if model doesn't trade enough (too many neutral predictions)
+            trade_mask = y_pred != 0  # Assuming 0 is neutral
+            trade_rate = trade_mask.mean()
+
+            if trade_rate < 0.10:
+                # Model is too selective, penalize
+                return 0.0
+
+            # Simulate returns: +1 for correct, -1 for incorrect
+            # Scale by confidence (simplified: all trades equal size)
+            returns = np.where(y_pred == y_true, 1.0, -1.0)
+
+            # Only count trades (non-neutral predictions)
+            if trade_mask.sum() > 0:
+                trade_returns = returns[trade_mask]
+            else:
+                return 0.0
+
+            # Calculate Sharpe-like ratio
+            mean_return = trade_returns.mean()
+            std_return = trade_returns.std()
+
+            if std_return < 1e-8:
+                # No variance - return mean if positive, else 0
+                return max(0.0, mean_return)
+
+            # Annualized Sharpe (assuming ~252 trading days, ~78 5-min bars per day)
+            sharpe = mean_return / std_return * np.sqrt(252 * 78)
+
+            # Penalize very low trade rates
+            if trade_rate < 0.20:
+                sharpe *= trade_rate / 0.20
+
+            return float(max(0.0, sharpe))
+
+        metric_fn = default_metric_sharpe
 
     # Validate data inputs when label generation is enabled
     if generate_labels_per_trial:
@@ -879,11 +924,12 @@ def run_5d_optimization(
         sampler=sampler,
     )
 
-    # Run optimization
+    # Run optimization with parallel trials (Phase 12A-7)
     study.optimize(
         objective,
         n_trials=n_trials,
         timeout=timeout,
+        n_jobs=-1,  # Use all available CPU cores for parallel trials
         show_progress_bar=(verbose >= 1),
     )
 
