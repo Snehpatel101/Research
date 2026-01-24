@@ -12,6 +12,7 @@ Post-Implementation (Agent 7):
 - Run full validation checklist:
   - `ruff check src/` passes
   - `python -c "from src.<module> import <Class>; print('OK')"` for new code
+  - test the actual pipeline.
 
 **REQUIRED: Update docs after execution completes:**
 1. Update CLEANUP_PLAN.md - mark completed items in tables

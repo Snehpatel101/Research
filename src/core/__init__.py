@@ -341,6 +341,20 @@ from src.core.validation import (
 )
 
 # =============================================================================
+# EXCEPTIONS - Unified exception hierarchy (Phase 8B)
+# =============================================================================
+from src.core.exceptions import (
+    ConfigError,
+    ContractViolation,
+    DataError,
+    InferenceError,
+    LeakageError,
+    LookaheadError,
+    MLFactoryError,
+    TrainingError,
+)
+
+# =============================================================================
 # ALL EXPORTS
 # =============================================================================
 __all__ = [
@@ -581,4 +595,15 @@ __all__ = [
     "validate_timestamp_alignment",
     "TimeframeCoordinator",
     "TimeframeData",
+    # =========================================================================
+    # EXCEPTIONS - Unified exception hierarchy (Phase 8B)
+    # =========================================================================
+    "MLFactoryError",
+    "ConfigError",
+    "ContractViolation",
+    "DataError",
+    "TrainingError",
+    "InferenceError",
+    "LeakageError",
+    "LookaheadError",
 ]

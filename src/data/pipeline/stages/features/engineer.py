@@ -408,6 +408,16 @@ class FeatureEngineer:
         rows_dropped = nan_audit["rows_dropped"]
         cols_dropped = nan_audit["cols_dropped"]
 
+        # Phase 7B: Minimum row validation after NaN cleaning
+        min_rows_required = 100  # Minimum rows for meaningful features
+        if len(df) < min_rows_required:
+            raise ValueError(
+                f"Feature engineering failed for {symbol}: insufficient rows after NaN cleaning. "
+                f"Got {len(df)} rows, minimum required is {min_rows_required}. "
+                f"Dropped {rows_dropped} rows for NaN values. "
+                f"Consider reducing nan_threshold or checking data quality."
+            )
+
         # Get MTF column names using standardized suffix detection
         from src.core.common.timeframes import get_timeframe_suffix
 
@@ -472,13 +482,29 @@ class FeatureEngineer:
         if len(micro_col_names) > 0:
             logger.info(f"Microstructure features: {len(micro_col_names)} columns")
 
+        # Phase 7D: Create and save feature manifest
+        from src.data.pipeline.feature_manifest import FeatureManifest
+
+        manifest = FeatureManifest.from_dataframe(
+            df,
+            symbol=symbol,
+            timeframe=self.timeframe,
+            pipeline_version="1.0.0",
+        )
+        feature_report["feature_manifest"] = {
+            "n_features": manifest.n_features,
+            "n_labels": manifest.n_labels,
+            "feature_columns": manifest.feature_columns,
+            "label_columns": manifest.label_columns,
+        }
+
         return df, feature_report
 
     def save_features(
         self, df: pd.DataFrame, symbol: str, feature_report: dict
-    ) -> tuple[Path, Path]:
+    ) -> tuple[Path, Path, Path]:
         """
-        Save features and metadata.
+        Save features, metadata, and feature manifest.
 
         Parameters
         ----------
@@ -491,8 +517,8 @@ class FeatureEngineer:
 
         Returns
         -------
-        Tuple[Path, Path]
-            (data_path, metadata_path)
+        Tuple[Path, Path, Path]
+            (data_path, metadata_path, manifest_path)
         """
         # Save features
         data_path = self.output_dir / f"{symbol}_features.parquet"
@@ -507,7 +533,19 @@ class FeatureEngineer:
             json.dump(metadata, f, indent=2, default=str)
         logger.info(f"Saved metadata to: {metadata_path}")
 
-        return data_path, metadata_path
+        # Phase 7D: Save feature manifest
+        from src.data.pipeline.feature_manifest import FeatureManifest
+
+        manifest = FeatureManifest.from_dataframe(
+            df,
+            symbol=symbol,
+            timeframe=self.timeframe,
+            pipeline_version="1.0.0",
+        )
+        manifest_path = self.output_dir / f"{symbol}_feature_manifest.json"
+        manifest.save(manifest_path)
+
+        return data_path, metadata_path, manifest_path
 
     def process_file(self, file_path: str | Path) -> dict:
         """

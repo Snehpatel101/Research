@@ -33,6 +33,7 @@ class NumpyEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
+from .schemas import StageValidationError
 from .stage_registry import PipelineStage, get_stage_definitions
 from .stages import (
     run_build_datasets,
@@ -203,6 +204,18 @@ class PipelineRunner:
                 self.logger.info(
                     f"[PASS] Stage completed: {stage.name} ({result.duration_seconds:.2f}s)"
                 )
+
+                # Phase 7B: Validate stage output schema
+                try:
+                    self._validate_stage_output(stage.name, result)
+                except StageValidationError as e:
+                    self.logger.error(f"[FAIL] Schema validation failed for {stage.name}: {e}")
+                    all_success = False
+                    if stage.required:
+                        self.logger.error(
+                            "Required stage schema validation failed. Stopping pipeline."
+                        )
+                        break
             else:
                 self.logger.error(f"[FAIL] Stage failed: {stage.name}")
                 if result.error:
@@ -319,6 +332,55 @@ class PipelineRunner:
     def get_stage_result(self, stage_name: str) -> StageResult | None:
         """Get the result of a specific stage."""
         return self.stage_results.get(stage_name)
+
+    def _validate_stage_output(self, stage_name: str, result: StageResult) -> None:
+        """
+        Validate stage output against its schema (Phase 7B).
+
+        Reads output artifacts and validates them against the stage schema.
+        Only validates parquet files; skips other artifact types.
+
+        Args:
+            stage_name: Name of the stage
+            result: StageResult containing artifact paths
+
+        Raises:
+            StageValidationError: If validation fails
+        """
+        import pandas as pd
+
+        from .schemas import get_stage_schema, validate_stage_output
+
+        schema = get_stage_schema(stage_name)
+        if schema is None:
+            self.logger.debug(f"No schema for stage '{stage_name}', skipping validation")
+            return
+
+        # Validate each parquet artifact
+        for artifact_path in result.artifacts:
+            if not artifact_path.exists():
+                self.logger.warning(f"Artifact not found: {artifact_path}")
+                continue
+
+            if artifact_path.suffix != ".parquet":
+                continue  # Only validate parquet files
+
+            try:
+                df = pd.read_parquet(artifact_path)
+                is_valid, issues = validate_stage_output(
+                    df=df,
+                    stage_name=stage_name,
+                    schema=schema,
+                    raise_on_failure=True,
+                )
+                if is_valid:
+                    self.logger.info(
+                        f"  Schema validation passed for {artifact_path.name}: "
+                        f"{len(df)} rows, {len(df.columns)} columns"
+                    )
+            except Exception as e:
+                self.logger.error(f"Schema validation error for {artifact_path}: {e}")
+                raise
 
     def _save_lineage(self) -> None:
         """Save pipeline lineage metadata for dataset validation."""

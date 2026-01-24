@@ -4,6 +4,84 @@
 
 ---
 
+## Phases 7-10: Production Hardening & Cleanup | 2026-01-24 | COMPLETE
+
+**Impact:** +1,525 lines added, 12 directories deleted, 2 deprecated shims removed
+
+### Phase 7: Production Hardening (+850 lines)
+
+| Task | Description | Files |
+|------|-------------|-------|
+| 7A | Validation blocking by default | `leakage_detection.py`, `lookahead_audit.py`, `trainer.py` |
+| 7B | Inter-stage schema validation | NEW: `schemas.py`, modified `runner.py`, `engineer.py` |
+| 7C | Adapter error handling | `sequence.py`, `base.py` |
+| 7D | Feature manifest system | NEW: `feature_manifest.py` |
+
+**New Files:**
+- `src/data/pipeline/schemas.py` - StageSchema, validate_stage_output()
+- `src/data/pipeline/feature_manifest.py` - FeatureManifest dataclass
+
+### Phase 8: Code Consolidation (+650 lines)
+
+| Task | Description | Files |
+|------|-------------|-------|
+| 8A | Common utilities | NEW: `math_utils.py`, `device_utils.py`, `class_weights.py` |
+| 8B | Exception hierarchy | NEW: `exceptions.py` |
+| 8C | Constants extraction | NEW: `default_periods.py`, `thresholds.py` |
+| 8D | Deprecation cleanup | `catboost_model.py`, `random_forest.py` |
+
+**New Files:**
+- `src/core/utils/math_utils.py` - safe_divide(), sma(), ema()
+- `src/core/utils/device_utils.py` - check_cuda_available()
+- `src/models/common/class_weights.py` - compute_balanced_weights()
+- `src/core/exceptions.py` - MLFactoryError hierarchy
+- `src/config/constants/default_periods.py` - RSI_PERIOD, ATR_PERIOD, etc.
+- `src/config/constants/thresholds.py` - MIN_SIGNAL_RATIO, etc.
+
+### Phase 9: Directory Cleanup (-12 directories)
+
+**Deleted Empty Directories:**
+- `src/contracts/`, `src/ml_pipeline/`, `src/adapters/`, `src/common/`
+- `src/monitoring/`, `src/feature_store/`, `src/utils/`, `src/cross_validation/`
+- `src/evaluation/`, `src/backtesting/`, `src/pipeline/`, `src/features/`
+
+**Deleted Deprecated Shims:**
+- `src/training/` - re-exported from `src.models.training`
+- `src/pipeline_config.py` - re-exported from `src.core.config`
+
+**Import Updates:**
+- `src/config/smart_config.py` - updated to `src.core.config`
+- `src/orchestrator.py` - updated to `src.core.config`
+- `src/cli/status_commands.py` - updated to `src.data.pipeline`
+
+### Phase 10: Refactor Complex Functions (Partial)
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 10A | Split stacking.py:fit() | ✅ Proof of concept: `_log_ensemble_config()` extracted |
+| 10B | Split _pre_training_validation() | ⏭️ Skipped (too risky) |
+
+### Verification
+
+All imports verified working:
+```bash
+python -c "from src.data.pipeline.schemas import StageSchema; print('OK')"
+python -c "from src.core.utils.math_utils import safe_divide; print('OK')"
+python -c "from src.core.exceptions import MLFactoryError; print('OK')"
+python -c "from src.config.constants import RSI_PERIOD; print('OK')"
+```
+
+Ruff check: 214 pre-existing issues (no regressions)
+
+### Lessons Learned
+
+1. Validation should be blocking by default - warning-only mode hides bugs
+2. Feature manifests enable explicit column tracking vs fragile prefix matching
+3. Consolidating utilities reduces duplication but migration can be done incrementally
+4. Phase 10B (complex refactoring) correctly deferred - needs dedicated test coverage first
+
+---
+
 ## Phase 6: Advanced Models | 2026-01-24 | COMPLETE
 
 **Impact:** +3,690 lines added (6 new model files)

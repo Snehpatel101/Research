@@ -83,6 +83,32 @@ class StackingEnsemble(BaseModel):
         self._diversity_metrics: DiversityMetrics | None = None
         self._diversity_analyzer: DiversityAnalyzer | None = None
 
+    def _log_ensemble_config(
+        self,
+        base_model_names: list[str],
+        meta_learner_name: str,
+        n_folds: int,
+        use_default_for_oof: bool,
+    ) -> None:
+        """
+        Log ensemble configuration at the start of training.
+
+        Extracted from fit() to reduce method complexity.
+        Phase 10A proof-of-concept refactoring.
+        """
+        if use_default_for_oof:
+            logger.info("Using DEFAULT configs for OOF generation (leakage prevention enabled)")
+        else:
+            logger.warning(
+                "Using tuned configs for OOF generation. "
+                "This may cause leakage - set use_default_configs_for_oof=True"
+            )
+
+        logger.info(
+            f"Training StackingEnsemble: base_models={base_model_names}, "
+            f"meta_learner={meta_learner_name}, n_folds={n_folds}"
+        )
+
     @property
     def model_family(self) -> str:
         return "ensemble"
@@ -342,18 +368,16 @@ class StackingEnsemble(BaseModel):
         if use_default_for_oof:
             # Use empty configs (defaults) for OOF to prevent leakage
             oof_base_configs: dict[str, dict[str, Any]] = {}
-            logger.info("Using DEFAULT configs for OOF generation (leakage prevention enabled)")
         else:
             # Legacy behavior: use provided configs (NOT RECOMMENDED)
             oof_base_configs = base_model_configs
-            logger.warning(
-                "Using tuned configs for OOF generation. "
-                "This may cause leakage - set use_default_configs_for_oof=True"
-            )
 
-        logger.info(
-            f"Training StackingEnsemble: base_models={self._base_model_names}, "
-            f"meta_learner={self._meta_learner_name}, n_folds={self._n_folds}"
+        # Log ensemble configuration (extracted to reduce fit() complexity - Phase 10A)
+        self._log_ensemble_config(
+            base_model_names=self._base_model_names,
+            meta_learner_name=self._meta_learner_name,
+            n_folds=self._n_folds,
+            use_default_for_oof=use_default_for_oof,
         )
 
         # Step 1: Generate OOF predictions with PurgedKFold (prevents label leakage)

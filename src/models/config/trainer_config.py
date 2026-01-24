@@ -117,6 +117,14 @@ class TrainerConfig:
     min_features: int = field(default=4)
     max_features: int = field(default=200)
 
+    # =========================================================================
+    # Phase 7: Pre-training validation configuration
+    # =========================================================================
+    check_leakage: bool = True  # Run leakage detection before training
+    check_lookahead: bool = True  # Run lookahead audit before training
+    validation_correlation_threshold: float = 0.5  # Threshold for leakage detection
+    project_root: Path | None = None  # Project root for lineage validation
+
     def __post_init__(self) -> None:
         """Validate and convert configuration values."""
         if self.horizon <= 0:
@@ -209,6 +217,11 @@ class TrainerConfig:
             "input_rank": self.input_rank,
             "min_features": self.min_features,
             "max_features": self.max_features,
+            # Phase 7: validation fields
+            "check_leakage": self.check_leakage,
+            "check_lookahead": self.check_lookahead,
+            "validation_correlation_threshold": self.validation_correlation_threshold,
+            "project_root": str(self.project_root) if self.project_root else None,
         }
 
     @classmethod

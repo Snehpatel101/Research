@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -226,11 +227,19 @@ class BaseAdapter(ABC):
 
         Args:
             df: Source DataFrame with features, labels, weights
-            model_contract: Optional contract for validation
+            model_contract: Optional contract for validation. When provided,
+                the adapter will validate output against model requirements
+                and raise ValidationError on mismatch. Should be provided
+                in production training pipelines but can be omitted for
+                testing or exploration.
             additional_dfs: Optional additional DataFrames for multi-stream adapters
 
         Returns:
             AdapterResult with transformed arrays
+
+        Raises:
+            ValidationError: If model_contract is provided and validation fails
+            ValueError: If input validation fails
         """
         pass
 
@@ -259,7 +268,12 @@ class BaseAdapter(ABC):
         return len(issues) == 0, issues
 
     def _get_feature_columns(self, df: pd.DataFrame) -> list[str]:
-        """Get feature columns (explicit or auto-detected)."""
+        """Get feature columns (explicit or auto-detected).
+
+        Priority order:
+        1. Explicit feature_columns from __init__
+        2. Auto-detect from column naming conventions
+        """
         if self.feature_columns:
             return self.feature_columns
 
@@ -294,6 +308,54 @@ class BaseAdapter(ABC):
             return True
 
         return [col for col in df.columns if is_feature_col(col)]
+
+    @classmethod
+    def from_manifest(
+        cls,
+        manifest_path: Path | str,
+        label_column: str | None = None,
+        weight_column: str | None = None,
+        **kwargs,
+    ) -> BaseAdapter:
+        """Create adapter with feature columns from a manifest file.
+
+        Phase 7D: Factory method that loads feature columns from a manifest
+        instead of relying on auto-detection or explicit lists.
+
+        Args:
+            manifest_path: Path to the feature manifest JSON file
+            label_column: Override label column (uses first from manifest if None)
+            weight_column: Override weight column
+            **kwargs: Additional arguments passed to __init__
+
+        Returns:
+            Adapter instance configured with manifest's feature columns
+
+        Raises:
+            FileNotFoundError: If manifest file doesn't exist
+
+        Example:
+            adapter = SequenceAdapter.from_manifest(
+                "data/MES_feature_manifest.json",
+                sequence_length=60
+            )
+        """
+        from src.data.pipeline.feature_manifest import FeatureManifest
+
+        manifest = FeatureManifest.load(Path(manifest_path))
+
+        # Use first label from manifest if not specified
+        if label_column is None and manifest.label_columns:
+            label_column = manifest.label_columns[0]
+        elif label_column is None:
+            label_column = "label_h20"  # Default fallback
+
+        return cls(
+            feature_columns=manifest.feature_columns,
+            label_column=label_column,
+            weight_column=weight_column,
+            **kwargs,
+        )
 
     def _get_weights(self, df: pd.DataFrame) -> np.ndarray | None:
         """Get sample weights from DataFrame."""

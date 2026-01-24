@@ -61,6 +61,21 @@ from .notebook import (
     setup_notebook,
 )
 
+# Math utilities (Phase 8A)
+from .math_utils import (
+    ema,
+    normalize_series,
+    safe_divide,
+    sma,
+)
+
+# Device utilities (Phase 8A)
+from .device_utils import (
+    check_cuda_available,
+    get_device_string,
+    get_torch_device,
+)
+
 __all__ = [
     # Colab & Environment setup
     "is_colab",
@@ -113,4 +128,13 @@ __all__ = [
     "run_all_validations",
     "generate_validation_report",
     "quick_validate",
+    # Math utilities (Phase 8A)
+    "safe_divide",
+    "sma",
+    "ema",
+    "normalize_series",
+    # Device utilities (Phase 8A)
+    "check_cuda_available",
+    "get_device_string",
+    "get_torch_device",
 ]

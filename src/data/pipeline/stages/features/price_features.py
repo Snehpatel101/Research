@@ -10,12 +10,16 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils import safe_divide
+
 logger = logging.getLogger(__name__)
 
 
+# Keep local alias for backward compatibility and slightly different semantics
+# (fills with NaN instead of 0.0 by default)
 def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
     """Safely divide, returning NaN when denominator is zero."""
-    return numerator / denominator.replace(0, np.nan)
+    return safe_divide(numerator, denominator, fill_value=np.nan)
 
 
 def add_returns(df: pd.DataFrame, feature_metadata: dict[str, str]) -> pd.DataFrame:

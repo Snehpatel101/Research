@@ -452,5 +452,16 @@ __all__ = [
     "BaseModel",
 ]
 
-# Backward compatibility alias (deprecated, will be removed in future version)
+
+# =============================================================================
+# DEPRECATED ALIAS
+# =============================================================================
+# PredictionOutput is deprecated. Use PredictionResult instead.
+# This alias exists for backward compatibility and will be removed in a future version.
+#
+# Migration: Replace all imports of PredictionOutput with PredictionResult:
+#   OLD: from src.models.base import PredictionOutput
+#   NEW: from src.models.base import PredictionResult
+#
+# The class interface is identical - this is just a rename.
 PredictionOutput = PredictionResult

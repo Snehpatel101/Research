@@ -1029,53 +1029,66 @@ class UnifiedConfig:
         """
         Convert to MLConfig for backward compatibility.
 
+        DEPRECATED: MLConfig from src.ml_pipeline.config no longer exists.
+        This method now returns a dictionary with the same structure for
+        backwards compatibility with any code that might use this API.
+
         Parameters
         ----------
         models : list[str], optional
             List of model names
         **overrides
-            Additional overrides for MLConfig
+            Additional overrides for the config
 
         Returns
         -------
-        MLConfig
+        dict[str, Any]
+            Configuration dictionary (MLConfig is deprecated)
         """
-        from src.ml_pipeline.config import MLConfig  # type: ignore[import-not-found]
+        import warnings
 
-        return MLConfig(
-            run_id=self.run_id,
-            description=self.description,
-            symbol=self.symbol,
-            symbols=self.symbols,
-            start_date=self.start_date,
-            end_date=self.end_date,
-            target_timeframe=self.timeframes.default_primary,
-            horizons=self.horizons.active,
-            train_ratio=self.splits.train,
-            val_ratio=self.splits.val,
-            test_ratio=self.splits.test,
-            sequence_length=self.training.sequence_length,
-            batch_size=self.training.batch_size,
-            max_epochs=self.training.max_epochs,
-            early_stopping_patience=self.training.early_stopping_patience,
-            random_seed=self.random_seed,
-            device=self.training.device,
-            mixed_precision=self.training.mixed_precision,
-            num_workers=self.training.num_workers,
-            pin_memory=self.training.pin_memory,
-            use_calibration=self.calibration.enabled,
-            calibration_method=self.calibration.method,
-            output_dir=self.output_dir,
-            data_dir=self.data_dir,
-            tracking_enabled=self.tracking.enabled,
-            tracking_backend=self.tracking.backend,
-            tracking_uri=self.tracking.uri,
-            tracking_tags=self.tracking.tags,
-            cv_splits=self.cross_validation.n_splits,
-            n_jobs=self.processing.n_jobs,
-            models=models or [],
-            **overrides,
+        warnings.warn(
+            "to_ml_config() is deprecated. MLConfig no longer exists. "
+            "Use to_pipeline_config() or to_trainer_config() instead.",
+            DeprecationWarning,
+            stacklevel=2,
         )
+
+        config_dict = {
+            "run_id": self.run_id,
+            "description": self.description,
+            "symbol": self.symbol,
+            "symbols": self.symbols,
+            "start_date": self.start_date,
+            "end_date": self.end_date,
+            "target_timeframe": self.timeframes.default_primary,
+            "horizons": self.horizons.active,
+            "train_ratio": self.splits.train,
+            "val_ratio": self.splits.val,
+            "test_ratio": self.splits.test,
+            "sequence_length": self.training.sequence_length,
+            "batch_size": self.training.batch_size,
+            "max_epochs": self.training.max_epochs,
+            "early_stopping_patience": self.training.early_stopping_patience,
+            "random_seed": self.random_seed,
+            "device": self.training.device,
+            "mixed_precision": self.training.mixed_precision,
+            "num_workers": self.training.num_workers,
+            "pin_memory": self.training.pin_memory,
+            "use_calibration": self.calibration.enabled,
+            "calibration_method": self.calibration.method,
+            "output_dir": str(self.output_dir),
+            "data_dir": str(self.data_dir),
+            "tracking_enabled": self.tracking.enabled,
+            "tracking_backend": self.tracking.backend,
+            "tracking_uri": self.tracking.uri,
+            "tracking_tags": self.tracking.tags,
+            "cv_splits": self.cross_validation.n_splits,
+            "n_jobs": self.processing.n_jobs,
+            "models": models or [],
+        }
+        config_dict.update(overrides)
+        return config_dict
 
     def to_horizon_config(self) -> Any:
         """

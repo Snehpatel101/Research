@@ -635,7 +635,7 @@ def train(
     logger.info("=" * 60)
 
     # Actually run training via unified orchestrator
-    from src.pipeline_config import PipelineConfig
+    from src.core.config import PipelineConfig
 
     # Convert resolved config to PipelineConfig
     pipeline_config = PipelineConfig(

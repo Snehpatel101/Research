@@ -119,3 +119,4 @@ experiments/runs/
 
 # CatBoost cache
 catboost_info/
+.venv312/

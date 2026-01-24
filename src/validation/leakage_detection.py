@@ -118,7 +118,7 @@ def check_feature_label_correlation(
     correlation_threshold: float = 0.5,
     p_value_threshold: float = 0.01,
     method: str = "spearman",
-    raise_on_leakage: bool = False,
+    raise_on_leakage: bool = True,
 ) -> LeakageReport:
     """
     Check for feature-label leakage via correlation analysis.
@@ -134,7 +134,7 @@ def check_feature_label_correlation(
         p_value_threshold: Only consider statistically significant correlations
         method: Correlation method ("spearman" or "pearson")
         raise_on_leakage: If True, raise LeakageDetectedError when leakage is found.
-            Default is False for backward compatibility.
+            Default is True (blocking mode for production safety).
 
     Returns:
         LeakageReport with analysis results
@@ -282,7 +282,7 @@ def check_temporal_leakage(
     feature_names: list[str] | None = None,
     max_lag: int = 5,
     correlation_threshold: float = 0.3,
-    raise_on_leakage: bool = False,
+    raise_on_leakage: bool = True,
 ) -> LeakageReport:
     """
     Check for temporal leakage by comparing forward vs backward correlations.
@@ -297,7 +297,7 @@ def check_temporal_leakage(
         max_lag: Maximum lag to check
         correlation_threshold: Threshold for suspicious forward correlation
         raise_on_leakage: If True, raise LeakageDetectedError when leakage is found.
-            Default is False for backward compatibility.
+            Default is True (blocking mode for production safety).
 
     Returns:
         LeakageReport with temporal leakage analysis
@@ -434,7 +434,7 @@ def check_information_leakage(
     labels: np.ndarray,
     feature_names: list[str] | None = None,
     mi_threshold: float = 0.5,
-    raise_on_leakage: bool = False,
+    raise_on_leakage: bool = True,
 ) -> LeakageReport:
     """
     Check for information leakage using mutual information.
@@ -449,7 +449,7 @@ def check_information_leakage(
         feature_names: Optional feature names
         mi_threshold: Mutual information threshold (normalized)
         raise_on_leakage: If True, raise LeakageDetectedError when leakage is found.
-            Default is False for backward compatibility.
+            Default is True (blocking mode for production safety).
 
     Returns:
         LeakageReport with mutual information analysis
@@ -562,7 +562,7 @@ def comprehensive_leakage_check(
     temporal_threshold: float = 0.3,
     mi_threshold: float = 0.5,
     max_lag: int = 5,
-    raise_on_leakage: bool = False,
+    raise_on_leakage: bool = True,
 ) -> dict[str, LeakageReport]:
     """
     Run comprehensive leakage detection with multiple methods.
@@ -576,7 +576,7 @@ def comprehensive_leakage_check(
         mi_threshold: Threshold for MI check
         max_lag: Max lag for temporal analysis
         raise_on_leakage: If True, raise LeakageDetectedError when ANY check
-            finds leakage. Default is False for backward compatibility.
+            finds leakage. Default is True (blocking mode for production safety).
 
     Returns:
         Dict with results from all leakage checks

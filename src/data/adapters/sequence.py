@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.contracts import DataContract, DataRank
+from src.core.validation import ValidationError
 
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
@@ -167,10 +168,15 @@ class SequenceAdapter(BaseAdapter):
             adapter_name=self.adapter_id,
         )
 
-        # Validate result
+        # Validate result - raise on failure (Phase 7C: blocking validation)
         is_valid, issues = result.validate()
         if not is_valid:
-            logger.warning(f"AdapterResult validation issues: {issues}")
+            raise ValidationError(
+                f"SequenceAdapter result validation failed: {issues}",
+                field="AdapterResult",
+                expected="valid result",
+                actual=f"{len(issues)} validation issues",
+            )
 
         return result
 

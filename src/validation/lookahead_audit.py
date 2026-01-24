@@ -209,7 +209,7 @@ class LookaheadAuditor:
         feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
         name: str,
         price_cols: list[str] | None = None,
-        raise_on_lookahead: bool = False,
+        raise_on_lookahead: bool = True,
     ) -> LookaheadAuditResult:
         """
         Audit a feature function for lookahead bias.
@@ -221,7 +221,7 @@ class LookaheadAuditor:
             name: Name of the feature (for reporting)
             price_cols: Columns to corrupt (default: OHLCV columns)
             raise_on_lookahead: If True, raise LookaheadBiasError when lookahead
-                is detected. Default is False for backward compatibility.
+                is detected. Default is True (blocking mode for production safety).
 
         Returns:
             LookaheadAuditResult with audit findings
@@ -459,7 +459,7 @@ def audit_feature_lookahead(
     feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
     name: str,
     corruption_points: list[float] | None = None,
-    raise_on_lookahead: bool = False,
+    raise_on_lookahead: bool = True,
 ) -> list[LookaheadAuditResult]:
     """
     Convenience function to audit features at multiple corruption points.
@@ -470,7 +470,8 @@ def audit_feature_lookahead(
         name: Feature name
         corruption_points: List of corruption fractions (default: [0.5, 0.7, 0.9])
         raise_on_lookahead: If True, raise LookaheadBiasError when lookahead
-            is detected at any corruption point. Default is False.
+            is detected at any corruption point.
+            Default is True (blocking mode for production safety).
 
     Returns:
         List of LookaheadAuditResult for each corruption point

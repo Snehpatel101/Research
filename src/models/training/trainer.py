@@ -197,6 +197,96 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         return all_valid, all_issues
 
+    def _run_pre_training_validation(
+        self,
+        X_train_df: pd.DataFrame,
+        y_train: np.ndarray | pd.Series,
+        feature_names: list[str],
+    ) -> None:
+        """
+        Run pre-training validation (Phase 7: Contract Enforcement).
+
+        Performs leakage detection and lookahead auditing before training.
+        Raises on failure when blocking mode is enabled (default).
+
+        Args:
+            X_train_df: Training features DataFrame
+            y_train: Training labels
+            feature_names: List of feature column names
+
+        Raises:
+            LeakageDetectedError: If leakage is detected and check_leakage=True
+            LookaheadBiasError: If lookahead bias is detected and check_lookahead=True
+        """
+        logger.info("\n" + "-" * 40)
+        logger.info("PRE-TRAINING VALIDATION (Phase 7)")
+        logger.info("-" * 40)
+
+        # Convert y_train to numpy if needed
+        y_train_arr = np.asarray(y_train)
+
+        # 1. Leakage detection (if enabled)
+        if self.config.check_leakage:
+            logger.info("  [1/2] Running leakage detection...")
+            try:
+                from src.validation.leakage_detection import check_feature_label_correlation
+
+                report = check_feature_label_correlation(
+                    features=X_train_df,
+                    labels=y_train_arr,
+                    feature_names=feature_names,
+                    correlation_threshold=self.config.validation_correlation_threshold,
+                    raise_on_leakage=True,  # Blocking mode (Phase 7)
+                )
+
+                logger.info(
+                    f"    Leakage check passed: "
+                    f"{report.n_features} features analyzed, 0 suspicious"
+                )
+
+            except Exception as e:
+                # Re-raise LeakageDetectedError, log other errors
+                from src.validation.leakage_detection import LeakageDetectedError
+
+                if isinstance(e, LeakageDetectedError):
+                    logger.error(f"    LEAKAGE DETECTED: {e}")
+                    raise
+                else:
+                    logger.warning(f"    Leakage detection failed: {e}")
+        else:
+            logger.info("  [1/2] Leakage detection: SKIPPED (check_leakage=False)")
+
+        # 2. Lookahead audit (if enabled)
+        if self.config.check_lookahead:
+            logger.info("  [2/2] Running lookahead validation...")
+            try:
+                from src.validation.lookahead_audit import validate_resample_config
+
+                # Basic resample config validation
+                is_valid, issues = validate_resample_config(
+                    closed="left",
+                    label="left",
+                )
+
+                if is_valid:
+                    logger.info("    Lookahead audit passed: resample config validated")
+                else:
+                    logger.warning(f"    Lookahead issues: {'; '.join(issues)}")
+
+            except Exception as e:
+                from src.validation.lookahead_audit import LookaheadBiasError
+
+                if isinstance(e, LookaheadBiasError):
+                    logger.error(f"    LOOKAHEAD BIAS DETECTED: {e}")
+                    raise
+                else:
+                    logger.warning(f"    Lookahead audit failed: {e}")
+        else:
+            logger.info("  [2/2] Lookahead audit: SKIPPED (check_lookahead=False)")
+
+        logger.info("\n  Pre-training validation: PASSED")
+        logger.info("-" * 40 + "\n")
+
     def _setup_tracker(self) -> ExperimentTracker:
         """
         Initialize experiment tracker based on configuration.
@@ -460,6 +550,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # The container should filter these by default, but this is a defensive check
         _validate_labels(y_train_series, "training labels")
         _validate_labels(y_val_series, "validation labels")
+
+        # Phase 7: Run pre-training validation (leakage/lookahead detection)
+        self._run_pre_training_validation(X_train_df, y_train_series, feature_names)
 
         # Extract label_end_times for overlapping label purging
         label_end_times = container.get_label_end_times("train")

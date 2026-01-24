@@ -28,6 +28,15 @@ Usage:
     success = runner.run()
 """
 
+from .feature_manifest import FeatureManifest
+from .schemas import (
+    STAGE_SCHEMAS,
+    StageSchema,
+    StageValidationError,
+    get_stage_schema,
+    register_stage_schema,
+    validate_stage_output,
+)
 from .stage_registry import PipelineStage, get_stage_definitions, get_stage_order
 from .utils import StageResult, StageStatus
 
@@ -39,6 +48,15 @@ __all__ = [
     "PipelineStage",
     "get_stage_definitions",
     "get_stage_order",
+    # Phase 7B: Schema validation
+    "StageSchema",
+    "StageValidationError",
+    "STAGE_SCHEMAS",
+    "validate_stage_output",
+    "get_stage_schema",
+    "register_stage_schema",
+    # Phase 7D: Feature manifest
+    "FeatureManifest",
 ]
 
 __version__ = "1.0.0"

@@ -25,7 +25,7 @@ from typing import Any
 
 import pandas as pd
 
-from src.pipeline_config import PipelineConfig
+from src.core.config import PipelineConfig
 
 warnings.warn(
     "src.orchestrator is deprecated. Use src.factory.MLFactory instead. "

@@ -21,7 +21,7 @@ def _get_pipeline_config():
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
-        from src.pipeline import data_config as pipeline_config  # type: ignore[import-not-found]
+        from src.data.pipeline import data_config as pipeline_config
 
         _pipeline_config = pipeline_config
     return _pipeline_config

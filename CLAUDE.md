@@ -86,8 +86,15 @@ Raw OHLCV → Pipeline (12 stages) → Features + Labels → Adapters → Models
 
 ### Model Support
 
-- **Working now:** XGBoost, LightGBM, CatBoost, LSTM, GRU, TCN (2D/3D data)
-- **Blocked (Phase 2):** PatchTST, iTransformer, TFT, N-BEATS (need 4D infrastructure)
+All 12 models are production-ready:
+
+| Category | Models |
+|----------|--------|
+| **Boosting** | XGBoost, LightGBM, CatBoost |
+| **Neural RNN** | LSTM, GRU |
+| **Neural CNN** | TCN, InceptionTime, 1D ResNet |
+| **Transformer** | PatchTST, iTransformer, TFT |
+| **MLP** | N-BEATS |
 
 ---
 
@@ -144,9 +151,9 @@ src/
 ├── models/         # All model implementations + training
 ├── optimization/   # Optuna, feature selection
 ├── validation/     # Leakage detection, lookahead audit, CV
-├── training/       # Unified training orchestration
 ├── inference/      # Backtesting, prediction
-└── config/         # Configuration classes
+├── config/         # Configuration classes
+└── cli/            # Command-line interface
 ```
 
 ### Canonical Locations
@@ -163,14 +170,17 @@ src/
 
 ## Current Status
 
-**Phase 0: Deduplication** - ✅ COMPLETE
-- Removed ~5,336 lines of duplicate code
-- Consolidated types and enums to single locations
-- Deleted duplicate directories
+**Phases 0-6: COMPLETE**
+- Phase 0: Removed ~5,336 lines of duplicate code
+- Phase 1: Contract enforcement with blocking validation
+- Phase 2: 4D data infrastructure for transformers
+- Phase 3: Enhanced adapter error handling
+- Phase 4: Feature manifest with lineage tracking
+- Phase 5: Performance optimizations
+- Phase 6: Deprecation cleanup and orchestrator consolidation
 
-**Phase 1: Contract Enforcement** - READY TO START
-- Make validation actually block on failure
-- Wire leakage/lookahead detection to training
+**Phases 7-11: IN PROGRESS**
+- See CLEANUP_PLAN.md for current work
 
 **See CLEANUP_PLAN.md for full phase details.**
 
@@ -244,5 +254,5 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-01-23*
+*Last updated: 2026-01-24*
 *See CLEANUP_PLAN.md for current phase*
