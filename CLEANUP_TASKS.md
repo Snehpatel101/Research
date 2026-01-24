@@ -1,14 +1,15 @@
 # ML Factory Cleanup Tasks - Active Work
 
 **Last Updated:** 2026-01-23
-**Status:** Phase 0 Complete | Phase 1 In Progress
+**Status:** Phase 0 Complete | Phase 1 Complete | Phase 2 Ready
 **Phase 0 Impact:** -5,336 lines removed | 7 naming conflicts resolved
+**Phase 1 Impact:** +616 lines added | 7 new exceptions | Commit 7f71b52
 
 ---
 
 ## Table of Contents
-- [Phase 1: Contract Enforcement](#phase-1-contract-enforcement)
-- [Phase 1 Execution Priority](#phase-1-execution-priority)
+- [Phase 2: 4D Infrastructure](#phase-2-4d-infrastructure) ← NEXT
+- [Completed: Phase 1](#completed-phase-1-contract-enforcement)
 - [Completed: Phase 0](#completed-phase-0-deduplication)
 - [False Positives](#false-positives)
 - [Deferred Items](#deferred-items)
@@ -16,16 +17,25 @@
 
 ---
 
-## Phase 1: Contract Enforcement
+## Phase 2: 4D Infrastructure
 
-**Source:** 7-agent codebase analysis
+**Source:** CLEANUP_PLAN.md Phase 2
 **Status:** Ready to Execute
-**Target:** 100% validation enforcement, zero silent failures
-**Estimated Effort:** 2-3 days
+**Target:** Enable 4D models (PatchTST, iTransformer, TFT, N-BEATS)
+**Estimated Effort:** 5-7 days
+**Blocked By:** Phase 1 (COMPLETE)
+
+See `CLEANUP_PLAN.md` for detailed Phase 2 tasks (2A-2G).
 
 ---
 
-### 1A: Make DataContract.validate_dataframe() Raise on Failure - PENDING
+## Completed: Phase 1 Contract Enforcement
+
+**Status:** ✅ COMPLETE (2026-01-23)
+**Commit:** 7f71b52
+**Impact:** +616 lines, 7 new exceptions
+
+### 1A: Make DataContract.validate_dataframe() Raise on Failure - ✅ DONE
 
 **Priority:** CRITICAL
 **Effort:** LOW (2 hours)
@@ -89,11 +99,11 @@ python -c "from src.core.contracts.data_contract import DataContract; print(hasa
 pytest tests/core/contracts/test_data_contract.py -v -k "strict"
 ```
 
-**Commit:** [pending]
+**Commit:** 7f71b52
 
 ---
 
-### 1B: Call ModelContract.validate_data_contract() in Adapter Load Path - PENDING
+### 1B: Call ModelContract.validate_data_contract() in Adapter Load Path - ✅ DONE
 
 **Priority:** CRITICAL
 **Effort:** LOW (2 hours)
@@ -158,11 +168,11 @@ python -c "from src.data.adapters.base import BaseAdapter; import inspect; print
 pytest tests/data/adapters/test_base.py -v -k "contract"
 ```
 
-**Commit:** [pending]
+**Commit:** 7f71b52
 
 ---
 
-### 1C: Add Pre-Training Validation Hook - PENDING
+### 1C: Add Pre-Training Validation Hook - ✅ DONE
 
 **Priority:** HIGH
 **Effort:** MEDIUM (3 hours)
@@ -275,11 +285,11 @@ python -c "from src.training.orchestrator import UnifiedTrainingOrchestrator; pr
 pytest tests/training/test_orchestrator.py -v -k "validation"
 ```
 
-**Commit:** [pending]
+**Commit:** 7f71b52
 
 ---
 
-### 1D: Wire Leakage Detection to Block Training - PENDING
+### 1D: Wire Leakage Detection to Block Training - ✅ DONE
 
 **Priority:** CRITICAL
 **Effort:** LOW (2 hours)
@@ -362,11 +372,11 @@ python -c "from src.validation.leakage_detection import LeakageDetector; import 
 pytest tests/validation/test_leakage_detection.py -v -k "blocking"
 ```
 
-**Commit:** [pending]
+**Commit:** 7f71b52
 
 ---
 
-### 1E: Wire Lookahead Audit to Block Training - PENDING
+### 1E: Wire Lookahead Audit to Block Training - ✅ DONE
 
 **Priority:** CRITICAL
 **Effort:** LOW (2 hours)
@@ -445,11 +455,11 @@ python -c "from src.validation.lookahead_audit import LookaheadAudit; import ins
 pytest tests/validation/test_lookahead_audit.py -v -k "blocking"
 ```
 
-**Commit:** [pending]
+**Commit:** 7f71b52
 
 ---
 
-### 1F: Add Scaler Fit Verification - PENDING
+### 1F: Add Scaler Fit Verification - ✅ DONE
 
 **Priority:** HIGH
 **Effort:** LOW (1 hour)
@@ -532,11 +542,11 @@ python -c "from src.data.pipeline.stages.scaling.core import ScalerFitError; pri
 pytest tests/data/pipeline/stages/test_scaling.py -v -k "fit"
 ```
 
-**Commit:** [pending]
+**Commit:** 7f71b52
 
 ---
 
-### 1G: Fix Chronological Splits Validation - PENDING
+### 1G: Fix Chronological Splits Validation - ✅ DONE
 
 **Priority:** MEDIUM
 **Effort:** LOW (1 hour)
@@ -639,31 +649,7 @@ python -c "from src.data.pipeline.stages.splits.core import ChronologicalSortErr
 pytest tests/data/pipeline/stages/test_splits.py -v -k "chronological"
 ```
 
-**Commit:** [pending]
-
----
-
-## Phase 1 Execution Priority
-
-| Task | Priority | Effort | Dependencies | Status | Assignee |
-|------|----------|--------|--------------|--------|----------|
-| 1A | CRITICAL | 2h | None | Pending | - |
-| 1B | CRITICAL | 2h | 1A | Blocked | - |
-| 1C | HIGH | 3h | 1A, 1B | Blocked | - |
-| 1D | CRITICAL | 2h | 1C | Blocked | - |
-| 1E | CRITICAL | 2h | 1C | Blocked | - |
-| 1F | HIGH | 1h | None | Pending | - |
-| 1G | MEDIUM | 1h | None | Pending | - |
-
-**Total Estimated Effort:** 13 hours (~2 days)
-
-**Parallelizable Tasks:**
-- Start immediately: 1A, 1F, 1G (no dependencies)
-- After 1A: 1B
-- After 1B: 1C
-- After 1C: 1D, 1E (can run in parallel)
-
-**Critical Path:** 1A → 1B → 1C → 1D/1E
+**Commit:** 7f71b52
 
 ---
 
@@ -756,9 +742,10 @@ pytest tests/ -x --tb=short
 
 | Date | Phase | Task | Impact | Commit |
 |------|-------|------|--------|--------|
-| 2026-01-23 | 0 | All | -5,336 lines | 3262996 |
+| 2026-01-23 | 1 | All (1A-1G) | +616 lines, 7 exceptions | 7f71b52 |
+| 2026-01-23 | 0 | All (0A-0G) | -5,336 lines | 3262996 |
 
 ---
 
-*Next: Execute Phase 1 tasks in priority order*
+*Next: Execute Phase 2 tasks (4D Infrastructure)*
 *Full cleanup plan: `CLEANUP_PLAN.md`*
