@@ -4,6 +4,54 @@
 
 ---
 
+## Phase 3: 5-Dimension Optuna | 2026-01-24 | COMPLETE
+
+**Impact:** +2,298 lines added (4 new files, 5 modified files)
+**Commit:** (pending)
+
+### Tasks
+
+| ID | Task | Status |
+|----|------|--------|
+| 3A | Create `FeatureSpec` dataclass with all 5 dimensions | ✅ |
+| 3B | Define `BASE_FEATURE_SETS` per model family | ✅ |
+| 3C | Implement 5D Optuna objective + runners | ✅ |
+| 3D | Move label generation inside Optuna trial | ✅ |
+| 3E | Create artifact saver for FeatureSpec | ✅ |
+| 3F | Embed FeatureSpec in ModelBundle | ✅ |
+
+### New Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/core/contracts/feature_spec.py` | 279 | 5-dimension FeatureSpec dataclass |
+| `src/optimization/base_feature_sets.py` | 629 | Per-model-family feature sets (6 families) |
+| `src/optimization/five_dimension_objective.py` | 975 | 5D Optuna objective + convenience runners |
+| `src/optimization/artifact_saver.py` | 415 | Save/load FeatureSpec artifacts |
+
+### Key Changes
+
+| Component | Change |
+|-----------|--------|
+| FeatureSpec | Captures all 5 dimensions with schema_hash for versioning |
+| BASE_FEATURE_SETS | 6 model families with categorized features |
+| 5D Objective | Per-trial label generation with caching |
+| ModelBundle | v1.2.0 with FeatureSpec support |
+| Artifact Saver | Directory structure: `experiments/{run_id}/feature_specs/` |
+
+### Verification
+- 6 sequential agents: **ALL PASS**
+- All imports verified
+- 5D flow: Optuna → all dimensions → FeatureSpec → ModelBundle
+- Ruff: All new files pass
+
+### Lessons Learned
+1. Per-trial label caching essential for performance
+2. Schema hash enables FeatureSpec versioning without complex diffing
+3. Optional FeatureSpec in ModelBundle maintains backward compatibility
+
+---
+
 ## Phase 2: 4D Infrastructure | 2026-01-24 | COMPLETE
 
 **Impact:** +958 lines added (9 files modified, 1 new file)

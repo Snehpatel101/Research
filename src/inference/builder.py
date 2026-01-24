@@ -74,9 +74,9 @@ class BundleBuildResult:
         """Convert to dictionary for serialization."""
         return {
             "bundle_paths": [str(p) for p in self.bundle_paths],
-            "ensemble_bundle_path": str(self.ensemble_bundle_path)
-            if self.ensemble_bundle_path
-            else None,
+            "ensemble_bundle_path": (
+                str(self.ensemble_bundle_path) if self.ensemble_bundle_path else None
+            ),
             "n_bundles": self.n_bundles,
             "total_size_mb": self.total_size_mb,
             "metadata": self.metadata,
@@ -114,9 +114,9 @@ class BundleBuildResult:
 
         return cls(
             bundle_paths=[Path(p) for p in data.get("bundle_paths", [])],
-            ensemble_bundle_path=Path(data["ensemble_bundle_path"])
-            if data.get("ensemble_bundle_path")
-            else None,
+            ensemble_bundle_path=(
+                Path(data["ensemble_bundle_path"]) if data.get("ensemble_bundle_path") else None
+            ),
             n_bundles=data.get("n_bundles", 0),
             total_size_mb=data.get("total_size_mb", 0.0),
             metadata=data.get("metadata", {}),
@@ -240,6 +240,7 @@ class BundleBuilder:
         training_result: TrainingRunResult,
         include_preprocessing_graph: bool = True,
         include_calibrator: bool = True,
+        feature_specs: dict[str, Any] | None = None,
     ) -> BundleBuildResult:
         """
         Build bundles from PHASE_3 TrainingRunResult.
@@ -250,12 +251,16 @@ class BundleBuilder:
         - Feature column names
         - Preprocessing graph (optional, for raw OHLCV inference)
         - Probability calibrator (optional)
+        - Feature spec (optional, for 5-dimension optimization parity)
         - Training metrics
 
         Args:
             training_result: Result from UnifiedTrainingOrchestrator.train()
             include_preprocessing_graph: Include preprocessing graph for raw inference
             include_calibrator: Include probability calibrator if available
+            feature_specs: Optional dict mapping model_key -> FeatureSpec for each model.
+                          When provided, the bundle will include the FeatureSpec to ensure
+                          inference uses the exact same configuration as training.
 
         Returns:
             BundleBuildResult with paths to created bundles
@@ -307,6 +312,11 @@ class BundleBuilder:
             if include_calibrator:
                 calibrator = self._extract_calibrator(trainer)
 
+            # Get feature spec if provided
+            feature_spec = None
+            if feature_specs is not None:
+                feature_spec = feature_specs.get(key)
+
             # Create bundle
             try:
                 bundle = ModelBundle.from_training(
@@ -316,6 +326,7 @@ class BundleBuilder:
                     horizon=horizon,
                     calibrator=calibrator,
                     preprocessing_graph=preprocessing_graph,
+                    feature_spec=feature_spec,
                     symbol=self.config.symbol,
                     training_metrics=model_result.metrics,
                     extra_metadata={
@@ -430,6 +441,7 @@ class BundleBuilder:
         training_result: TrainingRunResult | None = None,
         ensemble_result: EnsembleResult | None = None,
         include_preprocessing_graph: bool = True,
+        feature_specs: dict[str, Any] | None = None,
     ) -> BundleBuildResult:
         """
         Build all bundles from training and ensemble results.
@@ -441,6 +453,7 @@ class BundleBuilder:
             training_result: PHASE_3 training result (optional)
             ensemble_result: PHASE_4 ensemble result (optional)
             include_preprocessing_graph: Include preprocessing graph
+            feature_specs: Optional dict mapping model_key -> FeatureSpec
 
         Returns:
             BundleBuildResult with all bundle paths
@@ -460,6 +473,7 @@ class BundleBuilder:
             base_result = self.build_from_training_result(
                 training_result,
                 include_preprocessing_graph=include_preprocessing_graph,
+                feature_specs=feature_specs,
             )
             bundle_paths.extend(base_result.bundle_paths)
             metadata["base_build"] = base_result.metadata
@@ -706,6 +720,7 @@ def build_bundles(
     config: PipelineConfig,
     training_result: TrainingRunResult,
     ensemble_result: EnsembleResult | None = None,
+    feature_specs: dict[str, Any] | None = None,
 ) -> BundleBuildResult:
     """
     Convenience function to build all bundles.
@@ -723,18 +738,20 @@ def build_bundles(
         config: PipelineConfig instance
         training_result: PHASE_3 training result
         ensemble_result: Optional PHASE_4 ensemble result
+        feature_specs: Optional dict mapping model_key -> FeatureSpec
 
     Returns:
         BundleBuildResult with all bundle paths
     """
     builder = BundleBuilder(config)
-    return builder.build_all(training_result, ensemble_result)
+    return builder.build_all(training_result, ensemble_result, feature_specs=feature_specs)
 
 
 def build_from_run(
     run_path: str | Path,
     training_result: TrainingRunResult,
     ensemble_result: EnsembleResult | None = None,
+    feature_specs: dict[str, Any] | None = None,
 ) -> BundleBuildResult:
     """
     Build bundles from a completed training run.
@@ -745,12 +762,13 @@ def build_from_run(
         run_path: Path to training run directory
         training_result: PHASE_3 training result
         ensemble_result: Optional PHASE_4 ensemble result
+        feature_specs: Optional dict mapping model_key -> FeatureSpec
 
     Returns:
         BundleBuildResult with all bundle paths
     """
     builder = BundleBuilder.from_training_run(run_path)
-    return builder.build_all(training_result, ensemble_result)
+    return builder.build_all(training_result, ensemble_result, feature_specs=feature_specs)
 
 
 # =============================================================================

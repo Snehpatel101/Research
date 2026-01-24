@@ -1,15 +1,17 @@
 # ML Factory Cleanup Tasks - Active Work
 
 **Last Updated:** 2026-01-24
-**Status:** Phase 0 Complete | Phase 1 Complete | Phase 2 Complete | Phase 3 Ready
+**Status:** Phase 0 Complete | Phase 1 Complete | Phase 2 Complete | Phase 3 Complete | Phase 4 Ready
 **Phase 0 Impact:** -5,336 lines removed | 7 naming conflicts resolved
 **Phase 1 Impact:** +616 lines added | 7 new exceptions | Commit 7f71b52
 **Phase 2 Impact:** +958 lines added | 9 files modified | 4D models enabled
+**Phase 3 Impact:** +2,298 lines added | 4 new files | 5D Optuna enabled
 
 ---
 
 ## Table of Contents
-- [Phase 3: 5-Dimension Optuna](#phase-3-5-dimension-optuna) ← NEXT
+- [Phase 4: Validation Integration](#phase-4-validation-integration) ← NEXT
+- [Completed: Phase 3](#completed-phase-3-5-dimension-optuna)
 - [Completed: Phase 2](#completed-phase-2-4d-infrastructure)
 - [Completed: Phase 1](#completed-phase-1-contract-enforcement)
 - [Completed: Phase 0](#completed-phase-0-deduplication)
@@ -19,15 +21,53 @@
 
 ---
 
-## Phase 3: 5-Dimension Optuna
+## Phase 4: Validation Integration
 
-**Source:** CLEANUP_PLAN.md Phase 3
+**Source:** CLEANUP_PLAN.md Phase 4
 **Status:** Ready to Execute
-**Target:** Optuna optimizes all 5 dimensions (barriers, features, params, timeframes, hyperparams)
-**Estimated Effort:** 5-7 days
-**Blocked By:** Phase 2 (COMPLETE)
+**Target:** Integrate validation systems into training pipeline
+**Estimated Effort:** 3-4 days
+**Blocked By:** Phase 1 (COMPLETE)
 
-See `CLEANUP_PLAN.md` for detailed Phase 3 tasks (3A-3F).
+See `CLEANUP_PLAN.md` for detailed Phase 4 tasks (4A-4G).
+
+---
+
+## Completed: Phase 3 5-Dimension Optuna
+
+**Status:** ✅ COMPLETE (2026-01-24)
+**Commit:** (pending)
+**Impact:** +2,298 lines, 4 new files, 5 modified files
+
+### Tasks
+
+| ID | Task | Status |
+|----|------|--------|
+| 3A | Create FeatureSpec dataclass (279 lines) | ✅ |
+| 3B | Define BASE_FEATURE_SETS (629 lines) | ✅ |
+| 3C | Implement 5D Optuna objective (975 lines) | ✅ |
+| 3D | Move label generation inside trial | ✅ |
+| 3E | Create artifact saver (415 lines) | ✅ |
+| 3F | Embed FeatureSpec in ModelBundle | ✅ |
+
+### Files Created
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/core/contracts/feature_spec.py` | 279 | 5-dimension FeatureSpec dataclass |
+| `src/optimization/base_feature_sets.py` | 629 | Per-model-family feature sets |
+| `src/optimization/five_dimension_objective.py` | 975 | 5D Optuna objective + runners |
+| `src/optimization/artifact_saver.py` | 415 | Save/load FeatureSpec artifacts |
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `src/core/contracts/__init__.py` | FeatureSpec export |
+| `src/optimization/__init__.py` | All Phase 3 exports |
+| `src/inference/bundle.py` | FeatureSpec in ModelBundle (v1.2.0) |
+| `src/inference/builder.py` | feature_specs parameter |
+| `src/inference/__init__.py` | BUNDLE_FEATURE_SPEC_FILE export |
 
 ---
 

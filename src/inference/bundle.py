@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # VERSION AND CONSTANTS
 # =============================================================================
 
-BUNDLE_VERSION = "1.1.0"  # Updated for preprocessing graph support
+BUNDLE_VERSION = "1.2.0"  # Updated for FeatureSpec support (5-dimension optimization)
 BUNDLE_MANIFEST_FILE = "manifest.json"
 BUNDLE_MODEL_DIR = "model"
 BUNDLE_SCALER_FILE = "scaler.pkl"
@@ -58,6 +58,7 @@ BUNDLE_CALIBRATOR_FILE = "calibrator.pkl"
 BUNDLE_FEATURES_FILE = "features.json"
 BUNDLE_METADATA_FILE = "metadata.json"
 BUNDLE_PREPROCESSING_GRAPH_FILE = "preprocessing_graph.json"
+BUNDLE_FEATURE_SPEC_FILE = "feature_spec.json"
 
 
 # =============================================================================
@@ -81,6 +82,8 @@ class BundleMetadata:
     has_calibrator: bool = False
     has_preprocessing_graph: bool = False
     preprocessing_graph_hash: str = ""
+    has_feature_spec: bool = False
+    feature_spec_hash: str = ""
     symbol: str = ""
     training_metrics: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
@@ -99,6 +102,8 @@ class BundleMetadata:
             "has_calibrator": self.has_calibrator,
             "has_preprocessing_graph": self.has_preprocessing_graph,
             "preprocessing_graph_hash": self.preprocessing_graph_hash,
+            "has_feature_spec": self.has_feature_spec,
+            "feature_spec_hash": self.feature_spec_hash,
             "symbol": self.symbol,
             "training_metrics": self.training_metrics,
             "extra": self.extra,
@@ -119,6 +124,8 @@ class BundleMetadata:
             has_calibrator=data.get("has_calibrator", False),
             has_preprocessing_graph=data.get("has_preprocessing_graph", False),
             preprocessing_graph_hash=data.get("preprocessing_graph_hash", ""),
+            has_feature_spec=data.get("has_feature_spec", False),
+            feature_spec_hash=data.get("feature_spec_hash", ""),
             symbol=data.get("symbol", ""),
             training_metrics=data.get("training_metrics", {}),
             extra=data.get("extra", {}),
@@ -210,6 +217,7 @@ class ModelBundle:
         metadata: BundleMetadata,
         calibrator: Any | None = None,
         preprocessing_graph: Any | None = None,
+        feature_spec: Any | None = None,
     ) -> None:
         """
         Initialize ModelBundle.
@@ -221,6 +229,7 @@ class ModelBundle:
             metadata: Bundle metadata
             calibrator: Optional fitted probability calibrator
             preprocessing_graph: Optional PreprocessingGraph for raw data inference
+            feature_spec: Optional FeatureSpec for 5-dimension optimization parity
         """
         self.model = model
         self.scaler = scaler
@@ -228,6 +237,7 @@ class ModelBundle:
         self.metadata = metadata
         self.calibrator = calibrator
         self.preprocessing_graph = preprocessing_graph
+        self.feature_spec = feature_spec
 
     @classmethod
     def from_training(
@@ -238,6 +248,7 @@ class ModelBundle:
         horizon: int,
         calibrator: Any | None = None,
         preprocessing_graph: Any | None = None,
+        feature_spec: Any | None = None,
         symbol: str = "",
         training_metrics: dict[str, Any] | None = None,
         extra_metadata: dict[str, Any] | None = None,
@@ -252,6 +263,10 @@ class ModelBundle:
             horizon: Prediction horizon
             calibrator: Optional fitted calibrator
             preprocessing_graph: Optional PreprocessingGraph for train/serve parity
+            feature_spec: Optional FeatureSpec for 5-dimension optimization parity.
+                         Contains all optimization dimensions (triple barrier params,
+                         selected features, feature params, timeframes, hyperparameters)
+                         to ensure inference uses exact same configuration as training.
             symbol: Trading symbol (e.g., "MES", "MGC")
             training_metrics: Optional training metrics to store
             extra_metadata: Additional metadata
@@ -279,6 +294,11 @@ class ModelBundle:
                 "",
             )
 
+        # Get feature spec hash if available
+        feature_spec_hash = ""
+        if feature_spec is not None:
+            feature_spec_hash = getattr(feature_spec, "schema_hash", "")
+
         metadata = BundleMetadata(
             version=BUNDLE_VERSION,
             created_at=datetime.now().isoformat(),
@@ -292,6 +312,8 @@ class ModelBundle:
             has_calibrator=calibrator is not None,
             has_preprocessing_graph=preprocessing_graph is not None,
             preprocessing_graph_hash=preprocessing_graph_hash,
+            has_feature_spec=feature_spec is not None,
+            feature_spec_hash=feature_spec_hash,
             symbol=symbol,
             training_metrics=training_metrics or {},
             extra=extra_metadata or {},
@@ -304,6 +326,7 @@ class ModelBundle:
             metadata=metadata,
             calibrator=calibrator,
             preprocessing_graph=preprocessing_graph,
+            feature_spec=feature_spec,
         )
 
     def save(self, path: str | Path, overwrite: bool = False) -> Path:
@@ -372,6 +395,14 @@ class ModelBundle:
             files.append(BUNDLE_PREPROCESSING_GRAPH_FILE)
             checksums[BUNDLE_PREPROCESSING_GRAPH_FILE] = self._file_checksum(graph_path)
             logger.info(f"Saved preprocessing graph to {graph_path}")
+
+        # Save feature spec (5-dimension optimization)
+        if self.feature_spec is not None:
+            spec_path = path / BUNDLE_FEATURE_SPEC_FILE
+            self.feature_spec.save(spec_path)
+            files.append(BUNDLE_FEATURE_SPEC_FILE)
+            checksums[BUNDLE_FEATURE_SPEC_FILE] = self._file_checksum(spec_path)
+            logger.info(f"Saved feature spec to {spec_path}")
 
         # Save model
         model_dir = path / BUNDLE_MODEL_DIR
@@ -462,6 +493,20 @@ class ModelBundle:
             except ImportError:
                 logger.warning("PreprocessingGraph module not available, skipping graph loading")
 
+        # Load feature spec (5-dimension optimization)
+        feature_spec = None
+        spec_path = path / BUNDLE_FEATURE_SPEC_FILE
+        if spec_path.exists():
+            try:
+                from src.core.contracts.feature_spec import FeatureSpec
+
+                feature_spec = FeatureSpec.load(spec_path)
+                logger.info(f"Loaded feature spec from {spec_path}")
+            except ImportError:
+                logger.warning("FeatureSpec module not available, skipping spec loading")
+            except Exception as e:
+                logger.warning(f"Failed to load feature spec: {e}")
+
         # Load model
         model_dir = path / BUNDLE_MODEL_DIR
         model = ModelRegistry.create(metadata.model_name)
@@ -476,6 +521,7 @@ class ModelBundle:
             metadata=metadata,
             calibrator=calibrator,
             preprocessing_graph=preprocessing_graph,
+            feature_spec=feature_spec,
         )
 
     def predict(
@@ -588,11 +634,39 @@ class ModelBundle:
         if self.metadata.has_calibrator and self.calibrator is None:
             issues.append("Metadata indicates calibrator but none found")
 
+        # Check feature spec
+        if self.metadata.has_feature_spec and self.feature_spec is None:
+            issues.append("Metadata indicates feature_spec but none found")
+
+        # Validate feature spec if present
+        if self.feature_spec is not None:
+            is_valid, spec_issues = self.feature_spec.validate()
+            if not is_valid:
+                issues.extend([f"feature_spec: {i}" for i in spec_issues])
+
         return {
             "valid": len(issues) == 0,
             "issues": issues,
             "metadata": self.metadata.to_dict(),
         }
+
+    def set_feature_spec(self, feature_spec: Any) -> None:
+        """
+        Set or update the feature spec.
+
+        The FeatureSpec captures all 5 optimization dimensions used during training,
+        ensuring inference parity with the exact same configuration.
+
+        Args:
+            feature_spec: FeatureSpec instance from src.core.contracts
+        """
+        self.feature_spec = feature_spec
+
+        # Update metadata
+        self.metadata.has_feature_spec = True
+        self.metadata.feature_spec_hash = getattr(feature_spec, "schema_hash", "")
+
+        logger.info(f"Set feature spec (hash: {self.metadata.feature_spec_hash})")
 
     def set_preprocessing_graph(self, graph: Any) -> None:
         """
@@ -703,6 +777,7 @@ class ModelBundle:
             f"horizon={self.metadata.horizon}, "
             f"features={self.metadata.n_features}, "
             f"calibrated={self.metadata.has_calibrator}, "
+            f"has_feature_spec={self.metadata.has_feature_spec}, "
             f"has_preprocessing_graph={self.metadata.has_preprocessing_graph})"
         )
 
@@ -713,4 +788,5 @@ __all__ = [
     "BundleManifest",
     "BUNDLE_VERSION",
     "BUNDLE_PREPROCESSING_GRAPH_FILE",
+    "BUNDLE_FEATURE_SPEC_FILE",
 ]

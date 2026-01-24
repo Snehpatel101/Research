@@ -20,6 +20,9 @@ Usage:
         MODEL_CONTRACTS,
         get_model_contract,
 
+        # Feature spec (5-dimension optimization)
+        FeatureSpec,
+
         # Artifact manifest
         ArtifactManifest,
     )
@@ -56,6 +59,9 @@ from .data_contract import (
     FeatureMode,
     MTFMode,
 )
+from .feature_spec import (
+    FeatureSpec,
+)
 from .model_contract import (
     MODEL_CONTRACTS,
     ModelContract,
@@ -85,6 +91,8 @@ __all__ = [
     "get_models_by_rank",
     "get_models_requiring_scaling",
     "get_models_by_mtf_mode",
+    # Feature spec (5-dimension optimization)
+    "FeatureSpec",
     # Artifact manifest
     "ArtifactManifest",
 ]

@@ -57,10 +57,66 @@ Reference: Bergstra et al. (2011) "Algorithms for Hyper-Parameter Optimization"
 # =============================================================================
 # FEATURE OPTIMIZATION
 # =============================================================================
+# =============================================================================
+# BASE FEATURE SETS (Phase 3)
+# =============================================================================
+# =============================================================================
+# ARTIFACT SAVING (Phase 3)
+# =============================================================================
+from src.optimization.artifact_saver import (
+    DEFAULT_OUTPUT_DIR,
+    FEATURE_SPECS_SUBDIR,
+    MANIFEST_FILENAME,
+    list_runs,
+    list_saved_specs,
+    load_best_feature_spec,
+    load_feature_spec,
+    load_manifest,
+    save_feature_specs,
+    save_optimization_results,
+)
+
+# =============================================================================
+# 5-DIMENSION OPTUNA OBJECTIVE (Phase 3)
+# =============================================================================
+from src.optimization.base_feature_sets import (
+    BASE_FEATURE_SETS,
+    DEFAULT_FEATURE_PARAMS,
+    MOMENTUM_FEATURES,
+    MOVING_AVERAGE_FEATURES,
+    PRICE_FEATURES,
+    RAW_FEATURES,
+    TREND_FEATURES,
+    VOLATILITY_FEATURES,
+    VOLUME_FEATURES,
+    get_all_features,
+    get_base_features,
+    get_extensive_feature_set,
+    get_feature_category,
+    get_feature_params,
+    get_features_by_category,
+    get_minimal_feature_set,
+)
 from src.optimization.features import (
     FeatureOptimizer,
     FeaturePruningResult,
     FeatureSelectionResult,
+)
+from src.optimization.five_dimension_objective import (
+    DEFAULT_TIMEFRAMES,
+    LOWER_MULT_RANGE,
+    MAX_FEATURES_TO_SEARCH,
+    MAX_HOLDING_BARS_RANGE,
+    MIN_FEATURES,
+    UPPER_MULT_RANGE,
+    FiveDimensionResult,
+    clear_label_cache,
+    create_5d_objective,
+    generate_labels_for_trial,
+    get_best_feature_spec,
+    get_top_k_specs,
+    run_5d_optimization,
+    suggest_hyperparameters_by_family,
 )
 from src.optimization.hyperparameters import (
     # Search spaces
@@ -109,6 +165,49 @@ __all__ = [
     "FeatureSelectionResult",
     "FeaturePruningResult",
     "FeatureOptimizer",
+    # Base feature sets (Phase 3)
+    "BASE_FEATURE_SETS",
+    "DEFAULT_FEATURE_PARAMS",
+    "MOMENTUM_FEATURES",
+    "TREND_FEATURES",
+    "VOLATILITY_FEATURES",
+    "VOLUME_FEATURES",
+    "RAW_FEATURES",
+    "PRICE_FEATURES",
+    "MOVING_AVERAGE_FEATURES",
+    "get_base_features",
+    "get_all_features",
+    "get_feature_category",
+    "get_features_by_category",
+    "get_feature_params",
+    "get_minimal_feature_set",
+    "get_extensive_feature_set",
+    # 5-Dimension Optuna Objective (Phase 3)
+    "FiveDimensionResult",
+    "create_5d_objective",
+    "generate_labels_for_trial",
+    "clear_label_cache",
+    "run_5d_optimization",
+    "get_best_feature_spec",
+    "get_top_k_specs",
+    "suggest_hyperparameters_by_family",
+    "UPPER_MULT_RANGE",
+    "LOWER_MULT_RANGE",
+    "MAX_HOLDING_BARS_RANGE",
+    "MIN_FEATURES",
+    "MAX_FEATURES_TO_SEARCH",
+    "DEFAULT_TIMEFRAMES",
+    # Artifact saving (Phase 3)
+    "save_feature_specs",
+    "save_optimization_results",
+    "load_best_feature_spec",
+    "load_feature_spec",
+    "load_manifest",
+    "list_saved_specs",
+    "list_runs",
+    "DEFAULT_OUTPUT_DIR",
+    "FEATURE_SPECS_SUBDIR",
+    "MANIFEST_FILENAME",
     # Full pipeline
     "FullOptimizationResult",
     "OptimizationPipeline",

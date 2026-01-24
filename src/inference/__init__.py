@@ -87,6 +87,7 @@ from src.inference.builder import (
     build_from_run,
 )
 from src.inference.bundle import (
+    BUNDLE_FEATURE_SPEC_FILE,
     BUNDLE_PREPROCESSING_GRAPH_FILE,
     BUNDLE_VERSION,
     BundleManifest,
@@ -141,6 +142,7 @@ __all__ = [
     "BundleManifest",
     "BUNDLE_VERSION",
     "BUNDLE_PREPROCESSING_GRAPH_FILE",
+    "BUNDLE_FEATURE_SPEC_FILE",
     # Preprocessing Graph
     "PreprocessingGraph",
     "PreprocessingGraphConfig",
