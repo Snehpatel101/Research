@@ -12,7 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .data_contract import DataRank, FeatureMode, MTFMode
+from src.core.types import DataRank
+
+from .data_contract import FeatureMode, MTFMode
 
 if TYPE_CHECKING:
     from .data_contract import DataContract

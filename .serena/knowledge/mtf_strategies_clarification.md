@@ -29,7 +29,7 @@
 - Align to 5-minute base index (forward-fill)
 - Apply shift(1) to prevent lookahead
 
-**Status:** ⚠️ 5 of 9 timeframes implemented (15min, 30min, 1h, 4h, daily)
+**Status:** ✅ All 9 intraday timeframes implemented (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 
 ---
 
@@ -46,7 +46,7 @@
 - Trend alignment indicators across timeframes
 - Volatility ratios between timeframes
 
-**Status:** ✅ Complete (but only 5 timeframes, intended: 9)
+**Status:** ✅ Complete (all 9 timeframes)
 
 ---
 
@@ -186,16 +186,16 @@ phase3:
 
 ## MTF Implementation Gaps
 
-### Gap 1: Missing Timeframes (Phase 2)
-**Current:** 5 timeframes (15min, 30min, 1h, 4h, daily)
-**Intended:** 9 timeframes (1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h)
+### Gap 1: Missing Timeframes (Phase 2) - RESOLVED
+**Status:** ✅ All 9 intraday timeframes now implemented
+**Implemented:** 1min, 5min, 10min, 15min, 20min, 25min, 30min, 45min, 1h
 
-**Impact:**
-- MTF features incomplete (~30 features from 5 TFs, intended: ~30 from 9 TFs)
-- Multi-resolution adapter blocked (requires 9 TFs)
-- Advanced models blocked (PatchTST, iTransformer, TFT)
+**Resolution:** Full 9-TF ladder implemented with:
+- Configurable via `--process-all-timeframes` or `--output-timeframes`
+- Per-model primary TF selection (CatBoost->15min, TCN->5min, PatchTST->1min)
+- All stages iterate over `effective_output_timeframes`
 
-**Effort:** 1-2 days (add 4 missing timeframes)
+**No longer blocking:** Advanced model training and heterogeneous ensembles
 
 ---
 
@@ -310,4 +310,4 @@ phase3:
 
 ---
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-23

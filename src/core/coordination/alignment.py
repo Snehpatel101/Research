@@ -11,7 +11,7 @@ Key functions:
 - validate_timestamp_alignment: Validate two DataFrames have aligned timestamps
 
 Usage:
-    from src.coordination.alignment import (
+    from src.core.coordination.alignment import (
         align_to_anchor,
         apply_mtf_lag,
         compute_sequence_offset,

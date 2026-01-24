@@ -211,4 +211,42 @@ Proceed to **Phase 1 (Configuration Layer)** which will:
 
 ---
 
-**Last Updated:** 2026-01-16
+## Extended Inference System (Phase 1 Finding)
+
+Beyond the core contracts, the Phase 1 analysis revealed a comprehensive inference system:
+
+### Bundle System
+```
+bundle_dir/
+  manifest.json      # ArtifactManifest
+  metadata.json      # Training metadata
+  features.json      # Feature definitions
+  scaler.pkl         # Fitted scaler
+  calibrator.pkl     # Optional calibrator
+  preprocessing_graph.json  # Train/serve parity
+  model/             # Serialized model
+```
+
+### PreprocessingGraph
+Captures all preprocessing for reproducible inference:
+- CleaningConfig, IndicatorConfig, MTFConfig
+- WaveletConfig, RegimeConfig, ScalingConfig
+
+### InferenceOrchestrator Methods
+- `predict()` - Single model
+- `predict_all()` - All loaded models
+- `predict_from_raw()` - With preprocessing
+- `predict_batch()` - Large datasets
+- `predict_with_uncertainty()` - Confidence estimates
+
+### Backtesting Framework
+- BacktestConfig with MES/MGC presets
+- ExecutionModel: MARKET_ON_CLOSE, MARKET_ON_OPEN, VWAP
+- Position Sizing: Fixed, Kelly, FixedFractional, VolTargeted
+- Metrics: Sharpe, Sortino, Calmar, Max DD, VAR, CVAR
+
+See: `.serena/knowledge/inference_contracts_system.md` for full details.
+
+---
+
+**Last Updated:** 2026-01-23

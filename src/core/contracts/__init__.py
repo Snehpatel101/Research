@@ -43,6 +43,8 @@ Example:
     >>> is_valid, issues = contract.validate_data_contract(data_contract)
 """
 
+from src.core.types import DataRank
+
 from .artifact_manifest import (
     ArtifactManifest,
 )
@@ -50,7 +52,6 @@ from .data_contract import (
     DATA_SCHEMA,
     DataContract,
     DataContractSchema,
-    DataRank,
     FeatureMode,
     MTFMode,
 )

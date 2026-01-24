@@ -2,11 +2,8 @@
 Feature Selection Package for OHLCV Time-Series ML.
 
 Import paths:
-    # New (preferred):
+    # Canonical path:
     from src.optimization.feature_selection import WalkForwardFeatureSelector
-
-    # Legacy (still works, deprecation warning):
-    from src.feature_selection import WalkForwardFeatureSelector
 
 Main Components:
     Result Classes:

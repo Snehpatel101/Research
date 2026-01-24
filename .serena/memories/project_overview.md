@@ -98,36 +98,36 @@ Base Model Selection (1 per family, 3-4 total)
 - **Complete data isolation** - no cross-symbol correlation or features
 - **Symbol configurability** via config: `./pipeline run --symbols MES`
 
-## Model Families (5 Total)
+## Model Families (5 Total, 23 Models) - Verified 2026-01-23
 
 | Family | Models | Input Shape | Primary TF | Features | Status |
 |--------|--------|-------------|-----------|----------|--------|
-| **Boosting** | XGBoost, LightGBM, CatBoost | 2D `(N, 200)` | 15min | Base + MTF indicators | ✅ Complete |
-| **Classical** | Random Forest, Logistic, SVM | 2D `(N, 150)` | 1h | Base only | ✅ Complete |
-| **Neural** | LSTM, GRU, TCN, Transformer | 3D `(N, T, 150)` | 5min | Base only | ✅ Complete |
-| **Advanced** | PatchTST, iTransformer, TFT | 4D `(N, 3, T, 4)` | 1min | Raw OHLCV | ❌ Planned |
-| **Inference/Meta** | Logistic Meta, Ridge Meta, MLP Meta, Calibrated Blender | Mixed | N/A | OOF predictions | ⚠️ Partial |
+| **Boosting (3)** | XGBoost, LightGBM, CatBoost | 2D `(N, 200)` | 15min | Base + MTF indicators | ✅ Complete |
+| **Classical (3)** | Random Forest, Logistic, SVM | 2D `(N, 150)` | 1h | Base only | ✅ Complete |
+| **Neural (10)** | LSTM, GRU, TCN, Transformer, PatchTST, iTransformer, TFT, N-BEATS, InceptionTime, ResNet1D | 3D/4D | 5min/1min | Base/Raw OHLCV | ✅ Complete |
+| **Ensemble (3)** | Voting, Stacking, Blending | Mixed | N/A | OOF predictions | ✅ Complete |
+| **Meta-Learners (4)** | Ridge Meta, MLP Meta, Calibrated Meta, XGBoost Meta | 2D | N/A | OOF predictions | ✅ Complete |
 
 **Note**: Each model independently chooses primary TF from the 9 derived timeframes (configurable per-model)
 
-## Pipeline Implementation Status
+## Pipeline Implementation Status (Verified 2026-01-23)
 
-| Phase | Component | Status | Gap |
-|-------|-----------|--------|-----|
-| 1 | OHLCV Ingestion | ✅ Complete | None |
-| 2 | MTF Upscaling | ⚠️ Partial | 4 of 9 timeframes missing (5min, 10min, 20min, 25min, 45min) |
-| 3 | Feature Engineering | ✅ Complete | MTF features only from 5 timeframes (intended: 9) |
-| 4 | Labeling + Splits | ✅ Complete | None |
-| 5 | Adapters | ⚠️ Partial | Multi-res adapter (4D) not implemented, per-model feature selection not fully implemented |
-| 6 | Model Training | ⚠️ Partial | 6 advanced models not implemented (CNN, transformers, MLP) |
-| 7 | Meta-Learner Stacking | ⚠️ Partial | Heterogeneous stacking implemented, calibrated blender not implemented |
+| Phase | Component | Status | Notes |
+|-------|-----------|--------|-------|
+| 1 | OHLCV Ingestion | ✅ Complete | Validation, standardization |
+| 2 | MTF Upscaling | ✅ Complete | All 9 timeframes (1m-1h) |
+| 3 | Feature Engineering | ✅ Complete | 160+ features in 9 families |
+| 4 | Labeling + Splits | ✅ Complete | Triple-barrier + purge/embargo |
+| 5 | Adapters | ✅ Complete | 2D, 3D, 4D adapters all working |
+| 6 | Model Training | ✅ Complete | All 23 models registered |
+| 7 | Meta-Learner Stacking | ✅ Complete | 4 meta-learners, heterogeneous stacking |
 
-**Priority Tasks**:
-1. Complete 9-timeframe MTF ladder (1-2 days)
-2. Implement per-model feature selection in adapters (3-5 days)
-3. Implement multi-resolution adapter (3 days)
-4. Add advanced models (14-18 days)
-5. Complete meta-learner strategies (5-7 days)
+**Technical Debt Tasks (Priority Order)**:
+1. CFG-002: Migrate 71+ _get_global_or_default() patterns (2 days)
+2. VAL-001: Move validation thresholds to config (0.5 days)
+3. SCALE-001: Replace fragile string matching (1 day)
+4. CFG-005: Implement cross-config validation (1 day)
+5. CORE-001: Extract core.py for 10/12 stages (5-7 days)
 
 ## Key Parameters
 
@@ -155,4 +155,4 @@ MTF_TIMEFRAMES = [1, 5, 10, 15, 20, 25, 30, 45, 60]  # All 9 timeframes (minutes
 - MTF strategies: `docs/implementation/MTF_IMPLEMENTATION_ROADMAP.md`
 - Models catalog: `docs/reference/MODELS.md`
 
-**Last Updated:** 2026-01-15
+**Last Updated:** 2026-01-23 (Phase 2 Agent #4 - SERENA Memories Updater)

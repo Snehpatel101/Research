@@ -52,6 +52,14 @@ class DataRank(int, Enum):
             raise ValueError(f"Unknown model: {model_name}")
         return cls(rank)
 
+    @classmethod
+    def from_ndim(cls, ndim: int) -> DataRank:
+        """Get DataRank from array dimensions."""
+        for rank in cls:
+            if rank.value == ndim:
+                return rank
+        raise ValueError(f"Unsupported array dimension: {ndim}. Must be 2, 3, or 4.")
+
 
 # =============================================================================
 # MODEL FAMILY - Groupings of models with similar characteristics
@@ -73,6 +81,7 @@ class ModelFamily(str, Enum):
     NEURAL = "neural"
     ENSEMBLE = "ensemble"
     META_LEARNER = "meta_learner"
+    TRANSFORMER = "transformer"
 
     @classmethod
     def from_model(cls, model_name: str) -> ModelFamily:

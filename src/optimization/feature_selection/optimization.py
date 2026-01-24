@@ -15,7 +15,7 @@ import numpy as np
 import optuna
 from optuna.samplers import TPESampler
 
-from src.feature_selection.result import FeatureSelectionResult
+from src.optimization.feature_selection.result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
 

@@ -20,7 +20,7 @@ from src.data.pipeline.utils import (
 if TYPE_CHECKING:
     from src.core.common.manifest import ArtifactManifest
     from src.data.pipeline.data_config import DataConfig as PipelineConfig
-    from src.feature_selection.results import FeatureSelectionResult
+    from src.optimization.feature_selection.result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,8 @@
 """
 Data Adapters for Multi-Resolution Time Series.
 
+DEPRECATED: This module is deprecated. Import from src.data.adapters instead.
+
 This module provides adapters that transform time series data into
 different tensor formats for various model architectures:
 
@@ -9,6 +11,14 @@ different tensor formats for various model architectures:
 
 Usage:
 ------
+    # NEW (Recommended):
+    from src.data.adapters import (
+        MultiResolution4DAdapter,
+        MultiResolution4DDataset,
+        MultiResolution4DConfig,
+    )
+
+    # OLD (Deprecated):
     from src.data.pipeline.stages.datasets.adapters import (
         MultiResolution4DAdapter,
         MultiResolution4DDataset,
@@ -34,7 +44,8 @@ Usage:
         pass
 """
 
-from src.data.pipeline.stages.datasets.adapters.multi_resolution import (
+# Import from canonical location
+from src.data.adapters import (
     MultiResolution4DAdapter,
     MultiResolution4DConfig,
     MultiResolution4DDataset,

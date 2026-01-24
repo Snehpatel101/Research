@@ -1,8 +1,10 @@
 # Pipeline Implementation Status
 
+**Last Audit:** 2026-01-23 (Phase 1 Deep Analysis)
+
 ## Current State (What Works)
 
-### SNwH Phase 0: Canonical Contracts ✅ NEW
+### SNwH Phase 0: Canonical Contracts ✅
 - **Status:** Complete (81 tests passing)
 - **Implemented:** 2026-01-16
 - **Files Created:**
@@ -23,25 +25,34 @@
 - Session filtering (regular vs extended hours)
 - Output: `data/processed/{symbol}_1m_clean.parquet`
 
-### Phase 2: MTF Upscaling ⚠️ Partial
-- **Implemented:** 5 of 9 timeframes (15min, 30min, 1h, 4h, daily)
+### Phase 2: MTF Upscaling ✅ (Complete)
+- **Status:** All 9 intraday timeframes now implemented (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
 - Resample to higher timeframes (OHLCV aggregation)
-- Align to 5-minute base index (forward-fill)
+- Align to primary timeframe index (forward-fill)
 - Apply shift(1) to prevent lookahead
 - Output: `data/processed/{symbol}_{timeframe}.parquet`
 
 ### Phase 3: Feature Engineering ✅
-- Base indicators (~150): RSI, MACD, ATR, Bollinger, ADX
-- Wavelets (~30): Db4/Haar decomposition (3 levels)
-- Microstructure (~20): Spread proxies, order flow
-- MTF indicators (~30): Indicators from 5 timeframes
-- Total: ~180 features
+- **Feature Count:** 160+ features in 9 families (per Phase 1 Agent #5 analysis)
+- Feature Families:
+  1. Raw OHLCV (4): Base for transformers
+  2. Momentum (~40): RSI, MACD, Stochastic, MAs
+  3. Volatility (~30): ATR, Bollinger, Historical Vol
+  4. Volume (~20): VWAP, OBV, Volume Ratios
+  5. Microstructure (~30): VPIN, Kyle's Lambda
+  6. Wavelets (~30): Daubechies db4 decomposition
+  7. MTF (~20): Multi-timeframe indicators
+  8. Regime (~10): Volatility/Trend detection
+  9. Temporal: Hour/Day-of-week encoding
 - Output: `data/features/{symbol}_features.parquet`
 
 ### Phase 4: Triple-Barrier Labeling ✅
-- Optuna barrier optimization (100 trials, ~2 minutes)
-- Triple-barrier labeling (profit/loss/time)
-- Quality weighting (0.5x-1.5x)
+- **Optuna Optimization:** TPE sampler, 27% more sample-efficient than traditional GA
+- **Search Space:** k_up [0.8-2.5], k_down [0.8-2.5], max_bars_mult [2.0-3.0]
+- **Fitness Components:** Neutral Score (PRIMARY), Long/Short Balance (+2), Speed Score (+1.5), Profit Factor (+2)
+- **Safe Mode:** Uses only first 70% of data to prevent test leakage
+- **Symbol-Specific Seeds:** MES asymmetric (k_up > k_down), MGC symmetric
+- Quality weighting (Tier 1: 1.5x, Tier 2: 1.0x, Tier 3: 0.5x)
 - Time-series splits (70/15/15) with purge (60) + embargo (1440)
 - Robust scaling (train-only fit)
 - Output: `data/splits/scaled/{symbol}_{split}.parquet`
@@ -50,6 +61,11 @@
 - **Implemented:**
   - Tabular adapter (2D): `(N, 180)` for boosting + classical
   - Sequence adapter (3D): `(N, seq_len, 180)` for neural
+- **Data Adapters (4,771 lines):**
+  - TabularAdapter: 2D for XGBoost/LightGBM
+  - SequenceAdapter: 3D for LSTM/GRU
+  - MultiStreamAdapter: 4D for PatchTST/iTransformer
+  - AdapterFactory: Unified entry point
 - **Output:** `TimeSeriesDataContainer` (in-memory)
 
 ### Phase 6: Model Training ✅
@@ -73,6 +89,68 @@
 - Stacking dataset builder
 - Optuna hyperparameter tuning
 - Output: CV results, OOF predictions
+
+### Data Store/Versioning System ✅
+- **Total Lines:** 7,522
+- **FeatureStore (897 lines):** Unified storage with Parquet caching
+- **FeatureCache (647 lines):** Content-addressable storage (SHA256)
+- **LineageTracker (620 lines):** Full audit trail with TransformationType enum
+- **VersionManager (445 lines):** Semantic versioning (major/minor/patch bumps)
+
+---
+
+## Known Issues (From Phase 1 Analysis - 2026-01-23)
+
+### Critical Issues
+
+#### PIPE-008: Single-Symbol Enforcement
+**Status:** Open
+**Impact:** Limits batch processing capability
+**Description:** Pipeline currently enforces single-symbol processing, preventing batch operations across multiple symbols.
+
+#### CFG-001: Dual Configuration Hierarchy
+**Status:** Open
+**Impact:** Developer confusion, maintenance burden
+**Description:** UnifiedConfig vs PipelineConfig creates confusion. 71+ duplicated `_get_global_or_default()` patterns exist.
+**Recommendation:** Migrate all to `get_config_value()`, add cross-config validation (CompositeValidator)
+
+#### CFG-010: Constants Scattered
+**Status:** Open
+**Impact:** Maintenance difficulty
+**Description:** Constants scattered across multiple locations instead of centralized.
+
+### Medium Issues
+
+#### SCALE-001: Fragile Feature Column Detection
+**Status:** Open
+**Impact:** May break with new features
+**Description:** Feature column detection uses fragile string matching patterns.
+
+#### VAL-001: Hardcoded Validation Thresholds
+**Status:** Open
+**Impact:** Not tunable per experiment
+**Description:** Validation thresholds hardcoded (0.85 correlation, 0.01 variance) instead of configurable.
+
+#### LBL-001: ATR Dependency Not Declared
+**Status:** Fixed (2024-12)
+**Description:** ATR dependency was not declared in feature toggles.
+
+### Technical Debt
+
+#### Missing core.py Pattern
+**Status:** Open
+**Impact:** Inconsistent stage architecture
+**Description:** Only 2/12 pipeline stages fully implement the run.py/core.py pattern. 10 stages need extraction.
+
+#### Asymmetry Bonus Duplication
+**Status:** Open
+**Impact:** Code duplication
+**Description:** Asymmetry bonus logic duplicated between fitness.py and optuna_optimizer.py. Extract to shared module.
+
+#### Lineage Query Performance
+**Status:** Open
+**Impact:** Slow queries on large lineage graphs
+**Description:** Lineage queries are O(n) with no indexing. Add lineage indexing for large graphs.
 
 ---
 

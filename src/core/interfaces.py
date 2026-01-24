@@ -30,6 +30,20 @@ import pandas as pd
 # RESULT DATACLASSES
 # =============================================================================
 
+# NOTE: AdapterResult is defined in TWO locations to avoid circular imports:
+#   1. src.data.adapters.base (canonical, uses X/y ML conventions)
+#   2. Here (legacy, uses data/labels conventions)
+#
+# They are kept in sync via backward-compatibility properties:
+#   - base.py defines .data/.labels as aliases for .X/.y
+#   - This version uses data/labels as primary fields
+#
+# Import paths:
+#   - Adapters: import from src.data.adapters.base
+#   - Other code: import from src.core.interfaces (this file)
+#
+# TODO Phase 0G: Consolidate to single definition once circular imports resolved
+
 
 @dataclass
 class AdapterResult:
@@ -39,10 +53,14 @@ class AdapterResult:
     Adapters transform raw DataFrames into model-ready tensors (2D/3D/4D).
     This dataclass standardizes the output format.
 
+    NOTE: This is the LEGACY definition. The canonical version is in
+    src.data.adapters.base which uses X/y (ML conventions) instead of
+    data/labels. Both versions provide backward-compatible properties.
+
     Attributes:
-        data: Transformed features (2D, 3D, or 4D numpy array)
-        labels: Target labels (1D array)
-        feature_names: List of feature column names
+        data: Transformed features (2D, 3D, or 4D numpy array) [alias: X]
+        labels: Target labels (1D array) [alias: y]
+        feature_names: List of feature column names [alias: feature_columns]
         original_indices: Original DataFrame indices for OOF alignment
         weights: Optional sample weights
         metadata: Additional adapter-specific metadata
@@ -74,6 +92,22 @@ class AdapterResult:
     def shape(self) -> tuple[int, ...]:
         """Full data shape."""
         return self.data.shape
+
+    # Backward compatibility with base.py (ML conventions)
+    @property
+    def X(self) -> np.ndarray:
+        """Alias for data (backward compatibility with adapters.base)."""
+        return self.data
+
+    @property
+    def y(self) -> np.ndarray:
+        """Alias for labels (backward compatibility with adapters.base)."""
+        return self.labels
+
+    @property
+    def feature_columns(self) -> list[str]:
+        """Alias for feature_names (backward compatibility with adapters.base)."""
+        return self.feature_names
 
     def validate(self) -> None:
         """Validate the adapter result."""

@@ -401,4 +401,23 @@ python scripts/train_model.py \
 
 ---
 
-**Last Updated:** 2026-01-01
+## Phase 1 Analysis Notes (2026-01-23)
+
+**Pipeline Stage Status:**
+- 12-stage orchestration system identified
+- Only 2/12 stages fully implement run.py/core.py pattern
+- MTF upscaling: All 9 timeframes now complete
+
+**Known Issues Impacting Architecture:**
+- PIPE-008: Single-symbol enforcement limits batch processing
+- CFG-001: Dual config hierarchy (UnifiedConfig vs PipelineConfig)
+- Missing core.py extraction for 10/12 stages
+
+**Data Provenance:**
+- 7,522 lines of data provenance infrastructure
+- FeatureStore, FeatureCache, LineageTracker, VersionManager
+- Content-addressable caching (SHA256)
+
+---
+
+**Last Updated:** 2026-01-23

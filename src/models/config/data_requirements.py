@@ -17,22 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-
-class ModelFamily(str, Enum):
-    """
-    Model family classification.
-
-    NOTE: The canonical source of truth for model families is the @register decorator
-    in each model class (see src/models/registry.py). This enum should match those values.
-    The registry determines runtime behavior; this config is for data preparation planning.
-    """
-
-    BOOSTING = "boosting"
-    NEURAL = "neural"
-    TRANSFORMER = "transformer"  # Note: Registry uses "neural" for transformers too
-    CLASSICAL = "classical"
-    ENSEMBLE = "ensemble"
-    META_LEARNER = "meta_learner"
+from src.core.types import ModelFamily
 
 
 class ScalerType(str, Enum):

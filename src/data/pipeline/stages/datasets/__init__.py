@@ -52,7 +52,8 @@ from src.core.container import (
     SplitData,
     TimeSeriesDataContainer,
 )
-from src.data.pipeline.stages.datasets.adapters import (
+# Import from canonical location (src/data/adapters)
+from src.data.adapters import (
     MultiResolution4DAdapter,
     MultiResolution4DConfig,
     MultiResolution4DDataset,

@@ -74,8 +74,8 @@ Raw OHLCV → Clean → Configurable TF → Features → Labels → Splits → S
 
 **Leakage protection:** shift(1) on all MTF features (prevents lookahead)
 
-**Status:** ⚠️ 5 of 9 timeframes implemented (15m, 30m, 1h, 4h, daily)
-**Missing:** 1m, 5m, 10m, 20m, 25m, 45m (4 additional timeframes needed for full 9-TF ladder)
+**Status:** ✅ All 9 intraday timeframes implemented (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+**Completed:** Full 9-TF ladder from 1-min canonical source
 
 ---
 
@@ -383,8 +383,8 @@ def multi_resolution_adapter(
     return TimeSeriesDataContainer(X_train=X, ...)
 ```
 
-**Status:** ❌ Not implemented (requires Phase 2 completion: 9 timeframes)
+**Status:** ❌ Not implemented (9 timeframes now available - ready for implementation)
 
 ---
 
-**Last Updated:** 2026-01-01
+**Last Updated:** 2026-01-23

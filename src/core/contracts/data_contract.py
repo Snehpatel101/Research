@@ -4,6 +4,13 @@ Canonical Data Contract - Schema for all data flowing through the pipeline.
 Every adapter, trainer, and validator uses this contract to ensure
 data consistency and traceability.
 
+NOTE: This is the CANONICAL data contract for model data requirements.
+Do NOT confuse with:
+- OHLCVValidationSchema (src/data/pipeline/stages/validation/data_contract.py):
+  OHLCV-specific validation schema for pipeline data
+- DatasetContract (src/core/data_contract.py):
+  Pipeline stage data passing contract
+
 Phase 0 of the SNwH (Unified Multi-Timeframe Model Factory) implementation.
 """
 
@@ -19,21 +26,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-
-class DataRank(int, Enum):
-    """Data dimensionality rank for model inputs."""
-
-    TABULAR_2D = 2  # (n_samples, n_features) - tabular models
-    SEQUENCE_3D = 3  # (n_samples, seq_len, n_features) - sequence models
-    MULTI_TF_4D = 4  # (n_samples, n_timeframes, seq_len, n_features) - multi-stream
-
-    @classmethod
-    def from_ndim(cls, ndim: int) -> DataRank:
-        """Get DataRank from array dimensions."""
-        for rank in cls:
-            if rank.value == ndim:
-                return rank
-        raise ValueError(f"Unsupported array dimension: {ndim}. Must be 2, 3, or 4.")
+from src.core.types import DataRank
 
 
 class FeatureMode(str, Enum):
@@ -119,7 +112,7 @@ DATA_SCHEMA = DataContractSchema()
 @dataclass
 class DataContract:
     """
-    Canonical data contract for pipeline data.
+    Canonical data contract for MODEL data requirements and lineage tracking.
 
     This contract captures:
     - Data shape and type information
@@ -129,6 +122,9 @@ class DataContract:
 
     Every data artifact stores this contract alongside the data
     to ensure traceability and compatibility.
+
+    NOTE: This is for MODEL data requirements. For OHLCV validation,
+    use OHLCVValidationSchema (src/data/pipeline/stages/validation/data_contract.py).
     """
 
     # Identity

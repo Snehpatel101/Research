@@ -21,21 +21,11 @@ from enum import Enum
 from typing import Any
 
 from src.config.base import BaseConfig
+from src.core.types import ModelFamily
 
 # =============================================================================
 # ENUMS
 # =============================================================================
-
-
-class ModelFamily(str, Enum):
-    """Model family classification."""
-
-    BOOSTING = "boosting"
-    NEURAL = "neural"
-    TRANSFORMER = "transformer"
-    CLASSICAL = "classical"
-    ENSEMBLE = "ensemble"
-    META_LEARNER = "meta_learner"
 
 
 class ActivationType(str, Enum):

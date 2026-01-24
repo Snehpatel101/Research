@@ -21,11 +21,11 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
-from src.feature_selection.ohlcv_selector import (
+from src.optimization.feature_selection.ohlcv_selector import (
     OHLCVFeatureSelector,
     get_feature_categories,
 )
-from src.feature_selection.result import FeatureSelectionResult
+from src.optimization.feature_selection.result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class PurgedFeatureSelector:
 
     Example:
         >>> from src.validation.cv import PurgedKFold, PurgedKFoldConfig
-        >>> from src.feature_selection import PurgedFeatureSelector
+        >>> from src.optimization.feature_selection import PurgedFeatureSelector
         >>>
         >>> cv_config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=1440)
         >>> cv = PurgedKFold(cv_config)

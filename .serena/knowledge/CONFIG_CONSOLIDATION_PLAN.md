@@ -572,3 +572,48 @@ config = PipelineConfig.from_yaml("config/global.yaml", overrides={
 
 *Document created: 2026-01-20*
 *Author: Config Consolidation Analysis*
+*Updated: 2026-01-23 (Phase 1 Analysis integration)*
+
+---
+
+## Phase 1 Configuration System Analysis (2026-01-23)
+
+### Configuration Hierarchy (From Phase 1 Agent #3)
+
+The configuration system has a 5-level hierarchy:
+1. **Level 1:** GlobalConfig (YAML-based, application-wide)
+2. **Level 2:** UnifiedConfig (high-level API with sections)
+3. **Level 3:** PipelineConfig (user-facing, Phase 0)
+4. **Level 4:** DataConfig (internal Phase 1)
+5. **Level 5:** Stage-specific (barriers, feature sets, regimes)
+
+### Key Modules Identified
+
+| Module | Purpose |
+|--------|---------|
+| `runtime.py` | Paths, symbols, split ratios |
+| `barriers_config.py` | Symbol-specific barrier defaults |
+| `feature_sets/` | 50+ model-specific feature definitions |
+| `regime_config.py` | Volatility/trend adaptive adjustments |
+| `adaptive_costs.py` | Time/volume transaction costs |
+
+### Feature Sets (50+ Aliases)
+
+- `core_min` - 30-50 base features
+- `boosting_optimal` - XGBoost/LightGBM optimized
+- `neural_optimal` - LSTM/GRU normalized
+- `transformer_raw` - Minimal for foundation models
+
+### Critical Issues Confirmed
+
+1. **CFG-001:** Dual hierarchy confusion (UnifiedConfig vs PipelineConfig)
+2. **CFG-002:** 71+ duplicated `_get_global_or_default()` patterns
+3. **CFG-005:** No cross-config validation
+4. **CFG-010:** Constants scattered across multiple locations
+
+### Phase 1 Recommendations
+
+1. Migrate all `_get_global_or_default()` to `get_config_value()`
+2. Add cross-config validation (CompositeValidator)
+3. Clarify config hierarchy in documentation
+4. Create feature sets reference guide

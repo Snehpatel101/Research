@@ -1,11 +1,11 @@
 """
 Coordination utilities - Re-export from src.core.coordination.
 
-New import path:
+Import path:
     from src.core.utils.coordination import TimeframeCoordinator
 
-Legacy import path (still works):
-    from src.coordination import TimeframeCoordinator
+Alternative (direct):
+    from src.core.coordination import TimeframeCoordinator
 """
 
 from src.core.coordination import (

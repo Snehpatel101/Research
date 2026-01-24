@@ -1,8 +1,10 @@
-# Critical Bugs - MUST FIX BEFORE PRODUCTION
+# Critical Bugs and Technical Debt
 
 ## Overview
 
-There are **3 CRITICAL** and **2 HIGH** severity bugs that must be fixed before any model can be trusted for live trading.
+**Status 2026-01-23:** All 5 previously documented critical bugs are FIXED.
+
+No new critical bugs identified. Focus is now on technical debt reduction (see below).
 
 ---
 
@@ -92,3 +94,42 @@ pytest tests/phase_1_tests/stages/test_splits_leakage.py -v
 ```
 
 **Expected**: Some performance reduction after fixes (indicates leakage was real).
+
+---
+
+## Technical Debt Issues (Identified 2026-01-23)
+
+### HIGH Priority
+
+| ID | Issue | Location | Impact | Effort |
+|----|-------|----------|--------|--------|
+| CFG-002 | 71+ duplicated _get_global_or_default() patterns | Multiple files | Maintenance nightmare | 2 days |
+| SCALE-001 | Fragile string matching for feature columns | Scaling stage | Silent failures | 1 day |
+| VAL-001 | Hardcoded validation thresholds (0.85 corr, 0.01 var) | Validation stage | Inflexibility | 0.5 days |
+
+### MEDIUM Priority
+
+| ID | Issue | Location | Impact | Effort |
+|----|-------|----------|--------|--------|
+| CFG-005 | No cross-config validation | Config system | Silent conflicts | 1 day |
+| LIN-001 | Lineage queries O(n) | LineageTracker | Performance at scale | 0.5 days |
+| PIPE-008 | Single-symbol enforcement | Pipeline core | Blocks batch processing | 2-3 days |
+
+### LOW Priority
+
+| ID | Issue | Location | Impact | Effort |
+|----|-------|----------|--------|--------|
+| CORE-001 | Missing core.py for 10/12 stages | Pipeline stages | Inconsistent patterns | 5-7 days |
+| PIT-001 | DateTime column name assumptions | FeatureStore | Brittleness | 0.5 days |
+| CONC-001 | No concurrent access testing | Data store | Production risk | 1 day |
+| ML-001 | Asymmetry bonus duplicated | fitness.py, optuna_optimizer.py | Inconsistency risk | 0.5 days |
+
+### Recommendations
+
+1. **Immediate:** CFG-002 migration should be first priority - create centralized `get_config_value()` pattern
+2. **Short-term:** VAL-001 and SCALE-001 are quick wins with high impact
+3. **Medium-term:** CFG-005 CompositeValidator prevents config conflicts
+
+---
+
+**Last Updated:** 2026-01-23 (Phase 2 Agent #4 - SERENA Memories Updater)

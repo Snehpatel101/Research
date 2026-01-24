@@ -8,12 +8,13 @@ data preparation. Import from here:
     from src.models.config import MODEL_DATA_REQUIREMENTS, ModelFamily
 """
 
+from src.core.types import ModelFamily
+
 from .data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     EnsembleConfig,
     ModelDataRequirements,
-    ModelFamily,
     ScalerType,
     get_all_ensemble_names,
     get_all_model_names,

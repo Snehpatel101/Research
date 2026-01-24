@@ -63,12 +63,62 @@ class AdapterResult:
             elif self.X.ndim == 4:
                 self.n_features = self.X.shape[3]
 
+    # =========================================================================
+    # BACKWARD COMPATIBILITY PROPERTIES
+    # =========================================================================
+
+    @property
+    def data(self) -> np.ndarray:
+        """Alias for X (backward compatibility with interfaces.py)."""
+        return self.X
+
+    @property
+    def labels(self) -> np.ndarray:
+        """Alias for y (backward compatibility with interfaces.py)."""
+        return self.y
+
+    @property
+    def feature_names(self) -> list[str]:
+        """Alias for feature_columns (backward compatibility with interfaces.py)."""
+        return self.feature_columns
+
+    @property
+    def rank(self) -> int:
+        """Data tensor rank (backward compatibility with interfaces.py)."""
+        return self.data_rank.value
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Full data shape (backward compatibility with interfaces.py)."""
+        return self.X.shape
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        """
+        Metadata dictionary (backward compatibility with interfaces.py).
+
+        Returns a dictionary of metadata fields. Note: This is read-only.
+        To modify metadata, update the individual fields directly.
+        """
+        return {
+            "n_samples": self.n_samples,
+            "n_features": self.n_features,
+            "data_rank": self.data_rank.value,
+            "sequence_length": self.sequence_length,
+            "n_timeframes": self.n_timeframes,
+            "timeframe_names": self.timeframe_names,
+            "adapter_name": self.adapter_name,
+        }
+
     def validate(self) -> tuple[bool, list[str]]:
         """
         Validate adapter result.
 
         Returns:
             (is_valid, list_of_issues)
+
+        Note: This method returns a tuple for backward compatibility.
+        For exception-based validation, call validate_strict() instead.
         """
         issues: list[str] = []
 
@@ -98,6 +148,24 @@ class AdapterResult:
             issues.append(f"X contains {n_inf} Inf values")
 
         return len(issues) == 0, issues
+
+    def validate_strict(self) -> None:
+        """
+        Validate the adapter result (exception-based).
+
+        Raises:
+            ValueError: If validation fails
+
+        This method provides compatibility with the interfaces.py validate() API.
+        """
+        if self.X.size == 0:
+            raise ValueError("AdapterResult data is empty")
+        if len(self.y) != self.n_samples:
+            raise ValueError(f"Labels length ({len(self.y)}) != n_samples ({self.n_samples})")
+        if self.original_indices is not None and len(self.original_indices) != self.n_samples:
+            raise ValueError("original_indices length != n_samples")
+        if np.isnan(self.X).any():
+            raise ValueError("AdapterResult data contains NaN values")
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize metadata to dictionary (excludes arrays)."""

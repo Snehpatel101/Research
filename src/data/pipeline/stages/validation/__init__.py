@@ -24,7 +24,7 @@ from .data_contract import (
     POSITIVE_COLUMNS,
     REQUIRED_OHLCV,
     VALID_LABELS,
-    DataContract,
+    OHLCVValidationSchema,
     filter_invalid_labels,
     get_dataset_fingerprint,
     summarize_label_distribution,
@@ -48,8 +48,8 @@ __all__ = [
     "check_label_sanity",
     "check_feature_quality",
     "check_feature_normalization",
-    # Data contract validation
-    "DataContract",
+    # OHLCV validation schema (NOT the same as core DataContract)
+    "OHLCVValidationSchema",
     "validate_ohlcv_schema",
     "validate_labels",
     "filter_invalid_labels",

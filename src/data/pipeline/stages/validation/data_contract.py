@@ -1,5 +1,8 @@
 """
-Data Contract Validation for ML Pipeline.
+OHLCV Validation Schema for ML Pipeline.
+
+This module provides OHLCV-specific data validation, distinct from the canonical
+DataContract (src/core/contracts/data_contract.py) which defines model data requirements.
 
 Point-in-Time Contract:
 - Features[t]: computed from data[0:t-1] (excludes current bar)
@@ -16,8 +19,14 @@ import pandas as pd
 
 
 @dataclass
-class DataContract:
-    """Defines expected schema and constraints for pipeline data."""
+class OHLCVValidationSchema:
+    """
+    Defines expected schema and constraints for OHLCV pipeline data.
+
+    NOTE: This is NOT the same as DataContract (src/core/contracts/data_contract.py).
+    - OHLCVValidationSchema: Validates OHLCV data structure and relationships
+    - DataContract: Defines model data requirements with full lineage tracking
+    """
 
     # Required OHLCV columns
     REQUIRED_OHLCV: set[str] | None = None  # Initialized in __post_init__
@@ -121,7 +130,7 @@ def validate_ohlcv_schema(df: pd.DataFrame, stage: str = "unknown") -> None:
 
     # Check OHLC relationships
     if REQUIRED_OHLCV.issubset(set(df.columns)):
-        ohlc_errors = DataContract.validate_ohlc_relationships(df)
+        ohlc_errors = OHLCVValidationSchema.validate_ohlc_relationships(df)
         errors.extend(ohlc_errors)
 
     # Raise all errors at once

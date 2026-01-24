@@ -2,85 +2,86 @@
 
 ## Executive Summary
 
-**Total Work Remaining:** 36-40 engineer-days (~7-8 weeks single engineer, ~3 weeks with 3 engineers)
-**Critical Blocker:** HMM Lookahead Bug (0.5 days) - MUST FIX FIRST
+**STATUS UPDATE 2026-01-23:** Major implementation complete. Focus now on technical debt reduction.
+
+**Total Work Remaining:** 5-7 engineer-days (NOT 36-40 days)
+**Critical Blockers:** None (all previously documented bugs FIXED)
+**Primary Focus:** Configuration system consolidation and documentation
 
 ---
 
 ## Current State vs Target State
 
-### What's IMPLEMENTED (Working)
-- ✅ 13 base models (Boosting, Neural, Classical, Ensemble)
+### What's IMPLEMENTED (Verified 2026-01-23)
+- ✅ 23 base models (Boosting 3, Neural 10, Classical 3, Ensemble 3, Meta-Learners 4)
 - ✅ Tabular 2D adapter
 - ✅ Sequence 3D adapter
+- ✅ Multi-Resolution 4D adapter (615 lines)
 - ✅ OOF generation (supports heterogeneous)
 - ✅ PurgedKFold cross-validation
-- ✅ 5 MTF timeframes (15m, 30m, 1h, 4h, daily)
-- ✅ ~180 features (indicators, wavelets, microstructure)
+- ✅ 9 MTF timeframes (1m, 5m, 10m, 15m, 20m, 25m, 30m, 45m, 1h)
+- ✅ 160+ features (indicators, wavelets, microstructure)
 - ✅ Triple-barrier labeling with transaction costs
 - ✅ Purge/embargo leakage prevention
+- ✅ Heterogeneous stacking support
+- ✅ All 4 meta-learners (Ridge, MLP, Calibrated, XGBoost)
+- ✅ All 6 advanced models (InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS)
 
-### What's MISSING (Gaps)
-- ❌ HMM lookahead bug (CRITICAL)
-- ❌ 4 MTF timeframes (20min, 25min missing; 1min, 5min, 10min, 45min not default)
-- ❌ Per-model feature selection at runtime
-- ❌ Multi-resolution 4D adapter
-- ❌ Heterogeneous stacking (same-family constraint exists)
-- ❌ 4 meta-learners (Ridge, MLP, Calibrated Blender)
-- ❌ 6 advanced models (CNN, Transformers, N-BEATS)
+### What's REMAINING (Technical Debt)
+- ⚠️ CFG-002: 71+ duplicated _get_global_or_default() patterns need migration
+- ⚠️ VAL-001: Validation thresholds hardcoded (should be in config)
+- ⚠️ SCALE-001: Fragile string matching for feature columns
+- ⚠️ CFG-005: No cross-config validation (CompositeValidator needed)
+- ⚠️ CORE-001: Missing core.py for 10/12 stages
+- ⚠️ LIN-001: Lineage queries O(n) - needs indexing
 
 ---
 
-## Prioritized Implementation Order
+## Prioritized Technical Debt Reduction (Updated 2026-01-23)
 
 | Priority | Task | Effort | Sprint |
 |----------|------|--------|--------|
-| **P0** | HMM Lookahead Bug Fix | 0.5 days | Sprint 1 |
-| **P1** | MTF 9-Timeframe Ladder | 0.5 days | Sprint 1 |
-| **P1** | N-BEATS Model | 1 day | Sprint 1 |
-| **P1** | Meta-Learners (4) | 3 days | Sprint 1 |
-| **P1** | Heterogeneous Stacking | 1.5 days | Sprint 2 |
-| **P1** | Per-Model Feature Selection | 2-3 days | Sprint 1-2 |
-| **P2** | CNN Models (2) | 5 days | Sprint 2 |
-| **P2** | Multi-Resolution 4D Adapter | 5-7 days | Sprint 2 |
-| **P3** | Advanced Transformers (3) | 12 days | Sprint 3-4 |
+| **P1** | CFG-002: Migrate _get_global_or_default() patterns | 2 days | Sprint 1 |
+| **P1** | VAL-001: Move validation thresholds to config | 0.5 days | Sprint 1 |
+| **P1** | SCALE-001: Replace string matching with explicit lists | 1 day | Sprint 1 |
+| **P2** | CFG-005: Implement CompositeValidator | 1 day | Sprint 2 |
+| **P2** | LIN-001: Add SQLite index to LineageTracker | 0.5 days | Sprint 2 |
+| **P2** | Feature Sets Reference Guide | 1 day | Sprint 2 |
+| **P3** | CORE-001: Extract core.py for 10 stages | 5-7 days | Sprint 3 |
+| **P3** | PIPE-008: Remove single-symbol constraint | 2-3 days | Sprint 3 |
+| **P3** | PreprocessingGraph presets | 1 day | Sprint 3 |
 
 ---
 
-## Sprint Plan (3 Engineers)
+## Sprint Plan - Technical Debt (1 Engineer)
 
-### Sprint 1 (Week 1) - Foundation
-| Engineer A | Engineer B | Engineer C |
-|------------|------------|------------|
-| P0: HMM Fix | P1: MTF Ladder | P1: N-BEATS |
-| P1: Meta-Learners | P1: Per-Model Features | P2: CNN Models (start) |
+### Sprint 1 (Days 1-4) - Configuration Consolidation
+- Day 1-2: CFG-002 migration (create get_config_value() pattern)
+- Day 3: VAL-001 threshold externalization
+- Day 4: SCALE-001 explicit column lists
 
 **Sprint 1 Deliverables:**
-- Production-safe HMM regime features
-- 9-timeframe MTF ladder
-- N-BEATS model working
-- 4 meta-learners implemented
-- Per-model feature selection integrated
+- Centralized config access pattern
+- Configurable validation thresholds
+- Robust feature column detection
 
-### Sprint 2 (Week 2) - Core Infrastructure
-| Engineer A | Engineer B | Engineer C |
-|------------|------------|------------|
-| P1: Heterogeneous Stacking | P2: 4D Adapter | P2: CNN Models (finish) |
-| Support/Review | Continue 4D | Testing |
+### Sprint 2 (Days 5-7) - Validation & Documentation
+- Day 5: CFG-005 CompositeValidator implementation
+- Day 6: LIN-001 SQLite indexing
+- Day 7: Feature Sets Reference Guide
 
 **Sprint 2 Deliverables:**
-- Heterogeneous ensemble stacking working
-- Multi-resolution 4D adapter complete
-- InceptionTime + 1D ResNet working
+- Cross-config validation working
+- O(1) lineage queries
+- Complete feature set documentation
 
-### Sprint 3-4 (Weeks 3-4) - Advanced Models
-| Engineer A | Engineer B | Engineer C |
-|------------|------------|------------|
-| P3: PatchTST | P3: iTransformer | P3: TFT |
+### Sprint 3 (Days 8-14) - Architecture Cleanup
+- Days 8-12: CORE-001 stage pattern extraction
+- Days 13-14: PIPE-008 batch processing support
 
-**Sprint 3-4 Deliverables:**
-- All 3 advanced transformers working
-- Full model suite (23 models) complete
+**Sprint 3 Deliverables:**
+- Consistent run.py/core.py pattern across all stages
+- Multi-symbol batch processing capability
 
 ---
 
@@ -404,4 +405,4 @@ After all implementations:
 
 ---
 
-Last Updated: 2026-01-01
+Last Updated: 2026-01-23 (Phase 2 Agent #4 - SERENA Memories Updater)
