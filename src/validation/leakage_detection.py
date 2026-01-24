@@ -28,6 +28,34 @@ from scipy import stats  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 
+class LeakageDetectedError(Exception):
+    """Raised when data leakage is detected and blocking mode is enabled.
+
+    This exception is raised by leakage detection functions when:
+    1. Leakage is detected (suspicious features found)
+    2. The `raise_on_leakage=True` parameter is set
+
+    The exception contains the full LeakageReport for inspection.
+
+    Example:
+        >>> try:
+        ...     report = check_feature_label_correlation(
+        ...         features, labels, raise_on_leakage=True
+        ...     )
+        ... except LeakageDetectedError as e:
+        ...     print(f"Leakage found: {e.report.n_suspicious} suspicious features")
+        ...     for feat in e.report.suspicious_features:
+        ...         print(f"  - {feat.feature_name}: r={feat.correlation:.3f}")
+    """
+
+    def __init__(self, report: LeakageReport) -> None:
+        self.report = report
+        super().__init__(
+            f"Data leakage detected: {report.n_suspicious} suspicious features "
+            f"(threshold={report.correlation_threshold}). {report.summary}"
+        )
+
+
 @dataclass
 class LeakageCheckResult:
     """Result of a leakage check for a single feature."""
@@ -90,6 +118,7 @@ def check_feature_label_correlation(
     correlation_threshold: float = 0.5,
     p_value_threshold: float = 0.01,
     method: str = "spearman",
+    raise_on_leakage: bool = False,
 ) -> LeakageReport:
     """
     Check for feature-label leakage via correlation analysis.
@@ -104,9 +133,14 @@ def check_feature_label_correlation(
         correlation_threshold: Correlation above this is suspicious
         p_value_threshold: Only consider statistically significant correlations
         method: Correlation method ("spearman" or "pearson")
+        raise_on_leakage: If True, raise LeakageDetectedError when leakage is found.
+            Default is False for backward compatibility.
 
     Returns:
         LeakageReport with analysis results
+
+    Raises:
+        LeakageDetectedError: If raise_on_leakage=True and suspicious features found.
 
     Example:
         >>> report = check_feature_label_correlation(X_train, y_train)
@@ -114,6 +148,11 @@ def check_feature_label_correlation(
         ...     print(f"WARNING: {report.n_suspicious} suspicious features")
         ...     for feat in report.suspicious_features:
         ...         print(f"  - {feat.feature_name}: r={feat.correlation:.3f}")
+
+        >>> # Blocking mode for training pipelines
+        >>> report = check_feature_label_correlation(
+        ...     X_train, y_train, raise_on_leakage=True
+        ... )  # Raises LeakageDetectedError if leakage found
     """
     # Convert to numpy if DataFrame
     if isinstance(features, pd.DataFrame):
@@ -222,7 +261,7 @@ def check_feature_label_correlation(
             f"Top suspicious: {top_features}"
         )
 
-    return LeakageReport(
+    report = LeakageReport(
         n_features=n_features,
         n_suspicious=len(suspicious),
         suspicious_features=suspicious,
@@ -231,6 +270,11 @@ def check_feature_label_correlation(
         summary=summary,
     )
 
+    if raise_on_leakage and report.n_suspicious > 0:
+        raise LeakageDetectedError(report)
+
+    return report
+
 
 def check_temporal_leakage(
     features: pd.DataFrame | np.ndarray,
@@ -238,6 +282,7 @@ def check_temporal_leakage(
     feature_names: list[str] | None = None,
     max_lag: int = 5,
     correlation_threshold: float = 0.3,
+    raise_on_leakage: bool = False,
 ) -> LeakageReport:
     """
     Check for temporal leakage by comparing forward vs backward correlations.
@@ -251,13 +296,23 @@ def check_temporal_leakage(
         feature_names: Optional list of feature names
         max_lag: Maximum lag to check
         correlation_threshold: Threshold for suspicious forward correlation
+        raise_on_leakage: If True, raise LeakageDetectedError when leakage is found.
+            Default is False for backward compatibility.
 
     Returns:
         LeakageReport with temporal leakage analysis
 
+    Raises:
+        LeakageDetectedError: If raise_on_leakage=True and temporal leakage found.
+
     Example:
         >>> report = check_temporal_leakage(X_train, y_train, max_lag=10)
         >>> print(report.summary)
+
+        >>> # Blocking mode
+        >>> report = check_temporal_leakage(
+        ...     X_train, y_train, raise_on_leakage=True
+        ... )  # Raises if leakage found
     """
     if isinstance(features, pd.DataFrame):
         if feature_names is None:
@@ -340,9 +395,7 @@ def check_temporal_leakage(
                     "forward_backward_ratio": (
                         float(avg_forward / avg_backward)
                         if avg_backward > 0
-                        else float("inf")
-                        if avg_forward > 0
-                        else 0.0
+                        else float("inf") if avg_forward > 0 else 0.0
                     ),
                     "max_lag": max_lag,
                 },
@@ -361,7 +414,7 @@ def check_temporal_leakage(
             f"suspicious forward correlations. Top: {top_features}"
         )
 
-    return LeakageReport(
+    report = LeakageReport(
         n_features=n_features,
         n_suspicious=len(suspicious),
         suspicious_features=suspicious,
@@ -370,12 +423,18 @@ def check_temporal_leakage(
         summary=summary,
     )
 
+    if raise_on_leakage and report.n_suspicious > 0:
+        raise LeakageDetectedError(report)
+
+    return report
+
 
 def check_information_leakage(
     features: pd.DataFrame | np.ndarray,
     labels: np.ndarray,
     feature_names: list[str] | None = None,
     mi_threshold: float = 0.5,
+    raise_on_leakage: bool = False,
 ) -> LeakageReport:
     """
     Check for information leakage using mutual information.
@@ -389,9 +448,14 @@ def check_information_leakage(
         labels: Label array
         feature_names: Optional feature names
         mi_threshold: Mutual information threshold (normalized)
+        raise_on_leakage: If True, raise LeakageDetectedError when leakage is found.
+            Default is False for backward compatibility.
 
     Returns:
         LeakageReport with mutual information analysis
+
+    Raises:
+        LeakageDetectedError: If raise_on_leakage=True and information leakage found.
     """
     from sklearn.feature_selection import mutual_info_classif  # type: ignore[import-untyped]
 
@@ -475,7 +539,7 @@ def check_information_leakage(
             f"high mutual information with labels. Top: {top_features}"
         )
 
-    return LeakageReport(
+    report = LeakageReport(
         n_features=n_features,
         n_suspicious=len(suspicious),
         suspicious_features=suspicious,
@@ -483,6 +547,11 @@ def check_information_leakage(
         correlation_threshold=mi_threshold,
         summary=summary,
     )
+
+    if raise_on_leakage and report.n_suspicious > 0:
+        raise LeakageDetectedError(report)
+
+    return report
 
 
 def comprehensive_leakage_check(
@@ -493,6 +562,7 @@ def comprehensive_leakage_check(
     temporal_threshold: float = 0.3,
     mi_threshold: float = 0.5,
     max_lag: int = 5,
+    raise_on_leakage: bool = False,
 ) -> dict[str, LeakageReport]:
     """
     Run comprehensive leakage detection with multiple methods.
@@ -505,15 +575,26 @@ def comprehensive_leakage_check(
         temporal_threshold: Threshold for temporal check
         mi_threshold: Threshold for MI check
         max_lag: Max lag for temporal analysis
+        raise_on_leakage: If True, raise LeakageDetectedError when ANY check
+            finds leakage. Default is False for backward compatibility.
 
     Returns:
         Dict with results from all leakage checks
+
+    Raises:
+        LeakageDetectedError: If raise_on_leakage=True and any leakage found.
+            The exception's report will be the first check that found leakage.
 
     Example:
         >>> results = comprehensive_leakage_check(X_train, y_train)
         >>> for check_name, report in results.items():
         ...     if report.n_suspicious > 0:
         ...         print(f"{check_name}: {report.summary}")
+
+        >>> # Blocking mode for training pipelines
+        >>> results = comprehensive_leakage_check(
+        ...     X_train, y_train, raise_on_leakage=True
+        ... )  # Raises if any check finds leakage
     """
     results = {}
 
@@ -524,6 +605,7 @@ def comprehensive_leakage_check(
         labels,
         feature_names=feature_names,
         correlation_threshold=correlation_threshold,
+        raise_on_leakage=raise_on_leakage,
     )
 
     # Temporal check
@@ -534,6 +616,7 @@ def comprehensive_leakage_check(
         feature_names=feature_names,
         max_lag=max_lag,
         correlation_threshold=temporal_threshold,
+        raise_on_leakage=raise_on_leakage,
     )
 
     # MI check
@@ -543,6 +626,7 @@ def comprehensive_leakage_check(
         labels,
         feature_names=feature_names,
         mi_threshold=mi_threshold,
+        raise_on_leakage=raise_on_leakage,
     )
 
     return results
@@ -550,6 +634,7 @@ def comprehensive_leakage_check(
 
 __all__ = [
     "LeakageCheckResult",
+    "LeakageDetectedError",
     "LeakageReport",
     "check_feature_label_correlation",
     "check_temporal_leakage",

@@ -135,6 +135,7 @@ from src.validation.deflated_sharpe import (
 )
 from src.validation.leakage_detection import (
     LeakageCheckResult,
+    LeakageDetectedError,
     LeakageReport,
     check_feature_label_correlation,
     check_information_leakage,
@@ -144,6 +145,7 @@ from src.validation.leakage_detection import (
 from src.validation.lookahead_audit import (
     LookaheadAuditor,
     LookaheadAuditResult,
+    LookaheadBiasError,
     ResampleConfig,
     audit_feature_lookahead,
     audit_mtf_alignment,
@@ -162,6 +164,7 @@ __all__ = [
     # Lookahead audit
     "LookaheadAuditor",
     "LookaheadAuditResult",
+    "LookaheadBiasError",
     "ResampleConfig",
     "validate_resample_config",
     "audit_feature_lookahead",
@@ -191,6 +194,7 @@ __all__ = [
     "bootstrap_multiple_metrics",
     # Leakage detection
     "LeakageCheckResult",
+    "LeakageDetectedError",
     "LeakageReport",
     "check_feature_label_correlation",
     "check_temporal_leakage",

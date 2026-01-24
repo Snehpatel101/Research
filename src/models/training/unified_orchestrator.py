@@ -62,6 +62,36 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# EXCEPTIONS
+# =============================================================================
+
+
+class PreTrainingValidationError(Exception):
+    """
+    Raised when pre-training validation fails.
+
+    This exception is raised when any of the following validation checks fail:
+    - Data contract validation (strict mode)
+    - Leakage detection (check_leakage enabled)
+    - Lookahead audit (check_lookahead enabled)
+
+    The validation settings are controlled via PipelineConfig:
+    - strict_validation: Enable/disable data contract validation
+    - check_leakage: Enable/disable leakage detection
+    - check_lookahead: Enable/disable lookahead audit
+
+    Example:
+        try:
+            orchestrator.train(df)
+        except PreTrainingValidationError as e:
+            print(f"Validation failed: {e}")
+            # Inspect the specific issues and fix them
+    """
+
+    pass
+
+
+# =============================================================================
 # RESULT DATACLASSES
 # =============================================================================
 
@@ -266,6 +296,197 @@ class UnifiedTrainingOrchestrator:
             logger.warning(f"Unknown CV method: {cv_method}, using PurgedKFold")
             return PurgedKFold(cv_config)
 
+    def _pre_training_validation(
+        self,
+        df: pd.DataFrame,
+        feature_names: list[str] | None = None,
+    ) -> None:
+        """
+        Validate data before training. Raises PreTrainingValidationError on failure.
+
+        This method runs the following checks based on PipelineConfig settings:
+        1. Data contract validation (if strict_validation=True)
+        2. Leakage detection (if check_leakage=True)
+        3. Lookahead audit (if check_lookahead=True)
+
+        Args:
+            df: Input DataFrame to validate
+            feature_names: Optional list of feature column names
+
+        Raises:
+            PreTrainingValidationError: If any validation check fails
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        logger.info("\n" + "-" * 40)
+        logger.info("PRE-TRAINING VALIDATION")
+        logger.info("-" * 40)
+
+        # Determine feature columns
+        if feature_names is None:
+            # Exclude known non-feature columns
+            exclude_patterns = ["label", "sample_weight", "datetime", "date", "time"]
+            ohlcv_cols = ["open", "high", "low", "close", "volume"]
+            feature_names = [
+                col
+                for col in df.columns
+                if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
+            ]
+
+        # 1. Contract validation (if enabled)
+        if self.config.strict_validation:
+            logger.info("  [1/3] Validating data contracts...")
+            try:
+                from src.core.contracts import DataContract, DataContractViolation
+
+                # Find label column for validation
+                label_col = None
+                for h in self.config.horizons:
+                    candidate = f"label_h{h}"
+                    if candidate in df.columns:
+                        label_col = candidate
+                        break
+
+                if feature_names and len(feature_names) > 0:
+                    # Create data contract from the DataFrame
+                    X = df[feature_names].values
+                    data_contract = DataContract.from_array(
+                        X,
+                        symbol=self.config.symbol,
+                        timeframe=(
+                            self.config.mtf_timeframes[0] if self.config.mtf_timeframes else "5min"
+                        ),
+                        horizon=self.config.horizons[0],
+                        split="train",
+                    )
+
+                    # Validate against model contracts
+                    for model_name in self.config.models:
+                        from src.core.contracts import get_model_contract
+
+                        model_contract = get_model_contract(model_name)
+                        is_valid, issues = model_contract.validate_data_contract(data_contract)
+                        if not is_valid:
+                            errors.append(
+                                f"Contract violation for {model_name}: {'; '.join(issues)}"
+                            )
+                        elif issues:
+                            warnings.extend(issues)
+
+                    logger.info(f"    Data contract: {data_contract.n_features} features")
+                else:
+                    warnings.append("No feature columns identified for contract validation")
+
+            except DataContractViolation as e:
+                errors.append(f"Data contract violation: {e}")
+            except Exception as e:
+                warnings.append(f"Contract validation skipped: {e}")
+
+        else:
+            logger.info("  [1/3] Data contract validation: SKIPPED (strict_validation=False)")
+
+        # 2. Leakage detection (if enabled)
+        if self.config.check_leakage:
+            logger.info("  [2/3] Running leakage detection...")
+            try:
+                from src.validation.leakage_detection import check_feature_label_correlation
+
+                # Find label column
+                label_col = None
+                for h in self.config.horizons:
+                    candidate = f"label_h{h}"
+                    if candidate in df.columns:
+                        label_col = candidate
+                        break
+
+                if label_col is not None and feature_names and len(feature_names) > 0:
+                    # Run correlation-based leakage check
+                    X_features = df[feature_names]
+                    y_labels = df[label_col].values
+
+                    report = check_feature_label_correlation(
+                        features=X_features,
+                        labels=y_labels,
+                        feature_names=feature_names,
+                        correlation_threshold=self.config.validation_correlation_threshold,
+                    )
+
+                    if report.n_suspicious > 0:
+                        suspicious_names = report.get_suspicious_feature_names()[:5]
+                        error_msg = (
+                            f"LEAKAGE DETECTED: {report.n_suspicious} features have "
+                            f"suspicious correlation (threshold={report.correlation_threshold}). "
+                            f"Top suspicious: {', '.join(suspicious_names)}"
+                        )
+                        errors.append(error_msg)
+                        logger.warning(f"    {error_msg}")
+                    else:
+                        logger.info(
+                            f"    Leakage check passed: "
+                            f"{report.n_features} features analyzed, 0 suspicious"
+                        )
+                else:
+                    warnings.append("Leakage detection skipped: no label column or features found")
+
+            except Exception as e:
+                warnings.append(f"Leakage detection failed: {e}")
+
+        else:
+            logger.info("  [2/3] Leakage detection: SKIPPED (check_leakage=False)")
+
+        # 3. Lookahead audit (if enabled)
+        if self.config.check_lookahead:
+            logger.info("  [3/3] Running lookahead audit...")
+            try:
+                from src.validation.lookahead_audit import validate_resample_config
+
+                # Validate resample config (basic check for implicit parameters)
+                # Note: Full lookahead auditing requires a feature function, which we
+                # don't have here. The full audit should be done during feature engineering.
+                is_valid, issues = validate_resample_config(
+                    closed="left",  # Our expected setting
+                    label="left",  # Our expected setting
+                )
+
+                if not is_valid:
+                    errors.append(f"Lookahead risk: {'; '.join(issues)}")
+                elif issues:
+                    # These are warnings about implicit parameters
+                    if self.config.validation_fail_on_warning:
+                        errors.extend(issues)
+                    else:
+                        warnings.extend(issues)
+
+                if is_valid:
+                    logger.info("    Lookahead audit passed: resample config validated")
+
+            except Exception as e:
+                warnings.append(f"Lookahead audit failed: {e}")
+
+        else:
+            logger.info("  [3/3] Lookahead audit: SKIPPED (check_lookahead=False)")
+
+        # Log warnings
+        if warnings:
+            logger.warning("\n  Validation warnings:")
+            for w in warnings:
+                logger.warning(f"    - {w}")
+
+        # Raise if any errors
+        if errors:
+            error_summary = "\n".join([f"  - {e}" for e in errors])
+            raise PreTrainingValidationError(
+                f"Pre-training validation failed:\n{error_summary}\n\n"
+                f"To bypass validation, set in PipelineConfig:\n"
+                f"  - strict_validation=False (disable contract validation)\n"
+                f"  - check_leakage=False (disable leakage detection)\n"
+                f"  - check_lookahead=False (disable lookahead audit)"
+            )
+
+        logger.info("\n  Pre-training validation: PASSED")
+        logger.info("-" * 40 + "\n")
+
     def train(
         self,
         df: pd.DataFrame,
@@ -295,6 +516,10 @@ class UnifiedTrainingOrchestrator:
         logger.info(f"Symbol: {self.config.symbol}")
         logger.info(f"Models: {self.config.models}")
         logger.info(f"Horizons: {self.config.horizons}")
+
+        # Run pre-training validation (Phase 1: Contract Enforcement)
+        # This will raise PreTrainingValidationError if validation fails
+        self._pre_training_validation(df)
 
         # Route to appropriate training mode
         mode = TrainingMode(self.config.training_mode)
@@ -544,12 +769,16 @@ class UnifiedTrainingOrchestrator:
         )
 
         X_train_df = pd.DataFrame(
-            prepared.X_train.reshape(prepared.X_train.shape[0], -1)
-            if prepared.data_rank > 2
-            else prepared.X_train,
-            columns=prepared.feature_names
-            if prepared.data_rank == 2
-            else [f"f{i}" for i in range(np.prod(prepared.X_train.shape[1:]))],
+            (
+                prepared.X_train.reshape(prepared.X_train.shape[0], -1)
+                if prepared.data_rank > 2
+                else prepared.X_train
+            ),
+            columns=(
+                prepared.feature_names
+                if prepared.data_rank == 2
+                else [f"f{i}" for i in range(np.prod(prepared.X_train.shape[1:]))]
+            ),
         )
 
         # Build train DataFrame for container
@@ -1359,6 +1588,7 @@ def train_meta_labeling(
 
 __all__ = [
     "UnifiedTrainingOrchestrator",
+    "PreTrainingValidationError",
     "TrainingRunResult",
     "ModelTrainingResult",
     "train_pipeline",

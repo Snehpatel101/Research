@@ -21,6 +21,39 @@ logger.addHandler(logging.NullHandler())
 INVALID_LABEL_SENTINEL = -99
 
 
+class ChronologicalSortError(Exception):
+    """Raised when data is not chronologically sorted."""
+
+    pass
+
+
+def _verify_chronological_order(df: pd.DataFrame, datetime_col: str) -> None:
+    """
+    Verify that data is chronologically sorted.
+
+    Args:
+        df: DataFrame to check
+        datetime_col: Name of the datetime column
+
+    Raises:
+        ChronologicalSortError: If data is not sorted chronologically
+    """
+    if not df[datetime_col].is_monotonic_increasing:
+        # Find where the order breaks
+        diff = df[datetime_col].diff()
+        violations = (
+            (diff < pd.Timedelta(0)).sum()
+            if hasattr(diff.iloc[0], "total_seconds")
+            else (diff < 0).sum()
+        )
+        raise ChronologicalSortError(
+            f"Data is not chronologically sorted by '{datetime_col}'. "
+            f"Found {violations} chronological violations. "
+            f"Sort your data before calling create_chronological_splits(). "
+            f"Example: df = df.sort_values('{datetime_col}').reset_index(drop=True)"
+        )
+
+
 def validate_no_overlap(train_idx: np.ndarray, val_idx: np.ndarray, test_idx: np.ndarray) -> bool:
     """Validate that there is no overlap between splits."""
     train_set = set(train_idx)
@@ -225,9 +258,8 @@ def create_chronological_splits(
             f"Reduce purge_bars/embargo_bars or increase data size."
         )
 
-    if not df[datetime_col].is_monotonic_increasing:
-        logger.warning(f"DataFrame not sorted by {datetime_col}, sorting now...")
-        df = df.copy().sort_values(datetime_col).reset_index(drop=True)
+    # Verify chronological order - this is critical for preventing leakage
+    _verify_chronological_order(df, datetime_col)
 
     n = len(df)
     logger.info(f"Total samples: {n:,}")

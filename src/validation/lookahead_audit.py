@@ -23,6 +23,33 @@ import pandas as pd  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 
+class LookaheadBiasError(Exception):
+    """Raised when lookahead bias is detected and blocking mode is enabled.
+
+    This exception is raised by lookahead audit functions when:
+    1. Lookahead bias is detected (affected columns found)
+    2. The `raise_on_lookahead=True` parameter is set
+
+    The exception contains the full LookaheadAuditResult for inspection.
+
+    Example:
+        >>> auditor = LookaheadAuditor(corruption_point=0.8)
+        >>> try:
+        ...     result = auditor.audit_feature_function(
+        ...         df, compute_rsi, name="RSI", raise_on_lookahead=True
+        ...     )
+        ... except LookaheadBiasError as e:
+        ...     print(f"Lookahead detected: {e.result.affected_columns}")
+    """
+
+    def __init__(self, result: LookaheadAuditResult) -> None:
+        self.result = result
+        super().__init__(
+            f"Lookahead bias detected in '{result.feature_name}': "
+            f"{len(result.affected_columns)} columns affected. {result.details}"
+        )
+
+
 # =============================================================================
 # RESAMPLE CONFIG VALIDATION
 # =============================================================================
@@ -182,6 +209,7 @@ class LookaheadAuditor:
         feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
         name: str,
         price_cols: list[str] | None = None,
+        raise_on_lookahead: bool = False,
     ) -> LookaheadAuditResult:
         """
         Audit a feature function for lookahead bias.
@@ -192,9 +220,14 @@ class LookaheadAuditor:
                         Signature: (df) -> df_with_features
             name: Name of the feature (for reporting)
             price_cols: Columns to corrupt (default: OHLCV columns)
+            raise_on_lookahead: If True, raise LookaheadBiasError when lookahead
+                is detected. Default is False for backward compatibility.
 
         Returns:
             LookaheadAuditResult with audit findings
+
+        Raises:
+            LookaheadBiasError: If raise_on_lookahead=True and lookahead detected.
         """
         price_cols = price_cols or ["open", "high", "low", "close", "volume"]
         df_clean = df.copy()
@@ -303,7 +336,7 @@ class LookaheadAuditor:
         else:
             details = "No lookahead detected - past features stable under corruption"
 
-        return LookaheadAuditResult(
+        result = LookaheadAuditResult(
             feature_name=name,
             has_lookahead=has_lookahead,
             affected_columns=affected_cols,
@@ -311,6 +344,11 @@ class LookaheadAuditor:
             corruption_point=corruption_idx,
             details=details,
         )
+
+        if raise_on_lookahead and result.has_lookahead:
+            raise LookaheadBiasError(result)
+
+        return result
 
     def _corrupt_data(
         self,
@@ -421,6 +459,7 @@ def audit_feature_lookahead(
     feature_fn: Callable[[pd.DataFrame], pd.DataFrame],
     name: str,
     corruption_points: list[float] | None = None,
+    raise_on_lookahead: bool = False,
 ) -> list[LookaheadAuditResult]:
     """
     Convenience function to audit features at multiple corruption points.
@@ -430,16 +469,24 @@ def audit_feature_lookahead(
         feature_fn: Feature generation function
         name: Feature name
         corruption_points: List of corruption fractions (default: [0.5, 0.7, 0.9])
+        raise_on_lookahead: If True, raise LookaheadBiasError when lookahead
+            is detected at any corruption point. Default is False.
 
     Returns:
         List of LookaheadAuditResult for each corruption point
+
+    Raises:
+        LookaheadBiasError: If raise_on_lookahead=True and lookahead detected
+            at any corruption point. Raises on first detection.
     """
     corruption_points = corruption_points or [0.5, 0.7, 0.9]
     results = []
 
     for cp in corruption_points:
         auditor = LookaheadAuditor(corruption_point=cp)
-        result = auditor.audit_feature_function(df, feature_fn, f"{name}@{cp}")
+        result = auditor.audit_feature_function(
+            df, feature_fn, f"{name}@{cp}", raise_on_lookahead=raise_on_lookahead
+        )
         results.append(result)
 
     return results
@@ -448,6 +495,7 @@ def audit_feature_lookahead(
 __all__ = [
     "LookaheadAuditor",
     "LookaheadAuditResult",
+    "LookaheadBiasError",
     "ResampleConfig",
     "validate_resample_config",
     "audit_feature_lookahead",

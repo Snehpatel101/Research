@@ -69,6 +69,7 @@ from .trainer import Trainer
 # PHASE_3: Unified Training Orchestrator - THE single entry point
 from .unified_orchestrator import (
     ModelTrainingResult,
+    PreTrainingValidationError,
     TrainingRunResult,
     UnifiedTrainingOrchestrator,
     train_meta_labeling,
@@ -89,6 +90,7 @@ __all__ = [
     "compute_file_checksum",
     # PHASE_3: Unified Training Orchestrator (THE entry point)
     "UnifiedTrainingOrchestrator",
+    "PreTrainingValidationError",
     "TrainingRunResult",
     "ModelTrainingResult",
     "train_pipeline",

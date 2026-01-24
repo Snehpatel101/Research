@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
-from src.core.contracts import DataRank
+from src.core.contracts import DataContract, DataRank
 
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry
@@ -167,6 +167,20 @@ class MultiStreamAdapter(BaseAdapter):
             seq_len=seq_len,
         )
 
+        # Create data contract for 4D multi-stream data
+        data_contract = DataContract.from_array(
+            X=X,
+            symbol=self._get_metadata_value(df, "symbol", "unknown"),
+            timeframe=anchor_tf,
+            horizon=self._parse_horizon_from_label_column(self.label_column),
+            split=self._get_metadata_value(df, "split", "unknown"),
+            feature_columns=feature_cols,
+        )
+
+        # Validate data contract against model requirements if provided
+        if model_contract is not None:
+            model_contract.validate_data_contract_strict(data_contract)
+
         return AdapterResult(
             X=X,
             y=y,
@@ -179,6 +193,7 @@ class MultiStreamAdapter(BaseAdapter):
             timeframe_names=timeframes,
             original_indices=original_indices,
             feature_columns=feature_cols,
+            data_contract=data_contract,
             adapter_name=self.adapter_id,
         )
 
@@ -519,6 +534,68 @@ class MultiStreamAdapter(BaseAdapter):
             )
 
         return result[:target_len]
+
+    def _get_metadata_value(
+        self,
+        df: pd.DataFrame,
+        column: str,
+        default: str,
+    ) -> str:
+        """
+        Extract a single metadata value from DataFrame column.
+
+        If the column exists and has a single unique non-null value,
+        return that value. Otherwise return the default.
+
+        Args:
+            df: DataFrame to extract from.
+            column: Column name to look for.
+            default: Default value if column missing or ambiguous.
+
+        Returns:
+            Extracted metadata value or default.
+        """
+        if column not in df.columns:
+            return default
+
+        unique_values = df[column].dropna().unique()
+        if len(unique_values) == 1:
+            return str(unique_values[0])
+        elif len(unique_values) == 0:
+            return default
+        else:
+            # Multiple values - use first
+            return str(unique_values[0])
+
+    def _parse_horizon_from_label_column(self, label_column: str) -> int:
+        """
+        Parse horizon from label column name.
+
+        Examples:
+            "label_h20" -> 20
+            "label_h5" -> 5
+            "label" -> 20 (default)
+
+        Args:
+            label_column: Label column name.
+
+        Returns:
+            Extracted horizon or default of 20.
+        """
+        import re
+
+        # Pattern: label_h{number}
+        match = re.search(r"label_h(\d+)", label_column)
+        if match:
+            return int(match.group(1))
+
+        # Fallback: check for just a number at the end
+        match = re.search(r"_(\d+)$", label_column)
+        if match:
+            return int(match.group(1))
+
+        # Default horizon
+        return 20
 
 
 __all__ = [

@@ -20,6 +20,15 @@ if TYPE_CHECKING:
     from .data_contract import DataContract
 
 
+class ModelContractViolation(Exception):
+    """Raised when data violates model contract requirements."""
+
+    def __init__(self, model_name: str, issues: list[str]):
+        self.model_name = model_name
+        self.issues = issues
+        super().__init__(f"Model '{model_name}' contract violations: {issues}")
+
+
 @dataclass(frozen=True)
 class ModelContract:
     """
@@ -145,6 +154,23 @@ class ModelContract:
             )
 
         return len(issues) == 0, issues
+
+    def validate_data_contract_strict(self, data_contract: DataContract) -> None:
+        """
+        Validate data contract, raising ModelContractViolation on failure.
+
+        This is the preferred method for validation in pipelines where
+        incompatible data should halt execution.
+
+        Args:
+            data_contract: DataContract to validate
+
+        Raises:
+            ModelContractViolation: If validation fails with list of issues
+        """
+        is_valid, issues = self.validate_data_contract(data_contract)
+        if not is_valid:
+            raise ModelContractViolation(self.model_name, issues)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary."""
@@ -589,6 +615,7 @@ def get_models_by_mtf_mode(mtf_mode: MTFMode) -> list[str]:
 
 __all__ = [
     "ModelContract",
+    "ModelContractViolation",
     "MODEL_CONTRACTS",
     "get_model_contract",
     "list_model_contracts",

@@ -29,6 +29,14 @@ import pandas as pd
 from src.core.types import DataRank
 
 
+class DataContractViolation(Exception):
+    """Raised when data violates contract."""
+
+    def __init__(self, issues: list[str]):
+        self.issues = issues
+        super().__init__(f"Contract violations: {issues}")
+
+
 class FeatureMode(str, Enum):
     """Feature generation mode for models."""
 
@@ -217,6 +225,23 @@ class DataContract:
             issues.append(f"Missing weight column: {self.weight_column}")
 
         return len(issues) == 0, issues
+
+    def validate_dataframe_strict(self, df: pd.DataFrame) -> None:
+        """
+        Validate DataFrame, raising DataContractViolation on failure.
+
+        This is the preferred method for validation in pipelines where
+        invalid data should halt execution.
+
+        Args:
+            df: DataFrame to validate
+
+        Raises:
+            DataContractViolation: If validation fails with list of issues
+        """
+        is_valid, issues = self.validate_dataframe(df)
+        if not is_valid:
+            raise DataContractViolation(issues)
 
     def validate_array(self, X: np.ndarray, y: np.ndarray | None = None) -> tuple[bool, list[str]]:
         """
@@ -429,4 +454,5 @@ __all__ = [
     "DataContractSchema",
     "DATA_SCHEMA",
     "DataContract",
+    "DataContractViolation",
 ]

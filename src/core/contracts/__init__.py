@@ -52,12 +52,14 @@ from .data_contract import (
     DATA_SCHEMA,
     DataContract,
     DataContractSchema,
+    DataContractViolation,
     FeatureMode,
     MTFMode,
 )
 from .model_contract import (
     MODEL_CONTRACTS,
     ModelContract,
+    ModelContractViolation,
     get_model_contract,
     get_models_by_mtf_mode,
     get_models_by_rank,
@@ -73,8 +75,10 @@ __all__ = [
     "DataContractSchema",
     "DATA_SCHEMA",
     "DataContract",
+    "DataContractViolation",
     # Model contract
     "ModelContract",
+    "ModelContractViolation",
     "MODEL_CONTRACTS",
     "get_model_contract",
     "list_model_contracts",

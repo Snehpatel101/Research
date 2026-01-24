@@ -148,6 +148,10 @@ class SequenceAdapter(BaseAdapter):
             feature_cols=feature_cols,
         )
 
+        # Validate data contract against model requirements if provided
+        if model_contract is not None:
+            model_contract.validate_data_contract_strict(data_contract)
+
         # Build result
         result = AdapterResult(
             X=X,

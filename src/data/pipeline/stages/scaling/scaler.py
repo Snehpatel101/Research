@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
+class ScalerFitError(Exception):
+    """Raised when scaler fit is called on non-training data."""
+
+    pass
+
+
 class FeatureScaler:
     """
     Train-only feature scaler for Phase 2 model training.
@@ -103,6 +109,14 @@ class FeatureScaler:
         self.warnings: list[str] = []
         self.errors: list[str] = []
 
+        # Split tracking for leakage prevention
+        self._fitted_on_split: str | None = None
+
+    @property
+    def fitted_on_split(self) -> str | None:
+        """Return the split this scaler was fitted on (should always be 'train')."""
+        return self._fitted_on_split
+
     def _create_config_for_feature(self, feature_name: str) -> FeatureScalingConfig:
         """
         Create scaling configuration for a feature.
@@ -139,7 +153,9 @@ class FeatureScaler:
             log_shift=0.0,
         )
 
-    def fit(self, train_df: pd.DataFrame, feature_cols: list[str]) -> "FeatureScaler":
+    def fit(
+        self, train_df: pd.DataFrame, feature_cols: list[str], split: str = "train"
+    ) -> "FeatureScaler":
         """
         Fit scalers on training data only.
 
@@ -149,13 +165,24 @@ class FeatureScaler:
         Args:
             train_df: Training DataFrame
             feature_cols: List of feature column names to scale
+            split: Split identifier - must be "train" to prevent data leakage.
+                   Other values ("val", "test") will raise ScalerFitError.
 
         Returns:
             self (for method chaining)
 
         Raises:
             ValueError: If train_df is empty or feature_cols is invalid
+            ScalerFitError: If split is not "train" (prevents leakage)
         """
+        # Verify we're fitting on training data only
+        if split != "train":
+            raise ScalerFitError(
+                f"Scaler fit() must only be called on training data. "
+                f"Received split='{split}'. This would cause data leakage. "
+                f"Use transform() for validation/test data after fitting on train."
+            )
+
         logger.info("=" * 60)
         logger.info("FITTING FEATURE SCALER (TRAIN DATA ONLY)")
         logger.info("=" * 60)
@@ -240,6 +267,7 @@ class FeatureScaler:
                 )
 
         self.is_fitted = True
+        self._fitted_on_split = split
 
         # Log summary
         logger.info("\nFeature categories:")
@@ -394,7 +422,7 @@ class FeatureScaler:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         state = {
-            "version": "2.1",
+            "version": "2.2",
             "default_scaler_type": self.default_scaler_type.value,
             "robust_quantile_range": self.robust_quantile_range,
             "apply_log_to_price_volume": self.apply_log_to_price_volume,
@@ -410,6 +438,7 @@ class FeatureScaler:
             "n_samples_train": self.n_samples_train,
             "warnings": self.warnings,
             "errors": self.errors,
+            "fitted_on_split": self._fitted_on_split,
         }
 
         with open(path, "wb") as f:
@@ -491,6 +520,7 @@ class FeatureScaler:
         scaler.n_samples_train = state.get("n_samples_train", 0)
         scaler.warnings = state.get("warnings", [])
         scaler.errors = state.get("errors", [])
+        scaler._fitted_on_split = state.get("fitted_on_split", "train")
 
         logger.info(f"Scaler loaded from: {path}")
         logger.info(f"  Features: {len(scaler.feature_names)}")

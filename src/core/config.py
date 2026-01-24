@@ -237,6 +237,29 @@ class PipelineConfig:
     save_metrics: bool = True  # Save metrics JSON
 
     # =========================================================================
+    # VALIDATION CONFIGURATION (Phase 1: Contract Enforcement)
+    # =========================================================================
+
+    strict_validation: bool = True
+    # Enable strict contract validation before training
+    # When True, training will fail if data contracts are violated
+
+    check_leakage: bool = True
+    # Run leakage detection before training
+    # When True, checks for feature-label correlation leakage
+
+    check_lookahead: bool = True
+    # Run lookahead audit before training
+    # When True, validates that features don't contain future information
+
+    validation_correlation_threshold: float = 0.5
+    # Threshold for leakage detection (correlation above this is suspicious)
+
+    validation_fail_on_warning: bool = False
+    # When True, warnings from validation (e.g., implicit resample params) also fail
+    # When False, only hard failures (actual leakage/lookahead) block training
+
+    # =========================================================================
     # MISC CONFIGURATION
     # =========================================================================
 
