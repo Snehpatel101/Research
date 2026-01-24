@@ -31,6 +31,7 @@ import json
 import logging
 import pickle
 import shutil
+import tarfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -425,6 +426,146 @@ class ModelBundle:
         )
 
         return path
+
+    def package_bundle(
+        self,
+        bundle_dir: str | Path,
+        output_path: str | Path | None = None,
+        compression: str = "gz",
+    ) -> Path:
+        """
+        Package bundle directory into a single tarball for deployment.
+
+        This creates a compressed archive (tar.gz by default) containing all
+        bundle artifacts. Useful for deploying trained models to production
+        environments or sharing between systems.
+
+        Args:
+            bundle_dir: Path to the saved bundle directory (from save())
+            output_path: Optional path for output tarball. If not provided,
+                        creates {bundle_dir}.tar.{compression} in parent directory
+            compression: Compression format: 'gz' (default), 'bz2', 'xz', or '' (no compression)
+
+        Returns:
+            Path to created tarball
+
+        Raises:
+            FileNotFoundError: If bundle_dir doesn't exist
+            ValueError: If bundle directory is invalid
+
+        Example:
+            >>> bundle = ModelBundle.from_training(...)
+            >>> bundle_dir = bundle.save("./bundles/xgb_h20")
+            >>> tarball = bundle.package_bundle(bundle_dir)
+            >>> # Creates ./bundles/xgb_h20.tar.gz
+            >>>
+            >>> # Deploy to production
+            >>> # scp xgb_h20.tar.gz production:/models/
+            >>> # On production:
+            >>> # tar -xzf xgb_h20.tar.gz && python -c "from src.inference import ModelBundle; bundle = ModelBundle.load('xgb_h20')"
+        """
+        bundle_dir = Path(bundle_dir)
+
+        if not bundle_dir.is_dir():
+            raise FileNotFoundError(f"Bundle directory not found: {bundle_dir}")
+
+        # Verify bundle has required files
+        manifest_path = bundle_dir / BUNDLE_MANIFEST_FILE
+        if not manifest_path.exists():
+            raise ValueError(
+                f"Invalid bundle directory: missing {BUNDLE_MANIFEST_FILE}. "
+                "Did you call save() first?"
+            )
+
+        # Determine output path
+        if output_path is None:
+            compression_ext = f".{compression}" if compression else ""
+            output_path = bundle_dir.parent / f"{bundle_dir.name}.tar{compression_ext}"
+        else:
+            output_path = Path(output_path)
+
+        # Create tarball
+        mode = f"w:{compression}" if compression else "w"
+
+        logger.info(f"Packaging bundle {bundle_dir} -> {output_path}")
+
+        with tarfile.open(output_path, mode) as tar:
+            # Add all files in bundle directory
+            # Use arcname to preserve directory structure
+            tar.add(bundle_dir, arcname=bundle_dir.name)
+
+        tarball_size_mb = output_path.stat().st_size / (1024 * 1024)
+        logger.info(f"Created deployment bundle: {output_path} ({tarball_size_mb:.2f} MB)")
+
+        return output_path
+
+    @classmethod
+    def extract_bundle(
+        cls,
+        tarball_path: str | Path,
+        extract_dir: str | Path | None = None,
+    ) -> Path:
+        """
+        Extract a packaged bundle tarball.
+
+        Complementary to package_bundle(). Extracts the tarball and returns
+        the path to the extracted bundle directory, ready for load().
+
+        Args:
+            tarball_path: Path to the tarball created by package_bundle()
+            extract_dir: Directory to extract to. If None, extracts to same
+                        directory as tarball
+
+        Returns:
+            Path to extracted bundle directory
+
+        Raises:
+            FileNotFoundError: If tarball doesn't exist
+            tarfile.TarError: If tarball is corrupted
+
+        Example:
+            >>> # On production server
+            >>> from src.inference import ModelBundle
+            >>> bundle_dir = ModelBundle.extract_bundle("xgb_h20.tar.gz")
+            >>> bundle = ModelBundle.load(bundle_dir)
+            >>> predictions = bundle.predict(X_new)
+        """
+        tarball_path = Path(tarball_path)
+
+        if not tarball_path.exists():
+            raise FileNotFoundError(f"Tarball not found: {tarball_path}")
+
+        # Determine extraction directory
+        if extract_dir is None:
+            extract_dir = tarball_path.parent
+        else:
+            extract_dir = Path(extract_dir)
+            extract_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Extracting bundle {tarball_path} -> {extract_dir}")
+
+        # Extract tarball
+        with tarfile.open(tarball_path, "r:*") as tar:
+            # Security check: prevent path traversal attacks
+            for member in tar.getmembers():
+                if member.name.startswith("/") or ".." in member.name:
+                    raise ValueError(
+                        f"Unsafe path in tarball: {member.name}. "
+                        "Bundle may be corrupted or malicious."
+                    )
+            tar.extractall(extract_dir)
+
+        # Find the extracted bundle directory
+        # Should be the first top-level directory in the tarball
+        with tarfile.open(tarball_path, "r:*") as tar:
+            first_member = tar.getmembers()[0]
+            bundle_name = first_member.name.split("/")[0]
+
+        bundle_dir = extract_dir / bundle_name
+
+        logger.info(f"Extracted bundle to {bundle_dir}")
+
+        return bundle_dir
 
     @classmethod
     def load(cls, path: str | Path) -> ModelBundle:

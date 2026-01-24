@@ -515,9 +515,9 @@ class StackingEnsemble(BaseModel):
                 "is_heterogeneous": self._is_heterogeneous,
                 "tabular_models": list(self._tabular_models) if self._is_heterogeneous else [],
                 "sequence_models": list(self._sequence_models) if self._is_heterogeneous else [],
-                "diversity_analysis": self._diversity_metrics.to_dict()
-                if self._diversity_metrics
-                else None,
+                "diversity_analysis": (
+                    self._diversity_metrics.to_dict() if self._diversity_metrics else None
+                ),
             },
         )
 
@@ -1156,7 +1156,9 @@ class StackingEnsemble(BaseModel):
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),
             # sklearn accepts 0, 1, or "warn" for zero_division, but type stubs are outdated
-            "f1": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),  # pyright: ignore[reportArgumentType]
+            "f1": float(
+                f1_score(y_true, y_pred, average="macro", zero_division=0)
+            ),  # pyright: ignore[reportArgumentType]
         }
 
     def _analyze_oof_diversity(

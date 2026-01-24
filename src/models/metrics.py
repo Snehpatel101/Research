@@ -361,12 +361,12 @@ def _compute_real_pnl_metrics(
         "total_costs": float(sum(costs_list)),
         "n_trades": len(trade_returns),
         "win_rate": float(win_rate),
-        "avg_win": float(trade_returns[trade_returns > 0].mean())
-        if (trade_returns > 0).any()
-        else 0.0,
-        "avg_loss": float(trade_returns[trade_returns < 0].mean())
-        if (trade_returns < 0).any()
-        else 0.0,
+        "avg_win": (
+            float(trade_returns[trade_returns > 0].mean()) if (trade_returns > 0).any() else 0.0
+        ),
+        "avg_loss": (
+            float(trade_returns[trade_returns < 0].mean()) if (trade_returns < 0).any() else 0.0
+        ),
     }
 
 

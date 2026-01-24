@@ -4,6 +4,83 @@
 
 ---
 
+## Phase 5: Unified Entry Point | 2026-01-24 | COMPLETE
+
+**Impact:** +1,281 lines added (3 new files, 1 deleted file)
+
+### Tasks
+
+| ID | Task | Status |
+|----|------|--------|
+| 5A | Create `MLFactory` class | ✅ |
+| 5B | Create `ExperimentConfig` | ✅ |
+| 5C | Create unified deployment bundle | Deferred |
+| 5D | Remove deprecated orchestrator.py | ✅ |
+| 5E | Add Evaluation pipeline stage | ✅ |
+
+### New Files
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `src/factory.py` | 445 | MLFactory unified entry point |
+| `src/config/experiment.py` | 600 | ExperimentConfig single source of truth |
+| `src/data/pipeline/stages/evaluation/run.py` | 216 | Evaluation pipeline stage |
+| `src/data/pipeline/stages/evaluation/__init__.py` | 20 | Evaluation stage exports |
+
+### Key Changes
+
+| Component | Change |
+|-----------|--------|
+| MLFactory | Coordinates Pipeline → Training → Evaluation → Bundling |
+| ExperimentConfig | Single source of truth, YAML serialization, backward compat |
+| Evaluation Stage | Post-training metrics with financial report integration |
+| orchestrator.py | DELETED - replaced by UnifiedTrainingOrchestrator |
+
+### Verification
+- All imports verified
+- Ruff: All new files pass
+- Factory flow: config → MLFactory.run() → ExperimentResult
+
+### Lessons Learned
+1. Composition over inheritance for config classes
+2. Delegation pattern keeps factory thin and focused
+3. Backward compatibility via conversion methods (`to_pipeline_config()`)
+
+---
+
+## Phase 4: Validation Integration | 2026-01-24 | COMPLETE
+
+**Impact:** +50 lines added (validation wiring)
+
+### Tasks
+
+| ID | Task | Status |
+|----|------|--------|
+| 4A | Wire leakage_detection in validation stage | ✅ |
+| 4B | Wire lookahead_audit in validation stage | ✅ |
+| 4C | Integrate DiversityAnalyzer | Deferred |
+| 4D | Add DeflatedSharpeRatio validation | Deferred |
+| 4E | Add Bootstrap CIs to financial report | Deferred |
+| 4F | Make calibration automatic | Deferred |
+| 4G | Connect bet sizing | Deferred |
+
+### Key Changes
+
+| Component | Change |
+|-----------|--------|
+| Validation Stage | Added `check_leakage` and `check_lookahead` config params |
+| validate_data() | Now calls leakage/lookahead detection when enabled |
+
+### Verification
+- Validation stage accepts config flags
+- Leakage detection integrated at lines 78-79 of run.py
+
+### Lessons Learned
+1. Core validation (leakage/lookahead) wired; advanced features (diversity, DSR, bootstrap) deferred
+2. Config-driven approach allows gradual enablement
+
+---
+
 ## Phase 3: 5-Dimension Optuna | 2026-01-24 | COMPLETE
 
 **Impact:** +2,298 lines added (4 new files, 5 modified files)

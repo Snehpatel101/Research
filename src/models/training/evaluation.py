@@ -10,7 +10,6 @@ Contains methods for:
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np

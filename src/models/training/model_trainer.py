@@ -493,7 +493,9 @@ class ModelTrainer:
         Returns:
             Path to saved summary file
         """
-        resolved_path: Path = path if path is not None else self.output_dir / "training_summary.json"
+        resolved_path: Path = (
+            path if path is not None else self.output_dir / "training_summary.json"
+        )
 
         summary = {
             "config": {
@@ -535,7 +537,9 @@ class ModelTrainer:
         Returns:
             Dictionary with summary data
         """
-        resolved_path: Path = path if path is not None else self.output_dir / "training_summary.json"
+        resolved_path: Path = (
+            path if path is not None else self.output_dir / "training_summary.json"
+        )
 
         with open(resolved_path) as f:
             result: dict[str, Any] = json.load(f)

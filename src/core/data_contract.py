@@ -92,9 +92,9 @@ class DatasetContract:
             features=self.features.loc[mask].copy(),
             labels=self.labels.loc[mask].copy(),
             indices=self.indices[mask],
-            label_end_times=self.label_end_times.loc[mask].copy()
-            if self.label_end_times is not None
-            else None,
+            label_end_times=(
+                self.label_end_times.loc[mask].copy() if self.label_end_times is not None else None
+            ),
             split=self.split,
             metadata=self.metadata.copy(),
         )
@@ -105,9 +105,9 @@ class DatasetContract:
             features=self.features.copy(),
             labels=self.labels.copy(),
             indices=self.indices.copy() if self.indices is not None else None,
-            label_end_times=self.label_end_times.copy()
-            if self.label_end_times is not None
-            else None,
+            label_end_times=(
+                self.label_end_times.copy() if self.label_end_times is not None else None
+            ),
             split=self.split,
             metadata=self.metadata.copy(),
         )

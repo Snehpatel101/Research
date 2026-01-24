@@ -554,9 +554,11 @@ class RegimeAwareTrainer:
                     [
                         X_train[train_mask].reset_index(drop=True),
                         y_train[train_mask].reset_index(drop=True).to_frame(),
-                        w_train[train_mask].reset_index(drop=True).to_frame()
-                        if w_train is not None
-                        else pd.DataFrame(),
+                        (
+                            w_train[train_mask].reset_index(drop=True).to_frame()
+                            if w_train is not None
+                            else pd.DataFrame()
+                        ),
                     ],
                     axis=1,
                 ),
@@ -727,9 +729,11 @@ class RegimeAwareTrainer:
                 [
                     X_train_augmented,
                     y_train.reset_index(drop=True).to_frame(),
-                    w_train.reset_index(drop=True).to_frame()
-                    if w_train is not None
-                    else pd.DataFrame(),
+                    (
+                        w_train.reset_index(drop=True).to_frame()
+                        if w_train is not None
+                        else pd.DataFrame()
+                    ),
                 ],
                 axis=1,
             ),

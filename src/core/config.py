@@ -260,6 +260,38 @@ class PipelineConfig:
     # When False, only hard failures (actual leakage/lookahead) block training
 
     # =========================================================================
+    # CALIBRATION CONFIGURATION (Phase 4F)
+    # =========================================================================
+
+    auto_calibrate: bool = True
+    # Automatically calibrate model probabilities after training
+    # When True, applies probability calibration to improve reliability
+
+    calibration_method: str = "auto"
+    # Calibration method: "isotonic", "sigmoid", or "auto"
+    # "auto" selects isotonic for boosting, sigmoid for linear models
+
+    calibration_min_samples: int = 100
+    # Minimum samples required per class for calibration
+
+    # =========================================================================
+    # BET SIZING CONFIGURATION (Phase 4G)
+    # =========================================================================
+
+    use_bet_sizing: bool = False
+    # Connect bet sizing to position sizing
+    # When True, uses variable position sizing based on model confidence
+
+    bet_sizing_strategy: str = "binary"
+    # Bet sizing strategy: "binary", "proportional", "kelly", "half_kelly", "confidence"
+
+    bet_sizing_threshold: float = 0.5
+    # Minimum probability to take a trade
+
+    bet_sizing_max_size: float = 1.0
+    # Maximum position size (fraction of capital)
+
+    # =========================================================================
     # MISC CONFIGURATION
     # =========================================================================
 

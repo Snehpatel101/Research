@@ -9,6 +9,7 @@ providing a simpler interface for the UnifiedTrainingOrchestrator.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,7 @@ import pandas as pd
 
 from src.core import OOFResult
 from src.data.adapters import AlignedOOFResult, OOFAligner
+from src.models.ensemble.diversity import DiversityAnalyzer, DiversityMetrics
 from src.validation.cv import OOFPrediction, StackingDataset
 
 if TYPE_CHECKING:
@@ -43,6 +45,7 @@ class EnsembleServiceResult:
     ensemble_metrics: dict[str, Any]
     meta_learner: Any | None = None
     training_time_seconds: float = 0.0
+    diversity_metrics: DiversityMetrics | None = None
 
 
 class EnsembleService:
@@ -63,6 +66,11 @@ class EnsembleService:
     def __init__(self) -> None:
         """Initialize EnsembleService."""
         self._aligner = OOFAligner()
+        self._diversity_analyzer = DiversityAnalyzer(
+            min_diversity_threshold=0.3,
+            correlation_threshold=0.8,
+            n_classes=3,
+        )
 
     def build_ensemble(
         self,
@@ -77,7 +85,6 @@ class EnsembleService:
         Returns:
             EnsembleServiceResult with aligned OOF and ensemble metrics
         """
-        import time
 
         start_time = time.time()
 
@@ -122,12 +129,22 @@ class EnsembleService:
         # Extract aligned labels
         y_aligned = self._extract_aligned_labels(oof_predictions, aligned)
 
+        # Perform diversity analysis if ensemble building is enabled
+        diversity_metrics = None
+        if config.build_ensemble:
+            diversity_metrics = self._analyze_diversity(
+                oof_predictions=oof_predictions,
+                aligned=aligned,
+                y_aligned=y_aligned,
+            )
+
         if y_aligned is None:
             logger.warning("Could not extract aligned labels for meta-learner")
             return EnsembleServiceResult(
                 aligned_oof=aligned,
                 stacking_dataset=None,
                 ensemble_metrics={"n_common": aligned.n_common},
+                diversity_metrics=diversity_metrics,
             )
 
         # Build stacking dataset
@@ -161,6 +178,7 @@ class EnsembleService:
             ensemble_metrics=ensemble_metrics,
             meta_learner=meta_learner,
             training_time_seconds=training_time,
+            diversity_metrics=diversity_metrics,
         )
 
     def _convert_to_oof_results(
@@ -211,7 +229,6 @@ class EnsembleService:
         config: PipelineConfig,
     ) -> tuple[Any, dict[str, Any]]:
         """Train meta-learner on stacking dataset."""
-        import time
 
         try:
             from src.models import Trainer, TrainerConfig
@@ -273,6 +290,81 @@ class EnsembleService:
         except Exception as e:
             logger.error(f"Failed to train meta-learner: {e}")
             return None, {"error": str(e)}
+
+    def _analyze_diversity(
+        self,
+        oof_predictions: dict[str, OOFPrediction],
+        aligned: AlignedOOFResult,
+        y_aligned: np.ndarray | None,
+    ) -> DiversityMetrics | None:
+        """
+        Analyze ensemble diversity and log warnings if diversity is low.
+
+        Args:
+            oof_predictions: OOF predictions from base models
+            aligned: Aligned OOF result
+            y_aligned: Aligned ground truth labels
+
+        Returns:
+            DiversityMetrics containing diversity analysis
+        """
+        try:
+            # Extract class predictions for each model
+            base_predictions: dict[str, np.ndarray] = {}
+            base_probabilities: dict[str, np.ndarray] = {}
+
+            for model_name in aligned.model_names:
+                if model_name in oof_predictions:
+                    oof_pred = oof_predictions[model_name]
+
+                    # Get class predictions (aligned to common indices)
+                    preds = oof_pred.get_class_predictions()
+                    if aligned.common_indices is not None:
+                        valid_indices = aligned.common_indices[aligned.common_indices < len(preds)]
+                        preds = preds[valid_indices]
+                    base_predictions[model_name] = preds
+
+                    # Get probabilities if available
+                    probs = oof_pred.get_probabilities()
+                    if aligned.common_indices is not None:
+                        valid_indices = aligned.common_indices[aligned.common_indices < len(probs)]
+                        probs = probs[valid_indices]
+                    base_probabilities[model_name] = probs
+
+            # Run diversity analysis
+            diversity_metrics = self._diversity_analyzer.analyze(
+                base_predictions=base_predictions,
+                base_probabilities=base_probabilities,
+                y_true=y_aligned,
+            )
+
+            # Log diversity results
+            logger.info("Diversity analysis complete:")
+            logger.info(f"  - Diversity score: {diversity_metrics.diversity_score:.3f}")
+            logger.info(f"  - Pairwise correlation: {diversity_metrics.pairwise_correlation:.3f}")
+            logger.info(f"  - Disagreement rate: {diversity_metrics.disagreement:.3f}")
+            logger.info(f"  - Q-statistic: {diversity_metrics.q_statistic:.3f}")
+
+            # Warn if diversity is low
+            if diversity_metrics.diversity_score < self._diversity_analyzer.min_diversity_threshold:
+                logger.warning(
+                    f"Low ensemble diversity detected: "
+                    f"score={diversity_metrics.diversity_score:.3f} < "
+                    f"threshold={self._diversity_analyzer.min_diversity_threshold:.3f}"
+                )
+                logger.warning("Consider using more diverse model families or architectures")
+
+            # Log recommendations if any
+            if diversity_metrics.recommendations:
+                logger.warning("Diversity recommendations:")
+                for rec in diversity_metrics.recommendations:
+                    logger.warning(f"  - {rec}")
+
+            return diversity_metrics
+
+        except Exception as e:
+            logger.error(f"Failed to analyze diversity: {e}")
+            return None
 
 
 __all__ = ["EnsembleService", "EnsembleRequest", "EnsembleServiceResult"]

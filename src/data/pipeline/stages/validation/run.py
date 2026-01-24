@@ -75,6 +75,8 @@ def _validate_single_timeframe(
         correlation_threshold=0.85,
         variance_threshold=0.01,
         feature_selection_output_path=feature_selection_path,
+        check_leakage=config.check_leakage,  # Phase 4A
+        check_lookahead=config.check_lookahead,  # Phase 4B
     )
 
     artifacts = [validation_report_path]

@@ -224,9 +224,7 @@ class ModelRegistry:
             Sorted list of all model names (excluding aliases)
         """
         return sorted(
-            name
-            for name, meta in cls._metadata.items()
-            if name == meta["name"]  # Exclude aliases
+            name for name, meta in cls._metadata.items() if name == meta["name"]  # Exclude aliases
         )
 
     @classmethod

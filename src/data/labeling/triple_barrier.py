@@ -435,6 +435,7 @@ if NUMBA_AVAILABLE:
             touch_type[i] = 0
 
         return labels, bars_to_hit, mae, mfe, touch_type
+
 else:
     # Fallback to pure Python
     triple_barrier_numba = _triple_barrier_python

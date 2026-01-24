@@ -26,6 +26,7 @@ class PositionSizingMethod(Enum):
     VOLATILITY_TARGETED = "volatility_targeted"
     EQUAL_WEIGHT = "equal_weight"
     FIXED_CONTRACTS = "fixed_contracts"
+    BET_SIZING = "bet_sizing"  # Phase 4G: Variable sizing from model confidence
 
 
 class BasePositionSizer(ABC):
@@ -439,6 +440,85 @@ class FixedContracts(BasePositionSizer):
 
 
 @dataclass
+class BetSizingPositioner(BasePositionSizer):
+    """
+    Variable position sizing based on model confidence (Phase 4G).
+
+    Connects meta-labeling bet sizing to position sizing.
+    Uses model prediction probability to determine position size.
+
+    Attributes:
+        strategy: Bet sizing strategy ("binary", "proportional", "kelly", etc.)
+        threshold: Minimum probability to trade
+        max_size: Maximum position size (fraction of equity)
+        min_size: Minimum position size if trading
+        kelly_fraction: Fraction of Kelly to use (for Kelly strategies)
+        point_value: Dollar value per point
+    """
+
+    strategy: str = "binary"
+    threshold: float = 0.5
+    max_size: float = 1.0
+    min_size: float = 0.0
+    kelly_fraction: float = 0.5
+    point_value: float = 5.0
+
+    def calculate_position_size(
+        self,
+        account_equity: float,
+        probability: float = 0.5,
+        current_price: float = 5000.0,
+        **kwargs: Any,
+    ) -> int:
+        """
+        Calculate position size based on model confidence.
+
+        Args:
+            account_equity: Current account equity
+            probability: Model confidence/probability (0-1)
+            current_price: Current instrument price
+            **kwargs: Additional parameters
+
+        Returns:
+            Number of contracts to trade
+        """
+        try:
+            from src.models.training.meta_labeling.bet_sizing import compute_bet_sizes
+
+            # Compute fractional position size
+            size_fraction = compute_bet_sizes(
+                probabilities=np.array([probability]),
+                strategy=self.strategy,
+                threshold=self.threshold,
+                max_size=self.max_size,
+                min_size=self.min_size,
+                kelly_fraction=self.kelly_fraction,
+            )[0]
+
+            if size_fraction == 0:
+                return 0
+
+            # Convert fraction to contracts
+            dollar_amount = account_equity * size_fraction
+            contract_notional = current_price * self.point_value
+
+            if contract_notional <= 0:
+                return 0
+
+            fractional_contracts = dollar_amount / contract_notional
+            return self._round_to_contracts(fractional_contracts)
+
+        except ImportError:
+            # Fallback to binary if bet sizing module unavailable
+            if probability > self.threshold:
+                dollar_amount = account_equity * self.max_size
+                contract_notional = current_price * self.point_value
+                if contract_notional > 0:
+                    return self._round_to_contracts(dollar_amount / contract_notional)
+            return 0
+
+
+@dataclass
 class PositionSizerConfig:
     """Configuration for position sizing."""
 
@@ -451,6 +531,10 @@ class PositionSizerConfig:
     fixed_contracts: int = 1
     point_value: float = 5.0
     max_contracts: int = 100
+    # Phase 4G: Bet sizing parameters
+    bet_sizing_strategy: str = "binary"
+    bet_sizing_threshold: float = 0.5
+    bet_sizing_max_size: float = 1.0
 
 
 def create_position_sizer(
@@ -509,6 +593,16 @@ def create_position_sizer(
             contracts=kwargs.get("contracts", 1),
         )
 
+    elif method == PositionSizingMethod.BET_SIZING:
+        return BetSizingPositioner(
+            strategy=kwargs.get("strategy", "binary"),
+            threshold=kwargs.get("threshold", 0.5),
+            max_size=kwargs.get("max_size", 1.0),
+            min_size=kwargs.get("min_size", 0.0),
+            kelly_fraction=kwargs.get("kelly_fraction", 0.5),
+            point_value=point_value,
+        )
+
     else:
         return FixedFractional(
             risk_per_trade=0.02,
@@ -524,6 +618,7 @@ __all__ = [
     "VolatilityTargeted",
     "EqualWeight",
     "FixedContracts",
+    "BetSizingPositioner",  # Phase 4G
     "PositionSizerConfig",
     "create_position_sizer",
 ]

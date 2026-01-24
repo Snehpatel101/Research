@@ -188,6 +188,14 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
         default_factory=lambda: _get_global_or_default("processing.allow_batch_symbols", False)
     )
 
+    # Validation options (Phase 4A, 4B)
+    check_leakage: bool = field(
+        default_factory=lambda: _get_global_or_default("validation.check_leakage", True)
+    )
+    check_lookahead: bool = field(
+        default_factory=lambda: _get_global_or_default("validation.check_lookahead", True)
+    )
+
     # Optional configurations
     feature_toggles: dict[str, bool] | None = None
     barrier_overrides: dict[str, float] | None = None

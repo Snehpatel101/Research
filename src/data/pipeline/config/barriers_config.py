@@ -21,10 +21,10 @@ To add symbol-specific parameters for a new symbol, add entries to:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from typing import Callable
+    from collections.abc import Callable
 
 # Type alias for barrier parameter dictionaries
 BarrierParamsDict = dict[str, float | int | str]
@@ -249,7 +249,9 @@ PERCENTAGE_BARRIER_PARAMS: dict[int, dict[str, float | int]] = {
 }
 
 
-def get_barrier_params(symbol: str, horizon: int, get_default_for_horizon: "Callable[[int], dict] | None" = None) -> dict:
+def get_barrier_params(
+    symbol: str, horizon: int, get_default_for_horizon: Callable[[int], dict] | None = None
+) -> dict:
     """
     Get barrier parameters for a specific symbol and horizon.
 

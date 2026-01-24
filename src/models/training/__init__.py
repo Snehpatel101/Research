@@ -48,9 +48,6 @@ from .meta_labeling import (
 # PHASE_3: Unified model trainer with adapter integration
 from .model_trainer import ModelTrainer, TrainedModelArtifact, train_models
 
-# Legacy orchestrator
-from .orchestrator import TrainingOrchestrator
-
 # PHASE_3: Regime-aware training components
 from .regime_detector import (
     RegimeDetectionMethod,
@@ -114,8 +111,7 @@ __all__ = [
     "ModelTrainer",
     "TrainedModelArtifact",
     "train_models",
-    # Legacy orchestrator
-    "TrainingOrchestrator",
+    # Config and loading (used by legacy code, but TrainingOrchestrator removed)
     "ExperimentConfig",
     "ModelConfig",
     "ConfigLoader",

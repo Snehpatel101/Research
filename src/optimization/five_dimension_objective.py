@@ -71,6 +71,7 @@ from src.optimization.hyperparameters import (
     HYPERPARAMETER_SPACES,
     suggest_hyperparameters,
 )
+from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
 
 logger = logging.getLogger(__name__)
 
@@ -883,6 +884,56 @@ def run_5d_optimization(
         print(f"  Best value: {study.best_value:.4f}")
         print(f"  Best trial: {study.best_trial.number}")
         print(f"  Best spec: {best_result.feature_spec}")
+
+    # =========================================================================
+    # Phase 4D: Deflated Sharpe Ratio Validation
+    # =========================================================================
+    try:
+        dsr_result = compute_dsr_from_optuna_study(
+            study=study,
+            deployment_threshold=0.5,
+        )
+
+        # Store DSR metrics in best_result
+        best_result.additional_metrics.update(
+            {
+                "dsr_raw_sharpe": dsr_result.sharpe_ratio,
+                "dsr_deflated_sharpe": dsr_result.deflated_sharpe,
+                "dsr_n_trials": dsr_result.n_trials,
+                "dsr_is_significant": dsr_result.is_significant,
+                "dsr_should_deploy": dsr_result.should_deploy,
+                "dsr_deflation_pct": dsr_result.get_deflation_pct(),
+                "dsr_risk_level": dsr_result.get_risk_level(),
+            }
+        )
+
+        # Log DSR results
+        logger.info(
+            f"DSR Validation: Raw Sharpe={dsr_result.sharpe_ratio:.3f}, "
+            f"Deflated Sharpe={dsr_result.deflated_sharpe:.3f} "
+            f"({dsr_result.get_deflation_pct():.1f}% deflation), "
+            f"Risk: {dsr_result.get_risk_level()}"
+        )
+
+        # Warn if DSR is below deployment threshold
+        if not dsr_result.should_deploy:
+            logger.warning(
+                f"Deflated Sharpe ({dsr_result.deflated_sharpe:.3f}) below "
+                f"deployment threshold (0.5). Risk: {dsr_result.get_risk_level()}"
+            )
+
+        if verbose >= 1:
+            print("\nDeflated Sharpe Ratio Analysis:")
+            print(f"  Raw Sharpe: {dsr_result.sharpe_ratio:.3f}")
+            print(f"  Deflated Sharpe: {dsr_result.deflated_sharpe:.3f}")
+            print(f"  Deflation: {dsr_result.get_deflation_pct():.1f}%")
+            print(f"  Risk Level: {dsr_result.get_risk_level()}")
+            print(f"  Deploy Recommended: {dsr_result.should_deploy}")
+
+    except Exception as e:
+        logger.error(f"DSR computation failed: {e}")
+        if verbose >= 1:
+            print(f"\nDSR validation failed: {e}")
 
     # Save artifacts if requested
     if save_artifacts:

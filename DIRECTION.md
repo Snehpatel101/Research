@@ -2,7 +2,7 @@
 
 **Generated:** 2026-01-23
 **Last Updated:** 2026-01-24
-**Status:** Phase 3 Complete | Phase 4 Ready
+**Status:** Phase 5 Complete | Factory Ready
 **Goal:** Build a bulletproof, config-driven ML Factory for financial time-series ensembles
 
 ---
@@ -1837,33 +1837,24 @@ NO PRE-COMPUTED PARQUETS - notebook is self-contained.
 
 ---
 
-## Next Steps (Priority Order)
+## Next Steps
 
-**PHASE A: 4D Infrastructure** ✅ COMPLETE (Phase 2)
-1. [x] Implement raw MTF OHLCV canonical store
-2. [x] Add 4D support to TimeSeriesDataContainer
-3. [x] Implement Multi-Resolution 4D adapter
-4. [ ] Implement 6 advanced models (InceptionTime, ResNet, PatchTST, iTransformer, TFT, N-BEATS)
+**Phases 0-5 Complete** (see COMPLETION.md for details)
 
-**PHASE B: 5-Dimension Optuna** ✅ COMPLETE (Phase 3 - commit a3683fc)
-5. [x] Define per-model base feature sets (BASE_FEATURE_SETS)
-6. [x] Implement 5-dimension Optuna objective (all 5 dimensions)
-7. [x] Implement FeatureSpec artifact flow (save + embed in bundle)
-8. [ ] Implement MTF ablation flag (deferred - low priority)
+### Remaining: 6 Advanced Models
 
-**PHASE C: Validation Integration** ← NEXT (Phase 4)
-9. [ ] Integrate leakage/lookahead detection into pipeline
-10. [ ] Add ensemble diversity analysis
-11. [ ] Add post-optimization DSR validation
-12. [ ] Add bootstrap CIs to financial reports
+| Model | Family | Data Rank | Status |
+|-------|--------|-----------|--------|
+| InceptionTime | CNN | 3D | Ready |
+| 1D ResNet | CNN | 3D | Ready |
+| PatchTST | Transformer | 4D | Ready |
+| iTransformer | Transformer | 4D | Ready |
+| TFT | Transformer | 4D | Ready |
+| N-BEATS | MLP | 4D | Ready |
 
-**PHASE D: Factory + Notebook (after Phase 4)**
-13. [ ] Build MLFactory entry point
-14. [ ] Write end-to-end Colab notebook
-
-**Remaining blockers: 4 (advanced models, MTF ablation, factory, notebook)**
+All infrastructure is in place. Models are unblocked.
 
 ---
 
 *Document maintained as single source of truth for ML Factory architecture.*
-*Last updated: 2026-01-23*
+*Last updated: 2026-01-24*

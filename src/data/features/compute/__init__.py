@@ -123,7 +123,7 @@ FEATURE_FAMILY_COUNTS: dict[str, int] = {
 FEATURE_TO_FAMILY: dict[str, str] = {
     feature_name: family
     for family, features in FAMILY_FEATURE_MAPS.items()
-    for feature_name in features.keys()
+    for feature_name in features
 }
 
 

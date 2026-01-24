@@ -127,12 +127,18 @@ def compute_classification_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> di
     # sklearn accepts 0, 1, or "warn" but type stubs are outdated
     return {
         "accuracy": float(accuracy_score(y_true, y_pred)),
-        "f1": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),  # pyright: ignore[reportArgumentType]
+        "f1": float(
+            f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),  # pyright: ignore[reportArgumentType]
         "precision": float(
-            precision_score(y_true, y_pred, average="weighted", zero_division=0)  # pyright: ignore[reportArgumentType]
+            precision_score(
+                y_true, y_pred, average="weighted", zero_division=0
+            )  # pyright: ignore[reportArgumentType]
         ),
         "recall": float(
-            recall_score(y_true, y_pred, average="weighted", zero_division=0)  # pyright: ignore[reportArgumentType]
+            recall_score(
+                y_true, y_pred, average="weighted", zero_division=0
+            )  # pyright: ignore[reportArgumentType]
         ),
     }
 

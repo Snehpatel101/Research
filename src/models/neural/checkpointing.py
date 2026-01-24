@@ -156,9 +156,9 @@ class CheckpointManager:
         index_path = self.config.checkpoint_dir / "checkpoint_index.json"
         data = {
             "checkpoints": [c.to_dict() for c in self._checkpoints],
-            "best_checkpoint": str(self._best_checkpoint_path)
-            if self._best_checkpoint_path
-            else None,
+            "best_checkpoint": (
+                str(self._best_checkpoint_path) if self._best_checkpoint_path else None
+            ),
             "best_metric": self._best_metric,
             "config": self.config.to_dict(),
             "updated_at": datetime.now().isoformat(),

@@ -301,9 +301,11 @@ class LightGBMModel(BaseModel):
 
         return PredictionResult(
             class_predictions=class_predictions,
-            class_probabilities=np.array(probabilities)
-            if not isinstance(probabilities, np.ndarray)
-            else probabilities,
+            class_probabilities=(
+                np.array(probabilities)
+                if not isinstance(probabilities, np.ndarray)
+                else probabilities
+            ),
             confidence=confidence,
             metadata={"model": "lightgbm"},
         )

@@ -648,6 +648,10 @@ class UnifiedTrainingOrchestrator:
         )
         result = self._model_service.train_model(request)
 
+        # Phase 4F: Automatic calibration if enabled
+        if self.config.auto_calibrate:
+            self._calibrate_model(result, prepared, model_name)
+
         # Store for later use
         self._trained_models[f"{model_name}_h{horizon}"] = result.trainer
 
@@ -661,6 +665,85 @@ class UnifiedTrainingOrchestrator:
             n_features=result.n_features,
             data_rank=result.data_rank,
         )
+
+    def _calibrate_model(
+        self,
+        result: Any,
+        prepared: PreparedData,
+        model_name: str,
+    ) -> None:
+        """
+        Calibrate model probabilities (Phase 4F).
+
+        Applies probability calibration to improve reliability of model predictions.
+        Uses validation set for calibration to avoid overfitting.
+
+        Args:
+            result: ModelTrainingService result with trained model
+            prepared: PreparedData with validation split
+            model_name: Name of the model being calibrated
+        """
+        try:
+            from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
+
+            logger.info(f"  Calibrating {model_name} probabilities...")
+
+            # Check if model supports probability prediction
+            if not hasattr(result.trainer, "predict_proba"):
+                logger.warning(
+                    f"    {model_name} doesn't support predict_proba, skipping calibration"
+                )
+                return
+
+            # Need validation split for calibration
+            if prepared.X_val is None or prepared.y_val is None:
+                logger.warning("    No validation data available, skipping calibration")
+                return
+
+            # Check minimum samples
+            if len(prepared.y_val) < self.config.calibration_min_samples:
+                logger.warning(
+                    f"    Insufficient validation samples for calibration "
+                    f"({len(prepared.y_val)} < {self.config.calibration_min_samples})"
+                )
+                return
+
+            # Get validation probabilities
+            val_probas = result.trainer.predict_proba(prepared.X_val)
+
+            # Handle multi-class (take positive class probabilities)
+            if val_probas.ndim == 2 and val_probas.shape[1] > 1:
+                val_probas = val_probas[:, 1]  # Positive class
+
+            # Create calibration config
+            method = self.config.calibration_method
+            if method not in ("isotonic", "sigmoid", "auto"):
+                method = "auto"
+            calib_config = CalibrationConfig(
+                method=method,  # type: ignore[arg-type]
+                min_samples_per_class=self.config.calibration_min_samples,
+            )
+
+            # Fit calibrator
+            calibrator = ProbabilityCalibrator(calib_config)
+            metrics = calibrator.fit(prepared.y_val, val_probas)
+
+            # Log calibration improvement
+            logger.info(
+                f"    Brier improvement: {metrics.brier_improvement:.1%}, "
+                f"ECE improvement: {metrics.ece_improvement:.1%}"
+            )
+
+            # Attach calibrator to result for later use
+            # This allows inference pipeline to apply calibration
+            if not hasattr(result, "calibrator"):
+                result.calibrator = calibrator
+                result.calibration_metrics = metrics
+
+        except ImportError:
+            logger.warning("    Calibration module not available, skipping")
+        except Exception as e:
+            logger.warning(f"    Calibration failed: {e}")
 
     def _generate_oof(
         self,

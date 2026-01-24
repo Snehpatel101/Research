@@ -7,9 +7,13 @@ Use 4 sequential task agents with context handoffs:
 4. Agent 4: Fourth task category
 
 After implementation, run verification:
-- `ruff check .` passes
-- `pyright topstepx_backend/` passes (0 errors)
-- Backend starts without errors
+- `ruff check src/` passes
+- `python -c "from src.<module> import <Class>; print('OK')"` for new code
 - Report any regressions
+
+**REQUIRED: Update docs after execution completes:**
+1. Update CLEANUP_PLAN.md - mark completed items in tables
+2. Update CLEANUP_TASKS.md - mark tasks as ✅ complete
+3. If all items in a category done, add summary to COMPLETION.md
 
 Per CLAUDE.md: delete don't adapt, verify compiles before committing.

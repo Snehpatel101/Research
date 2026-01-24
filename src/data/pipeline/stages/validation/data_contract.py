@@ -123,10 +123,9 @@ def validate_ohlcv_schema(df: pd.DataFrame, stage: str = "unknown") -> None:
 
     # Check positive values
     for col in POSITIVE_COLUMNS:
-        if col in df.columns:
-            if (df[col] <= 0).any():
-                n_neg = (df[col] <= 0).sum()
-                errors.append(f"Non-positive values in '{col}': {n_neg} rows")
+        if col in df.columns and (df[col] <= 0).any():
+            n_neg = (df[col] <= 0).sum()
+            errors.append(f"Non-positive values in '{col}': {n_neg} rows")
 
     # Check OHLC relationships
     if REQUIRED_OHLCV.issubset(set(df.columns)):

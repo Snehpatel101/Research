@@ -12,7 +12,6 @@ Defines:
 - DEFAULT_* values for pipeline configuration
 """
 
-
 # =============================================================================
 # TIMEFRAMES - 9 canonical intraday timeframes
 # =============================================================================

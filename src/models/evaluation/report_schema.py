@@ -133,23 +133,25 @@ class EvaluationReport:
                     "total_return": self.val_metrics.metrics.total_return,
                 },
             },
-            "test_metrics": {
-                "split": self.test_metrics.split,
-                "n_samples": self.test_metrics.n_samples,
-                "n_features": self.test_metrics.n_features,
-                "metrics": {
-                    "accuracy": self.test_metrics.metrics.accuracy,
-                    "precision": self.test_metrics.metrics.precision,
-                    "recall": self.test_metrics.metrics.recall,
-                    "f1_score": self.test_metrics.metrics.f1_score,
-                    "sharpe_ratio": self.test_metrics.metrics.sharpe_ratio,
-                    "max_drawdown": self.test_metrics.metrics.max_drawdown,
-                    "win_rate": self.test_metrics.metrics.win_rate,
-                    "total_return": self.test_metrics.metrics.total_return,
-                },
-            }
-            if self.test_metrics
-            else None,
+            "test_metrics": (
+                {
+                    "split": self.test_metrics.split,
+                    "n_samples": self.test_metrics.n_samples,
+                    "n_features": self.test_metrics.n_features,
+                    "metrics": {
+                        "accuracy": self.test_metrics.metrics.accuracy,
+                        "precision": self.test_metrics.metrics.precision,
+                        "recall": self.test_metrics.metrics.recall,
+                        "f1_score": self.test_metrics.metrics.f1_score,
+                        "sharpe_ratio": self.test_metrics.metrics.sharpe_ratio,
+                        "max_drawdown": self.test_metrics.metrics.max_drawdown,
+                        "win_rate": self.test_metrics.metrics.win_rate,
+                        "total_return": self.test_metrics.metrics.total_return,
+                    },
+                }
+                if self.test_metrics
+                else None
+            ),
             "artifacts": self.artifacts,
             "notes": self.notes,
         }

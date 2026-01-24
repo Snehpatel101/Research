@@ -213,14 +213,16 @@ class ModelTrainingService:
                 None,
                 horizon,
             ),
-            test_df=self._build_container_df(
-                X_test_df,
-                pd.Series(prepared.y_test) if prepared.has_test else None,
-                None,
-                horizon,
-            )
-            if prepared.has_test and X_test_df is not None
-            else None,
+            test_df=(
+                self._build_container_df(
+                    X_test_df,
+                    pd.Series(prepared.y_test) if prepared.has_test else None,
+                    None,
+                    horizon,
+                )
+                if prepared.has_test and X_test_df is not None
+                else None
+            ),
             horizon=horizon,
             feature_columns=list(X_train_df.columns),
         )

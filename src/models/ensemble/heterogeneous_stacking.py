@@ -432,9 +432,11 @@ class HeterogeneousStackingBuilder:
             "max_samples": int(max_samples) if max_samples != float("inf") else 0,
             "min_samples": int(min_samples) if min_samples != float("inf") else 0,
             "common_samples": int(min_samples) if min_samples != float("inf") else 0,
-            "max_offset": int(max_samples - min_samples)
-            if max_samples != float("inf") and min_samples != float("inf")
-            else 0,
+            "max_offset": (
+                int(max_samples - min_samples)
+                if max_samples != float("inf") and min_samples != float("inf")
+                else 0
+            ),
         }
 
         return report

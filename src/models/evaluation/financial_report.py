@@ -18,6 +18,12 @@ import numpy as np
 import pandas as pd
 
 from src.inference.backtesting.equity_curve import EquityCurve, Trade
+from src.validation.bootstrap import (
+    BootstrapResult,
+    bootstrap_max_drawdown,
+    bootstrap_sharpe_ratio,
+    bootstrap_win_rate,
+)
 
 from .charts import generate_all_charts
 
@@ -92,6 +98,16 @@ class FinancialReport:
     precision: float = 0.0
     recall: float = 0.0
     f1_score: float = 0.0
+
+    # Bootstrap Confidence Intervals (Phase 4E)
+    sharpe_ci_lower: float = 0.0
+    sharpe_ci_upper: float = 0.0
+    win_rate_ci_lower: float = 0.0
+    win_rate_ci_upper: float = 0.0
+    max_dd_ci_lower: float = 0.0
+    max_dd_ci_upper: float = 0.0
+    bootstrap_ci_level: float = 0.95  # 95% CI by default
+    bootstrap_n_samples: int = 1000
 
     # Chart Paths
     charts: dict[str, str] = field(default_factory=dict)
@@ -433,7 +449,37 @@ def generate_financial_report(
     if equity_curve.trades:
         trades_df.to_csv(trades_path, index=False)
 
-    # 8. Create report object
+    # 8. Compute bootstrap confidence intervals (Phase 4E)
+    logger.info("\nComputing bootstrap confidence intervals...")
+    sharpe_ci: BootstrapResult | None = None
+    win_rate_ci: BootstrapResult | None = None
+    max_dd_ci: BootstrapResult | None = None
+
+    # Extract returns for bootstrap
+    if len(equity_curve.trades) > 10:  # Need minimum trades for bootstrap
+        trade_returns = np.array([trade.return_pct for trade in equity_curve.trades])
+
+        try:
+            # Sharpe ratio CI
+            sharpe_ci = bootstrap_sharpe_ratio(
+                trade_returns, periods_per_year=config.periods_per_year, n_bootstrap=1000
+            )
+            logger.info(f"  Sharpe: {sharpe_ci}")
+
+            # Win rate CI
+            win_rate_ci = bootstrap_win_rate(trade_returns, n_bootstrap=1000)
+            logger.info(f"  Win Rate: {win_rate_ci}")
+
+            # Max drawdown CI
+            max_dd_ci = bootstrap_max_drawdown(trade_returns, n_bootstrap=1000)
+            logger.info(f"  Max DD: {max_dd_ci}")
+
+        except Exception as e:
+            logger.warning(f"Bootstrap CI calculation failed: {e}")
+    else:
+        logger.warning("  Insufficient trades for bootstrap CIs (need > 10)")
+
+    # 9. Create report object
     report = FinancialReport(
         run_id=run_id,
         model_name=model_name,
@@ -473,6 +519,15 @@ def generate_financial_report(
         precision=class_metrics["precision"],
         recall=class_metrics["recall"],
         f1_score=class_metrics["f1_score"],
+        # Bootstrap CIs (Phase 4E)
+        sharpe_ci_lower=sharpe_ci.ci_lower if sharpe_ci else 0.0,
+        sharpe_ci_upper=sharpe_ci.ci_upper if sharpe_ci else 0.0,
+        win_rate_ci_lower=win_rate_ci.ci_lower if win_rate_ci else 0.0,
+        win_rate_ci_upper=win_rate_ci.ci_upper if win_rate_ci else 0.0,
+        max_dd_ci_lower=max_dd_ci.ci_lower if max_dd_ci else 0.0,
+        max_dd_ci_upper=max_dd_ci.ci_upper if max_dd_ci else 0.0,
+        bootstrap_ci_level=0.95,
+        bootstrap_n_samples=1000,
         # Paths
         charts={k: str(v) for k, v in charts.items()},
         equity_curve_path=str(equity_path),

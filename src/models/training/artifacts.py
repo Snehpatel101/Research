@@ -49,8 +49,7 @@ class _TrainerProtocol(Protocol):
 
 
 if TYPE_CHECKING:
-    from src.models.config import TrainerConfig
-    from src.models.config.data_requirements import ModelDataRequirements
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -164,9 +163,11 @@ class TrainerArtifactsMixin:
                 "family": req.family.value if hasattr(req.family, "value") else str(req.family),
                 "feature_set_recommended": req.feature_set,
                 "requires_scaling": req.requires_scaling,
-                "scaler_type": req.scaler_type.value
-                if hasattr(req.scaler_type, "value")
-                else str(req.scaler_type),
+                "scaler_type": (
+                    req.scaler_type.value
+                    if hasattr(req.scaler_type, "value")
+                    else str(req.scaler_type)
+                ),
                 "requires_sequences": req.requires_sequences,
                 "sequence_length_default": req.sequence_length,
                 "max_features": req.max_features,

@@ -155,9 +155,9 @@ def _validate_sequences(
                     result.add_warning(
                         f"{name}/{sym}: Only {n_seq} sequences (< {MIN_SEQUENCES_PER_SYMBOL})"
                     )
-                result.metadata.setdefault("sequences_per_symbol", {}).setdefault(name, {})[sym] = (
-                    n_seq
-                )
+                result.metadata.setdefault("sequences_per_symbol", {}).setdefault(name, {})[
+                    sym
+                ] = n_seq
 
 
 def _validate_integration(container: TimeSeriesDataContainer, result: ValidationResult) -> None:

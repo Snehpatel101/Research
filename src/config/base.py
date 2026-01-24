@@ -84,10 +84,7 @@ class BaseConfig:
         for field in fields(self):
             value = getattr(self, field.name)
             # Check if field has no default and is None
-            if (
-                field.default is field.default_factory  # Both are MISSING
-                and value is None
-            ):
+            if field.default is field.default_factory and value is None:  # Both are MISSING
                 issues.append(f"Required field '{field.name}' is None")
 
         return issues
