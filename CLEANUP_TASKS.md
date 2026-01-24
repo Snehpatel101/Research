@@ -34,7 +34,7 @@ See `CLEANUP_PLAN.md` for detailed Phase 3 tasks (3A-3F).
 ## Completed: Phase 2 4D Infrastructure
 
 **Status:** ✅ COMPLETE (2026-01-24)
-**Commit:** [pending]
+**Commit:** 8b39b9e
 **Impact:** +958 lines, 9 files modified, 1 new file
 
 ### Tasks
@@ -778,7 +778,7 @@ pytest tests/ -x --tb=short
 
 | Date | Phase | Task | Impact | Commit |
 |------|-------|------|--------|--------|
-| 2026-01-24 | 2 | All (2A-2G) | +958 lines, 4D enabled | [pending] |
+| 2026-01-24 | 2 | All (2A-2G) | +958 lines, 4D enabled | 8b39b9e |
 | 2026-01-23 | 1 | All (1A-1G) | +616 lines, 7 exceptions | 7f71b52 |
 | 2026-01-23 | 0 | All (0A-0G) | -5,336 lines | 3262996 |
 
