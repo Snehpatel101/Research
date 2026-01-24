@@ -1,7 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Status:** Architecture Design Phase
+**Last Updated:** 2026-01-24
+**Status:** Phase 3 Complete | Phase 4 Ready
 **Goal:** Build a bulletproof, config-driven ML Factory for financial time-series ensembles
 
 ---
@@ -446,11 +447,12 @@ def optuna_objective(trial, model_contract, raw_ohlcv, horizon):
 4. **FeatureSpec artifact saves ALL 5 dimensions** - for reproducibility
 
 **Current Implementation Status:**
-- ⚠️ Only hyperparameters (Dimension 5) implemented
-- ❌ Triple barrier optimization: NOT IMPLEMENTED
-- ❌ Feature selection: NOT IMPLEMENTED
-- ❌ Feature parameters: NOT IMPLEMENTED
-- ❌ Feature timeframes: NOT IMPLEMENTED
+- ✅ All 5 dimensions implemented (Phase 3 complete - commit a3683fc)
+- ✅ Triple barrier optimization: IMPLEMENTED
+- ✅ Feature selection: IMPLEMENTED
+- ✅ Feature parameters: IMPLEMENTED
+- ✅ Feature timeframes: IMPLEMENTED
+- ✅ Model hyperparameters: IMPLEMENTED
 
 ---
 
@@ -1634,10 +1636,10 @@ IMPLICATIONS:
 |-----------|--------|-------|
 | Barrier optimization | ✅ Complete | TPE, symbol-aware |
 | Hyperparameter tuning | ✅ Complete | Per-model |
-| Feature selection | ❌ NOT IMPLEMENTED | **BLOCKER** |
-| Feature parameters | ❌ NOT IMPLEMENTED | **BLOCKER** |
-| Feature timeframes | ❌ NOT IMPLEMENTED | **BLOCKER** |
-| FeatureSpec artifact | ❌ NOT IMPLEMENTED | **BLOCKER** |
+| Feature selection | ✅ Complete | Phase 3 |
+| Feature parameters | ✅ Complete | Phase 3 |
+| Feature timeframes | ✅ Complete | Phase 3 |
+| FeatureSpec artifact | ✅ Complete | Phase 3 - a3683fc |
 
 **INFERENCE:**
 | Component | Status | Notes |
@@ -1673,36 +1675,27 @@ BLOCKER 4: Advanced Model Implementations (6 models)
 ├── MLP family: N-BEATS (needs 4D adapter)
 └── Status: ❌ 0/6 IMPLEMENTED
 
-BLOCKER 5: 5-Dimension Optuna Optimization
-├── What: Optuna must optimize ALL 5 dimensions in single study:
-│   ├── Dim 1: Triple barrier params (profit/loss thresholds, holding period)
-│   ├── Dim 2: Feature selection (which features from model's base set)
-│   ├── Dim 3: Feature parameters (RSI period, ATR window, etc.)
-│   ├── Dim 4: Feature timeframes (which TF each feature computed on)
-│   └── Dim 5: Model hyperparameters (already implemented)
-├── Why: Find globally optimal config, not local optima per dimension
-├── Current: Only Dim 5 (hyperparameters) implemented
-└── Status: ❌ 4/5 DIMENSIONS NOT IMPLEMENTED
+RESOLVED (Phase 3 - commit a3683fc):
 
-BLOCKER 6: FeatureSpec Artifact Flow
-├── What: Save ALL 5 dimensions to JSON → embed in ModelBundle
-├── Why: Reproducibility requires exact config for inference
-├── Depends on: Blocker 5 (need all dimensions to save them)
-└── Status: ❌ NOT IMPLEMENTED
+BLOCKER 5: 5-Dimension Optuna Optimization → ✅ RESOLVED
+├── All 5 dimensions now optimized in single study
+├── src/optimization/five_dimension_objective.py (975 lines)
+└── Status: ✅ COMPLETE
 
-BLOCKER 7: Per-Model Base Feature Sets
-├── What: Define base feature set for each model type
-│   ├── CatBoost: ~80 features (momentum, volatility, volume, microstructure)
-│   ├── TCN: ~60 features (momentum, volatility, wavelets)
-│   ├── LSTM: ~70 features (momentum, volatility, volume)
-│   └── PatchTST: 4 (raw OHLCV only)
-├── Why: Optuna selects FROM these sets, not a universal superset
-└── Status: ❌ NOT IMPLEMENTED (currently universal feature set)
+BLOCKER 6: FeatureSpec Artifact Flow → ✅ RESOLVED
+├── FeatureSpec saved to experiments/{run_id}/feature_specs/
+├── Embedded in ModelBundle v1.2.0 for inference parity
+└── Status: ✅ COMPLETE
+
+BLOCKER 7: Per-Model Base Feature Sets → ✅ RESOLVED
+├── BASE_FEATURE_SETS defined for 6 model families
+├── src/optimization/base_feature_sets.py (629 lines)
+└── Status: ✅ COMPLETE
 
 BLOCKER 8: MTF Ablation Flag
 ├── What: Config flag to disable MTF indicator features
 ├── Why: Cleanly compare base-only vs with-MTF performance
-└── Status: ❌ NOT IMPLEMENTED
+└── Status: ⚠️ DEFERRED (low priority)
 ```
 
 ### Two Canonical Stores (REQUIRED FOR 4D)
@@ -1846,23 +1839,29 @@ NO PRE-COMPUTED PARQUETS - notebook is self-contained.
 
 ## Next Steps (Priority Order)
 
-**PHASE A: 4D Infrastructure (can parallelize with Phase B)**
-1. [ ] Implement raw MTF OHLCV canonical store
-2. [ ] Add 4D support to TimeSeriesDataContainer
-3. [ ] Implement Multi-Resolution 4D adapter
+**PHASE A: 4D Infrastructure** ✅ COMPLETE (Phase 2)
+1. [x] Implement raw MTF OHLCV canonical store
+2. [x] Add 4D support to TimeSeriesDataContainer
+3. [x] Implement Multi-Resolution 4D adapter
 4. [ ] Implement 6 advanced models (InceptionTime, ResNet, PatchTST, iTransformer, TFT, N-BEATS)
 
-**PHASE B: 5-Dimension Optuna (can start immediately)**
-5. [ ] Define per-model base feature sets
-6. [ ] Implement 5-dimension Optuna objective (barriers, features, params, TFs, hyperparams)
-7. [ ] Implement FeatureSpec artifact flow (save + embed in bundle)
-8. [ ] Implement MTF ablation flag
+**PHASE B: 5-Dimension Optuna** ✅ COMPLETE (Phase 3 - commit a3683fc)
+5. [x] Define per-model base feature sets (BASE_FEATURE_SETS)
+6. [x] Implement 5-dimension Optuna objective (all 5 dimensions)
+7. [x] Implement FeatureSpec artifact flow (save + embed in bundle)
+8. [ ] Implement MTF ablation flag (deferred - low priority)
 
-**PHASE C: Factory + Notebook (after A and B)**
-9. [ ] Build MLFactory entry point
-10. [ ] Write end-to-end Colab notebook
+**PHASE C: Validation Integration** ← NEXT (Phase 4)
+9. [ ] Integrate leakage/lookahead detection into pipeline
+10. [ ] Add ensemble diversity analysis
+11. [ ] Add post-optimization DSR validation
+12. [ ] Add bootstrap CIs to financial reports
 
-**Total blockers: 8 | Estimated complexity: HIGH**
+**PHASE D: Factory + Notebook (after Phase 4)**
+13. [ ] Build MLFactory entry point
+14. [ ] Write end-to-end Colab notebook
+
+**Remaining blockers: 4 (advanced models, MTF ablation, factory, notebook)**
 
 ---
 
