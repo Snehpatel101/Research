@@ -1,3 +1,5 @@
+**Tier:** Light (1 agent, basic validation)
+
 Run validation checklist for $ARGUMENTS:
 
 ```bash
@@ -6,6 +8,6 @@ python -c "from src.core.types import DataRank; print('OK')"
 python -c "from src.core.contracts import get_model_contract; print('OK')"
 ```
 
-Use integration-checker subagent to verify imports resolve and no circular deps.
+Use `integration-checker` (Sonnet) to verify imports resolve and no circular deps.
 
-Return: ✅ PASS | ❌ FAIL with details and recommended next actions.
+**Output:** `PASS` | `FAIL` with details and recommended next actions.

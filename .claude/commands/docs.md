@@ -1,8 +1,10 @@
-Use doc-updater subagent to update root docs with $ARGUMENTS.
+Use `doc-updater` (Sonnet) to update root docs with $ARGUMENTS.
 
 Ensure CLEANUP_PLAN.md and CLEANUP_TASKS.md stay in sync.
 
-**For specific doc operations, use:**
-- `/docs-tasks(3a)` - update tasks only
-- `/docs-full(3b)` - update all 4 docs
-- `/docs-final(6a)` - close out a phase
+**Tiered alternatives:**
+| Tier | Command | Use When |
+|------|---------|----------|
+| Light | `/docs-tasks(3a)` | Update tasks only |
+| Medium | `/docs-full(3b)` | Update all 4 docs |
+| Heavy | `/docs-final(6a)` | Close out a phase |

@@ -1,8 +1,10 @@
-**First check COMPLETION.md** - this claim may already be verified or disproven.
+**Reads:** COMPLETION.md (first - claim may already be verified/disproven)
 
-Use codebase-analyzer subagent to verify $ARGUMENTS:
+**Tier:** Light (1 agent, single claim)
+
+Use `codebase-analyzer` (Opus) to verify $ARGUMENTS:
 - Trace all usages with grep
 - Check for dynamic access (getattr, **kwargs, config-driven)
 - Confirm no runtime paths depend on item
 
-Return: ✅ VERIFIED | ❌ DISPROVEN | ⚠️ INCONCLUSIVE with file:line evidence.
+**Output:** `VERIFIED` | `DISPROVEN` | `INCONCLUSIVE` with file:line evidence.

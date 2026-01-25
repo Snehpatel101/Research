@@ -1,8 +1,10 @@
-Read DIRECTION.md for architectural contracts.
+**Reads:** DIRECTION.md (architectural contracts)
+
+**Tier:** Heavy (3 agents sequential, deep contract analysis)
 
 Run 3 subagents sequentially:
-- contract-verifier: static analysis (signatures, types, interfaces)
-- code-reviewer: behavioral docs (expected vs actual, side effects)
-- integration-checker: runtime validation (execution paths, unverifiable assumptions)
+1. `contract-verifier` (Sonnet): static analysis (signatures, types, interfaces)
+2. `code-reviewer` (Sonnet): behavioral docs (expected vs actual, side effects)
+3. `integration-checker` (Sonnet): runtime validation (execution paths, unverifiable assumptions)
 
-Return consolidated contract compliance report.
+**Output:** Consolidated contract compliance report for $ARGUMENTS.

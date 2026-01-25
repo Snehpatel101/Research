@@ -1,8 +1,12 @@
-Read CLEANUP_TASKS.md and COMPLETION.md for context on $ARGUMENTS.
+**Reads:** CLEANUP_TASKS.md, COMPLETION.md
 
-Use codebase-analyzer subagent to analyze:
+**Tier:** Light (1 agent, focused investigation)
+
+Use `codebase-analyzer` (Opus) to analyze $ARGUMENTS:
 - Dependencies: imports, consumers, callers
 - Contracts: signatures, return types, side effects
 - Behavior: current vs documented vs intended
 
-Many past claims were disproven - be skeptical. Ask clarifying questions if needed.
+**Output:** Focused analysis with file:line evidence.
+
+**Note:** Many past claims were disproven - be skeptical. Ask clarifying questions if needed.

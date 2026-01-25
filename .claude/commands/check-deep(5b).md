@@ -1,8 +1,10 @@
-Run 4 parallel task agents for comprehensive verification of $ARGUMENTS:
+**Tier:** Medium (4 agents, comprehensive verification)
 
-- code-reviewer: Check CLAUDE.md standards, no adapters, encapsulation
-- contract-verifier: API schemas, type definitions match implementations
-- integration-checker: All imports resolve, no circular deps, no orphans
+Run 4 parallel subagents to verify $ARGUMENTS:
+
+- `code-reviewer` (Sonnet): Check CLAUDE.md standards, no adapters, encapsulation
+- `contract-verifier` (Sonnet): API schemas, type definitions match implementations
+- `integration-checker` (Sonnet): All imports resolve, no circular deps, no orphans
 - Explore (medium): Runtime validation, check for errors
 
-Return consolidated report: ✅ PASS | ❌ FAIL per category.
+**Output:** Consolidated report with `PASS` | `FAIL` per category.

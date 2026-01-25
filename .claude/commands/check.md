@@ -3,7 +3,9 @@ Run validation checklist for $ARGUMENTS:
 - Core imports work
 - No circular deps
 
-**For deeper checks, use:**
-- `/check-standard(5a)` - full validation suite
-- `/check-deep(5b)` - 4-way comprehensive
-- `/check-behavior(5c)` - execution tracing
+**Tiered alternatives:**
+| Tier | Command | Use When |
+|------|---------|----------|
+| Light | `/check-standard(5a)` | Full validation suite |
+| Medium | `/check-deep(5b)` | 4-way comprehensive |
+| Heavy | `/check-behavior(5c)` | Execution tracing |

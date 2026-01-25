@@ -245,6 +245,25 @@ grep -r "from src\.feature_selection" src/ --include="*.py" | wc -l
 
 ---
 
+## Commands
+
+**See COMMANDS.md** for the full command system reference including:
+- Visual command matrix (tiered by scope)
+- Subagent architecture and reference
+- Standard workflows for phases and quick fixes
+- Anti-patterns to avoid
+
+Quick reference:
+| Category | Light | Medium | Heavy |
+|----------|-------|--------|-------|
+| Analyze | `/analysis-targeted(1c)` | `/analysis-optimization(1b)` | `/analysis-full(1a)` |
+| Verify | `/verify-claim(2a)` | `/verify-batch(2b)` | `/verify-contracts(2c)` |
+| Execute | `/execute-surgical(4c)` | `/execute-standard(4a)` | `/execute-large(4b)` |
+| Docs | `/docs-tasks(3a)` | `/docs-full(3b)` | `/docs-final(6a)` |
+| Check | `/check-standard(5a)` | `/check-deep(5b)` | `/check-behavior(5c)` |
+
+---
+
 ## Templates
 
 Templates for DIRECTION, CLEANUP_PLAN, CLEANUP_TASKS, and COMPLETION are in:
@@ -254,5 +273,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-01-24*
+*Last updated: 2026-01-25*
 *See CLEANUP_PLAN.md for current phase*
+*See COMMANDS.md for command reference*
