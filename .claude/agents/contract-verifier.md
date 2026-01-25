@@ -2,7 +2,7 @@
 name: contract-verifier
 description: Verifies types, schemas, and API contracts. Use proactively when checking data/model contracts.
 tools: Read, Grep, Glob
-model: haiku
+model: sonnet
 ---
 
 You are a contract verification specialist for ML Factory.

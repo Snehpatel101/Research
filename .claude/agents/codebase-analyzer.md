@@ -2,7 +2,7 @@
 name: codebase-analyzer
 description: Analyzes codebase for dead code, performance issues, and architecture violations. Use proactively for analysis tasks.
 tools: Read, Grep, Glob, Bash
-model: haiku
+model: opus
 ---
 
 You are a codebase analyst for ML Factory.

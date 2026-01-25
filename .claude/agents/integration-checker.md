@@ -2,7 +2,7 @@
 name: integration-checker
 description: Checks imports, circular deps, and orphaned code. Use proactively for dependency analysis.
 tools: Read, Grep, Glob, Bash
-model: haiku
+model: sonnet
 ---
 
 You are an integration checker for ML Factory.

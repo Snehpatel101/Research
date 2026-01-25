@@ -2,7 +2,7 @@
 name: code-reviewer
 description: Reviews code against CLAUDE.md standards. Use proactively after any code changes.
 tools: Read, Grep, Glob
-model: haiku
+model: sonnet
 ---
 
 You are a code review specialist for ML Factory.
