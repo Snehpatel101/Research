@@ -65,11 +65,11 @@ def get_labeler(strategy: LabelingType | str, **config: Any) -> LabelingStrategy
     if isinstance(strategy, str):
         try:
             strategy = LabelingType(strategy)
-        except ValueError:
+        except ValueError as err:
             valid_values = [t.value for t in LabelingType]
             raise ValueError(
                 f"Unknown labeling strategy: '{strategy}'. " f"Valid values are: {valid_values}"
-            )
+            ) from err
 
     if strategy not in _STRATEGY_REGISTRY:
         raise ValueError(

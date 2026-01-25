@@ -109,11 +109,11 @@ def get_labeling_strategy_config(strategy: LabelingStrategyType | str) -> dict:
     if isinstance(strategy, str):
         try:
             strategy = LabelingStrategyType(strategy)
-        except ValueError:
+        except ValueError as err:
             valid_values = [t.value for t in LabelingStrategyType]
             raise ValueError(
                 f"Unknown labeling strategy: '{strategy}'. " f"Valid values are: {valid_values}"
-            )
+            ) from err
 
     if strategy not in LABELING_STRATEGY_CONFIGS:
         raise ValueError(

@@ -291,7 +291,7 @@ def validate_field_types(
         # Check type
         if not isinstance(value, expected_type):
             # Allow int for float fields
-            if expected_type == float and isinstance(value, int):
+            if expected_type is float and isinstance(value, int):
                 continue
 
             result.add_error(
@@ -780,7 +780,7 @@ def coerce_types(
 
         # Attempt coercion
         try:
-            if expected_type == int and isinstance(value, float):
+            if expected_type is int and isinstance(value, float):
                 coerced_value = int(value)
                 if coerced_value != value:
                     msg = f"Coerced {path}: {value} -> {coerced_value} (truncated)"
@@ -789,18 +789,18 @@ def coerce_types(
                         warnings.warn(msg, UserWarning, stacklevel=2)
                 parent[final_key] = coerced_value
 
-            elif expected_type == float and isinstance(value, int):
+            elif expected_type is float and isinstance(value, int):
                 parent[final_key] = float(value)
                 coercion_log.append(f"Coerced {path}: {value} (int) -> {float(value)} (float)")
 
-            elif expected_type == bool and isinstance(value, (int, str)):
+            elif expected_type is bool and isinstance(value, (int, str)):
                 if isinstance(value, int):
                     parent[final_key] = bool(value)
                 elif isinstance(value, str):
                     parent[final_key] = value.lower() in ("true", "yes", "1", "on")
                 coercion_log.append(f"Coerced {path}: {value} -> {parent[final_key]}")
 
-            elif expected_type == list and isinstance(value, (tuple, set)):
+            elif expected_type is list and isinstance(value, (tuple, set)):
                 parent[final_key] = list(value)
                 coercion_log.append(f"Coerced {path}: {type(value).__name__} -> list")
 

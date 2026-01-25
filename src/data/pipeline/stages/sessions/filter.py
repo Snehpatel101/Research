@@ -404,9 +404,9 @@ def create_session_filter(
         for name in include:
             try:
                 include_sessions.append(SessionName(name.lower()))
-            except ValueError:
+            except ValueError as err:
                 valid = [s.value for s in SessionName]
-                raise ValueError(f"Invalid session name '{name}'. Valid names: {valid}")
+                raise ValueError(f"Invalid session name '{name}'. Valid names: {valid}") from err
 
     exclude_sessions = None
     if exclude:
@@ -414,9 +414,9 @@ def create_session_filter(
         for name in exclude:
             try:
                 exclude_sessions.append(SessionName(name.lower()))
-            except ValueError:
+            except ValueError as err:
                 valid = [s.value for s in SessionName]
-                raise ValueError(f"Invalid session name '{name}'. Valid names: {valid}")
+                raise ValueError(f"Invalid session name '{name}'. Valid names: {valid}") from err
 
     config = SessionsConfig(
         include_sessions=include_sessions,

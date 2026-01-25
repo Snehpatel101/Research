@@ -67,7 +67,6 @@ def compute_prediction_diversity(
         existing_predictions = existing_predictions.reshape(-1, 1)
 
     n_samples = len(new_predictions)
-    n_existing = existing_predictions.shape[1]
 
     if existing_predictions.shape[0] != n_samples:
         logger.warning(
@@ -76,25 +75,21 @@ def compute_prediction_diversity(
         )
         return 0.0
 
-    # Compute correlation with each existing model
-    correlations = []
-    for i in range(n_existing):
-        existing_col = existing_predictions[:, i]
+    # Check for constant predictions (new_predictions)
+    new_std = np.std(new_predictions)
+    if new_std < 1e-10:
+        # Constant predictions are considered maximally correlated (not diverse)
+        return 0.0
 
-        # Check for constant arrays (would cause correlation to be undefined)
-        if np.std(existing_col) < 1e-10 or np.std(new_predictions) < 1e-10:
-            # Constant predictions are considered maximally correlated (not diverse)
-            correlations.append(1.0)
-            continue
+    # Vectorized correlation computation
+    # Stack new_predictions with existing_predictions and compute full correlation matrix
+    all_preds = np.column_stack([new_predictions, existing_predictions])
+    corr_matrix = np.corrcoef(all_preds.T)
+    # Extract correlations between new_predictions (index 0) and all existing (indices 1:)
+    correlations = np.abs(corr_matrix[0, 1:])
 
-        # Compute Pearson correlation
-        corr = np.corrcoef(new_predictions, existing_col)[0, 1]
-
-        # Handle NaN (can occur with constant predictions)
-        if np.isnan(corr):
-            corr = 0.0
-
-        correlations.append(abs(corr))
+    # Handle NaN values (can occur with constant predictions in existing models)
+    correlations = np.where(np.isnan(correlations), 1.0, correlations)
 
     if not correlations:
         return 1.0

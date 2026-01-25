@@ -109,7 +109,9 @@ def run_create_splits(config: "PipelineConfig", manifest: "ArtifactManifest") ->
                 continue
 
             combined_df = pd.concat(dfs, ignore_index=True)
-            combined_df = combined_df.sort_values("datetime").reset_index(drop=True)
+            # Only sort if not already sorted (performance optimization)
+            if not combined_df["datetime"].is_monotonic_increasing:
+                combined_df = combined_df.sort_values("datetime").reset_index(drop=True)
             logger.info(f"Combined dataset for {tf}: {len(combined_df):,} rows")
 
             # Save combined file with timeframe suffix for multi-TF mode

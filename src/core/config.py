@@ -395,13 +395,13 @@ class PipelineConfig:
                 validate_model_list(
                     [self.meta_labeling_primary_model], "meta_labeling_primary_model"
                 )
-            except ValidationError:
+            except ValidationError as err:
                 raise ValidationError(
                     f"Invalid meta_labeling_primary_model: {self.meta_labeling_primary_model}",
                     field="meta_labeling_primary_model",
                     expected=ALL_MODELS,
                     actual=self.meta_labeling_primary_model,
-                )
+                ) from err
 
             # Validate meta model
             valid_meta_models = ["logistic", "xgboost", "lightgbm", "random_forest", "catboost"]

@@ -172,14 +172,14 @@ def build_correlation_groups(
         if px != py:
             parent[px] = py
 
-    # Find all highly correlated pairs and union them
-    for i, col1 in enumerate(feature_cols):
-        for j, col2 in enumerate(feature_cols):
-            if i >= j:
-                continue
-            corr_val = abs(corr_matrix.loc[col1, col2])
-            if corr_val >= correlation_threshold:
-                union(col1, col2)
+    # Find all highly correlated pairs and union them (vectorized)
+    # Get upper triangle indices where correlation exceeds threshold
+    corr_values = corr_matrix.values
+    mask = np.abs(np.triu(corr_values, k=1)) >= correlation_threshold
+    high_corr_pairs = np.argwhere(mask)
+
+    for i, j in high_corr_pairs:
+        union(feature_cols[i], feature_cols[j])
 
     # Build groups from union-find structure
     groups_dict: dict[str, set[str]] = {}

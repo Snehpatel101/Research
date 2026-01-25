@@ -1,10 +1,10 @@
 """
 Feature Computation Package - PHASE_1 Unified Features.
 
-This package provides computation functions for all 162 base features
-across 12 feature families.
+This package provides computation functions for all 196 base features
+across 15 feature families.
 
-Feature Families (162 total):
+Feature Families (196 total):
 - raw: 5 features (OHLCV passthrough)
 - momentum: 23 features (RSI, MACD, Stochastic, etc.)
 - moving_average: 16 features (SMA, EMA, crossovers)
@@ -17,6 +17,9 @@ Feature Families (162 total):
 - wavelets: 15 features (DWT coefficients)
 - temporal: 9 features (hour/day encoding, sessions)
 - regime: 9 features (vol/trend regimes)
+- order_flow: 12 features (buy/sell pressure, volume delta)
+- liquidity: 12 features (spread estimation, liquidity regime)
+- mean_reversion: 10 features (z-scores, Hurst, variance ratios)
 
 Usage:
     from src.data.features.compute import (
@@ -43,6 +46,8 @@ from collections.abc import Callable
 import pandas as pd
 
 from src.data.features.compute.entropy import ENTROPY_FEATURES
+from src.data.features.compute.liquidity import LIQUIDITY_FEATURES
+from src.data.features.compute.mean_reversion import MEAN_REVERSION_FEATURES
 from src.data.features.compute.microstructure import MICROSTRUCTURE_FEATURES
 from src.data.features.compute.momentum import MOMENTUM_FEATURES
 from src.data.features.compute.moving_average import MOVING_AVERAGE_FEATURES
@@ -57,6 +62,7 @@ from src.data.features.compute.mtf import (
     resample_ohlcv,
     validate_mtf_config,
 )
+from src.data.features.compute.order_flow import ORDER_FLOW_FEATURES
 from src.data.features.compute.price import PRICE_FEATURES
 
 # Import all feature maps from submodules
@@ -85,6 +91,10 @@ FAMILY_FEATURE_MAPS: dict[str, dict[str, Callable[[pd.DataFrame], pd.Series]]] =
     "wavelets": WAVELETS_FEATURES,
     "temporal": TEMPORAL_FEATURES,
     "regime": REGIME_FEATURES,
+    # Phase 19A - ML Pipeline Enhancements
+    "order_flow": ORDER_FLOW_FEATURES,
+    "liquidity": LIQUIDITY_FEATURES,
+    "mean_reversion": MEAN_REVERSION_FEATURES,
 }
 
 # =============================================================================
@@ -99,7 +109,7 @@ for _family_name, family_map in FAMILY_FEATURE_MAPS.items():
 
 # Verify feature count
 TOTAL_FEATURES = len(FEATURE_COMPUTE_MAP)
-EXPECTED_FEATURES = 162
+EXPECTED_FEATURES = 196  # 162 original + 12 order_flow + 12 liquidity + 10 mean_reversion
 
 # Log warning if count mismatch (don't raise error to allow flexibility)
 if TOTAL_FEATURES != EXPECTED_FEATURES:
@@ -410,6 +420,10 @@ __all__ = [
     "WAVELETS_FEATURES",
     "TEMPORAL_FEATURES",
     "REGIME_FEATURES",
+    # Phase 19A - ML Pipeline Enhancements
+    "ORDER_FLOW_FEATURES",
+    "LIQUIDITY_FEATURES",
+    "MEAN_REVERSION_FEATURES",
     # Constants
     "TOTAL_FEATURES",
     "PYWT_AVAILABLE",

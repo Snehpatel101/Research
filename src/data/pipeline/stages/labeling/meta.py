@@ -97,12 +97,12 @@ class MetaLabeler(LabelingStrategy):
         if isinstance(bet_size_method, str):
             try:
                 bet_size_method = BetSizeMethod(bet_size_method)
-            except ValueError:
+            except ValueError as err:
                 valid_values = [m.value for m in BetSizeMethod]
                 raise ValueError(
                     f"Invalid bet_size_method: '{bet_size_method}'. "
                     f"Valid values are: {valid_values}"
-                )
+                ) from err
         self._bet_size_method = bet_size_method
 
         # Validate that we can compute returns

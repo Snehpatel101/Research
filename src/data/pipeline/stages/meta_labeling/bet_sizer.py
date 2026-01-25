@@ -426,9 +426,9 @@ class BetSizer:
         if isinstance(method, str):
             try:
                 method = BetSizingMethod(method.lower())
-            except ValueError:
+            except ValueError as err:
                 valid = [m.value for m in BetSizingMethod]
-                raise ValueError(f"Invalid method '{method}'. Valid: {valid}")
+                raise ValueError(f"Invalid method '{method}'. Valid: {valid}") from err
         self.method = method
 
         # Initialize Kelly criterion if needed

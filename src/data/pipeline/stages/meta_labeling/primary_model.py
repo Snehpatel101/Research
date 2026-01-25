@@ -372,8 +372,8 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
                     verbose=-1,
                     **self.model_params,
                 )
-            except ImportError:
-                raise ImportError("lightgbm not installed. Use pip install lightgbm")
+            except ImportError as err:
+                raise ImportError("lightgbm not installed. Use pip install lightgbm") from err
         elif self.base_model == "xgboost":
             try:
                 import xgboost as xgb
@@ -386,8 +386,8 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
                     eval_metric="logloss",
                     **self.model_params,
                 )
-            except ImportError:
-                raise ImportError("xgboost not installed. Use pip install xgboost")
+            except ImportError as err:
+                raise ImportError("xgboost not installed. Use pip install xgboost") from err
         elif self.base_model == "random_forest":
             from sklearn.ensemble import RandomForestClassifier
 

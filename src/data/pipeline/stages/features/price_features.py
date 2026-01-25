@@ -144,7 +144,7 @@ def add_autocorrelation(
         # ANTI-LOOKAHEAD: shift(1) ensures autocorr at bar[t] uses data up to bar[t-1]
         autocorr = (
             returns.rolling(period)
-            .apply(lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan, raw=False)
+            .apply(lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan, raw=False)  # noqa: B023
             .shift(1)
         )
         df[col] = autocorr

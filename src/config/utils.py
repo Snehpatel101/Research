@@ -24,7 +24,6 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from pathlib import Path  # noqa: F401 - used for type hints in docstrings
 from typing import Any, TypeVar
 
 from src.core.exceptions import ConfigValueError
@@ -347,7 +346,7 @@ def get_config_value_strict(attr_path: str) -> Any:
                     raise ConfigValueError(
                         f"Config path '{attr_path}' not found: "
                         f"attribute '{part}' does not exist"
-                    )
+                    ) from None
 
         if value is None:
             raise ConfigValueError(f"Config value at '{attr_path}' is None")

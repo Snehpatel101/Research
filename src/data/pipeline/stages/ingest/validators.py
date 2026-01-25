@@ -49,7 +49,7 @@ def validate_path(file_path: Path, allowed_dirs: list[Path]) -> Path:
     try:
         resolved_path = file_path.resolve()
     except (OSError, RuntimeError) as e:
-        raise SecurityError(f"Invalid file path: {file_path}. Error: {e}")
+        raise SecurityError(f"Invalid file path: {file_path}. Error: {e}") from e
 
     # Validate that resolved path is within allowed directories
     is_allowed = False

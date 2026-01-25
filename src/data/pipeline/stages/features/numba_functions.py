@@ -322,7 +322,5 @@ __all__ = [
     "calculate_rsi_numba",
     "calculate_atr_numba",
     "calculate_stochastic_numba",
-    "calculate_rolling_correlation_numba",
-    "calculate_rolling_beta_numba",
     "calculate_adx_numba",
 ]

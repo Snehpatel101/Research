@@ -102,7 +102,7 @@ class _MTFCache:
         self._hits = 0
         self._misses = 0
 
-    def get(self, path: Path) -> pd.DataFrame | None:
+    def get(self, path: Path, copy: bool = True) -> pd.DataFrame | None:
         """
         Get cached DataFrame if valid (file unchanged).
 
@@ -110,6 +110,9 @@ class _MTFCache:
         ----------
         path : Path
             Path to the parquet file
+        copy : bool, default True
+            If True, return a copy of the cached DataFrame (safe).
+            If False, return a view (faster, but caller must not modify).
 
         Returns
         -------
@@ -137,7 +140,9 @@ class _MTFCache:
 
             self._hits += 1
             logger.debug(f"Cache hit: {path.name}")
-            return entry.df.copy()
+            if copy:
+                return entry.df.copy()
+            return entry.df
 
     def put(self, path: Path, df: pd.DataFrame) -> None:
         """

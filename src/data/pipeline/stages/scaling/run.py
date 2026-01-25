@@ -135,9 +135,10 @@ def _scale_single_timeframe(
         f"Val: {len(val_indices):,}, Test: {len(test_indices):,}"
     )
 
-    train_df = df.iloc[train_indices].copy()
-    val_df = df.iloc[val_indices].copy()
-    test_df = df.iloc[test_indices].copy()
+    # No .copy() needed - sklearn scalers create new arrays internally
+    train_df = df.iloc[train_indices]
+    val_df = df.iloc[val_indices]
+    test_df = df.iloc[test_indices]
 
     feature_cols = _identify_feature_columns(train_df)
     logger.info(f"Identified {len(feature_cols)} feature columns to scale")
@@ -342,7 +343,7 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
             logger.info(
                 "\n✓ Scaled data remains in run-specific location (run isolation preserved)"
             )
-            logger.info(f"  Use --copy-scaled-to-global to enable global copy")
+            logger.info("  Use --copy-scaled-to-global to enable global copy")
 
         logger.info("\n" + "=" * 70)
         logger.info("STAGE 7.5 COMPLETE: Feature Scaling")

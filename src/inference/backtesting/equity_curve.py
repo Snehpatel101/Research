@@ -302,8 +302,8 @@ class EquityCurve:
         try:
             import matplotlib.pyplot as plt
             from matplotlib.dates import DateFormatter
-        except ImportError:
-            raise ImportError("matplotlib is required for plotting")
+        except ImportError as err:
+            raise ImportError("matplotlib is required for plotting") from err
 
         n_panels = 2 if show_drawdowns else 1
         fig, axes = plt.subplots(n_panels, 1, figsize=figsize, sharex=True)
@@ -430,8 +430,8 @@ class EquityCurve:
         """
         try:
             import matplotlib.pyplot as plt
-        except ImportError:
-            raise ImportError("matplotlib is required for plotting")
+        except ImportError as err:
+            raise ImportError("matplotlib is required for plotting") from err
 
         fig, axes = plt.subplots(1, 2, figsize=figsize)
 
@@ -496,8 +496,8 @@ class EquityCurve:
         try:
             import matplotlib.colors as mcolors
             import matplotlib.pyplot as plt
-        except ImportError:
-            raise ImportError("matplotlib is required for plotting")
+        except ImportError as err:
+            raise ImportError("matplotlib is required for plotting") from err
 
         df = self.to_dataframe()
         if len(df) < 2:
