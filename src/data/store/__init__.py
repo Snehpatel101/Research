@@ -117,7 +117,9 @@ from .lineage import (
 from .raw_mtf_store import (
     TIMEFRAMES,
     VALID_SPLITS,
+    clear_mtf_cache,
     delete_raw_mtf,
+    get_mtf_cache_stats,
     get_mtf_path,
     list_available_timeframes,
     load_all_timeframes,
@@ -172,4 +174,7 @@ __all__ = [
     "load_all_timeframes",
     "list_available_timeframes",
     "delete_raw_mtf",
+    # MTF cache management
+    "get_mtf_cache_stats",
+    "clear_mtf_cache",
 ]

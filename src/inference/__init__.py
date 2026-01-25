@@ -75,9 +75,12 @@ Usage:
 """
 
 from src.inference.batch import (
+    BatchInference,
+    BatchInferenceResult,
     BatchPredictor,
     BatchProgress,
     BatchResult,
+    ModelPrediction,
     run_batch_inference,
 )
 from src.inference.builder import (
@@ -158,11 +161,15 @@ __all__ = [
     "InferencePipeline",
     "InferenceResult",
     "EnsembleResult",
-    # Batch
+    # Batch data processing
     "BatchPredictor",
     "BatchProgress",
     "BatchResult",
     "run_batch_inference",
+    # Parallel ensemble inference
+    "BatchInference",
+    "BatchInferenceResult",
+    "ModelPrediction",
     # Server
     "ModelServer",
     "ServerConfig",

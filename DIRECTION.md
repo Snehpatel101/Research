@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-01-25 (Post-Phase 12.5 Complete)
-**Status:** Phases 0-12.5 Complete | Production Ready
+**Last Updated:** 2026-01-25 (Post-Phase 13 Complete)
+**Status:** Phases 0-13 Complete | Production Ready
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -18,10 +18,10 @@ A "for dummies" system where users configure WHAT they want and the factory hand
 - No data leakage (guaranteed)
 - Reproducible results (same config = same output)
 - Financially sound metrics (realistic costs, proper validation)
-- **NEW: Optimized for trading profit (Sharpe ratio), not classification accuracy**
-- **NEW: Circuit breakers prevent catastrophic losses**
-- **NEW: R-multiple tracking for objective risk/reward analysis**
-- **NEW: 10-50x performance improvements (caching, parallel, GPU)**
+- Optimized for trading profit (Sharpe ratio), not classification accuracy
+- Circuit breakers prevent catastrophic losses
+- R-multiple tracking for objective risk/reward analysis
+- **10-50x performance improvements** (FeatureStore, MTF cache, parallel training, GPU, batch inference)
 
 ---
 

@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from threading import Lock
+from typing import NamedTuple
 
 import pandas as pd
 
@@ -58,6 +60,158 @@ VALID_SPLITS: list[str] = ["train", "val", "test"]
 
 # Default compression for parquet files
 DEFAULT_COMPRESSION: str = "snappy"
+
+
+# =============================================================================
+# MTF Cache - Memoize loaded parquet files with mtime invalidation
+# =============================================================================
+
+
+class _CacheEntry(NamedTuple):
+    """Cache entry storing loaded DataFrame and file modification time."""
+
+    df: pd.DataFrame
+    mtime: float
+
+
+class _MTFCache:
+    """
+    Thread-safe in-memory cache for MTF parquet files.
+
+    Caches loaded DataFrames keyed by file path, with automatic invalidation
+    when the source file's modification time changes.
+
+    Attributes
+    ----------
+    maxsize : int
+        Maximum number of entries to keep in cache
+    """
+
+    def __init__(self, maxsize: int = 100):
+        """
+        Initialize the MTF cache.
+
+        Parameters
+        ----------
+        maxsize : int, default 100
+            Maximum number of entries to cache
+        """
+        self._cache: dict[str, _CacheEntry] = {}
+        self._maxsize = maxsize
+        self._lock = Lock()
+        self._hits = 0
+        self._misses = 0
+
+    def get(self, path: Path) -> pd.DataFrame | None:
+        """
+        Get cached DataFrame if valid (file unchanged).
+
+        Parameters
+        ----------
+        path : Path
+            Path to the parquet file
+
+        Returns
+        -------
+        pd.DataFrame or None
+            Cached DataFrame if valid, None otherwise
+        """
+        key = str(path)
+        with self._lock:
+            if key not in self._cache:
+                return None
+
+            entry = self._cache[key]
+
+            # Check if file still exists and mtime matches
+            if not path.exists():
+                del self._cache[key]
+                return None
+
+            current_mtime = path.stat().st_mtime
+            if current_mtime != entry.mtime:
+                # File changed, invalidate cache entry
+                del self._cache[key]
+                logger.debug(f"Cache invalidated (mtime changed): {path.name}")
+                return None
+
+            self._hits += 1
+            logger.debug(f"Cache hit: {path.name}")
+            return entry.df.copy()
+
+    def put(self, path: Path, df: pd.DataFrame) -> None:
+        """
+        Store DataFrame in cache.
+
+        Parameters
+        ----------
+        path : Path
+            Path to the parquet file
+        df : pd.DataFrame
+            DataFrame to cache
+        """
+        key = str(path)
+        mtime = path.stat().st_mtime
+
+        with self._lock:
+            # Evict oldest entries if at capacity
+            if len(self._cache) >= self._maxsize and key not in self._cache:
+                # Simple FIFO eviction - remove first item
+                oldest_key = next(iter(self._cache))
+                del self._cache[oldest_key]
+                logger.debug(f"Cache eviction: {oldest_key}")
+
+            self._cache[key] = _CacheEntry(df=df.copy(), mtime=mtime)
+            self._misses += 1
+            logger.debug(f"Cache miss, stored: {path.name}")
+
+    def invalidate(self, path: Path) -> bool:
+        """
+        Invalidate a cache entry.
+
+        Parameters
+        ----------
+        path : Path
+            Path to invalidate
+
+        Returns
+        -------
+        bool
+            True if entry was removed
+        """
+        key = str(path)
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+                return True
+            return False
+
+    def clear(self) -> None:
+        """Clear all cache entries."""
+        with self._lock:
+            self._cache.clear()
+            logger.info("MTF cache cleared")
+
+    def stats(self) -> dict[str, int]:
+        """
+        Get cache statistics.
+
+        Returns
+        -------
+        dict
+            Dictionary with hits, misses, and size
+        """
+        with self._lock:
+            return {
+                "hits": self._hits,
+                "misses": self._misses,
+                "size": len(self._cache),
+                "maxsize": self._maxsize,
+            }
+
+
+# Global cache instance
+_mtf_cache = _MTFCache(maxsize=100)
 
 
 def _validate_timeframe(timeframe: str) -> None:
@@ -207,6 +361,9 @@ def save_raw_mtf(
 
     logger.info(f"Saved raw MTF data: {symbol}/{timeframe}/{split} " f"({len(df)} rows) -> {path}")
 
+    # Invalidate cache for this path since file changed
+    _mtf_cache.invalidate(path)
+
     return path
 
 
@@ -215,9 +372,13 @@ def load_raw_mtf(
     timeframe: str,
     split: str,
     base_path: str | Path = "data/canonical",
+    use_cache: bool = True,
 ) -> pd.DataFrame:
     """
     Load raw OHLCV data for a specific timeframe and split.
+
+    Uses an in-memory cache with mtime-based invalidation to avoid
+    repeated disk reads of unchanged files.
 
     Parameters
     ----------
@@ -229,6 +390,9 @@ def load_raw_mtf(
         Data split ("train", "val", "test")
     base_path : str or Path, default "data/canonical"
         Base directory for data storage
+    use_cache : bool, default True
+        Whether to use the in-memory cache. Set to False to always
+        read from disk.
 
     Returns
     -------
@@ -257,7 +421,18 @@ def load_raw_mtf(
             f"Raw MTF data not found: {symbol}/{timeframe}/{split} " f"(expected at {path})"
         )
 
+    # Try cache first if enabled
+    if use_cache:
+        cached_df = _mtf_cache.get(path)
+        if cached_df is not None:
+            return cached_df
+
+    # Load from disk
     df = pd.read_parquet(path)
+
+    # Store in cache
+    if use_cache:
+        _mtf_cache.put(path, df)
 
     logger.debug(f"Loaded raw MTF data: {symbol}/{timeframe}/{split} ({len(df)} rows)")
 
@@ -420,8 +595,45 @@ def delete_raw_mtf(
 
     if path.exists():
         path.unlink()
+        # Invalidate cache entry
+        _mtf_cache.invalidate(path)
         logger.info(f"Deleted raw MTF data: {path}")
         return True
     else:
         logger.debug(f"File not found for deletion: {path}")
         return False
+
+
+# =============================================================================
+# Cache Management Functions
+# =============================================================================
+
+
+def get_mtf_cache_stats() -> dict[str, int]:
+    """
+    Get MTF cache statistics.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys: hits, misses, size, maxsize
+
+    Examples
+    --------
+    >>> stats = get_mtf_cache_stats()
+    >>> print(f"Hit rate: {stats['hits'] / (stats['hits'] + stats['misses']):.2%}")
+    """
+    return _mtf_cache.stats()
+
+
+def clear_mtf_cache() -> None:
+    """
+    Clear all entries from the MTF cache.
+
+    Use this when you want to force fresh reads from disk.
+
+    Examples
+    --------
+    >>> clear_mtf_cache()
+    """
+    _mtf_cache.clear()
