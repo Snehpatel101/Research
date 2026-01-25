@@ -291,14 +291,13 @@ class LabelOptimizer:
         # Validate input
         validate_ohlcv(df, context="LabelOptimizer")
 
-        if feature_df is not None:
-            if len(feature_df) != len(df):
-                raise ValidationError(
-                    "feature_df must have same length as df",
-                    field="feature_df",
-                    expected=len(df),
-                    actual=len(feature_df),
-                )
+        if feature_df is not None and len(feature_df) != len(df):
+            raise ValidationError(
+                "feature_df must have same length as df",
+                field="feature_df",
+                expected=len(df),
+                actual=len(feature_df),
+            )
 
         # Store for objective function
         self._df = df

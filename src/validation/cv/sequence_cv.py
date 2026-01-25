@@ -255,10 +255,7 @@ class SequenceCVBuilder:
 
         # Check if any boundary falls within (start_idx, end_idx]
         # A boundary at position b means symbols[b-1] != symbols[b]
-        for boundary in self._symbol_boundaries:
-            if start_idx < boundary <= end_idx:
-                return True
-        return False
+        return any(start_idx < boundary <= end_idx for boundary in self._symbol_boundaries)
 
     def build_fold_sequences(
         self,
@@ -463,7 +460,7 @@ def validate_sequence_cv_coverage(
     fold_n_sequences = []
     fold_n_samples = []
 
-    for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X, y)):
+    for _fold_idx, (_train_idx, val_idx) in enumerate(cv.split(X, y)):
         # Check validation fold coverage
         val_result = builder.build_fold_sequences(
             val_idx,

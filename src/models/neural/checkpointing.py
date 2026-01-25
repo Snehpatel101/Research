@@ -378,7 +378,7 @@ class CheckpointManager:
             )
 
         # Keep top N
-        to_keep = set(c.checkpoint_path for c in sorted_ckpts[: self.config.keep_n_best])
+        to_keep = {c.checkpoint_path for c in sorted_ckpts[: self.config.keep_n_best]}
         to_remove = [c for c in self._checkpoints if c.checkpoint_path not in to_keep]
 
         for ckpt in to_remove:

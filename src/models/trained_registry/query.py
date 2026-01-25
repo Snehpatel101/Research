@@ -155,11 +155,7 @@ class ModelQuery:
 
         # Tag filters
         entry_tags = entry.get("tags", {})
-        for key, value in self.tags.items():
-            if entry_tags.get(key) != value:
-                return False
-
-        return True
+        return all(entry_tags.get(key) == value for key, value in self.tags.items())
 
     def to_dict(self) -> dict[str, Any]:
         """Convert query to dictionary for serialization."""

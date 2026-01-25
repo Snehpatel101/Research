@@ -384,7 +384,7 @@ class ArtifactManifest:
 
     def get_summary(self) -> dict[str, Any]:
         """Get summary statistics about the manifest."""
-        stages = set(artifact["stage"] for artifact in self.artifacts.values())
+        stages = {artifact["stage"] for artifact in self.artifacts.values()}
         total_size = sum(artifact.get("size_bytes", 0) for artifact in self.artifacts.values())
 
         return {

@@ -352,7 +352,7 @@ class FeatureOptimizer:
 
             # Suggest inclusion for each feature
             selected_indices = []
-            for i, fname in enumerate(feature_names):
+            for i, _fname in enumerate(feature_names):
                 include = trial.suggest_categorical(f"include_{i}", [True, False])
                 if include:
                     selected_indices.append(i)

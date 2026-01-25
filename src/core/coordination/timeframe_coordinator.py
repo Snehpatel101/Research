@@ -332,7 +332,7 @@ class TimeframeCoordinator:
             return
 
         # Find smallest timeframe by minutes
-        tf_minutes = [(tf, get_timeframe_minutes(tf)) for tf in self._timeframe_data.keys()]
+        tf_minutes = [(tf, get_timeframe_minutes(tf)) for tf in self._timeframe_data]
         tf_minutes.sort(key=lambda x: x[1])
         self._anchor_timeframe = tf_minutes[0][0]
 

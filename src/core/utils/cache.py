@@ -7,6 +7,7 @@ with automatic invalidation based on source file modification times.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import logging
@@ -156,9 +157,7 @@ class DataCache:
             return True
         # Also use disk if memory is low
         available = check_available_memory()
-        if size_bytes > available * 0.5:
-            return True
-        return False
+        return size_bytes > available * 0.5
 
     def _get_disk_path(self, key: str) -> Path:
         """Get disk cache path for a key."""
@@ -353,7 +352,7 @@ class DataCache:
         count = 0
 
         with self._lock:
-            keys_to_remove = [k for k in self._metadata.keys() if k.startswith(prefix)]
+            keys_to_remove = [k for k in self._metadata if k.startswith(prefix)]
             for key in keys_to_remove:
                 identifier = key.split(":", 1)[1]
                 if self.invalidate(category, identifier):
@@ -370,10 +369,8 @@ class DataCache:
             # Clear disk cache
             if self._config.enable_disk_fallback and self._config.disk_cache_dir:
                 for path in self._config.disk_cache_dir.glob("*.pkl"):
-                    try:
+                    with contextlib.suppress(Exception):
                         path.unlink()
-                    except Exception:
-                        pass
 
     # Convenience methods for specific data types
 

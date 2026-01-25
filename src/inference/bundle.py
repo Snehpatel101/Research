@@ -782,7 +782,7 @@ class ModelBundle:
 
         warnings = []
 
-        for i, feature_name in enumerate(self.feature_columns):
+        for _i, feature_name in enumerate(self.feature_columns):
             if feature_name not in X_current.columns:
                 continue
 
@@ -826,7 +826,8 @@ class ModelBundle:
                         ).tolist()
                         # Simple PSI approximation
                         psi_value = sum(
-                            abs(c - t) for c, t in zip(current_quantiles, train_quantiles)
+                            abs(c - t)
+                            for c, t in zip(current_quantiles, train_quantiles, strict=False)
                         ) / len(train_quantiles)
                         if psi_value > threshold:
                             warnings.append(

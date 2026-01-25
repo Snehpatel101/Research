@@ -189,12 +189,11 @@ class InceptionBlock(nn.Module):
         # Residual connection with 1x1 conv if dimensions don't match
         self.residual_conv: nn.Conv1d | None = None
         self.residual_bn: nn.BatchNorm1d | None = None
-        if use_residual:
-            if in_channels != self.out_channels:
-                self.residual_conv = nn.Conv1d(
-                    in_channels, self.out_channels, kernel_size=1, bias=False
-                )
-                self.residual_bn = nn.BatchNorm1d(self.out_channels)
+        if use_residual and in_channels != self.out_channels:
+            self.residual_conv = nn.Conv1d(
+                in_channels, self.out_channels, kernel_size=1, bias=False
+            )
+            self.residual_bn = nn.BatchNorm1d(self.out_channels)
 
         self.activation = nn.ReLU()
 

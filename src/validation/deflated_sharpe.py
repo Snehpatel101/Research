@@ -307,10 +307,7 @@ def _compute_gamma_correction(
     denominator = 1.0 - skew * sharpe + (kurt / 4.0) * (sharpe**2)
 
     # Prevent division by zero or very small values
-    if abs(denominator) < 1e-10:
-        gamma = config.gamma_clip_max
-    else:
-        gamma = 1.0 / denominator
+    gamma = config.gamma_clip_max if abs(denominator) < 1e-10 else 1.0 / denominator
 
     # Clip for numerical stability
     gamma = np.clip(gamma, config.gamma_clip_min, config.gamma_clip_max)

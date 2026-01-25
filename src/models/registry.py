@@ -276,7 +276,7 @@ class ModelRegistry:
 
         # Find the canonical name (in case alias was passed)
         model_class = cls._models[name_lower]
-        for canonical, meta in cls._metadata.items():
+        for _canonical, meta in cls._metadata.items():
             if meta["class"] == model_class.__name__:
                 return meta.copy()
 

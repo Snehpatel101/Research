@@ -279,10 +279,7 @@ class NBEATSStack(nn.Module):
             backcast, block_forecast = block(residual)
             residual = residual - backcast
 
-            if forecast is None:
-                forecast = block_forecast
-            else:
-                forecast = forecast + block_forecast
+            forecast = block_forecast if forecast is None else forecast + block_forecast
 
         # forecast is guaranteed to be set after loop if blocks is non-empty
         if forecast is None:

@@ -240,7 +240,7 @@ def run_command(
         )
     except ValueError as e:
         show_error(f"Configuration error: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Display configuration
     table = Table(title="Pipeline Configuration", show_header=True)
@@ -301,7 +301,7 @@ def run_command(
         show_error("Configuration validation failed:")
         for issue in issues:
             console.print(f"  [red]x[/red] {issue}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     show_success("Configuration validated")
     console.print()
@@ -330,14 +330,14 @@ def run_command(
             )
         else:
             show_error(f"Pipeline failed. Check logs at {runner.log_file}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     except Exception as e:
         show_error(f"Pipeline execution error: {e}")
         import traceback
 
         console.print(traceback.format_exc())
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def rerun_command(
@@ -366,7 +366,7 @@ def rerun_command(
         show_success(f"Loaded configuration for run: {run_id}")
     except FileNotFoundError as e:
         show_error(f"Run not found: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Display configuration
     console.print("\n[bold]Configuration:[/bold]")
@@ -415,8 +415,8 @@ def rerun_command(
             show_success("Pipeline completed successfully!")
         else:
             show_error("Pipeline failed. Check logs for details.")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
     except Exception as e:
         show_error(f"Pipeline execution error: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

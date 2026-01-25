@@ -127,15 +127,13 @@ class ModelContract:
             )
 
         # Check sequence length for 3D/4D
-        if self.requires_sequences:
-            if (
-                data_contract.sequence_length
-                and data_contract.sequence_length != self.sequence_length
-            ):
-                issues.append(
-                    f"Sequence length mismatch: model expects {self.sequence_length}, "
-                    f"data has {data_contract.sequence_length}"
-                )
+        if self.requires_sequences and (
+            data_contract.sequence_length and data_contract.sequence_length != self.sequence_length
+        ):
+            issues.append(
+                f"Sequence length mismatch: model expects {self.sequence_length}, "
+                f"data has {data_contract.sequence_length}"
+            )
 
         # Check timeframe count for 4D
         if self.requires_multi_timeframe:

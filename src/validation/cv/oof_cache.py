@@ -439,10 +439,7 @@ def compute_data_hash(
     else:
         X_sample = np.asarray(X)[sample_idx]
 
-    if isinstance(y, pd.Series):
-        y_sample = y.iloc[sample_idx].values
-    else:
-        y_sample = np.asarray(y)[sample_idx]
+    y_sample = y.iloc[sample_idx].values if isinstance(y, pd.Series) else np.asarray(y)[sample_idx]
 
     # Build hash input
     hash_dict = {

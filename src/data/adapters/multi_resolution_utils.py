@@ -155,7 +155,7 @@ def build_timeframe_feature_map(
     # For base timeframe, optionally include non-suffixed features
     if include_base_features and timeframes:
         base_tf = timeframes[0]
-        all_suffixes = [get_timeframe_suffix(tf) for tf in TIMEFRAME_TO_MINUTES.keys()]
+        all_suffixes = [get_timeframe_suffix(tf) for tf in TIMEFRAME_TO_MINUTES]
         base_cols = []
         for col in df.columns:
             if col in ["datetime", "symbol", "date", "time"]:

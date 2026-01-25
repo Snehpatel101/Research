@@ -637,10 +637,7 @@ class RegimeAwareTrainer:
             raise RuntimeError("No trained models. Call train() first.")
 
         # Convert to DataFrame if needed
-        if isinstance(X, np.ndarray):
-            X_df = pd.DataFrame(X)
-        else:
-            X_df = X
+        X_df = pd.DataFrame(X) if isinstance(X, np.ndarray) else X
 
         # Create DataFrame for regime detection
         # This is a simplification - in practice, need original OHLCV
@@ -736,7 +733,7 @@ class RegimeAwareTrainer:
 
         # Group by model
         model_metrics: dict[str, list[RegimeModelResult]] = {}
-        for (model_name, regime), result in results.items():
+        for (model_name, _regime), result in results.items():
             if model_name not in model_metrics:
                 model_metrics[model_name] = []
             model_metrics[model_name].append(result)
@@ -766,7 +763,7 @@ class RegimeAwareTrainer:
             r.val_accuracy * r.n_samples / total_samples for r in all_results
         )
         aggregated["n_models_trained"] = len(results)
-        aggregated["n_regimes"] = len(set(r.regime for r in all_results))
+        aggregated["n_regimes"] = len({r.regime for r in all_results})
 
         return aggregated
 

@@ -470,7 +470,7 @@ class DSTHandler:
 
         spring, fall = self.get_dst_transition_dates(dt.year)
 
-        return dt == spring or dt == fall
+        return dt in (spring, fall)
 
     def adjust_session_times_for_dst(
         self, base_start_utc: tuple[int, int], base_end_utc: tuple[int, int], dt: datetime

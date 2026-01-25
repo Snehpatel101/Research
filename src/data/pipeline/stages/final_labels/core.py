@@ -166,10 +166,7 @@ def compute_quality_scores(
                 pain = max(mfe[i], 0)
                 gain = abs(mae[i])
 
-            if gain > 1e-6:
-                pain_ratio = pain / gain
-            else:
-                pain_ratio = MAX_PAIN_RATIO
+            pain_ratio = pain / gain if gain > 1e-06 else MAX_PAIN_RATIO
 
             pain_ratio = min(pain_ratio, MAX_PAIN_RATIO)
             time_weighted_dd[i] = time_fraction * pain_ratio

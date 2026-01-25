@@ -15,7 +15,7 @@ from src.data.pipeline.utils.constants import LABEL_PREFIXES, METADATA_COLUMNS
 def _mtf_suffixes() -> list[str]:
     """Generate MTF column suffixes from canonical timeframe definitions."""
     suffixes = set()
-    for tf in TIMEFRAME_TO_MINUTES.keys():
+    for tf in TIMEFRAME_TO_MINUTES:
         if tf.endswith("min"):
             minutes = tf.replace("min", "")
             suffixes.add(f"_{minutes}m")

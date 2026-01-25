@@ -400,7 +400,7 @@ class DriftAlertAggregator:
             "features": features,
             "n_features_affected": len(features),
             "max_severity": max_sev.severity.value,
-            "drift_types": list(set(a.drift_type.value for a in self._alerts)),
+            "drift_types": list({a.drift_type.value for a in self._alerts}),
         }
 
     def reset(self) -> None:

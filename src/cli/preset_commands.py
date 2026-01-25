@@ -92,7 +92,7 @@ def _show_preset_details(preset_name: str, presets_mod, verbose: bool) -> None:
         config = presets_mod.get_preset(preset_name)
     except ValueError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Header
     console.print(

@@ -102,10 +102,7 @@ def setup_environment(
     elif is_colab_runtime:
         drive_repo = Path("/content/drive/MyDrive/research")
         content_repo = Path("/content/research")
-        if drive_repo.exists():
-            resolved_root = drive_repo
-        else:
-            resolved_root = content_repo
+        resolved_root = drive_repo if drive_repo.exists() else content_repo
     else:
         resolved_root = _git_repo_root(Path.cwd()) or Path.cwd()
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from src.core.exceptions import StageValidationError
+from src.data.pipeline.stage_registry import StageName
 
 logger = logging.getLogger(__name__)
 
@@ -37,49 +38,71 @@ class StageSchema:
 
 
 # Stage schemas for common pipeline stages
+# Uses StageName enum values for type safety (Phase 12.5G)
 STAGE_SCHEMAS: dict[str, StageSchema] = {
-    "data_generation": StageSchema(
+    StageName.DATA_GENERATION.value: StageSchema(
         required_columns=["datetime", "open", "high", "low", "close", "volume"],
         min_rows=100,
         description="Raw OHLCV data from data generation",
     ),
-    "data_cleaning": StageSchema(
+    StageName.DATA_CLEANING.value: StageSchema(
         required_columns=["datetime", "open", "high", "low", "close", "volume"],
         min_rows=1000,
         description="Cleaned OHLCV data with outliers removed",
     ),
-    "feature_engineering": StageSchema(
+    StageName.FEATURE_ENGINEERING.value: StageSchema(
         required_columns=["datetime"],  # Dynamic based on features
         min_rows=500,
         max_nan_ratio=0.01,
         description="Feature-engineered data with NaN columns cleaned",
     ),
-    "initial_labeling": StageSchema(
+    StageName.INITIAL_LABELING.value: StageSchema(
         required_columns=["datetime"],
         min_rows=500,
         description="Data with initial labels applied",
     ),
-    "final_labels": StageSchema(
+    StageName.GA_OPTIMIZE.value: StageSchema(
+        required_columns=["datetime"],
+        min_rows=100,
+        description="Data with GA-optimized labeling parameters (profit/loss thresholds)",
+    ),
+    StageName.FINAL_LABELS.value: StageSchema(
         required_columns=["datetime"],
         min_rows=100,
         description="Data with final optimized labels",
     ),
-    "create_splits": StageSchema(
+    StageName.CREATE_SPLITS.value: StageSchema(
         required_columns=["datetime"],
         min_rows=50,
         description="Data split into train/val/test",
     ),
-    "feature_scaling": StageSchema(
+    StageName.FEATURE_SCALING.value: StageSchema(
         required_columns=["datetime"],
         min_rows=50,
         max_nan_ratio=0.0,  # No NaNs allowed after scaling
         description="Scaled features ready for training",
     ),
-    "build_datasets": StageSchema(
+    StageName.BUILD_DATASETS.value: StageSchema(
         required_columns=["datetime"],
         min_rows=50,
         max_nan_ratio=0.0,
         description="Final datasets built for training",
+    ),
+    StageName.VALIDATE_SCALED.value: StageSchema(
+        required_columns=["datetime"],
+        min_rows=50,
+        max_nan_ratio=0.0,  # No NaNs allowed in scaled data
+        description="Validation of scaled data before training",
+    ),
+    StageName.VALIDATE.value: StageSchema(
+        required_columns=["datetime"],
+        min_rows=50,
+        description="General data validation stage",
+    ),
+    StageName.GENERATE_REPORT.value: StageSchema(
+        required_columns=[],  # Report generation may not produce DataFrames
+        min_rows=0,
+        description="Pipeline report generation (metadata/statistics)",
     ),
 }
 
@@ -165,6 +188,7 @@ def register_stage_schema(stage_name: str, schema: StageSchema) -> None:
 
 
 __all__ = [
+    "StageName",
     "StageSchema",
     "StageValidationError",
     "STAGE_SCHEMAS",

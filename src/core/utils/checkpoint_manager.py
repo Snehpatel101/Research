@@ -70,7 +70,7 @@ class CheckpointManager:
 
                 self.wandb = wandb
             except ImportError:
-                warnings.warn("W&B not installed. Install with: pip install wandb")
+                warnings.warn("W&B not installed. Install with: pip install wandb", stacklevel=2)
                 self.wandb_project = None
 
     def init_wandb_run(

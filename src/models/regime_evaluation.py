@@ -152,19 +152,19 @@ class RegimeEvaluationResult:
         rows = []
 
         # Add volatility regimes
-        for regime, metrics in self.volatility_breakdown.items():
+        for _regime, metrics in self.volatility_breakdown.items():
             row = metrics.to_dict()
             row["regime_type"] = "volatility"
             rows.append(row)
 
         # Add trend regimes
-        for regime, metrics in self.trend_breakdown.items():
+        for _regime, metrics in self.trend_breakdown.items():
             row = metrics.to_dict()
             row["regime_type"] = "trend"
             rows.append(row)
 
         # Add time-of-day regimes
-        for regime, metrics in self.time_of_day_breakdown.items():
+        for _regime, metrics in self.time_of_day_breakdown.items():
             row = metrics.to_dict()
             row["regime_type"] = "time_of_day"
             rows.append(row)

@@ -272,10 +272,7 @@ class PipelineRunner:
 
     def _check_dependencies(self, stage: PipelineStage) -> bool:
         """Check if all dependencies for a stage are completed."""
-        for dep in stage.dependencies:
-            if dep not in self.completed_stages:
-                return False
-        return True
+        return all(dep in self.completed_stages for dep in stage.dependencies)
 
     def _save_state(self) -> None:
         """Save current pipeline state."""

@@ -209,10 +209,7 @@ def _bca_interval(
     num = np.sum((jack_mean - valid_jack) ** 3)
     denom = 6 * (np.sum((jack_mean - valid_jack) ** 2) ** 1.5)
 
-    if denom == 0:
-        a = 0.0
-    else:
-        a = num / denom
+    a = 0.0 if denom == 0 else num / denom
 
     # BCa percentiles
     z_alpha_lower = stats.norm.ppf(alpha / 2)

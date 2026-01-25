@@ -458,4 +458,4 @@ def get_features_by_model(model_family: str) -> list[str]:
 
 def get_feature_families() -> list[str]:
     """Get list of all feature families."""
-    return list(set(defn.family for defn in FEATURE_REGISTRY.values()))
+    return list({defn.family for defn in FEATURE_REGISTRY.values()})

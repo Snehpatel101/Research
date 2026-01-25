@@ -306,30 +306,43 @@ def run_feature_scaling(config: "PipelineConfig", manifest: "ArtifactManifest") 
             all_artifacts.extend(artifacts)
             all_metadata[tf] = scaling_metadata
 
-        # Copy scaled data to global location for training script compatibility
-        # Pipeline outputs to runs/{run_id}/data/splits/scaled/
-        # Training scripts default to data/splits/scaled/
-        # For multi-TF mode, copy the target_timeframe's data to maintain backward compat
-        if config.project_root is None:
-            raise ValueError("project_root is required for scaling stage")
-        global_scaled_dir = config.project_root / "data" / "splits" / "scaled"
-        global_scaled_dir.mkdir(parents=True, exist_ok=True)
-
-        # In single-TF mode, copy directly; in multi-TF mode, copy target_timeframe
+        # Phase 12.5E: Conditional copy to global location
+        # Only copy if explicitly enabled to prevent run isolation issues
+        # and avoid data corruption in parallel runs
         primary_tf = config.target_timeframe
-        if is_multi_tf:
-            src_scaled_dir = config.splits_dir / primary_tf / "scaled"
+
+        if getattr(config, "copy_scaled_to_global", False):
+            # Copy scaled data to global location for training script compatibility
+            # Pipeline outputs to runs/{run_id}/data/splits/scaled/
+            # Training scripts default to data/splits/scaled/
+            if config.project_root is None:
+                raise ValueError("project_root is required for scaling stage")
+            global_scaled_dir = config.project_root / "data" / "splits" / "scaled"
+            global_scaled_dir.mkdir(parents=True, exist_ok=True)
+
+            # In single-TF mode, copy directly; in multi-TF mode, copy target_timeframe
+            if is_multi_tf:
+                src_scaled_dir = config.splits_dir / primary_tf / "scaled"
+            else:
+                src_scaled_dir = config.splits_dir / "scaled"
+
+            logger.warning(
+                "\n⚠️  Copying scaled data to GLOBAL location (copy_scaled_to_global=True)"
+            )
+            logger.warning("    This breaks run isolation! Use run-specific paths in production.")
+            logger.info(f"    Source (primary TF={primary_tf}): {src_scaled_dir}")
+            logger.info(f"    Destination: {global_scaled_dir}")
+
+            for src_file in src_scaled_dir.glob("*"):
+                if src_file.is_file():
+                    dst_file = global_scaled_dir / src_file.name
+                    shutil.copy2(src_file, dst_file)
+                    logger.info(f"  Copied: {src_file.name}")
         else:
-            src_scaled_dir = config.splits_dir / "scaled"
-
-        logger.info(f"\nCopying scaled data to global location: {global_scaled_dir}")
-        logger.info(f"Source (primary TF={primary_tf}): {src_scaled_dir}")
-
-        for src_file in src_scaled_dir.glob("*"):
-            if src_file.is_file():
-                dst_file = global_scaled_dir / src_file.name
-                shutil.copy2(src_file, dst_file)
-                logger.info(f"  Copied: {src_file.name}")
+            logger.info(
+                "\n✓ Scaled data remains in run-specific location (run isolation preserved)"
+            )
+            logger.info(f"  Use --copy-scaled-to-global to enable global copy")
 
         logger.info("\n" + "=" * 70)
         logger.info("STAGE 7.5 COMPLETE: Feature Scaling")

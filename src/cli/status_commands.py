@@ -60,14 +60,14 @@ def status_command(
     # Check if run exists
     if not run_dir.exists():
         show_error(f"Run not found: {run_id}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Load configuration
     try:
         config = pipeline_config.PipelineConfig.load_from_run_id(run_id, project_path)
     except FileNotFoundError:
         show_error("Configuration not found for this run")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Display basic info
     info_table = Table(show_header=False, box=None)
@@ -226,7 +226,7 @@ def validate_command(
             show_info(f"Validating configuration for run: {run_id}")
         except FileNotFoundError:
             show_error(f"Run not found: {run_id}")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     else:
         symbol_list = [s.strip().upper() for s in symbols.split(",")]
         config = pipeline_config.create_default_config(
@@ -244,7 +244,7 @@ def validate_command(
         for issue in issues:
             console.print(f"  • [red]{issue}[/red]")
         console.print()
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     else:
         show_success("Configuration is valid")
         console.print()
@@ -409,7 +409,7 @@ def compare_command(
 
     except Exception as e:
         show_error(f"Comparison failed: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 def clean_command(
@@ -429,19 +429,18 @@ def clean_command(
 
     if not run_dir.exists():
         show_error(f"Run not found: {run_id}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     console.print(f"\n[bold yellow]⚠ Warning:[/bold yellow] This will delete run: {run_id}")
     console.print(f"Location: {run_dir}\n")
 
-    if not force:
-        if not typer.confirm("Are you sure you want to delete this run?"):
-            show_warning("Deletion cancelled")
-            return
+    if not force and not typer.confirm("Are you sure you want to delete this run?"):
+        show_warning("Deletion cancelled")
+        return
 
     try:
         shutil.rmtree(run_dir)
         show_success(f"Deleted run: {run_id}")
     except Exception as e:
         show_error(f"Failed to delete run: {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None

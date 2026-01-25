@@ -112,10 +112,7 @@ class GatedResidualNetwork(nn.Module):
             Output tensor, shape (..., output_dim)
         """
         # Skip connection
-        if self.skip_proj is not None:
-            skip = self.skip_proj(x)
-        else:
-            skip = x
+        skip = self.skip_proj(x) if self.skip_proj is not None else x
 
         # First layer
         hidden = self.fc1(x)

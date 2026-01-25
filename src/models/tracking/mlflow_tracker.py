@@ -176,7 +176,7 @@ class MLflowTracker(ExperimentTracker):
                 str_value = str(value)
             elif hasattr(value, "tolist"):  # numpy arrays
                 str_value = str(value.tolist())[:500]
-            elif isinstance(value, dict) or isinstance(value, list):
+            elif isinstance(value, (dict, list)):
                 str_value = str(value)[:500]
             else:
                 str_value = str(value)[:500] if value is not None else "None"

@@ -156,11 +156,10 @@ class PreparedData:
                 )
 
         # Check weights length if present
-        if self.train_weights is not None:
-            if len(self.train_weights) != self.n_train:
-                issues.append(
-                    f"Train weights length mismatch: {len(self.train_weights)} vs {self.n_train}"
-                )
+        if self.train_weights is not None and len(self.train_weights) != self.n_train:
+            issues.append(
+                f"Train weights length mismatch: {len(self.train_weights)} vs {self.n_train}"
+            )
 
         # Check for NaN/Inf
         for name, arr in [("X_train", self.X_train), ("X_val", self.X_val)]:

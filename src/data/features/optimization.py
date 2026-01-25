@@ -106,7 +106,7 @@ def optimize_features_for_model(
     def objective(trial: optuna.Trial) -> float:
         # Select features using boolean flags for each feature
         selected_indices = []
-        for i, feat in enumerate(available_features):
+        for i, _feat in enumerate(available_features):
             if trial.suggest_categorical(f"include_{i}", [True, False]):
                 selected_indices.append(i)
 

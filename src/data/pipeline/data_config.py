@@ -194,6 +194,12 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
         default_factory=lambda: _get_global_or_default("processing.allow_batch_symbols", False)
     )
 
+    # Phase 12.5E: Global state mutation prevention
+    # When True, copies scaled data to global data/splits/scaled/ for backward compatibility.
+    # Disabled by default to ensure run isolation and prevent parallel run conflicts.
+    # WARNING: Enabling this can cause data corruption if multiple runs execute simultaneously.
+    copy_scaled_to_global: bool = False
+
     # Validation options (Phase 4A, 4B)
     check_leakage: bool = field(
         default_factory=lambda: _get_global_or_default("validation.check_leakage", True)

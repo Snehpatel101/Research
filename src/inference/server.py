@@ -88,7 +88,9 @@ try:
 except ImportError:
     PYDANTIC_AVAILABLE = False
     BaseModel = object
-    Field = lambda *args, **kwargs: None
+
+    def Field(*args, **kwargs):
+        return None
 
 
 class PredictionRequest(BaseModel if PYDANTIC_AVAILABLE else object):  # type: ignore[misc]

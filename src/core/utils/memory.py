@@ -468,7 +468,7 @@ class CacheManager:
             Number of entries removed
         """
         with self._lock:
-            keys_to_remove = [k for k in self._cache.keys() if k.startswith(prefix)]
+            keys_to_remove = [k for k in self._cache if k.startswith(prefix)]
             for key in keys_to_remove:
                 self._remove_entry(key)
             return len(keys_to_remove)

@@ -377,13 +377,12 @@ def validate_numeric_bounds(
                             message=f"Value {item} outside typical range [{min_val}, {max_val}]",
                             value=item,
                         )
-        elif isinstance(value, (int, float)):
-            if value < min_val or value > max_val:
-                result.add_warning(
-                    field=path,
-                    message=f"Value {value} outside typical range [{min_val}, {max_val}]",
-                    value=value,
-                )
+        elif isinstance(value, (int, float)) and (value < min_val or value > max_val):
+            result.add_warning(
+                field=path,
+                message=f"Value {value} outside typical range [{min_val}, {max_val}]",
+                value=value,
+            )
 
     return result
 
@@ -787,7 +786,7 @@ def coerce_types(
                     msg = f"Coerced {path}: {value} -> {coerced_value} (truncated)"
                     coercion_log.append(msg)
                     if warn_on_coercion:
-                        warnings.warn(msg, UserWarning)
+                        warnings.warn(msg, UserWarning, stacklevel=2)
                 parent[final_key] = coerced_value
 
             elif expected_type == float and isinstance(value, int):

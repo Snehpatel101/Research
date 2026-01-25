@@ -143,10 +143,7 @@ def run_create_splits(config: "PipelineConfig", manifest: "ArtifactManifest") ->
             )
 
             # Create per-timeframe splits directory for multi-TF mode
-            if is_multi_tf:
-                tf_splits_dir = config.splits_dir / tf
-            else:
-                tf_splits_dir = config.splits_dir
+            tf_splits_dir = config.splits_dir / tf if is_multi_tf else config.splits_dir
 
             tf_splits_dir.mkdir(parents=True, exist_ok=True)
 

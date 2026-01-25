@@ -308,10 +308,7 @@ class BaseAdapter(ABC):
             col_lower = col.lower()
             if col_lower in exclude_exact:
                 return False
-            for prefix in exclude_prefixes:
-                if col_lower.startswith(prefix):
-                    return False
-            return True
+            return all(not col_lower.startswith(prefix) for prefix in exclude_prefixes)
 
         return [col for col in df.columns if is_feature_col(col)]
 
@@ -401,7 +398,6 @@ class BaseAdapter(ABC):
         )
 
         # Read in chunks and concatenate
-        chunks = []
         parquet_file = pd.read_parquet(file_path, engine="pyarrow")
 
         # If file is already loaded, just return it

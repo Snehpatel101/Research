@@ -331,7 +331,7 @@ def _compute_features_on_resampled(
         except Exception as e:
             import warnings
 
-            warnings.warn(f"Error computing {feature_name}: {e}")
+            warnings.warn(f"Error computing {feature_name}: {e}", stacklevel=2)
             results[feature_name] = pd.Series(np.nan, index=resampled_df.index)
 
     return pd.DataFrame(results, index=resampled_df.index)
@@ -438,7 +438,7 @@ class MTFFeatureComputer:
             if len(resampled) == 0:
                 import warnings
 
-                warnings.warn(f"No data after resampling to {timeframe}, skipping")
+                warnings.warn(f"No data after resampling to {timeframe}, skipping", stacklevel=2)
                 continue
 
             # 2. Compute features on resampled data
@@ -489,10 +489,7 @@ class MTFFeatureComputer:
             self.config.timeframes = [timeframe]
 
         # Set up working DataFrame with datetime index
-        if datetime_col is not None:
-            df_work = df.set_index(datetime_col)
-        else:
-            df_work = df.copy()
+        df_work = df.set_index(datetime_col) if datetime_col is not None else df.copy()
 
         if not isinstance(df_work.index, pd.DatetimeIndex):
             raise ValueError(

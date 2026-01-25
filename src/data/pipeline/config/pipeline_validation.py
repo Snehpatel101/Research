@@ -139,7 +139,7 @@ def validate_feature_toggles(toggles: dict[str, bool] | None) -> list[str]:
         return []
     valid_keys = {"wavelets", "microstructure", "volume", "volatility"}
     issues = []
-    for key in toggles.keys():
+    for key in toggles:
         if key not in valid_keys:
             issues.append(f"Unknown feature toggle key: '{key}'. Valid keys: {valid_keys}")
     return issues

@@ -322,10 +322,7 @@ class SequenceAdapter(BaseAdapter):
         original_indices = np.concatenate(indices_list, axis=0)
 
         # Concatenate weights if available
-        if weights_list:
-            weights = np.concatenate(weights_list, axis=0)
-        else:
-            weights = None
+        weights = np.concatenate(weights_list, axis=0) if weights_list else None
 
         logger.debug(f"Total sequences: {X.shape[0]} across {len(symbols)} symbol(s)")
 

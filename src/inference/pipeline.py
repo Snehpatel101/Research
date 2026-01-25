@@ -345,10 +345,7 @@ class InferencePipeline:
     ) -> PredictionResult:
         """Average probabilities across models."""
         weights_list: list[float]
-        if weights is None:
-            weights_list = [1.0] * len(results)
-        else:
-            weights_list = weights
+        weights_list = [1.0] * len(results) if weights is None else weights
 
         # Normalize weights
         weights_array: np.ndarray = np.array(weights_list) / sum(weights_list)

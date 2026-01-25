@@ -6,6 +6,34 @@ Defines the PipelineStage dataclass and provides stage registration utilities.
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import Enum
+
+
+class StageName(str, Enum):
+    """
+    Canonical stage names for the pipeline.
+
+    Phase 12.5G: Replaces magic strings with type-safe enum values.
+    Using str as base allows direct string comparison while providing type safety.
+
+    Usage:
+        stage_name = StageName.FEATURE_ENGINEERING
+        if stage_name == "feature_engineering":  # Works due to str inheritance
+            ...
+    """
+
+    DATA_GENERATION = "data_generation"
+    DATA_CLEANING = "data_cleaning"
+    FEATURE_ENGINEERING = "feature_engineering"
+    INITIAL_LABELING = "initial_labeling"
+    GA_OPTIMIZE = "ga_optimize"
+    FINAL_LABELS = "final_labels"
+    CREATE_SPLITS = "create_splits"
+    FEATURE_SCALING = "feature_scaling"
+    BUILD_DATASETS = "build_datasets"
+    VALIDATE_SCALED = "validate_scaled"
+    VALIDATE = "validate"
+    GENERATE_REPORT = "generate_report"
 
 
 @dataclass
@@ -55,85 +83,85 @@ def get_stage_definitions() -> list[dict]:
     """
     return [
         {
-            "name": "data_generation",
+            "name": StageName.DATA_GENERATION.value,
             "dependencies": [],
             "description": "Stage 1: Generate or validate raw data files",
             "required": True,
             "stage_number": 1,
         },
         {
-            "name": "data_cleaning",
-            "dependencies": ["data_generation"],
+            "name": StageName.DATA_CLEANING.value,
+            "dependencies": [StageName.DATA_GENERATION.value],
             "description": "Stage 2: Clean and resample OHLCV data",
             "required": True,
             "stage_number": 2,
         },
         {
-            "name": "feature_engineering",
-            "dependencies": ["data_cleaning"],
+            "name": StageName.FEATURE_ENGINEERING.value,
+            "dependencies": [StageName.DATA_CLEANING.value],
             "description": "Stage 3: Generate technical features",
             "required": True,
             "stage_number": 3,
         },
         {
-            "name": "initial_labeling",
-            "dependencies": ["feature_engineering"],
+            "name": StageName.INITIAL_LABELING.value,
+            "dependencies": [StageName.FEATURE_ENGINEERING.value],
             "description": "Stage 4: Apply initial triple-barrier labeling",
             "required": True,
             "stage_number": 4,
         },
         {
-            "name": "ga_optimize",
-            "dependencies": ["initial_labeling"],
+            "name": StageName.GA_OPTIMIZE.value,
+            "dependencies": [StageName.INITIAL_LABELING.value],
             "description": "Stage 5: GA optimization of barrier parameters",
             "required": True,
             "stage_number": 5,
         },
         {
-            "name": "final_labels",
-            "dependencies": ["ga_optimize"],
+            "name": StageName.FINAL_LABELS.value,
+            "dependencies": [StageName.GA_OPTIMIZE.value],
             "description": "Stage 6: Apply optimized labels with quality scores",
             "required": True,
             "stage_number": 6,
         },
         {
-            "name": "create_splits",
-            "dependencies": ["final_labels"],
+            "name": StageName.CREATE_SPLITS.value,
+            "dependencies": [StageName.FINAL_LABELS.value],
             "description": "Stage 7: Create train/val/test splits",
             "required": True,
             "stage_number": 7,
         },
         {
-            "name": "feature_scaling",
-            "dependencies": ["create_splits"],
+            "name": StageName.FEATURE_SCALING.value,
+            "dependencies": [StageName.CREATE_SPLITS.value],
             "description": "Stage 7.5: Train-only feature scaling",
             "required": True,
             "stage_number": 7.5,
         },
         {
-            "name": "build_datasets",
-            "dependencies": ["feature_scaling"],
+            "name": StageName.BUILD_DATASETS.value,
+            "dependencies": [StageName.FEATURE_SCALING.value],
             "description": "Stage 7.6: Build dataset splits and manifests",
             "required": True,
             "stage_number": 7.6,
         },
         {
-            "name": "validate_scaled",
-            "dependencies": ["build_datasets"],
+            "name": StageName.VALIDATE_SCALED.value,
+            "dependencies": [StageName.BUILD_DATASETS.value],
             "description": "Stage 7.7: Post-scale drift validation",
             "required": True,
             "stage_number": 7.7,
         },
         {
-            "name": "validate",
-            "dependencies": ["validate_scaled"],
+            "name": StageName.VALIDATE.value,
+            "dependencies": [StageName.VALIDATE_SCALED.value],
             "description": "Stage 8: Comprehensive data validation",
             "required": True,
             "stage_number": 8,
         },
         {
-            "name": "generate_report",
-            "dependencies": ["validate"],
+            "name": StageName.GENERATE_REPORT.value,
+            "dependencies": [StageName.VALIDATE.value],
             "description": "Stage 9: Generate completion report",
             "required": True,
             "stage_number": 9,

@@ -64,7 +64,7 @@ def plot_convergence(results: dict, output_path: Path) -> None:
         ax2.grid(True, alpha=0.3, axis="y")
 
         # Add percentage labels on bars
-        for i, (label, pct) in enumerate(zip(labels, sizes, strict=False)):
+        for i, (_label, pct) in enumerate(zip(labels, sizes, strict=False)):
             ax2.text(i, pct + 1, f"{pct:.1f}%", ha="center", va="bottom", fontweight="bold")
 
     plt.tight_layout()

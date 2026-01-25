@@ -140,10 +140,7 @@ def compute_bet_size_labels(
     correct = (y_actual == y_pred_primary).astype(float)
 
     # Apply quality weights if provided
-    if quality_weights is not None:
-        bet_size = correct * quality_weights
-    else:
-        bet_size = correct
+    bet_size = correct * quality_weights if quality_weights is not None else correct
 
     return np.asarray(np.clip(bet_size, 0.0, 1.0))
 

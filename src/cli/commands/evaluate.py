@@ -101,7 +101,7 @@ def run_cv(
 
     # Validate data directory exists
     if not validate_data_dir(data_dir):
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Import CV modules
     from src.core.container import TimeSeriesDataContainer
@@ -177,7 +177,7 @@ def run_cv(
 
     if not all_results:
         show_error("No CV results generated. Check errors above.")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Analyze stability
     console.print("\n" + "=" * 60)
@@ -445,7 +445,7 @@ def run_walk_forward(
 
     # Validate data directory
     if not validate_data_dir(data_dir):
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -749,7 +749,7 @@ def run_cpcv_pbo(
 
     # Validate data directory
     if not validate_data_dir(data_dir):
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -883,7 +883,7 @@ def run_cpcv_pbo(
         any_blocked = any(r["should_block"] for r in all_results)
         if any_blocked:
             show_warning("Some horizons have PBO > block threshold!")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
     else:
         show_warning("No results generated")
 

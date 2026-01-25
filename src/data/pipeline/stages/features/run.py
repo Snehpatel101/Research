@@ -276,9 +276,21 @@ def run_feature_engineering(
             for symbol, tf in tasks
         )
 
-        # Collect results
+        # Collect results and track failures
         artifacts: list[Path] = []
         feature_metadata: dict[str, dict[str, Any]] = {}
+
+        # Track failed tasks (where result is None)
+        failed_tasks = [(task, result) for task, result in zip(tasks, results) if result is None]
+
+        if failed_tasks:
+            failed_symbols = [f"{symbol}_{tf}" for (symbol, tf), _ in failed_tasks]
+            logger.error(
+                f"Feature engineering failed for {len(failed_tasks)} tasks: {failed_symbols}"
+            )
+            # Log each failure for debugging
+            for (symbol, tf), _ in failed_tasks:
+                logger.error(f"  - FAILED: {symbol}@{tf}")
 
         for result in results:
             if result is None:

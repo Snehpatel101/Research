@@ -750,9 +750,9 @@ def get_combined_requirements(model_names: list[str]) -> dict[str, Any]:
     requirements = [get_model_requirements(m) for m in model_names]
 
     return {
-        "feature_sets": set(r.feature_set for r in requirements),
+        "feature_sets": {r.feature_set for r in requirements},
         "requires_scaling": any(r.requires_scaling for r in requirements),
-        "scaler_types": set(r.scaler_type for r in requirements if r.requires_scaling),
+        "scaler_types": {r.scaler_type for r in requirements if r.requires_scaling},
         "requires_sequences": any(r.requires_sequences for r in requirements),
         "max_sequence_length": max(
             (r.sequence_length for r in requirements if r.requires_sequences), default=0

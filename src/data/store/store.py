@@ -225,11 +225,7 @@ class FeatureStore:
 
         # Check cache for any entry matching feature_set/symbol/version
         entries = self._cache.list_entries(feature_set)
-        for entry in entries:
-            if entry.symbol == symbol and entry.version == version:
-                return True
-
-        return False
+        return any(entry.symbol == symbol and entry.version == version for entry in entries)
 
     def get_features(
         self,

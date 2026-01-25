@@ -230,11 +230,10 @@ class RecallOptimizer:
             )
 
             # Check if meets recall target
-            if recall >= self.recall_target:
-                if precision > best_precision:
-                    best_precision = precision
-                    best_threshold = threshold
-                    best_recall = recall
+            if recall >= self.recall_target and precision > best_precision:
+                best_precision = precision
+                best_threshold = threshold
+                best_recall = recall
 
         # Validate we found a valid threshold
         if best_recall < self.recall_target:

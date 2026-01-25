@@ -256,7 +256,7 @@ def show_status(
         show_error(f"Run ID '{run_id}' not found at {state_path}")
         console.print("\n[dim]Pipeline state file not found. The run may not exist or ")
         console.print("may have been created with a different project root.[/dim]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     try:
         with open(state_path) as f:

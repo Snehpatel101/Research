@@ -228,10 +228,7 @@ def check_feature_label_correlation(
         is_suspicious = abs_corr >= correlation_threshold and p_val < p_value_threshold
 
         # Leakage score: combines correlation magnitude and significance
-        if p_val < p_value_threshold:
-            leakage_score = abs_corr
-        else:
-            leakage_score = 0.0
+        leakage_score = abs_corr if p_val < p_value_threshold else 0.0
 
         results.append(
             LeakageCheckResult(

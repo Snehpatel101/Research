@@ -360,9 +360,8 @@ def apply_preset_to_config(
 
     # Apply mapped keys
     for preset_key, config_key in key_mapping.items():
-        if preset_key in preset_config:
-            if override_conflicts or config_key not in result:
-                result[config_key] = preset_config[preset_key]
+        if preset_key in preset_config and (override_conflicts or config_key not in result):
+            result[config_key] = preset_config[preset_key]
 
     # Sync bar_resolution with target_timeframe (backward compatibility)
     if "target_timeframe" in result:

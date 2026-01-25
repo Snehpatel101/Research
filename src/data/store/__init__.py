@@ -83,6 +83,17 @@ The feature store integrates with the existing feature engineering pipeline:
 
 # Main store class
 # Cache components
+# Import exceptions from core (consolidated in Phase 12F)
+from src.core.exceptions import (
+    FeatureIntegrityError,
+    FeatureNotFoundError,
+    FeatureStoreError,
+    InvalidSplitError,
+    InvalidTimeframeError,
+    RawMTFStoreError,
+    TimeframeNotFoundError,
+)
+
 from .cache import (
     CacheMetadata,
     FeatureCache,
@@ -112,17 +123,6 @@ from .raw_mtf_store import (
     load_all_timeframes,
     load_raw_mtf,
     save_raw_mtf,
-)
-
-# Import exceptions from core (consolidated in Phase 12F)
-from src.core.exceptions import (
-    FeatureIntegrityError,
-    FeatureNotFoundError,
-    FeatureStoreError,
-    InvalidSplitError,
-    InvalidTimeframeError,
-    RawMTFStoreError,
-    TimeframeNotFoundError,
 )
 from .store import FeatureStore
 

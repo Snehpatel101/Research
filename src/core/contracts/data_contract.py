@@ -296,11 +296,10 @@ class DataContract:
                 )
 
         # Validate y if provided
-        if y is not None:
-            if y.shape[0] != X.shape[0]:
-                issues.append(
-                    f"Label count mismatch: X has {X.shape[0]} samples, " f"y has {y.shape[0]}"
-                )
+        if y is not None and y.shape[0] != X.shape[0]:
+            issues.append(
+                f"Label count mismatch: X has {X.shape[0]} samples, " f"y has {y.shape[0]}"
+            )
 
         return len(issues) == 0, issues
 

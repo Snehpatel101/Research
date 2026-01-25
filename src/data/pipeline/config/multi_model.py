@@ -320,12 +320,11 @@ def validate_multi_model_setup(model_names: list[str]) -> list[str]:
             if req.requires_sequences:
                 seq_lengths.append(req.sequence_length)
 
-    if seq_lengths:
-        if max(seq_lengths) > 2 * min(seq_lengths):
-            warnings.append(
-                f"Wide range of sequence lengths: {min(seq_lengths)} to {max(seq_lengths)}. "
-                f"Using max ({max(seq_lengths)}) may include unnecessary padding for shorter models."
-            )
+    if seq_lengths and max(seq_lengths) > 2 * min(seq_lengths):
+        warnings.append(
+            f"Wide range of sequence lengths: {min(seq_lengths)} to {max(seq_lengths)}. "
+            f"Using max ({max(seq_lengths)}) may include unnecessary padding for shorter models."
+        )
 
     return warnings
 

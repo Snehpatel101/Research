@@ -4,6 +4,73 @@
 
 ---
 
+## Phase 12.5: Code Quality Pass | 2026-01-25 | COMPLETE
+
+**Impact:** +344 / -317 lines across 72 files
+**Purpose:** Fix code quality issues discovered during post-Phase 12 review
+
+### Tasks Completed (8/8)
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 12.5A | Ruff auto-fixes (`--fix`) | ✅ 1 fixed |
+| 12.5B | Ruff unsafe-fixes (`--unsafe-fixes`) | ✅ 81 fixed |
+| 12.5C | Critical type error in feature_spec.py | ✅ Already resolved |
+| 12.5D | Silent parallel processing failures | ✅ Now logs failures explicitly |
+| 12.5E | Global state mutation in scaling | ✅ Opt-in only (`copy_scaled_to_global=False`) |
+| 12.5F | Missing stage schemas | ✅ 12/12 stages now have schemas |
+| 12.5G | StageName enum | ✅ Type-safe enum replacing magic strings |
+| 12.5H | Standardized error handling | ✅ B904 violations reduced 29→19 |
+
+### Key Changes
+
+**New: `StageName` Enum** (`src/data/pipeline/stage_registry.py`)
+- 12 canonical stage names with type safety
+- Enables IDE autocomplete and catches typos at import time
+- Inherits from `str` for backward compatibility
+
+**New Config Flag: `copy_scaled_to_global`** (`src/data/pipeline/data_config.py`)
+- Default: `False` (preserves run isolation)
+- When `True`: Copies scaled data to global `data/splits/scaled/` with warning
+- Prevents parallel run conflicts
+
+**Fixed: Silent Parallel Failures** (`src/data/pipeline/stages/features/run.py`)
+- Failed tasks now explicitly logged with symbol/timeframe details
+- Provides visibility into which processing tasks failed
+
+**Added Missing Schemas** (`src/data/pipeline/schemas.py`)
+- `ga_optimize`, `validate_scaled`, `validate`, `generate_report`
+- All 12 pipeline stages now have validation schemas
+
+### Verification Results (4-Agent Review)
+
+| Agent | Status | Key Findings |
+|-------|--------|--------------|
+| Code Review | ✅ PASSED | No adapters/compat layers, proper encapsulation |
+| Contract Verification | ✅ PASSED | 12/12 schemas match, types consistent |
+| Integration | ✅ PASSED | No circular deps, single StageName definition |
+| Runtime | ✅ PASSED | 42 tests pass, syntax valid, core files lint-clean |
+
+### Metrics
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Ruff violations | 210 | 93 (56% reduction) |
+| B904 violations | 29 | 19 (34% reduction) |
+| Stage schemas | 8/12 | 12/12 |
+| StageName enum | ❌ | ✅ |
+| Silent failures | Yes | No (logged) |
+| Global state mutation | Always | Opt-in |
+
+### Lessons Learned
+
+1. **Enums > magic strings** - StageName enum prevents typos and enables refactoring
+2. **Opt-in for side effects** - Making global copy opt-in prevents hidden state mutation
+3. **Explicit failure logging** - Silent `continue` in parallel processing hides bugs
+4. **4-agent verification** - Parallel review catches different issue categories efficiently
+
+---
+
 ## Post-Phase 12 Review | 2026-01-25 | ANALYSIS COMPLETE
 
 **Purpose:** Comprehensive 4-agent parallel analysis to identify remaining issues

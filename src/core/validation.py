@@ -329,12 +329,11 @@ def validate_ohlcv(df: pd.DataFrame, context: str = "OHLCV") -> None:
         )
 
     # Check index is datetime
-    if not isinstance(df.index, pd.DatetimeIndex):
-        if "datetime" not in df.columns:
-            raise ValidationError(
-                f"{context} must have DatetimeIndex or 'datetime' column",
-                field="index",
-            )
+    if not isinstance(df.index, pd.DatetimeIndex) and "datetime" not in df.columns:
+        raise ValidationError(
+            f"{context} must have DatetimeIndex or 'datetime' column",
+            field="index",
+        )
 
     # Check no negative values
     for col in OHLCV_COLUMNS:

@@ -94,7 +94,7 @@ FAMILY_FEATURE_MAPS: dict[str, dict[str, Callable[[pd.DataFrame], pd.Series]]] =
 FEATURE_COMPUTE_MAP: dict[str, Callable[[pd.DataFrame], pd.Series]] = {}
 
 # Build unified map from all families
-for family_name, family_map in FAMILY_FEATURE_MAPS.items():
+for _family_name, family_map in FAMILY_FEATURE_MAPS.items():
     FEATURE_COMPUTE_MAP.update(family_map)
 
 # Verify feature count
@@ -107,7 +107,8 @@ if TOTAL_FEATURES != EXPECTED_FEATURES:
 
     warnings.warn(
         f"Feature count mismatch: expected {EXPECTED_FEATURES}, got {TOTAL_FEATURES}. "
-        "This may indicate missing or extra features."
+        "This may indicate missing or extra features.",
+        stacklevel=2,
     )
 
 
@@ -220,7 +221,7 @@ def compute_features_by_family(
                 # Log error and continue with NaN
                 import warnings
 
-                warnings.warn(f"Error computing {feature_name}: {e}")
+                warnings.warn(f"Error computing {feature_name}: {e}", stacklevel=2)
                 results[feature_name] = pd.Series(float("nan"), index=df.index)
 
     if return_dataframe:
@@ -250,7 +251,7 @@ def compute_features_by_names(
         if feature_name not in FEATURE_COMPUTE_MAP:
             import warnings
 
-            warnings.warn(f"Unknown feature '{feature_name}', skipping")
+            warnings.warn(f"Unknown feature '{feature_name}', skipping", stacklevel=2)
             continue
 
         compute_fn = FEATURE_COMPUTE_MAP[feature_name]
@@ -259,7 +260,7 @@ def compute_features_by_names(
         except Exception as e:
             import warnings
 
-            warnings.warn(f"Error computing {feature_name}: {e}")
+            warnings.warn(f"Error computing {feature_name}: {e}", stacklevel=2)
             results[feature_name] = pd.Series(float("nan"), index=df.index)
 
     if return_dataframe:
@@ -319,7 +320,7 @@ def compute_all_features(
             except Exception as e:
                 import warnings
 
-                warnings.warn(f"Error computing {feature_name}: {e}")
+                warnings.warn(f"Error computing {feature_name}: {e}", stacklevel=2)
                 results[feature_name] = pd.Series(float("nan"), index=df.index)
 
     return pd.DataFrame(results, index=df.index)

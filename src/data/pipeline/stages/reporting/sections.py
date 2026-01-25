@@ -456,9 +456,8 @@ def generate_recommendations(
         poor_results = []
         for horizon, result in backtest_results.items():
             metrics = result.get("metrics", {})
-            if metrics.get("total_trades", 0) > 0:
-                if metrics.get("win_rate", 0) < 45:
-                    poor_results.append(horizon)
+            if metrics.get("total_trades", 0) > 0 and metrics.get("win_rate", 0) < 45:
+                poor_results.append(horizon)
 
         if poor_results:
             recommendations.append(

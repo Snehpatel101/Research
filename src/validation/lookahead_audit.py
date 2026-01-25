@@ -445,12 +445,11 @@ def audit_mtf_alignment(
             continue
 
         early_vals = df_mtf[col].iloc[: expected_nan_rows * 2].dropna()
-        if len(early_vals) > 1:
-            if early_vals.nunique() == 1 and len(early_vals) > 3:
-                issues.append(
-                    f"Column '{col}': Suspiciously constant early values. "
-                    f"May indicate improper forward-fill without shift."
-                )
+        if len(early_vals) > 1 and early_vals.nunique() == 1 and len(early_vals) > 3:
+            issues.append(
+                f"Column '{col}': Suspiciously constant early values. "
+                f"May indicate improper forward-fill without shift."
+            )
 
     is_valid = len(issues) == 0
     return is_valid, issues

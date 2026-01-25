@@ -110,7 +110,8 @@ def _validate_horizons_vs_data(
     data_length: int,
     symbol: str = "",
     timeframe: str = "",
-) -> None:
+    raise_on_violation: bool = False,
+) -> list[str]:
     """
     Validate that horizons are appropriate for the data length.
 
@@ -128,27 +129,50 @@ def _validate_horizons_vs_data(
         Symbol for context in log messages
     timeframe : str, optional
         Timeframe for context in log messages
+    raise_on_violation : bool, optional
+        If True, raise ValueError when validation fails. Default False for backward compat.
+
+    Returns
+    -------
+    list[str]
+        List of validation warnings (empty if all valid)
+
+    Raises
+    ------
+    ValueError
+        If raise_on_violation=True and horizons exceed recommended limits
 
     Notes
     -----
-    This function logs warnings but does not raise errors, allowing the pipeline
-    to continue with potentially problematic horizon/data combinations while
-    alerting the user to review their configuration.
+    Phase 12.5H: Added raise_on_violation parameter for stricter validation.
+    Previously only logged warnings without option to fail.
     """
+    warnings = []
+
     if data_length <= 0:
-        logger.warning(f"Invalid data_length={data_length}, skipping horizon validation")
-        return
+        msg = f"Invalid data_length={data_length}, skipping horizon validation"
+        logger.warning(msg)
+        return [msg]
 
     max_recommended = data_length // 10
     context = f" for {symbol} @ {timeframe}" if symbol and timeframe else ""
 
     for h in horizons:
         if h >= max_recommended:
-            logger.warning(
+            msg = (
                 f"Horizon {h} may be too large{context}: "
                 f"data has {data_length:,} rows, recommended max horizon is {max_recommended}. "
                 f"Consider using smaller horizons or more data for reliable label distributions."
             )
+            warnings.append(msg)
+            logger.warning(msg)
+
+    if warnings and raise_on_violation:
+        raise ValueError(
+            f"Horizon validation failed with {len(warnings)} violations: {warnings[0]}"
+        )
+
+    return warnings
 
 
 def run_initial_labeling(

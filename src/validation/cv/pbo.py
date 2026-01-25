@@ -213,10 +213,7 @@ def compute_pbo(
     partition_indices = []
     for i in range(n_partitions):
         start = i * paths_per_partition
-        if i == n_partitions - 1:
-            end = n_paths
-        else:
-            end = (i + 1) * paths_per_partition
+        end = n_paths if i == n_partitions - 1 else (i + 1) * paths_per_partition
         partition_indices.append(list(range(start, end)))
 
     # Generate CSCV combinations (half-splits)
@@ -275,10 +272,7 @@ def compute_pbo(
         # Compute relative OOS rank (w_bar): fraction of strategies it beats OOS
         # w_bar = (oos_rank - 1) / (n - 1) for ranks in [1, n]
         # If best IS strategy has low OOS rank, w_bar < 0.5 → overfit signal
-        if n_valid > 1:
-            w_bar = (best_is_oos_rank - 1) / (n_valid - 1)
-        else:
-            w_bar = 0.5
+        w_bar = (best_is_oos_rank - 1) / (n_valid - 1) if n_valid > 1 else 0.5
 
         logit_val = _compute_logit(w_bar)
         logit_values.append(logit_val)
@@ -299,10 +293,7 @@ def compute_pbo(
     all_oos = np.concatenate([p[1] for p in is_oos_pairs])
     mean_is = np.nanmean(all_is)
     mean_oos = np.nanmean(all_oos)
-    if abs(mean_is) > 1e-10:
-        perf_degradation = float(mean_oos / mean_is)
-    else:
-        perf_degradation = 1.0
+    perf_degradation = float(mean_oos / mean_is) if abs(mean_is) > 1e-10 else 1.0
 
     # Compute rank correlation between IS and OOS
     # Use the last CSCV split for this

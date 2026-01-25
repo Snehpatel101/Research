@@ -124,10 +124,7 @@ def filter_low_variance(
         # Normalize variance by scale for fair comparison
         # Use coefficient of variation for features with non-zero mean
         mean_val = abs(series.mean())
-        if mean_val > 1e-10:
-            normalized_variance = variance / (mean_val**2)
-        else:
-            normalized_variance = variance
+        normalized_variance = variance / mean_val**2 if mean_val > 1e-10 else variance
 
         # Check if variance is below threshold
         if variance < variance_threshold and normalized_variance < variance_threshold:

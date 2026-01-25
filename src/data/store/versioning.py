@@ -369,7 +369,7 @@ class VersionManager:
     def from_dict(cls, data: dict[str, Any]) -> VersionManager:
         """Create from dictionary."""
         manager = cls(data["feature_set"])
-        for version_str, info_dict in data.get("versions", {}).items():
+        for _version_str, info_dict in data.get("versions", {}).items():
             info = VersionInfo.from_dict(info_dict)
             manager._versions[info.version] = info
             manager._ordered_versions.append(info.version)

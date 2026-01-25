@@ -184,7 +184,7 @@ def _create_config_from_args(
                 description = f"{preset_config.get('name', preset)} run"
 
         except ValueError as e:
-            raise ValueError(f"Invalid preset: {e}")
+            raise ValueError(f"Invalid preset: {e}") from e
 
     # Apply CLI overrides (these take precedence over preset)
     # Symbols - auto-detect from available data if not specified

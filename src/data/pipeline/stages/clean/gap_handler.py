@@ -85,10 +85,7 @@ def is_cme_market_closed(
         return True
 
     # Daily maintenance break: 4:00 PM - 5:00 PM CT
-    if hour == CME_MAINTENANCE_START_HOUR:
-        return True
-
-    return False
+    return hour == CME_MAINTENANCE_START_HOUR
 
 
 def is_expected_gap(

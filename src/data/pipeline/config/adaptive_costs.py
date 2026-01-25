@@ -235,10 +235,7 @@ def compute_cost_in_atr_adaptive(
 
         cost_dollars = slippage_ticks * tick_value
 
-        if row["atr_14"] > 0:
-            cost_in_atr = cost_dollars / row["atr_14"]
-        else:
-            cost_in_atr = 0.0
+        cost_in_atr = cost_dollars / row["atr_14"] if row["atr_14"] > 0 else 0.0
 
         adaptive_costs.append(cost_in_atr)
 
