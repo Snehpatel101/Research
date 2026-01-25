@@ -125,6 +125,14 @@ from .meta_factory import (
     list_meta_learners,
     register_meta_learner,
 )
+
+# PHASE_16C: Optuna-based meta-learner selection
+from .meta_selection import (
+    AVAILABLE_META_LEARNER_TYPES,
+    MetaLearnerSelectionResult,
+    MetaLearnerSelector,
+    select_meta_learner_with_optuna,
+)
 from .mlp_meta import MLPMetaLearner
 
 # PHASE_4: EnsembleOrchestrator - THE single entry point for ensemble training
@@ -134,6 +142,15 @@ from .orchestrator import (
     build_ensemble,
 )
 from .ridge_meta import RidgeMetaLearner
+
+# PHASE_16D: Second-level stacking for large ensembles
+from .second_level import (
+    ClusterInfo,
+    SecondLevelResult,
+    SecondLevelStacker,
+    SecondLevelStackingConfig,
+    build_second_level_stacking,
+)
 from .stacking import StackingEnsemble
 from .validator import (
     HETEROGENEOUS_ENSEMBLE_TYPES,
@@ -203,4 +220,15 @@ __all__ = [
     "EnsembleOrchestrator",
     "EnsembleResult",
     "build_ensemble",
+    # Meta-learner selection (PHASE_16C)
+    "MetaLearnerSelector",
+    "MetaLearnerSelectionResult",
+    "select_meta_learner_with_optuna",
+    "AVAILABLE_META_LEARNER_TYPES",
+    # Second-level stacking (PHASE_16D)
+    "SecondLevelStacker",
+    "SecondLevelStackingConfig",
+    "SecondLevelResult",
+    "ClusterInfo",
+    "build_second_level_stacking",
 ]

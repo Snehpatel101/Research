@@ -4,6 +4,136 @@
 
 ---
 
+## Phases 15-18: Production Hardening Final | 2026-01-25 | COMPLETE
+
+**Impact:** +2,230 lines added (5 new files, 7 files modified)
+**Purpose:** Complete production hardening with backtesting realism, ensemble optimization, and architecture resilience
+
+### Summary
+
+| Phase | Description | Tasks | New Files |
+|-------|-------------|-------|-----------|
+| 15 | Backtesting Realism | 5/5 ✅ | execution.py (Phase 12) |
+| 16 | Ensemble Optimization | 5/5 ✅ | ensemble_objective.py, meta_selection.py, second_level.py |
+| 17 | Architecture Resilience | 5/5 ✅ | checkpoint.py, resilience.py |
+| 18 | Code Cleanup | 2/3 ✅ (1 skipped) | - |
+
+### Phase 15: Backtesting Realism (5/5 tasks)
+
+| Task | Description | Location |
+|------|-------------|----------|
+| 15A | Market Hours Filtering | `execution.py:31` - MarketHoursFilter class |
+| 15B | Volume-Relative Position Limits | `execution.py:143` - calculate_max_position_size() |
+| 15C | Adverse Selection Bias | `execution.py:104` - apply_adverse_selection() |
+| 15D | Volatility-Scaled Slippage | `costs.py:338` - VolatilityScaledSlippage default |
+| 15E | Bet Sizing Integration | `backtest.py:384-424`, `position_sizing.py:485-502` |
+
+**Note:** Tasks 15A-15D were already implemented in Phase 12. Task 15E required fixes to wire confidence through position sizing.
+
+### Phase 16: Ensemble Optimization (5/5 tasks)
+
+| Task | Description | Location |
+|------|-------------|----------|
+| 16A | Diversity-Aware Selection | `ensemble_objective.py` - diversity_aware_objective() |
+| 16B | Feature Overlap Constraint | `ensemble_objective.py` - check_feature_diversity() |
+| 16C | Auto Meta-Learner Selection | `meta_selection.py` - MetaLearnerSelector |
+| 16D | Second-Level Stacking | `second_level.py` - SecondLevelStacker |
+| 16E | DiversityAnalyzer Integration | `unified_orchestrator.py:792-912` |
+
+**New Files Created:**
+- `src/optimization/ensemble_objective.py` (516 lines) - EnsembleAwareObjective class
+- `src/models/ensemble/meta_selection.py` (432 lines) - Optuna-based meta-learner selection
+- `src/models/ensemble/second_level.py` (532 lines) - Two-level stacking for 12+ models
+
+### Phase 17: Architecture Resilience (5/5 tasks)
+
+| Task | Description | Location |
+|------|-------------|----------|
+| 17A | State Checkpointing | `checkpoint.py` - PipelineCheckpointManager |
+| 17B | Timeout Protection | `resilience.py` - @timeout decorator |
+| 17C | Circuit Breakers | `resilience.py` - CircuitBreaker class |
+| 17D | Retry with Backoff | `resilience.py` - @retry decorator |
+| 17E | Exception Unification | `resilience.py` - ResilienceError hierarchy |
+
+**New Files Created:**
+- `src/core/checkpoint.py` (~150 lines) - Pipeline state checkpointing
+- `src/core/resilience.py` (~600 lines) - Timeout, circuit breaker, retry patterns
+
+**Key Features:**
+- `PipelineCheckpointManager` - Save/resume pipeline state after failures
+- `@timeout(seconds)` - Signal or thread-based timeout protection
+- `CircuitBreaker` - Isolate failures, auto-recover after timeout
+- `@retry(max_retries, backoff)` - Exponential backoff with jitter
+- Predefined configs: `GPU_OOM_RETRY`, `NETWORK_RETRY`, `TRANSIENT_RETRY`
+
+### Phase 18: Code Cleanup (2/3 tasks)
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 18A | Consolidate DataContractViolation | ✅ Single class in `exceptions.py` |
+| 18B | AdapterResult Resolution | ✅ Verified as documented exception (OK) |
+| 18C | Refactor Large Files | ⏭️ SKIPPED - Not beneficial |
+
+**18A Fix:** `DataContractViolation` now has single canonical definition in `src/core/exceptions.py` with `issues: list[str]` attribute.
+
+**18B Status:** Dual `AdapterResult` classes remain intentional (circular import prevention). Both have bidirectional properties (`X`↔`data`, `y`↔`labels`).
+
+### Verification (4-Agent Review)
+
+| Agent | Focus | Status |
+|-------|-------|--------|
+| Code Review | CLAUDE.md standards | ✅ PASS - No adapters, proper encapsulation |
+| Contract Verification | Types + schemas | ✅ PASS - All exports verified |
+| Integration | Imports + dependencies | ✅ PASS - No circular deps |
+| Runtime | Tests + validation | ✅ PASS - 42 tests pass |
+
+### Files Summary
+
+**New Files (5):**
+1. `src/optimization/ensemble_objective.py` (516 lines)
+2. `src/models/ensemble/meta_selection.py` (432 lines)
+3. `src/models/ensemble/second_level.py` (532 lines)
+4. `src/core/checkpoint.py` (~150 lines)
+5. `src/core/resilience.py` (~600 lines)
+
+**Modified Files (7):**
+1. `src/inference/backtesting/backtest.py` - Bet sizing integration
+2. `src/inference/backtesting/position_sizing.py` - BetSizingPositioner fix
+3. `src/models/training/unified_orchestrator.py` - DiversityAnalyzer wiring
+4. `src/factory.py` - Checkpoint support
+5. `src/core/exceptions.py` - DataContractViolation consolidation
+6. `src/optimization/__init__.py` - Phase 16 exports
+7. `src/models/ensemble/__init__.py` - Phase 16 exports
+
+### Lessons Learned
+
+1. **Verify before implementing** - 4 of 5 Phase 15 tasks were already done in Phase 12
+2. **Singleton pattern for registries** - Global circuit breaker registry with lazy init is acceptable
+3. **Document intentional exceptions** - AdapterResult dual definition is fine if documented
+4. **Thread-safe by default** - CircuitBreaker uses threading.Lock for concurrent access
+5. **Graceful degradation** - retry decorator logs warnings but continues execution
+6. **12-agent orchestration** - Sequential handoffs maintain context across complex changes
+
+### Agent Orchestration
+
+**11 Sequential Agents Used:**
+1. Phase 15 analysis + 15E fix
+2. Phase 16A-B (ensemble_objective.py)
+3. Phase 16C-D (meta_selection.py, second_level.py)
+4. Phase 16E + 17A (DiversityAnalyzer, checkpoint.py)
+5. Phase 17B-C (timeout, circuit breaker)
+6. Phase 17D-E (retry, exceptions)
+7. Phase 18 (code cleanup)
+8. Ruff fixes
+9. Tests + validation
+10. CLEANUP_PLAN.md update
+11. CLEANUP_TASKS.md update
+
+**4-Agent Parallel Verification:**
+- Code Review, Contract, Integration, Runtime agents ran in parallel for final check
+
+---
+
 ## Phase 14: Data Quality Hardening | 2026-01-25 | COMPLETE
 
 **Impact:** ~450 lines added/modified (7 files modified)

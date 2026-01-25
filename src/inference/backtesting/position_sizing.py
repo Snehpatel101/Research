@@ -483,12 +483,18 @@ class BetSizingPositioner(BasePositionSizer):
             Number of contracts to trade
         """
         try:
-            from src.models.training.meta_labeling.bet_sizing import compute_bet_sizes
+            from src.models.training.meta_labeling.bet_sizing import (
+                BetSizingStrategy,
+                compute_bet_sizes,
+            )
+
+            # Convert string strategy to enum
+            strategy_enum = BetSizingStrategy(self.strategy.lower())
 
             # Compute fractional position size
             size_fraction = compute_bet_sizes(
                 probabilities=np.array([probability]),
-                strategy=self.strategy,
+                strategy=strategy_enum,
                 threshold=self.threshold,
                 max_size=self.max_size,
                 min_size=self.min_size,

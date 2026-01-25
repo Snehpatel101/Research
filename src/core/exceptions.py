@@ -10,9 +10,20 @@ Exception Hierarchy:
     ├── ValidationError - Data/model validation failures
     ├── ConfigError - Configuration parsing/validation failures
     ├── ContractViolation - Data or model contract violations
+    │   ├── DataContractViolation - Data contract violations
+    │   └── ModelContractViolation - Model contract violations
     ├── DataError - Data processing failures
+    │   ├── LeakageError - Data leakage detected
+    │   ├── LookaheadError - Lookahead bias detected
+    │   └── ChronologicalSortError - Chronological sorting failures
     ├── TrainingError - Model training failures
-    └── InferenceError - Model inference failures
+    │   ├── PreTrainingValidationError - Pre-training validation failures
+    │   └── ScalerFitError - Scaler fitting failures
+    ├── InferenceError - Model inference failures
+    └── ResilienceError - Resilience mechanism failures (in src.core.resilience)
+        ├── ResilienceTimeoutError - Operation timeout
+        ├── CircuitOpenError - Circuit breaker open
+        └── RetryExhaustedError - All retry attempts exhausted
 
 Usage:
     from src.core.exceptions import ValidationError, ContractViolation
@@ -123,6 +134,35 @@ class ContractViolation(MLFactoryError):
             full_message += f": {violation_details}"
 
         super().__init__(full_message)
+
+
+class DataContractViolation(ContractViolation):
+    """
+    Raised when a data contract is violated.
+
+    Data contracts define the expected shape, type, and range of data
+    flowing through the pipeline.
+
+    Attributes
+    ----------
+    issues : list[str]
+        List of specific contract violation issues
+    """
+
+    def __init__(self, issues: list[str]):
+        self.issues = issues
+        super().__init__("Contract violations", violation_details=str(issues))
+
+
+class ModelContractViolation(ContractViolation):
+    """
+    Raised when a model contract is violated.
+
+    Model contracts define the expected input/output specifications
+    for model training and inference.
+    """
+
+    pass
 
 
 class DataError(MLFactoryError):
@@ -283,29 +323,42 @@ class PreTrainingValidationError(MLFactoryError):
 
 
 __all__ = [
+    # Base error
     "MLFactoryError",
+    # Validation errors
     "ValidationError",
     "ConfigError",
+    "ConfigValueError",
+    # Contract violations
     "ContractViolation",
+    "DataContractViolation",
+    "ModelContractViolation",
+    # Data errors
     "DataError",
-    "TrainingError",
-    "InferenceError",
     "LeakageError",
     "LookaheadError",
+    "ChronologicalSortError",
+    # Training errors
+    "TrainingError",
+    "PreTrainingValidationError",
+    "ScalerFitError",
+    # Inference errors
+    "InferenceError",
+    # Feature store errors
     "FeatureStoreError",
     "FeatureNotFoundError",
     "FeatureIntegrityError",
+    "FeatureSchemaError",
+    # Raw MTF store errors
     "RawMTFStoreError",
     "TimeframeNotFoundError",
     "InvalidTimeframeError",
     "InvalidSplitError",
+    # Other errors
     "NumericalInstabilityError",
-    "ScalerFitError",
-    "ChronologicalSortError",
-    "FeatureSchemaError",
     "EnsembleCompatibilityError",
     "SecurityError",
     "StageValidationError",
-    "ConfigValueError",
-    "PreTrainingValidationError",
+    # Note: ResilienceError hierarchy is in src.core.resilience to avoid
+    # circular imports (resilience module imports from exceptions)
 ]

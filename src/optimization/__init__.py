@@ -77,6 +77,22 @@ from src.optimization.artifact_saver import (
 )
 
 # =============================================================================
+# ENSEMBLE-AWARE OBJECTIVE (Phase 16)
+# =============================================================================
+from src.optimization.ensemble_objective import (
+    DEFAULT_DIVERSITY_WEIGHT,
+    DEFAULT_MAX_OVERLAP,
+    DEFAULT_SHARPE_WEIGHT,
+    EnsembleAwareObjective,
+    calculate_feature_overlap,
+    calculate_feature_overlap_ratio,
+    check_feature_diversity,
+    compute_feature_diversity_score,
+    compute_prediction_diversity,
+    diversity_aware_objective,
+)
+
+# =============================================================================
 # 5-DIMENSION OPTUNA OBJECTIVE (Phase 3)
 # =============================================================================
 from src.optimization.base_feature_sets import (
@@ -211,4 +227,15 @@ __all__ = [
     # Full pipeline
     "FullOptimizationResult",
     "OptimizationPipeline",
+    # Ensemble-aware objective (Phase 16)
+    "diversity_aware_objective",
+    "compute_prediction_diversity",
+    "calculate_feature_overlap",
+    "calculate_feature_overlap_ratio",
+    "check_feature_diversity",
+    "compute_feature_diversity_score",
+    "EnsembleAwareObjective",
+    "DEFAULT_SHARPE_WEIGHT",
+    "DEFAULT_DIVERSITY_WEIGHT",
+    "DEFAULT_MAX_OVERLAP",
 ]

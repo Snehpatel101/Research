@@ -389,12 +389,14 @@ class Backtester:
         win_rate: float = 0.5,
         avg_win: float = 100.0,
         avg_loss: float = 100.0,
+        confidence: float | None = None,
     ) -> int:
         """Calculate position size using configured method."""
         # Provide reasonable defaults for position sizing
         if stop_distance is None:
             stop_distance = current_price * 0.02  # 2% default stop
 
+        # Phase 15E: Pass confidence/probability to position sizer for bet sizing
         return self.position_sizer.calculate_position_size(
             account_equity=self._equity,
             current_price=current_price,
@@ -403,6 +405,7 @@ class Backtester:
             win_rate=win_rate,
             avg_win=avg_win,
             avg_loss=avg_loss,
+            probability=confidence or 0.5,  # BetSizingPositioner uses probability parameter
         )
 
     def _open_position(
@@ -417,7 +420,8 @@ class Backtester:
         atr: float | None = None,
     ) -> None:
         """Open a new position."""
-        contracts = self._calculate_position_size(price)
+        # Phase 15E: Pass confidence for bet sizing integration
+        contracts = self._calculate_position_size(price, confidence=confidence)
 
         if contracts <= 0:
             return
@@ -581,11 +585,11 @@ class Backtester:
             # Get execution prices
             close_price = self._get_execution_price(bar, 1, is_entry=False)
 
-            # Check if we have a position
-            if self._current_position is not None:
-                # Check for exit
-                if self._should_exit(self._current_position, bar, i, prediction):
-                    self._close_position(close_price, timestamp)
+            # Check if we have a position and should exit
+            if self._current_position is not None and self._should_exit(
+                self._current_position, bar, i, prediction
+            ):
+                self._close_position(close_price, timestamp)
 
             # If no position, check for entry
             if self._current_position is None:

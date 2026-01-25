@@ -748,6 +748,8 @@ class UnifiedTrainingOrchestrator:
         """
         Build ensemble from OOF predictions - delegates to EnsembleService.
 
+        Also performs diversity analysis on base model predictions (Phase 16E).
+
         Args:
             df: Original DataFrame (for label extraction)
 
@@ -766,18 +768,148 @@ class UnifiedTrainingOrchestrator:
         )
         result = self._ensemble_service.build_ensemble(request)
 
+        # Phase 16E: Analyze ensemble diversity
+        diversity_metrics = self._analyze_ensemble_diversity(result.aligned_oof, df)
+
         # Convert service result to orchestrator result
         ensemble_result = None
         if result.meta_learner is not None:
+            # Merge diversity metrics into ensemble metrics
+            ensemble_metrics = result.ensemble_metrics.copy()
+            if diversity_metrics:
+                ensemble_metrics.update(diversity_metrics)
+
             ensemble_result = ModelTrainingResult(
                 model_name=f"ensemble_{self.config.meta_learner}",
                 horizon=self.config.horizons[0] if self.config.horizons else 20,
-                metrics=result.ensemble_metrics,
+                metrics=ensemble_metrics,
                 trainer=result.meta_learner,
                 training_time_seconds=result.training_time_seconds,
             )
 
         return result.aligned_oof, result.stacking_dataset, ensemble_result
+
+    def _analyze_ensemble_diversity(
+        self,
+        aligned_oof: AlignedOOFResult | None,
+        df: pd.DataFrame,
+    ) -> dict[str, float]:
+        """
+        Analyze diversity of base model predictions using DiversityAnalyzer.
+
+        Phase 16E: Wire DiversityAnalyzer to ensemble training.
+
+        Computes diversity metrics including:
+        - Q-statistic (Yule's Q): Agreement measure between classifier pairs
+        - Pairwise correlation: Average correlation between base predictions
+        - Disagreement: Fraction of samples where classifiers disagree
+        - Diversity score: Composite diversity score
+
+        Args:
+            aligned_oof: AlignedOOFResult with base model predictions
+            df: Original DataFrame for label extraction
+
+        Returns:
+            Dict of diversity metrics, empty if analysis fails
+        """
+        if aligned_oof is None:
+            logger.debug("No aligned OOF, skipping diversity analysis")
+            return {}
+
+        try:
+            from src.models.ensemble.diversity import DiversityAnalyzer
+
+            logger.info("\n--- Ensemble Diversity Analysis (Phase 16E) ---")
+
+            # Extract base model predictions
+            base_predictions: dict[str, np.ndarray] = {}
+            base_probabilities: dict[str, np.ndarray] = {}
+
+            for model_key, oof in self._oof_predictions.items():
+                if oof is not None and hasattr(oof, "predictions"):
+                    # Align to common indices
+                    aligned_preds = oof.predictions[
+                        np.isin(np.arange(len(oof.predictions)), aligned_oof.common_indices)
+                    ]
+                    if len(aligned_preds) == len(aligned_oof.common_indices):
+                        base_predictions[model_key] = aligned_preds
+
+                    # Also get probabilities if available
+                    if hasattr(oof, "probabilities") and oof.probabilities is not None:
+                        aligned_probs = oof.probabilities[
+                            np.isin(np.arange(len(oof.probabilities)), aligned_oof.common_indices)
+                        ]
+                        if len(aligned_probs) == len(aligned_oof.common_indices):
+                            base_probabilities[model_key] = aligned_probs
+
+            if len(base_predictions) < 2:
+                logger.warning("Need at least 2 models for diversity analysis")
+                return {}
+
+            # Get ground truth labels
+            y_true = None
+            for h in self.config.horizons:
+                label_col = f"label_h{h}"
+                if label_col in df.columns:
+                    y_true = df[label_col].values[aligned_oof.common_indices]
+                    break
+
+            # Initialize analyzer
+            analyzer = DiversityAnalyzer(
+                min_diversity_threshold=0.3,
+                correlation_threshold=0.8,
+                n_classes=3,  # Long/Neutral/Short
+            )
+
+            # Run diversity analysis
+            metrics = analyzer.analyze(
+                base_predictions=base_predictions,
+                base_probabilities=base_probabilities if base_probabilities else None,
+                y_true=y_true,
+            )
+
+            # Log key metrics
+            logger.info(f"  Diversity Score: {metrics.diversity_score:.4f}")
+            logger.info(f"  Q-statistic: {metrics.q_statistic:.4f}")
+            logger.info(f"  Pairwise Correlation: {metrics.pairwise_correlation:.4f}")
+            logger.info(f"  Disagreement Rate: {metrics.disagreement:.4f}")
+            logger.info(f"  Double Fault Rate: {metrics.double_fault:.4f}")
+            logger.info(f"  Entropy: {metrics.entropy:.4f}")
+
+            # Log recommendations if any
+            if metrics.recommendations:
+                logger.info("\n  Diversity Recommendations:")
+                for rec in metrics.recommendations[:3]:  # Top 3 recommendations
+                    logger.info(f"    - {rec}")
+
+            # Log highly correlated pairs
+            high_corr_pairs = [
+                (m1, m2, corr)
+                for (m1, m2), corr in metrics.model_pair_correlations.items()
+                if abs(corr) > 0.8
+            ]
+            if high_corr_pairs:
+                logger.info("\n  High Correlation Pairs (>0.8):")
+                for m1, m2, corr in sorted(high_corr_pairs, key=lambda x: -abs(x[2]))[:5]:
+                    logger.info(f"    {m1} <-> {m2}: {corr:.4f}")
+
+            # Return metrics dict for inclusion in ensemble result
+            return {
+                "diversity_score": metrics.diversity_score,
+                "diversity_q_statistic": metrics.q_statistic,
+                "diversity_correlation": metrics.pairwise_correlation,
+                "diversity_disagreement": metrics.disagreement,
+                "diversity_double_fault": metrics.double_fault,
+                "diversity_entropy": metrics.entropy,
+                "diversity_kl_divergence": metrics.kl_divergence,
+            }
+
+        except ImportError as e:
+            logger.warning(f"Diversity analysis not available: {e}")
+            return {}
+        except Exception as e:
+            logger.warning(f"Diversity analysis failed: {e}")
+            return {}
 
     def _train_walk_forward(
         self,

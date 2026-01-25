@@ -226,11 +226,13 @@ from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
 from src.core.exceptions import (
     ConfigError,
     ContractViolation,
+    DataContractViolation,
     DataError,
     InferenceError,
     LeakageError,
     LookaheadError,
     MLFactoryError,
+    ModelContractViolation,
     TrainingError,
 )
 
@@ -281,6 +283,31 @@ from src.core.reproducibility import (
     get_reproducibility_info,
     get_worker_init_fn,
     set_all_seeds,
+)
+
+# =============================================================================
+# RESILIENCE - Timeout protection, circuit breakers, retry (Phase 17B-E)
+# =============================================================================
+from src.core.resilience import (
+    GPU_OOM_RETRY,
+    NETWORK_RETRY,
+    TRANSIENT_RETRY,
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerRegistry,
+    CircuitBreakerStats,
+    CircuitOpenError,
+    CircuitState,
+    ResilienceError,
+    ResilienceTimeoutError,
+    RetryConfig,
+    RetryExhaustedError,
+    TimeoutError,
+    get_model_breaker_registry,
+    retry,
+    retry_with_config,
+    run_with_timeout,
+    timeout,
 )
 from src.core.types import (
     AdapterType,
@@ -601,9 +628,37 @@ __all__ = [
     "MLFactoryError",
     "ConfigError",
     "ContractViolation",
+    "DataContractViolation",
+    "ModelContractViolation",
     "DataError",
     "TrainingError",
     "InferenceError",
     "LeakageError",
     "LookaheadError",
+    # =========================================================================
+    # RESILIENCE - Timeout protection, circuit breakers, retry (Phase 17B-E)
+    # =========================================================================
+    # Exceptions
+    "ResilienceError",
+    "ResilienceTimeoutError",
+    "TimeoutError",
+    "CircuitOpenError",
+    "RetryExhaustedError",
+    # Timeout
+    "timeout",
+    "run_with_timeout",
+    # Retry
+    "RetryConfig",
+    "retry",
+    "retry_with_config",
+    "GPU_OOM_RETRY",
+    "NETWORK_RETRY",
+    "TRANSIENT_RETRY",
+    # Circuit Breaker
+    "CircuitState",
+    "CircuitBreakerConfig",
+    "CircuitBreakerStats",
+    "CircuitBreaker",
+    "CircuitBreakerRegistry",
+    "get_model_breaker_registry",
 ]

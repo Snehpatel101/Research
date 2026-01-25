@@ -10,6 +10,11 @@ This is THE single entry point for the ML Factory system, coordinating:
 The factory pattern provides a clean, high-level API while delegating
 heavy lifting to specialized components.
 
+Supports checkpointing for pipeline recovery (Phase 17A):
+- Enable with `enable_checkpoints=True`
+- Resume failed runs with `resume_from_checkpoint()`
+- Automatic config change detection
+
 Example:
     from src.factory import MLFactory
     from src.config.experiment import ExperimentConfig
@@ -21,12 +26,16 @@ Example:
         horizons=[5, 10, 15, 20],
     )
 
-    factory = MLFactory(config)
+    factory = MLFactory(config, enable_checkpoints=True)
     result = factory.run()
 
     print(f"Trained {result.n_models} models")
     print(f"Best model: {result.best_model}")
     print(f"Bundle path: {result.bundle_path}")
+
+    # Resume a failed run
+    factory = MLFactory(config, enable_checkpoints=True)
+    result = factory.resume_from_checkpoint()
 """
 
 from __future__ import annotations
@@ -40,6 +49,7 @@ from typing import Any
 import pandas as pd
 
 from src.config.experiment import ExperimentConfig
+from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
 logger = logging.getLogger(__name__)
 
@@ -149,29 +159,63 @@ class MLFactory:
     - UnifiedTrainingOrchestrator: Model training
     - BundleBuilder: Inference artifact creation
 
+    Supports checkpointing (Phase 17A):
+    - Enable with enable_checkpoints=True
+    - Saves state after each stage for recovery
+    - Detects config changes and handles appropriately
+
     Example:
-        factory = MLFactory(config)
+        factory = MLFactory(config, enable_checkpoints=True)
         result = factory.run()
 
         if result.success:
             print(f"Trained {result.n_models} models")
             print(f"Best: {result.best_model}")
+
+        # Resume from failure
+        factory = MLFactory(config, enable_checkpoints=True)
+        result = factory.resume_from_checkpoint()
     """
 
-    def __init__(self, config: ExperimentConfig, verbose: int = 1):
+    # Stage definitions for checkpointing
+    STAGE_DATA_PIPELINE = 0
+    STAGE_TRAINING = 1
+    STAGE_EVALUATION = 2
+    STAGE_BUNDLING = 3
+
+    def __init__(
+        self,
+        config: ExperimentConfig,
+        verbose: int = 1,
+        enable_checkpoints: bool = True,
+    ):
         """
         Initialize MLFactory with experiment configuration.
 
         Args:
             config: ExperimentConfig defining the experiment
             verbose: Logging verbosity (0=silent, 1=info, 2=debug)
+            enable_checkpoints: Whether to save checkpoints after each stage
+                (default: True). Enables resume_from_checkpoint() on failure.
         """
         self.config = config
         self.verbose = verbose
+        self.enable_checkpoints = enable_checkpoints
 
         # Create output directory
         self.output_dir = Path(config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize checkpoint manager
+        self._checkpoint_manager: PipelineCheckpointManager | None = None
+        self._config_hash: str = ""
+        if enable_checkpoints:
+            self._checkpoint_manager = PipelineCheckpointManager(self.output_dir)
+            self._config_hash = compute_config_hash(config)
+
+        # Cache for intermediate results (used during resume)
+        self._cached_df: pd.DataFrame | None = None
+        self._cached_training_result: Any = None
 
         # Save config
         config_path = self.output_dir / "experiment_config.yaml"
@@ -180,8 +224,10 @@ class MLFactory:
         if verbose >= 1:
             logger.info(f"MLFactory initialized: {self.output_dir.name}")
             logger.info(f"Config saved to: {config_path}")
+            if enable_checkpoints:
+                logger.info("Checkpointing enabled")
 
-    def run(self) -> ExperimentResult:
+    def run(self, resume: bool = False) -> ExperimentResult:
         """
         Execute the complete ML Factory pipeline.
 
@@ -190,6 +236,10 @@ class MLFactory:
         2. Training: Train models and ensemble
         3. Evaluation: Compute metrics (optional backtest)
         4. Bundling: Create deployment artifacts (optional)
+
+        Args:
+            resume: If True, attempt to resume from last checkpoint
+                (only works if enable_checkpoints=True)
 
         Returns:
             ExperimentResult with metrics and artifacts
@@ -202,22 +252,45 @@ class MLFactory:
         self._log(f"Starting ML Factory Experiment: {self.config.name}")
         self._log("=" * 60)
 
+        # Determine resume stage
+        resume_from_stage = 0
+        if resume and self._checkpoint_manager:
+            resume_from_stage = self._get_resume_stage()
+            if resume_from_stage > 0:
+                self._log(f"Resuming from stage {resume_from_stage}")
+
         try:
             # Phase 1: Data Pipeline
-            self._log("\n[Phase 1/4] Data Pipeline")
-            df = self._run_data_pipeline()
+            if resume_from_stage <= self.STAGE_DATA_PIPELINE:
+                self._log("\n[Phase 1/4] Data Pipeline")
+                df = self._run_data_pipeline()
+                self._save_checkpoint_data_pipeline(df)
+            else:
+                self._log("\n[Phase 1/4] Data Pipeline (cached)")
+                df = self._load_cached_data()
 
             # Phase 2: Training
-            self._log("\n[Phase 2/4] Model Training")
-            training_result = self._run_training(df)
+            if resume_from_stage <= self.STAGE_TRAINING:
+                self._log("\n[Phase 2/4] Model Training")
+                training_result = self._run_training(df)
+                self._save_checkpoint_training(training_result)
+            else:
+                self._log("\n[Phase 2/4] Model Training (cached)")
+                training_result = self._load_cached_training()
 
             # Phase 3: Evaluation (optional)
-            self._log("\n[Phase 3/4] Evaluation")
-            backtest_metrics = self._run_evaluation(df, training_result)
+            if resume_from_stage <= self.STAGE_EVALUATION:
+                self._log("\n[Phase 3/4] Evaluation")
+                backtest_metrics = self._run_evaluation(df, training_result)
+                self._save_checkpoint_evaluation(backtest_metrics)
+            else:
+                self._log("\n[Phase 3/4] Evaluation (cached)")
+                backtest_metrics = self._load_cached_evaluation()
 
             # Phase 4: Bundling (optional)
             self._log("\n[Phase 4/4] Bundling")
             bundle_path = self._create_bundle(training_result)
+            self._save_checkpoint_bundling(bundle_path)
 
             # Build result
             duration = (datetime.now() - start_time).total_seconds()
@@ -253,6 +326,158 @@ class MLFactory:
 
             self._log("\n" + result.summary())
             raise
+
+    def resume_from_checkpoint(self) -> ExperimentResult:
+        """
+        Resume experiment from the last successful checkpoint.
+
+        This method checks for existing checkpoints and resumes from
+        the last successfully completed stage. If the configuration
+        has changed since the checkpoint was created, checkpoints are
+        cleared and execution starts fresh.
+
+        Returns:
+            ExperimentResult from the resumed run
+
+        Raises:
+            ValueError: If checkpointing is not enabled
+            Exception: If the resumed run fails
+
+        Example:
+            factory = MLFactory(config, enable_checkpoints=True)
+            try:
+                result = factory.run()
+            except Exception:
+                # Something failed, resume later
+                result = factory.resume_from_checkpoint()
+        """
+        if not self._checkpoint_manager:
+            raise ValueError(
+                "Cannot resume: checkpointing not enabled. "
+                "Initialize with enable_checkpoints=True"
+            )
+
+        if not self._checkpoint_manager.has_checkpoint():
+            self._log("No checkpoint found, starting fresh run")
+            return self.run(resume=False)
+
+        # Validate config hasn't changed
+        if not self._checkpoint_manager.validate_config(self._config_hash):
+            self._log("Config changed since checkpoint, starting fresh")
+            self._checkpoint_manager.clear_checkpoints()
+            return self.run(resume=False)
+
+        return self.run(resume=True)
+
+    def _get_resume_stage(self) -> int:
+        """Get the stage to resume from based on checkpoints."""
+        if not self._checkpoint_manager:
+            return 0
+        return self._checkpoint_manager.get_resume_stage()
+
+    def _save_checkpoint_data_pipeline(self, df: pd.DataFrame) -> None:
+        """Save checkpoint after data pipeline stage."""
+        if not self._checkpoint_manager:
+            return
+
+        # Save DataFrame to cache
+        data_cache_path = self.output_dir / "cache" / "data_pipeline.parquet"
+        data_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(data_cache_path)
+
+        self._checkpoint_manager.save_checkpoint(
+            stage_name="data_pipeline",
+            stage_index=self.STAGE_DATA_PIPELINE,
+            artifacts={"data": data_cache_path},
+            config_hash=self._config_hash,
+            n_rows=len(df),
+            n_columns=len(df.columns),
+        )
+
+    def _save_checkpoint_training(self, training_result: Any) -> None:
+        """Save checkpoint after training stage."""
+        if not self._checkpoint_manager:
+            return
+
+        import pickle
+
+        # Save training result
+        training_cache_path = self.output_dir / "cache" / "training_result.pkl"
+        training_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(training_cache_path, "wb") as f:
+            pickle.dump(training_result, f)
+
+        self._checkpoint_manager.save_checkpoint(
+            stage_name="training",
+            stage_index=self.STAGE_TRAINING,
+            artifacts={"training_result": training_cache_path},
+            config_hash=self._config_hash,
+            n_models=training_result.n_models,
+            best_model=training_result.best_model,
+        )
+
+    def _save_checkpoint_evaluation(self, backtest_metrics: dict) -> None:
+        """Save checkpoint after evaluation stage."""
+        if not self._checkpoint_manager:
+            return
+
+        import json
+
+        # Save backtest metrics
+        eval_cache_path = self.output_dir / "cache" / "evaluation.json"
+        eval_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(eval_cache_path, "w") as f:
+            json.dump(backtest_metrics, f)
+
+        self._checkpoint_manager.save_checkpoint(
+            stage_name="evaluation",
+            stage_index=self.STAGE_EVALUATION,
+            artifacts={"evaluation": eval_cache_path},
+            config_hash=self._config_hash,
+        )
+
+    def _save_checkpoint_bundling(self, bundle_path: Path | None) -> None:
+        """Save checkpoint after bundling stage."""
+        if not self._checkpoint_manager:
+            return
+
+        artifacts = {}
+        if bundle_path:
+            artifacts["bundle"] = bundle_path
+
+        self._checkpoint_manager.save_checkpoint(
+            stage_name="bundling",
+            stage_index=self.STAGE_BUNDLING,
+            artifacts=artifacts,
+            config_hash=self._config_hash,
+        )
+
+    def _load_cached_data(self) -> pd.DataFrame:
+        """Load cached data from checkpoint."""
+        data_cache_path = self.output_dir / "cache" / "data_pipeline.parquet"
+        if data_cache_path.exists():
+            return pd.read_parquet(data_cache_path)
+        raise FileNotFoundError(f"Cached data not found at {data_cache_path}")
+
+    def _load_cached_training(self) -> Any:
+        """Load cached training result from checkpoint."""
+        import pickle
+
+        training_cache_path = self.output_dir / "cache" / "training_result.pkl"
+        if training_cache_path.exists():
+            with open(training_cache_path, "rb") as f:
+                return pickle.load(f)
+        raise FileNotFoundError(f"Cached training result not found at {training_cache_path}")
+
+    def _load_cached_evaluation(self) -> dict:
+        """Load cached evaluation metrics from checkpoint."""
+        import json
+
+        eval_cache_path = self.output_dir / "cache" / "evaluation.json"
+        if eval_cache_path.exists():
+            with open(eval_cache_path) as f:
+                return json.load(f)
+        return {}
 
     def _run_data_pipeline(self) -> pd.DataFrame:
         """
