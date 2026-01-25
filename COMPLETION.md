@@ -4,6 +4,47 @@
 
 ---
 
+## Batch Verification Results | 2026-01-25 | ANALYSIS
+
+**Purpose:** 4-agent parallel verification of outstanding issues and claims
+
+### Verified Action Items
+
+| Priority | Item | Action | Status |
+|----------|------|--------|--------|
+| 🔴 Critical | F822 undefined exports | Remove `calculate_rolling_correlation_numba`, `calculate_rolling_beta_numba` from `__all__` in `numba_functions.py:325-326` | Ready to fix |
+| 🟠 High | `models/config/exceptions.py` orphaned | Delete file (0 imports, contains unused ConfigError/ConfigValidationError) | Ready to fix |
+| 🟠 High | O(n²) correlation loop | Vectorize nested loops in `filtering.py:176-182` with NumPy | Verified bottleneck |
+| ⚪ Low | B023 ruff warning | Add `# noqa: B023` to `price_features.py:147` with comment explaining false positive | False positive |
+
+### Disproven Claims
+
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| B023 loop variable closure bug | ❌ DISPROVEN | `price_features.py:147` - Lambda executed immediately via `.apply()`, not stored. Works correctly. |
+| `notebook.py` is dead code | ❌ DISPROVEN | Re-exported through `src/core` public API for external notebook users |
+| `colab_setup.py` is dead code | ❌ DISPROVEN | Re-exported through public API for Colab support |
+| `device_utils.py` used by 5+ models | ❌ DISPROVEN | Models use `src/models/device.py` instead; this is a lightweight wrapper |
+| `orchestrator.py` DELETED (line 795) | ❌ DISPROVEN | File exists with 2 active imports: `src/__init__.py`, `cli/commands/pipeline.py` |
+
+### Verified as Intentional
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Dual AdapterResult classes | ✅ INTENTIONAL | Documented exception for circular import prevention; both have bidirectional properties |
+| DataFrame copies in scaling | ✅ INTENTIONAL | `scaling/run.py:138-140` - `.copy()` is intentional for memory safety |
+| MTF cache double-copy | ✅ INTENTIONAL | `raw_mtf_store.py:140,164` - Intentional for memory safety |
+| Validation re-exports coupling | ✅ INTENTIONAL | Facade pattern, documented in module docstring |
+
+### Performance Bottlenecks (Verified)
+
+| Item | Location | Evidence |
+|------|----------|----------|
+| O(n²) correlation loop | `filtering.py:176-182` | Nested for loops with pandas `.loc` indexing |
+| Serial scaler fit loop | `scaler.py:210-264` | Per-feature loop prevents batching |
+
+---
+
 ## Phases 15-18: Production Hardening Final | 2026-01-25 | COMPLETE
 
 **Impact:** +2,230 lines added (5 new files, 7 files modified)
@@ -792,7 +833,7 @@ Ruff check: 214 pre-existing issues (no regressions)
 | MLFactory | Coordinates Pipeline → Training → Evaluation → Bundling |
 | ExperimentConfig | Single source of truth, YAML serialization, backward compat |
 | Evaluation Stage | Post-training metrics with financial report integration |
-| orchestrator.py | DELETED - replaced by UnifiedTrainingOrchestrator |
+| orchestrator.py | DEPRECATED but NOT deleted - still has 2 active imports (src/__init__.py, cli/commands/pipeline.py) |
 
 ### Verification
 - All imports verified

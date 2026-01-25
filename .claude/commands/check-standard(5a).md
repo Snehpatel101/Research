@@ -1,10 +1,11 @@
 Run validation checklist for $ARGUMENTS:
 
-Parallel task agents verify:
-- `ruff check .` passes
-- `pyright topstepx_backend/` passes (0 errors)
-- Backend starts without errors (`python -m topstepx_backend`)
-- Frontend builds (`cd topstepx_frontend && npm run build`)
-- Frontend typecheck passes (`npm run typecheck`)
+```bash
+ruff check src/
+python -c "from src.core.types import DataRank; print('OK')"
+python -c "from src.core.contracts import get_model_contract; print('OK')"
+```
 
-Report: Pass/Fail status, any warnings, recommended next actions.
+Use integration-checker subagent to verify imports resolve and no circular deps.
+
+Return: ✅ PASS | ❌ FAIL with details and recommended next actions.

@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phases 0-18 Complete | Phase 19 Planned
-**Last Updated:** 2026-01-25
+**Status:** Phases 0-18 Complete | Phase 19 Planned | Quick Fixes Ready
+**Last Updated:** 2026-01-25 (Post-Batch Verification)
 
 ---
 
@@ -32,6 +32,23 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 18 | Code Cleanup | 2/3 tasks | 2026-01-25 |
 
 **Net Impact:** ~+12,000 lines of production infrastructure
+
+---
+
+## Verified Quick Fixes (From Batch Verification)
+
+**Status:** READY TO FIX | 4-Agent Verification Complete
+
+| Priority | Item | Location | Action |
+|----------|------|----------|--------|
+| 🔴 Critical | F822 undefined exports | `numba_functions.py:325-326` | Remove 2 non-existent functions from `__all__` |
+| 🟠 High | Orphaned exceptions file | `models/config/exceptions.py` | Delete (0 imports) |
+| ⚪ Low | B023 false positive | `price_features.py:147` | Add `# noqa: B023` with explanation |
+
+**Disproven Claims (Do NOT fix):**
+- B023 loop variable closure - False positive, lambda executed immediately
+- notebook.py/colab_setup.py dead - Re-exported for external users
+- orchestrator.py deleted - Still has 2 active imports
 
 ---
 
@@ -75,12 +92,12 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 
 ### Phase 19C: Architecture Cleanup (MEDIUM PRIORITY)
 
-| Task | Description | Location |
-|------|-------------|----------|
-| 19C-1 | Move misplaced utilities from core to models | `core/utils/notebook.py`, `colab_setup.py`, `device_utils.py` |
-| 19C-2 | Delete duplicate exception file | `models/config/exceptions.py` |
-| 19C-3 | Consolidate ConfigValidationError to core | `config/validators.py` → `core/exceptions.py` |
-| 19C-4 | Remove deprecated orchestrator.py | `src/orchestrator.py` |
+| Task | Description | Location | Notes |
+|------|-------------|----------|-------|
+| 19C-1 | ~~Move misplaced utilities from core to models~~ | ~~`core/utils/notebook.py`, `colab_setup.py`, `device_utils.py`~~ | **DISPROVEN** - These are public API exports for external users |
+| 19C-2 | Delete duplicate exception file | `models/config/exceptions.py` | ✅ Verified orphaned (0 imports) |
+| 19C-3 | Consolidate ConfigValidationError to core | `config/validators.py` → `core/exceptions.py` | - |
+| 19C-4 | Remove deprecated orchestrator.py | `src/orchestrator.py` | **BLOCKED** - Still has 2 active imports (CLI + __init__). Migrate CLI first. |
 
 ### Phase 19D: Code Quality (LOW PRIORITY)
 

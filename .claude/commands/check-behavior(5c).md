@@ -1,13 +1,12 @@
 Use 2 parallel task agents to verify $ARGUMENTS still works:
 
-Agent 1 - Execution Tracing:
-- Trace the code path from entry to exit
-- Confirm expected inputs → expected outputs
-- Check EventBus subscriptions still fire
+**Agent 1 - Execution Tracing:**
+- Trace code path entry → exit
+- Confirm inputs → outputs
+- Check for side effects
 
-Agent 2 - Edge Cases:
-- Null/empty inputs
+**Agent 2 - Edge Cases:**
+- Null/empty/boundary inputs
 - Error conditions
-- Boundary values
 
-Report pass/fail with evidence. Reference file:line for any failures.
+Return: ✅ PASS | ❌ FAIL with file:line evidence.

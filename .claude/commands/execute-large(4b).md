@@ -1,26 +1,19 @@
 Read CLEANUP_PLAN.md (roadmap) and CLEANUP_TASKS.md (details) for $ARGUMENTS.
 
-Orchestrate 12 sequential task agents with context handoffs:
+Execute in phases with verification between each:
 
-Implementation (Agents 1-12):
-- Each handles one task category from CLEANUP_TASKS.md
-- Run `ruff check src/` after each agent
-- Pass full context to next agent
+**Phase 1-3:** Implementation
+- Execute changes per CLEANUP_TASKS.md
+- Run `ruff check src/` after each major change
+- Verify imports work
 
-Post-Implementation (Agent 7):
-- Review remaining issues
-- Run full validation checklist:
-  - `ruff check src/` passes
-  - `python -c "from src.<module> import <Class>; print('OK')"` for new code
-  - test the actual pipeline.
+**Phase 4:** Validation
+- Run full validation: ruff, imports, tests if applicable
 
-**REQUIRED: Update docs after execution completes:**
-1. Update CLEANUP_PLAN.md - mark completed items in tables
-2. Update CLEANUP_TASKS.md - mark tasks as ✅ complete
-3. Add phase summary to COMPLETION.md with:
-   - Impact (lines added/removed)
-   - Tasks completed
-   - Files created/modified
-   - Lessons learned
+**Phase 5:** Documentation (use doc-updater subagent)
+- Update CLEANUP_PLAN.md - mark completed
+- Update CLEANUP_TASKS.md - mark tasks ✅
+- Add phase summary to COMPLETION.md
+- Remove completed items from PLAN and TASKS
 
 Per CLAUDE.md: delete don't adapt, small diffs, verify compiles.

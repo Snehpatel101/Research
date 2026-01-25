@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phases 0-18 Complete | Phase 19 Planned
-**Last Updated:** 2026-01-25
+**Status:** Phases 0-18 Complete | Phase 19 Planned | Quick Fixes Ready
+**Last Updated:** 2026-01-25 (Post-Batch Verification)
 
 ---
 
@@ -30,6 +30,31 @@
 | 18 | 2/3 | DataContractViolation consolidation |
 
 See **COMPLETION.md** for detailed implementation records.
+
+---
+
+## Verified Quick Fixes (From Batch Verification)
+
+**Status:** READY TO FIX | 4-Agent Verification Complete
+
+These items were verified by 4 parallel agents and are ready for immediate action:
+
+### Critical: F822 Undefined Exports
+- [ ] File: `src/data/features/compute/numba_functions.py:325-326`
+- [ ] Remove `calculate_rolling_correlation_numba` from `__all__` (function doesn't exist)
+- [ ] Remove `calculate_rolling_beta_numba` from `__all__` (function doesn't exist)
+- [ ] Verify: `ruff check src/data/features/compute/numba_functions.py --select F822`
+
+### High: Delete Orphaned Exception File
+- [ ] File: `src/models/config/exceptions.py`
+- [ ] Verify no imports: `grep -r "from src.models.config.exceptions import" src/`
+- [ ] Delete file (contains unused ConfigError, ConfigValidationError)
+- [ ] Verify tests still pass
+
+### Low: B023 False Positive
+- [ ] File: `src/data/features/compute/price_features.py:147`
+- [ ] Add `# noqa: B023` with comment: `# Lambda executed immediately via .apply(), not stored`
+- [ ] This is a false positive - lambda is not captured, it's used immediately
 
 ---
 
@@ -179,10 +204,11 @@ correlations = np.abs(corr_matrix[0, 1:])
 - [ ] Remove local definition
 
 #### 19C-4: Remove Deprecated Orchestrator
-- [ ] Verify no direct imports of `src/orchestrator.py` except lazy export
-- [ ] Update `src/__init__.py` to remove MLPipeline export
-- [ ] Delete `src/orchestrator.py`
-- [ ] Update CLI if needed
+- [ ] **NOTE:** Verified still has 2 active imports - cannot delete yet
+- [ ] Active imports: `src/__init__.py` (lazy import), `src/cli/commands/pipeline.py`
+- [ ] First: Update `src/cli/commands/pipeline.py` to use `UnifiedTrainingOrchestrator`
+- [ ] Then: Update `src/__init__.py` to remove deprecated lazy export
+- [ ] Finally: Delete `src/orchestrator.py`
 
 ---
 
