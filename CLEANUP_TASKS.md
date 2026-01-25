@@ -1,8 +1,9 @@
 # ML Factory - Phase 12 Implementation Tasks
 
-**Status:** PHASE 12 COMPLETE (39 tasks)
-**Completed:** 2026-01-24
-**Priority:** CRITICAL - Trading profitability + Live deployment
+**Status:** PHASE 12 COMPLETE | PHASE 12.5 PENDING
+**Completed:** 2026-01-24 (Phase 12)
+**Review Date:** 2026-01-25
+**Priority:** HIGH - Code quality cleanup before Phase 13
 
 ---
 
@@ -2586,4 +2587,223 @@ python -c "from src.core.exceptions import MLFactoryError; from src.validation.l
 **Completion Date:** 2026-01-24
 **Priority Order:** 12A->12B->12E->12D->12C->12F (EXECUTED IN ORDER)
 
-*Last Updated: 2026-01-24 - PHASE 12 COMPLETE*
+---
+
+## PHASE 12.5: Code Quality Pass (NEW)
+
+**Status:** NOT STARTED
+**Discovered:** 2026-01-25 (Post-Phase 12 Review)
+**Priority:** HIGH - Block on this before Phase 13
+
+### Issues Discovered by 4-Agent Parallel Analysis
+
+| Agent | Focus | Findings |
+|-------|-------|----------|
+| Explore | Remaining tasks | Phases 13-18 pending (32 tasks total) |
+| Debugger | Tests/imports | 42 tests pass, 4 cosmetic import issues |
+| Architect | Pipeline review | 5 critical architecture issues |
+| Code Reviewer | Quality check | 210 ruff + 82 mypy violations |
+
+---
+
+### 12.5A: Ruff Auto-fixes
+
+**Command:** `ruff check src/ --fix`
+
+**Expected to fix ~100 violations:**
+- UP038 (28): Non-PEP604 isinstance
+- C401/C416 (10): Unnecessary generators
+- RUF005 (10): Concatenation vs unpacking
+
+---
+
+### 12.5B: Ruff Unsafe Fixes (Review Required)
+
+**Command:** `ruff check src/ --fix --unsafe-fixes`
+
+**Review before applying:**
+- SIM102 (36): Collapsible if statements
+- SIM108 (27): Ternary operator conversion
+- B007 (15): Unused loop variables
+
+---
+
+### 12.5C: Fix Critical Type Error
+
+**File:** `/home/jake/Desktop/Research/src/core/contracts/feature_spec.py`
+**Line:** 123
+
+**Issue:** Assigns `list[Any]` to variable typed as `dict[str, Any]`
+
+**Investigation needed** - This could be:
+1. Incorrect type annotation
+2. Incorrect assignment
+3. Schema mismatch
+
+**Verify:**
+```bash
+python -c "from src.core.contracts.feature_spec import FeatureSpec; print('OK')"
+```
+
+---
+
+### 12.5D: Fix Silent Parallel Processing Failures
+
+**File:** `/home/jake/Desktop/Research/src/data/pipeline/stages/features/run.py`
+**Lines:** 279-286
+
+**Current (WRONG):**
+```python
+for result in results:
+    if result is None:  # Silently skips failures
+        continue
+```
+
+**Fix:**
+```python
+failures = [(task, r) for task, r in zip(tasks, results) if r is None]
+if failures:
+    failed_symbols = [f"{s}_{tf}" for (s, tf), _ in failures]
+    logger.error(f"Feature engineering failed for: {failed_symbols}")
+    if config.strict_mode:
+        raise StageValidationError(f"Failed: {failed_symbols}")
+```
+
+**Verify:**
+```bash
+# Should report failures instead of silently continuing
+python -m src pipeline --stages features --strict-mode
+```
+
+---
+
+### 12.5E: Remove Global State Mutation
+
+**File:** `/home/jake/Desktop/Research/src/data/pipeline/stages/scaling/run.py`
+**Lines:** 325-332
+
+**Current (WRONG):**
+```python
+for src_file in src_scaled_dir.glob("*"):
+    if src_file.is_file():
+        dst_file = global_scaled_dir / src_file.name
+        shutil.copy2(src_file, dst_file)  # COPIES TO SHARED DIR
+```
+
+**Issue:** Copies run-specific files to `data/splits/scaled/` which:
+- Breaks run isolation
+- Could overwrite data from parallel runs
+- Creates hidden side effects
+
+**Fix Options:**
+1. Remove the copy entirely (use run-specific dir)
+2. Make it opt-in with config flag + warning
+3. Add run_id prefix to filenames
+
+---
+
+### 12.5F: Add Missing Stage Schemas
+
+**File:** `/home/jake/Desktop/Research/src/data/pipeline/schemas.py`
+
+**Missing schemas (4 of 12):**
+1. `ga_optimize` - Stage 5
+2. `validate_scaled` - Stage 7.6
+3. `validate` - Stage 8
+4. `generate_report` - Stage 9
+
+**Add to STAGE_SCHEMAS dict:**
+```python
+"ga_optimize": StageSchema(
+    required_columns=["label_horizon_*", "label_type"],
+    optional_columns=["ga_generation", "ga_fitness"],
+),
+# ... etc
+```
+
+---
+
+### 12.5G: Create StageNames Enum
+
+**File:** `/home/jake/Desktop/Research/src/data/pipeline/stage_registry.py`
+
+**Create enum to replace magic strings:**
+```python
+class StageName(str, Enum):
+    INGEST = "ingest"
+    CLEAN = "clean"
+    FEATURES = "features"
+    MTF = "mtf"
+    INITIAL_LABELS = "initial_labels"
+    GA_OPTIMIZE = "ga_optimize"
+    FINAL_LABELS = "final_labels"
+    CREATE_SPLITS = "create_splits"
+    SCALING = "scaling"
+    CREATE_DATASETS = "create_datasets"
+    VALIDATE_SCALED = "validate_scaled"
+    VALIDATE = "validate"
+    GENERATE_REPORT = "generate_report"
+```
+
+**Update references in:**
+- `stage_registry.py` (stage definitions)
+- `runner.py` (stage_functions dict)
+- `schemas.py` (STAGE_SCHEMAS dict)
+
+---
+
+### 12.5H: Standardize Error Handling
+
+**Issue:** Inconsistent patterns across stages
+
+| Stage | Pattern | Should Be |
+|-------|---------|-----------|
+| `run_initial_labeling` | Raises `ValueError` | Consistent |
+| `_validate_horizons_vs_data` | Logs warning only | Should raise |
+| `run_feature_scaling` | Raises `RuntimeError` | Consistent |
+| `run_validation` | Returns failed result | Should raise |
+
+**Recommendation:**
+- All validation failures should RAISE exceptions by default
+- Add `warn_only: bool = False` parameter for non-blocking mode
+- Document when to use each pattern
+
+---
+
+### Verification Commands
+
+```bash
+# After 12.5A + 12.5B
+ruff check src/  # Target: <50 violations (from 210)
+
+# After 12.5C
+mypy src/core/contracts/feature_spec.py  # No assignment error
+
+# After 12.5D
+python -m src pipeline --stages features --test-failure-handling
+
+# After 12.5E
+# Run two pipelines in parallel - should not interfere
+python -m src pipeline --run-id run_001 &
+python -m src pipeline --run-id run_002 &
+
+# After all
+pytest tests/ -v  # Still 42 passing
+```
+
+---
+
+### Success Criteria
+
+| Metric | Before | After Target |
+|--------|--------|--------------|
+| Ruff violations | 210 | <50 |
+| Mypy critical errors | 82 | <10 |
+| Silent pipeline failures | Yes | No |
+| Global state mutation | Yes | No |
+| Stage schemas | 8/12 | 12/12 |
+| Magic strings | Many | 0 (use enum) |
+
+---
+
+*Last Updated: 2026-01-25 - PHASE 12.5 ADDED*

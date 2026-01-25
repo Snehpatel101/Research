@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-01-24 (Phase 12 Complete)
-**Status:** Phase 12 Complete | Production-Ready Trading System
+**Last Updated:** 2026-01-25 (Post-Phase 12 Review)
+**Status:** Phase 12 Complete | Code Quality Improvements Pending
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -1937,5 +1937,46 @@ NO PRE-COMPUTED PARQUETS - notebook is self-contained.
 
 ---
 
+---
+
+## Post-Phase 12 Review (2026-01-25)
+
+### Code Quality Issues Identified
+
+| Category | Count | Severity |
+|----------|-------|----------|
+| **Ruff Linting** | 210 | MEDIUM - Many auto-fixable |
+| **Mypy Type Errors** | 82 | MEDIUM - Some critical |
+| **Pipeline Arch Issues** | 5 | HIGH - Silent failures, state mutation |
+| **Import Inconsistencies** | 4 | LOW - Cosmetic |
+
+### Critical Type Error
+
+`src/core/contracts/feature_spec.py:123` - Assigns `list` to `dict` variable (needs investigation)
+
+### Pipeline Architecture Issues
+
+1. **Silent parallel failures** - `stages/features/run.py:279-286` swallows errors
+2. **Global state mutation** - `stages/scaling/run.py:325-332` copies to shared dir
+3. **Missing stage schemas** - 4 of 12 stages lack validation
+4. **Magic stage names** - Should use enum, scattered across files
+
+### Financial Improvements Available
+
+See `IMPROVEMENTS.md` for 25 research-backed improvements ranked by Sharpe impact:
+- **Critical (#1-4):** +20-40% Sharpe potential
+- **High (#5-11):** +15-25% Sharpe potential
+- **Medium (#12-19):** +10-15% Sharpe potential
+
+### Tests Passing
+
+42/42 tests pass (~5.3 seconds). Test suite covers:
+- Backtester smoke tests
+- Circuit breaker integration
+- Transaction costs
+- R-multiple calculations
+
+---
+
 *Document maintained as single source of truth for ML Factory architecture.*
-*Last updated: 2026-01-24 (Phase 12 Complete)*
+*Last updated: 2026-01-25 (Post-Phase 12 Review)*

@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phases 0-12 Complete | Production Ready
-**Last Updated:** 2026-01-24 (Phase 12 Complete)
+**Status:** Phases 0-12 Complete | Code Quality Pass Needed
+**Last Updated:** 2026-01-25 (Post-Phase 12 Review)
 
 ---
 
@@ -346,6 +346,46 @@ python -c "from src.core.exceptions import MLFactoryError; from src.validation.l
 ## Remaining Work from Original Phase 11-18
 
 These phases are now superseded by Phase 12 above. Original deferred items:
+
+---
+
+## Phase 12.5: Code Quality Pass (HIGH - P1) ⚠️ NEW
+
+**Goal:** Fix code quality issues discovered during post-Phase 12 review
+
+**Status:** NOT STARTED
+**Discovered:** 2026-01-25
+
+### Quick Wins (Auto-fixable)
+
+| Task | Command | Impact |
+|------|---------|--------|
+| 12.5A | `ruff check src/ --fix` | Fix ~100 auto-fixable violations |
+| 12.5B | `ruff check src/ --fix --unsafe-fixes` | Fix ~98 more (review changes) |
+
+### Critical Fixes
+
+| Task | Description | File:Line | Severity |
+|------|-------------|-----------|----------|
+| 12.5C | Fix list→dict type error | `src/core/contracts/feature_spec.py:123` | HIGH |
+| 12.5D | Make parallel errors explicit | `src/data/pipeline/stages/features/run.py:279-286` | HIGH |
+| 12.5E | Remove global state mutation | `src/data/pipeline/stages/scaling/run.py:325-332` | HIGH |
+
+### Schema/Architecture Fixes
+
+| Task | Description | Impact |
+|------|-------------|--------|
+| 12.5F | Add missing stage schemas | 4 stages need validation schemas |
+| 12.5G | Create StageNames enum | Replace magic strings |
+| 12.5H | Standardize error handling | Raise vs log warning consistency |
+
+### Verification
+
+```bash
+ruff check src/  # Should drop from 210 to <50
+mypy src/ --ignore-missing-imports  # Critical errors only
+pytest tests/ -v  # Still 42 passing
+```
 
 ---
 
