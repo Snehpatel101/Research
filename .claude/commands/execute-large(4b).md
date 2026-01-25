@@ -1,8 +1,8 @@
 Read CLEANUP_PLAN.md (roadmap) and CLEANUP_TASKS.md (details) for $ARGUMENTS.
 
-Orchestrate 7 sequential task agents with context handoffs:
+Orchestrate 12 sequential task agents with context handoffs:
 
-Implementation (Agents 1-6):
+Implementation (Agents 1-12):
 - Each handles one task category from CLEANUP_TASKS.md
 - Run `ruff check src/` after each agent
 - Pass full context to next agent
