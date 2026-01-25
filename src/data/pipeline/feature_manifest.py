@@ -1,16 +1,19 @@
 """Feature manifest for tracking engineered features.
 
 Part of Phase 7D: Feature Manifest System.
+Enhanced in Phase 14G: Per-feature computation parameters for reproducibility.
 
 The FeatureManifest provides a persistent record of what feature columns
 were produced by feature engineering. This enables:
 1. Explicit feature column lists for adapters (vs prefix matching)
 2. Validation that expected features are present
 3. Reproducibility auditing for ML pipelines
+4. Per-feature computation parameters for exact reproduction
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
@@ -25,8 +28,85 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class FeatureMetadata:
+    """Metadata for a single feature including computation parameters.
+
+    Stores all information needed to reproduce a feature's computation,
+    including the parameters used and source columns.
+
+    Attributes:
+        name: Feature name (e.g., 'rsi_14')
+        category: Feature category (e.g., 'momentum', 'volatility', 'mtf')
+        params: Computation parameters (e.g., {'period': 14, 'method': 'sma'})
+        source_columns: Input columns used to compute this feature
+        created_at: ISO timestamp when feature was registered
+        checksum: Hash of params for change detection
+    """
+
+    name: str
+    category: str
+    params: dict[str, Any] = field(default_factory=dict)
+    source_columns: list[str] = field(default_factory=list)
+    created_at: str = ""
+    checksum: str | None = None
+
+    def __post_init__(self) -> None:
+        """Set created_at and compute checksum if not provided."""
+        if not self.created_at:
+            self.created_at = datetime.now().isoformat()
+        if self.checksum is None and self.params:
+            self.checksum = self._compute_checksum()
+
+    def _compute_checksum(self) -> str:
+        """Compute a deterministic hash of the computation parameters.
+
+        Returns:
+            SHA-256 hash of the JSON-serialized params
+        """
+        # Sort keys for deterministic serialization
+        params_json = json.dumps(self.params, sort_keys=True, default=str)
+        return hashlib.sha256(params_json.encode()).hexdigest()[:16]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization.
+
+        Returns:
+            Dictionary representation of the feature metadata
+        """
+        return {
+            "name": self.name,
+            "category": self.category,
+            "params": self.params,
+            "source_columns": self.source_columns,
+            "created_at": self.created_at,
+            "checksum": self.checksum,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FeatureMetadata:
+        """Create FeatureMetadata from dictionary.
+
+        Args:
+            data: Dictionary with feature metadata fields
+
+        Returns:
+            FeatureMetadata instance
+        """
+        return cls(
+            name=data["name"],
+            category=data["category"],
+            params=data.get("params", {}),
+            source_columns=data.get("source_columns", []),
+            created_at=data.get("created_at", ""),
+            checksum=data.get("checksum"),
+        )
+
+
+@dataclass
 class FeatureManifest:
     """Manifest tracking feature columns produced by feature engineering.
+
+    Enhanced to support per-feature computation parameters for reproducibility.
 
     Attributes:
         feature_columns: List of feature column names (e.g., 'rsi_14', 'sma_20')
@@ -37,9 +117,11 @@ class FeatureManifest:
         symbol: Trading symbol (e.g., 'MES')
         timeframe: Data timeframe (e.g., '5min')
         metadata: Additional metadata dictionary
+        features: Map of feature name to FeatureMetadata with computation params
+        computation_config: Global computation settings applied to all features
     """
 
-    feature_columns: list[str]
+    feature_columns: list[str] = field(default_factory=list)
     label_columns: list[str] = field(default_factory=list)
     timestamp_column: str = "datetime"
     created_at: str = ""
@@ -47,11 +129,22 @@ class FeatureManifest:
     symbol: str = ""
     timeframe: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    features: dict[str, FeatureMetadata] = field(default_factory=dict)
+    computation_config: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Set created_at if not provided."""
+        """Set created_at if not provided and convert features from dict."""
         if not self.created_at:
             self.created_at = datetime.now().isoformat()
+        # Convert dict representations to FeatureMetadata objects
+        if self.features:
+            converted = {}
+            for name, meta in self.features.items():
+                if isinstance(meta, dict):
+                    converted[name] = FeatureMetadata.from_dict(meta)
+                else:
+                    converted[name] = meta
+            self.features = converted
 
     def save(self, path: Path | str) -> None:
         """Save manifest to JSON file.
@@ -100,6 +193,8 @@ class FeatureManifest:
             "symbol": self.symbol,
             "timeframe": self.timeframe,
             "metadata": self.metadata,
+            "features": {name: meta.to_dict() for name, meta in self.features.items()},
+            "computation_config": self.computation_config,
         }
 
     @property
@@ -111,6 +206,141 @@ class FeatureManifest:
     def n_labels(self) -> int:
         """Number of label columns."""
         return len(self.label_columns)
+
+    def add_feature(
+        self,
+        name: str,
+        category: str,
+        params: dict[str, Any],
+        source_columns: list[str],
+    ) -> None:
+        """Register a feature with its computation parameters.
+
+        Args:
+            name: Feature name (e.g., 'rsi_14')
+            category: Feature category (e.g., 'momentum', 'volatility', 'mtf')
+            params: Computation parameters (e.g., {'period': 14, 'method': 'sma'})
+            source_columns: Input columns used to compute this feature
+        """
+        metadata = FeatureMetadata(
+            name=name,
+            category=category,
+            params=params,
+            source_columns=source_columns,
+        )
+        self.features[name] = metadata
+        # Also add to feature_columns if not present
+        if name not in self.feature_columns:
+            self.feature_columns.append(name)
+        logger.debug(f"Added feature '{name}' with category '{category}'")
+
+    def get_feature_params(self, name: str) -> dict[str, Any] | None:
+        """Get computation parameters for a feature.
+
+        Args:
+            name: Feature name to look up
+
+        Returns:
+            Computation parameters dict, or None if feature not found
+        """
+        metadata = self.features.get(name)
+        if metadata is None:
+            return None
+        return metadata.params
+
+    def get_feature_metadata(self, name: str) -> FeatureMetadata | None:
+        """Get full metadata for a feature.
+
+        Args:
+            name: Feature name to look up
+
+        Returns:
+            FeatureMetadata instance, or None if feature not found
+        """
+        return self.features.get(name)
+
+    def get_features_by_category(self, category: str) -> list[FeatureMetadata]:
+        """Get all features in a specific category.
+
+        Args:
+            category: Category to filter by (e.g., 'momentum', 'volatility')
+
+        Returns:
+            List of FeatureMetadata instances in the category
+        """
+        return [meta for meta in self.features.values() if meta.category == category]
+
+    def to_reproducibility_record(self) -> dict[str, Any]:
+        """Export manifest for reproducibility tracking.
+
+        Creates a comprehensive record containing all information needed
+        to exactly reproduce the feature engineering process.
+
+        Returns:
+            Dictionary with complete reproducibility information
+        """
+        return {
+            "manifest_version": "2.0.0",  # Version with params support
+            "pipeline_version": self.pipeline_version,
+            "created_at": self.created_at,
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "computation_config": self.computation_config,
+            "features": {
+                name: {
+                    "category": meta.category,
+                    "params": meta.params,
+                    "source_columns": meta.source_columns,
+                    "checksum": meta.checksum,
+                }
+                for name, meta in self.features.items()
+            },
+            "feature_count": len(self.feature_columns),
+            "label_columns": self.label_columns,
+            "timestamp_column": self.timestamp_column,
+        }
+
+    def validate_reproducibility(self, other: FeatureManifest) -> tuple[bool, list[str]]:
+        """Validate that another manifest can reproduce this one.
+
+        Compares feature checksums to detect parameter changes.
+
+        Args:
+            other: Another FeatureManifest to compare against
+
+        Returns:
+            Tuple of (is_reproducible, list of differences)
+        """
+        differences = []
+
+        # Check pipeline versions
+        if self.pipeline_version != other.pipeline_version:
+            differences.append(
+                f"Pipeline version mismatch: {self.pipeline_version} vs "
+                f"{other.pipeline_version}"
+            )
+
+        # Check computation configs
+        if self.computation_config != other.computation_config:
+            differences.append("Computation config differs")
+
+        # Check feature checksums
+        for name, meta in self.features.items():
+            other_meta = other.features.get(name)
+            if other_meta is None:
+                differences.append(f"Feature '{name}' missing in other manifest")
+            elif meta.checksum != other_meta.checksum:
+                differences.append(
+                    f"Feature '{name}' params differ: checksum "
+                    f"{meta.checksum} vs {other_meta.checksum}"
+                )
+
+        # Check for extra features in other
+        for name in other.features:
+            if name not in self.features:
+                differences.append(f"Extra feature '{name}' in other manifest")
+
+        return len(differences) == 0, differences
 
     def validate_dataframe(self, df: pd.DataFrame) -> tuple[bool, list[str]]:
         """Validate that a DataFrame contains expected columns.
@@ -215,4 +445,4 @@ class FeatureManifest:
         )
 
 
-__all__ = ["FeatureManifest"]
+__all__ = ["FeatureManifest", "FeatureMetadata"]

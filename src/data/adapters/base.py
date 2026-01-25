@@ -18,6 +18,48 @@ if TYPE_CHECKING:
     from src.core.contracts import DataContract, ModelContract
 
 from src.core.contracts import DataRank
+from src.core.contracts.data_contract import DataContractViolation
+
+
+def validate_label_alignment(features: pd.DataFrame, labels: pd.Series) -> None:
+    """Validate labels are properly aligned with features.
+
+    This function ensures that labels match features exactly in both length
+    and index alignment. This catches off-by-one errors and timestamp
+    misalignments that could cause incorrect label associations.
+
+    Args:
+        features: Feature DataFrame with datetime index
+        labels: Label Series that should align with features
+
+    Raises:
+        DataContractViolation: If labels don't align with features
+
+    Example:
+        >>> features = pd.DataFrame({'a': [1,2,3]}, index=pd.date_range('2020-01-01', periods=3))
+        >>> labels = pd.Series([0,1,0], index=pd.date_range('2020-01-01', periods=3))
+        >>> validate_label_alignment(features, labels)  # No exception
+    """
+    # Check length match
+    if len(features) != len(labels):
+        raise DataContractViolation(
+            [f"Label length mismatch: features={len(features)}, labels={len(labels)}"]
+        )
+
+    # Check index alignment if both have indices
+    has_indices = hasattr(features, "index") and hasattr(labels, "index")
+    if has_indices and not features.index.equals(labels.index):
+        # Find first mismatch for detailed error reporting
+        mismatches = features.index != labels.index
+        if mismatches.any():
+            first_mismatch_idx = int(mismatches.argmax())
+            raise DataContractViolation(
+                [
+                    f"Label index mismatch at position {first_mismatch_idx}: "
+                    f"features={features.index[first_mismatch_idx]}, "
+                    f"labels={labels.index[first_mismatch_idx]}"
+                ]
+            )
 
 
 @dataclass
@@ -409,4 +451,5 @@ class BaseAdapter(ABC):
 __all__ = [
     "AdapterResult",
     "BaseAdapter",
+    "validate_label_alignment",
 ]

@@ -4,6 +4,85 @@
 
 ---
 
+## Phase 14: Data Quality Hardening | 2026-01-25 | COMPLETE
+
+**Impact:** ~450 lines added/modified (7 files modified)
+**Purpose:** Eliminate silent data quality failures and leakage risks
+
+### Tasks Completed (7/7)
+
+| Task | Description | Status | Location |
+|------|-------------|--------|----------|
+| 14A | Dynamic Purge Bars | ✅ Done | `purged_kfold.py:80-147` - `from_horizons()` method |
+| 14B | Mandatory MTF shift(1) | ✅ Done | `mtf.py` - removed `apply_shift` parameter |
+| 14C | Automatic Lookahead Audit | ✅ Done | `validation/__init__.py:331-463` - mandatory blocking |
+| 14D | Per-Feature NaN Monitoring | ✅ Done | `features/run.py:39-164` - `validate_feature_nan_ratio()` |
+| 14E | Label Alignment Validation | ✅ Done | `adapters/base.py` - `validate_label_alignment()` |
+| 14F | Inter-Stage Schema Validation | ✅ Done | `schemas.py` - `validate_stage_transition()` |
+| 14G | Feature Manifest with Params | ✅ Done | `feature_manifest.py` - `FeatureMetadata` dataclass |
+
+### Key Changes
+
+**14A: Dynamic Purge Bars** (`src/validation/cv/purged_kfold.py`)
+- Added `PurgedKFoldConfig.from_horizons(horizons)` - computes `purge_bars = max(horizons) * 3`
+- Added `validate_purge_for_horizons()` - warns if manual purge is insufficient
+- Added `from_horizons_and_timeframe()` - combined factory for purge + embargo
+
+**14B: Mandatory MTF Shift** (`src/data/features/compute/mtf.py`)
+- Removed `apply_shift` parameter from `MTFConfig`
+- shift(1) now ALWAYS applied for anti-lookahead protection
+- Updated docstrings to explain mandatory nature
+
+**14C: Mandatory Lookahead Audit** (`src/data/pipeline/stages/validation/__init__.py`)
+- Lookahead audit now ALWAYS runs (not optional)
+- `check_lookahead=False` emits deprecation warning and runs anyway
+- Always uses `raise_on_lookahead=True` (blocking mode)
+
+**14D: NaN Monitoring** (`src/data/pipeline/stages/features/run.py`)
+- Added `validate_feature_nan_ratio()` function
+- Fails if any feature >10% NaN after 200-bar warmup
+- Logs warnings for features with 5-10% NaN
+
+**14E: Label Alignment** (`src/data/adapters/base.py`)
+- Added `validate_label_alignment(features, labels)` function
+- Validates length match and index alignment
+- Reports exact position of first mismatch
+
+**14F: Inter-Stage Schema** (`src/data/pipeline/schemas.py`)
+- Added `STAGE_TRANSITION_REQUIREMENTS` dict
+- Added `validate_stage_transition()` function
+- Validates required columns, NaN, and data types between stages
+
+**14G: Feature Manifest** (`src/data/pipeline/feature_manifest.py`)
+- Added `FeatureMetadata` dataclass with `params`, `source_columns`, `checksum`
+- Added `add_feature()`, `get_feature_params()`, `to_reproducibility_record()` methods
+- Enables exact feature reproduction
+
+### Verification
+
+```bash
+# All ruff checks pass
+ruff check src/validation/cv/purged_kfold.py  # ✓
+ruff check src/data/features/compute/mtf.py   # ✓
+ruff check src/data/pipeline/stages/validation/__init__.py  # ✓
+ruff check src/data/pipeline/stages/features/run.py  # ✓
+ruff check src/data/adapters/base.py  # ✓
+ruff check src/data/pipeline/schemas.py  # ✓
+ruff check src/data/pipeline/feature_manifest.py  # ✓
+
+# All 42 tests pass
+pytest tests/ -v  # 42 passed
+```
+
+### Lessons Learned
+
+1. **Dynamic defaults > static defaults** - `purge_bars=60` was insufficient for longer horizons; dynamic calculation prevents leakage
+2. **Remove optional safety features** - Making shift optional invited bugs; mandatory is safer
+3. **Fail-fast with context** - NaN monitoring reports which features and exact ratios, not just "failed"
+4. **Deprecation warnings for API changes** - `check_lookahead=False` now warns but still runs audit
+
+---
+
 ## Phase 13: Performance Optimization | 2026-01-25 | COMPLETE
 
 **Impact:** +504 lines added (2 files modified, 1 new file)

@@ -3,10 +3,13 @@ Validators submodule for Stage 8 data validation.
 
 Provides modular validation checks for data integrity, labels, features,
 and normalization.
+
+Note: Lookahead audit is MANDATORY (Phase 14C) and always runs in blocking mode.
 """
 
 import json
 import logging
+import warnings
 from datetime import datetime
 from pathlib import Path
 
@@ -298,6 +301,10 @@ def validate_data(
     """
     Main validation function.
 
+    IMPORTANT: Lookahead audit is MANDATORY and always runs in blocking mode.
+    The check_lookahead parameter is deprecated - setting it to False will
+    emit a warning but the audit will still run.
+
     Args:
         data_path: Path to combined labeled data
         output_path: Optional path to save validation report (JSON)
@@ -308,17 +315,29 @@ def validate_data(
         feature_selection_output_path: Optional path to save feature selection report
         seed: Random seed for reproducibility (default: 42)
         check_leakage: Whether to run leakage detection (default True, Phase 4A)
-        check_lookahead: Whether to run lookahead audit (default True, Phase 4B)
+        check_lookahead: DEPRECATED - lookahead audit is now mandatory and always
+            runs in blocking mode. Setting to False will emit a deprecation warning.
 
     Returns:
         Tuple of (validation summary dict, FeatureSelectionResult or None)
 
     Raises:
         LeakageDetectedError: If leakage is detected and check_leakage=True
-        LookaheadBiasError: If lookahead bias is detected and check_lookahead=True
+        LookaheadBiasError: If lookahead bias is detected (always - audit is mandatory)
     """
     if horizons is None:
         horizons = [1, 5, 20]
+
+    # Phase 14C: Lookahead audit is now mandatory - emit deprecation warning if disabled
+    if not check_lookahead:
+        warnings.warn(
+            "check_lookahead=False is deprecated and ignored. "
+            "Lookahead audit is now MANDATORY and always runs in blocking mode. "
+            "This parameter will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     logger.info("=" * 70)
     logger.info("STAGE 8: DATA VALIDATION")
     logger.info("=" * 70)
@@ -375,58 +394,73 @@ def validate_data(
         else:
             logger.warning("Skipping leakage detection - insufficient labels or features")
 
-    # Phase 4B: Lookahead audit (blocks training if lookahead bias detected)
-    if check_lookahead:
-        logger.info("\n" + "=" * 60)
-        logger.info("LOOKAHEAD AUDIT (Phase 4B)")
-        logger.info("=" * 60)
+    # Phase 4B/14C: Lookahead audit - MANDATORY and BLOCKING
+    # This audit ALWAYS runs regardless of check_lookahead parameter (deprecated)
+    logger.info("\n" + "=" * 60)
+    logger.info("LOOKAHEAD AUDIT (MANDATORY - Phase 14C)")
+    logger.info("=" * 60)
+    logger.info("Lookahead audit is mandatory and will BLOCK on failure.")
 
-        # Run lookahead audit with corruption testing
-        # This will raise LookaheadBiasError if lookahead is found
-        auditor = LookaheadAuditor(corruption_point=0.8, random_seed=seed)
+    # Run lookahead audit with corruption testing
+    # This will raise LookaheadBiasError if lookahead is found
+    auditor = LookaheadAuditor(corruption_point=0.8, random_seed=seed)
 
-        # For a comprehensive audit, we'd test individual feature functions
-        # For now, we'll do a basic check on the entire feature set
-        # Note: Detailed per-feature audit requires feature generation functions
-        logger.info("Running corruption-based lookahead audit at 80% point")
+    # For a comprehensive audit, we'd test individual feature functions
+    # For now, we'll do a basic check on the entire feature set
+    # Note: Detailed per-feature audit requires feature generation functions
+    logger.info("Running corruption-based lookahead audit at 80% point")
 
-        # Check if data has required OHLCV columns for meaningful audit
-        ohlcv_cols = ["open", "high", "low", "close", "volume"]
-        has_ohlcv = all(col in df.columns for col in ohlcv_cols)
+    # Check if data has required OHLCV columns for meaningful audit
+    ohlcv_cols = ["open", "high", "low", "close", "volume"]
+    has_ohlcv = all(col in df.columns for col in ohlcv_cols)
 
-        if has_ohlcv:
-            # Test a simple feature (e.g., returns) for lookahead
-            # In production, this would test all feature generation functions
-            try:
-                # Create a simple feature function to test
-                def compute_returns(data: pd.DataFrame) -> pd.DataFrame:
-                    result = data.copy()
-                    if "close" in result.columns:
-                        result["test_returns"] = result["close"].pct_change()
-                    return result
+    if has_ohlcv:
+        # Test a simple feature (e.g., returns) for lookahead
+        # In production, this would test all feature generation functions
+        try:
+            # Create a simple feature function to test
+            def compute_returns(data: pd.DataFrame) -> pd.DataFrame:
+                result = data.copy()
+                if "close" in result.columns:
+                    result["test_returns"] = result["close"].pct_change()
+                return result
 
-                # Audit the feature function
-                ohlcv_df = pd.DataFrame(df[ohlcv_cols])
-                result = auditor.audit_feature_function(
-                    df=ohlcv_df,
-                    feature_fn=compute_returns,
-                    name="returns",
-                    raise_on_lookahead=True,
-                )
+            # Audit the feature function - ALWAYS with raise_on_lookahead=True
+            ohlcv_df = pd.DataFrame(df[ohlcv_cols])
+            result = auditor.audit_feature_function(
+                df=ohlcv_df,
+                feature_fn=compute_returns,
+                name="returns",
+                raise_on_lookahead=True,  # Mandatory blocking mode
+            )
 
-                logger.info("Lookahead audit passed - no lookahead bias detected")
-                validator.validation_results["lookahead_audit"] = {
-                    "status": "passed",
-                    "corruption_point": 0.8,
-                    "affected_columns": (
-                        list(result.affected_columns) if result.affected_columns else []
-                    ),
-                }
-            except LookaheadBiasError:
-                # Re-raise to block training
-                raise
-        else:
-            logger.warning("Skipping lookahead audit - missing OHLCV columns")
+            logger.info("Lookahead audit PASSED - no lookahead bias detected")
+            validator.validation_results["lookahead_audit"] = {
+                "status": "passed",
+                "mandatory": True,
+                "blocking": True,
+                "corruption_point": 0.8,
+                "affected_columns": (
+                    list(result.affected_columns) if result.affected_columns else []
+                ),
+            }
+        except LookaheadBiasError:
+            # Re-raise to block training - this is mandatory
+            logger.error("Lookahead audit FAILED - blocking pipeline execution")
+            raise
+    else:
+        # Even without OHLCV, we log that audit was attempted but data insufficient
+        logger.warning(
+            "Lookahead audit: Insufficient data (missing OHLCV columns). "
+            "Audit will pass but with warning - ensure OHLCV data is available "
+            "for comprehensive lookahead detection."
+        )
+        validator.validation_results["lookahead_audit"] = {
+            "status": "skipped_insufficient_data",
+            "mandatory": True,
+            "blocking": True,
+            "reason": "Missing OHLCV columns for corruption testing",
+        }
 
     # Run feature selection if requested
     feature_selection_result = None

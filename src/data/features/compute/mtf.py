@@ -112,9 +112,14 @@ class MTFConfig:
     Attributes:
         timeframes: Higher timeframes to resample to (e.g., ["5min", "15min", "60min"])
         features: Feature names to compute on each timeframe
-        apply_shift: Whether to apply shift(1) for anti-lookahead bias (default: True)
         ffill_limit: Maximum periods to forward-fill after resampling (default: None = no limit)
         min_periods_ratio: Minimum valid data ratio required (default: 0.5)
+
+    Note:
+        shift(1) is ALWAYS applied to higher timeframe features. This is mandatory
+        anti-lookahead protection - higher timeframe candles are not "complete" until
+        the period ends, so we must use the previous period's values. This cannot
+        be disabled to prevent accidental data leakage.
 
     Example:
         config = MTFConfig(
@@ -125,7 +130,6 @@ class MTFConfig:
 
     timeframes: list[str] = field(default_factory=lambda: DEFAULT_MTF_TIMEFRAMES.copy())
     features: list[str] = field(default_factory=lambda: DEFAULT_MTF_FEATURES.copy())
-    apply_shift: bool = True  # Anti-lookahead protection
     ffill_limit: int | None = None  # Forward fill limit after reindex
     min_periods_ratio: float = 0.5  # Minimum valid data ratio
 
@@ -451,10 +455,11 @@ class MTFFeatureComputer:
                 ffill_limit=self.config.ffill_limit,
             )
 
-            # 4. Apply shift(1) for anti-lookahead bias
-            # This ensures we only use information from completed candles
-            if self.config.apply_shift:
-                tf_features_aligned = tf_features_aligned.shift(1)
+            # 4. Apply shift(1) for anti-lookahead bias (MANDATORY)
+            # Higher timeframe candles are not complete until the period ends.
+            # We MUST use the previous period's values to prevent lookahead bias.
+            # This shift is unconditional - it cannot be disabled.
+            tf_features_aligned = tf_features_aligned.shift(1)
 
             # 5. Rename columns with timeframe suffix
             for feature_name in self.config.features:
@@ -502,11 +507,11 @@ class MTFFeatureComputer:
         resampled = resample_ohlcv(df_work, timeframe)
         tf_features = _compute_features_on_resampled(resampled, self.config.features)
 
-        # Reindex and shift
+        # Reindex and apply mandatory shift(1) for anti-lookahead protection
         tf_features_aligned = _reindex_to_base(tf_features, base_index, self.config.ffill_limit)
 
-        if self.config.apply_shift:
-            tf_features_aligned = tf_features_aligned.shift(1)
+        # shift(1) is MANDATORY - higher TF candles aren't complete until period ends
+        tf_features_aligned = tf_features_aligned.shift(1)
 
         # Rename with timeframe suffix
         tf_features_aligned.columns = [f"{col}_{timeframe}" for col in tf_features_aligned.columns]
@@ -532,7 +537,7 @@ class MTFFeatureComputer:
             f"  timeframes={self.config.timeframes},\n"
             f"  n_features={self.config.n_features},\n"
             f"  total_features={self.config.total_features},\n"
-            f"  apply_shift={self.config.apply_shift}\n"
+            f"  shift=mandatory  # Anti-lookahead protection\n"
             f")"
         )
 
@@ -546,7 +551,6 @@ def compute_mtf_features(
     df: pd.DataFrame,
     timeframes: list[str] | None = None,
     features: list[str] | None = None,
-    apply_shift: bool = True,
     datetime_col: str | None = None,
 ) -> pd.DataFrame:
     """
@@ -555,11 +559,14 @@ def compute_mtf_features(
     This is the primary entry point for MTF feature computation.
     Uses sensible defaults that can be overridden as needed.
 
+    Note:
+        shift(1) is ALWAYS applied to higher timeframe features. This is mandatory
+        anti-lookahead protection that cannot be disabled.
+
     Args:
         df: DataFrame with 1-minute OHLCV data
         timeframes: Higher timeframes (default: ["5min", "15min", "60min"])
         features: Features to compute (default: ~30 standard features)
-        apply_shift: Apply shift(1) for anti-lookahead (default: True)
         datetime_col: Name of datetime column (if not using DatetimeIndex)
 
     Returns:
@@ -580,7 +587,6 @@ def compute_mtf_features(
     config = MTFConfig(
         timeframes=timeframes or DEFAULT_MTF_TIMEFRAMES.copy(),
         features=features or DEFAULT_MTF_FEATURES.copy(),
-        apply_shift=apply_shift,
     )
 
     computer = MTFFeatureComputer(config)
@@ -656,7 +662,7 @@ def validate_mtf_config(config: MTFConfig) -> dict[str, Any]:
         "n_timeframes": config.n_timeframes,
         "n_features_per_tf": config.n_features,
         "total_features": config.total_features,
-        "apply_shift": config.apply_shift,
+        "shift_applied": True,  # Always mandatory for anti-lookahead protection
     }
 
     return {

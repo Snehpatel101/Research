@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phases 0-13 Complete | Production Ready
-**Last Updated:** 2026-01-25 (Post-Phase 13 Complete)
+**Status:** Phases 0-14 Complete | Production Ready
+**Last Updated:** 2026-01-25 (Post-Phase 14 Complete)
 
 ---
 
@@ -24,7 +24,8 @@ See COMPLETION.md for full details.
 | 10 | Refactor (partial) | +25 lines | 2026-01-24 |
 | 12 | Trading Profitability | +5,780 lines | 2026-01-24 |
 | 12.5 | Code Quality Pass | Ruff 210→93, 4 schemas added | 2026-01-25 |
-| **13** | **Performance Optimization** | **+504 lines (MTF cache, BatchInference)** | **2026-01-25** |
+| 13 | Performance Optimization | +504 lines (MTF cache, BatchInference) | 2026-01-25 |
+| **14** | **Data Quality Hardening** | **7 tasks (dynamic purge, mandatory shift, NaN monitoring)** | **2026-01-25** |
 
 ---
 
@@ -420,19 +421,20 @@ python -c "from src.data.store import get_mtf_cache_stats; print('OK')"  # ✓
 
 ---
 
-## Phase 14: Data Quality Hardening (HIGH - P1)
+## Phase 14: Data Quality Hardening (HIGH - P1) ✅ COMPLETE
 
+**Status:** COMPLETE | 2026-01-25
 **Goal:** Eliminate silent data quality failures and leakage risks
 
-| Task | Description | Impact | Effort |
+| Task | Description | Impact | Status |
 |------|-------------|--------|--------|
-| 14A | Dynamic Purge Bars Calculation | purge_bars = max(horizons) * 3 (auto-computed) | Prevent label leakage | 1 hour |
-| 14B | Make MTF shift(1) Mandatory | Remove apply_shift parameter, always shift | Prevent lookahead | 30 min |
-| 14C | Automatic Lookahead Audit | Integrate LookaheadAuditor into pipeline validation | Catch new feature bugs | 2 hours |
-| 14D | Per-Feature NaN Monitoring | Fail-fast if feature >10% NaN before warmup | Prevent silent data loss | 2 hours |
-| 14E | Label Alignment Validation | Verify labels match sequence timestamps | Prevent off-by-one | 1 hour |
-| 14F | Inter-Stage Schema Validation | Validate schema between pipeline stages | Catch corruption early | 2 hours |
-| 14G | Feature Manifest with Params | Store computation params per feature | Reproducibility | 2 hours |
+| 14A | Dynamic Purge Bars Calculation | purge_bars = max(horizons) * 3 (auto-computed) | ✅ Done |
+| 14B | Make MTF shift(1) Mandatory | Remove apply_shift parameter, always shift | ✅ Done |
+| 14C | Automatic Lookahead Audit | Integrate LookaheadAuditor into pipeline validation | ✅ Done |
+| 14D | Per-Feature NaN Monitoring | Fail-fast if feature >10% NaN before warmup | ✅ Done |
+| 14E | Label Alignment Validation | Verify labels match sequence timestamps | ✅ Done |
+| 14F | Inter-Stage Schema Validation | Validate schema between pipeline stages | ✅ Done |
+| 14G | Feature Manifest with Params | Store computation params per feature | ✅ Done |
 
 **Files:**
 - MODIFY: `src/validation/cv/purged_kfold.py:39` (dynamic purge_bars)

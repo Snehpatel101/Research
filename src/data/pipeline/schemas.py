@@ -181,6 +181,169 @@ def get_stage_schema(stage_name: str) -> StageSchema | None:
     return STAGE_SCHEMAS.get(stage_name)
 
 
+# Define expected column patterns for stage transitions
+STAGE_TRANSITION_REQUIREMENTS: dict[tuple[str, str], dict[str, list[str]]] = {
+    # From data_generation to data_cleaning
+    (StageName.DATA_GENERATION.value, StageName.DATA_CLEANING.value): {
+        "required": ["datetime", "open", "high", "low", "close", "volume"],
+        "no_nan": ["open", "high", "low", "close"],
+    },
+    # From data_cleaning to feature_engineering
+    (StageName.DATA_CLEANING.value, StageName.FEATURE_ENGINEERING.value): {
+        "required": ["datetime", "open", "high", "low", "close", "volume"],
+        "no_nan": ["open", "high", "low", "close"],
+    },
+    # From feature_engineering to initial_labeling
+    (StageName.FEATURE_ENGINEERING.value, StageName.INITIAL_LABELING.value): {
+        "required": ["datetime"],
+        "no_nan": [],  # Features may have some NaN at edges
+    },
+    # From initial_labeling to ga_optimize
+    (StageName.INITIAL_LABELING.value, StageName.GA_OPTIMIZE.value): {
+        "required": ["datetime"],
+        "no_nan": [],
+    },
+    # From ga_optimize to final_labels
+    (StageName.GA_OPTIMIZE.value, StageName.FINAL_LABELS.value): {
+        "required": ["datetime"],
+        "no_nan": [],
+    },
+    # From final_labels to create_splits
+    (StageName.FINAL_LABELS.value, StageName.CREATE_SPLITS.value): {
+        "required": ["datetime"],
+        "no_nan": [],
+    },
+    # From create_splits to feature_scaling
+    (StageName.CREATE_SPLITS.value, StageName.FEATURE_SCALING.value): {
+        "required": ["datetime"],
+        "no_nan": [],
+    },
+    # From feature_scaling to build_datasets
+    (StageName.FEATURE_SCALING.value, StageName.BUILD_DATASETS.value): {
+        "required": ["datetime"],
+        "no_nan": [],  # All columns should be clean after scaling
+    },
+    # From build_datasets to validate_scaled
+    (StageName.BUILD_DATASETS.value, StageName.VALIDATE_SCALED.value): {
+        "required": ["datetime"],
+        "no_nan": [],
+    },
+}
+
+
+def validate_stage_transition(
+    output_df: pd.DataFrame,
+    from_stage: str,
+    to_stage: str,
+    strict: bool = True,
+) -> list[str]:
+    """Validate data when transitioning between pipeline stages.
+
+    This function checks that data meets requirements when passing from
+    one pipeline stage to the next. It catches data corruption, missing
+    columns, and unexpected NaN values early.
+
+    Args:
+        output_df: DataFrame output from the source stage
+        from_stage: Name of the source stage (use StageName.value)
+        to_stage: Name of the target stage (use StageName.value)
+        strict: If True, raise StageValidationError on critical errors
+
+    Returns:
+        List of warning messages (non-blocking issues)
+
+    Raises:
+        StageValidationError: If strict=True and critical validation fails
+
+    Example:
+        >>> from src.data.pipeline.stage_registry import StageName
+        >>> warnings = validate_stage_transition(
+        ...     df,
+        ...     StageName.DATA_CLEANING.value,
+        ...     StageName.FEATURE_ENGINEERING.value,
+        ... )
+    """
+    warnings: list[str] = []
+    critical_issues: list[str] = []
+
+    # Get transition-specific requirements
+    transition_key = (from_stage, to_stage)
+    requirements = STAGE_TRANSITION_REQUIREMENTS.get(transition_key)
+
+    if requirements is None:
+        # No specific requirements for this transition, use target schema
+        logger.debug(
+            f"No specific transition requirements for {from_stage} -> {to_stage}, "
+            "using target stage schema"
+        )
+        # Validate against target schema
+        is_valid, issues = validate_stage_output(output_df, to_stage, raise_on_failure=False)
+        if not is_valid:
+            if strict:
+                raise StageValidationError(
+                    f"{from_stage} -> {to_stage}",
+                    issues,
+                )
+            warnings.extend(issues)
+        return warnings
+
+    # Check required columns exist
+    required_cols = requirements.get("required", [])
+    missing_cols = set(required_cols) - set(output_df.columns)
+    if missing_cols:
+        critical_issues.append(f"Missing required columns for {to_stage}: {sorted(missing_cols)}")
+
+    # Check no NaN in key columns
+    no_nan_cols = requirements.get("no_nan", [])
+    for col in no_nan_cols:
+        if col in output_df.columns:
+            nan_count = int(output_df[col].isna().sum())
+            if nan_count > 0:
+                critical_issues.append(
+                    f"Column '{col}' has {nan_count} NaN values "
+                    f"(not allowed for {from_stage} -> {to_stage} transition)"
+                )
+
+    # Check data types for key columns (OHLCV should be numeric)
+    numeric_cols = ["open", "high", "low", "close", "volume"]
+    for col in numeric_cols:
+        col_exists_and_required = col in output_df.columns and col in required_cols
+        if col_exists_and_required and not pd.api.types.is_numeric_dtype(output_df[col]):
+            critical_issues.append(f"Column '{col}' should be numeric, got {output_df[col].dtype}")
+
+    # Check datetime column is proper datetime type
+    if "datetime" in output_df.columns:
+        dt_col_not_datetime = not pd.api.types.is_datetime64_any_dtype(output_df["datetime"])
+        idx_not_datetime = not pd.api.types.is_datetime64_any_dtype(output_df.index)
+        if dt_col_not_datetime and idx_not_datetime:
+            warnings.append(
+                f"Column 'datetime' is not datetime type: {output_df['datetime'].dtype}"
+            )
+
+    # Check minimum row count
+    target_schema = STAGE_SCHEMAS.get(to_stage)
+    if target_schema and len(output_df) < target_schema.min_rows:
+        critical_issues.append(
+            f"Insufficient rows for {to_stage}: {len(output_df)} < {target_schema.min_rows}"
+        )
+
+    # Log results
+    if critical_issues:
+        logger.warning(
+            f"Stage transition {from_stage} -> {to_stage} validation failed: " f"{critical_issues}"
+        )
+        if strict:
+            raise StageValidationError(f"{from_stage} -> {to_stage}", critical_issues)
+        warnings.extend(critical_issues)
+    else:
+        logger.debug(
+            f"Stage transition {from_stage} -> {to_stage} validated: "
+            f"{len(output_df)} rows, {len(output_df.columns)} columns"
+        )
+
+    return warnings
+
+
 def register_stage_schema(stage_name: str, schema: StageSchema) -> None:
     """Register a custom schema for a stage."""
     STAGE_SCHEMAS[stage_name] = schema
@@ -192,7 +355,9 @@ __all__ = [
     "StageSchema",
     "StageValidationError",
     "STAGE_SCHEMAS",
+    "STAGE_TRANSITION_REQUIREMENTS",
     "validate_stage_output",
+    "validate_stage_transition",
     "get_stage_schema",
     "register_stage_schema",
 ]
