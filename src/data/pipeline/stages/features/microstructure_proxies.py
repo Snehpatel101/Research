@@ -119,22 +119,12 @@ def compute_roll_spread(df, window=20):
     close_prices = df["close"]
     price_changes = close_prices.diff()
 
-    # Rolling covariance with lag-1
-    def rolling_cov_lag1(series, window):
-        """Compute rolling covariance with lag-1."""
-        result = pd.Series(index=series.index, dtype=float)
-
-        for i in range(window, len(series)):
-            window_data = series.iloc[i - window : i]
-            window_data_lag1 = series.iloc[i - window - 1 : i - 1]
-
-            # Align indices for covariance calculation
-            cov = window_data.cov(window_data_lag1)
-            result.iloc[i] = cov
-
-        return result
-
-    cov_lag1 = rolling_cov_lag1(price_changes, window)
+    # Rolling covariance with lag-1 (vectorized)
+    # Use pandas rolling with pairwise covariance
+    price_changes_lag1 = price_changes.shift(1)
+    cov_lag1 = price_changes.rolling(window=window, min_periods=window).cov(
+        price_changes_lag1
+    )
 
     # Spread = 2 * sqrt(-cov) if cov < 0, else 0
     spread = np.where(cov_lag1 < 0, 2 * np.sqrt(-cov_lag1), 0)

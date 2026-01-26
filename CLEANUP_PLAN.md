@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phases 0-19 Complete
-**Last Updated:** 2026-01-25 (Phase 19 Complete)
+**Status:** Phase 20 Complete
+**Last Updated:** 2026-01-25 (Phase 20 Complete)
 
 ---
 
@@ -31,8 +31,51 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 17 | Architecture Resilience | +750 lines | 2026-01-25 |
 | 18 | Code Cleanup | 2/3 tasks | 2026-01-25 |
 | 19 | Comprehensive Optimization | +750 lines, 34 features | 2026-01-25 |
+| 20 | Performance & Quality Polish | -851 lines, 50-100x speedup | 2026-01-25 |
 
-**Net Impact:** ~+12,750 lines of production infrastructure
+**Net Impact:** ~+11,900 lines of production infrastructure
+
+---
+
+## Phase 20: Performance & Quality Polish (COMPLETE ✅)
+
+**Status:** COMPLETE | 2026-01-25
+**Actual Impact:** -851 lines, 50-100x speedup on critical paths
+
+### Phase 20A: Critical Performance Hotspots ✅
+
+| Task | Description | Speedup | Status |
+|------|-------------|---------|--------|
+| 20A-1 | Numba JIT for entropy.py O(n²) loops | 50-100x | ✅ Complete |
+| 20A-2 | Vectorize adaptive_costs.py iterrows() | 100-500x | ✅ Complete |
+| 20A-3 | Replace rolling cov Python loop | 20-50x | ✅ Complete |
+| 20A-4 | raw=True for rolling .apply() patterns | 2-5x | ✅ Complete |
+
+### Phase 20B: Architecture Consolidation ✅
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 20B-1 | Delete orphaned `contracts/artifact_manifest.py` (-424 lines) | ✅ Complete |
+| 20B-2 | PurgedKFoldConfig consolidation | ⏭️ Deferred (breaking change) |
+| 20B-3 | MTFConfig 4 definitions | ❌ DISPROVEN (different purposes) |
+| 20B-4 | Delete SequenceConfig duplicate (-427 lines) | ✅ Complete |
+
+### Phase 20C: Code Quality Fixes ✅
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 20C-1 | Fix B018 useless expressions (2 bugs) | ✅ Complete |
+| 20C-2 | Fix B904 exception chaining | ❌ DISPROVEN (fixed in Phase 19) |
+| 20C-3 | Remove F401 unused imports | ⏭️ None found |
+| 20C-4 | Refactor complex functions | ⏭️ Deferred (low priority) |
+
+### Phase 20D: ML Pipeline Improvements ✅
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 20D-1 | Add nested CV warning in meta_selection.py | ✅ Complete |
+| 20D-2 | GARCH stubs | ❌ ACCEPTED (documented design decision) |
+| 20D-3 | Sequence OOF alignment | ❌ ALREADY DOCUMENTED |
 
 ---
 

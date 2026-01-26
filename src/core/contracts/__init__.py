@@ -48,7 +48,8 @@ Example:
 
 from src.core.types import DataRank
 
-from .artifact_manifest import (
+# Re-export from canonical location (src/core/common/manifest.py)
+from src.core.common.manifest import (
     ArtifactManifest,
 )
 from .data_contract import (

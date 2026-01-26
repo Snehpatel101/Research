@@ -33,6 +33,7 @@ Example:
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -398,7 +399,23 @@ class MetaLearnerSelector:
         X: np.ndarray,
         y: np.ndarray,
     ) -> MetaLearnerSelectionResult:
-        """Select using time-series cross-validation."""
+        """
+        Select using time-series cross-validation.
+
+        Warning:
+            This method uses nested CV which may cause overfitting. The same
+            CV folds used for Optuna hyperparameter tuning are also used for
+            evaluation, leading to optimistically biased performance estimates.
+            Consider using _select_with_holdout() with a separate validation set
+            for more reliable model selection.
+        """
+        warnings.warn(
+            "Using CV-based meta-learner selection may cause overfitting. "
+            "The same CV folds used for hyperparameter tuning are used for evaluation, "
+            "which can lead to optimistically biased estimates. Consider using a holdout set.",
+            UserWarning,
+            stacklevel=2,
+        )
         tscv = TimeSeriesSplit(n_splits=self.n_cv_splits)
 
         def objective(trial: optuna.Trial) -> float:

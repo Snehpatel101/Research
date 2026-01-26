@@ -174,6 +174,45 @@ def compute_adaptive_slippage(
     return float(adjusted_slippage)
 
 
+def _vectorized_time_of_day_multiplier(timestamps: pd.DatetimeIndex) -> np.ndarray:
+    """
+    Vectorized time-of-day multiplier computation.
+
+    Replaces iterrows() with vectorized numpy/pandas operations.
+
+    Args:
+        timestamps: DatetimeIndex of trading timestamps
+
+    Returns:
+        Array of slippage multipliers
+    """
+    hours = timestamps.hour
+    minutes = timestamps.minute
+
+    # Start with default 1.0
+    multipliers = np.ones(len(timestamps), dtype=np.float64)
+
+    # Outside hours: 3.0 (hour < 9 or hour >= 16)
+    multipliers[(hours < 9) | (hours >= 16)] = 3.0
+
+    # 09:00-09:29: 3.0 (before market open)
+    multipliers[(hours == 9) & (minutes < 30)] = 3.0
+
+    # 09:30-09:59: 2.5 (open - volatile)
+    multipliers[(hours == 9) & (minutes >= 30)] = 2.5
+
+    # 10:00-13:59: 1.0 (mid-session - already default)
+    # No change needed
+
+    # 14:00-14:59: 1.5 (pre-close)
+    multipliers[hours == 14] = 1.5
+
+    # 15:00-15:59: 2.5 (close - volatile)
+    multipliers[hours == 15] = 2.5
+
+    return multipliers
+
+
 def compute_cost_in_atr_adaptive(
     df: pd.DataFrame,
     symbol: str,
@@ -190,6 +229,8 @@ def compute_cost_in_atr_adaptive(
     For triple-barrier labeling, we typically use the MEDIAN cost
     to ensure consistent barriers across all samples. However,
     this function returns the full series for analysis.
+
+    Uses vectorized operations instead of iterrows() for performance.
 
     Args:
         df: DataFrame with timestamp index, volume, and atr_14 columns
@@ -213,33 +254,40 @@ def compute_cost_in_atr_adaptive(
         >>> median_cost = costs.median()  # Use for triple-barrier
         >>> print(f"Median cost_in_atr: {median_cost:.4f}")
     """
-    volume_stats = pd.DataFrame(
-        {
-            "median_volume": [df["volume"].median()],
-            "mean_atr": [df["atr_14"].mean()],
-        },
-        index=[symbol],
-    )
+    # Compute volume stats once
+    median_volume = df["volume"].median()
+    mean_atr = df["atr_14"].mean()
 
-    adaptive_costs = []
+    # Vectorized time-of-day multiplier
+    time_mult = _vectorized_time_of_day_multiplier(df.index)
 
-    for idx, row in df.iterrows():
-        slippage_ticks = compute_adaptive_slippage(
-            symbol=symbol,
-            timestamp=idx,
-            order_size_contracts=order_size_contracts,
-            atr_current=row["atr_14"],
-            df_volume_stats=volume_stats,
-            base_slippage_ticks=base_cost_ticks,
-        )
+    # Vectorized volume impact multiplier
+    # Uses square root law: impact = 1.0 + 0.5 * sqrt(order_size / typical_volume)
+    if median_volume > 0:
+        volume_fraction = order_size_contracts / median_volume
+        volume_mult = 1.0 + 0.5 * np.sqrt(volume_fraction)
+        volume_mult = max(1.0, volume_mult)
+    else:
+        volume_mult = 1.0
 
-        cost_dollars = slippage_ticks * tick_value
+    # Vectorized volatility multiplier
+    # vol_ratio = atr_current / mean_atr, capped at [0.5, 2.0]
+    atr_values = df["atr_14"].values
+    if mean_atr > 0:
+        vol_mult = np.clip(atr_values / mean_atr, 0.5, 2.0)
+    else:
+        vol_mult = np.ones(len(df), dtype=np.float64)
 
-        cost_in_atr = cost_dollars / row["atr_14"] if row["atr_14"] > 0 else 0.0
+    # Compute adaptive slippage: base * time * volume * volatility
+    slippage_ticks = base_cost_ticks * time_mult * volume_mult * vol_mult
 
-        adaptive_costs.append(cost_in_atr)
+    # Convert to dollars
+    cost_dollars = slippage_ticks * tick_value
 
-    return pd.Series(adaptive_costs, index=df.index, name="cost_in_atr_adaptive")
+    # Compute cost_in_atr (avoid division by zero)
+    cost_in_atr = np.where(atr_values > 0, cost_dollars / atr_values, 0.0)
+
+    return pd.Series(cost_in_atr, index=df.index, name="cost_in_atr_adaptive")
 
 
 def compute_cost_in_atr_adaptive_fast(

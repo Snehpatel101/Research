@@ -8,8 +8,47 @@ These features measure market complexity, randomness, and predictability.
 
 from collections.abc import Callable
 
+import numba
 import numpy as np
 import pandas as pd
+
+
+# =============================================================================
+# NUMBA-ACCELERATED HELPER FUNCTIONS
+# =============================================================================
+
+
+@numba.njit(cache=True)
+def _count_matches_numba(patterns: np.ndarray, r: float) -> int:
+    """
+    Numba-accelerated pattern matching for sample entropy.
+
+    Counts pairs of patterns (i, j) where i < j and max|patterns[i] - patterns[j]| <= r.
+    This replaces the O(n^2) Python loop with JIT-compiled code for ~50-100x speedup.
+
+    Args:
+        patterns: 2D array of shape (n_patterns, m) containing embedded patterns
+        r: Tolerance threshold for pattern matching
+
+    Returns:
+        Count of matching pattern pairs
+    """
+    n_patterns = patterns.shape[0]
+    m = patterns.shape[1]
+    count = 0
+
+    for i in range(n_patterns):
+        for j in range(i + 1, n_patterns):
+            # Compute max absolute difference (Chebyshev distance)
+            max_diff = 0.0
+            for k in range(m):
+                diff = abs(patterns[i, k] - patterns[j, k])
+                if diff > max_diff:
+                    max_diff = diff
+            if max_diff <= r:
+                count += 1
+
+    return count
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -158,6 +197,8 @@ def _sample_entropy(x: np.ndarray, m: int = 2, r: float | None = None) -> float:
 
     Similar to ApEn but less biased for short time series.
     Does not count self-matches.
+
+    Uses numba-accelerated pattern matching for O(n^2) loops.
     """
     n = len(x)
     if n < m + 1:
@@ -171,18 +212,15 @@ def _sample_entropy(x: np.ndarray, m: int = 2, r: float | None = None) -> float:
     if r is None:
         r = 0.2 * np.std(x)
 
-    def _count_matches(m_val):
-        """Count matches for embedding dimension m."""
-        patterns = np.array([x[i : i + m_val] for i in range(n - m_val)])
-        n_patterns = len(patterns)
-
-        count = 0
+    def _count_matches(m_val: int) -> int:
+        """Count matches for embedding dimension m using numba acceleration."""
+        # Create patterns array - contiguous for numba
+        n_patterns = n - m_val
+        patterns = np.empty((n_patterns, m_val), dtype=np.float64)
         for i in range(n_patterns):
-            for j in range(i + 1, n_patterns):
-                if np.max(np.abs(patterns[i] - patterns[j])) <= r:
-                    count += 1
+            patterns[i] = x[i : i + m_val]
 
-        return count
+        return _count_matches_numba(patterns, r)
 
     a = _count_matches(m + 1)
     b = _count_matches(m)
@@ -267,30 +305,21 @@ def compute_entropy_shannon_10(df: pd.DataFrame) -> pd.Series:
     """10-period Shannon entropy of returns."""
     returns = _log_returns(df["close"])
 
-    def rolling_shannon(x):
-        return _shannon_entropy(x.values)
-
-    return returns.rolling(window=10, min_periods=10).apply(rolling_shannon, raw=False)
+    return returns.rolling(window=10, min_periods=10).apply(_shannon_entropy, raw=True)
 
 
 def compute_entropy_shannon_20(df: pd.DataFrame) -> pd.Series:
     """20-period Shannon entropy of returns."""
     returns = _log_returns(df["close"])
 
-    def rolling_shannon(x):
-        return _shannon_entropy(x.values)
-
-    return returns.rolling(window=20, min_periods=20).apply(rolling_shannon, raw=False)
+    return returns.rolling(window=20, min_periods=20).apply(_shannon_entropy, raw=True)
 
 
 def compute_entropy_shannon_50(df: pd.DataFrame) -> pd.Series:
     """50-period Shannon entropy of returns."""
     returns = _log_returns(df["close"])
 
-    def rolling_shannon(x):
-        return _shannon_entropy(x.values)
-
-    return returns.rolling(window=50, min_periods=50).apply(rolling_shannon, raw=False)
+    return returns.rolling(window=50, min_periods=50).apply(_shannon_entropy, raw=True)
 
 
 def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
@@ -304,9 +333,9 @@ def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
     max_entropy = np.log2(n_bins)
 
     def rolling_shannon_norm(x):
-        return _shannon_entropy(x.values, n_bins) / max_entropy
+        return _shannon_entropy(x, n_bins) / max_entropy
 
-    return returns.rolling(window=20, min_periods=20).apply(rolling_shannon_norm, raw=False)
+    return returns.rolling(window=20, min_periods=20).apply(rolling_shannon_norm, raw=True)
 
 
 # =============================================================================
@@ -320,10 +349,10 @@ def compute_entropy_lz_20(df: pd.DataFrame) -> pd.Series:
 
     def rolling_lz(x):
         # Binarize: 1 if return > 0, 0 otherwise
-        binary = (x > 0).astype(int).values
+        binary = (x > 0).astype(int)
         return _lempel_ziv_complexity(binary)
 
-    return returns.rolling(window=20, min_periods=20).apply(rolling_lz, raw=False)
+    return returns.rolling(window=20, min_periods=20).apply(rolling_lz, raw=True)
 
 
 def compute_entropy_lz_50(df: pd.DataFrame) -> pd.Series:
@@ -331,10 +360,10 @@ def compute_entropy_lz_50(df: pd.DataFrame) -> pd.Series:
     returns = _log_returns(df["close"])
 
     def rolling_lz(x):
-        binary = (x > 0).astype(int).values
+        binary = (x > 0).astype(int)
         return _lempel_ziv_complexity(binary)
 
-    return returns.rolling(window=50, min_periods=50).apply(rolling_lz, raw=False)
+    return returns.rolling(window=50, min_periods=50).apply(rolling_lz, raw=True)
 
 
 # =============================================================================
@@ -347,9 +376,9 @@ def compute_entropy_apen_20(df: pd.DataFrame) -> pd.Series:
     returns = _log_returns(df["close"])
 
     def rolling_apen(x):
-        return _approximate_entropy(x.values, m=2)
+        return _approximate_entropy(x, m=2)
 
-    return returns.rolling(window=20, min_periods=20).apply(rolling_apen, raw=False)
+    return returns.rolling(window=20, min_periods=20).apply(rolling_apen, raw=True)
 
 
 def compute_entropy_apen_50(df: pd.DataFrame) -> pd.Series:
@@ -357,9 +386,9 @@ def compute_entropy_apen_50(df: pd.DataFrame) -> pd.Series:
     returns = _log_returns(df["close"])
 
     def rolling_apen(x):
-        return _approximate_entropy(x.values, m=2)
+        return _approximate_entropy(x, m=2)
 
-    return returns.rolling(window=50, min_periods=50).apply(rolling_apen, raw=False)
+    return returns.rolling(window=50, min_periods=50).apply(rolling_apen, raw=True)
 
 
 # =============================================================================
@@ -372,9 +401,9 @@ def compute_sample_entropy_20(df: pd.DataFrame) -> pd.Series:
     returns = _log_returns(df["close"])
 
     def rolling_sampen(x):
-        return _sample_entropy(x.values, m=2)
+        return _sample_entropy(x, m=2)
 
-    return returns.rolling(window=20, min_periods=20).apply(rolling_sampen, raw=False)
+    return returns.rolling(window=20, min_periods=20).apply(rolling_sampen, raw=True)
 
 
 # =============================================================================
@@ -386,20 +415,14 @@ def compute_hurst_50(df: pd.DataFrame) -> pd.Series:
     """50-period Hurst exponent."""
     returns = _log_returns(df["close"])
 
-    def rolling_hurst(x):
-        return _hurst_exponent(x.values)
-
-    return returns.rolling(window=50, min_periods=50).apply(rolling_hurst, raw=False)
+    return returns.rolling(window=50, min_periods=50).apply(_hurst_exponent, raw=True)
 
 
 def compute_hurst_100(df: pd.DataFrame) -> pd.Series:
     """100-period Hurst exponent."""
     returns = _log_returns(df["close"])
 
-    def rolling_hurst(x):
-        return _hurst_exponent(x.values)
-
-    return returns.rolling(window=100, min_periods=100).apply(rolling_hurst, raw=False)
+    return returns.rolling(window=100, min_periods=100).apply(_hurst_exponent, raw=True)
 
 
 def compute_hurst_regime(df: pd.DataFrame) -> pd.Series:

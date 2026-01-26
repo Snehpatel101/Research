@@ -209,7 +209,6 @@ class CoreOOFGenerator:
             # Handle sample weights
             if sample_weights is not None:
                 w_train = sample_weights.iloc[train_idx].values
-                sample_weights.iloc[val_idx].values
             else:
                 w_train = None
 

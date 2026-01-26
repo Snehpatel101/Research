@@ -97,14 +97,14 @@ def compute_mr_zscore_60(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def _calc_halflife(x: pd.Series) -> float:
+def _calc_halflife(x: np.ndarray) -> float:
     """Calculate OU half-life for a price series."""
     if len(x) < 10:
         return np.nan
 
     # AR(1): y_t = a + b * y_{t-1} + e
-    y = x.values[1:]
-    y_lag = x.values[:-1]
+    y = x[1:]
+    y_lag = x[:-1]
 
     # Simple OLS for speed
     n = len(y)
@@ -145,7 +145,7 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
     """
     log_prices = np.log(df["close"])
 
-    return log_prices.rolling(window=60, min_periods=20).apply(_calc_halflife, raw=False)
+    return log_prices.rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
 
 
 # =============================================================================
@@ -153,7 +153,7 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def _calc_hurst(x: pd.Series, max_lag: int = 20) -> float:
+def _calc_hurst(x: np.ndarray, max_lag: int = 20) -> float:
     """Calculate Hurst exponent using R/S analysis."""
     if len(x) < max_lag * 2:
         return np.nan
@@ -169,18 +169,18 @@ def _calc_hurst(x: pd.Series, max_lag: int = 20) -> float:
 
         rs_chunk = []
         for i in range(n_chunks):
-            chunk = x.values[i * lag : (i + 1) * lag]
+            chunk = x[i * lag : (i + 1) * lag]
             if len(chunk) < 2:
                 continue
 
             # Cumulative deviation from mean
-            mean_adj = chunk - chunk.mean()
+            mean_adj = chunk - np.mean(chunk)
             cumsum = np.cumsum(mean_adj)
 
             # Range
-            r = cumsum.max() - cumsum.min()
+            r = np.max(cumsum) - np.min(cumsum)
             # Standard deviation
-            s = chunk.std()
+            s = np.std(chunk)
 
             if s > 0:
                 rs_chunk.append(r / s)
@@ -217,7 +217,7 @@ def compute_hurst_exponent(df: pd.DataFrame) -> pd.Series:
     log_prices = np.log(df["close"])
 
     return log_prices.rolling(window=100, min_periods=40).apply(
-        lambda x: _calc_hurst(x, max_lag=20), raw=False
+        lambda x: _calc_hurst(x, max_lag=20), raw=True
     )
 
 

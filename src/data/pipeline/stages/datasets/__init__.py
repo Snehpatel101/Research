@@ -65,7 +65,8 @@ from src.data.pipeline.stages.datasets.run import (
     run_build_datasets,
     validate_feature_schema,
 )
-from src.data.pipeline.stages.datasets.sequences import (
+# Import from canonical location (src/core/datasets/sequences.py)
+from src.core.datasets.sequences import (
     SequenceConfig,
     SequenceDataset,
     build_sequence_indices,

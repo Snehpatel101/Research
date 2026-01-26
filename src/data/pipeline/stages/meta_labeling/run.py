@@ -388,10 +388,6 @@ def run_meta_labeling(
                     if weight_col in df_valid.columns:
                         weights = df_valid[weight_col].values
 
-                    # Get returns for meta-labeling
-                    if return_col in df_valid.columns:
-                        df_valid[return_col].values
-
                     # Step 1: Train primary model
                     primary, primary_metrics = _train_primary_model(
                         X_train=X,
