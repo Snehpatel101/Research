@@ -27,6 +27,7 @@ except ImportError:
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
+from ..neural.numerical_stability import validate_training_inputs
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -163,6 +164,7 @@ class LightGBMModel(BaseModel):
         """Train LightGBM model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
+        validate_training_inputs(X_train, y_train, X_val, y_val, sample_weights)
         start_time = time.time()
 
         # Merge config

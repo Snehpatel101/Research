@@ -21,6 +21,7 @@ import numpy as np
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
+from ..neural.numerical_stability import validate_training_inputs
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,7 @@ class CatBoostModel(BaseModel):
         """Train CatBoost model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
+        validate_training_inputs(X_train, y_train, X_val, y_val, sample_weights)
         start_time = time.time()
 
         # Merge config
@@ -297,7 +299,17 @@ class CatBoostModel(BaseModel):
         self._feature_names = names
 
     def _build_model(self, config: dict[str, Any]) -> CatBoostClassifier:
-        """Build CatBoostClassifier with config."""
+        """Build CatBoostClassifier with config and range validation."""
+        depth = config.get("depth", 6)
+        learning_rate = config.get("learning_rate", 0.05)
+        iterations = config.get("iterations", 500)
+        if depth <= 0:
+            raise ValueError(f"depth must be > 0, got {depth}")
+        if learning_rate <= 0:
+            raise ValueError(f"learning_rate must be > 0, got {learning_rate}")
+        if iterations <= 0:
+            raise ValueError(f"iterations must be > 0, got {iterations}")
+
         params = {
             "iterations": config.get("iterations", 500),
             "depth": config.get("depth", 6),

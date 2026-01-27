@@ -39,6 +39,16 @@ class StageSchema:
 
 # Stage schemas for common pipeline stages
 # Uses StageName enum values for type safety (Phase 12.5G)
+#
+# NaN Tolerance Strategy:
+#   - Default (1.0): No NaN limit. Used for stages that don't produce DataFrames
+#     or where NaN handling hasn't occurred yet (e.g., raw data, labels, reports).
+#   - Feature engineering (0.01 = 1%): Allows up to 1% NaN per column because
+#     indicator warmup periods (e.g., 200-bar SMA) produce leading NaNs that
+#     are expected and later dropped by downstream stages.
+#   - Scaling / build_datasets / validate_scaled (0.0): Zero tolerance. By the
+#     time data reaches scaling, all NaNs must be resolved (forward-filled,
+#     dropped, or imputed). Models cannot train on NaN values.
 STAGE_SCHEMAS: dict[str, StageSchema] = {
     StageName.DATA_GENERATION.value: StageSchema(
         required_columns=["datetime", "open", "high", "low", "close", "volume"],

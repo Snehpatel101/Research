@@ -26,7 +26,7 @@ class OOMConfig:
     enabled: bool = True
     max_retries: int = 3
     batch_reduction_factor: float = 0.5  # Reduce batch size by this factor
-    min_batch_size: int = 8  # Don't reduce below this
+    min_batch_size: int = 2  # Don't reduce below this (lowered from 8 for small datasets)
     clear_cache_on_oom: bool = True
     force_gc_on_oom: bool = True
     log_memory_stats: bool = True
@@ -322,7 +322,7 @@ def create_oom_manager(
     enabled: bool = True,
     max_retries: int = 3,
     batch_reduction_factor: float = 0.5,
-    min_batch_size: int = 8,
+    min_batch_size: int = 2,
 ) -> OOMRecoveryManager:
     """
     Factory function to create an OOM recovery manager.

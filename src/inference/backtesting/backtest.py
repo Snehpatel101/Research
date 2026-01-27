@@ -631,7 +631,10 @@ class Backtester:
 
             self._equity_history.append((timestamp, current_equity))
 
-            # Circuit Breaker: Check max drawdown
+            # Circuit Breaker: Check max drawdown.
+            # Note: current_equity includes unrealized P&L (mark-to-market).
+            # This is intentional — circuit breakers protect against adverse
+            # moves in open positions, not just realized losses.
             if len(self._equity_history) > 1:
                 equity_values = [e for _, e in self._equity_history]
                 running_max = max(equity_values)
@@ -725,9 +728,19 @@ class Backtester:
         )
 
     def _calculate_unrealized_pnl(self, position: Position, current_price: float) -> float:
-        """Calculate unrealized P&L for open position."""
+        """Calculate unrealized P&L for open position.
+
+        Deducts estimated entry costs (commission + slippage) so that
+        unrealized equity is conservative rather than overstated.
+        """
         price_change = current_price - position.entry_price
-        return position.direction * position.contracts * price_change * self.config.point_value
+        gross = position.direction * position.contracts * price_change * self.config.point_value
+        # Deduct estimated entry costs (commission + slippage per contract)
+        entry_cost = (
+            self.config.commission_per_contract
+            + self.config.slippage_ticks * self.config.tick_value
+        ) * position.contracts
+        return gross - entry_cost
 
 
 def run_backtest(

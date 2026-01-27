@@ -5,6 +5,11 @@ This module provides realistic cost modeling for futures trading including:
 - Commission costs (per-contract or percentage)
 - Slippage models (fixed, linear, square-root impact)
 - Market impact estimation
+
+Known limitation: Overnight financing / carry / swap costs are not modeled.
+For intraday futures strategies (the primary use case), this is negligible.
+For multi-day holding periods, users should account for roll costs and
+margin interest externally.
 """
 
 from __future__ import annotations

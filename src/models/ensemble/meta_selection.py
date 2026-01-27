@@ -270,7 +270,7 @@ def select_meta_learner_with_optuna(
                 y_val=y_val,
             )
             return score
-        except Exception as e:
+        except (ValueError, RuntimeError, np.linalg.LinAlgError) as e:
             logger.warning(f"Trial {trial.number} failed: {e}")
             return 0.0  # Return worst score on failure
 
@@ -438,7 +438,7 @@ class MetaLearnerSelector:
                         y_val=y[val_idx],
                     )
                     scores.append(score)
-                except Exception:
+                except (ValueError, RuntimeError, np.linalg.LinAlgError):
                     scores.append(0.0)
 
             return float(np.mean(scores)) if scores else 0.0
@@ -489,7 +489,7 @@ class MetaLearnerSelector:
                     X_val=X_val,
                     y_val=y_val,
                 )
-            except Exception:
+            except (ValueError, RuntimeError, np.linalg.LinAlgError):
                 return 0.0
 
         sampler = optuna.samplers.TPESampler(seed=self.seed)

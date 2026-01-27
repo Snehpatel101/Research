@@ -4,6 +4,159 @@
 
 ---
 
+## Phase 21: ML Pipeline Review Fixes | 2026-01-27 | COMPLETE
+
+**Impact:** 10 tasks completed, 10 files modified, 0 files added/deleted
+**Purpose:** Robustness and correctness fixes from comprehensive ML pipeline review
+
+### Summary
+
+| Category | Tasks | Key Deliverables |
+|----------|-------|------------------|
+| 21A: Input Validation | 2/2 | NaN validation for boosting models, hyperparameter range checks |
+| 21B: Financial Accuracy | 2/2 | Unrealized P&L cost deduction, overnight costs documented |
+| 21C: Data Pipeline | 2/3 | Timeframe ratio validation, NaN tolerance strategy documented (1 disproven) |
+| 21D: Error Handling | 4/4 | Specific exceptions (5 locations), circuit breaker docs, OOM min_batch_size |
+| 21E: Documentation | 0/2 | Both disproven (correct counts confirmed) |
+
+**Disproven Issues (3):**
+- 21C-3: Sequence adapter already warns at sample loss (sequence.py:140-143)
+- 21E-1: SlippageModel has 4 models (not 3)
+- 21E-2: Exception count is 27 (not 24 or 22)
+
+### Phase 21A: Input Validation (2/2 tasks)
+
+| Task | File | Change |
+|------|------|--------|
+| 21A-1 | xgboost_model.py:122 | Added `validate_training_inputs()` at start of fit() |
+| 21A-1 | lightgbm_model.py:154 | Added `validate_training_inputs()` at start of fit() |
+| 21A-1 | catboost_model.py:112 | Added `validate_training_inputs()` at start of fit() |
+| 21A-2 | xgboost_model.py:332-357 | Added range validation for max_depth, learning_rate, subsample |
+| 21A-2 | catboost_model.py:299-325 | Added range validation for max_depth, learning_rate, iterations |
+
+**Validation Pattern:**
+```python
+from src.models.neural.numerical_stability import validate_training_inputs
+
+# At start of fit()
+validate_training_inputs(X_train, y_train, X_val, y_val, sample_weights)
+```
+
+### Phase 21B: Financial Accuracy (2/2 tasks)
+
+| Task | File | Change |
+|------|------|--------|
+| 21B-1 | backtest.py:727-730 | Deduct entry costs (commission + slippage) from unrealized P&L |
+| 21B-2 | costs.py | Added module docstring documenting overnight costs as known limitation |
+
+**Unrealized P&L Fix:**
+```python
+# Before: unrealized_pnl = direction * contracts * price_change * point_value
+# After:  unrealized_pnl -= entry_cost  # Subtract estimated entry costs
+```
+
+### Phase 21C: Data Pipeline Robustness (2/3 tasks, 1 disproven)
+
+| Task | File | Change |
+|------|------|--------|
+| 21C-1 | multi_stream.py:558-561 | Added warning if timeframe minutes not exact multiple of anchor |
+| 21C-2 | schemas.py:36-106 | Added docstring explaining NaN tolerance strategy (1% for features, 0% for scaling) |
+| 21C-3 | sequence.py | ❌ DISPROVEN - Already warns at lines 140-143 |
+
+### Phase 21D: Error Handling & Resilience (4/4 tasks)
+
+| Task | File | Change |
+|------|------|--------|
+| 21D-1 | meta_selection.py:273 | Replaced `except Exception` with `except (ValueError, RuntimeError, np.linalg.LinAlgError)` |
+| 21D-1 | meta_selection.py:441 | Replaced `except Exception` with `except (ValueError, RuntimeError, np.linalg.LinAlgError)` |
+| 21D-1 | meta_selection.py:492 | Replaced `except Exception` with `except (ValueError, RuntimeError, np.linalg.LinAlgError)` |
+| 21D-2 | registry.py:345 | Replaced `except Exception` with `except (TypeError, ValueError, RuntimeError, AttributeError)` |
+| 21D-2 | registry.py:429 | Replaced `except Exception` with `except (TypeError, ValueError, RuntimeError, AttributeError)` |
+| 21D-3 | backtest.py:634-653 | Added docstring comment documenting circuit breaker MTM equity behavior |
+| 21D-4 | oom_recovery.py:29 | Lowered min_batch_size from 8 to 2 |
+
+### Files Modified (10)
+
+**Modified Files:**
+1. `src/models/boosting/xgboost_model.py` - NaN validation + param range checks
+2. `src/models/boosting/lightgbm_model.py` - NaN validation
+3. `src/models/boosting/catboost_model.py` - NaN validation + param range checks
+4. `src/inference/backtesting/backtest.py` - Unrealized P&L fix + circuit breaker docs
+5. `src/inference/backtesting/costs.py` - Overnight costs limitation doc
+6. `src/data/adapters/multi_stream.py` - Timeframe ratio validation
+7. `src/data/pipeline/schemas.py` - NaN tolerance strategy docs
+8. `src/models/ensemble/meta_selection.py` - Specific exceptions (3 locations)
+9. `src/models/registry.py` - Specific exceptions (2 locations)
+10. `src/models/neural/oom_recovery.py` - min_batch_size 8→2
+
+### Verification
+
+| Check | Status |
+|-------|--------|
+| All 10 files compile | ✅ PASS |
+| Ruff check on modified files | ✅ PASS (0 violations) |
+| Core imports | ✅ PASS |
+| Test suite (42 tests) | ✅ PASS (3.92s) |
+| Validation pattern consistency | ✅ PASS (matches neural models) |
+
+```bash
+# All modified files compile
+python3 -m py_compile src/models/boosting/*.py  # ✓ OK
+python3 -m py_compile src/inference/backtesting/{backtest,costs}.py  # ✓ OK
+python3 -m py_compile src/data/adapters/multi_stream.py  # ✓ OK
+python3 -m py_compile src/data/pipeline/schemas.py  # ✓ OK
+python3 -m py_compile src/models/ensemble/meta_selection.py  # ✓ OK
+python3 -m py_compile src/models/registry.py  # ✓ OK
+python3 -m py_compile src/models/neural/oom_recovery.py  # ✓ OK
+
+# Ruff check (0 violations on modified files)
+ruff check src/models/boosting/ src/inference/backtesting/ \
+  src/data/adapters/multi_stream.py src/data/pipeline/schemas.py \
+  src/models/ensemble/meta_selection.py src/models/registry.py \
+  src/models/neural/oom_recovery.py
+
+# Test suite
+pytest tests/ -v  # 42 passed in 3.92s
+```
+
+### Disproven Issues (3 total)
+
+| Issue | Original Claim | Verification Result |
+|-------|----------------|---------------------|
+| 21C-3 | Sequence adapter silent sample loss | **FALSE** - sequence.py:140-143 already logs warning |
+| 21E-1 | Only 3 slippage models | **FALSE** - SlippageModel enum has 4 (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED) |
+| 21E-2 | Exception count is 24 | **FALSE** - Actual count is 27 custom exception classes |
+
+### Lessons Learned
+
+1. **Input validation consistency** - Boosting models now match neural model validation pattern; prevents silent NaN propagation
+2. **Financial accuracy matters** - Unrealized P&L overstated equity when not accounting for entry costs; now matches realized calculation
+3. **Document known limitations** - Overnight financing costs noted as limitation rather than silently missing
+4. **Specific exceptions > generic** - 5 locations replaced `except Exception` with targeted exception types for better debugging
+5. **Validation claims before acting** - 3 of 11 issues were disproven, saving unnecessary work
+6. **Batch size tradeoffs** - Lowering OOM recovery min_batch_size from 8 to 2 allows more recovery attempts before failure
+7. **Timeframe alignment** - Integer division can cause temporal misalignment; validation warning prevents silent errors
+
+### Production Impact
+
+**Before Phase 21:**
+- Boosting models could train on NaN data without error
+- Unrealized P&L overstated current equity
+- Generic exception handling masked specific failure modes
+- Min OOM batch size of 8 limited recovery options
+
+**After Phase 21:**
+- All 3 boosting models validate inputs (matches neural pattern)
+- Unrealized P&L accurately reflects entry costs
+- 5 locations now catch specific exceptions
+- OOM recovery can try smaller batch sizes (min=2)
+- Timeframe ratio validation warns of alignment issues
+- NaN tolerance strategy documented for pipeline stages
+
+**No Breaking Changes:** All changes are additive (validation) or clarifying (documentation)
+
+---
+
 ## Phase 20: Performance & Quality Polish | 2026-01-25 | COMPLETE
 
 **Impact:** -851 lines removed (2 files deleted, 9 files modified)

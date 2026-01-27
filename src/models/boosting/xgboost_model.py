@@ -18,6 +18,7 @@ import xgboost as xgb
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
+from ..neural.numerical_stability import validate_training_inputs
 from ..registry import register
 
 logger = logging.getLogger(__name__)
@@ -131,6 +132,7 @@ class XGBoostModel(BaseModel):
         """Train XGBoost model with early stopping."""
         self._validate_input_shape(X_train, "X_train")
         self._validate_input_shape(X_val, "X_val")
+        validate_training_inputs(X_train, y_train, X_val, y_val, sample_weights)
         start_time = time.time()
 
         # Merge config
@@ -330,7 +332,17 @@ class XGBoostModel(BaseModel):
         self._feature_names = names
 
     def _build_params(self, config: dict[str, Any]) -> dict[str, Any]:
-        """Build XGBoost parameter dict."""
+        """Build XGBoost parameter dict with range validation."""
+        max_depth = config.get("max_depth", 6)
+        learning_rate = config.get("learning_rate", 0.05)
+        if max_depth <= 0:
+            raise ValueError(f"max_depth must be > 0, got {max_depth}")
+        if learning_rate <= 0:
+            raise ValueError(f"learning_rate must be > 0, got {learning_rate}")
+        subsample = config.get("subsample", 0.8)
+        if not 0 < subsample <= 1:
+            raise ValueError(f"subsample must be in (0, 1], got {subsample}")
+
         params = {
             "objective": "multi:softprob",
             "num_class": self._n_classes,

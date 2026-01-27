@@ -488,6 +488,12 @@ class MultiStreamAdapter(BaseAdapter):
             tf_df = tf_dfs[tf]
             tf_minutes = get_timeframe_minutes(tf)
             ratio = tf_minutes // anchor_minutes
+            if tf_minutes % anchor_minutes != 0:
+                logger.warning(
+                    f"Timeframe {tf} ({tf_minutes}min) is not an exact multiple of "
+                    f"anchor ({anchor_minutes}min). Floor division may cause temporal "
+                    f"misalignment (ratio={ratio}, remainder={tf_minutes % anchor_minutes})."
+                )
 
             # Extract feature values as numpy array for efficiency
             tf_values = tf_df[feature_cols].values.astype(np.float32)

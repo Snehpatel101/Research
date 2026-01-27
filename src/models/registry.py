@@ -342,7 +342,7 @@ class ModelRegistry:
                 "available": False,
                 "error": str(e),
             }
-        except Exception as e:
+        except (TypeError, ValueError, RuntimeError, AttributeError) as e:
             # Other instantiation errors (config issues, etc.)
             logger.warning(f"Model '{name}' instantiation failed: {e}")
             return {
@@ -426,9 +426,8 @@ class ModelRegistry:
         except ImportError:
             # Dependency not available (e.g., CatBoost not installed)
             return False
-        except Exception as e:
-            # MOD-004/MOD-007: Return False for unexpected exceptions
-            # If a model fails to instantiate for any reason, it's not available
+        except (TypeError, ValueError, RuntimeError, AttributeError) as e:
+            # MOD-004/MOD-007: Return False for instantiation failures
             logger.debug(f"Model '{name}' instantiation failed in is_available(): {e}")
             return False
 
