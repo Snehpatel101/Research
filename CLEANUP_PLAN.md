@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 20 Complete
-**Last Updated:** 2026-01-25 (Phase 20 Complete)
+**Status:** Phase 21 Planned
+**Last Updated:** 2026-01-27 (Phase 21 from ML Pipeline Review)
 
 ---
 
@@ -32,6 +32,7 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 18 | Code Cleanup | 2/3 tasks | 2026-01-25 |
 | 19 | Comprehensive Optimization | +750 lines, 34 features | 2026-01-25 |
 | 20 | Performance & Quality Polish | -851 lines, 50-100x speedup | 2026-01-25 |
+| 21 | ML Pipeline Review Fixes | Robustness + correctness | PLANNED |
 
 **Net Impact:** ~+11,900 lines of production infrastructure
 
@@ -76,6 +77,89 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 20D-1 | Add nested CV warning in meta_selection.py | ✅ Complete |
 | 20D-2 | GARCH stubs | ❌ ACCEPTED (documented design decision) |
 | 20D-3 | Sequence OOF alignment | ❌ ALREADY DOCUMENTED |
+
+---
+
+## Phase 21: ML Pipeline Review Fixes (PLANNED)
+
+**Status:** PLANNED | 2026-01-27
+**Source:** ML_PIPELINE_REVIEW.md (verified by 3 parallel agents against src/)
+**Scope:** Fix verified issues from comprehensive pipeline review
+
+### Review Verification Summary
+
+| Issue | Review Claim | Agent Verdict |
+|-------|-------------|---------------|
+| #1 P&L bug (financial_report.py) | 5x understatement | **FALSE** - division/multiplication cancels out |
+| #2 Boosting NaN validation | Missing in all 3 | **TRUE** - confirmed |
+| #3 Unrealized P&L costs | Overstates equity | **TRUE** - confirmed |
+| #4 Multi-stream integer division | Temporal misalignment | **TRUE** - confirmed |
+| #5 Feature column validation | Missing cross-TF check | **FALSE** - validation exists at L351-356 |
+| #6 Hyperparameter validation | Incomplete | **PARTIALLY TRUE** - XGB/Cat lack, LGB has partial |
+| #7 NaN tolerance inconsistency | 1% vs 0% thresholds | **TRUE** - confirmed |
+| #8 Sequence adapter sample loss | Silent empty return | **TRUE** - confirmed |
+| #9 Circuit breaker MTM equity | Unrealized included | **TRUE** - confirmed |
+| #10 OOM min_batch_size=8 | Too high | **TRUE** - confirmed |
+| #11 No overnight costs | Missing carry/swap | **TRUE** - confirmed |
+| #12 Generic except Exception | Mixed patterns | **TRUE** - confirmed at 5 locations |
+| Strength: 4 slippage models | 4 models claimed | **FALSE** - only 3 in enum |
+| Strength: 22 exceptions | 22 types claimed | **MINOR ERROR** - actually 25 |
+
+### Phase 21A: Input Validation (HIGH)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 21A-1 | Add NaN/Inf validation to boosting model fit() methods | 🔴 HIGH |
+| 21A-2 | Add hyperparameter range validation to XGBoost/CatBoost `_build_params()` | 🟡 MEDIUM |
+
+### Phase 21B: Financial Accuracy (MEDIUM)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 21B-1 | Deduct entry costs from unrealized P&L in backtest.py | 🟡 MEDIUM |
+| 21B-2 | Document or add overnight financing costs | 🟢 LOW |
+
+### Phase 21C: Data Pipeline Robustness (MEDIUM)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 21C-1 | Add timeframe ratio validation in multi_stream.py | 🟡 MEDIUM |
+| 21C-2 | Document NaN tolerance strategy across pipeline stages | 🟡 MEDIUM |
+| 21C-3 | Add warning log for sequence adapter sample loss >10% | 🟢 LOW |
+
+### Phase 21D: Error Handling & Resilience (LOW)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 21D-1 | Replace generic `except Exception` in meta_selection.py (3 locations) | 🟢 LOW |
+| 21D-2 | Replace generic `except Exception` in registry.py (2 locations) | 🟢 LOW |
+| 21D-3 | Document circuit breaker MTM equity behavior | 🟢 LOW |
+| 21D-4 | Allow min_batch_size=1 in OOM recovery config | 🟢 LOW |
+
+### Phase 21E: Documentation Corrections (LOW)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 21E-1 | Fix slippage model count: 3 not 4 (in any docs) | 🟢 LOW |
+| 21E-2 | Fix exception count: 25 not 22 (in any docs) | 🟢 LOW |
+
+### Validation Criteria
+
+```bash
+# 21A-1: Boosting validation
+grep -rn "validate_training_inputs" src/models/boosting/  # Should find matches after fix
+
+# 21B-1: Unrealized P&L
+grep -n "entry_cost\|entry_commission" src/inference/backtesting/backtest.py  # In unrealized calc
+
+# 21C-1: Timeframe ratio
+grep -n "not exact multiple\|ratio.*validation" src/data/adapters/multi_stream.py
+```
+
+### Disproven Issues (NO ACTION NEEDED)
+
+- **Issue #1:** P&L calculation in financial_report.py - division by tick_value is cancelled by multiplication; formula is correct despite being ugly
+- **Issue #5:** Feature column validation - code at multi_stream.py:351-356 already validates columns per timeframe
 
 ---
 

@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 20 Complete
-**Last Updated:** 2026-01-25 (Phase 20 Complete)
+**Status:** Phase 21 Planned
+**Last Updated:** 2026-01-27 (Phase 21 from ML Pipeline Review)
 
 ---
 
@@ -30,8 +30,114 @@
 | 18 | 2/3 | DataContractViolation consolidation |
 | 19 | 17/21 | 34 new features, 5 perf fixes, quick fixes, code quality |
 | 20 | 9/15 | -851 lines, 50-100x speedup, B018 fixes, nested CV warning |
+| 21 | 0/13 | ML Pipeline Review fixes (robustness + correctness) |
 
 See **COMPLETION.md** for detailed implementation records.
+
+---
+
+## Phase 21: ML Pipeline Review Fixes (PLANNED)
+
+**Status:** PLANNED | 2026-01-27
+**Tasks:** 0/13
+**Source:** ML_PIPELINE_REVIEW.md verified by 3 parallel agents against src/
+
+---
+
+### Phase 21A: Input Validation (HIGH)
+
+#### 21A-1: Add NaN/Inf Validation to Boosting Models 🔴
+- [ ] File: `src/models/boosting/xgboost_model.py:122` (fit method)
+- [ ] File: `src/models/boosting/lightgbm_model.py:154` (fit method)
+- [ ] File: `src/models/boosting/catboost_model.py:112` (fit method)
+- [ ] Add `from src.models.neural.numerical_stability import validate_training_inputs`
+- [ ] Call `validate_training_inputs(X_train, y_train, X_val, y_val, sample_weights)` at start of each fit()
+- [ ] Matches existing neural model pattern in `base_rnn.py:330`
+
+#### 21A-2: Add Hyperparameter Range Validation 🟡
+- [ ] File: `src/models/boosting/xgboost_model.py:332-357` (`_build_params()`)
+- [ ] File: `src/models/boosting/catboost_model.py:299-325` (`_build_params()`)
+- [ ] Add range checks (e.g., max_depth > 0, learning_rate > 0)
+- [ ] Extend LightGBM pattern (already validates `num_leaves <= 2^max_depth` at lines 379-387)
+
+---
+
+### Phase 21B: Financial Accuracy (MEDIUM)
+
+#### 21B-1: Deduct Entry Costs from Unrealized P&L 🟡
+- [ ] File: `src/inference/backtesting/backtest.py:727-730` (`_calculate_unrealized_pnl`)
+- [ ] Current: `direction * contracts * price_change * point_value` (no costs)
+- [ ] Fix: Subtract estimated entry costs (commission + slippage) from unrealized P&L
+- [ ] Entry costs currently only deducted at position close (line 494)
+
+#### 21B-2: Document or Add Overnight Financing Costs 🟢
+- [ ] File: `src/inference/backtesting/costs.py`
+- [ ] No overnight/carry/swap costs currently modeled (confirmed: zero matches)
+- [ ] Either add optional overnight cost model OR document as known limitation
+
+---
+
+### Phase 21C: Data Pipeline Robustness (MEDIUM)
+
+#### 21C-1: Add Timeframe Ratio Validation 🟡
+- [ ] File: `src/data/adapters/multi_stream.py:558-561`
+- [ ] Integer division `anchor_start // ratio` may lose precision for non-exact multiples
+- [ ] Add validation: warn if `get_timeframe_minutes(tf) % anchor_minutes != 0`
+
+#### 21C-2: Document NaN Tolerance Strategy 🟡
+- [ ] File: `src/data/pipeline/schemas.py:36-106`
+- [ ] Current thresholds: feature_engineering=1%, feature_scaling=0%, build_datasets=0%
+- [ ] Add docstring explaining rationale for different thresholds per stage
+
+#### 21C-3: Add Sequence Adapter Sample Loss Warning 🟢
+- [ ] File: `src/data/adapters/sequence.py:210-217`
+- [ ] Currently returns empty arrays silently when `n_rows < seq_len`
+- [ ] Add `logger.warning()` when sample loss exceeds 10%
+
+---
+
+### Phase 21D: Error Handling & Resilience (LOW)
+
+#### 21D-1: Specific Exceptions in meta_selection.py 🟢
+- [ ] File: `src/models/ensemble/meta_selection.py:273` - generic `except Exception`
+- [ ] File: `src/models/ensemble/meta_selection.py:441` - generic `except Exception`
+- [ ] File: `src/models/ensemble/meta_selection.py:492` - generic `except Exception`
+- [ ] Replace with specific exception types from `src/core/exceptions.py` (25 types available)
+
+#### 21D-2: Specific Exceptions in registry.py 🟢
+- [ ] File: `src/models/trained_registry/registry.py:458` - generic `except Exception`
+- [ ] File: `src/models/trained_registry/registry.py:484` - generic `except Exception`
+
+#### 21D-3: Document Circuit Breaker MTM Behavior 🟢
+- [ ] File: `src/inference/backtesting/backtest.py:634-653`
+- [ ] Max drawdown threshold triggers on equity including unrealized P&L
+- [ ] Add docstring explaining this design choice and risks
+
+#### 21D-4: Allow min_batch_size=1 in OOM Recovery 🟢
+- [ ] File: `src/models/neural/oom_recovery.py:29`
+- [ ] Current: `min_batch_size: int = 8`
+- [ ] Consider lowering default or making configurable down to 1
+
+---
+
+### Phase 21E: Documentation Corrections (LOW)
+
+#### 21E-1: Fix Slippage Model Count 🟢
+- [ ] SlippageModel enum has 3 models (LINEAR, SQUARE_ROOT, VOLATILITY_SCALED), not 4
+- [ ] Update any documentation that claims 4 slippage models
+
+#### 21E-2: Fix Exception Count 🟢
+- [ ] `src/core/exceptions.py` has 25 custom types, not 22
+- [ ] Update any documentation referencing 22
+
+---
+
+### Disproven Issues (NO ACTION NEEDED)
+
+| Issue | Claim | Why Disproven |
+|-------|-------|---------------|
+| #1 | P&L divides by tick_value (5x error) | Division on L195 cancelled by multiplication on L205; formula is correct |
+| #5 | Missing column validation | Code at multi_stream.py:351-356 validates feature columns per timeframe |
 
 ---
 
