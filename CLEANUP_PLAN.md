@@ -102,8 +102,8 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | #10 OOM min_batch_size=8 | Too high | **TRUE** - confirmed |
 | #11 No overnight costs | Missing carry/swap | **TRUE** - confirmed |
 | #12 Generic except Exception | Mixed patterns | **TRUE** - confirmed at 5 locations |
-| Strength: 4 slippage models | 4 models claimed | **FALSE** - only 3 in enum |
-| Strength: 22 exceptions | 22 types claimed | **MINOR ERROR** - actually 25 |
+| Strength: 4 slippage models | 4 models claimed | **TRUE** - 4 in enum (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED) |
+| Strength: 22 exceptions | 22 types claimed | **MINOR ERROR** - actually 24 |
 
 ### Phase 21A: Input Validation (HIGH)
 
@@ -132,7 +132,7 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | Task | Description | Priority |
 |------|-------------|----------|
 | 21D-1 | Replace generic `except Exception` in meta_selection.py (3 locations) | 🟢 LOW |
-| 21D-2 | Replace generic `except Exception` in registry.py (2 locations) | 🟢 LOW |
+| 21D-2 | Replace generic `except Exception` in `src/models/registry.py` (lines 345, 429) | 🟢 LOW |
 | 21D-3 | Document circuit breaker MTM equity behavior | 🟢 LOW |
 | 21D-4 | Allow min_batch_size=1 in OOM recovery config | 🟢 LOW |
 
@@ -140,8 +140,8 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 
 | Task | Description | Priority |
 |------|-------------|----------|
-| 21E-1 | Fix slippage model count: 3 not 4 (in any docs) | 🟢 LOW |
-| 21E-2 | Fix exception count: 25 not 22 (in any docs) | 🟢 LOW |
+| 21E-1 | ~~Fix slippage model count~~ ❌ DISPROVEN (enum has 4, claim was wrong) | ❌ N/A |
+| 21E-2 | Fix exception count: 24 not 22 (in any docs) | 🟢 LOW |
 
 ### Validation Criteria
 
@@ -160,6 +160,7 @@ grep -n "not exact multiple\|ratio.*validation" src/data/adapters/multi_stream.p
 
 - **Issue #1:** P&L calculation in financial_report.py - division by tick_value is cancelled by multiplication; formula is correct despite being ugly
 - **Issue #5:** Feature column validation - code at multi_stream.py:351-356 already validates columns per timeframe
+- **21E-1:** SlippageModel enum has 4 models (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED), not 3 as review claimed
 
 ---
 

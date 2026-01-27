@@ -30,7 +30,7 @@
 | 18 | 2/3 | DataContractViolation consolidation |
 | 19 | 17/21 | 34 new features, 5 perf fixes, quick fixes, code quality |
 | 20 | 9/15 | -851 lines, 50-100x speedup, B018 fixes, nested CV warning |
-| 21 | 0/13 | ML Pipeline Review fixes (robustness + correctness) |
+| 21 | 0/12 | ML Pipeline Review fixes (robustness + correctness, 1 disproven) |
 
 See **COMPLETION.md** for detailed implementation records.
 
@@ -39,7 +39,7 @@ See **COMPLETION.md** for detailed implementation records.
 ## Phase 21: ML Pipeline Review Fixes (PLANNED)
 
 **Status:** PLANNED | 2026-01-27
-**Tasks:** 0/13
+**Tasks:** 0/12 (1 disproven)
 **Source:** ML_PIPELINE_REVIEW.md verified by 3 parallel agents against src/
 
 ---
@@ -102,11 +102,11 @@ See **COMPLETION.md** for detailed implementation records.
 - [ ] File: `src/models/ensemble/meta_selection.py:273` - generic `except Exception`
 - [ ] File: `src/models/ensemble/meta_selection.py:441` - generic `except Exception`
 - [ ] File: `src/models/ensemble/meta_selection.py:492` - generic `except Exception`
-- [ ] Replace with specific exception types from `src/core/exceptions.py` (25 types available)
+- [ ] Replace with specific exception types from `src/core/exceptions.py` (24 types available)
 
 #### 21D-2: Specific Exceptions in registry.py 🟢
-- [ ] File: `src/models/trained_registry/registry.py:458` - generic `except Exception`
-- [ ] File: `src/models/trained_registry/registry.py:484` - generic `except Exception`
+- [ ] File: `src/models/registry.py:345` - generic `except Exception`
+- [ ] File: `src/models/registry.py:429` - generic `except Exception`
 
 #### 21D-3: Document Circuit Breaker MTM Behavior 🟢
 - [ ] File: `src/inference/backtesting/backtest.py:634-653`
@@ -122,13 +122,13 @@ See **COMPLETION.md** for detailed implementation records.
 
 ### Phase 21E: Documentation Corrections (LOW)
 
-#### 21E-1: Fix Slippage Model Count 🟢
-- [ ] SlippageModel enum has 3 models (LINEAR, SQUARE_ROOT, VOLATILITY_SCALED), not 4
-- [ ] Update any documentation that claims 4 slippage models
+#### 21E-1: Fix Slippage Model Count 🟢 ❌ DISPROVEN
+- [x] SlippageModel enum actually has 4 models (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED)
+- [x] Original review claim of "only 3" was wrong; NO ACTION NEEDED
 
 #### 21E-2: Fix Exception Count 🟢
-- [ ] `src/core/exceptions.py` has 25 custom types, not 22
-- [ ] Update any documentation referencing 22
+- [ ] `src/core/exceptions.py` has 24 custom types (not 25 or 22)
+- [ ] Update any documentation referencing 22 or 25
 
 ---
 
