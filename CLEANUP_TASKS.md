@@ -30,7 +30,7 @@
 | 18 | 2/3 | DataContractViolation consolidation |
 | 19 | 17/21 | 34 new features, 5 perf fixes, quick fixes, code quality |
 | 20 | 9/15 | -851 lines, 50-100x speedup, B018 fixes, nested CV warning |
-| 21 | 0/12 | ML Pipeline Review fixes (robustness + correctness, 1 disproven) |
+| 21 | 0/11 | ML Pipeline Review fixes (robustness + correctness, 3 disproven) |
 
 See **COMPLETION.md** for detailed implementation records.
 
@@ -39,8 +39,8 @@ See **COMPLETION.md** for detailed implementation records.
 ## Phase 21: ML Pipeline Review Fixes (PLANNED)
 
 **Status:** PLANNED | 2026-01-27
-**Tasks:** 0/12 (1 disproven)
-**Source:** ML_PIPELINE_REVIEW.md verified by 3 parallel agents against src/
+**Tasks:** 0/11 (3 disproven)
+**Source:** ML_PIPELINE_REVIEW.md verified by 3 parallel agents + claim verification against src/
 
 ---
 
@@ -89,10 +89,10 @@ See **COMPLETION.md** for detailed implementation records.
 - [ ] Current thresholds: feature_engineering=1%, feature_scaling=0%, build_datasets=0%
 - [ ] Add docstring explaining rationale for different thresholds per stage
 
-#### 21C-3: Add Sequence Adapter Sample Loss Warning 🟢
-- [ ] File: `src/data/adapters/sequence.py:210-217`
-- [ ] Currently returns empty arrays silently when `n_rows < seq_len`
-- [ ] Add `logger.warning()` when sample loss exceeds 10%
+#### 21C-3: Add Sequence Adapter Sample Loss Warning 🟢 ❌ DISPROVEN
+- [x] File: `src/data/adapters/sequence.py:140-143` already logs warning when no sequences created
+- [x] NOT silent — `transform()` warns: "No sequences created. DataFrame has {len(df)} rows..."
+- [x] **NO ACTION NEEDED**
 
 ---
 
@@ -126,9 +126,10 @@ See **COMPLETION.md** for detailed implementation records.
 - [x] SlippageModel enum actually has 4 models (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED)
 - [x] Original review claim of "only 3" was wrong; NO ACTION NEEDED
 
-#### 21E-2: Fix Exception Count 🟢
-- [ ] `src/core/exceptions.py` has 24 custom types (not 25 or 22)
-- [ ] Update any documentation referencing 22 or 25
+#### 21E-2: Fix Exception Count 🟢 ❌ DISPROVEN (count was wrong)
+- [x] `src/core/exceptions.py` actually has **27** custom exception classes (not 24 or 22)
+- [x] Update any documentation referencing 22, 24, or 25 to say 27
+- [x] Previous verification claiming 24 was itself incorrect
 
 ---
 
@@ -138,6 +139,8 @@ See **COMPLETION.md** for detailed implementation records.
 |-------|-------|---------------|
 | #1 | P&L divides by tick_value (5x error) | Division on L195 cancelled by multiplication on L205; formula is correct |
 | #5 | Missing column validation | Code at multi_stream.py:351-356 validates feature columns per timeframe |
+| 21C-3 | Sequence adapter returns empty silently | `sequence.py:140-143` already logs warning; NOT silent |
+| 21E-2 | Exception count is 24 | Actual count is 27 (verified by class grep) |
 
 ---
 

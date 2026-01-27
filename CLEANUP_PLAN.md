@@ -32,7 +32,7 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 18 | Code Cleanup | 2/3 tasks | 2026-01-25 |
 | 19 | Comprehensive Optimization | +750 lines, 34 features | 2026-01-25 |
 | 20 | Performance & Quality Polish | -851 lines, 50-100x speedup | 2026-01-25 |
-| 21 | ML Pipeline Review Fixes | Robustness + correctness | PLANNED |
+| 21 | ML Pipeline Review Fixes | Robustness + correctness (3 disproven) | PLANNED |
 
 **Net Impact:** ~+11,900 lines of production infrastructure
 
@@ -97,13 +97,13 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | #5 Feature column validation | Missing cross-TF check | **FALSE** - validation exists at L351-356 |
 | #6 Hyperparameter validation | Incomplete | **PARTIALLY TRUE** - XGB/Cat lack, LGB has partial |
 | #7 NaN tolerance inconsistency | 1% vs 0% thresholds | **TRUE** - confirmed |
-| #8 Sequence adapter sample loss | Silent empty return | **TRUE** - confirmed |
+| #8 Sequence adapter sample loss | Silent empty return | **FALSE** - sequence.py:140-143 already logs warning |
 | #9 Circuit breaker MTM equity | Unrealized included | **TRUE** - confirmed |
 | #10 OOM min_batch_size=8 | Too high | **TRUE** - confirmed |
 | #11 No overnight costs | Missing carry/swap | **TRUE** - confirmed |
 | #12 Generic except Exception | Mixed patterns | **TRUE** - confirmed at 5 locations |
 | Strength: 4 slippage models | 4 models claimed | **TRUE** - 4 in enum (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED) |
-| Strength: 22 exceptions | 22 types claimed | **MINOR ERROR** - actually 24 |
+| Strength: 22 exceptions | 22 types claimed | **MINOR ERROR** - actually 27 |
 
 ### Phase 21A: Input Validation (HIGH)
 
@@ -125,7 +125,7 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 |------|-------------|----------|
 | 21C-1 | Add timeframe ratio validation in multi_stream.py | 🟡 MEDIUM |
 | 21C-2 | Document NaN tolerance strategy across pipeline stages | 🟡 MEDIUM |
-| 21C-3 | Add warning log for sequence adapter sample loss >10% | 🟢 LOW |
+| 21C-3 | ~~Add warning log for sequence adapter sample loss >10%~~ ❌ DISPROVEN (already warns at sequence.py:140-143) | ❌ N/A |
 
 ### Phase 21D: Error Handling & Resilience (LOW)
 
@@ -141,7 +141,7 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | Task | Description | Priority |
 |------|-------------|----------|
 | 21E-1 | ~~Fix slippage model count~~ ❌ DISPROVEN (enum has 4, claim was wrong) | ❌ N/A |
-| 21E-2 | Fix exception count: 24 not 22 (in any docs) | 🟢 LOW |
+| 21E-2 | ~~Fix exception count~~ ❌ DISPROVEN (actual count is 27, not 24 or 22) | ❌ N/A |
 
 ### Validation Criteria
 
@@ -160,7 +160,9 @@ grep -n "not exact multiple\|ratio.*validation" src/data/adapters/multi_stream.p
 
 - **Issue #1:** P&L calculation in financial_report.py - division by tick_value is cancelled by multiplication; formula is correct despite being ugly
 - **Issue #5:** Feature column validation - code at multi_stream.py:351-356 already validates columns per timeframe
+- **Issue #8:** Sequence adapter sample loss - `sequence.py:140-143` already logs warning; NOT silent
 - **21E-1:** SlippageModel enum has 4 models (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED), not 3 as review claimed
+- **21E-2:** Exception count is 27 (not 24 or 22) - verified by class grep of `core/exceptions.py`
 
 ---
 
