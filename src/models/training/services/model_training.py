@@ -32,6 +32,7 @@ class ModelTrainingRequest:
     optimize_hyperparams: bool = False
     hyperparam_trials: int = 100
     n_splits: int = 5
+    scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
 
 
 @dataclass
@@ -284,6 +285,7 @@ class ModelTrainingService:
             prepared_data=prepared,
             n_splits=request.n_splits,
             n_trials=request.hyperparam_trials,
+            scoring=request.scoring,
         )
 
         result = tuning_service.optimize(tuning_request)

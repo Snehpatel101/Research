@@ -558,7 +558,7 @@ class MLFactory:
             return {}
 
         try:
-            from src.inference.backtesting import Backtester
+            from src.inference.backtesting import BacktestConfig, Backtester
 
             # Extract predictions from training result
             predictions_df = self._extract_predictions(df, training_result)
@@ -566,8 +566,22 @@ class MLFactory:
                 self._log("  No predictions available for backtest")
                 return {}
 
-            # Configure backtester
-            backtest_config = self.config.to_backtest_config()
+            # Configure backtester using local BacktestConfig
+            # Note: canonical BacktestConfig (src/config/inference.py) has different fields
+            # than the local one (src/inference/backtesting/backtest.py).
+            # We map position_sizing from canonical short names to local long names.
+            position_sizing_map = {
+                "fixed": "fixed_contracts",
+                "volatility": "volatility_targeted",
+                "confidence": "bet_sizing",
+                # "kelly" stays as "kelly"
+            }
+            canonical_sizing = self.config.evaluation.position_sizing
+            local_sizing = position_sizing_map.get(canonical_sizing, canonical_sizing)
+
+            backtest_config = BacktestConfig(
+                position_sizing=local_sizing,
+            )
             backtester = Backtester(predictions=predictions_df, prices=df, config=backtest_config)
 
             # Run backtest

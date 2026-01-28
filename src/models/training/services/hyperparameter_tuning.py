@@ -20,6 +20,7 @@ class TuningRequest:
     prepared_data: PreparedData
     n_splits: int = 5
     n_trials: int = 100
+    scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
 
 
 @dataclass
@@ -70,6 +71,7 @@ class HyperparameterTuningService:
             model_name=request.model_name,
             cv=cv,
             n_trials=request.n_trials,
+            metric=request.scoring,
         )
 
         # Flatten to 2D for tuning

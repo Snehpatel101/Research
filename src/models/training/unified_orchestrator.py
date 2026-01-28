@@ -624,6 +624,7 @@ class UnifiedTrainingOrchestrator:
             optimize_hyperparams=self.config.optimize_hyperparams,
             n_splits=self.config.n_splits,
             hyperparam_trials=self.config.hyperparam_trials,
+            scoring=self.config.optuna_metric,
         )
         result = self._model_service.train_model(request)
 

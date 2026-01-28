@@ -103,7 +103,7 @@ class TrainingSection:
     horizons: list[int] = field(default_factory=lambda: [5, 10, 15, 20])
 
     # Training settings
-    training_mode: str = "single_horizon"  # single_horizon, multi_horizon, oof_only
+    training_mode: str = "standard"  # standard, walk_forward, regime_aware, meta_labeling
     cv_method: str = "purged_kfold"
     n_splits: int = 5
     purge_bars: int = 60
@@ -414,11 +414,25 @@ class ExperimentConfig:
             purge_bars=self.training.purge_bars,
             embargo_bars=self.training.embargo_bars,
             random_state=self.random_seed,
+            # Optuna trial counts - all driven by OptunaConfig.n_trials
             hyperparam_trials=self.training.optuna.n_trials,
             label_optimization_trials=self.training.optuna.n_trials,
             feature_selection_trials=self.training.optuna.n_trials,
+            feature_pruning_trials=self.training.optuna.n_trials,
             optuna_random_state=self.training.optuna.random_state,
             optuna_metric=self.training.optuna.metric,
+            # Feature configuration
+            feature_families=self.data.features.families,
+            # Labeling configuration
+            labeling_method=self.data.labeling.method,
+            # MTF configuration
+            mtf_timeframes=self.data.mtf.timeframes,
+            # Sequence configuration
+            sequence_length=self.data.sequence.seq_len,
+            # Neural network configuration
+            batch_size=self.training.batch_size,
+            max_epochs=self.training.max_epochs,
+            early_stopping_patience=self.training.early_stopping_patience,
         )
 
     def to_trainer_config(self, model_name: str, horizon: int | None = None) -> Any:

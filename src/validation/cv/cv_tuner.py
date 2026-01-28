@@ -86,6 +86,11 @@ class TimeSeriesOptunaTuner:
             sampler=TPESampler(seed=42),
         )
 
+        # Get the scoring function based on configured metric
+        from src.optimization.scoring import get_score_fn
+
+        score_fn = get_score_fn(self.metric)
+
         def objective(trial: optuna.Trial) -> float:
             params = self._sample_params(trial, param_space)
 
@@ -102,8 +107,14 @@ class TimeSeriesOptunaTuner:
 
                 # Train and evaluate
                 model = ModelRegistry.create(self.model_name, config=params)
-                metrics = model.fit(X_train, y_train, X_val, y_val, sample_weights=w_train)
-                scores.append(metrics.val_f1)
+                model.fit(X_train, y_train, X_val, y_val, sample_weights=w_train)
+
+                # Use configured metric instead of hardcoded val_f1
+                # score_fn takes (y_true, y_pred) and returns a score
+                pred_result = model.predict(X_val)
+                y_pred = pred_result.class_predictions
+                fold_score = score_fn(y_val, y_pred)
+                scores.append(fold_score)
 
             # Return mean score with variance penalty
             mean_score = np.mean(scores)
