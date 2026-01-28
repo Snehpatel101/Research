@@ -486,36 +486,82 @@ class MLFactory:
         Returns:
             DataFrame with features, labels, and metadata
         """
-        self._log("Loading raw data...")
+        self._log("Running data pipeline...")
 
-        # If data path provided, load it
-        if self.config.data.data_path:
-            df = pd.read_parquet(self.config.data.data_path)
-            self._log(f"  Loaded: {len(df)} rows from {self.config.data.data_path}")
-            return df
+        # Load raw OHLCV data
+        if not self.config.data.data_path:
+            raise ValueError("data_path must be provided in config")
 
-        # Otherwise, run full pipeline
-        from src.data.pipeline import PipelineRunner
+        raw_df = pd.read_parquet(self.config.data.data_path)
+        self._log(f"  Loaded: {len(raw_df)} rows from {self.config.data.data_path}")
 
-        pipeline_config = self.config.to_pipeline_config()
-        runner = PipelineRunner(pipeline_config)
+        # Normalize column names
+        raw_df.columns = [c.lower().strip() for c in raw_df.columns]
 
-        self._log("  Running pipeline stages...")
-        runner.run()
+        # Ensure datetime index
+        if "datetime" in raw_df.columns:
+            raw_df["datetime"] = pd.to_datetime(raw_df["datetime"])
+            raw_df = raw_df.set_index("datetime").sort_index()
+        elif not isinstance(raw_df.index, pd.DatetimeIndex):
+            raw_df.index = pd.to_datetime(raw_df.index)
+            raw_df = raw_df.sort_index()
 
-        # Load the processed data
-        # Note: This assumes the pipeline saves to a canonical location
-        # You may need to adjust based on actual pipeline output
-        processed_path = pipeline_config.run_canonical_dir / "processed.parquet"
-        if not processed_path.exists():
-            raise FileNotFoundError(
-                f"Pipeline output not found at {processed_path}. "
-                "Ensure PipelineRunner saves processed data."
+        # Check for OHLCV columns
+        required = ["open", "high", "low", "close", "volume"]
+        missing = [c for c in required if c not in raw_df.columns]
+        if missing:
+            raise ValueError(f"Missing required OHLCV columns: {missing}")
+
+        # =====================================================================
+        # STEP 1: Feature Engineering
+        # =====================================================================
+        self._log("  Generating features...")
+        from src.data.pipeline.stages.features import FeatureEngineer
+
+        engineer = FeatureEngineer(
+            input_dir=self.output_dir,
+            output_dir=self.output_dir,
+        )
+        df_features, feature_report = engineer.engineer_features(
+            raw_df.copy(),
+            symbol=self.config.data.symbol,
+        )
+        self._log(f"  Features: {len(df_features.columns)} columns")
+
+        # =====================================================================
+        # STEP 2: Triple Barrier Labeling
+        # =====================================================================
+        self._log("  Generating labels...")
+        from src.data.labeling import TripleBarrierLabeler, TripleBarrierConfig
+
+        # Create labels for each horizon
+        for horizon in self.config.training.horizons:
+            label_config = TripleBarrierConfig(
+                horizon=horizon,
+                upper_barrier_mult=2.0,
+                lower_barrier_mult=2.0,
+                vol_lookback=20,
             )
+            labeler = TripleBarrierLabeler(label_config)
+            labels = labeler.create_labels(df_features)
+            df_features[f"label_h{horizon}"] = labels
+            self._log(f"    label_h{horizon}: {labels.value_counts().to_dict()}")
 
-        df = pd.read_parquet(processed_path)
-        self._log(f"  Pipeline complete: {len(df)} rows")
-        return df
+        # Also create a default 'label' column using first horizon
+        first_horizon = self.config.training.horizons[0]
+        df_features["label"] = df_features[f"label_h{first_horizon}"]
+
+        # Drop rows with NaN labels
+        initial_len = len(df_features)
+        df_features = df_features.dropna(subset=["label"])
+        dropped = initial_len - len(df_features)
+        if dropped > 0:
+            self._log(f"  Dropped {dropped} rows with NaN labels")
+
+        self._log(f"  Pipeline complete: {len(df_features)} rows, {len(df_features.columns)} columns")
+        self._log(f"  Label distribution: {df_features['label'].value_counts().to_dict()}")
+
+        return df_features
 
     def _run_training(self, df: pd.DataFrame) -> Any:
         """
