@@ -518,12 +518,17 @@ class MLFactory:
         self._log("  Generating features...")
         from src.data.pipeline.stages.features import FeatureEngineer
 
+        # Reset index to make datetime a column (FeatureEngineer expects this)
+        df_for_features = raw_df.reset_index()
+        if df_for_features.columns[0] == "index":
+            df_for_features = df_for_features.rename(columns={"index": "datetime"})
+
         engineer = FeatureEngineer(
             input_dir=self.output_dir,
             output_dir=self.output_dir,
         )
         df_features, _report = engineer.engineer_features(
-            raw_df.copy(),
+            df_for_features,
             symbol=self.config.data.symbol,
         )
         self._log(f"  Features: {len(df_features.columns)} columns")
