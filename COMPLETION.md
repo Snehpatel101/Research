@@ -4,6 +4,33 @@
 
 ---
 
+## Phase 22: OPTIMIZE_FOR Metric Wiring | 2026-01-27 | COMPLETE
+
+**Impact:** 7 changes, 6 modified files + 1 new file (~110 lines added)
+**Purpose:** Wire user's OPTIMIZE_FOR metric choice through the full optimization pipeline
+
+### Summary
+
+`OptunaConfig.metric` existed but was silently ignored — `OptimizationPipeline` hardcoded `scoring="f1_weighted"`. This phase wired the metric end-to-end.
+
+| Change | File | Description |
+|--------|------|-------------|
+| 1 | `src/core/config.py:202` | Added `optuna_metric: str` field to PipelineConfig |
+| 2 | `src/config/experiment.py:421` | `to_pipeline_config()` passes `optuna_metric` |
+| 3 | `src/optimization/scoring.py` (NEW) | Shared `get_score_fn()` with 8 metrics |
+| 4 | `src/optimization/pipeline.py` | Added `scoring` param, threaded to all optimizers |
+| 5 | `src/optimization/features.py:659` | `permutation_importance` uses `self.scoring` |
+| 6 | `src/optimization/features.py:255` | Dispatcher delegates to `scoring.get_score_fn()` |
+| 7 | `src/optimization/hyperparameters.py:540` | Dispatcher delegates to `scoring.get_score_fn()` |
+
+**Supported Metrics:** accuracy, f1_weighted, f1_macro, precision, recall, sharpe_ratio, sortino_ratio, profit_factor
+
+**Lessons Learned:**
+- Both `HyperparameterOptimizer` and `FeatureOptimizer` already accepted `scoring` — the gap was purely in config conversion
+- Trading proxy metrics (sharpe/sortino/profit_factor) simulate PnL from classification predictions, matching `five_dimension_objective.py` logic
+
+---
+
 ## Phase 21: ML Pipeline Review Fixes | 2026-01-27 | COMPLETE
 
 **Impact:** 10 tasks completed, 10 files modified, 0 files added/deleted

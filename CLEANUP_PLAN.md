@@ -33,8 +33,9 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 19 | Comprehensive Optimization | +750 lines, 34 features | 2026-01-25 |
 | 20 | Performance & Quality Polish | -851 lines, 50-100x speedup | 2026-01-25 |
 | 21 | ML Pipeline Review Fixes | 10 tasks, 10 files modified (3 disproven) | 2026-01-27 |
+| 22 | OPTIMIZE_FOR Metric Wiring | 7 changes, 6 files + scoring.py | 2026-01-27 |
 
-**Net Impact:** ~+11,900 lines of production infrastructure
+**Net Impact:** ~+12,010 lines of production infrastructure
 
 ---
 
@@ -163,6 +164,41 @@ grep -n "not exact multiple\|ratio.*validation" src/data/adapters/multi_stream.p
 - **Issue #8:** Sequence adapter sample loss - `sequence.py:140-143` already logs warning; NOT silent
 - **21E-1:** SlippageModel enum has 4 models (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED), not 3 as review claimed
 - **21E-2:** Exception count is 27 (not 24 or 22) - verified by class grep of `core/exceptions.py`
+
+---
+
+## Phase 22: OPTIMIZE_FOR Metric Wiring (COMPLETE)
+
+**Status:** COMPLETE | 2026-01-27
+**Source:** OPTIMIZE_FOR_PLAN.md (3 research agents + 1 verification agent)
+**Impact:** 7 changes, 6 modified files + 1 new file (scoring.py), ~110 lines
+
+### What Was Fixed
+
+`OPTIMIZE_FOR` / `OptunaConfig.metric` was silently ignored — the user's metric choice never reached the optimization layer. `OptimizationPipeline` hardcoded `scoring="f1_weighted"`.
+
+### Changes Made
+
+| Change | File | Description |
+|--------|------|-------------|
+| 1 | `src/core/config.py:202` | Added `optuna_metric: str` field to PipelineConfig |
+| 2 | `src/config/experiment.py:421` | `to_pipeline_config()` passes `optuna_metric` |
+| 3 | `src/optimization/scoring.py` (NEW) | Shared `get_score_fn()` with 8 metrics |
+| 4 | `src/optimization/pipeline.py` | Added `scoring` param, threaded to all optimizers |
+| 5 | `src/optimization/features.py:659` | `permutation_importance` uses `self.scoring` |
+| 6 | `src/optimization/features.py:255` | Dispatcher delegates to `scoring.get_score_fn()` |
+| 7 | `src/optimization/hyperparameters.py:540` | Dispatcher delegates to `scoring.get_score_fn()` |
+
+### Supported Metrics
+
+| Category | Metrics |
+|----------|---------|
+| Classification | accuracy, f1_weighted, f1_macro, precision, recall |
+| Trading (proxy) | sharpe_ratio, sortino_ratio, profit_factor |
+
+### Notebook Updated
+
+Removed "aspirational" NOTE from Cell 2 Section 3. OPTIMIZE_FOR now flows through the full pipeline.
 
 ---
 
