@@ -100,6 +100,20 @@ class OptunaConfig(BaseConfig):
         if self.direction not in valid_directions:
             issues.append(f"direction must be one of {valid_directions}, got '{self.direction}'")
 
+        valid_metrics = [
+            "f1_weighted",
+            "accuracy",
+            "sharpe_ratio",
+            "sortino_ratio",
+            "profit_factor",
+            "precision",
+            "recall",
+            "roc_auc",
+            "log_loss",
+        ]
+        if self.metric not in valid_metrics:
+            issues.append(f"metric must be one of {valid_metrics}, got '{self.metric}'")
+
         return issues
 
 

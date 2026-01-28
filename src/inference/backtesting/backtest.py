@@ -38,7 +38,7 @@ class BacktestConfig:
 
     Attributes:
         initial_equity: Starting portfolio value
-        position_sizing_method: Method for calculating position size
+        position_sizing: Method for calculating position size
         execution_model: How orders are executed
         allow_short: Whether to allow short positions
         allow_pyramiding: Whether to allow adding to positions
@@ -56,7 +56,7 @@ class BacktestConfig:
     """
 
     initial_equity: float = 100000.0
-    position_sizing_method: str = "fixed_contracts"
+    position_sizing: str = "fixed_contracts"
     execution_model: ExecutionModel = ExecutionModel.MARKET_ON_CLOSE
     allow_short: bool = True
     allow_pyramiding: bool = False
@@ -240,7 +240,7 @@ class Backtester:
         # Create position sizer
         if position_sizer is None:
             self.position_sizer = create_position_sizer(
-                method=self.config.position_sizing_method,
+                method=self._resolve_sizing_method(self.config.position_sizing),
                 risk_per_trade=self.config.risk_per_trade,
                 kelly_fraction=self.config.kelly_fraction,
                 target_volatility=self.config.target_volatility,
@@ -265,6 +265,24 @@ class Backtester:
         self._halt_trading = False
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
+
+    @staticmethod
+    def _resolve_sizing_method(value: str) -> str:
+        """Map canonical position_sizing values to local PositionSizingMethod values.
+
+        The canonical config (src/config/inference.py) uses short names like
+        "fixed", "kelly", "volatility", "confidence".  The local position sizer
+        (position_sizing.py) expects "fixed_contracts", "kelly",
+        "volatility_targeted", "bet_sizing", etc.  This method bridges the two.
+        """
+        mapping = {
+            "fixed": "fixed_contracts",
+            "volatility": "volatility_targeted",
+            "confidence": "bet_sizing",
+            # These already match:
+            # "kelly" -> "kelly"
+        }
+        return mapping.get(value, value)
 
     def _validate_predictions(self, df: pd.DataFrame) -> pd.DataFrame:
         """Validate and normalize predictions DataFrame."""

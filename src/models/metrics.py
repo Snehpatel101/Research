@@ -401,7 +401,7 @@ def compute_backtest_metrics(
 
     config = BacktestConfig(
         initial_equity=initial_equity,
-        position_sizing_method="fixed_contracts",
+        position_sizing="fixed_contracts",
         fixed_contracts=1,
         point_value=point_value,
         commission_per_contract=commission_per_contract,

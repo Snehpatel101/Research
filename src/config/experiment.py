@@ -134,6 +134,7 @@ class EvaluationSection:
     run_backtest: bool = False
     compute_shap: bool = False
     generate_report: bool = True
+    position_sizing: str = "fixed"
 
 
 @dataclass
@@ -289,6 +290,7 @@ class ExperimentConfig:
             run_backtest=eval_section_dict.get("run_backtest", False),
             compute_shap=eval_section_dict.get("compute_shap", False),
             generate_report=eval_section_dict.get("generate_report", True),
+            position_sizing=eval_section_dict.get("position_sizing", "fixed"),
         )
 
         # Parse bundling section
@@ -359,6 +361,7 @@ class ExperimentConfig:
                 "run_backtest": self.evaluation.run_backtest,
                 "compute_shap": self.evaluation.compute_shap,
                 "generate_report": self.evaluation.generate_report,
+                "position_sizing": self.evaluation.position_sizing,
             },
             "bundling": {
                 "create_bundle": self.bundling.create_bundle,
@@ -411,6 +414,10 @@ class ExperimentConfig:
             purge_bars=self.training.purge_bars,
             embargo_bars=self.training.embargo_bars,
             random_state=self.random_seed,
+            hyperparam_trials=self.training.optuna.n_trials,
+            label_optimization_trials=self.training.optuna.n_trials,
+            feature_selection_trials=self.training.optuna.n_trials,
+            optuna_random_state=self.training.optuna.random_state,
         )
 
     def to_trainer_config(self, model_name: str, horizon: int | None = None) -> Any:
@@ -450,6 +457,7 @@ class ExperimentConfig:
         return BacktestConfig(
             start_date=self.data.start_date,
             end_date=self.data.end_date,
+            position_sizing=self.evaluation.position_sizing,
         )
 
     def to_bundle_config(self, model_name: str, horizon: int) -> BundleConfig:

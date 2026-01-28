@@ -21,7 +21,7 @@ Quick Start:
     # Configure backtest
     config = BacktestConfig.for_mes(
         initial_equity=100000.0,
-        position_sizing_method="fixed_fractional",
+        position_sizing="fixed_fractional",
         risk_per_trade=0.02,
     )
 
