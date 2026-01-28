@@ -39,9 +39,9 @@ venv.bak/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data files (too large for git)
-data/raw/*.parquet
-data/raw/*.csv
+# Data files (large - but needed for Colab)
+# data/raw/*.parquet  # REMOVED - needed for Colab access
+# data/raw/*.csv      # REMOVED - needed for Colab access
 data/clean/*.parquet
 data/features/*.parquet
 data/final/*.parquet
