@@ -116,10 +116,10 @@ def _lempel_ziv_complexity(binary_seq: np.ndarray) -> float:
 
     binary_str = "".join(binary_seq.astype(str))
 
-    # LZ76 algorithm
+    # LZ76 algorithm (l = length, standard academic notation)
     i = 0
     c = 1
-    l = 1
+    l = 1  # noqa: E741 - standard LZ76 variable name for "length"
     k = 1
     k_max = 1
 
@@ -130,7 +130,7 @@ def _lempel_ziv_complexity(binary_seq: np.ndarray) -> float:
             i += 1
             if i == l:
                 c += 1
-                l += k_max
+                l += k_max  # noqa: E741
                 if l + 1 > n:
                     break
                 i = 0

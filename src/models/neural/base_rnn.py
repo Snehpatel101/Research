@@ -25,9 +25,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader as _DataLoader
 from torch.utils.data import TensorDataset
 
-# Type alias for DataLoader with Any type parameter
-DataLoader = _DataLoader[Any]
-
 from src.core.reproducibility import set_all_seeds
 
 from ..base import BaseModel, PredictionOutput, TrainingMetrics
@@ -36,6 +33,9 @@ from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
 from .checkpointing import CheckpointConfig, CheckpointManager
 from .numerical_stability import NumericalValidator, validate_training_inputs
 from .oom_recovery import OOMConfig, OOMRecoveryManager
+
+# Type alias for DataLoader with Any type parameter
+DataLoader = _DataLoader[Any]
 
 logger = logging.getLogger(__name__)
 

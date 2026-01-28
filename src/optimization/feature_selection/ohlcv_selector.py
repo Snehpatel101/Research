@@ -655,7 +655,7 @@ class OHLCVFeatureSelector:
         selected: list[str] = []
         correlation_clusters: list[list[str]] = []
 
-        for cluster_id, features in cluster_groups.items():
+        for _cluster_id, features in cluster_groups.items():
             if len(features) == 1:
                 selected.append(features[0])
                 correlation_clusters.append(features)

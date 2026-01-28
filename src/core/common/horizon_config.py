@@ -64,10 +64,11 @@ LABEL_HORIZONS: list[int] = ACTIVE_HORIZONS
 # =============================================================================
 # Import timeframe definitions from the canonical source of truth.
 # NOTE: Use get_timeframe_minutes() for parsing timeframe strings.
-from src.core.common.timeframes import (
+# noqa: E402 - Intentional late import to avoid circular dependency with global_config
+from src.core.common.timeframes import (  # noqa: E402
     TIMEFRAME_TO_MINUTES as HORIZON_TIMEFRAME_MINUTES,
 )
-from src.core.common.timeframes import (
+from src.core.common.timeframes import (  # noqa: E402
     get_timeframe_minutes as _get_timeframe_minutes,
 )
 

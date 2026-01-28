@@ -299,7 +299,7 @@ def display_metrics(
             print("  Confusion Matrix:")
             cm = np.array(em["confusion_matrix"])
             labels = ["Short", "Neutral", "Long"]
-            print("           " + "  ".join(f"{l:>8}" for l in labels))
+            print("           " + "  ".join(f"{label:>8}" for label in labels))
             for i, row in enumerate(cm):
                 print(f"    {labels[i]:>7}" + "  ".join(f"{v:>8}" for v in row))
 

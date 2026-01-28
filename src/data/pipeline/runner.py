@@ -14,25 +14,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from src.data.pipeline.data_config import DataConfig
-
-
-class NumpyEncoder(json.JSONEncoder):
-    """Custom JSON encoder to handle numpy types."""
-
-    def default(self, obj):
-        if isinstance(obj, (np.integer,)):
-            return int(obj)
-        if isinstance(obj, (np.floating,)):
-            return float(obj)
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, Path):
-            return str(obj)
-        return super().default(obj)
-
-
 from .schemas import StageValidationError
 from .stage_registry import PipelineStage, get_stage_definitions
 from .stages import (
@@ -50,6 +31,24 @@ from .stages import (
     run_validation,
 )
 from .utils import StageResult, StageStatus
+
+if TYPE_CHECKING:
+    from src.data.pipeline.data_config import DataConfig
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle numpy types."""
+
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, Path):
+            return str(obj)
+        return super().default(obj)
 
 
 class PipelineRunner:

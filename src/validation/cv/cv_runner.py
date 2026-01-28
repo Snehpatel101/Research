@@ -444,7 +444,7 @@ class CrossValidationRunner:
         stacking_dir = output_dir / "stacking"
         stacking_dir.mkdir(exist_ok=True)
 
-        for horizon, stacking_ds in stacking_datasets.items():
+        for _horizon, stacking_ds in stacking_datasets.items():
             OOFGenerator(self.cv).save_stacking_dataset(stacking_ds, stacking_dir)
 
         # Save tuned parameters

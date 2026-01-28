@@ -229,7 +229,7 @@ class LabelingMethod(str, Enum):
 # =============================================================================
 
 # Feature data types
-Features = Union[np.ndarray, pd.DataFrame]
+Features = np.ndarray | pd.DataFrame
 Labels = np.ndarray
 
 # Model type variable (for generic model handling)
@@ -243,7 +243,7 @@ Array4D = np.ndarray  # Shape: (n, timeframes, seq_len, features)
 
 # Index types
 DatetimeIndex = pd.DatetimeIndex
-Index = Union[np.ndarray, pd.Index]
+Index = np.ndarray | pd.Index
 
 
 # =============================================================================
