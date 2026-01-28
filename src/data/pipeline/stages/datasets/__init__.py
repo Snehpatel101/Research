@@ -53,6 +53,15 @@ from src.core.container import (
     TimeSeriesDataContainer,
 )
 
+# Import from canonical location (src/core/datasets/sequences.py)
+from src.core.datasets.sequences import (
+    SequenceConfig,
+    SequenceDataset,
+    build_sequence_indices,
+    create_sequence_dataset,
+    find_symbol_boundaries,
+)
+
 # Import from canonical location (src/data/adapters)
 from src.data.adapters import (
     MultiResolution4DAdapter,
@@ -64,14 +73,6 @@ from src.data.pipeline.stages.datasets.run import (
     FeatureSchemaError,
     run_build_datasets,
     validate_feature_schema,
-)
-# Import from canonical location (src/core/datasets/sequences.py)
-from src.core.datasets.sequences import (
-    SequenceConfig,
-    SequenceDataset,
-    build_sequence_indices,
-    create_sequence_dataset,
-    find_symbol_boundaries,
 )
 from src.data.pipeline.stages.datasets.validators import (
     ValidationResult,

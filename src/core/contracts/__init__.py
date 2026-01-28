@@ -46,12 +46,12 @@ Example:
     >>> is_valid, issues = contract.validate_data_contract(data_contract)
 """
 
-from src.core.types import DataRank
-
 # Re-export from canonical location (src/core/common/manifest.py)
 from src.core.common.manifest import (
     ArtifactManifest,
 )
+from src.core.types import DataRank
+
 from .data_contract import (
     DATA_SCHEMA,
     DataContract,
