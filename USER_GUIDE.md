@@ -80,13 +80,20 @@ The Google Colab VS Code extension lets you use Colab's free GPUs directly from 
 | **L4 GPU** | 24GB | Production training | Colab Pro |
 | **CPU** | N/A | Testing only | Always |
 
-#### Data Upload (VS Code Extension)
+#### Data Location
 
-Since Google Drive mounting is **not available** in the VS Code extension, you have two options:
+The notebook defaults to using data from the repo's `data/` folder:
+
+**Default (Recommended):**
+```python
+# Uses repo's data folder - upload your data there before running
+DATA_PATH = "/content/ml_factory/data/clean/MES_5m_clean.parquet"
+```
+
+**Alternative Options:**
 
 **Option 1: Upload directly (small files < 100MB)**
 ```python
-# In your notebook, upload data to session storage
 from google.colab import files
 uploaded = files.upload()  # Opens file picker
 DATA_PATH = "/content/your_data.parquet"
@@ -94,15 +101,17 @@ DATA_PATH = "/content/your_data.parquet"
 
 **Option 2: Download from URL**
 ```python
-# Download from cloud storage or URL
 !wget -O /content/data.parquet "https://your-storage.com/data.parquet"
 DATA_PATH = "/content/data.parquet"
 ```
 
-**Option 3: Clone with data (if data is in repo)**
+**Option 3: Google Drive (Web Colab only)**
 ```python
-DATA_PATH = "/content/ml_factory/data/your_data.parquet"
+# Uncomment drive.mount() in Cell 1 first
+DATA_PATH = "/content/drive/MyDrive/data/MES_5min.parquet"
 ```
+
+**Note:** Google Drive mounting does NOT work in VS Code extension.
 
 #### Key Commands
 
@@ -149,7 +158,7 @@ DATA_PATH = "/content/drive/MyDrive/data/MES_5min.parquet"
 ```python
 # Just change these two lines!
 SYMBOL = "MES"
-DATA_PATH = "/content/data/MES_5min.parquet"
+DATA_PATH = "/content/ml_factory/data/clean/MES_5m_clean.parquet"
 
 # Everything else uses sensible defaults
 MODELS = ["xgboost", "lightgbm"]
@@ -163,7 +172,7 @@ RUN_BACKTEST = True
 POSITION_SIZING = "fixed"
 EXPERIMENT_NAME = "quick_test"
 RANDOM_SEED = 42
-SAVE_TO_DRIVE = True
+SAVE_RESULTS = True
 ```
 **Runtime:** ~5-15 minutes
 
@@ -172,7 +181,7 @@ SAVE_TO_DRIVE = True
 #### Intermediate: Balanced Config
 ```python
 SYMBOL = "MES"
-DATA_PATH = "/content/data/MES_5min.parquet"
+DATA_PATH = "/content/ml_factory/data/clean/MES_5m_clean.parquet"
 
 MODELS = ["xgboost", "lightgbm", "catboost", "lstm"]
 OPTIMIZE_FOR = "sharpe_ratio"
@@ -186,7 +195,7 @@ RUN_BACKTEST = True
 POSITION_SIZING = "confidence"
 EXPERIMENT_NAME = "balanced_run"
 RANDOM_SEED = 42
-SAVE_TO_DRIVE = True
+SAVE_RESULTS = True
 ```
 **Runtime:** ~30-90 minutes (GPU required for LSTM)
 
@@ -195,7 +204,7 @@ SAVE_TO_DRIVE = True
 #### Advanced: Full Production Config
 ```python
 SYMBOL = "MES"
-DATA_PATH = "/content/data/MES_5min.parquet"
+DATA_PATH = "/content/ml_factory/data/clean/MES_5m_clean.parquet"
 
 MODELS = [
     "xgboost", "lightgbm", "catboost",
@@ -216,7 +225,7 @@ RUN_BACKTEST = True
 POSITION_SIZING = "kelly"
 EXPERIMENT_NAME = "production_run"
 RANDOM_SEED = 42
-SAVE_TO_DRIVE = True
+SAVE_RESULTS = True
 ```
 **Runtime:** ~2-6 hours (GPU required)
 
@@ -248,10 +257,13 @@ Path to your OHLCV data file. Must contain columns: `open`, `high`, `low`, `clos
 
 **Examples:**
 ```python
-# VS Code Extension (upload to session)
+# Repo's data folder (default)
+DATA_PATH = "/content/ml_factory/data/clean/MES_5m_clean.parquet"
+
+# Uploaded to session
 DATA_PATH = "/content/my_data.parquet"
 
-# Web Colab (Google Drive)
+# Google Drive (web Colab only)
 DATA_PATH = "/content/drive/MyDrive/data/MES_5min.parquet"
 ```
 
@@ -462,7 +474,7 @@ How to size trades.
 | `POSITION_SIZING` | str | "fixed" | fixed, kelly, volatility, confidence |
 | `EXPERIMENT_NAME` | str | "my_experiment" | Any string |
 | `RANDOM_SEED` | int | 42 | Any integer |
-| `SAVE_TO_DRIVE` | bool | True | True, False |
+| `SAVE_RESULTS` | bool | True | True, False |
 
 ---
 
