@@ -235,6 +235,7 @@ class OptimizationPipeline:
         hyperparam_trials: int = DEFAULT_HYPERPARAM_TRIALS,
         min_features: int = DEFAULT_MIN_FEATURES,
         random_state: int = DEFAULT_OPTUNA_RANDOM_STATE,
+        scoring: str = "f1_weighted",
         verbose: int = 1,
     ):
         self.label_trials = label_trials
@@ -243,6 +244,7 @@ class OptimizationPipeline:
         self.hyperparam_trials = hyperparam_trials
         self.min_features = min_features
         self.random_state = random_state
+        self.scoring = scoring
         self.verbose = verbose
 
         # Initialize sub-optimizers
@@ -268,6 +270,7 @@ class OptimizationPipeline:
             hyperparam_trials=config.hyperparam_trials,
             min_features=config.min_features,
             random_state=config.optuna_random_state,
+            scoring=config.optuna_metric,
             verbose=config.verbose,
         )
 
@@ -423,6 +426,7 @@ class OptimizationPipeline:
                 selection_trials=self.feature_trials,
                 pruning_trials=self.pruning_trials,
                 min_features=self.min_features,
+                scoring=self.scoring,
                 random_state=self.random_state,
                 verbose=self.verbose,
             )
@@ -491,7 +495,7 @@ class OptimizationPipeline:
             self._hyperparam_optimizer = HyperparameterOptimizer(
                 n_trials=self.hyperparam_trials,
                 cv_folds=3,
-                scoring="f1_weighted",
+                scoring=self.scoring,
                 use_pruning=True,
                 random_state=self.random_state,
                 verbose=self.verbose,
@@ -649,7 +653,7 @@ class OptimizationPipeline:
         self._hyperparam_optimizer = HyperparameterOptimizer(
             n_trials=self.hyperparam_trials,
             cv_folds=3,
-            scoring="f1_weighted",
+            scoring=self.scoring,
             use_pruning=True,
             random_state=self.random_state,
             verbose=self.verbose,

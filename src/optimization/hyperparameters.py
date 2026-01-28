@@ -46,7 +46,6 @@ import numpy as np
 import optuna
 from optuna.pruners import HyperbandPruner
 from optuna.samplers import TPESampler
-from sklearn.metrics import accuracy_score, f1_score
 
 from src.core import (
     ALL_MODELS,
@@ -539,14 +538,9 @@ class HyperparameterOptimizer:
 
     def _get_score_fn(self) -> Callable[[np.ndarray, np.ndarray], float]:
         """Get scoring function based on metric name."""
-        if self.scoring == "accuracy":
-            return lambda y_true, y_pred: float(accuracy_score(y_true, y_pred))
-        elif self.scoring == "f1_weighted":
-            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="weighted"))
-        elif self.scoring == "f1_macro":
-            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="macro"))
-        else:
-            raise ValueError(f"Unknown scoring metric: {self.scoring}")
+        from src.optimization.scoring import get_score_fn
+
+        return get_score_fn(self.scoring)
 
     def _is_neural_model(self, model_name: str) -> bool:
         """Check if model is a neural network (for pruning)."""

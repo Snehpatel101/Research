@@ -56,7 +56,6 @@ from typing import Any
 import numpy as np
 import optuna
 from optuna.samplers import TPESampler
-from sklearn.metrics import f1_score
 
 from src.core import (
     DEFAULT_FEATURE_PRUNING_TRIALS,
@@ -254,19 +253,9 @@ class FeatureOptimizer:
 
     def _get_score_fn(self) -> Callable[[np.ndarray, np.ndarray], float]:
         """Get scoring function based on metric name."""
-        if self.scoring == "accuracy":
-            from sklearn.metrics import accuracy_score
+        from src.optimization.scoring import get_score_fn
 
-            def acc_fn(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-                return float(accuracy_score(y_true, y_pred))
-
-            return acc_fn
-        elif self.scoring == "f1_weighted":
-            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="weighted"))
-        elif self.scoring == "f1_macro":
-            return lambda y_true, y_pred: float(f1_score(y_true, y_pred, average="macro"))
-        else:
-            raise ValueError(f"Unknown scoring metric: {self.scoring}")
+        return get_score_fn(self.scoring)
 
     def _compute_baseline_score(
         self,
@@ -656,7 +645,7 @@ class FeatureOptimizer:
                 y_val,
                 n_repeats=5,
                 random_state=self.random_state,
-                scoring="f1_weighted",
+                scoring=self.scoring,
             )
 
             return {

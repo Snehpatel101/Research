@@ -418,6 +418,7 @@ class ExperimentConfig:
             label_optimization_trials=self.training.optuna.n_trials,
             feature_selection_trials=self.training.optuna.n_trials,
             optuna_random_state=self.training.optuna.random_state,
+            optuna_metric=self.training.optuna.metric,
         )
 
     def to_trainer_config(self, model_name: str, horizon: int | None = None) -> Any:

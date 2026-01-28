@@ -199,6 +199,7 @@ class PipelineConfig:
 
     # Optuna settings
     optuna_random_state: int = DEFAULT_OPTUNA_RANDOM_STATE  # 42
+    optuna_metric: str = "f1_weighted"  # Optimization metric (from OptunaConfig.metric)
 
     # =========================================================================
     # REGIME-AWARE TRAINING CONFIGURATION
