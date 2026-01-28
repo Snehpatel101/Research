@@ -26,7 +26,7 @@ catboost>=1.2.0
 
 # Feature engineering
 ta>=0.10.0  # Technical analysis indicators
-pywt>=1.4.0  # Wavelet transforms
+PyWavelets>=1.4.0  # Wavelet transforms (imported as pywt)
 
 # ============================================================================
 # EXPERIMENT TRACKING & VERSIONING (Critical for Colab)
