@@ -522,7 +522,7 @@ class MLFactory:
             input_dir=self.output_dir,
             output_dir=self.output_dir,
         )
-        df_features, feature_report = engineer.engineer_features(
+        df_features, _report = engineer.engineer_features(
             raw_df.copy(),
             symbol=self.config.data.symbol,
         )
@@ -538,9 +538,8 @@ class MLFactory:
         for horizon in self.config.training.horizons:
             label_config = TripleBarrierConfig(
                 horizon=horizon,
-                upper_barrier_mult=2.0,
-                lower_barrier_mult=2.0,
-                vol_lookback=20,
+                upper_mult=2.0,
+                lower_mult=2.0,
             )
             labeler = TripleBarrierLabeler(label_config)
             labels = labeler.create_labels(df_features)
