@@ -24,9 +24,12 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.core.exceptions import ConfigValueError
+
+if TYPE_CHECKING:
+    from src.config.global_config import GlobalConfig
 
 logger = logging.getLogger(__name__)
 
@@ -150,11 +153,11 @@ class ConfigAccessLog:
 
 
 # Module-level cache for the global config to avoid repeated loading
-_global_config_cache: Any = None
+_global_config_cache: GlobalConfig | None = None
 _global_config_lock = threading.Lock()
 
 
-def _load_global_config() -> Any:
+def _load_global_config() -> GlobalConfig | None:
     """
     Load the global config with caching.
 

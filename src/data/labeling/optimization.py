@@ -82,7 +82,7 @@ class LabelOptimizationResult:
     best_score: float
     class_distribution: dict[str, float]
     n_trials: int
-    study: Any  # optuna.Study (Any for optional import)
+    study: optuna.Study | None  # optuna.Study (string annotation for optional import)
     optimization_history: list[dict[str, Any]]
 
     def to_dict(self) -> dict[str, Any]:

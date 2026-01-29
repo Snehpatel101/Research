@@ -44,11 +44,14 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from src.config.experiment import ExperimentConfig
+
+if TYPE_CHECKING:
+    from src.models.training.result import TrainingResult
 from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
 logger = logging.getLogger(__name__)
@@ -215,7 +218,7 @@ class MLFactory:
 
         # Cache for intermediate results (used during resume)
         self._cached_df: pd.DataFrame | None = None
-        self._cached_training_result: Any = None
+        self._cached_training_result: TrainingResult | None = None
 
         # Save config
         config_path = self.output_dir / "experiment_config.yaml"
@@ -537,7 +540,7 @@ class MLFactory:
         # STEP 2: Triple Barrier Labeling
         # =====================================================================
         self._log("  Generating labels...")
-        from src.data.labeling import TripleBarrierLabeler, TripleBarrierConfig
+        from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 
         # Create labels for each horizon
         for horizon in self.config.training.horizons:

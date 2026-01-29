@@ -118,7 +118,7 @@ class SplitsSection:
     val: float = 0.15
     test: float = 0.15
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         total = self.train + self.val + self.test
         if abs(total - 1.0) > 0.01:
             raise ValueError(
@@ -170,7 +170,7 @@ class HorizonsSection:
     active: list[int] = field(default_factory=lambda: [5, 10, 15, 20])
     default: list[int] = field(default_factory=lambda: [5, 10, 15, 20])
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Validate active is subset of supported
         for h in self.active:
             if h not in self.supported:
@@ -299,7 +299,7 @@ class TrainingSection:
     num_workers: int = 4
     pin_memory: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {self.batch_size}")
         if self.max_epochs <= 0:
@@ -589,7 +589,7 @@ class UnifiedConfig:
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
     data_dir: Path = field(default_factory=lambda: Path("data"))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate and normalize configuration."""
         # Ensure paths are Path objects
         if isinstance(self.output_dir, str):

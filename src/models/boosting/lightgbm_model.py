@@ -13,6 +13,7 @@ import pickle
 import time
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import numpy as np
@@ -23,7 +24,7 @@ try:
     LIGHTGBM_AVAILABLE = True
 except ImportError:
     LIGHTGBM_AVAILABLE = False
-    lgb: Any = None  # type: ignore
+    lgb: ModuleType | None = None  # type: ignore
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes

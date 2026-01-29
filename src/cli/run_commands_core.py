@@ -6,16 +6,17 @@ for pipeline execution commands.
 """
 
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from .utils import show_info
 
-_pipeline_config: Any = None
-_pipeline_runner: Any = None
-_presets_module: Any = None
+_pipeline_config: ModuleType | None = None
+_pipeline_runner: ModuleType | None = None
+_presets_module: ModuleType | None = None
 
 
-def _get_pipeline_config() -> Any:
+def _get_pipeline_config() -> ModuleType:
     """Lazy import pipeline_config module."""
     global _pipeline_config
     if _pipeline_config is None:
@@ -25,7 +26,7 @@ def _get_pipeline_config() -> Any:
     return _pipeline_config
 
 
-def _get_pipeline_runner() -> Any:
+def _get_pipeline_runner() -> ModuleType:
     """Lazy import pipeline module."""
     global _pipeline_runner
     if _pipeline_runner is None:
@@ -35,7 +36,7 @@ def _get_pipeline_runner() -> Any:
     return _pipeline_runner
 
 
-def _get_presets_module() -> Any:
+def _get_presets_module() -> ModuleType:
     """Lazy import presets module."""
     global _presets_module
     if _presets_module is None:

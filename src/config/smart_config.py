@@ -311,7 +311,7 @@ class SmartConfig:
     # Advanced overrides (experts only)
     overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Ensure models is a list
         if isinstance(self.models, str):
             self.models = [self.models]

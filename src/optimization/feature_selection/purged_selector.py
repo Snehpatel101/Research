@@ -14,9 +14,12 @@ Key difference from standard OHLCVFeatureSelector:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from src.validation.cv.purged_kfold import PurgedKFold
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
@@ -52,7 +55,7 @@ class PurgedFeatureSelector:
 
     def __init__(
         self,
-        cv: Any,  # PurgedKFold instance
+        cv: PurgedKFold,  # PurgedKFold instance
         min_stability_score: float = 0.5,
         correlation_threshold: float = 0.85,
         use_regime_conditioning: bool = False,

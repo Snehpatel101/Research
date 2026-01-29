@@ -21,11 +21,14 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
 from src.core.config import PipelineConfig
+
+if TYPE_CHECKING:
+    from src.models.training.result import TrainingResult
 
 warnings.warn(
     "src.orchestrator is deprecated. Use src.factory.MLFactory instead. "
@@ -51,7 +54,7 @@ class PipelineResult:
     backtest_metrics: dict[str, float] = field(default_factory=dict)
     output_dir: Path | None = None
     bundle_path: Path | None = None
-    training_result: Any = None
+    training_result: TrainingResult | None = None
 
     def summary(self) -> str:
         """Human-readable summary."""

@@ -456,12 +456,18 @@ __all__ = [
 # =============================================================================
 # DEPRECATED ALIAS
 # =============================================================================
-# PredictionOutput is deprecated. Use PredictionResult instead.
-# This alias exists for backward compatibility and will be removed in a future version.
-#
-# Migration: Replace all imports of PredictionOutput with PredictionResult:
-#   OLD: from src.models.base import PredictionOutput
-#   NEW: from src.models.base import PredictionResult
-#
-# The class interface is identical - this is just a rename.
-PredictionOutput = PredictionResult
+
+
+def __getattr__(name: str) -> type:
+    """Module-level __getattr__ for deprecation warning on PredictionOutput."""
+    if name == "PredictionOutput":
+        import warnings
+
+        warnings.warn(
+            "PredictionOutput is deprecated. Use PredictionResult instead. "
+            "This alias will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return PredictionResult
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

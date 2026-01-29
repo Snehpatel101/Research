@@ -84,7 +84,7 @@ class DataSection:
     mtf: MTFConfig = field(default_factory=MTFConfig)
     splits: SplitConfig = field(default_factory=SplitConfig)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Convert string paths to Path objects."""
         if isinstance(self.data_path, str):
             self.data_path = Path(self.data_path)
@@ -199,7 +199,7 @@ class ExperimentConfig:
     evaluation: EvaluationSection = field(default_factory=EvaluationSection)
     bundling: BundlingSection = field(default_factory=BundlingSection)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate and normalize configuration."""
         # Ensure paths are Path objects
         if isinstance(self.output_dir, str):
