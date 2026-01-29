@@ -1,13 +1,11 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 22 Complete, Phase 23 In Progress
-**Last Updated:** 2026-01-28 (Phase 23: Critical Bugfixes & Validation Fixes)
+**Status:** Phase 23 In Progress
+**Last Updated:** 2026-01-28
 
 ---
 
 ## Completed Phases
-
-All major phases complete. See **COMPLETION.md** for full implementation details.
 
 | Phase | Description | Impact | Date |
 |-------|-------------|--------|------|
@@ -15,406 +13,88 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 1 | Contract Enforcement | +616 lines | 2026-01-23 |
 | 2 | 4D Infrastructure | +958 lines | 2026-01-24 |
 | 3 | 5-Dimension Optuna | +2,298 lines | 2026-01-24 |
-| 4 | Validation Integration | +50 lines | 2026-01-24 |
-| 5 | Unified Entry Point | +1,281 lines | 2026-01-24 |
-| 6 | Advanced Models | +3,690 lines | 2026-01-24 |
-| 7 | Production Hardening | +850 lines | 2026-01-24 |
-| 8 | Code Consolidation | +650 lines | 2026-01-24 |
-| 9 | Directory Cleanup | -12 dirs | 2026-01-24 |
-| 10 | Refactor (partial) | +25 lines | 2026-01-24 |
-| 12 | Trading Profitability | +5,780 lines | 2026-01-24 |
-| 12.5 | Code Quality Pass | Ruff 210→93 | 2026-01-25 |
-| 13 | Performance Optimization | +504 lines | 2026-01-25 |
-| 14 | Data Quality Hardening | +450 lines | 2026-01-25 |
-| 15 | Backtesting Realism | 5 tasks | 2026-01-25 |
-| 16 | Ensemble Optimization | +1,480 lines | 2026-01-25 |
-| 17 | Architecture Resilience | +750 lines | 2026-01-25 |
-| 18 | Code Cleanup | 2/3 tasks | 2026-01-25 |
+| 4-10 | Validation, Entry Point, Models, Hardening | +6,556 lines | 2026-01-24 |
+| 12-18 | Trading, Quality, Performance, Ensemble | +8,464 lines | 2026-01-25 |
 | 19 | Comprehensive Optimization | +750 lines, 34 features | 2026-01-25 |
 | 20 | Performance & Quality Polish | -851 lines, 50-100x speedup | 2026-01-25 |
-| 21 | ML Pipeline Review Fixes | 10 tasks, 10 files modified (3 disproven) | 2026-01-27 |
-| 22 | OPTIMIZE_FOR Metric Wiring | 7 changes, 6 files + scoring.py | 2026-01-27 |
-| 23 | Critical Bugfixes & Validation | In Progress | 2026-01-28 |
+| 21 | ML Pipeline Review Fixes | 10 tasks, 3 disproven | 2026-01-27 |
+| 22 | OPTIMIZE_FOR Metric Wiring | 7 changes | 2026-01-27 |
 
-**Net Impact:** ~+12,010 lines of production infrastructure
-
----
-
-## Phase 20: Performance & Quality Polish (COMPLETE ✅)
-
-**Status:** COMPLETE | 2026-01-25
-**Actual Impact:** -851 lines, 50-100x speedup on critical paths
-
-### Phase 20A: Critical Performance Hotspots ✅
-
-| Task | Description | Speedup | Status |
-|------|-------------|---------|--------|
-| 20A-1 | Numba JIT for entropy.py O(n²) loops | 50-100x | ✅ Complete |
-| 20A-2 | Vectorize adaptive_costs.py iterrows() | 100-500x | ✅ Complete |
-| 20A-3 | Replace rolling cov Python loop | 20-50x | ✅ Complete |
-| 20A-4 | raw=True for rolling .apply() patterns | 2-5x | ✅ Complete |
-
-### Phase 20B: Architecture Consolidation ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 20B-1 | Delete orphaned `contracts/artifact_manifest.py` (-424 lines) | ✅ Complete |
-| 20B-2 | PurgedKFoldConfig consolidation | ⏭️ Deferred (breaking change) |
-| 20B-3 | MTFConfig 4 definitions | ❌ DISPROVEN (different purposes) |
-| 20B-4 | Delete SequenceConfig duplicate (-427 lines) | ✅ Complete |
-
-### Phase 20C: Code Quality Fixes ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 20C-1 | Fix B018 useless expressions (2 bugs) | ✅ Complete |
-| 20C-2 | Fix B904 exception chaining | ❌ DISPROVEN (fixed in Phase 19) |
-| 20C-3 | Remove F401 unused imports | ⏭️ None found |
-| 20C-4 | Refactor complex functions | ⏭️ Deferred (low priority) |
-
-### Phase 20D: ML Pipeline Improvements ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 20D-1 | Add nested CV warning in meta_selection.py | ✅ Complete |
-| 20D-2 | GARCH stubs | ❌ ACCEPTED (documented design decision) |
-| 20D-3 | Sequence OOF alignment | ❌ ALREADY DOCUMENTED |
-
----
-
-## Phase 21: ML Pipeline Review Fixes (COMPLETE ✅)
-
-**Status:** COMPLETE | 2026-01-27
-**Source:** ML_PIPELINE_REVIEW.md (verified by 3 parallel agents against src/)
-**Actual Impact:** 10 tasks completed, 10 files modified, 3 issues disproven
-
-### Review Verification Summary
-
-| Issue | Review Claim | Agent Verdict |
-|-------|-------------|---------------|
-| #1 P&L bug (financial_report.py) | 5x understatement | **FALSE** - division/multiplication cancels out |
-| #2 Boosting NaN validation | Missing in all 3 | **TRUE** - confirmed |
-| #3 Unrealized P&L costs | Overstates equity | **TRUE** - confirmed |
-| #4 Multi-stream integer division | Temporal misalignment | **TRUE** - confirmed |
-| #5 Feature column validation | Missing cross-TF check | **FALSE** - validation exists at L351-356 |
-| #6 Hyperparameter validation | Incomplete | **PARTIALLY TRUE** - XGB/Cat lack, LGB has partial |
-| #7 NaN tolerance inconsistency | 1% vs 0% thresholds | **TRUE** - confirmed |
-| #8 Sequence adapter sample loss | Silent empty return | **FALSE** - sequence.py:140-143 already logs warning |
-| #9 Circuit breaker MTM equity | Unrealized included | **TRUE** - confirmed |
-| #10 OOM min_batch_size=8 | Too high | **TRUE** - confirmed |
-| #11 No overnight costs | Missing carry/swap | **TRUE** - confirmed |
-| #12 Generic except Exception | Mixed patterns | **TRUE** - confirmed at 5 locations |
-| Strength: 4 slippage models | 4 models claimed | **TRUE** - 4 in enum (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED) |
-| Strength: 22 exceptions | 22 types claimed | **MINOR ERROR** - actually 27 |
-
-### Phase 21A: Input Validation (HIGH) ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 21A-1 | Add NaN/Inf validation to boosting model fit() methods | ✅ Complete (3 models) |
-| 21A-2 | Add hyperparameter range validation to XGBoost/CatBoost `_build_params()` | ✅ Complete (2 models) |
-
-### Phase 21B: Financial Accuracy (MEDIUM) ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 21B-1 | Deduct entry costs from unrealized P&L in backtest.py | ✅ Complete (entry_cost deducted) |
-| 21B-2 | Document or add overnight financing costs | ✅ Complete (documented limitation) |
-
-### Phase 21C: Data Pipeline Robustness (MEDIUM) ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 21C-1 | Add timeframe ratio validation in multi_stream.py | ✅ Complete (warning added) |
-| 21C-2 | Document NaN tolerance strategy across pipeline stages | ✅ Complete (docstring added) |
-| 21C-3 | ~~Add warning log for sequence adapter sample loss >10%~~ | ❌ DISPROVEN (already warns at sequence.py:140-143) |
-
-### Phase 21D: Error Handling & Resilience (LOW) ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 21D-1 | Replace generic `except Exception` in meta_selection.py (3 locations) | ✅ Complete (ValueError, RuntimeError, etc.) |
-| 21D-2 | Replace generic `except Exception` in `src/models/registry.py` (lines 345, 429) | ✅ Complete (TypeError, ValueError, etc.) |
-| 21D-3 | Document circuit breaker MTM equity behavior | ✅ Complete (docstring comment) |
-| 21D-4 | Allow min_batch_size=1 in OOM recovery config | ✅ Complete (min=2, was 8) |
-
-### Phase 21E: Documentation Corrections (LOW)
-
-| Task | Description | Priority |
-|------|-------------|----------|
-| 21E-1 | ~~Fix slippage model count~~ ❌ DISPROVEN (enum has 4, claim was wrong) | ❌ N/A |
-| 21E-2 | ~~Fix exception count~~ ❌ DISPROVEN (actual count is 27, not 24 or 22) | ❌ N/A |
-
-### Validation Criteria
-
-```bash
-# 21A-1: Boosting validation
-grep -rn "validate_training_inputs" src/models/boosting/  # Should find matches after fix
-
-# 21B-1: Unrealized P&L
-grep -n "entry_cost\|entry_commission" src/inference/backtesting/backtest.py  # In unrealized calc
-
-# 21C-1: Timeframe ratio
-grep -n "not exact multiple\|ratio.*validation" src/data/adapters/multi_stream.py
-```
-
-### Disproven Issues (NO ACTION NEEDED)
-
-- **Issue #1:** P&L calculation in financial_report.py - division by tick_value is cancelled by multiplication; formula is correct despite being ugly
-- **Issue #5:** Feature column validation - code at multi_stream.py:351-356 already validates columns per timeframe
-- **Issue #8:** Sequence adapter sample loss - `sequence.py:140-143` already logs warning; NOT silent
-- **21E-1:** SlippageModel enum has 4 models (FIXED, LINEAR, SQUARE_ROOT, VOLATILITY_SCALED), not 3 as review claimed
-- **21E-2:** Exception count is 27 (not 24 or 22) - verified by class grep of `core/exceptions.py`
-
----
-
----
-
-## Phase 22: OPTIMIZE_FOR Metric Wiring (COMPLETE ✅)
-
-**Status:** COMPLETE | 2026-01-27
-**Source:** OPTIMIZE_FOR_PLAN.md (3 research agents + 1 verification agent)
-**Impact:** 7 changes, 6 modified files + 1 new file (scoring.py), ~110 lines
-
-### What Was Fixed
-
-`OPTIMIZE_FOR` / `OptunaConfig.metric` was silently ignored — the user's metric choice never reached the optimization layer. `OptimizationPipeline` hardcoded `scoring="f1_weighted"`.
-
-### Changes Made
-
-| Change | File | Description |
-|--------|------|-------------|
-| 1 | `src/core/config.py:202` | Added `optuna_metric: str` field to PipelineConfig |
-| 2 | `src/config/experiment.py:421` | `to_pipeline_config()` passes `optuna_metric` |
-| 3 | `src/optimization/scoring.py` (NEW) | Shared `get_score_fn()` with 8 metrics |
-| 4 | `src/optimization/pipeline.py` | Added `scoring` param, threaded to all optimizers |
-| 5 | `src/optimization/features.py:659` | `permutation_importance` uses `self.scoring` |
-| 6 | `src/optimization/features.py:255` | Dispatcher delegates to `scoring.get_score_fn()` |
-| 7 | `src/optimization/hyperparameters.py:540` | Dispatcher delegates to `scoring.get_score_fn()` |
-
-### Supported Metrics
-
-| Category | Metrics |
-|----------|---------|
-| Classification | accuracy, f1_weighted, f1_macro, precision, recall |
-| Trading (proxy) | sharpe_ratio, sortino_ratio, profit_factor |
-
-### Notebook Updated
-
-Removed "aspirational" NOTE from Cell 2 Section 3. OPTIMIZE_FOR now flows through the full pipeline.
-
----
-
-## Verified Quick Fixes (From Batch Verification)
-
-**Status:** ✅ ALL FIXED (Phase 19)
-
-| Priority | Item | Location | Status |
-|----------|------|----------|--------|
-| 🔴 Critical | F822 undefined exports | `numba_functions.py` | ✅ Fixed |
-| 🟠 High | Orphaned exceptions file | `models/config/exceptions.py` | ✅ Refactored (circular import) |
-| ⚪ Low | B023 false positive | `price_features.py:147` | ✅ Added noqa |
-
-**Disproven Claims (Confirmed NOT bugs):**
-- B023 loop variable closure - False positive, lambda executed immediately
-- notebook.py/colab_setup.py dead - Re-exported for external users
-- orchestrator.py deleted - Still has 2 active imports (deprecation warning added)
-
----
-
-## Phase 19: Comprehensive Optimization (COMPLETE ✅)
-
-**Status:** COMPLETE | 2026-01-25
-**Actual Impact:** +750 lines, 34 new features, 2-4x additional speedup
-
-### Phase 19A: ML Pipeline Enhancements ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 19A-1 | Order Flow Imbalance indicators (12 features) | ✅ Complete |
-| 19A-2 | Liquidity Dry-Up detectors (12 features) | ✅ Complete |
-| 19A-3 | Mean-Reversion metrics (10 features) | ✅ Complete |
-| 19A-4 | MTF optimization | ⏭️ Deferred |
-| 19A-5 | Gap risk handling | ⏭️ Deferred |
-
-**New Files Created:**
-- `src/data/features/compute/order_flow.py` (12 features)
-- `src/data/features/compute/liquidity.py` (12 features)
-- `src/data/features/compute/mean_reversion.py` (10 features)
-
-### Phase 19B: Performance Optimization ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 19B-1 | Vectorize O(n²) correlation loops | ✅ Fixed |
-| 19B-2 | Remove DataFrame copies in scaling | ✅ Fixed |
-| 19B-3 | Add copy parameter to cache | ✅ Fixed |
-| 19B-4 | Optimize concat+sort patterns | ✅ Fixed |
-| 19B-5 | Vectorize ensemble correlations | ✅ Fixed |
-
-### Phase 19C: Architecture Cleanup ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 19C-1 | Move misplaced utilities | ❌ DISPROVEN (public API) |
-| 19C-2 | Delete/refactor exceptions.py | ✅ Refactored (circular import) |
-| 19C-3 | Consolidate ConfigValidationError | ⏭️ Not needed |
-| 19C-4 | Remove orchestrator.py | ⏸️ BLOCKED (2 active imports) |
-
-### Phase 19D: Code Quality ✅
-
-| Task | Description | Status |
-|------|-------------|--------|
-| 19D-1 | Ruff auto-fixes | ✅ E721, F541 fixed |
-| 19D-2 | B904 exception chaining | ✅ 11 files fixed |
-| 19D-3 | Type hints | ⏭️ Deferred |
-| 19D-4 | pipeline_cli.py status | ✅ Verified USED (CLI entry point)
-
----
-
-## Remaining Work: Phase 11 Deferred Items (Low Priority)
-
-These are backlog items that were intentionally deferred:
-
-| Task | Description | Notes |
-|------|-------------|-------|
-| 5C | Unified deployment bundle (tar.gz) | Needs bundle spec |
-| 4D | Deflated Sharpe Ratio post-Optuna | Add DSR gate |
-| 4E | Bootstrap CIs in financial reports | Wire BootstrapCI |
-| 4F | Auto calibration in orchestrator | Wire CalibrationManager |
-| - | MTF ablation flag | Add `mtf.enabled` config |
-
-**Priority:** Low - System is production-ready without these
-
----
-
-## Quick Reference: What's Implemented
-
-### Core Guarantees
-- ✅ Sharpe ratio optimization (not F1 score)
-- ✅ No data leakage (purge/embargo in all CV)
-- ✅ No lookahead bias (mandatory shift, audit)
-- ✅ Reproducible (same config = same output)
-
-### Trading Infrastructure
-- ✅ Circuit breakers (drawdown, daily loss, consecutive losses)
-- ✅ R-multiple tracking for every trade
-- ✅ Realistic costs (volatility-scaled slippage)
-- ✅ Market hours filtering
-
-### Performance
-- ✅ 10-50x speedup (caching, parallel, GPU, batch inference)
-- ✅ 2-4x additional speedup (Phase 19 vectorization)
-- ✅ 42 tests passing
-- ✅ MLflow auto-enabled
-
-### New Features (Phase 19)
-- ✅ 34 new ML features (order flow, liquidity, mean-reversion)
-- ✅ 196 total features (was 162)
-- ✅ Ruff violations: 65 (was 93)
-
-### Resilience
-- ✅ Pipeline checkpointing (resume from failures)
-- ✅ Timeout protection
-- ✅ Retry with exponential backoff
-- ✅ Circuit breaker pattern
+**Net Impact:** ~+12,010 lines | See **COMPLETION.md** for details.
 
 ---
 
 ## Phase 23: Critical Bugfixes & Validation Fixes (IN PROGRESS)
 
 **Status:** IN PROGRESS | 2026-01-28
-**Source:** Integration checker, contract verifier, codebase analyzer agents (parallel verification)
-**Priority:** CRITICAL (label leakage) + HIGH (validation timing, feature count)
+**Priority:** CRITICAL + HIGH
+**Source:** 4 parallel verification agents
 
 ### Overview
 
-Four agents ran parallel verification discovering critical bugs and validation issues:
-- **integration-checker** - Found label column leakage (CRITICAL)
-- **contract-verifier** - Found validation timing and feature count issues
-- **codebase-analyzer** - Found performance bottlenecks
-- **Explore agent** - Found config gaps
-
-### Phase 23A: Critical Label Leakage Bugfix (PRIORITY 1)
-
-**Issue:** Label column NOT excluded from training features - perfect data leakage
-
-| Task | Description | Priority |
-|------|-------------|----------|
-| 23A-1 | Add "label" to exclude_exact set | CRITICAL |
-
-**Location:** `src/data/adapters/base.py:339-347`
-
-**Impact:** ALL models currently train with label as a feature (100% accuracy in training, catastrophic in production)
-
-### Phase 23B: Validation Timing & Feature Selection (PRIORITY 2)
-
-**Issue 1:** Validation happens before adapter transformation (wrong data rank)
-**Issue 2:** Pipeline produces 218 features, exceeds model contracts
-
-| Task | Description | Priority |
-|------|-------------|----------|
-| 23B-1 | Move validation after adapter OR skip rank validation on raw data | HIGH |
-| 23B-2 | Add auto feature selection at orchestrator.py:499 before validation | HIGH |
-
-**Locations:**
-- `src/models/training/unified_orchestrator.py:501` - validation call
-- `src/models/training/unified_orchestrator.py:579` - adapter call
-- `src/models/training/unified_orchestrator.py:499` - feature selection insertion point
-
-**Contract Violations:**
-- LightGBM: max 200 features (pipeline produces 218)
-- TCN: max 120 features (pipeline produces 218)
-- PatchTST: max 10 features (pipeline produces 218)
-
-### Phase 23C: Feature Engineering Performance (PRIORITY 3)
-
-**Issue:** Unvectorized loops in feature computation (10-500x slower than optimal)
-
-| Task | Description | Priority |
-|------|-------------|----------|
-| 23C-1 | Vectorize temporal.py:64 get_session pattern | MEDIUM |
-| 23C-2 | Replace microstructure.py:589-591 loop with pd.concat | MEDIUM |
-| 23C-3 | Batch volatility.py:97-116 Bollinger Band assignments | MEDIUM |
-
-**Performance Impact:**
-- temporal.py:64 - `.apply(get_session)` is 10-50x slower than vectorized
-- microstructure.py:589-591 - Loop column assignment is 5-20x slower than pd.concat
-- volatility.py:97-116 - Individual assignments are 2-5x slower than batch
-
-### Phase 23D: Config Gaps (DEFERRED)
-
-**Missing Configuration:**
-- Bundle registry/versioning system
-- A/B testing configuration
-- Drift detection config
-- Streaming inference configuration
-
-**Status:** Deferred to Phase 24 (low priority, system functional without)
-
-### Validation Criteria
-
-```bash
-# 23A-1: Label exclusion
-grep -n "exclude_exact.*label" src/data/adapters/base.py  # Should find "label" in set
-
-# 23B-1: Validation timing
-grep -n "validate_data_contract\|get_adapter" src/models/training/unified_orchestrator.py  # Order check
-
-# 23B-2: Feature selection
-grep -n "select_features\|feature_selection" src/models/training/unified_orchestrator.py:499  # Should exist
-
-# 23C: Vectorization patterns
-grep -n "np.select\|pd.concat\|assign" src/data/features/compute/{temporal,microstructure,volatility}.py
-```
-
-### Lessons Expected
-
-1. **Integration testing reveals leakage** - Unit tests passed but integration found critical bug
-2. **Validation timing matters** - Validating at wrong pipeline stage causes false failures
-3. **Contract enforcement catches overruns** - Feature count limits prevent model errors
-4. **Vectorization is essential** - Python loops in hot paths cause 10-500x slowdowns
+| Sub-Phase | Issue | Priority | Status |
+|-----------|-------|----------|--------|
+| 23A | Label column data leakage | CRITICAL | Pending |
+| 23B | Validation timing + feature count | HIGH | Pending |
+| 23C | Feature engineering performance | MEDIUM | Pending |
+| 23D | Config gaps | LOW | Deferred |
 
 ---
 
-*For implementation details, see COMPLETION.md*
+### 23A: Critical Label Leakage Bugfix
+
+**Issue:** `src/data/adapters/base.py:339-347` does NOT exclude "label" column from features.
+
+**Impact:** ALL models train with label as feature = 100% training accuracy, catastrophic production failure.
+
+**Fix:** Add `"label"` to `exclude_exact` set.
+
+---
+
+### 23B: Validation Timing & Feature Selection
+
+**Issue 1:** `unified_orchestrator.py:501` validates raw 2D DataFrame before adapters transform to 3D/4D at line 579.
+
+**Issue 2:** Pipeline produces 218 features, exceeds:
+- LightGBM: max 200
+- TCN: max 120
+- PatchTST: max 10
+
+**Fix:**
+1. Move validation after adapter OR skip rank validation on raw data
+2. Add auto feature selection before validation
+
+---
+
+### 23C: Feature Engineering Performance
+
+| File | Line | Issue | Speedup |
+|------|------|-------|---------|
+| temporal.py | 64 | `.apply(get_session)` | 10-50x |
+| microstructure.py | 589-591 | Loop assignment | 5-20x |
+| volatility.py | 97-116 | Individual BB assignments | 2-5x |
+
+**Fix:** Vectorize with `np.select()`, `pd.concat()`, `df.assign()`
+
+---
+
+### 23D: Config Gaps (Deferred to Phase 24)
+
+- Bundle registry/versioning
+- A/B testing configuration
+- Drift detection config
+
+---
+
+## Deferred Backlog
+
+| Task | Description |
+|------|-------------|
+| 5C | Unified deployment bundle |
+| 4D | Deflated Sharpe Ratio |
+| 4E | Bootstrap CIs |
+| 4F | Auto calibration |
+
+---
+
+*See COMPLETION.md for implementation details*
