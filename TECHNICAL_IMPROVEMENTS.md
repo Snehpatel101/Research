@@ -372,7 +372,7 @@ mad = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
 
 | File | Line | Context |
 |------|------|---------|
-| `src/factory.py` | 350 | Training operation |
+| `src/factory.py` | 314, 647, 680 | Experiment/backtest/bundle (has logging) |
 | `src/validation/bootstrap.py` | 128, 197, 496 | Bootstrap sampling |
 | `src/data/features/compute/wavelets.py` | 58, 85, 100 | Wavelet decomposition |
 | `src/validation/cv/pbo.py` | 306 | PBO calculation |
