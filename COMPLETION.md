@@ -4,6 +4,107 @@
 
 ---
 
+## Phase 23A: Critical Label Leakage Bugfix | 2026-01-29 | COMPLETE
+
+**Impact:** 2 lines added (2 files)
+**Purpose:** Fix catastrophic data leakage where bare "label" column was included as training feature
+
+### Summary
+
+The label column was being included as a training feature, causing models to achieve 100% training accuracy by simply memorizing the target variable. This is catastrophic data leakage that would render all trained models useless in production.
+
+**Root Cause:** `factory.py:556` creates a bare `"label"` column for the target, but `base.py:339-347` only excluded columns with `"label_"` prefix (e.g., `label_h5`, `label_h15`), not the bare `"label"` column itself.
+
+**Fix:** Added `"label"` to the `exclude_exact` set in `src/data/adapters/base.py:339-347`.
+
+### Files Modified (2)
+
+| File | Change | Lines |
+|------|--------|-------|
+| `src/data/adapters/base.py` | Added `"label"` to exclude_exact set | +1 |
+| `src/data/pipeline/feature_manifest.py` | Added `"label"` to exclude_exact set (consistency fix) | +1 |
+
+### Before vs After
+
+**Before (BUGGY):**
+```python
+exclude_exact = {
+    "open", "high", "low", "close", "volume",
+    "bar_index", "session_id",
+    # ← MISSING: "label"
+}
+```
+
+**After (FIXED):**
+```python
+exclude_exact = {
+    "open", "high", "low", "close", "volume",
+    "bar_index", "session_id",
+    "label",  # CRITICAL: Exclude label columns to prevent data leakage
+}
+```
+
+### Why This Mattered
+
+When the label is included as a feature:
+- Training input: X = [feature_1, feature_2, ..., **label**]
+- Training target: y = **label**
+- Model learns: f(X) = X[:, -1] (just read the last column)
+- Result: 100% training accuracy, random production accuracy
+
+This is the most severe form of data leakage - the model memorizes the answer from the input.
+
+### Verification
+
+```bash
+# Ruff check
+ruff check src/data/adapters/base.py  # ✓ PASS
+
+# Syntax validation
+python3 -m py_compile src/data/adapters/base.py  # ✓ OK
+
+# Import test
+python -c "from src.data.adapters import get_adapter; print('OK')"  # ✓ OK
+
+# Functional test - verify "label" excluded
+python -c "
+from src.data.adapters.base import BaseAdapter
+import pandas as pd
+df = pd.DataFrame({'close': [100.0], 'label_h5': [1], 'label': [0], 'feature_a': [0.5]})
+adapter = BaseAdapter.__new__(BaseAdapter)
+adapter.feature_columns = None
+cols = adapter._get_feature_columns(df)
+assert 'label' not in cols and 'label_h5' not in cols
+print('PASS: Labels excluded')
+"  # ✓ PASS
+
+# Test suite
+pytest tests/ -v  # ✓ 42/42 passed
+```
+
+### Lessons Learned
+
+1. **Exhaustive exclusion is critical** - Prefix matching (`label_*`) misses bare column names (`label`)
+2. **Test with actual column names** - The bug wasn't caught because tests didn't use the exact column name `factory.py` creates
+3. **Training accuracy should be realistic** - 100% training accuracy on financial data is a red flag for data leakage
+4. **Small fixes, huge impact** - 1 line addition prevents all models from being garbage
+
+### Production Impact
+
+**Before Phase 23A:**
+- All trained models had access to the target variable as a feature
+- Training accuracy near 100% (memorization, not learning)
+- Production predictions would be random (no access to labels)
+- Catastrophic failure mode
+
+**After Phase 23A:**
+- Label column correctly excluded from training features
+- Training accuracy should be realistic (40-70% for financial classification)
+- Models learn actual patterns from features
+- Production-ready predictions
+
+---
+
 ## Phase 22: OPTIMIZE_FOR Metric Wiring | 2026-01-27 | COMPLETE
 
 **Impact:** 7 changes, 6 modified files + 1 new file (~110 lines added)

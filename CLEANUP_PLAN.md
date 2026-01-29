@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
 **Status:** Phase 23 In Progress
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29 (Phase 23A Complete)
 
 ---
 
@@ -26,6 +26,7 @@
 | 20 | Performance & Quality Polish | -851 lines, 50-500x speedup | 2026-01-25 |
 | 21 | ML Pipeline Review Fixes | 10 tasks, 3 disproven | 2026-01-27 |
 | 22 | OPTIMIZE_FOR Metric Wiring | 7 changes, scoring.py | 2026-01-27 |
+| 23A | Label Column Leakage Fix | +2 lines, 2 files, CRITICAL | 2026-01-29 |
 
 **Net Impact:** ~+12,010 lines | 196 features | 13 models | See **COMPLETION.md** for details.
 
@@ -33,9 +34,11 @@
 
 ## Phase 23: Critical Bugfixes, Validation & Performance (IN PROGRESS)
 
-**Status:** IN PROGRESS | 2026-01-28
+**Status:** IN PROGRESS | 2026-01-29
 **Priority:** CRITICAL → HIGH → MEDIUM → LOW
 **Source:** Runtime errors from Colab notebook + PERFORMANCE_FIXES.md analysis
+
+**Progress:** 23A COMPLETE (1/13 active tasks), 23B-C TODO, 7 tasks deferred to Phase 24
 
 ---
 
@@ -115,9 +118,14 @@ Phase 23C (Performance) ────────────┴─── Indepen
 
 ---
 
-## Phase 23A: Critical Label Leakage (PRIORITY: CRITICAL)
+## Phase 23A: Critical Label Leakage ✅ COMPLETE
 
-### The Bug
+**Status:** COMPLETE | 2026-01-29
+**Priority:** CRITICAL
+**Impact:** 2 lines added (2 files), prevents catastrophic data leakage
+**Verification:** 42/42 tests pass, 4-agent deep check PASS
+
+### The Bug (FIXED)
 
 **Location:** `src/data/adapters/base.py:339-347`
 
@@ -146,9 +154,38 @@ When the label column is included as a feature:
 
 This is **catastrophic data leakage** - the model memorizes the answer from the input.
 
-### The Exact Fix
+### The Fix Applied
 
-Add `"label"` to the `exclude_exact` set in `base.py:339-347`.
+**Files Modified (2):**
+1. `src/data/adapters/base.py:347` - Added `"label"` to exclude_exact set
+2. `src/data/pipeline/feature_manifest.py:417` - Added `"label"` for consistency
+
+**Before:**
+```python
+exclude_exact = {
+    "open", "high", "low", "close", "volume",
+    "bar_index", "session_id",
+    # ← MISSING: "label"
+}
+```
+
+**After:**
+```python
+exclude_exact = {
+    "open", "high", "low", "close", "volume",
+    "bar_index", "session_id",
+    "label",  # CRITICAL: Exclude label columns to prevent data leakage
+}
+```
+
+**Verification (4-Agent Deep Check):**
+- Ruff check: PASS
+- Syntax check: OK
+- Import test: OK
+- Functional test: "label" now correctly excluded from features
+- Test suite: 42/42 passed
+- Contract verification: PASS
+- Integration test: PASS
 
 ---
 

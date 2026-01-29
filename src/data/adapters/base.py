@@ -344,6 +344,7 @@ class BaseAdapter(ABC):
             "volume",
             "bar_index",
             "session_id",
+            "label",  # CRITICAL: Exclude bare label column to prevent data leakage
         }
 
         def is_feature_col(col: str) -> bool:

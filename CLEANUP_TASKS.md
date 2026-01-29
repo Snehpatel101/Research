@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
 **Status:** Phase 23 In Progress
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-01-29 (Phase 23A Complete)
 
 ---
 
@@ -15,6 +15,7 @@
 | 20 | 9/15 | -851 lines, 50-100x speedup | See COMPLETION.md |
 | 21 | 10/11 | ML pipeline fixes (3 disproven) | See COMPLETION.md |
 | 22 | 7/7 | OPTIMIZE_FOR metric wiring | See COMPLETION.md |
+| 23A | 1/1 | Label column leakage fix (CRITICAL) | See COMPLETION.md |
 
 **Net Impact:** ~+12,010 lines | See **COMPLETION.md** for implementation details.
 
@@ -22,18 +23,19 @@
 
 ## Phase 23: Critical Bugfixes, Validation Fixes & Performance
 
-**Status:** IN PROGRESS | 2026-01-28
-**Tasks:** 0/13 active (7 deferred to Phase 24)
+**Status:** IN PROGRESS | 2026-01-29
+**Tasks:** 1/13 active tasks complete, 7 deferred to Phase 24
 **Source:** Runtime error analysis (OBSERVED THINGS.MD), performance analysis (PERFORMANCE_FIXES.md)
+**Completion:** Phase 23A COMPLETE (2/2 files fixed, 42/42 tests pass)
 
 ### Phase Overview
 
-| Sub-Phase | Description | Priority | Tasks |
-|-----------|-------------|----------|-------|
-| 23A | Label column data leakage fix | CRITICAL | 1 |
-| 23B | Validation timing + auto feature selection | HIGH | 2 |
-| 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 |
-| 23D | Config gaps (production deployment features) | LOW | 7 (deferred) |
+| Sub-Phase | Description | Priority | Tasks | Status |
+|-----------|-------------|----------|-------|--------|
+| 23A | Label column data leakage fix | CRITICAL | 1 | ✅ COMPLETE |
+| 23B | Validation timing + auto feature selection | HIGH | 2 | [ ] TODO |
+| 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 | [ ] TODO |
+| 23D | Config gaps (production deployment features) | LOW | 7 | DEFERRED |
 
 ---
 
@@ -42,27 +44,16 @@
 **Priority:** CRITICAL
 **Impact:** ALL models train with label as feature = 100% training accuracy, catastrophic production failure
 
-### Task 23A-1: Add "label" to exclude_exact Set
+### Task 23A-1: Add "label" to exclude_exact Set ✅ COMPLETE
 
-**File:** `src/data/adapters/base.py`
-**Lines:** 339-347
+**Files:**
+- `src/data/adapters/base.py:347` (PRIMARY FIX)
+- `src/data/pipeline/feature_manifest.py:417` (CONSISTENCY FIX)
 
-#### BEFORE (Current Buggy Code):
+**Completed:** 2026-01-29
+**Lines Changed:** +2 total
 
-```python
-# Line 339-347
-exclude_exact = {
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "bar_index",
-    "session_id",
-}
-```
-
-#### AFTER (Fixed Code):
+#### Fix Applied:
 
 ```python
 # Line 339-348
@@ -78,20 +69,19 @@ exclude_exact = {
 }
 ```
 
-#### Implementation Steps:
-
-1. Open `src/data/adapters/base.py`
-2. Navigate to line 339 (the `exclude_exact` set in `_get_feature_columns`)
-3. Add `"label",` to the set
-4. Save file
-
-#### Validation:
+#### Verification Results:
 
 ```bash
-# Verify "label" is in exclude_exact
-grep -A10 "exclude_exact = {" src/data/adapters/base.py | grep -q '"label"' && echo "PASS" || echo "FAIL"
+# Ruff check: PASS
+ruff check src/data/adapters/base.py
 
-# Test adapter doesn't include labels
+# Syntax check: OK
+python3 -m py_compile src/data/adapters/base.py
+
+# Import test: OK
+python -c "from src.data.adapters import get_adapter; print('OK')"
+
+# Functional test: PASS - "label" now excluded from features
 python -c "
 from src.data.adapters.base import BaseAdapter
 import pandas as pd
@@ -102,6 +92,9 @@ cols = adapter._get_feature_columns(df)
 assert 'label' not in cols and 'label_h5' not in cols
 print('PASS: Labels excluded')
 "
+
+# Test suite: 42/42 passed
+pytest tests/ -v
 ```
 
 ---
@@ -1014,7 +1007,7 @@ print('PASS: No PerformanceWarning')
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 23A-1 | Add "label" to exclude_exact | CRITICAL | [ ] |
+| 23A-1 | Add "label" to exclude_exact (2 files) | CRITICAL | [x] COMPLETE |
 | 23B-1 | Skip rank validation on raw data | HIGH | [ ] |
 | 23B-2 | Auto feature selection | HIGH | [ ] |
 | 23C-1 | temporal.py vectorization | MEDIUM | [ ] |

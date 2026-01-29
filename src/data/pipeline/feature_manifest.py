@@ -414,6 +414,7 @@ class FeatureManifest:
             "volume",
             "bar_index",
             "session_id",
+            "label",  # Exclude bare label column (matches BaseAdapter)
         }
 
         feature_columns = []

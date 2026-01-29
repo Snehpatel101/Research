@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-01-28 (Phase 22 Complete, Phase 23 In Progress)
-**Status:** Phases 0-22 Complete | Phase 23 In Progress | CRITICAL BUG IDENTIFIED
+**Last Updated:** 2026-01-29 (Phase 22 Complete, Phase 23A Complete)
+**Status:** Phases 0-22 Complete | Phase 23A Complete | Phase 23B-C In Progress
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -1843,24 +1843,29 @@ NO PRE-COMPUTED PARQUETS - notebook is self-contained.
 
 ## Production Readiness Status
 
-**Phases 0-22 Complete, Phase 23 In Progress** (see COMPLETION.md for details)
+**Phases 0-22 Complete, Phase 23A Complete** (see COMPLETION.md for details)
 
 ### Known Issues
 
-**CRITICAL BUG - Label Column Data Leakage:**
-- The "label" column is NOT excluded from training features in base.py:339-347
-- Causes ALL models to train with label as a feature = PERFECT LEAKAGE
-- Status: Identified by integration-checker agent, fix pending in Phase 23A
+**CRITICAL BUG - Label Column Data Leakage:** ✅ FIXED IN PHASE 23A
+- The "label" column was NOT excluded from training features in base.py:339-347
+- Caused ALL models to train with label as a feature = PERFECT LEAKAGE
+- Status: ✅ FIXED (2 files modified, 42/42 tests pass)
 
-**Validation Timing Issue:**
+**Validation Timing Issue:** (PRIORITY: HIGH)
 - unified_orchestrator.py:501 validates raw 2D DataFrame before adapter transformation at line 579
 - Causes validation failures for models expecting 3D/4D data
-- Status: Fix pending in Phase 23B
+- Status: ⏳ Fix pending in Phase 23B
 
-**Feature Count Contract Violations:**
+**Feature Count Contract Violations:** (PRIORITY: HIGH)
 - Pipeline produces 218 features, exceeds LightGBM (max 200), TCN (max 120), PatchTST (max 10)
 - Auto feature selection needed before validation
-- Status: Fix pending in Phase 23B
+- Status: ⏳ Fix pending in Phase 23B
+
+**DataFrame Fragmentation Performance:** (PRIORITY: MEDIUM)
+- 83+ individual `df[col] = value` assignments cause "highly fragmented" warnings
+- 5-20x slower feature generation
+- Status: ⏳ Fix pending in Phase 23C (10 tasks)
 
 ### Phase 12: Trading Profitability & Production Ready (2026-01-24)
 
@@ -2023,7 +2028,7 @@ All verified action items from batch verification have been fixed in Phase 19:
 ---
 
 *Document maintained as single source of truth for ML Factory architecture.*
-*Last updated: 2026-01-28 (Phase 22 Complete, Phase 23 In Progress)*
+*Last updated: 2026-01-29 (Phase 22 Complete, Phase 23A Complete, Phase 23B-C In Progress)*
 
 ---
 
