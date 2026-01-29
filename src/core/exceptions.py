@@ -154,15 +154,9 @@ class DataContractViolation(ContractViolation):
         super().__init__("Contract violations", violation_details=str(issues))
 
 
-class ModelContractViolation(ContractViolation):
-    """
-    Raised when a model contract is violated.
-
-    Model contracts define the expected input/output specifications
-    for model training and inference.
-    """
-
-    pass
+# NOTE: ModelContractViolation moved to contracts/model_contract.py (Phase 27)
+# Re-import for backward compatibility
+from src.core.contracts.model_contract import ModelContractViolation
 
 
 class DataError(MLFactoryError):

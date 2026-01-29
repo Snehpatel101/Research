@@ -33,7 +33,6 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -42,69 +41,10 @@ import pandas as pd
 
 from src.core import PipelineConfig
 
+# PredictionResult: Import from canonical location (Phase 27 consolidation)
+from src.core.interfaces import PredictionResult
+
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# RESULT DATACLASS
-# =============================================================================
-
-
-@dataclass
-class PredictionResult:
-    """
-    Result from inference.
-
-    Attributes:
-        class_predictions: Predicted class labels (-1, 0, 1)
-        class_probabilities: Probability array of shape (n_samples, n_classes)
-        confidence: Confidence scores (max probability per sample)
-        model_name: Name of the model used for prediction
-        horizon: Prediction horizon in bars
-        inference_time_ms: Time taken for inference in milliseconds
-        n_samples: Number of samples processed
-        is_ensemble: Whether ensemble was used for prediction
-        individual_predictions: Optional dict of predictions from individual models
-    """
-
-    class_predictions: np.ndarray
-    class_probabilities: np.ndarray
-    confidence: np.ndarray
-    model_name: str
-    horizon: int
-    inference_time_ms: float
-    n_samples: int
-    is_ensemble: bool = False
-    individual_predictions: dict[str, np.ndarray] | None = None
-
-    def to_dataframe(self) -> pd.DataFrame:
-        """Convert to DataFrame with predictions."""
-        df = pd.DataFrame(
-            {
-                "prediction": self.class_predictions,
-                "confidence": self.confidence,
-                "prob_short": self.class_probabilities[:, 0],
-                "prob_neutral": self.class_probabilities[:, 1],
-                "prob_long": self.class_probabilities[:, 2],
-            }
-        )
-        return df
-
-    def summary(self) -> str:
-        """Get human-readable summary string."""
-        lines = [
-            f"PredictionResult: {self.model_name}",
-            f"  Horizon: {self.horizon} bars",
-            f"  Samples: {self.n_samples}",
-            f"  Inference time: {self.inference_time_ms:.2f}ms",
-            f"  Is ensemble: {self.is_ensemble}",
-            "  Class distribution:",
-            f"    Short (-1): {(self.class_predictions == -1).sum()}",
-            f"    Neutral (0): {(self.class_predictions == 0).sum()}",
-            f"    Long (1): {(self.class_predictions == 1).sum()}",
-            f"  Mean confidence: {self.confidence.mean():.4f}",
-        ]
-        return "\n".join(lines)
 
 
 # =============================================================================
@@ -355,7 +295,6 @@ class InferenceOrchestrator:
             is_ensemble = False
 
         inference_time = (time.perf_counter() - start_time) * 1000
-        n_samples = len(X) if hasattr(X, "__len__") else X.shape[0]
 
         return PredictionResult(
             class_predictions=output.class_predictions,
@@ -364,7 +303,6 @@ class InferenceOrchestrator:
             model_name=model_name,
             horizon=self._get_horizon(),
             inference_time_ms=inference_time,
-            n_samples=n_samples,
             is_ensemble=is_ensemble,
         )
 

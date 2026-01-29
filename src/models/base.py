@@ -22,69 +22,9 @@ import numpy as np
 # =============================================================================
 # PREDICTION RESULT
 # =============================================================================
-
-
-@dataclass
-class PredictionResult:
-    """
-    Standardized prediction result for all models.
-
-    All models must return predictions in this format to enable
-    unified evaluation and ensemble composition.
-
-    Attributes:
-        class_predictions: Predicted class labels, shape (n_samples,)
-        class_probabilities: Class probabilities, shape (n_samples, n_classes)
-        confidence: Prediction confidence (max probability), shape (n_samples,)
-        metadata: Model-specific metadata (feature importance, attention, etc.)
-
-    Example:
-        >>> result = model.predict(X_test)
-        >>> print(result.class_predictions.shape)  # (1000,)
-        >>> print(result.class_probabilities.shape)  # (1000, 3)
-        >>> print(result.confidence.mean())  # 0.65
-    """
-
-    class_predictions: np.ndarray
-    class_probabilities: np.ndarray
-    confidence: np.ndarray
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        """Validate prediction output shapes."""
-        n_samples = len(self.class_predictions)
-
-        if len(self.class_probabilities) != n_samples:
-            raise ValueError(
-                f"class_probabilities length ({len(self.class_probabilities)}) "
-                f"!= class_predictions length ({n_samples})"
-            )
-
-        if len(self.confidence) != n_samples:
-            raise ValueError(
-                f"confidence length ({len(self.confidence)}) "
-                f"!= class_predictions length ({n_samples})"
-            )
-
-    @property
-    def n_samples(self) -> int:
-        """Number of samples in predictions."""
-        return len(self.class_predictions)
-
-    @property
-    def n_classes(self) -> int:
-        """Number of classes."""
-        return int(self.class_probabilities.shape[1])
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
-            "class_predictions": self.class_predictions.tolist(),
-            "class_probabilities": self.class_probabilities.tolist(),
-            "confidence": self.confidence.tolist(),
-            "metadata": self.metadata,
-        }
-
+# PredictionResult: Import from canonical location (Phase 27 consolidation)
+# Canonical definition is in src/core/interfaces.py to avoid circular imports
+from src.core.interfaces import PredictionResult
 
 # =============================================================================
 # TRAINING METRICS

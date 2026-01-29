@@ -181,10 +181,12 @@ from src.core.container import (
 # =============================================================================
 # ABSORBED: src/contracts - Model and data contracts
 # =============================================================================
+# Re-export DataContract from contracts for backward compatibility
 from src.core.contracts import (
     DATA_SCHEMA,
     MODEL_CONTRACTS,
     ArtifactManifest,
+    DataContract,
     DataContractSchema,
     FeatureMode,
     MTFMode,
@@ -243,8 +245,7 @@ from src.core.interfaces import (
     AdapterContract,
     # Result types
     AdapterResult,
-    # Contracts
-    DataContract,
+    # Contracts (Note: DataContract is from contracts/, not interfaces - Phase 27)
     ModelContract,
     OOFResult,
     PredictionResult,

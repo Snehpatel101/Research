@@ -15,13 +15,13 @@ This is the SINGLE SOURCE OF TRUTH for:
 from __future__ import annotations
 
 from enum import Enum
-from typing import TYPE_CHECKING, TypeVar, Union
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from src.core.interfaces import ModelContract
+    from src.core.contracts import ModelContract
 
 
 # =============================================================================

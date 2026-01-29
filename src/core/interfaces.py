@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
 import numpy as np
@@ -30,19 +29,20 @@ import pandas as pd
 # RESULT DATACLASSES
 # =============================================================================
 
-# NOTE: AdapterResult is defined in TWO locations to avoid circular imports:
+# NOTE: AdapterResult is defined in TWO locations (DOCUMENTED EXCEPTION):
 #   1. src.data.adapters.base (canonical, uses X/y ML conventions)
 #   2. Here (legacy, uses data/labels conventions)
 #
-# They are kept in sync via backward-compatibility properties:
-#   - base.py defines .data/.labels as aliases for .X/.y
-#   - This version uses data/labels as primary fields
+# This is INTENTIONAL to avoid circular imports between core and data.adapters.
+# Both definitions are kept in sync via backward-compatibility properties:
+#   - adapters/base.py: primary fields X/y, with .data/.labels as aliases
+#   - interfaces.py: primary fields data/labels, with .X/.y as aliases
 #
 # Import paths:
 #   - Adapters: import from src.data.adapters.base
 #   - Other code: import from src.core.interfaces (this file)
 #
-# TODO Phase 0G: Consolidate to single definition once circular imports resolved
+# Phase 27: Verified as documented exception - not a consolidation target
 
 
 @dataclass
@@ -124,31 +124,132 @@ class AdapterResult:
 @dataclass
 class PredictionResult:
     """
-    Output from model prediction.
+    Standardized prediction result for all models.
 
-    Attributes:
-        class_predictions: Predicted class labels (1D int array)
-        class_probabilities: Probability per class (2D array: n_samples x n_classes)
-        confidence: Prediction confidence (max probability)
+    All models must return predictions in this format to enable
+    unified evaluation and ensemble composition.
+
+    This is the CANONICAL definition - consolidated from models/base.py,
+    core/interfaces.py, and inference/orchestrator.py (Phase 27).
+
+    Core Attributes:
+        class_predictions: Predicted class labels, shape (n_samples,)
+        class_probabilities: Class probabilities, shape (n_samples, n_classes)
+        confidence: Prediction confidence (max probability), shape (n_samples,)
+        metadata: Model-specific metadata (feature importance, attention, etc.)
+
+    Optional Inference Attributes:
         indices: Original indices for alignment
+        model_name: Name of the model used for prediction
+        horizon: Prediction horizon in bars
+        inference_time_ms: Time taken for inference in milliseconds
+        is_ensemble: Whether ensemble was used for prediction
+        individual_predictions: Dict of predictions from individual models
+
+    Example:
+        >>> result = model.predict(X_test)
+        >>> print(result.class_predictions.shape)  # (1000,)
+        >>> print(result.class_probabilities.shape)  # (1000, 3)
+        >>> print(result.confidence.mean())  # 0.65
     """
 
-    class_predictions: np.ndarray  # Shape: (n,) - predicted labels
-    class_probabilities: np.ndarray  # Shape: (n, n_classes)
+    # Core fields (required)
+    class_predictions: np.ndarray
+    class_probabilities: np.ndarray
+    confidence: np.ndarray
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    # Optional fields for alignment
     indices: np.ndarray | None = None
+
+    # Optional inference fields
+    model_name: str | None = None
+    horizon: int | None = None
+    inference_time_ms: float | None = None
+    is_ensemble: bool = False
+    individual_predictions: dict[str, np.ndarray] | None = None
+
+    def __post_init__(self) -> None:
+        """Validate prediction output shapes."""
+        n_samples = len(self.class_predictions)
+
+        if len(self.class_probabilities) != n_samples:
+            raise ValueError(
+                f"class_probabilities length ({len(self.class_probabilities)}) "
+                f"!= class_predictions length ({n_samples})"
+            )
+
+        if len(self.confidence) != n_samples:
+            raise ValueError(
+                f"confidence length ({len(self.confidence)}) "
+                f"!= class_predictions length ({n_samples})"
+            )
 
     @property
     def n_samples(self) -> int:
+        """Number of samples in predictions."""
         return len(self.class_predictions)
 
     @property
     def n_classes(self) -> int:
+        """Number of classes."""
         return int(self.class_probabilities.shape[1])
 
-    @property
-    def confidence(self) -> np.ndarray:
-        """Maximum probability per sample."""
-        return np.asarray(self.class_probabilities.max(axis=1))
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        result = {
+            "class_predictions": self.class_predictions.tolist(),
+            "class_probabilities": self.class_probabilities.tolist(),
+            "confidence": self.confidence.tolist(),
+            "metadata": self.metadata,
+        }
+        # Include optional fields if set
+        if self.indices is not None:
+            result["indices"] = self.indices.tolist()
+        if self.model_name is not None:
+            result["model_name"] = self.model_name
+        if self.horizon is not None:
+            result["horizon"] = self.horizon
+        if self.inference_time_ms is not None:
+            result["inference_time_ms"] = self.inference_time_ms
+        if self.is_ensemble:
+            result["is_ensemble"] = self.is_ensemble
+        if self.individual_predictions is not None:
+            result["individual_predictions"] = {
+                k: v.tolist() for k, v in self.individual_predictions.items()
+            }
+        return result
+
+    def to_dataframe(self) -> pd.DataFrame:
+        """Convert to DataFrame with predictions (for inference)."""
+        df = pd.DataFrame(
+            {
+                "prediction": self.class_predictions,
+                "confidence": self.confidence,
+            }
+        )
+        # Add probability columns if 3-class
+        if self.n_classes == 3:
+            df["prob_short"] = self.class_probabilities[:, 0]
+            df["prob_neutral"] = self.class_probabilities[:, 1]
+            df["prob_long"] = self.class_probabilities[:, 2]
+        return df
+
+    def summary(self) -> str:
+        """Get human-readable summary string."""
+        lines = [
+            f"PredictionResult: {self.model_name or 'unnamed'}",
+            f"  Samples: {self.n_samples}",
+            f"  Classes: {self.n_classes}",
+            f"  Mean confidence: {float(self.confidence.mean()):.3f}",
+        ]
+        if self.horizon is not None:
+            lines.append(f"  Horizon: {self.horizon}")
+        if self.inference_time_ms is not None:
+            lines.append(f"  Inference time: {self.inference_time_ms:.1f}ms")
+        if self.is_ensemble:
+            lines.append("  Is ensemble: True")
+        return "\n".join(lines)
 
 
 @dataclass
@@ -287,168 +388,18 @@ class OOFPredictionProtocol(Protocol):
 # ABSTRACT CONTRACTS
 # =============================================================================
 
-
-class DataContract(ABC):
-    """
-    Contract for model data requirements.
-
-    Every model must specify its data requirements through this contract.
-    The adapter uses this to prepare data in the correct format.
-
-    Example:
-        class XGBoostContract(DataContract):
-            rank = 2
-            required_features = ["momentum", "volatility"]
-            feature_bounds = (20, 200)
-    """
-
-    @property
-    @abstractmethod
-    def rank(self) -> int:
-        """
-        Data dimensionality: 2=tabular, 3=sequence, 4=multi-stream.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def required_features(self) -> list[str]:
-        """
-        Minimum required feature families.
-
-        Returns list of FeatureFamily values that must be present.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def feature_bounds(self) -> tuple[int, int]:
-        """
-        (min_features, max_features) tuple.
-
-        Defines acceptable feature count range for this model.
-        """
-        pass
-
-    @property
-    def sequence_length(self) -> int | None:
-        """Sequence length for 3D/4D models. None for 2D models."""
-        return None if self.rank == 2 else 60  # Default: 60 bars
+# NOTE: DataContract ABC was removed in Phase 27 - it was dead code.
+# The canonical DataContract is the dataclass in src/core/contracts/data_contract.py
+# which is used for lineage tracking and schema validation throughout the pipeline.
 
 
-class ModelContract(ABC):
-    """
-    Contract all models must implement.
-
-    This ensures consistent interface across all model types:
-    - Boosting (XGBoost, LightGBM, CatBoost)
-    - Classical (RandomForest, Logistic, SVM)
-    - Neural (LSTM, GRU, TCN, Transformer, etc.)
-    - Meta-learners (Ridge, MLP, XGBoost meta)
-
-    Key methods:
-    - fit(): Train the model
-    - predict(): Get class predictions
-    - predict_proba(): Get probability estimates
-    - save()/load(): Serialization
-    """
-
-    @abstractmethod
-    def fit(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray | None = None,
-        y_val: np.ndarray | None = None,
-        sample_weights: np.ndarray | None = None,
-        **kwargs: Any,
-    ) -> TrainingResult:
-        """
-        Train the model.
-
-        Args:
-            X_train: Training features (2D/3D/4D based on model)
-            y_train: Training labels (1D)
-            X_val: Validation features (optional)
-            y_val: Validation labels (optional)
-            sample_weights: Sample weights (optional)
-            **kwargs: Model-specific arguments
-
-        Returns:
-            TrainingResult with trained model and metrics
-        """
-        pass
-
-    @abstractmethod
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        """
-        Get class predictions.
-
-        Args:
-            X: Features (same rank as training data)
-
-        Returns:
-            1D array of predicted class labels
-        """
-        pass
-
-    @abstractmethod
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """
-        Get probability estimates.
-
-        Args:
-            X: Features (same rank as training data)
-
-        Returns:
-            2D array of shape (n_samples, n_classes)
-        """
-        pass
-
-    @abstractmethod
-    def save(self, path: Path) -> None:
-        """
-        Save model to disk.
-
-        Args:
-            path: Directory path to save model artifacts
-        """
-        pass
-
-    @classmethod
-    @abstractmethod
-    def load(cls, path: Path) -> ModelContract:
-        """
-        Load model from disk.
-
-        Args:
-            path: Directory path containing model artifacts
-
-        Returns:
-            Loaded model instance
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def data_contract(self) -> DataContract:
-        """
-        Get the data contract for this model.
-
-        Returns:
-            DataContract specifying data requirements
-        """
-        pass
-
-    @property
-    def name(self) -> str:
-        """Model name (class name by default)."""
-        return self.__class__.__name__
-
-    @property
-    def is_fitted(self) -> bool:
-        """Whether the model has been trained."""
-        return hasattr(self, "_is_fitted") and self._is_fitted
+# NOTE: ModelContract ABC was removed in Phase 27 - it was dead code.
+# The canonical ModelContract is the frozen dataclass in src/core/contracts/model_contract.py
+# which describes model data requirements (input_rank, sequence_length, feature_modes).
+# Model implementations inherit from BaseModel in src/models/base.py instead.
+#
+# Re-export ModelContract and DataContract from contracts for backward compatibility
+from src.core.contracts import DataContract, ModelContract
 
 
 class AdapterContract(ABC):
