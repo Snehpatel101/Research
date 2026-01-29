@@ -7,75 +7,585 @@
 
 ## Completed Phases Summary
 
-| Phase | Tasks | Key Deliverables |
-|-------|-------|------------------|
-| 0-10 | 47/49 | Deduplication, contracts, 4D infra, Optuna, models |
-| 12-18 | 76/80 | Trading, quality, performance, ensemble, resilience |
-| 19 | 17/21 | 34 new features, vectorization, code quality |
-| 20 | 9/15 | -851 lines, 50-100x speedup |
-| 21 | 10/11 | ML pipeline fixes (3 disproven) |
-| 22 | 7/7 | OPTIMIZE_FOR metric wiring |
+| Phase | Tasks | Key Deliverables | Details |
+|-------|-------|------------------|---------|
+| 0-10 | 47/49 | Deduplication, contracts, 4D infra, Optuna, models | See COMPLETION.md |
+| 12-18 | 76/80 | Trading, quality, performance, ensemble, resilience | See COMPLETION.md |
+| 19 | 17/21 | 34 new features, vectorization, code quality | See COMPLETION.md |
+| 20 | 9/15 | -851 lines, 50-100x speedup | See COMPLETION.md |
+| 21 | 10/11 | ML pipeline fixes (3 disproven) | See COMPLETION.md |
+| 22 | 7/7 | OPTIMIZE_FOR metric wiring | See COMPLETION.md |
 
-**Net Impact:** ~+12,010 lines | See **COMPLETION.md** for details.
+**Net Impact:** ~+12,010 lines | See **COMPLETION.md** for implementation details.
 
 ---
 
-## Phase 23: Critical Bugfixes & Validation Fixes (IN PROGRESS)
+## Phase 23: Critical Bugfixes, Validation Fixes & Performance
 
 **Status:** IN PROGRESS | 2026-01-28
-**Tasks:** 0/6 (3 deferred)
-**Source:** 4 parallel verification agents
+**Tasks:** 0/13 (Phase 23D deferred)
+**Source:** Runtime error analysis (OBSERVED THINGS.MD), performance analysis (PERFORMANCE_FIXES.md)
+
+### Phase Overview
+
+| Sub-Phase | Description | Priority | Tasks |
+|-----------|-------------|----------|-------|
+| 23A | Label column data leakage fix | CRITICAL | 1 |
+| 23B | Validation timing + auto feature selection | HIGH | 2 |
+| 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 |
+| 23D | Config gaps | LOW | Deferred |
 
 ---
 
-### 23A: Critical Label Leakage Bugfix (PRIORITY 1)
+## Phase 23A: Critical Label Leakage Bugfix
 
-#### 23A-1: Add "label" to exclude_exact Set
-- [ ] File: `src/data/adapters/base.py:339-347`
-- [ ] Issue: "label" column included as feature = 100% leakage
-- [ ] Fix: Add `"label"` to exclude_exact set
-- [ ] Validation: `grep -n '"label"' src/data/adapters/base.py`
+**Priority:** CRITICAL
+**Impact:** ALL models train with label as feature = 100% training accuracy, catastrophic production failure
+
+### Task 23A-1: Add "label" to exclude_exact Set
+
+**File:** `src/data/adapters/base.py`
+**Lines:** 339-347
+
+#### BEFORE (Current Buggy Code):
+
+```python
+# Line 339-347
+exclude_exact = {
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "bar_index",
+    "session_id",
+}
+```
+
+#### AFTER (Fixed Code):
+
+```python
+# Line 339-348
+exclude_exact = {
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "bar_index",
+    "session_id",
+    "label",  # CRITICAL: Exclude label columns to prevent data leakage
+}
+```
+
+#### Implementation Steps:
+
+1. Open `src/data/adapters/base.py`
+2. Navigate to line 339 (the `exclude_exact` set in `_get_feature_columns`)
+3. Add `"label",` to the set
+4. Save file
+
+#### Validation:
+
+```bash
+# Verify "label" is in exclude_exact
+grep -A10 "exclude_exact = {" src/data/adapters/base.py | grep -q '"label"' && echo "PASS" || echo "FAIL"
+
+# Test adapter doesn't include labels
+python -c "
+from src.data.adapters.base import BaseAdapter
+import pandas as pd
+df = pd.DataFrame({'close': [100.0], 'label_h5': [1], 'label': [0], 'feature_a': [0.5]})
+adapter = BaseAdapter.__new__(BaseAdapter)
+adapter.feature_columns = None
+cols = adapter._get_feature_columns(df)
+assert 'label' not in cols and 'label_h5' not in cols
+print('PASS: Labels excluded')
+"
+```
 
 ---
 
-### 23B: Validation Timing & Feature Selection (PRIORITY 2)
+## Phase 23B: Validation Timing & Feature Selection
 
-#### 23B-1: Move Validation After Adapter Transformation
-- [ ] File: `src/models/training/unified_orchestrator.py:501,579`
-- [ ] Issue: Line 501 validates 2D data, adapters transform at 579
-- [ ] Fix: Move validation after adapter OR add skip_rank_validation
+**Priority:** HIGH
+**Impact:** Contract validation fails - validation runs before adapter, feature counts exceed limits
 
-#### 23B-2: Add Auto Feature Selection Before Validation
-- [ ] File: `src/models/training/unified_orchestrator.py:499`
-- [ ] Issue: 218 features exceeds LightGBM(200), TCN(120), PatchTST(10)
-- [ ] Fix: Auto-select top N features before validation
+### Task 23B-1: Skip Rank Validation on Raw Data
+
+**File:** `src/models/training/unified_orchestrator.py`
+**Lines:** 343-352 (inside `_pre_training_validation`)
+
+#### BEFORE:
+
+```python
+# Lines 343-352
+for model_name in self.config.models:
+    from src.core.contracts import get_model_contract
+
+    model_contract = get_model_contract(model_name)
+    is_valid, issues = model_contract.validate_data_contract(data_contract)
+    if not is_valid:
+        errors.append(
+            f"Contract violation for {model_name}: {'; '.join(issues)}"
+        )
+```
+
+#### AFTER:
+
+```python
+# Lines 343-365
+for model_name in self.config.models:
+    from src.core.contracts import get_model_contract
+
+    model_contract = get_model_contract(model_name)
+
+    # Skip rank validation at this stage - we're validating raw 2D DataFrame
+    # Adapters will transform to appropriate rank (3D/4D) later
+    issues = []
+
+    # Only validate feature count at this stage
+    if data_contract.n_features > model_contract.max_features:
+        issues.append(
+            f"Too many features: model max is {model_contract.max_features}, "
+            f"data has {data_contract.n_features}"
+        )
+
+    if issues:
+        errors.append(
+            f"Contract violation for {model_name}: {'; '.join(issues)}"
+        )
+```
+
+#### Validation:
+
+```bash
+# Models with different ranks should not fail on rank mismatch
+python -c "
+from src.core.contracts import get_model_contract
+for m in ['lightgbm', 'tcn', 'patchtst']:
+    c = get_model_contract(m)
+    print(f'{m}: rank={c.input_rank}, max_features={c.max_features}')
+"
+```
 
 ---
 
-### 23C: Feature Engineering Performance (PRIORITY 3)
+### Task 23B-2: Add Auto Feature Selection Before Validation
 
-#### 23C-1: Vectorize temporal.py get_session
-- [ ] File: `src/data/pipeline/stages/features/temporal.py:64`
-- [ ] Issue: `.apply(get_session)` is 10-50x slower
-- [ ] Fix: Replace with `np.select()`
+**File:** `src/models/training/unified_orchestrator.py`
+**Insert Location:** Before line 343 (before model contract validation loop)
 
-#### 23C-2: Replace microstructure.py Loop
-- [ ] File: `src/data/pipeline/stages/features/microstructure.py:589-591`
-- [ ] Issue: Loop assignment is 5-20x slower
-- [ ] Fix: Replace with `pd.concat()`
+#### Code to Insert:
 
-#### 23C-3: Batch Bollinger Band Assignments
-- [ ] File: `src/data/pipeline/stages/features/volatility.py:97-116`
-- [ ] Issue: Individual assignments 2-5x slower
-- [ ] Fix: Single `df.assign()` call
+```python
+# Auto-select features if count exceeds minimum model limit
+min_max_features = float('inf')
+for model_name in self.config.models:
+    from src.core.contracts import get_model_contract
+    model_contract = get_model_contract(model_name)
+    if model_contract.max_features < min_max_features:
+        min_max_features = model_contract.max_features
+
+# If we have too many features, select top N by variance
+if feature_names and len(feature_names) > min_max_features:
+    logger.warning(
+        f"Feature count ({len(feature_names)}) exceeds minimum model limit "
+        f"({min_max_features}). Auto-selecting top {min_max_features} features."
+    )
+
+    X_subset = df[feature_names].dropna()
+    if len(X_subset) > 0:
+        variances = X_subset.var().sort_values(ascending=False)
+        feature_names = variances.head(int(min_max_features)).index.tolist()
+        logger.info(f"Selected {len(feature_names)} features by variance")
+```
+
+#### Validation:
+
+```bash
+python -c "
+# Verify feature selection reduces count
+import pandas as pd
+import numpy as np
+df = pd.DataFrame(np.random.randn(100, 250), columns=[f'f{i}' for i in range(250)])
+variances = df.var().sort_values(ascending=False)
+top_200 = variances.head(200).index.tolist()
+print(f'Reduced {len(df.columns)} -> {len(top_200)} features')
+assert len(top_200) == 200
+print('PASS')
+"
+```
 
 ---
 
-### 23D: Config Gaps (DEFERRED TO PHASE 24)
+## Phase 23C: Feature Engineering Performance Fixes
+
+**Priority:** MEDIUM
+**Impact:** 2-10x speedup for feature generation pipeline
+**Pattern:** Replace individual `df[col] = value` with batch `pd.concat()`
+
+---
+
+### Task 23C-1: Vectorize temporal.py get_session and Batch Assignments
+
+**File:** `src/data/pipeline/stages/features/temporal.py`
+**Lines:** 38-68
+
+#### BEFORE:
+
+```python
+df["hour"] = df["datetime"].dt.hour
+df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
+df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
+df["minute"] = df["datetime"].dt.minute
+df["minute_sin"] = np.sin(2 * np.pi * df["minute"] / 60)
+df["minute_cos"] = np.cos(2 * np.pi * df["minute"] / 60)
+df["dayofweek"] = df["datetime"].dt.dayofweek
+df["dayofweek_sin"] = np.sin(2 * np.pi * df["dayofweek"] / 7)
+df["dayofweek_cos"] = np.cos(2 * np.pi * df["dayofweek"] / 7)
+
+def get_session(hour):
+    if 0 <= hour < 8:
+        return "asia"
+    elif 8 <= hour < 16:
+        return "london"
+    else:
+        return "ny"
+
+df["session"] = df["hour"].apply(get_session)  # SLOW!
+
+for session in ["asia", "london", "ny"]:
+    df[f"session_{session}"] = (df["session"] == session).astype(int)
+```
+
+#### AFTER:
+
+```python
+# Extract datetime components once as numpy arrays
+hour = df["datetime"].dt.hour.values
+minute = df["datetime"].dt.minute.values
+dayofweek = df["datetime"].dt.dayofweek.values
+
+# Vectorized session (replaces slow .apply())
+session_asia = ((hour >= 0) & (hour < 8)).astype(np.int8)
+session_london = ((hour >= 8) & (hour < 16)).astype(np.int8)
+session_ny = (hour >= 16).astype(np.int8)
+
+# Build all columns in a single dict, concat once
+new_cols = pd.DataFrame({
+    "hour_sin": np.sin(2 * np.pi * hour / 24),
+    "hour_cos": np.cos(2 * np.pi * hour / 24),
+    "minute_sin": np.sin(2 * np.pi * minute / 60),
+    "minute_cos": np.cos(2 * np.pi * minute / 60),
+    "dayofweek_sin": np.sin(2 * np.pi * dayofweek / 7),
+    "dayofweek_cos": np.cos(2 * np.pi * dayofweek / 7),
+    "session_asia": session_asia,
+    "session_london": session_london,
+    "session_ny": session_ny,
+}, index=df.index)
+
+df = pd.concat([df, new_cols], axis=1)
+```
+
+**Speedup:** 10-100x (removes .apply())
+
+---
+
+### Task 23C-2: Batch Microstructure Feature Assignment
+
+**File:** `src/data/pipeline/stages/features/microstructure.py`
+**Lines:** 589-591
+
+#### BEFORE:
+
+```python
+for col in new_features.columns:
+    df[col] = new_features[col]  # Individual assignment in loop
+    feature_metadata[col] = f"Microstructure 2024: {col}"
+```
+
+#### AFTER:
+
+```python
+# Batch assignment (single concat)
+df = pd.concat([df, new_features], axis=1)
+
+# Update metadata separately
+for col in new_features.columns:
+    feature_metadata[col] = f"Microstructure 2024: {col}"
+```
+
+**Speedup:** 5-20x
+
+---
+
+### Task 23C-3: Batch Bollinger Band Assignments
+
+**File:** `src/data/pipeline/stages/features/volatility.py`
+**Lines:** 97-116
+
+#### BEFORE:
+
+```python
+df["bb_middle"] = bb_middle_raw.shift(1)
+bb_std = bb_std_raw.shift(1)
+df["bb_upper"] = df["bb_middle"] + (std_mult * bb_std)
+df["bb_lower"] = df["bb_middle"] - (std_mult * bb_std)
+bb_std_safe = bb_std.replace(0, np.nan)
+df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / bb_std_safe
+band_range = df["bb_upper"] - df["bb_lower"]
+band_range_safe = band_range.replace(0, np.nan)
+close_lagged = df["close"].shift(1)
+df["bb_position"] = (close_lagged - df["bb_lower"]) / band_range_safe
+df["close_bb_zscore"] = (close_lagged - df["bb_middle"]) / bb_std_safe
+```
+
+#### AFTER:
+
+```python
+# Compute all values using numpy arrays first
+bb_middle = bb_middle_raw.shift(1).values
+bb_std = bb_std_raw.shift(1).values
+bb_upper = bb_middle + (std_mult * bb_std)
+bb_lower = bb_middle - (std_mult * bb_std)
+bb_std_safe = np.where(bb_std == 0, np.nan, bb_std)
+band_range = bb_upper - bb_lower
+band_range_safe = np.where(band_range == 0, np.nan, band_range)
+close_lagged = df["close"].shift(1).values
+
+# Single concat
+bb_cols = pd.DataFrame({
+    "bb_middle": bb_middle,
+    "bb_upper": bb_upper,
+    "bb_lower": bb_lower,
+    "bb_width": band_range / bb_std_safe,
+    "bb_position": (close_lagged - bb_lower) / band_range_safe,
+    "close_bb_zscore": (close_lagged - bb_middle) / bb_std_safe,
+}, index=df.index)
+
+df = pd.concat([df, bb_cols], axis=1)
+```
+
+**Speedup:** 2-5x
+
+---
+
+### Task 23C-4: Batch Trend Feature Assignments
+
+**File:** `src/data/pipeline/stages/features/trend.py`
+**Lines:** 167-168
+
+#### BEFORE:
+
+```python
+df["supertrend"] = pd.Series(supertrend).shift(1).values
+df["supertrend_direction"] = pd.Series(direction).shift(1).values
+```
+
+#### AFTER:
+
+```python
+def numpy_shift(arr, periods=1):
+    result = np.empty(len(arr), dtype=np.float64)
+    result[:periods] = np.nan
+    result[periods:] = arr[:-periods]
+    return result
+
+trend_cols = pd.DataFrame({
+    "supertrend": numpy_shift(supertrend, 1),
+    "supertrend_direction": numpy_shift(direction, 1),
+}, index=df.index)
+df = pd.concat([df, trend_cols], axis=1)
+```
+
+**Speedup:** 2-3x
+
+---
+
+### Task 23C-5: Batch Entropy Feature Assignments
+
+**File:** `src/data/pipeline/stages/features/entropy.py`
+**Lines:** 234, 420, 621, 837, 1063
+
+#### Pattern BEFORE:
+
+```python
+df[col_name] = pd.Series(entropy, index=df.index).shift(1)
+```
+
+#### Pattern AFTER:
+
+```python
+# At start of function, create dict
+new_cols = {}
+
+# Replace each assignment with:
+shifted = np.concatenate([[np.nan], entropy[:-1]])
+new_cols[col_name] = shifted
+
+# At end of function, single concat:
+df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
+```
+
+**Speedup:** 2-5x
+
+---
+
+### Task 23C-6: Batch Wavelet Feature Assignments
+
+**File:** `src/data/pipeline/stages/features/wavelets.py`
+**Lines:** 154, 164, 200, 207, 212, 253, 300, 301
+
+Same pattern as 23C-5 - collect in dict, concat once at end of each function.
+
+---
+
+### Task 23C-7: Batch Momentum Feature Assignments
+
+**File:** `src/data/pipeline/stages/features/momentum.py`
+**Lines:** 51-55, 100-108, 164-169
+
+#### BEFORE (add_rsi):
+
+```python
+df[col_name] = pd.Series(calculate_rsi_numba(df["close"].values, period)).shift(1).values
+df["rsi_overbought"] = (df[col_name] > 70).astype(int)
+df["rsi_oversold"] = (df[col_name] < 30).astype(int)
+```
+
+#### AFTER:
+
+```python
+rsi = calculate_rsi_numba(df["close"].values, period)
+rsi_shifted = np.concatenate([[np.nan], rsi[:-1]])
+
+rsi_cols = pd.DataFrame({
+    col_name: rsi_shifted,
+    "rsi_overbought": (rsi_shifted > 70).astype(np.int8),
+    "rsi_oversold": (rsi_shifted < 30).astype(np.int8),
+}, index=df.index)
+df = pd.concat([df, rsi_cols], axis=1)
+```
+
+---
+
+### Task 23C-8: Batch Price Feature Autocorrelation Loop
+
+**File:** `src/data/pipeline/stages/features/price_features.py`
+**Lines:** 142-152
+
+#### BEFORE:
+
+```python
+for lag in lags:
+    col = f"return_autocorr_lag{lag}"
+    autocorr = returns.rolling(period).apply(...)
+    df[col] = autocorr  # Individual in loop
+```
+
+#### AFTER:
+
+```python
+autocorr_cols = {}
+for lag in lags:
+    col = f"return_autocorr_lag{lag}"
+    autocorr_cols[col] = returns.rolling(period).apply(...)
+
+df = pd.concat([df, pd.DataFrame(autocorr_cols, index=df.index)], axis=1)
+```
+
+---
+
+### Task 23C-9: Batch Regime Feature Assignments
+
+**File:** `src/data/pipeline/stages/features/regime.py`
+**Lines:** 96, 113
+
+#### BEFORE:
+
+```python
+df["volatility_regime"] = (df["hvol_20"] > hvol_median).astype(int)
+df["trend_regime"] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
+```
+
+#### AFTER:
+
+```python
+regime_cols = pd.DataFrame({
+    "volatility_regime": (df["hvol_20"] > hvol_median).astype(np.int8),
+    "trend_regime": np.where(uptrend, 1, np.where(downtrend, -1, 0)).astype(np.int8),
+}, index=df.index)
+df = pd.concat([df, regime_cols], axis=1)
+```
+
+---
+
+### Task 23C-10: Fix fillna Deprecation Warning
+
+**File:** `src/data/pipeline/stages/features/microstructure_proxies.py`
+**Line:** 504
+
+#### BEFORE:
+
+```python
+features = features.fillna(method="bfill").fillna(0)
+```
+
+#### AFTER:
+
+```python
+features = features.bfill().fillna(0)
+```
+
+---
+
+## Phase 23D: Config Gaps (DEFERRED TO PHASE 24)
 
 - [ ] 23D-1: Bundle registry/versioning
 - [ ] 23D-2: A/B testing configuration
 - [ ] 23D-3: Drift detection config
+
+---
+
+## Verification Commands
+
+### Core Imports
+
+```bash
+python -c "from src.core.types import DataRank, ModelFamily; print('OK')"
+python -c "from src.core.contracts import get_model_contract; print('OK')"
+python -c "from src.data.adapters import get_adapter; print('OK')"
+```
+
+### Phase 23A
+
+```bash
+grep -n '"label"' src/data/adapters/base.py | grep exclude_exact
+```
+
+### Phase 23B
+
+```bash
+python -c "
+from src.core.contracts import get_model_contract
+for m in ['lightgbm', 'tcn', 'patchtst']:
+    c = get_model_contract(m)
+    print(f'{m}: max_features={c.max_features}')
+"
+```
+
+### Phase 23C
+
+```bash
+python -c "
+import warnings
+import pandas as pd
+warnings.filterwarnings('error', category=pd.errors.PerformanceWarning)
+from src.data.pipeline.stages.features import temporal
+print('PASS: No PerformanceWarning')
+"
+```
 
 ---
 
@@ -90,18 +600,26 @@
 
 ---
 
-## Verification Commands
+## Summary Checklist
 
-```bash
-# Core imports
-python -c "from src.core.types import DataRank, ModelFamily; print('OK')"
-python -c "from src.core.contracts import get_model_contract; print('OK')"
+| Task | Description | Priority | Status |
+|------|-------------|----------|--------|
+| 23A-1 | Add "label" to exclude_exact | CRITICAL | [ ] |
+| 23B-1 | Skip rank validation on raw data | HIGH | [ ] |
+| 23B-2 | Auto feature selection | HIGH | [ ] |
+| 23C-1 | temporal.py vectorization | MEDIUM | [ ] |
+| 23C-2 | microstructure.py batch concat | MEDIUM | [ ] |
+| 23C-3 | volatility.py batch assign | MEDIUM | [ ] |
+| 23C-4 | trend.py batch assign | MEDIUM | [ ] |
+| 23C-5 | entropy.py batch assign | MEDIUM | [ ] |
+| 23C-6 | wavelets.py batch assign | MEDIUM | [ ] |
+| 23C-7 | momentum.py batch assign | MEDIUM | [ ] |
+| 23C-8 | price_features.py autocorr loop | MEDIUM | [ ] |
+| 23C-9 | regime.py batch assign | MEDIUM | [ ] |
+| 23C-10 | fillna deprecation fix | LOW | [ ] |
 
-# Phase 23 verification
-grep -n "exclude_exact" src/data/adapters/base.py
-grep -n "_pre_training_validation" src/models/training/unified_orchestrator.py
-```
+**Total:** 13 active tasks + 3 deferred = 16 tasks
 
 ---
 
-*See COMPLETION.md for implementation details*
+*See COMPLETION.md for implementation details after phase completion*
