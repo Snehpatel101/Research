@@ -46,12 +46,18 @@ def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
     plus_di_col = f"plus_di_{period}"
     minus_di_col = f"minus_di_{period}"
 
-    df[adx_col] = pd.Series(adx).shift(1).values
-    df[plus_di_col] = pd.Series(plus_di).shift(1).values
-    df[minus_di_col] = pd.Series(minus_di).shift(1).values
+    adx_shifted = pd.Series(adx).shift(1).values
+    plus_di_shifted = pd.Series(plus_di).shift(1).values
+    minus_di_shifted = pd.Series(minus_di).shift(1).values
 
-    # Trend strength - already shifted via adx column
-    df["adx_strong_trend"] = (df[adx_col] > 25).astype(int)
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        adx_col: adx_shifted,
+        plus_di_col: plus_di_shifted,
+        minus_di_col: minus_di_shifted,
+        "adx_strong_trend": (adx_shifted > 25).astype(int),
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata[adx_col] = f"Average Directional Index ({period}, lagged)"
     feature_metadata[plus_di_col] = f"+DI ({period}, lagged)"
@@ -164,8 +170,12 @@ def add_supertrend(
     direction[:period] = np.nan
 
     # ANTI-LOOKAHEAD: shift(1) ensures Supertrend at bar[t] uses data up to bar[t-1]
-    df["supertrend"] = pd.Series(supertrend).shift(1).values
-    df["supertrend_direction"] = pd.Series(direction).shift(1).values
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        "supertrend": pd.Series(supertrend).shift(1).values,
+        "supertrend_direction": pd.Series(direction).shift(1).values,
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata["supertrend"] = f"Supertrend ({period},{multiplier}, lagged)"
     feature_metadata["supertrend_direction"] = "Supertrend direction (1=up, -1=down, lagged)"

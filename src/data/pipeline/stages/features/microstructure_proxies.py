@@ -501,7 +501,7 @@ def compute_all_microstructure_features(df):
     features = features.join(bar_feats)
 
     # Handle NaN values (from rolling windows at start)
-    features = features.fillna(method="bfill").fillna(0)
+    features = features.bfill().fillna(0)
 
     logger.info(f"Microstructure features computed: {features.shape[1]} features")
 

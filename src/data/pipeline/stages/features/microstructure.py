@@ -586,8 +586,9 @@ def add_microstructure_features(
         logger.info("Adding 2024 research-backed microstructure features...")
         new_features = compute_all_microstructure_features(df)
 
+        # Batch concat to avoid fragmentation (instead of loop assignment)
+        df = pd.concat([df, new_features], axis=1)
         for col in new_features.columns:
-            df[col] = new_features[col]
             feature_metadata[col] = f"Microstructure 2024: {col}"
 
     added_cols = len(df.columns) - initial_cols

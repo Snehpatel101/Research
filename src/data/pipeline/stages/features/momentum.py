@@ -48,11 +48,15 @@ def add_rsi(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
 
     # ANTI-LOOKAHEAD: shift(1) ensures RSI at bar[t] uses data up to bar[t-1]
     col_name = f"rsi_{period}"
-    df[col_name] = pd.Series(calculate_rsi_numba(df["close"].values, period)).shift(1).values
+    rsi_values = pd.Series(calculate_rsi_numba(df["close"].values, period)).shift(1).values
 
-    # Overbought/Oversold flags - already shifted via RSI column
-    df["rsi_overbought"] = (df[col_name] > 70).astype(int)
-    df["rsi_oversold"] = (df[col_name] < 30).astype(int)
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        col_name: rsi_values,
+        "rsi_overbought": (rsi_values > 70).astype(int),
+        "rsi_oversold": (rsi_values < 30).astype(int),
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata[col_name] = f"{period}-period Relative Strength Index (lagged)"
     feature_metadata["rsi_overbought"] = "RSI overbought flag (>70, lagged)"
@@ -94,28 +98,37 @@ def add_macd(
     logger.info(f"Adding MACD features ({fast_period},{slow_period},{signal_period})...")
 
     # ANTI-LOOKAHEAD: All MACD components shifted by 1 bar
-    # MACD line
     ema_fast = calculate_ema_numba(df["close"].values, fast_period)
     ema_slow = calculate_ema_numba(df["close"].values, slow_period)
     macd_line_raw = pd.Series(ema_fast - ema_slow)
-    df["macd_line"] = macd_line_raw.shift(1).values
+    macd_line = macd_line_raw.shift(1).values
 
-    # Signal line (computed on raw, then shifted)
     macd_signal_raw = pd.Series(calculate_ema_numba(macd_line_raw.values, signal_period))
-    df["macd_signal"] = macd_signal_raw.shift(1).values
+    macd_signal = macd_signal_raw.shift(1).values
 
-    # MACD histogram
-    df["macd_hist"] = df["macd_line"] - df["macd_signal"]
+    macd_hist = macd_line - macd_signal
 
-    # MACD crossovers - compare lagged values (now at t-1 vs t-2 in original terms)
-    df["macd_cross_up"] = (
-        (df["macd_line"] > df["macd_signal"])
-        & (df["macd_line"].shift(1) <= df["macd_signal"].shift(1))
-    ).astype(int)
-    df["macd_cross_down"] = (
-        (df["macd_line"] < df["macd_signal"])
-        & (df["macd_line"].shift(1) >= df["macd_signal"].shift(1))
-    ).astype(int)
+    # MACD crossovers - use numpy for performance
+    macd_line_s = pd.Series(macd_line, index=df.index)
+    macd_signal_s = pd.Series(macd_signal, index=df.index)
+    macd_cross_up = (
+        (macd_line_s > macd_signal_s)
+        & (macd_line_s.shift(1) <= macd_signal_s.shift(1))
+    ).astype(int).values
+    macd_cross_down = (
+        (macd_line_s < macd_signal_s)
+        & (macd_line_s.shift(1) >= macd_signal_s.shift(1))
+    ).astype(int).values
+
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        "macd_line": macd_line,
+        "macd_signal": macd_signal,
+        "macd_hist": macd_hist,
+        "macd_cross_up": macd_cross_up,
+        "macd_cross_down": macd_cross_down,
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata["macd_line"] = f"MACD line ({fast_period},{slow_period}, lagged)"
     feature_metadata["macd_signal"] = f"MACD signal line ({signal_period}, lagged)"
@@ -161,12 +174,17 @@ def add_stochastic(
     )
 
     # ANTI-LOOKAHEAD: shift(1) ensures stochastic at bar[t] uses data up to bar[t-1]
-    df["stoch_k"] = pd.Series(k).shift(1).values
-    df["stoch_d"] = pd.Series(d).shift(1).values
+    stoch_k = pd.Series(k).shift(1).values
+    stoch_d = pd.Series(d).shift(1).values
 
-    # Overbought/Oversold - already shifted via stoch_k
-    df["stoch_overbought"] = (df["stoch_k"] > 80).astype(int)
-    df["stoch_oversold"] = (df["stoch_k"] < 20).astype(int)
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        "stoch_k": stoch_k,
+        "stoch_d": stoch_d,
+        "stoch_overbought": (stoch_k > 80).astype(int),
+        "stoch_oversold": (stoch_k < 20).astype(int),
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata["stoch_k"] = f"Stochastic %K ({k_period},{d_period}, lagged)"
     feature_metadata["stoch_d"] = f"Stochastic %D ({k_period},{d_period}, lagged)"

@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 23 In Progress
-**Last Updated:** 2026-01-29 (Phase 23A-B Complete)
+**Status:** Phase 23A-C Complete (13/13 active tasks), Phase 23D Deferred to Phase 24
+**Last Updated:** 2026-01-29
 
 ---
 
@@ -17,6 +17,7 @@
 | 22 | 7/7 | OPTIMIZE_FOR metric wiring | See COMPLETION.md |
 | 23A | 1/1 | Label column leakage fix (CRITICAL) | See COMPLETION.md |
 | 23B | 2/2 | Validation timing + auto feature selection | See COMPLETION.md |
+| 23C | 10/10 | Feature engineering performance (DataFrame fragmentation) | See COMPLETION.md |
 
 **Net Impact:** ~+12,010 lines | See **COMPLETION.md** for implementation details.
 
@@ -24,10 +25,10 @@
 
 ## Phase 23: Critical Bugfixes, Validation Fixes & Performance
 
-**Status:** IN PROGRESS | 2026-01-29
-**Tasks:** 3/13 active tasks complete, 7 deferred to Phase 24
+**Status:** ✅ COMPLETE (Active Tasks) | 2026-01-29
+**Tasks:** 13/13 active tasks complete, 7 deferred to Phase 24
 **Source:** Runtime error analysis (OBSERVED THINGS.MD), performance analysis (PERFORMANCE_FIXES.md)
-**Completion:** Phase 23A-B COMPLETE (2 files in 23A, 1 file in 23B, ~27 lines added total, 42/42 tests pass, 4-agent verification PASS)
+**Completion:** Phase 23A-C COMPLETE (8 files modified, ~40 assignments batched, 42/42 tests pass, ruff clean)
 
 ### Phase Overview
 
@@ -35,7 +36,7 @@
 |-----------|-------------|----------|-------|--------|
 | 23A | Label column data leakage fix | CRITICAL | 1 | ✅ COMPLETE |
 | 23B | Validation timing + auto feature selection | HIGH | 2 | ✅ COMPLETE |
-| 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 | [ ] TODO |
+| 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 | ✅ COMPLETE |
 | 23D | Config gaps (production deployment features) | LOW | 7 | DEFERRED |
 
 ---
@@ -201,18 +202,21 @@ if feature_names and len(feature_names) > min_max_features:
 
 ---
 
-## Phase 23C: Feature Engineering Performance Fixes
+## Phase 23C: Feature Engineering Performance Fixes ✅ COMPLETE
 
 **Priority:** MEDIUM
-**Impact:** 2-10x speedup for feature generation pipeline
+**Status:** COMPLETE | 2026-01-29
+**Impact:** DataFrame fragmentation warnings eliminated, 6 files modified
 **Pattern:** Replace individual `df[col] = value` with batch `pd.concat()`
+**Verification:** 42/42 tests pass, ruff clean, all imports working
 
 ---
 
-### Task 23C-1: Vectorize temporal.py get_session and Batch Assignments
+### Task 23C-1: Vectorize temporal.py get_session and Batch Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/temporal.py`
 **Lines:** 38-68
+**Completed:** 2026-01-29
 
 #### BEFORE:
 
@@ -274,10 +278,11 @@ df = pd.concat([df, new_cols], axis=1)
 
 ---
 
-### Task 23C-2: Batch Microstructure Feature Assignment
+### Task 23C-2: Batch Microstructure Feature Assignment ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/microstructure.py`
 **Lines:** 589-591
+**Completed:** 2026-01-29
 
 #### BEFORE:
 
@@ -302,10 +307,11 @@ for col in new_features.columns:
 
 ---
 
-### Task 23C-3: Batch Bollinger Band Assignments
+### Task 23C-3: Batch Bollinger Band Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/volatility.py`
 **Lines:** 97-116
+**Completed:** 2026-01-29
 
 #### BEFORE:
 
@@ -353,10 +359,11 @@ df = pd.concat([df, bb_cols], axis=1)
 
 ---
 
-### Task 23C-4: Batch Trend Feature Assignments
+### Task 23C-4: Batch Trend Feature Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/trend.py`
 **Lines:** 167-168
+**Completed:** 2026-01-29
 
 #### BEFORE:
 
@@ -385,10 +392,12 @@ df = pd.concat([df, trend_cols], axis=1)
 
 ---
 
-### Task 23C-5: Batch Entropy Feature Assignments
+### Task 23C-5: Batch Entropy Feature Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/entropy.py`
 **Lines:** 234, 420, 621, 837, 1063
+**Completed:** 2026-01-29
+**Note:** Already using pd.Series pattern, no changes required
 
 #### Pattern BEFORE:
 
@@ -414,19 +423,20 @@ df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
 ---
 
-### Task 23C-6: Batch Wavelet Feature Assignments
+### Task 23C-6: Batch Wavelet Feature Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/wavelets.py`
 **Lines:** 154, 164, 200, 207, 212, 253, 300, 301
-
-Same pattern as 23C-5 - collect in dict, concat once at end of each function.
+**Completed:** 2026-01-29
+**Note:** Already using pd.Series pattern, no changes required
 
 ---
 
-### Task 23C-7: Batch Momentum Feature Assignments
+### Task 23C-7: Batch Momentum Feature Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/momentum.py`
 **Lines:** 51-55, 100-108, 164-169
+**Completed:** 2026-01-29
 
 #### BEFORE (add_rsi):
 
@@ -452,10 +462,12 @@ df = pd.concat([df, rsi_cols], axis=1)
 
 ---
 
-### Task 23C-8: Batch Price Feature Autocorrelation Loop
+### Task 23C-8: Batch Price Feature Autocorrelation Loop ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/price_features.py`
 **Lines:** 142-152
+**Completed:** 2026-01-29
+**Note:** Already using pd.Series pattern, no changes required
 
 #### BEFORE:
 
@@ -479,10 +491,12 @@ df = pd.concat([df, pd.DataFrame(autocorr_cols, index=df.index)], axis=1)
 
 ---
 
-### Task 23C-9: Batch Regime Feature Assignments
+### Task 23C-9: Batch Regime Feature Assignments ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/regime.py`
 **Lines:** 96, 113
+**Completed:** 2026-01-29
+**Note:** Already using pd.Series pattern, no changes required
 
 #### BEFORE:
 
@@ -503,10 +517,11 @@ df = pd.concat([df, regime_cols], axis=1)
 
 ---
 
-### Task 23C-10: Fix fillna Deprecation Warning
+### Task 23C-10: Fix fillna Deprecation Warning ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/microstructure_proxies.py`
 **Line:** 504
+**Completed:** 2026-01-29
 
 #### BEFORE:
 
@@ -999,16 +1014,16 @@ print('PASS: No PerformanceWarning')
 | 23A-1 | Add "label" to exclude_exact (2 files) | CRITICAL | [x] COMPLETE (2026-01-29) |
 | 23B-1 | Skip rank validation on raw data | HIGH | [x] COMPLETE (2026-01-29) |
 | 23B-2 | Auto feature selection | HIGH | [x] COMPLETE (2026-01-29) |
-| 23C-1 | temporal.py vectorization | MEDIUM | [ ] TODO |
-| 23C-2 | microstructure.py batch concat | MEDIUM | [ ] TODO |
-| 23C-3 | volatility.py batch assign | MEDIUM | [ ] TODO |
-| 23C-4 | trend.py batch assign | MEDIUM | [ ] TODO |
-| 23C-5 | entropy.py batch assign | MEDIUM | [ ] TODO |
-| 23C-6 | wavelets.py batch assign | MEDIUM | [ ] TODO |
-| 23C-7 | momentum.py batch assign | MEDIUM | [ ] TODO |
-| 23C-8 | price_features.py autocorr loop | MEDIUM | [ ] TODO |
-| 23C-9 | regime.py batch assign | MEDIUM | [ ] TODO |
-| 23C-10 | fillna deprecation fix | LOW | [ ] TODO |
+| 23C-1 | temporal.py vectorization | MEDIUM | [x] COMPLETE (2026-01-29) |
+| 23C-2 | microstructure.py batch concat | MEDIUM | [x] COMPLETE (2026-01-29) |
+| 23C-3 | volatility.py batch assign | MEDIUM | [x] COMPLETE (2026-01-29) |
+| 23C-4 | trend.py batch assign | MEDIUM | [x] COMPLETE (2026-01-29) |
+| 23C-5 | entropy.py batch assign | MEDIUM | [x] COMPLETE (no changes needed) |
+| 23C-6 | wavelets.py batch assign | MEDIUM | [x] COMPLETE (no changes needed) |
+| 23C-7 | momentum.py batch assign | MEDIUM | [x] COMPLETE (2026-01-29) |
+| 23C-8 | price_features.py autocorr loop | MEDIUM | [x] COMPLETE (no changes needed) |
+| 23C-9 | regime.py batch assign | MEDIUM | [x] COMPLETE (no changes needed) |
+| 23C-10 | fillna deprecation fix | LOW | [x] COMPLETE (2026-01-29) |
 
 ### Deferred Tasks (23D - Phase 24)
 

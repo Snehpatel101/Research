@@ -91,29 +91,25 @@ def add_bollinger_bands(
     logger.info(f"Adding Bollinger Bands with period: {period}")
 
     # ANTI-LOOKAHEAD: shift(1) ensures BB at bar[t] uses data up to bar[t-1]
-    bb_middle_raw = df["close"].rolling(window=period).mean()
-    bb_std_raw = df["close"].rolling(window=period).std()
-
-    df["bb_middle"] = bb_middle_raw.shift(1)
-    bb_std = bb_std_raw.shift(1)
-
-    df["bb_upper"] = df["bb_middle"] + (std_mult * bb_std)
-    df["bb_lower"] = df["bb_middle"] - (std_mult * bb_std)
-
-    # Bollinger Band width normalized by std (stationary)
-    # This is equivalent to band_width / std, making it scale-invariant
+    bb_middle = df["close"].rolling(window=period).mean().shift(1)
+    bb_std = df["close"].rolling(window=period).std().shift(1)
     bb_std_safe = bb_std.replace(0, np.nan)
-    df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / bb_std_safe
-
-    # Price position in bands - use lagged close to match lagged bands
-    # Use safe division to handle band collapse
-    band_range = df["bb_upper"] - df["bb_lower"]
-    band_range_safe = band_range.replace(0, np.nan)
     close_lagged = df["close"].shift(1)
-    df["bb_position"] = (close_lagged - df["bb_lower"]) / band_range_safe
 
-    # Add close price z-score relative to BB middle (stationary)
-    df["close_bb_zscore"] = (close_lagged - df["bb_middle"]) / bb_std_safe
+    bb_upper = bb_middle + (std_mult * bb_std)
+    bb_lower = bb_middle - (std_mult * bb_std)
+    band_range_safe = (bb_upper - bb_lower).replace(0, np.nan)
+
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        "bb_middle": bb_middle,
+        "bb_upper": bb_upper,
+        "bb_lower": bb_lower,
+        "bb_width": (bb_upper - bb_lower) / bb_std_safe,
+        "bb_position": (close_lagged - bb_lower) / band_range_safe,
+        "close_bb_zscore": (close_lagged - bb_middle) / bb_std_safe,
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata["bb_middle"] = f"Bollinger Band middle ({period},{std_mult}, lagged)"
     feature_metadata["bb_upper"] = f"Bollinger Band upper ({period},{std_mult}, lagged)"
@@ -160,21 +156,23 @@ def add_keltner_channels(
     # ANTI-LOOKAHEAD: shift(1) ensures KC at bar[t] uses data up to bar[t-1]
     ema = pd.Series(ema_raw).shift(1).values
     atr = pd.Series(atr_raw).shift(1).values
+    close_lagged = df["close"].shift(1).values
 
-    df["kc_middle"] = ema
-    df["kc_upper"] = ema + (atr_mult * atr)
-    df["kc_lower"] = ema - (atr_mult * atr)
+    kc_upper = ema + (atr_mult * atr)
+    kc_lower = ema - (atr_mult * atr)
+    channel_range = kc_upper - kc_lower
+    channel_range_safe = np.where(channel_range == 0, np.nan, channel_range)
+    atr_safe = np.where(atr == 0, np.nan, atr)
 
-    # Price position in channels - use lagged close to match lagged channels
-    # Use safe division to handle channel collapse
-    channel_range = df["kc_upper"] - df["kc_lower"]
-    channel_range_safe = channel_range.replace(0, np.nan)
-    close_lagged = df["close"].shift(1)
-    df["kc_position"] = (close_lagged - df["kc_lower"]) / channel_range_safe
-
-    # Add close deviation from KC middle in ATR units (stationary)
-    atr_safe = pd.Series(atr).replace(0, np.nan)
-    df["close_kc_atr_dev"] = (close_lagged - df["kc_middle"]) / atr_safe
+    # Batch concat to avoid fragmentation
+    new_cols = {
+        "kc_middle": ema,
+        "kc_upper": kc_upper,
+        "kc_lower": kc_lower,
+        "kc_position": (close_lagged - kc_lower) / channel_range_safe,
+        "close_kc_atr_dev": (close_lagged - ema) / atr_safe,
+    }
+    df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata["kc_middle"] = f"Keltner Channel middle ({period},{atr_mult}, lagged)"
     feature_metadata["kc_upper"] = f"Keltner Channel upper ({period},{atr_mult}, lagged)"
