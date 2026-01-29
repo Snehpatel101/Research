@@ -1,577 +1,459 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 23A-C Complete (13/13 active tasks), Phase 23D Deferred to Phase 24
+**Status:** Phase 24 Ready to Start
 **Last Updated:** 2026-01-29
 
 ---
 
 ## Completed Phases Summary
 
-| Phase | Description | Impact | Date |
-|-------|-------------|--------|------|
-| 0 | Deduplication | -5,336 lines removed | 2026-01-23 |
-| 1 | Contract Enforcement | +616 lines, 7 new exceptions | 2026-01-23 |
-| 2 | 4D Infrastructure | +958 lines, raw MTF store | 2026-01-24 |
-| 3 | 5-Dimension Optuna | +2,298 lines, FeatureSpec artifact | 2026-01-24 |
-| 4 | Validation Integration | +50 lines, leakage/lookahead wiring | 2026-01-24 |
-| 5 | Unified Entry Point | +1,281 lines, MLFactory class | 2026-01-24 |
-| 6 | Advanced Models | +3,690 lines, 6 new models | 2026-01-24 |
-| 7-10 | Production Hardening | +1,525 lines, schemas, manifests | 2026-01-24 |
-| 12 | Trading Profitability | +5,780 lines, Sharpe optimization, circuit breakers | 2026-01-24 |
-| 12.5 | Code Quality Pass | Ruff 210→93, StageName enum | 2026-01-25 |
-| 13 | Performance Optimization | MTF cache, batch inference | 2026-01-25 |
-| 14 | Data Quality Hardening | Dynamic purge, NaN monitoring | 2026-01-25 |
-| 15-18 | Ensemble & Resilience | +2,230 lines, meta-selection, checkpoints | 2026-01-25 |
-| 19 | Comprehensive Optimization | +750 lines, 34 new features | 2026-01-25 |
-| 20 | Performance & Quality Polish | -851 lines, 50-500x speedup | 2026-01-25 |
-| 21 | ML Pipeline Review Fixes | 10 tasks, 3 disproven | 2026-01-27 |
-| 22 | OPTIMIZE_FOR Metric Wiring | 7 changes, scoring.py | 2026-01-27 |
-| 23A | Label Column Leakage Fix | +2 lines, 2 files, CRITICAL | 2026-01-29 |
-| 23B | Validation Timing & Feature Selection | +25 lines, 1 file, HIGH | 2026-01-29 |
-| 23C | Feature Engineering Performance | 6 files, ~40 batched assignments, 2-10x speedup | 2026-01-29 |
+All phases 0-23 are complete. See **COMPLETION.md** for full details.
 
-**Net Impact:** ~+12,010 lines | 196 features | 13 models | See **COMPLETION.md** for details.
+| Phases | Description | Net Impact |
+|--------|-------------|------------|
+| 0-23 | Deduplication, contracts, 4D infra, models, validation, performance | +12,010 lines, 196 features, 23 models |
 
 ---
 
-## Phase 23: Critical Bugfixes, Validation & Performance (IN PROGRESS)
+## New Phases: Technical Improvements (118 Issues)
 
-**Status:** IN PROGRESS | 2026-01-29
-**Priority:** CRITICAL → HIGH → MEDIUM → LOW
-**Source:** Runtime errors from Colab notebook + PERFORMANCE_FIXES.md analysis
-
-**Progress:** ✅ COMPLETE - All 13 active tasks complete, 7 tasks deferred to Phase 24
+**Source:** `z/TECHNICAL_IMPROVEMENTS.md` - Analysis by 5 specialized agents
+**Categories:** Architecture (22), Performance (23), Code Quality (57), Data Engineering (16)
 
 ---
 
-### Phase 23 Architecture Overview
+## Phase 24: Quick Wins - Feature Computation Caching
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         ML FACTORY PIPELINE FLOW                                 │
-│                                                                                  │
-│  ┌──────────┐    ┌──────────┐    ┌────────────┐    ┌─────────────────────────┐  │
-│  │  Raw     │───▶│ Feature  │───▶│  Labeling  │───▶│  Adapter Transform      │  │
-│  │  OHLCV   │    │  Eng.    │    │  Stage     │    │  (2D/3D/4D)             │  │
-│  └──────────┘    └────┬─────┘    └─────┬──────┘    └───────────┬─────────────┘  │
-│                       │                │                        │                │
-│                       │ 🔴 23C         │                        │ 🟡 23B-1      │
-│                       │ PERFORMANCE    │                        │ VALIDATION    │
-│                       │ (DataFrame     │                        │ TIMING        │
-│                       │  fragmentation)│                        │               │
-│                       ▼                ▼                        ▼               │
-│                  ┌─────────────────────────────────────────────────────────┐    │
-│                  │           Pre-Training Validation                        │    │
-│                  │           (unified_orchestrator.py:501)                  │    │
-│                  │                                                          │    │
-│                  │   🔴 23A: Label in features → 100% accuracy → LEAKAGE   │    │
-│                  │   🟡 23B-2: 218 features > model max (200/120/10)       │    │
-│                  └───────────────────────────────────┬─────────────────────┘    │
-│                                                      │                          │
-│                                                      ▼                          │
-│                                              ┌────────────┐                     │
-│                                              │  Training  │                     │
-│                                              │  (BLOCKED) │                     │
-│                                              └────────────┘                     │
-└─────────────────────────────────────────────────────────────────────────────────┘
-
-LEGEND:
-  🔴 CRITICAL - Phase 23A (Label Leakage)
-  🟡 HIGH     - Phase 23B (Validation Timing + Feature Count)
-  🟠 MEDIUM   - Phase 23C (Performance Anti-Patterns)
-  ⚪ LOW      - Phase 23D (Config Gaps - Deferred)
-```
-
----
-
-### Root Cause Analysis
-
-| Issue Category | Root Cause | Symptom | Impact |
-|----------------|------------|---------|--------|
-| **Label Leakage** | `base.py:339` excludes `label_*` prefix but not bare `label` | 100% train accuracy | Models memorize labels, useless in production |
-| **Validation Timing** | Validation at L501 runs on raw 2D before adapter at L579 | Rank mismatch errors for 3D/4D models | Cannot train TCN, PatchTST |
-| **Feature Count** | Pipeline generates 218 features, no auto-selection | Contract violations: LightGBM(200), TCN(120), PatchTST(10) | Training blocked |
-| **DataFrame Fragmentation** | 83+ individual `df[col] = ...` assignments | "DataFrame is highly fragmented" warnings | 5-20x slower feature generation |
-| **sqrt Warning** | Negative values passed to np.sqrt | "invalid value encountered in sqrt" | NaN features, garbage predictions |
-| **fillna Deprecation** | `fillna(method="bfill")` deprecated | FutureWarning logged | Will break in pandas 3.0 |
-
----
-
-### Dependencies Between Fixes
-
-```
-Phase 23A (Label Leakage) ──────────────────────────────────────────┐
-                                                                     │
-Phase 23B-1 (Validation Timing) ────┬───▶ Phase 23B-2 (Feature     │
-                                    │      Selection) ─────────────▶ │
-                                    │                                │
-                                    │                                ▼
-                                    │                     TRAINING CAN START
-                                    │
-Phase 23C (Performance) ────────────┴─── Independent, can run in parallel
-```
-
-**Execution Order:**
-1. **23A FIRST** - Without this fix, all trained models are garbage
-2. **23B-1** - Must fix validation timing before feature selection helps
-3. **23B-2** - Auto-select features to pass contract validation
-4. **23C** - Performance can be addressed any time (no blocking)
-5. **23D** - Deferred to Phase 24
-
----
-
-## Phase 23A: Critical Label Leakage ✅ COMPLETE
-
-**Status:** COMPLETE | 2026-01-29
-**Priority:** CRITICAL
-**Impact:** 2 lines added (2 files), prevents catastrophic data leakage
-**Verification:** 42/42 tests pass, 4-agent deep check PASS
-
-### The Bug (FIXED)
-
-**Location:** `src/data/adapters/base.py:339-347`
-
-```python
-# CURRENT CODE (BUGGY)
-exclude_prefixes = (
-    "label_",           # ← Excludes "label_h5", "label_h15", etc.
-    "sample_weight_",
-    "regime_",
-    ...
-)
-exclude_exact = {
-    "open", "high", "low", "close", "volume",
-    "bar_index", "session_id",
-    # ← MISSING: "label"
-}
-```
-
-### Why It Causes 100% Training Accuracy
-
-When the label column is included as a feature:
-- X = [feature_1, feature_2, ..., label] ← Label IS a feature
-- y = label ← Label IS the target
-- Model learns: f(X) = X[:, -1] ← Just read the label column!
-- Result: Training accuracy 100%, production accuracy random
-
-This is **catastrophic data leakage** - the model memorizes the answer from the input.
-
-### The Fix Applied
-
-**Files Modified (2):**
-1. `src/data/adapters/base.py:347` - Added `"label"` to exclude_exact set
-2. `src/data/pipeline/feature_manifest.py:417` - Added `"label"` for consistency
-
-**Before:**
-```python
-exclude_exact = {
-    "open", "high", "low", "close", "volume",
-    "bar_index", "session_id",
-    # ← MISSING: "label"
-}
-```
-
-**After:**
-```python
-exclude_exact = {
-    "open", "high", "low", "close", "volume",
-    "bar_index", "session_id",
-    "label",  # CRITICAL: Exclude label columns to prevent data leakage
-}
-```
-
-**Verification (4-Agent Deep Check):**
-- Ruff check: PASS
-- Syntax check: OK
-- Import test: OK
-- Functional test: "label" now correctly excluded from features
-- Test suite: 42/42 passed
-- Contract verification: PASS
-- Integration test: PASS
-
----
-
-## Phase 23B: Validation Timing & Feature Selection ✅ COMPLETE
-
-**Status:** COMPLETE | 2026-01-29
+**Status:** NOT STARTED
 **Priority:** HIGH
-**Impact:** ~25 lines added (1 file), prevents training failures for 3D/4D models
-**Verification:** 4-agent deep check PASS, ruff clean, 42/42 tests pass
+**Effort:** 1-2 days
+**Source Issues:** PERF-001, PERF-003, PERF-009
 
-### What Was Fixed
-
-**Task 23B-1: Skip Rank Validation on Raw Data** ✅
-- Modified `unified_orchestrator.py:343-370` to skip rank validation
-- Validation now only checks `min_features` and `max_features`
-- Rank validation skipped because adapters transform 2D→3D/4D later
-- **Fix Applied:** Inline validation instead of calling `validate_data_contract()`
-
-**Task 23B-2: Add Auto Feature Selection** ✅
-- Added feature auto-selection logic at `unified_orchestrator.py:316-340`
-- Finds minimum `max_features` across all configured models
-- Selects top N features by variance if count exceeds limit
-- Logs warning and info about the selection
-- **Fix Applied:** ~25 lines of automatic feature reduction
-
-### Why This Mattered
-
-**Before Phase 23B:**
-- Validation ran on raw 2D DataFrame before adapter transformation
-- TCN, PatchTST, iTransformer failed with "Data rank mismatch" errors
-- 218 features exceeded contract limits (LightGBM=200, TCN=120, PatchTST=10)
-- Training was blocked for 3D/4D models
-
-**After Phase 23B:**
-- Rank validation skipped on raw data (adapters handle transformation)
-- Auto feature selection reduces to minimum model limit
-- 3D/4D models can now train successfully
-- Feature count violations automatically resolved
-
-### Contract Violation Resolution
-
-| Model | Expected Rank | Max Features | Before | After |
-|-------|---------------|--------------|--------|-------|
-| LightGBM | 2D | 200 | 218 (FAIL) | 200 (PASS) |
-| TCN | 3D | 120 | 218 (FAIL) | 120 (PASS) |
-| PatchTST | 4D | 10 | 218 (FAIL) | 10 (PASS) |
-
----
-
-## Phase 23C: Feature Engineering Performance ✅ COMPLETE
-
-**Status:** COMPLETE | 2026-01-29
-**Priority:** MEDIUM
-**Impact:** 6 files modified, DataFrame fragmentation warnings eliminated
-**Verification:** 42/42 tests pass, ruff clean, all imports working
-
-### Affected Files (from PERFORMANCE_FIXES.md)
-
-| File | Priority | Individual Assigns | pd.Series() Wraps | Key Fix |
-|------|----------|-------------------|-------------------|---------|
-| `temporal.py` | **P0** | 13 | 0 | `.apply()` → `np.select()` |
-| `momentum.py` | **P0** | 14 | 6 | Batch `pd.concat()` |
-| `volatility.py` | **P0** | 20 | 4 | Batch `pd.concat()` |
-| `volume.py` | **P1** | 18 | 1 | Remove temp columns |
-| `microstructure.py` | **P1** | 17 | 1 | Replace loop with concat |
-| `entropy.py` | **P2** | 1 | 5 | `np.concatenate()` shift |
-| `wavelets.py` | **P2** | 10 | 10 | Batch loop outputs |
-| `trend.py` | **P2** | 6 | 5 | Batch assignments |
-| `regime.py` | **P3** | 5 | 0 | Minor batching |
-| `price_features.py` | **P3** | 4 | 0 | Minor batching |
-
-**Total: 83 individual assignments, 38 pd.Series() wrappers**
-
-### Expected Speedup
-
-| Fix | Current | Fixed | Speedup |
-|-----|---------|-------|---------|
-| `.apply()` → `np.select()` | 100ms/call | 1ms/call | **100x** |
-| Loop → `pd.concat()` | O(n*k) copies | O(1) copies | **5-20x** |
-| `pd.Series().shift()` → `np.concatenate()` | 2 allocs | 1 alloc | **2-5x** |
-
-**Combined potential: 2-5x overall feature generation speedup**
-
-### Architecture Pattern: FeatureBuilder
-
-```python
-class FeatureBuilder:
-    def __init__(self, index): self.cols = {}
-    def add(self, name, values): self.cols[name] = values; return self
-    def to_frame(self): return pd.DataFrame(self.cols, index=self.index)
-    def concat_to(self, df): return pd.concat([df, self.to_frame()], axis=1)
-```
-
----
-
-## Phase 23D: Config Gaps (PRIORITY: LOW - DEFERRED TO PHASE 24)
-
-**Status:** DEFERRED | Will be addressed in Phase 24
-**Reason:** System is functional without these; 23A-C fixes are blocking
-
----
-
-### 23D Overview
+### Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         PRODUCTION DEPLOYMENT GAPS                               │
+│                    FEATURE COMPUTATION REDUNDANCY                                │
+│                                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                       │
+│  │   ADX/DI     │    │ Microstructure│    │  Supertrend  │                       │
+│  │   4x calls   │    │   3x calls    │    │   2x calls   │                       │
+│  │  to same fn  │    │  to same fn   │    │  to same fn  │                       │
+│  └──────────────┘    └──────────────┘    └──────────────┘                       │
+│         │                   │                   │                                │
+│         ▼                   ▼                   ▼                                │
+│  ┌─────────────────────────────────────────────────────────────────────────┐    │
+│  │                    SOLUTION: Memoization/Caching                         │    │
+│  │   - @lru_cache on base computation functions                            │    │
+│  │   - Or return all variants from single function call                    │    │
+│  └─────────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Description |
+|------|------|-------------|
+| 24-1 | `trend.py:93-133` | Cache `_compute_di_adx()` - called 4x for ADX, +DI, -DI, strong_trend |
+| 24-2 | `microstructure.py:60-69` | Cache `compute_micro_amihud()` - called 3x for variants |
+| 24-3 | `trend.py:216-236` | Return both supertrend value and direction from single call |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| ADX/DI computation time | 4x base | 1x base | Profile `compute_adx_14` + variants |
+| Microstructure time | 3x base | 1x base | Profile `compute_micro_amihud_*` |
+| Supertrend time | 2x base | 1x base | Profile supertrend features |
+| **Overall trend features** | 100% | **25%** | `time python -c "from src.data.features.compute.trend import *"` |
+
+---
+
+## Phase 25: Data Validation Hardening
+
+**Status:** NOT STARTED
+**Priority:** HIGH
+**Effort:** 2-3 days
+**Source Issues:** DE-001, DE-002, DE-003, DE-008, DE-009
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                       VALIDATION GAP ANALYSIS                                    │
+│                                                                                  │
+│  Stage 1 ──▶ Stage 2 ──▶ Stage 3 ──▶ ... ──▶ Training                          │
+│     │           │           │                    │                              │
+│     ⚠️          ⚠️          ⚠️                   ✓                              │
+│  No validation between stages = silent data corruption                          │
+│                                                                                  │
+│  ISSUES:                                                                         │
+│  • Inter-stage validation exists but NOT CALLED                                 │
+│  • Raw data validation logs warnings but doesn't FAIL                           │
+│  • MTF lookahead validation exists but NOT CALLED                               │
+│  • Label sentinel -99 not validated at consumption                              │
+│  • Horizon validation is warning-only                                           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Description |
+|------|------|-------------|
+| 25-1 | `schemas.py` | Call `validate_stage_transition()` after each stage write |
+| 25-2 | `clean/run.py:83-85` | Make raw data validation blocking (fail-fast) |
+| 25-3 | `features/run.py:372-404` | Call `validate_no_lookahead()` after MTF generation |
+| 25-4 | `splits/core.py:22` | Add sentinel validation at label consumption points |
+| 25-5 | `labeling/run.py:108-175` | Default `raise_on_violation=True` |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Inter-stage validation | 0% | 100% | Grep for `validate_stage_transition` calls |
+| Bad data detection | Warning only | Fail-fast | Inject bad data, verify failure |
+| Lookahead detection | Not called | Called | Verify validation runs in logs |
+| Sentinel leakage | Possible | Impossible | Test with -99 labels |
+| **Data integrity guarantee** | PARTIAL | **FULL** | Run pipeline with intentionally bad data |
+
+---
+
+## Phase 26: Type Safety & Code Quality
+
+**Status:** NOT STARTED
+**Priority:** HIGH
+**Effort:** 3-5 days
+**Source Issues:** CQ-001, CQ-002, CQ-003, CQ-007
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         CODE QUALITY ISSUES                                      │
+│                                                                                  │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐              │
+│  │  8 `Any` types   │  │ 11 bare except   │  │  6 missing       │              │
+│  │  in public APIs  │  │ handlers         │  │  return types    │              │
+│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘              │
+│           │                     │                     │                         │
+│           ▼                     ▼                     ▼                         │
+│  Type confusion          Silent failures       Incomplete docs                  │
+│                                                                                  │
+│  SOLUTION: Replace with proper types, add specific exception handling           │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Description |
+|------|------|-------------|
+| 26-1 | Multiple (8 files) | Replace `Any` types with proper types |
+| 26-2 | Multiple (11 files) | Add specific exception handling to bare `except` |
+| 26-3 | `config/*.py` | Add `-> None` to `__post_init__` methods |
+| 26-4 | `models/base.py:467` | Remove deprecated `PredictionOutput` alias |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| `Any` in public APIs | 8 | 0 | `grep -r ": Any" src/ \| wc -l` |
+| Bare except handlers | 11 | 0 | `grep -r "except Exception:" src/ \| wc -l` |
+| Missing return types | 6 | 0 | mypy check |
+| Deprecated aliases | 1 | 0 | grep for PredictionOutput |
+| **Type coverage** | ~70% | **95%+** | mypy --strict (informational) |
+
+---
+
+## Phase 27: Architecture Consolidation
+
+**Status:** NOT STARTED
+**Priority:** MEDIUM
+**Effort:** 1 week
+**Source Issues:** ARCH-001, ARCH-002, ARCH-003, ARCH-004, ARCH-005
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    DUPLICATE CLASS DEFINITIONS                                   │
+│                                                                                  │
+│  PredictionResult:     3 definitions (models/base, core/interfaces, inference)  │
+│  AdapterResult:        2 definitions (adapters/base, core/interfaces)           │
+│  DataContract:         3 definitions (data_contract, contracts/, interfaces)    │
+│  ModelContract:        2 definitions (interfaces=abstract, contracts/=dataclass)│
+│                                                                                  │
+│  SOLUTION: Single canonical definition per class, re-export where needed        │
+│                                                                                  │
+│  CANONICAL LOCATIONS:                                                           │
+│  • PredictionResult → src/core/interfaces.py                                    │
+│  • AdapterResult → src/data/adapters/base.py                                    │
+│  • DataContract → rename DatasetContract to PipelineData                        │
+│  • ModelContract (abstract) → rename to ModelInterface                          │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Description |
+|------|------|-------------|
+| 27-1 | `core/interfaces.py` | Consolidate `PredictionResult` (merge all 3 definitions) |
+| 27-2 | `core/interfaces.py` | Remove duplicate `AdapterResult`, import from adapters |
+| 27-3 | `core/data_contract.py` | Rename `DatasetContract` to `PipelineData` |
+| 27-4 | `core/interfaces.py` | Rename abstract `ModelContract` to `ModelInterface` |
+| 27-5 | `models/neural/*.py` | Replace `PredictionOutput` with `PredictionResult` |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| PredictionResult definitions | 3 | 1 | `grep -r "class PredictionResult" src/` |
+| AdapterResult definitions | 2 | 1 | `grep -r "class AdapterResult" src/` |
+| DataContract naming collisions | 3 | 0 | No same-name classes |
+| ModelContract confusion | 2 concepts | Clear separation | Docs + naming |
+| **Single definition principle** | VIOLATED | **ENFORCED** | Each class defined once |
+
+---
+
+## Phase 28: Performance - Compute Optimization
+
+**Status:** NOT STARTED
+**Priority:** MEDIUM
+**Effort:** 1-2 weeks
+**Source Issues:** PERF-002, PERF-004, PERF-005, PERF-006, PERF-007
+
+### Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                    COMPUTE BOTTLENECKS                                           │
 │                                                                                  │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│  │  ExperimentConfig  │    │  BundleConfig   │    │  InferenceConfig │    │  Monitoring     │  │
-│  │                │    │                │    │                │    │                │  │
-│  │  ⚪ MTF mode   │    │  ⚪ Versioning  │    │  ⚪ Streaming  │    │  ⚪ Drift      │  │
-│  │  ⚪ Feature    │    │  ⚪ Registry    │    │  ⚪ A/B test   │    │  ⚪ Alerts     │  │
-│  │    selection  │    │  ⚪ Rollback    │    │  ⚪ Canary     │    │  ⚪ Retrain    │  │
+│  │ Approx Ent   │    │  Sequential  │    │    GARCH     │    │     ATR      │  │
+│  │   O(n²)      │    │   Features   │    │  Per-bar fit │    │  3x compute  │  │
+│  │  50-100x     │    │  No parallel │    │  10-100x     │    │  per run     │  │
+│  │  slower      │    │              │    │  slower      │    │              │  │
 │  └──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘  │
 │                                                                                  │
-│  CURRENT STATE: All configs exist but lack production deployment features       │
+│  SOLUTIONS:                                                                      │
+│  • Numba JIT for entropy                                                        │
+│  • ProcessPoolExecutor for feature families                                     │
+│  • GARCH: fit every N bars or use EWMA                                          │
+│  • Pre-compute ATR at pipeline start                                            │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Tasks
+
+| Task | File | Description |
+|------|------|-------------|
+| 28-1 | `entropy.py:177-188` | Apply `_count_matches_numba` to approximate entropy |
+| 28-2 | `features/compute/` | Parallelize feature families with ProcessPoolExecutor |
+| 28-3 | `volatility.py:548-586` | Optimize GARCH (fit every 10-20 bars or EWMA) |
+| 28-4 | Multiple | Pre-compute ATR once at pipeline start |
+| 28-5 | `volume.py` | Add `@lru_cache` to volume helper functions |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Approx entropy time | O(n²) | O(n) | Profile entropy features |
+| Feature parallelism | 1 core | N cores | Check CPU usage during feature gen |
+| GARCH time | 100% | 10-20% | Profile volatility features |
+| ATR computations | 3+ per run | 1 per run | Grep for ATR compute calls |
+| **Feature gen time** | 100% | **25-50%** | End-to-end feature benchmark |
+
 ---
 
-### Gap Analysis
+## Phase 29: Performance - Memory Optimization
 
-| Gap | Current State | Missing | Location | Priority |
-|-----|---------------|---------|----------|----------|
-| **MTF Mode** | MTFConfig has `mode` field | No ExperimentConfig exposure | `src/config/experiment.py` | LOW |
-| **Feature Selection** | FeatureConfig has `selection_*` | No per-model override | `src/config/experiment.py` | LOW |
-| **Compatibility Matrix** | MODEL_CONTRACTS has all data | No visual documentation | `docs/` | LOW |
-| **Bundle Versioning** | BundleConfig has `version` | No version strategy/registry | `src/inference/` | MEDIUM |
-| **A/B Testing** | None | Traffic split config | `src/config/inference.py` | MEDIUM |
-| **Drift Detection** | None | Threshold/alert config | `src/config/monitoring.py` | MEDIUM |
-| **Streaming Inference** | InferenceConfig has `mode` | Buffer management incomplete | `src/inference/` | LOW |
+**Status:** NOT STARTED
+**Priority:** MEDIUM
+**Effort:** 3-5 days
+**Source Issues:** PERF-010, PERF-011, PERF-012, DE-004, DE-010
 
----
+### Overview
 
-### Task 23D-1: MTF Mode in ExperimentConfig
-
-**Current:** MTFConfig exists with full mode options, but ExperimentConfig doesn't expose it clearly.
-
-```python
-# src/config/data.py (EXISTS)
-class MTFConfig:
-    mode: str = "indicators"  # 'none', 'indicators', 'bars', 'both', 'multi_stream'
-    timeframes: list[str] = ["5min", "15min", "1h"]
-
-# src/config/experiment.py (MISSING clear exposure)
-class ExperimentConfig:
-    # mtf_mode not directly accessible
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                       MEMORY INEFFICIENCIES                                      │
+│                                                                                  │
+│  Issue                          │ Impact          │ Solution                    │
+│  ──────────────────────────────┼─────────────────┼─────────────────────────────│
+│  DataFrame fragmentation        │ 2-3x memory     │ Batch concat pattern        │
+│  Label cache unbounded          │ OOM in long opt │ LRU cache with max size     │
+│  Log returns computed 3x        │ CPU waste       │ Compute once at start       │
+│  Multiple df.copy() calls       │ 2-3x memory     │ Single copy, in-place mods  │
+│  Parquet reads all columns      │ I/O overhead    │ Column pruning              │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Fix:** Add `mtf_mode` parameter to `ExperimentConfig.__init__()` that maps to `MTFConfig.mode`.
+### Tasks
+
+| Task | File | Description |
+|------|------|-------------|
+| 29-1 | Multiple | Fix remaining DataFrame fragmentation patterns |
+| 29-2 | `five_dimension_objective.py:99` | Add max size to label cache |
+| 29-3 | Multiple | Compute log returns once at pipeline start |
+| 29-4 | `features/engineer.py:238` | Single df.copy() at stage entry |
+| 29-5 | `features/run.py:199,294` | Add columns parameter to parquet reads |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Fragmentation warnings | Some | 0 | Check logs for PerformanceWarning |
+| Cache memory growth | Unbounded | Bounded | Monitor memory in long opt |
+| Log returns calls | 3+ | 1 | Grep for log return computation |
+| df.copy() calls | Multiple | 1 per stage | Grep for `.copy()` |
+| **Peak memory** | 100% | **70-80%** | Memory profiler during training |
 
 ---
 
-### Task 23D-2: Per-Model Feature Selection Override
+## Phase 30: Advanced Architecture
 
-**Current:** FeatureConfig has global selection settings.
+**Status:** NOT STARTED
+**Priority:** LOW
+**Effort:** 1 week
+**Source Issues:** ARCH-006, ARCH-007, ARCH-008, ARCH-009, DE-005
 
-```python
-# src/config/data.py (EXISTS)
-class FeatureConfig:
-    selection_enabled: bool = True
-    selection_method: str = "mda"
-    selection_n_features: int = 50
-```
+### Tasks
 
-**Missing:** Per-model overrides (e.g., PatchTST needs 10 features, LightGBM can use 200).
+| Task | File | Description |
+|------|------|-------------|
+| 30-1 | `core/types.py` | Standardize transformer model family naming |
+| 30-2 | `core/constants.py` | Derive constants from MODEL_CONTRACTS |
+| 30-3 | `inference/orchestrator.py` | Move types to core layer |
+| 30-4 | `core/interfaces.py` | Fix circular imports with TYPE_CHECKING |
+| 30-5 | `features/compute/volatility.py` | Create computation context for caching intermediates |
 
-**Fix:** Add `model_feature_overrides: dict[str, int]` to ExperimentConfig.
+### Success Metrics
 
----
-
-### Task 23D-3: Bundle Registry & Versioning
-
-**Current:** BundleConfig has version field but no registry.
-
-```python
-# src/inference/bundle.py (EXISTS)
-@dataclass
-class BundleConfig:
-    version: str = "1.0.0"  # Just a string, no strategy
-```
-
-**Missing:**
-- Version increment strategy (semver, timestamp, hash)
-- Bundle registry (catalog of deployed bundles)
-- Rollback support (link to previous version)
-
-**Fix:** Create `src/inference/registry.py` with:
-```python
-class BundleRegistry:
-    def register(bundle: ModelBundle) -> str: ...
-    def get(bundle_id: str) -> ModelBundle: ...
-    def rollback(bundle_id: str) -> ModelBundle: ...
-    def list_versions(model_name: str) -> list[str]: ...
-```
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Model family consistency | Mixed | Uniform | Check ModelFamily enum usage |
+| Constant duplication | 2 sources | 1 source | Constants derived from contracts |
+| Circular import workarounds | 2 | 0 | Clean import structure |
+| **Architecture violations** | 10 | **0** | Code review |
 
 ---
 
-### Task 23D-4: A/B Testing Configuration
+## Phase 31: Code Polish
 
-**Current:** No A/B testing support.
+**Status:** NOT STARTED
+**Priority:** LOW
+**Effort:** Ongoing
+**Source Issues:** CQ-004, CQ-005, CQ-006, DE-006, DE-007, DE-011, DE-012
 
-**Missing:** Traffic split configuration for comparing models.
+### Tasks
 
-**Fix:** Add to `src/config/inference.py`:
-```python
-@dataclass
-class ABTestConfig:
-    enabled: bool = False
-    control_bundle_id: str = ""
-    treatment_bundle_id: str = ""
-    traffic_split: float = 0.5  # % to treatment
-    metric: str = "sharpe_ratio"
-    min_samples: int = 1000
-    significance_level: float = 0.05
-```
+| Task | File | Description |
+|------|------|-------------|
+| 31-1 | `monitor.py:264-265` | Address TODO comments |
+| 31-2 | Multiple | Extract magic numbers to named constants |
+| 31-3 | `config/unified.py` | Consolidate duplicate default definitions |
+| 31-4 | `adapters/base.py` | Complete feature column exclusion list |
+| 31-5 | `multi_stream.py` | Fix temporal misalignment for non-integer ratios |
+| 31-6 | `features/engineer.py` | Define feature dependency DAG |
+| 31-7 | `adapters/*.py` | Move common methods to BaseAdapter |
 
----
+### Success Metrics
 
-### Task 23D-5: Drift Detection Configuration
-
-**Current:** No drift monitoring.
-
-**Missing:** Feature/prediction drift thresholds and alerts.
-
-**Fix:** Create `src/config/monitoring.py`:
-```python
-@dataclass
-class DriftConfig:
-    enabled: bool = True
-    feature_drift_threshold: float = 0.1  # PSI threshold
-    prediction_drift_threshold: float = 0.15
-    check_interval_hours: int = 24
-    alert_channels: list[str] = ["log"]  # log, email, slack
-    auto_retrain_trigger: bool = False
-```
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| TODO comments | 3 | 0 | `grep -r "TODO" src/` |
+| Magic numbers | 6 | 0 | Code review for unexplained constants |
+| Duplicate defaults | Multiple | 0 | Single definition per default |
+| **Code cleanliness** | Good | **Excellent** | Ruff + manual review |
 
 ---
 
-### Task 23D-6: Streaming Inference Buffer
+## Phase Summary
 
-**Current:** InferenceConfig has `mode="streaming"` but implementation incomplete.
-
-```python
-# src/config/inference.py (EXISTS)
-class InferenceConfig:
-    mode: str = "single"  # single, batch, streaming
-```
-
-**Missing:** Buffer management for streaming mode.
-
-**Fix:** Add streaming config:
-```python
-@dataclass
-class StreamingConfig:
-    buffer_size: int = 1000
-    flush_interval_seconds: float = 1.0
-    max_latency_ms: float = 100.0
-    backpressure_strategy: str = "drop"  # drop, block, sample
-```
+| Phase | Focus | Priority | Effort | Key Metric |
+|-------|-------|----------|--------|------------|
+| 24 | Feature Caching | HIGH | 1-2 days | 75% trend speedup |
+| 25 | Validation | HIGH | 2-3 days | 100% validation coverage |
+| 26 | Type Safety | HIGH | 3-5 days | 0 `Any` types |
+| 27 | Architecture | MEDIUM | 1 week | Single definitions |
+| 28 | Compute Perf | MEDIUM | 1-2 weeks | 50-75% speedup |
+| 29 | Memory Perf | MEDIUM | 3-5 days | 20-30% memory reduction |
+| 30 | Adv Architecture | LOW | 1 week | Clean architecture |
+| 31 | Polish | LOW | Ongoing | Clean codebase |
 
 ---
 
-### Task 23D-7: Compatibility Matrix Documentation
+## Execution Order
 
-**Current:** MODEL_CONTRACTS contains all compatibility data but not documented visually.
+```
+Phase 24 (Quick Wins) ────────┐
+                              │
+Phase 25 (Validation) ────────┼───▶ Can run in parallel (different files)
+                              │
+Phase 26 (Type Safety) ───────┘
 
-**Fix:** Generate `docs/COMPATIBILITY.md` from MODEL_CONTRACTS:
+                              ▼
 
-```markdown
-## Model Compatibility Matrix
+Phase 27 (Architecture) ──────▶ Depends on 26 (type changes first)
 
-| Model | Adapter | Rank | MTF Mode | Feature Mode | Max Features |
-|-------|---------|------|----------|--------------|--------------|
-| xgboost | tabular | 2D | indicators | engineered | 200 |
-| lightgbm | tabular | 2D | indicators | engineered | 200 |
-| tcn | sequence | 3D | none | engineered | 120 |
-| patchtst | multi_stream | 4D | multi_stream | raw | 10 |
-...
+                              ▼
+
+Phase 28 (Compute) ───────────┐
+                              ├───▶ Can run in parallel
+Phase 29 (Memory) ────────────┘
+
+                              ▼
+
+Phase 30 (Adv Architecture) ──▶ Depends on 27
+
+                              ▼
+
+Phase 31 (Polish) ────────────▶ Ongoing, can start anytime
 ```
 
 ---
 
-### Why Deferred
+## Validation Commands
 
-| Gap | Deferral Reason |
-|-----|-----------------|
-| MTF Mode | Current default works for most cases |
-| Feature Selection | Auto-selection in 23B-2 covers 80% |
-| Bundle Registry | Manual versioning works for now |
-| A/B Testing | Can do manually with separate runs |
-| Drift Detection | External tools (MLflow, Evidently) available |
-| Streaming | Batch mode sufficient for current use |
-| Compatibility Matrix | Users can check MODEL_CONTRACTS |
-
-**Blocking Issues (23A-C) take priority.** Config gaps don't prevent training.
-
----
-
-## Validation Criteria
-
-### Phase 23A
+### Phase 24
 ```bash
-grep -n '"label"' src/data/adapters/base.py | grep exclude_exact
-# Training accuracy should be 40-70%, NOT 100%
+# Profile trend features before/after
+python -c "
+import time
+from src.data.features.compute import trend
+import pandas as pd
+df = pd.DataFrame({'high': [100]*1000, 'low': [99]*1000, 'close': [99.5]*1000})
+start = time.time()
+trend.compute_adx_14(df)
+trend.compute_plus_di_14(df)
+trend.compute_minus_di_14(df)
+trend.compute_adx_strong_trend(df)
+print(f'Time: {time.time()-start:.3f}s')
+"
 ```
 
-### Phase 23B
+### Phase 25
 ```bash
-# Validation runs after adapter - no rank mismatch errors
-# Feature count <= contract.max_features
+# Verify validation is called
+grep -r "validate_stage_transition" src/data/pipeline/stages/*/run.py
 ```
 
-### Phase 23C
+### Phase 26
 ```bash
-# No PerformanceWarning in logs
-# No "invalid value encountered in sqrt"
-# No "fillna with method is deprecated"
+# Count Any types
+grep -rn ": Any" src/ --include="*.py" | grep -v "test" | wc -l
+
+# Count bare excepts
+grep -rn "except Exception:" src/ --include="*.py" | wc -l
+```
+
+### Phase 27
+```bash
+# Count class definitions
+grep -r "class PredictionResult" src/ | wc -l  # Should be 1
+grep -r "class AdapterResult" src/ | wc -l     # Should be 1
 ```
 
 ---
 
-## Lessons Learned
-
-1. **Column exclusion must be exhaustive** - prefix matching misses bare column names
-2. **Validation timing matters** - validate actual training data, not raw input
-3. **Contract max_features are real limits** - models can't accept more features
-4. **DataFrame fragmentation is real** - 83 individual assignments = 5-20x slowdown
-5. **Runtime warnings predict bugs** - don't ignore sqrt/fillna warnings
-
----
-
-## Summary
-
-| Category | Priority | Impact | Effort | Tasks | Status |
-|----------|----------|--------|--------|-------|--------|
-| **23A: Label Leakage** | CRITICAL | Training unusable | 2 lines | 1 | ✅ COMPLETE |
-| **23B: Validation** | HIGH | Training blocked | ~25 lines | 2 | ✅ COMPLETE |
-| **23C: Performance** | MEDIUM | 2-10x speedup | 6 files | 10 | ✅ COMPLETE |
-| **23D: Config** | LOW | Production features | ~500 lines | 7 (deferred) | DEFERRED |
-
-**Total Phase 23:** 13 active tasks + 7 deferred = 20 tasks
-**Completed:** 13/13 active tasks (Phase 23A-C complete)
-**Next:** Phase 24 (Deferred config gaps from 23D)
-
-### Phase 23 Final Verification
-
-```bash
-# All tests passing
-pytest tests/ -v  # ✓ 42/42 passed
-
-# Ruff checks clean
-ruff check src/  # ✓ PASS
-
-# No fragmentation warnings
-python -c "import warnings; import pandas as pd; warnings.filterwarnings('error', category=pd.errors.PerformanceWarning); from src.data.pipeline.stages.features import temporal; print('PASS')"  # ✓ OK
-
-# Label exclusion verified
-python -c "from src.data.adapters.base import BaseAdapter; import pandas as pd; df = pd.DataFrame({'close': [100.0], 'label': [0], 'feature_a': [0.5]}); adapter = BaseAdapter.__new__(BaseAdapter); adapter.feature_columns = None; cols = adapter._get_feature_columns(df); assert 'label' not in cols; print('PASS')"  # ✓ PASS
-
-# Auto feature selection verified
-python -c "from src.core.contracts import get_model_contract; for m in ['lightgbm', 'tcn', 'patchtst']: c = get_model_contract(m); print(f'{m}: max_features={c.max_features}')"  # ✓ 200, 120, 10
-```
-
-### Production Impact Summary
-
-**Before Phase 23:**
-- Models trained with label as feature = catastrophic leakage
-- TCN, PatchTST, iTransformer could not train (rank mismatch)
-- 218 features exceeded limits for 3 models
-- DataFrame fragmentation warnings in logs
-- 5-20x slower feature generation
-
-**After Phase 23:**
-- Label correctly excluded from training features
-- All 12 models can train successfully
-- Feature count auto-adjusted to model limits
-- No fragmentation warnings, clean logs
-- 2-10x faster feature engineering
-- Pandas 3.0 compatible
-
----
-
-*See CLEANUP_TASKS.md for specific file:line tasks*
+*See CLEANUP_TASKS.md for detailed file:line instructions*
 *See COMPLETION.md for implementation details after completion*

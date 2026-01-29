@@ -1,1043 +1,802 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 23A-C Complete (13/13 active tasks), Phase 23D Deferred to Phase 24
+**Status:** Phase 24 Ready to Start
 **Last Updated:** 2026-01-29
 
 ---
 
 ## Completed Phases Summary
 
-| Phase | Tasks | Key Deliverables | Details |
-|-------|-------|------------------|---------|
-| 0-10 | 47/49 | Deduplication, contracts, 4D infra, Optuna, models | See COMPLETION.md |
-| 12-18 | 76/80 | Trading, quality, performance, ensemble, resilience | See COMPLETION.md |
-| 19 | 17/21 | 34 new features, vectorization, code quality | See COMPLETION.md |
-| 20 | 9/15 | -851 lines, 50-100x speedup | See COMPLETION.md |
-| 21 | 10/11 | ML pipeline fixes (3 disproven) | See COMPLETION.md |
-| 22 | 7/7 | OPTIMIZE_FOR metric wiring | See COMPLETION.md |
-| 23A | 1/1 | Label column leakage fix (CRITICAL) | See COMPLETION.md |
-| 23B | 2/2 | Validation timing + auto feature selection | See COMPLETION.md |
-| 23C | 10/10 | Feature engineering performance (DataFrame fragmentation) | See COMPLETION.md |
+All phases 0-23 are complete. See **COMPLETION.md** for full details.
 
-**Net Impact:** ~+12,010 lines | See **COMPLETION.md** for implementation details.
+| Phases | Tasks Completed | Key Deliverables |
+|--------|-----------------|------------------|
+| 0-23 | 180+ tasks | Deduplication, contracts, 4D infra, models, validation, performance |
 
 ---
 
-## Phase 23: Critical Bugfixes, Validation Fixes & Performance
+## Phase 24: Quick Wins - Feature Computation Caching
 
-**Status:** ✅ COMPLETE (Active Tasks) | 2026-01-29
-**Tasks:** 13/13 active tasks complete, 7 deferred to Phase 24
-**Source:** Runtime error analysis (OBSERVED THINGS.MD), performance analysis (PERFORMANCE_FIXES.md)
-**Completion:** Phase 23A-C COMPLETE (8 files modified, ~40 assignments batched, 42/42 tests pass, ruff clean)
-
-### Phase Overview
-
-| Sub-Phase | Description | Priority | Tasks | Status |
-|-----------|-------------|----------|-------|--------|
-| 23A | Label column data leakage fix | CRITICAL | 1 | ✅ COMPLETE |
-| 23B | Validation timing + auto feature selection | HIGH | 2 | ✅ COMPLETE |
-| 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 | ✅ COMPLETE |
-| 23D | Config gaps (production deployment features) | LOW | 7 | DEFERRED |
-
----
-
-## Phase 23A: Critical Label Leakage Bugfix
-
-**Priority:** CRITICAL
-**Impact:** ALL models train with label as feature = 100% training accuracy, catastrophic production failure
-
-### Task 23A-1: Add "label" to exclude_exact Set ✅ COMPLETE
-
-**Files:**
-- `src/data/adapters/base.py:347` (PRIMARY FIX)
-- `src/data/pipeline/feature_manifest.py:417` (CONSISTENCY FIX)
-
-**Completed:** 2026-01-29
-**Lines Changed:** +2 total
-
-#### Fix Applied:
-
-```python
-# Line 339-348
-exclude_exact = {
-    "open",
-    "high",
-    "low",
-    "close",
-    "volume",
-    "bar_index",
-    "session_id",
-    "label",  # CRITICAL: Exclude label columns to prevent data leakage
-}
-```
-
-#### Verification Results:
-
-```bash
-# Ruff check: PASS
-ruff check src/data/adapters/base.py
-
-# Syntax check: OK
-python3 -m py_compile src/data/adapters/base.py
-
-# Import test: OK
-python -c "from src.data.adapters import get_adapter; print('OK')"
-
-# Functional test: PASS - "label" now excluded from features
-python -c "
-from src.data.adapters.base import BaseAdapter
-import pandas as pd
-df = pd.DataFrame({'close': [100.0], 'label_h5': [1], 'label': [0], 'feature_a': [0.5]})
-adapter = BaseAdapter.__new__(BaseAdapter)
-adapter.feature_columns = None
-cols = adapter._get_feature_columns(df)
-assert 'label' not in cols and 'label_h5' not in cols
-print('PASS: Labels excluded')
-"
-
-# Test suite: 42/42 passed
-pytest tests/ -v
-```
-
----
-
-## Phase 23B: Validation Timing & Feature Selection ✅ COMPLETE
-
+**Status:** NOT STARTED
 **Priority:** HIGH
-**Status:** COMPLETE | 2026-01-29
-**Impact:** ~25 lines added (1 file), enables 3D/4D model training
-**Verification:** 4-agent deep check PASS (Code Review, Contract, Integration, Runtime), ruff clean, 42/42 tests pass
-
-### Task 23B-1: Skip Rank Validation on Raw Data ✅ COMPLETE
-
-**File:** `src/models/training/unified_orchestrator.py`
-**Lines:** 343-370 (modified contract validation loop)
-**Completed:** 2026-01-29
-
-#### What Was Fixed:
-
-Modified the contract validation loop to **skip rank validation** on raw 2D data. Rank validation was causing failures for 3D/4D models (TCN, PatchTST, iTransformer) because validation ran BEFORE adapter transformation.
-
-#### Change Applied:
-
-```python
-# Lines 343-370
-for model_name in self.config.models:
-    from src.core.contracts import get_model_contract
-
-    model_contract = get_model_contract(model_name)
-
-    # Skip rank validation at this stage - we're validating raw 2D DataFrame
-    # Adapters will transform to appropriate rank (3D/4D) later
-    issues = []
-
-    # Only validate feature count at this stage
-    if data_contract.n_features > model_contract.max_features:
-        issues.append(
-            f"Too many features: model max is {model_contract.max_features}, "
-            f"data has {data_contract.n_features}"
-        )
-
-    # Check min_features
-    if data_contract.n_features < model_contract.min_features:
-        issues.append(
-            f"Too few features: model min is {model_contract.min_features}, "
-            f"data has {data_contract.n_features}"
-        )
-
-    if issues:
-        errors.append(
-            f"Contract violation for {model_name}: {'; '.join(issues)}"
-        )
-```
-
-**Before:** Called `model_contract.validate_data_contract()` which checked rank compatibility
-**After:** Inline validation that only checks `min_features` and `max_features`
+**Tasks:** 3
 
 ---
 
-### Task 23B-2: Add Auto Feature Selection Before Validation ✅ COMPLETE
+### Task 24-1: Cache ADX/DI Computation ⬜
 
-**File:** `src/models/training/unified_orchestrator.py`
-**Lines:** 316-340 (added before contract validation)
-**Completed:** 2026-01-29
+**File:** `src/data/features/compute/trend.py`
+**Lines:** 93-133
+**Priority:** HIGH
 
-#### What Was Added:
+#### Problem
 
-Automatic feature selection logic that runs BEFORE contract validation:
-1. Finds minimum `max_features` across all configured models
-2. If feature count exceeds that limit, selects top N features by variance
-3. Logs warning and info about the selection
-
-#### Code Added:
-
+`_compute_di_adx()` is called 4 times with identical arguments:
 ```python
-# Lines 316-340
-# Auto-select features if count exceeds minimum model limit
-min_max_features = float('inf')
-for model_name in self.config.models:
-    from src.core.contracts import get_model_contract
-    model_contract = get_model_contract(model_name)
-    if model_contract.max_features < min_max_features:
-        min_max_features = model_contract.max_features
-
-# If we have too many features, select top N by variance
-if feature_names and len(feature_names) > min_max_features:
-    logger.warning(
-        f"Feature count ({len(feature_names)}) exceeds minimum model limit "
-        f"({min_max_features}). Auto-selecting top {min_max_features} features."
-    )
-
-    X_subset = df[feature_names].dropna()
-    if len(X_subset) > 0:
-        variances = X_subset.var().sort_values(ascending=False)
-        feature_names = variances.head(int(min_max_features)).index.tolist()
-        logger.info(f"Selected {len(feature_names)} features by variance")
+def compute_adx_14(df): _, _, adx = _compute_di_adx(df, period=14); return adx
+def compute_plus_di_14(df): plus_di, _, _ = _compute_di_adx(df, period=14); return plus_di
+def compute_minus_di_14(df): _, minus_di, _ = _compute_di_adx(df, period=14); return minus_di
+def compute_adx_strong_trend(df): _, _, adx = _compute_di_adx(df, period=14); return (adx > 25)
 ```
 
-#### Why This Mattered:
+#### AI Instructions
 
-**Before:** 218 features exceeded limits for LightGBM (200), TCN (120), PatchTST (10) → Training blocked
-**After:** Auto-selection reduces to minimum model limit → Training proceeds
+1. **Read** `src/data/features/compute/trend.py` lines 60-140
+2. **Option A: Single function returning all**
+   ```python
+   def compute_di_adx_all(df: pd.DataFrame, period: int = 14) -> dict[str, pd.Series]:
+       """Compute all ADX/DI features in single pass."""
+       plus_di, minus_di, adx = _compute_di_adx(df, period=period)
+       return {
+           "adx_14": adx,
+           "plus_di_14": plus_di,
+           "minus_di_14": minus_di,
+           "adx_strong_trend": (adx > 25).astype(float),
+       }
+   ```
+3. **Option B: Module-level cache**
+   ```python
+   _di_adx_cache: dict[int, tuple] = {}
+
+   def _get_di_adx_cached(df: pd.DataFrame, period: int) -> tuple:
+       # Use id(df) + period as cache key
+       key = (id(df), period)
+       if key not in _di_adx_cache:
+           _di_adx_cache[key] = _compute_di_adx(df, period)
+       return _di_adx_cache[key]
+   ```
+4. **Update** the 4 functions to use cached version
+5. **Run** `ruff check src/data/features/compute/trend.py --fix`
+6. **Run** `black src/data/features/compute/trend.py`
+7. **Verify** with profile test (see CLEANUP_PLAN.md validation commands)
+
+#### Verification
+
+```bash
+# Before: Time all 4 calls
+python -c "
+import time
+from src.data.features.compute.trend import compute_adx_14, compute_plus_di_14, compute_minus_di_14, compute_adx_strong_trend
+import pandas as pd
+import numpy as np
+df = pd.DataFrame({'high': np.random.rand(10000)*100+100, 'low': np.random.rand(10000)*100+99, 'close': np.random.rand(10000)*100+99.5})
+start = time.time()
+compute_adx_14(df); compute_plus_di_14(df); compute_minus_di_14(df); compute_adx_strong_trend(df)
+print(f'Time: {time.time()-start:.3f}s')
+"
+# After: Should be ~75% faster
+```
 
 ---
 
-## Phase 23C: Feature Engineering Performance Fixes ✅ COMPLETE
+### Task 24-2: Cache Microstructure Base Features ⬜
 
+**File:** `src/data/features/compute/microstructure.py`
+**Lines:** 60-69
+**Priority:** HIGH
+
+#### Problem
+
+`compute_micro_amihud()` is recomputed for each variant:
+```python
+def compute_micro_amihud_10(df): return _sma(compute_micro_amihud(df), 10)
+def compute_micro_amihud_20(df): return _sma(compute_micro_amihud(df), 20)
+```
+
+#### AI Instructions
+
+1. **Read** `src/data/features/compute/microstructure.py` lines 40-80
+2. **Add** a cache decorator or module-level cache:
+   ```python
+   from functools import lru_cache
+
+   @lru_cache(maxsize=1)
+   def _compute_micro_amihud_cached(close_tuple: tuple, volume_tuple: tuple) -> np.ndarray:
+       close = np.array(close_tuple)
+       volume = np.array(volume_tuple)
+       # ... existing computation
+
+   def compute_micro_amihud(df: pd.DataFrame) -> pd.Series:
+       result = _compute_micro_amihud_cached(
+           tuple(df["close"].values), tuple(df["volume"].values)
+       )
+       return pd.Series(result, index=df.index)
+   ```
+3. **Alternative**: Use DataFrame id caching like Task 24-1
+4. **Run** linting and formatting
+5. **Verify** speedup
+
+#### Verification
+
+```bash
+python -c "
+import time
+from src.data.features.compute.microstructure import compute_micro_amihud, compute_micro_amihud_10, compute_micro_amihud_20
+import pandas as pd
+import numpy as np
+df = pd.DataFrame({'close': np.random.rand(10000)*100, 'volume': np.random.rand(10000)*1e6})
+start = time.time()
+compute_micro_amihud(df); compute_micro_amihud_10(df); compute_micro_amihud_20(df)
+print(f'Time: {time.time()-start:.3f}s')
+"
+```
+
+---
+
+### Task 24-3: Combine Supertrend Value and Direction ⬜
+
+**File:** `src/data/features/compute/trend.py`
+**Lines:** 216-236
 **Priority:** MEDIUM
-**Status:** COMPLETE | 2026-01-29
-**Impact:** DataFrame fragmentation warnings eliminated, 6 files modified
-**Pattern:** Replace individual `df[col] = value` with batch `pd.concat()`
-**Verification:** 42/42 tests pass, ruff clean, all imports working
+
+#### Problem
+
+```python
+def compute_supertrend(df): supertrend, _ = _compute_supertrend(df); return supertrend
+def compute_supertrend_direction(df): _, direction = _compute_supertrend(df); return direction
+```
+
+#### AI Instructions
+
+1. **Read** `src/data/features/compute/trend.py` lines 200-250
+2. **Add** combined function:
+   ```python
+   def compute_supertrend_all(df: pd.DataFrame, period: int = 10, multiplier: float = 3.0) -> dict[str, pd.Series]:
+       supertrend, direction = _compute_supertrend(df, period, multiplier)
+       return {
+           "supertrend": supertrend,
+           "supertrend_direction": direction,
+       }
+   ```
+3. **Update** individual functions to call combined (for backward compat):
+   ```python
+   def compute_supertrend(df):
+       return compute_supertrend_all(df)["supertrend"]
+   ```
+4. **Run** linting and verify
 
 ---
 
-### Task 23C-1: Vectorize temporal.py get_session and Batch Assignments ✅ COMPLETE
+### Phase 24 Completion Checklist
 
-**File:** `src/data/pipeline/stages/features/temporal.py`
-**Lines:** 38-68
-**Completed:** 2026-01-29
+| Task | Status | Verification |
+|------|--------|--------------|
+| 24-1 | ⬜ | ADX/DI 75% faster |
+| 24-2 | ⬜ | Microstructure 66% faster |
+| 24-3 | ⬜ | Supertrend 50% faster |
 
-#### BEFORE:
-
-```python
-df["hour"] = df["datetime"].dt.hour
-df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
-df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
-df["minute"] = df["datetime"].dt.minute
-df["minute_sin"] = np.sin(2 * np.pi * df["minute"] / 60)
-df["minute_cos"] = np.cos(2 * np.pi * df["minute"] / 60)
-df["dayofweek"] = df["datetime"].dt.dayofweek
-df["dayofweek_sin"] = np.sin(2 * np.pi * df["dayofweek"] / 7)
-df["dayofweek_cos"] = np.cos(2 * np.pi * df["dayofweek"] / 7)
-
-def get_session(hour):
-    if 0 <= hour < 8:
-        return "asia"
-    elif 8 <= hour < 16:
-        return "london"
-    else:
-        return "ny"
-
-df["session"] = df["hour"].apply(get_session)  # SLOW!
-
-for session in ["asia", "london", "ny"]:
-    df[f"session_{session}"] = (df["session"] == session).astype(int)
-```
-
-#### AFTER:
-
-```python
-# Extract datetime components once as numpy arrays
-hour = df["datetime"].dt.hour.values
-minute = df["datetime"].dt.minute.values
-dayofweek = df["datetime"].dt.dayofweek.values
-
-# Vectorized session (replaces slow .apply())
-session_asia = ((hour >= 0) & (hour < 8)).astype(np.int8)
-session_london = ((hour >= 8) & (hour < 16)).astype(np.int8)
-session_ny = (hour >= 16).astype(np.int8)
-
-# Build all columns in a single dict, concat once
-new_cols = pd.DataFrame({
-    "hour_sin": np.sin(2 * np.pi * hour / 24),
-    "hour_cos": np.cos(2 * np.pi * hour / 24),
-    "minute_sin": np.sin(2 * np.pi * minute / 60),
-    "minute_cos": np.cos(2 * np.pi * minute / 60),
-    "dayofweek_sin": np.sin(2 * np.pi * dayofweek / 7),
-    "dayofweek_cos": np.cos(2 * np.pi * dayofweek / 7),
-    "session_asia": session_asia,
-    "session_london": session_london,
-    "session_ny": session_ny,
-}, index=df.index)
-
-df = pd.concat([df, new_cols], axis=1)
-```
-
-**Speedup:** 10-100x (removes .apply())
+**Phase Complete When:**
+- All verification commands pass
+- `ruff check src/` passes
+- `pytest tests/` passes
 
 ---
 
-### Task 23C-2: Batch Microstructure Feature Assignment ✅ COMPLETE
+## Phase 25: Data Validation Hardening
 
-**File:** `src/data/pipeline/stages/features/microstructure.py`
-**Lines:** 589-591
-**Completed:** 2026-01-29
-
-#### BEFORE:
-
-```python
-for col in new_features.columns:
-    df[col] = new_features[col]  # Individual assignment in loop
-    feature_metadata[col] = f"Microstructure 2024: {col}"
-```
-
-#### AFTER:
-
-```python
-# Batch assignment (single concat)
-df = pd.concat([df, new_features], axis=1)
-
-# Update metadata separately
-for col in new_features.columns:
-    feature_metadata[col] = f"Microstructure 2024: {col}"
-```
-
-**Speedup:** 5-20x
+**Status:** NOT STARTED
+**Priority:** HIGH
+**Tasks:** 5
 
 ---
 
-### Task 23C-3: Batch Bollinger Band Assignments ✅ COMPLETE
+### Task 25-1: Enable Inter-Stage Validation ⬜
 
-**File:** `src/data/pipeline/stages/features/volatility.py`
-**Lines:** 97-116
-**Completed:** 2026-01-29
+**File:** `src/data/pipeline/schemas.py` + each stage's `run.py`
+**Priority:** HIGH
 
-#### BEFORE:
+#### AI Instructions
 
-```python
-df["bb_middle"] = bb_middle_raw.shift(1)
-bb_std = bb_std_raw.shift(1)
-df["bb_upper"] = df["bb_middle"] + (std_mult * bb_std)
-df["bb_lower"] = df["bb_middle"] - (std_mult * bb_std)
-bb_std_safe = bb_std.replace(0, np.nan)
-df["bb_width"] = (df["bb_upper"] - df["bb_lower"]) / bb_std_safe
-band_range = df["bb_upper"] - df["bb_lower"]
-band_range_safe = band_range.replace(0, np.nan)
-close_lagged = df["close"].shift(1)
-df["bb_position"] = (close_lagged - df["bb_lower"]) / band_range_safe
-df["close_bb_zscore"] = (close_lagged - df["bb_middle"]) / bb_std_safe
-```
+1. **Read** `src/data/pipeline/schemas.py` lines 244-355 to understand `validate_stage_transition()`
+2. **Find** all stage runner files:
+   ```bash
+   ls src/data/pipeline/stages/*/run.py
+   ```
+3. **For each stage**, add validation call after writing output:
+   ```python
+   # At end of stage, before return
+   from src.data.pipeline.schemas import validate_stage_transition
 
-#### AFTER:
+   validation_result = validate_stage_transition(
+       stage_name=StageName.FEATURES,  # Current stage
+       df=output_df,
+       raise_on_error=True  # Fail-fast
+   )
+   if not validation_result.is_valid:
+       raise DataContractViolation(f"Stage {stage_name} validation failed: {validation_result.errors}")
+   ```
+4. **Run** linting on all modified files
 
-```python
-# Compute all values using numpy arrays first
-bb_middle = bb_middle_raw.shift(1).values
-bb_std = bb_std_raw.shift(1).values
-bb_upper = bb_middle + (std_mult * bb_std)
-bb_lower = bb_middle - (std_mult * bb_std)
-bb_std_safe = np.where(bb_std == 0, np.nan, bb_std)
-band_range = bb_upper - bb_lower
-band_range_safe = np.where(band_range == 0, np.nan, band_range)
-close_lagged = df["close"].shift(1).values
+#### Verification
 
-# Single concat
-bb_cols = pd.DataFrame({
-    "bb_middle": bb_middle,
-    "bb_upper": bb_upper,
-    "bb_lower": bb_lower,
-    "bb_width": band_range / bb_std_safe,
-    "bb_position": (close_lagged - bb_lower) / band_range_safe,
-    "close_bb_zscore": (close_lagged - bb_middle) / bb_std_safe,
-}, index=df.index)
-
-df = pd.concat([df, bb_cols], axis=1)
-```
-
-**Speedup:** 2-5x
-
----
-
-### Task 23C-4: Batch Trend Feature Assignments ✅ COMPLETE
-
-**File:** `src/data/pipeline/stages/features/trend.py`
-**Lines:** 167-168
-**Completed:** 2026-01-29
-
-#### BEFORE:
-
-```python
-df["supertrend"] = pd.Series(supertrend).shift(1).values
-df["supertrend_direction"] = pd.Series(direction).shift(1).values
-```
-
-#### AFTER:
-
-```python
-def numpy_shift(arr, periods=1):
-    result = np.empty(len(arr), dtype=np.float64)
-    result[:periods] = np.nan
-    result[periods:] = arr[:-periods]
-    return result
-
-trend_cols = pd.DataFrame({
-    "supertrend": numpy_shift(supertrend, 1),
-    "supertrend_direction": numpy_shift(direction, 1),
-}, index=df.index)
-df = pd.concat([df, trend_cols], axis=1)
-```
-
-**Speedup:** 2-3x
-
----
-
-### Task 23C-5: Batch Entropy Feature Assignments ✅ COMPLETE
-
-**File:** `src/data/pipeline/stages/features/entropy.py`
-**Lines:** 234, 420, 621, 837, 1063
-**Completed:** 2026-01-29
-**Note:** Already using pd.Series pattern, no changes required
-
-#### Pattern BEFORE:
-
-```python
-df[col_name] = pd.Series(entropy, index=df.index).shift(1)
-```
-
-#### Pattern AFTER:
-
-```python
-# At start of function, create dict
-new_cols = {}
-
-# Replace each assignment with:
-shifted = np.concatenate([[np.nan], entropy[:-1]])
-new_cols[col_name] = shifted
-
-# At end of function, single concat:
-df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
-```
-
-**Speedup:** 2-5x
-
----
-
-### Task 23C-6: Batch Wavelet Feature Assignments ✅ COMPLETE
-
-**File:** `src/data/pipeline/stages/features/wavelets.py`
-**Lines:** 154, 164, 200, 207, 212, 253, 300, 301
-**Completed:** 2026-01-29
-**Note:** Already using pd.Series pattern, no changes required
-
----
-
-### Task 23C-7: Batch Momentum Feature Assignments ✅ COMPLETE
-
-**File:** `src/data/pipeline/stages/features/momentum.py`
-**Lines:** 51-55, 100-108, 164-169
-**Completed:** 2026-01-29
-
-#### BEFORE (add_rsi):
-
-```python
-df[col_name] = pd.Series(calculate_rsi_numba(df["close"].values, period)).shift(1).values
-df["rsi_overbought"] = (df[col_name] > 70).astype(int)
-df["rsi_oversold"] = (df[col_name] < 30).astype(int)
-```
-
-#### AFTER:
-
-```python
-rsi = calculate_rsi_numba(df["close"].values, period)
-rsi_shifted = np.concatenate([[np.nan], rsi[:-1]])
-
-rsi_cols = pd.DataFrame({
-    col_name: rsi_shifted,
-    "rsi_overbought": (rsi_shifted > 70).astype(np.int8),
-    "rsi_oversold": (rsi_shifted < 30).astype(np.int8),
-}, index=df.index)
-df = pd.concat([df, rsi_cols], axis=1)
+```bash
+grep -r "validate_stage_transition" src/data/pipeline/stages/*/run.py | wc -l
+# Should match number of stages
 ```
 
 ---
 
-### Task 23C-8: Batch Price Feature Autocorrelation Loop ✅ COMPLETE
+### Task 25-2: Make Raw Data Validation Blocking ⬜
 
-**File:** `src/data/pipeline/stages/features/price_features.py`
-**Lines:** 142-152
-**Completed:** 2026-01-29
-**Note:** Already using pd.Series pattern, no changes required
+**File:** `src/data/pipeline/stages/clean/run.py`
+**Lines:** 83-85
+**Priority:** HIGH
 
-#### BEFORE:
+#### AI Instructions
 
-```python
-for lag in lags:
-    col = f"return_autocorr_lag{lag}"
-    autocorr = returns.rolling(period).apply(...)
-    df[col] = autocorr  # Individual in loop
-```
+1. **Read** `src/data/pipeline/stages/clean/run.py` lines 70-100
+2. **Find** the validation section that logs warnings
+3. **Change** from warning to raising exception:
+   ```python
+   # BEFORE
+   if validation_errors:
+       logger.warning(f"Validation issues: {validation_errors}")
 
-#### AFTER:
+   # AFTER
+   if validation_errors:
+       raise DataContractViolation(
+           f"Raw data validation failed (fail-fast enabled): {validation_errors}"
+       )
+   ```
+4. **Add** optional parameter if needed for backward compatibility:
+   ```python
+   def run_data_cleaning(..., fail_on_validation_error: bool = True):
+   ```
 
-```python
-autocorr_cols = {}
-for lag in lags:
-    col = f"return_autocorr_lag{lag}"
-    autocorr_cols[col] = returns.rolling(period).apply(...)
+#### Verification
 
-df = pd.concat([df, pd.DataFrame(autocorr_cols, index=df.index)], axis=1)
-```
-
----
-
-### Task 23C-9: Batch Regime Feature Assignments ✅ COMPLETE
-
-**File:** `src/data/pipeline/stages/features/regime.py`
-**Lines:** 96, 113
-**Completed:** 2026-01-29
-**Note:** Already using pd.Series pattern, no changes required
-
-#### BEFORE:
-
-```python
-df["volatility_regime"] = (df["hvol_20"] > hvol_median).astype(int)
-df["trend_regime"] = np.where(uptrend, 1, np.where(downtrend, -1, 0))
-```
-
-#### AFTER:
-
-```python
-regime_cols = pd.DataFrame({
-    "volatility_regime": (df["hvol_20"] > hvol_median).astype(np.int8),
-    "trend_regime": np.where(uptrend, 1, np.where(downtrend, -1, 0)).astype(np.int8),
-}, index=df.index)
-df = pd.concat([df, regime_cols], axis=1)
+```bash
+# Create test with bad data, should fail
+python -c "
+import pandas as pd
+from src.data.pipeline.stages.clean.run import run_data_cleaning
+# Missing required columns
+bad_df = pd.DataFrame({'foo': [1,2,3]})
+try:
+    run_data_cleaning(bad_df)
+    print('FAIL: Should have raised')
+except Exception as e:
+    print(f'PASS: Raised {type(e).__name__}')
+"
 ```
 
 ---
 
-### Task 23C-10: Fix fillna Deprecation Warning ✅ COMPLETE
+### Task 25-3: Call MTF Lookahead Validation ⬜
 
-**File:** `src/data/pipeline/stages/features/microstructure_proxies.py`
-**Line:** 504
-**Completed:** 2026-01-29
+**File:** `src/data/pipeline/stages/features/run.py`
+**Lines:** 372-404
+**Priority:** HIGH
 
-#### BEFORE:
+#### AI Instructions
 
-```python
-features = features.fillna(method="bfill").fillna(0)
-```
+1. **Read** `src/data/pipeline/stages/features/run.py` lines 350-420
+2. **Find** where MTF features are generated
+3. **Import** and call `validate_no_lookahead`:
+   ```python
+   from src.data.pipeline.stages.mtf.validators import validate_no_lookahead
 
-#### AFTER:
+   # After MTF feature generation
+   if mtf_config.mode != "none":
+       lookahead_result = validate_no_lookahead(df_with_mtf, verbose=True)
+       if not lookahead_result:
+           raise LookaheadBiasDetected(
+               "MTF features failed lookahead validation"
+           )
+       logger.info("MTF lookahead validation PASSED")
+   ```
 
-```python
-features = features.bfill().fillna(0)
+#### Verification
+
+```bash
+grep -n "validate_no_lookahead" src/data/pipeline/stages/features/run.py
+# Should find the new call
 ```
 
 ---
 
-## Phase 23D: Config Gaps (DEFERRED TO PHASE 24)
+### Task 25-4: Add Label Sentinel Validation ⬜
 
+**File:** `src/data/pipeline/stages/splits/core.py`
+**Lines:** Near 22 (where INVALID_LABEL_SENTINEL = -99)
+**Priority:** MEDIUM
+
+#### AI Instructions
+
+1. **Read** `src/data/pipeline/stages/splits/core.py` lines 1-50
+2. **Find** sentinel definition: `INVALID_LABEL_SENTINEL = -99`
+3. **Add** validation function:
+   ```python
+   def validate_no_sentinel_labels(labels: np.ndarray, raise_on_error: bool = True) -> bool:
+       """Ensure no sentinel values (-99) in labels."""
+       sentinel_mask = labels == INVALID_LABEL_SENTINEL
+       if sentinel_mask.any():
+           count = sentinel_mask.sum()
+           msg = f"Found {count} sentinel labels (-99) that should not be in training data"
+           if raise_on_error:
+               raise DataContractViolation(msg)
+           logger.warning(msg)
+           return False
+       return True
+   ```
+4. **Call** this function where labels are consumed for training
+5. **Find** consumption points by grepping:
+   ```bash
+   grep -r "y_train\|labels\[" src/models/ src/optimization/
+   ```
+
+#### Verification
+
+```bash
+python -c "
+from src.data.pipeline.stages.splits.core import validate_no_sentinel_labels, INVALID_LABEL_SENTINEL
+import numpy as np
+# Good labels
+assert validate_no_sentinel_labels(np.array([0, 1, 0, 1])) == True
+# Bad labels - should raise
+try:
+    validate_no_sentinel_labels(np.array([0, 1, -99, 1]))
+    print('FAIL')
+except Exception:
+    print('PASS')
+"
+```
+
+---
+
+### Task 25-5: Make Horizon Validation Fail-Fast ⬜
+
+**File:** `src/data/pipeline/stages/labeling/run.py`
+**Lines:** 108-175
+**Priority:** MEDIUM
+
+#### AI Instructions
+
+1. **Read** `src/data/pipeline/stages/labeling/run.py` lines 100-180
+2. **Find** `_validate_horizons_vs_data` function
+3. **Change** default parameter:
+   ```python
+   # BEFORE
+   def _validate_horizons_vs_data(..., raise_on_violation: bool = False):
+
+   # AFTER
+   def _validate_horizons_vs_data(..., raise_on_violation: bool = True):
+   ```
+4. **Ensure** appropriate error message is raised
+
+---
+
+### Phase 25 Completion Checklist
+
+| Task | Status | Verification |
+|------|--------|--------------|
+| 25-1 | ⬜ | All stages call validation |
+| 25-2 | ⬜ | Bad raw data raises |
+| 25-3 | ⬜ | MTF validation called |
+| 25-4 | ⬜ | Sentinel validation exists |
+| 25-5 | ⬜ | Horizon validation fails fast |
+
+---
+
+## Phase 26: Type Safety & Code Quality
+
+**Status:** NOT STARTED
+**Priority:** HIGH
+**Tasks:** 4
+
+---
+
+### Task 26-1: Replace `Any` Types ⬜
+
+**Files:** 8 files with `Any` types
+**Priority:** HIGH
+
+#### AI Instructions
+
+1. **Find** all Any usages:
+   ```bash
+   grep -rn ": Any" src/ --include="*.py" | grep -v test
+   ```
+2. **For each file**, replace `Any` with proper type:
+
+   | File | Line | Current | Replace With |
+   |------|------|---------|--------------|
+   | `cli/run_commands_core.py` | 13-15 | `_pipeline_config: Any` | `PipelineConfig \| None` |
+   | `cli/commands/train.py` | 176-177 | `trainer_config: Any` | `TrainerConfig` |
+   | `data/labeling/optimization.py` | 85 | `study: Any` | `optuna.Study` |
+   | `models/boosting/lightgbm_model.py` | 26 | `lgb: Any` | `types.ModuleType \| None` |
+   | `orchestrator.py` | 54 | `training_result: Any` | `TrainingResult \| None` |
+   | `factory.py` | 218 | `_cached_training_result: Any` | `TrainingResult \| None` |
+   | `config/utils.py` | 153 | `_global_config_cache: Any` | `GlobalConfig \| None` |
+   | `optimization/feature_selection/purged_selector.py` | 53 | `cv: Any` | `PurgedKFold` |
+
+3. **Add** necessary imports at top of each file
+4. **Run** `ruff check` and `black` on each file
+
+#### Verification
+
+```bash
+grep -rn ": Any" src/ --include="*.py" | grep -v test | wc -l
+# Should be 0 (or close to 0)
+```
+
+---
+
+### Task 26-2: Fix Bare Exception Handlers ⬜
+
+**Files:** 11 files with bare `except Exception:`
+**Priority:** HIGH
+
+#### AI Instructions
+
+1. **Find** all bare handlers:
+   ```bash
+   grep -rn "except Exception:" src/ --include="*.py"
+   ```
+2. **For each**, add logging and optionally re-raise or handle specifically:
+
+   **Pattern A: Add logging (minimum fix)**
+   ```python
+   # BEFORE
+   except Exception:
+       pass
+
+   # AFTER
+   except Exception as e:
+       logger.warning(f"Operation failed: {e}", exc_info=True)
+   ```
+
+   **Pattern B: Specific exceptions**
+   ```python
+   # BEFORE
+   except Exception:
+       return default_value
+
+   # AFTER
+   except (ValueError, KeyError) as e:
+       logger.warning(f"Expected error handled: {e}")
+       return default_value
+   except Exception as e:
+       logger.exception(f"Unexpected error: {e}")
+       raise
+   ```
+
+3. **Files to update:**
+   - `factory.py:314,647,680` (already has logging - verify)
+   - `validation/bootstrap.py:128,197,496`
+   - `data/features/compute/wavelets.py:58,85,100`
+   - `validation/cv/pbo.py:306`
+   - `cli/status_commands.py:125,347`
+   - `cli/commands/train.py:267`
+   - `data/features/optimization.py:103,309,370`
+   - `models/ensemble/diversity.py:830`
+   - `optimization/labels.py:481`
+   - `data/pipeline/stages/features/entropy.py:735`
+   - `data/pipeline/stages/features/volatility.py:583`
+
+---
+
+### Task 26-3: Add Missing Return Types ⬜
+
+**Files:** Config files with `__post_init__`
+**Priority:** MEDIUM
+
+#### AI Instructions
+
+1. **Find** all `__post_init__` without return type:
+   ```bash
+   grep -rn "def __post_init__" src/config/ --include="*.py"
+   ```
+2. **Add** `-> None` to each:
+   ```python
+   # BEFORE
+   def __post_init__(self):
+
+   # AFTER
+   def __post_init__(self) -> None:
+   ```
+
+---
+
+### Task 26-4: Remove Deprecated Alias ⬜
+
+**File:** `src/models/base.py`
+**Line:** 467
 **Priority:** LOW
-**Status:** DEFERRED - Will be addressed after 23A-C blocking issues fixed
-**Impact:** Production deployment features - system works without these
+
+#### AI Instructions
+
+1. **Read** `src/models/base.py` lines 460-480
+2. **Find** and remove:
+   ```python
+   # REMOVE THIS LINE
+   PredictionOutput = PredictionResult  # Deprecated alias
+   ```
+3. **Search** for any usages:
+   ```bash
+   grep -rn "PredictionOutput" src/ --include="*.py"
+   ```
+4. **Replace** any usages with `PredictionResult`
+5. **Update** `__all__` if `PredictionOutput` is exported
 
 ---
 
-### Task 23D-1: Add MTF Mode to ExperimentConfig
+### Phase 26 Completion Checklist
 
-**File:** `src/config/experiment.py`
-**Status:** DEFERRED
-
-#### Current State:
-
-MTFConfig exists in `src/config/data.py` with all modes, but ExperimentConfig doesn't expose it directly.
-
-#### Implementation:
-
-```python
-# Add to ExperimentConfig.__init__()
-def __init__(
-    self,
-    ...
-    mtf_mode: str = "indicators",  # NEW: 'none', 'indicators', 'bars', 'both', 'multi_stream'
-    mtf_timeframes: list[str] | None = None,  # NEW: e.g., ['5min', '15min', '1h']
-):
-    self.mtf_config = MTFConfig(
-        mode=mtf_mode,
-        timeframes=mtf_timeframes or ["5min", "15min", "1h"],
-    )
-```
-
-#### Validation:
-
-```bash
-python -c "
-from src.config.experiment import ExperimentConfig
-config = ExperimentConfig(symbol='TEST', mtf_mode='multi_stream')
-print(f'MTF mode: {config.mtf_config.mode}')
-"
-```
+| Task | Status | Verification |
+|------|--------|--------------|
+| 26-1 | ⬜ | 0 `Any` types |
+| 26-2 | ⬜ | All exceptions logged |
+| 26-3 | ⬜ | All `__post_init__` typed |
+| 26-4 | ⬜ | No PredictionOutput |
 
 ---
 
-### Task 23D-2: Per-Model Feature Selection Override
+## Phase 27: Architecture Consolidation
 
-**File:** `src/config/experiment.py`
-**Status:** DEFERRED
-
-#### Current State:
-
-FeatureConfig has global `selection_n_features=50` but models have different limits (PatchTST=10, LightGBM=200).
-
-#### Implementation:
-
-```python
-# Add to ExperimentConfig
-@dataclass
-class ModelFeatureOverride:
-    max_features: int | None = None
-    selection_method: str | None = None
-
-# In ExperimentConfig.__init__()
-model_feature_overrides: dict[str, ModelFeatureOverride] = {
-    "patchtst": ModelFeatureOverride(max_features=10),
-    "itransformer": ModelFeatureOverride(max_features=10),
-    "tcn": ModelFeatureOverride(max_features=120),
-}
-```
-
-#### Validation:
-
-```bash
-python -c "
-from src.config.experiment import ExperimentConfig
-config = ExperimentConfig(symbol='TEST', models=['patchtst'])
-override = config.model_feature_overrides.get('patchtst')
-print(f'PatchTST max_features: {override.max_features if override else \"default\"}')
-"
-```
+**Status:** NOT STARTED
+**Priority:** MEDIUM
+**Tasks:** 5
 
 ---
 
-### Task 23D-3: Bundle Registry & Versioning
+### Task 27-1: Consolidate PredictionResult ⬜
 
-**File:** `src/inference/registry.py` (NEW)
-**Status:** DEFERRED
+**Files:** 3 files with PredictionResult definitions
+**Priority:** HIGH
 
-#### Current State:
+#### AI Instructions
 
-BundleConfig has `version: str = "1.0.0"` but no registry or rollback support.
+1. **Read** all 3 definitions:
+   - `src/models/base.py:28-87`
+   - `src/core/interfaces.py:124-152`
+   - `src/inference/orchestrator.py:53-78`
 
-#### Implementation:
+2. **Create** unified definition in `src/core/interfaces.py`:
+   ```python
+   @dataclass
+   class PredictionResult:
+       """Unified prediction result container."""
+       class_predictions: np.ndarray
+       class_probabilities: np.ndarray
+       indices: np.ndarray | None = None
+       confidence: np.ndarray | None = None
+       metadata: dict | None = None
+       # Inference-specific fields (optional)
+       model_name: str | None = None
+       horizon: int | None = None
+       inference_time_ms: float | None = None
+       n_samples: int | None = None
+       is_ensemble: bool = False
+       individual_predictions: dict | None = None
+   ```
 
-```python
-# src/inference/registry.py (NEW FILE)
-from dataclasses import dataclass
-from pathlib import Path
-import json
-from datetime import datetime
+3. **Remove** definitions from other files
+4. **Add** re-exports:
+   ```python
+   # src/models/base.py
+   from src.core.interfaces import PredictionResult
 
-@dataclass
-class BundleMetadata:
-    bundle_id: str
-    model_name: str
-    version: str
-    created_at: str
-    path: Path
-    metrics: dict
-    previous_version: str | None = None
+   # src/inference/orchestrator.py
+   from src.core.interfaces import PredictionResult
+   ```
 
-class BundleRegistry:
-    """Registry for tracking deployed model bundles."""
-
-    def __init__(self, registry_path: Path = Path("bundles/registry.json")):
-        self.registry_path = registry_path
-        self._registry: dict[str, BundleMetadata] = {}
-        self._load()
-
-    def register(self, bundle: "ModelBundle", metrics: dict) -> str:
-        """Register a new bundle, return bundle_id."""
-        bundle_id = f"{bundle.model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        # Find previous version
-        previous = self.get_latest(bundle.model_name)
-
-        metadata = BundleMetadata(
-            bundle_id=bundle_id,
-            model_name=bundle.model_name,
-            version=bundle.version,
-            created_at=datetime.now().isoformat(),
-            path=bundle.path,
-            metrics=metrics,
-            previous_version=previous.bundle_id if previous else None,
-        )
-
-        self._registry[bundle_id] = metadata
-        self._save()
-        return bundle_id
-
-    def get(self, bundle_id: str) -> BundleMetadata | None:
-        return self._registry.get(bundle_id)
-
-    def get_latest(self, model_name: str) -> BundleMetadata | None:
-        """Get most recent bundle for a model."""
-        candidates = [m for m in self._registry.values() if m.model_name == model_name]
-        return max(candidates, key=lambda m: m.created_at) if candidates else None
-
-    def rollback(self, bundle_id: str) -> BundleMetadata | None:
-        """Get previous version of a bundle."""
-        current = self.get(bundle_id)
-        if current and current.previous_version:
-            return self.get(current.previous_version)
-        return None
-
-    def list_versions(self, model_name: str) -> list[BundleMetadata]:
-        """List all versions of a model."""
-        return sorted(
-            [m for m in self._registry.values() if m.model_name == model_name],
-            key=lambda m: m.created_at,
-            reverse=True,
-        )
-
-    def _load(self):
-        if self.registry_path.exists():
-            with open(self.registry_path) as f:
-                data = json.load(f)
-                self._registry = {k: BundleMetadata(**v) for k, v in data.items()}
-
-    def _save(self):
-        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.registry_path, "w") as f:
-            json.dump({k: asdict(v) for k, v in self._registry.items()}, f, indent=2)
-```
-
-#### Validation:
-
-```bash
-python -c "
-from src.inference.registry import BundleRegistry
-registry = BundleRegistry()
-print(f'Registry initialized: {registry.registry_path}')
-"
-```
+5. **Update** all imports across codebase
 
 ---
 
-### Task 23D-4: A/B Testing Configuration
+### Task 27-2: Remove Duplicate AdapterResult ⬜
 
-**File:** `src/config/inference.py`
-**Status:** DEFERRED
+**Files:** `src/core/interfaces.py`, `src/data/adapters/base.py`
+**Priority:** MEDIUM
 
-#### Implementation:
+#### AI Instructions
 
-```python
-# Add to src/config/inference.py
-@dataclass
-class ABTestConfig:
-    """Configuration for A/B testing between model versions."""
-    enabled: bool = False
-    control_bundle_id: str = ""
-    treatment_bundle_id: str = ""
-    traffic_split: float = 0.5  # Fraction of traffic to treatment (0.0-1.0)
-    metric: str = "sharpe_ratio"  # Metric to compare
-    min_samples: int = 1000  # Minimum samples before declaring winner
-    significance_level: float = 0.05  # p-value threshold
-
-    def get_variant(self, request_id: str) -> str:
-        """Deterministically assign request to control or treatment."""
-        import hashlib
-        hash_val = int(hashlib.md5(request_id.encode()).hexdigest(), 16)
-        return "treatment" if (hash_val % 100) / 100 < self.traffic_split else "control"
-```
-
-#### Validation:
-
-```bash
-python -c "
-from src.config.inference import ABTestConfig
-config = ABTestConfig(enabled=True, traffic_split=0.2)
-variants = [config.get_variant(f'req_{i}') for i in range(1000)]
-treatment_pct = sum(1 for v in variants if v == 'treatment') / len(variants)
-print(f'Treatment %: {treatment_pct:.2%} (expected ~20%)')
-"
-```
+1. **Keep** canonical definition in `src/data/adapters/base.py`
+2. **Remove** from `src/core/interfaces.py`
+3. **Add** re-export in `src/core/interfaces.py`:
+   ```python
+   from src.data.adapters.base import AdapterResult
+   ```
+4. **Handle** circular import if needed with TYPE_CHECKING
 
 ---
 
-### Task 23D-5: Drift Detection Configuration
+### Task 27-3: Rename DatasetContract to PipelineData ⬜
 
-**File:** `src/config/monitoring.py` (NEW)
-**Status:** DEFERRED
+**File:** `src/core/data_contract.py`
+**Priority:** MEDIUM
 
-#### Implementation:
+#### AI Instructions
 
-```python
-# src/config/monitoring.py (NEW FILE)
-from dataclasses import dataclass, field
+1. **Read** `src/core/data_contract.py`
+2. **Rename** class:
+   ```python
+   # BEFORE
+   class DatasetContract:
 
-@dataclass
-class DriftConfig:
-    """Configuration for feature and prediction drift detection."""
-    enabled: bool = True
-
-    # Feature drift (PSI - Population Stability Index)
-    feature_drift_threshold: float = 0.1  # PSI > 0.1 = significant drift
-    feature_drift_critical: float = 0.25  # PSI > 0.25 = critical drift
-
-    # Prediction drift
-    prediction_drift_threshold: float = 0.15
-    prediction_drift_window: int = 1000  # Samples to compare
-
-    # Monitoring schedule
-    check_interval_hours: int = 24
-
-    # Alerting
-    alert_channels: list[str] = field(default_factory=lambda: ["log"])  # log, email, slack, pagerduty
-    alert_cooldown_hours: int = 4  # Don't re-alert within this window
-
-    # Auto-remediation
-    auto_retrain_trigger: bool = False
-    auto_retrain_threshold: float = 0.3  # Trigger retrain if drift > this
-
-    # Reference data
-    reference_data_path: str = ""  # Path to baseline distribution
-
-@dataclass
-class MonitoringConfig:
-    """Top-level monitoring configuration."""
-    drift: DriftConfig = field(default_factory=DriftConfig)
-    log_predictions: bool = True
-    log_features: bool = False  # Can be expensive
-    metrics_export_interval_seconds: int = 60
-```
-
-#### Validation:
-
-```bash
-python -c "
-from src.config.monitoring import DriftConfig, MonitoringConfig
-config = MonitoringConfig()
-print(f'Drift enabled: {config.drift.enabled}')
-print(f'Feature drift threshold: {config.drift.feature_drift_threshold}')
-print(f'Alert channels: {config.drift.alert_channels}')
-"
-```
+   # AFTER
+   class PipelineData:
+   ```
+3. **Add** alias for backward compatibility:
+   ```python
+   DatasetContract = PipelineData  # Deprecated alias
+   ```
+4. **Update** all imports:
+   ```bash
+   grep -rn "DatasetContract" src/ --include="*.py"
+   ```
 
 ---
 
-### Task 23D-6: Streaming Inference Configuration
+### Task 27-4: Rename ModelContract Interface ⬜
 
-**File:** `src/config/inference.py`
-**Status:** DEFERRED
+**File:** `src/core/interfaces.py`
+**Priority:** MEDIUM
 
-#### Current State:
+#### AI Instructions
 
-InferenceConfig has `mode: str = "streaming"` but no buffer/latency config.
+1. **Read** `src/core/interfaces.py` lines 339-446
+2. **Rename** abstract class:
+   ```python
+   # BEFORE
+   class ModelContract(ABC):
 
-#### Implementation:
-
-```python
-# Add to src/config/inference.py
-@dataclass
-class StreamingConfig:
-    """Configuration for streaming inference mode."""
-    enabled: bool = False
-
-    # Buffer settings
-    buffer_size: int = 1000  # Max items in buffer
-    flush_interval_seconds: float = 1.0  # Force flush after this time
-
-    # Latency requirements
-    max_latency_ms: float = 100.0  # Target max latency
-    timeout_ms: float = 500.0  # Hard timeout
-
-    # Backpressure handling
-    backpressure_strategy: str = "drop"  # drop, block, sample
-    sample_rate: float = 0.1  # If strategy=sample, keep this fraction
-
-    # State management
-    checkpoint_interval_seconds: float = 60.0
-    checkpoint_path: str = ""
-
-    # Warm-up
-    warmup_samples: int = 100  # Samples to process before going live
-```
-
-#### Validation:
-
-```bash
-python -c "
-from src.config.inference import StreamingConfig
-config = StreamingConfig(enabled=True, buffer_size=500)
-print(f'Buffer size: {config.buffer_size}')
-print(f'Max latency: {config.max_latency_ms}ms')
-"
-```
+   # AFTER
+   class ModelInterface(ABC):
+   ```
+3. **Add** alias for backward compatibility
+4. **Update** all usages
 
 ---
 
-### Task 23D-7: Compatibility Matrix Documentation
+### Task 27-5: Replace PredictionOutput Usages ⬜
 
-**File:** `docs/COMPATIBILITY.md` (NEW)
-**Status:** DEFERRED
+**Files:** `src/models/neural/*.py`
+**Priority:** LOW
 
-#### Implementation:
+#### AI Instructions
 
-Generate from MODEL_CONTRACTS:
-
-```python
-# Script: scripts/generate_compatibility_matrix.py
-from src.core.contracts import MODEL_CONTRACTS
-
-def generate_matrix():
-    rows = []
-    for name, contract in MODEL_CONTRACTS.items():
-        rows.append({
-            "Model": name,
-            "Family": contract.model_family,
-            "Adapter": contract.adapter_id,
-            "Input Rank": contract.input_rank.name,
-            "MTF Mode": contract.mtf_mode.name,
-            "Feature Mode": contract.feature_mode.name,
-            "Min Features": contract.min_features,
-            "Max Features": contract.max_features,
-            "Sequence Length": contract.sequence_length or "-",
-        })
-
-    # Generate markdown table
-    headers = list(rows[0].keys())
-    lines = [
-        "# Model Compatibility Matrix\n",
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join(["---"] * len(headers)) + " |",
-    ]
-    for row in rows:
-        lines.append("| " + " | ".join(str(row[h]) for h in headers) + " |")
-
-    return "\n".join(lines)
-
-if __name__ == "__main__":
-    print(generate_matrix())
-```
-
-#### Output Example:
-
-```markdown
-# Model Compatibility Matrix
-
-| Model | Family | Adapter | Input Rank | MTF Mode | Feature Mode | Min Features | Max Features | Sequence Length |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| xgboost | boosting | tabular | TABULAR_2D | INDICATORS | ENGINEERED | 5 | 200 | - |
-| lightgbm | boosting | tabular | TABULAR_2D | INDICATORS | ENGINEERED | 5 | 200 | - |
-| tcn | neural | sequence | SEQUENCE_3D | NONE | ENGINEERED | 5 | 120 | 60 |
-| patchtst | transformer | multi_stream | MULTI_TF_4D | MULTI_STREAM | RAW | 4 | 10 | 64 |
-```
+1. **Find** all usages:
+   ```bash
+   grep -rn "PredictionOutput" src/models/neural/ --include="*.py"
+   ```
+2. **Replace** each with `PredictionResult`
+3. **Update** imports
 
 ---
 
-### 23D Summary
+## Phases 28-31: Detailed Tasks
 
-| Task | File | Description | Status |
-|------|------|-------------|--------|
-| 23D-1 | `experiment.py` | MTF mode in ExperimentConfig | DEFERRED |
-| 23D-2 | `experiment.py` | Per-model feature selection override | DEFERRED |
-| 23D-3 | `registry.py` (NEW) | Bundle registry & versioning | DEFERRED |
-| 23D-4 | `inference.py` | A/B testing configuration | DEFERRED |
-| 23D-5 | `monitoring.py` (NEW) | Drift detection configuration | DEFERRED |
-| 23D-6 | `inference.py` | Streaming inference configuration | DEFERRED |
-| 23D-7 | `docs/COMPATIBILITY.md` | Compatibility matrix docs | DEFERRED |
+See `z/TECHNICAL_IMPROVEMENTS.md` for full issue descriptions.
 
-**Total 23D Tasks:** 7 (all deferred to Phase 24)
+---
+
+### Phase 28 Tasks (Compute Performance)
+
+| Task | File | Description |
+|------|------|-------------|
+| 28-1 | `entropy.py:177-188` | Apply `_count_matches_numba` to approximate entropy |
+| 28-2 | `features/compute/` | Add ProcessPoolExecutor for feature families |
+| 28-3 | `volatility.py:548-586` | GARCH: fit every 10-20 bars or use EWMA |
+| 28-4 | Multiple | Pre-compute ATR once at pipeline start |
+| 28-5 | `volume.py` | Add `@lru_cache` to volume helpers |
+
+---
+
+### Phase 29 Tasks (Memory Performance)
+
+| Task | File | Description |
+|------|------|-------------|
+| 29-1 | Multiple | Fix remaining DataFrame fragmentation |
+| 29-2 | `five_dimension_objective.py:99` | Add max size to label cache |
+| 29-3 | Multiple | Compute log returns once |
+| 29-4 | `features/engineer.py:238` | Single df.copy() at stage entry |
+| 29-5 | `features/run.py:199,294` | Column pruning on parquet reads |
+
+---
+
+### Phase 30 Tasks (Advanced Architecture)
+
+| Task | File | Description |
+|------|------|-------------|
+| 30-1 | `core/types.py` | Standardize transformer family naming |
+| 30-2 | `core/constants.py` | Derive from MODEL_CONTRACTS |
+| 30-3 | `inference/orchestrator.py` | Move types to core |
+| 30-4 | `core/interfaces.py` | Fix circular imports |
+| 30-5 | `volatility.py` | Cache computation context |
+
+---
+
+### Phase 31 Tasks (Polish)
+
+| Task | File | Description |
+|------|------|-------------|
+| 31-1 | `monitor.py:264-265` | Address TODOs |
+| 31-2 | Multiple | Extract magic numbers |
+| 31-3 | `config/unified.py` | Consolidate defaults |
+| 31-4 | `adapters/base.py` | Complete exclusion list |
+| 31-5 | `multi_stream.py` | Fix temporal alignment |
+| 31-6 | `features/engineer.py` | Define feature DAG |
+| 31-7 | `adapters/*.py` | Move common methods |
 
 ---
 
 ## Verification Commands
 
 ### Core Imports
-
 ```bash
 python -c "from src.core.types import DataRank, ModelFamily; print('OK')"
 python -c "from src.core.contracts import get_model_contract; print('OK')"
 python -c "from src.data.adapters import get_adapter; print('OK')"
 ```
 
-### Phase 23A
-
+### Linting
 ```bash
-grep -n '"label"' src/data/adapters/base.py | grep exclude_exact
+ruff check src/
+black --check src/
 ```
 
-### Phase 23B
-
+### Tests
 ```bash
-python -c "
-from src.core.contracts import get_model_contract
-for m in ['lightgbm', 'tcn', 'patchtst']:
-    c = get_model_contract(m)
-    print(f'{m}: max_features={c.max_features}')
-"
+pytest tests/ -v
 ```
-
-### Phase 23C
-
-```bash
-python -c "
-import warnings
-import pandas as pd
-warnings.filterwarnings('error', category=pd.errors.PerformanceWarning)
-from src.data.pipeline.stages.features import temporal
-print('PASS: No PerformanceWarning')
-"
-```
-
----
-
-## Deferred Backlog (Low Priority)
-
-| Task | Description | Notes |
-|------|-------------|-------|
-| 5C | Unified deployment bundle | Needs spec |
-| 4D | Deflated Sharpe Ratio | Post-Optuna gate |
-| 4E | Bootstrap CIs | Wire BootstrapCI |
-| 4F | Auto calibration | Wire CalibrationManager |
 
 ---
 
 ## Summary Checklist
 
-### Active Tasks (23A-C)
+### Phase 24: Feature Caching
+- [ ] 24-1: Cache ADX/DI
+- [ ] 24-2: Cache Microstructure
+- [ ] 24-3: Combine Supertrend
 
-| Task | Description | Priority | Status |
-|------|-------------|----------|--------|
-| 23A-1 | Add "label" to exclude_exact (2 files) | CRITICAL | [x] COMPLETE (2026-01-29) |
-| 23B-1 | Skip rank validation on raw data | HIGH | [x] COMPLETE (2026-01-29) |
-| 23B-2 | Auto feature selection | HIGH | [x] COMPLETE (2026-01-29) |
-| 23C-1 | temporal.py vectorization | MEDIUM | [x] COMPLETE (2026-01-29) |
-| 23C-2 | microstructure.py batch concat | MEDIUM | [x] COMPLETE (2026-01-29) |
-| 23C-3 | volatility.py batch assign | MEDIUM | [x] COMPLETE (2026-01-29) |
-| 23C-4 | trend.py batch assign | MEDIUM | [x] COMPLETE (2026-01-29) |
-| 23C-5 | entropy.py batch assign | MEDIUM | [x] COMPLETE (no changes needed) |
-| 23C-6 | wavelets.py batch assign | MEDIUM | [x] COMPLETE (no changes needed) |
-| 23C-7 | momentum.py batch assign | MEDIUM | [x] COMPLETE (2026-01-29) |
-| 23C-8 | price_features.py autocorr loop | MEDIUM | [x] COMPLETE (no changes needed) |
-| 23C-9 | regime.py batch assign | MEDIUM | [x] COMPLETE (no changes needed) |
-| 23C-10 | fillna deprecation fix | LOW | [x] COMPLETE (2026-01-29) |
+### Phase 25: Validation
+- [ ] 25-1: Inter-stage validation
+- [ ] 25-2: Raw data fail-fast
+- [ ] 25-3: MTF lookahead check
+- [ ] 25-4: Sentinel validation
+- [ ] 25-5: Horizon fail-fast
 
-### Deferred Tasks (23D - Phase 24)
+### Phase 26: Type Safety
+- [ ] 26-1: Replace Any types
+- [ ] 26-2: Fix bare exceptions
+- [ ] 26-3: Add return types
+- [ ] 26-4: Remove deprecated alias
 
-| Task | Description | Priority | Status |
-|------|-------------|----------|--------|
-| 23D-1 | MTF mode in ExperimentConfig | LOW | [ ] DEFERRED |
-| 23D-2 | Per-model feature selection override | LOW | [ ] DEFERRED |
-| 23D-3 | Bundle registry & versioning | LOW | [ ] DEFERRED |
-| 23D-4 | A/B testing configuration | LOW | [ ] DEFERRED |
-| 23D-5 | Drift detection configuration | LOW | [ ] DEFERRED |
-| 23D-6 | Streaming inference configuration | LOW | [ ] DEFERRED |
-| 23D-7 | Compatibility matrix documentation | LOW | [ ] DEFERRED |
+### Phase 27: Architecture
+- [ ] 27-1: Consolidate PredictionResult
+- [ ] 27-2: Remove duplicate AdapterResult
+- [ ] 27-3: Rename DatasetContract
+- [ ] 27-4: Rename ModelContract
+- [ ] 27-5: Replace PredictionOutput
 
-**Total:** 13 active tasks + 7 deferred = 20 tasks
+### Phase 28-31
+See task tables above.
+
+---
+
+**Total Tasks:** 38 across 8 phases
 
 ---
 
