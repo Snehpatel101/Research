@@ -23,7 +23,7 @@
 ## Phase 23: Critical Bugfixes, Validation Fixes & Performance
 
 **Status:** IN PROGRESS | 2026-01-28
-**Tasks:** 0/13 (Phase 23D deferred)
+**Tasks:** 0/13 active (7 deferred to Phase 24)
 **Source:** Runtime error analysis (OBSERVED THINGS.MD), performance analysis (PERFORMANCE_FIXES.md)
 
 ### Phase Overview
@@ -33,7 +33,7 @@
 | 23A | Label column data leakage fix | CRITICAL | 1 |
 | 23B | Validation timing + auto feature selection | HIGH | 2 |
 | 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 |
-| 23D | Config gaps | LOW | Deferred |
+| 23D | Config gaps (production deployment features) | LOW | 7 (deferred) |
 
 ---
 
@@ -542,9 +542,417 @@ features = features.bfill().fillna(0)
 
 ## Phase 23D: Config Gaps (DEFERRED TO PHASE 24)
 
-- [ ] 23D-1: Bundle registry/versioning
-- [ ] 23D-2: A/B testing configuration
-- [ ] 23D-3: Drift detection config
+**Priority:** LOW
+**Status:** DEFERRED - Will be addressed after 23A-C blocking issues fixed
+**Impact:** Production deployment features - system works without these
+
+---
+
+### Task 23D-1: Add MTF Mode to ExperimentConfig
+
+**File:** `src/config/experiment.py`
+**Status:** DEFERRED
+
+#### Current State:
+
+MTFConfig exists in `src/config/data.py` with all modes, but ExperimentConfig doesn't expose it directly.
+
+#### Implementation:
+
+```python
+# Add to ExperimentConfig.__init__()
+def __init__(
+    self,
+    ...
+    mtf_mode: str = "indicators",  # NEW: 'none', 'indicators', 'bars', 'both', 'multi_stream'
+    mtf_timeframes: list[str] | None = None,  # NEW: e.g., ['5min', '15min', '1h']
+):
+    self.mtf_config = MTFConfig(
+        mode=mtf_mode,
+        timeframes=mtf_timeframes or ["5min", "15min", "1h"],
+    )
+```
+
+#### Validation:
+
+```bash
+python -c "
+from src.config.experiment import ExperimentConfig
+config = ExperimentConfig(symbol='TEST', mtf_mode='multi_stream')
+print(f'MTF mode: {config.mtf_config.mode}')
+"
+```
+
+---
+
+### Task 23D-2: Per-Model Feature Selection Override
+
+**File:** `src/config/experiment.py`
+**Status:** DEFERRED
+
+#### Current State:
+
+FeatureConfig has global `selection_n_features=50` but models have different limits (PatchTST=10, LightGBM=200).
+
+#### Implementation:
+
+```python
+# Add to ExperimentConfig
+@dataclass
+class ModelFeatureOverride:
+    max_features: int | None = None
+    selection_method: str | None = None
+
+# In ExperimentConfig.__init__()
+model_feature_overrides: dict[str, ModelFeatureOverride] = {
+    "patchtst": ModelFeatureOverride(max_features=10),
+    "itransformer": ModelFeatureOverride(max_features=10),
+    "tcn": ModelFeatureOverride(max_features=120),
+}
+```
+
+#### Validation:
+
+```bash
+python -c "
+from src.config.experiment import ExperimentConfig
+config = ExperimentConfig(symbol='TEST', models=['patchtst'])
+override = config.model_feature_overrides.get('patchtst')
+print(f'PatchTST max_features: {override.max_features if override else \"default\"}')
+"
+```
+
+---
+
+### Task 23D-3: Bundle Registry & Versioning
+
+**File:** `src/inference/registry.py` (NEW)
+**Status:** DEFERRED
+
+#### Current State:
+
+BundleConfig has `version: str = "1.0.0"` but no registry or rollback support.
+
+#### Implementation:
+
+```python
+# src/inference/registry.py (NEW FILE)
+from dataclasses import dataclass
+from pathlib import Path
+import json
+from datetime import datetime
+
+@dataclass
+class BundleMetadata:
+    bundle_id: str
+    model_name: str
+    version: str
+    created_at: str
+    path: Path
+    metrics: dict
+    previous_version: str | None = None
+
+class BundleRegistry:
+    """Registry for tracking deployed model bundles."""
+
+    def __init__(self, registry_path: Path = Path("bundles/registry.json")):
+        self.registry_path = registry_path
+        self._registry: dict[str, BundleMetadata] = {}
+        self._load()
+
+    def register(self, bundle: "ModelBundle", metrics: dict) -> str:
+        """Register a new bundle, return bundle_id."""
+        bundle_id = f"{bundle.model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        # Find previous version
+        previous = self.get_latest(bundle.model_name)
+
+        metadata = BundleMetadata(
+            bundle_id=bundle_id,
+            model_name=bundle.model_name,
+            version=bundle.version,
+            created_at=datetime.now().isoformat(),
+            path=bundle.path,
+            metrics=metrics,
+            previous_version=previous.bundle_id if previous else None,
+        )
+
+        self._registry[bundle_id] = metadata
+        self._save()
+        return bundle_id
+
+    def get(self, bundle_id: str) -> BundleMetadata | None:
+        return self._registry.get(bundle_id)
+
+    def get_latest(self, model_name: str) -> BundleMetadata | None:
+        """Get most recent bundle for a model."""
+        candidates = [m for m in self._registry.values() if m.model_name == model_name]
+        return max(candidates, key=lambda m: m.created_at) if candidates else None
+
+    def rollback(self, bundle_id: str) -> BundleMetadata | None:
+        """Get previous version of a bundle."""
+        current = self.get(bundle_id)
+        if current and current.previous_version:
+            return self.get(current.previous_version)
+        return None
+
+    def list_versions(self, model_name: str) -> list[BundleMetadata]:
+        """List all versions of a model."""
+        return sorted(
+            [m for m in self._registry.values() if m.model_name == model_name],
+            key=lambda m: m.created_at,
+            reverse=True,
+        )
+
+    def _load(self):
+        if self.registry_path.exists():
+            with open(self.registry_path) as f:
+                data = json.load(f)
+                self._registry = {k: BundleMetadata(**v) for k, v in data.items()}
+
+    def _save(self):
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.registry_path, "w") as f:
+            json.dump({k: asdict(v) for k, v in self._registry.items()}, f, indent=2)
+```
+
+#### Validation:
+
+```bash
+python -c "
+from src.inference.registry import BundleRegistry
+registry = BundleRegistry()
+print(f'Registry initialized: {registry.registry_path}')
+"
+```
+
+---
+
+### Task 23D-4: A/B Testing Configuration
+
+**File:** `src/config/inference.py`
+**Status:** DEFERRED
+
+#### Implementation:
+
+```python
+# Add to src/config/inference.py
+@dataclass
+class ABTestConfig:
+    """Configuration for A/B testing between model versions."""
+    enabled: bool = False
+    control_bundle_id: str = ""
+    treatment_bundle_id: str = ""
+    traffic_split: float = 0.5  # Fraction of traffic to treatment (0.0-1.0)
+    metric: str = "sharpe_ratio"  # Metric to compare
+    min_samples: int = 1000  # Minimum samples before declaring winner
+    significance_level: float = 0.05  # p-value threshold
+
+    def get_variant(self, request_id: str) -> str:
+        """Deterministically assign request to control or treatment."""
+        import hashlib
+        hash_val = int(hashlib.md5(request_id.encode()).hexdigest(), 16)
+        return "treatment" if (hash_val % 100) / 100 < self.traffic_split else "control"
+```
+
+#### Validation:
+
+```bash
+python -c "
+from src.config.inference import ABTestConfig
+config = ABTestConfig(enabled=True, traffic_split=0.2)
+variants = [config.get_variant(f'req_{i}') for i in range(1000)]
+treatment_pct = sum(1 for v in variants if v == 'treatment') / len(variants)
+print(f'Treatment %: {treatment_pct:.2%} (expected ~20%)')
+"
+```
+
+---
+
+### Task 23D-5: Drift Detection Configuration
+
+**File:** `src/config/monitoring.py` (NEW)
+**Status:** DEFERRED
+
+#### Implementation:
+
+```python
+# src/config/monitoring.py (NEW FILE)
+from dataclasses import dataclass, field
+
+@dataclass
+class DriftConfig:
+    """Configuration for feature and prediction drift detection."""
+    enabled: bool = True
+
+    # Feature drift (PSI - Population Stability Index)
+    feature_drift_threshold: float = 0.1  # PSI > 0.1 = significant drift
+    feature_drift_critical: float = 0.25  # PSI > 0.25 = critical drift
+
+    # Prediction drift
+    prediction_drift_threshold: float = 0.15
+    prediction_drift_window: int = 1000  # Samples to compare
+
+    # Monitoring schedule
+    check_interval_hours: int = 24
+
+    # Alerting
+    alert_channels: list[str] = field(default_factory=lambda: ["log"])  # log, email, slack, pagerduty
+    alert_cooldown_hours: int = 4  # Don't re-alert within this window
+
+    # Auto-remediation
+    auto_retrain_trigger: bool = False
+    auto_retrain_threshold: float = 0.3  # Trigger retrain if drift > this
+
+    # Reference data
+    reference_data_path: str = ""  # Path to baseline distribution
+
+@dataclass
+class MonitoringConfig:
+    """Top-level monitoring configuration."""
+    drift: DriftConfig = field(default_factory=DriftConfig)
+    log_predictions: bool = True
+    log_features: bool = False  # Can be expensive
+    metrics_export_interval_seconds: int = 60
+```
+
+#### Validation:
+
+```bash
+python -c "
+from src.config.monitoring import DriftConfig, MonitoringConfig
+config = MonitoringConfig()
+print(f'Drift enabled: {config.drift.enabled}')
+print(f'Feature drift threshold: {config.drift.feature_drift_threshold}')
+print(f'Alert channels: {config.drift.alert_channels}')
+"
+```
+
+---
+
+### Task 23D-6: Streaming Inference Configuration
+
+**File:** `src/config/inference.py`
+**Status:** DEFERRED
+
+#### Current State:
+
+InferenceConfig has `mode: str = "streaming"` but no buffer/latency config.
+
+#### Implementation:
+
+```python
+# Add to src/config/inference.py
+@dataclass
+class StreamingConfig:
+    """Configuration for streaming inference mode."""
+    enabled: bool = False
+
+    # Buffer settings
+    buffer_size: int = 1000  # Max items in buffer
+    flush_interval_seconds: float = 1.0  # Force flush after this time
+
+    # Latency requirements
+    max_latency_ms: float = 100.0  # Target max latency
+    timeout_ms: float = 500.0  # Hard timeout
+
+    # Backpressure handling
+    backpressure_strategy: str = "drop"  # drop, block, sample
+    sample_rate: float = 0.1  # If strategy=sample, keep this fraction
+
+    # State management
+    checkpoint_interval_seconds: float = 60.0
+    checkpoint_path: str = ""
+
+    # Warm-up
+    warmup_samples: int = 100  # Samples to process before going live
+```
+
+#### Validation:
+
+```bash
+python -c "
+from src.config.inference import StreamingConfig
+config = StreamingConfig(enabled=True, buffer_size=500)
+print(f'Buffer size: {config.buffer_size}')
+print(f'Max latency: {config.max_latency_ms}ms')
+"
+```
+
+---
+
+### Task 23D-7: Compatibility Matrix Documentation
+
+**File:** `docs/COMPATIBILITY.md` (NEW)
+**Status:** DEFERRED
+
+#### Implementation:
+
+Generate from MODEL_CONTRACTS:
+
+```python
+# Script: scripts/generate_compatibility_matrix.py
+from src.core.contracts import MODEL_CONTRACTS
+
+def generate_matrix():
+    rows = []
+    for name, contract in MODEL_CONTRACTS.items():
+        rows.append({
+            "Model": name,
+            "Family": contract.model_family,
+            "Adapter": contract.adapter_id,
+            "Input Rank": contract.input_rank.name,
+            "MTF Mode": contract.mtf_mode.name,
+            "Feature Mode": contract.feature_mode.name,
+            "Min Features": contract.min_features,
+            "Max Features": contract.max_features,
+            "Sequence Length": contract.sequence_length or "-",
+        })
+
+    # Generate markdown table
+    headers = list(rows[0].keys())
+    lines = [
+        "# Model Compatibility Matrix\n",
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join(["---"] * len(headers)) + " |",
+    ]
+    for row in rows:
+        lines.append("| " + " | ".join(str(row[h]) for h in headers) + " |")
+
+    return "\n".join(lines)
+
+if __name__ == "__main__":
+    print(generate_matrix())
+```
+
+#### Output Example:
+
+```markdown
+# Model Compatibility Matrix
+
+| Model | Family | Adapter | Input Rank | MTF Mode | Feature Mode | Min Features | Max Features | Sequence Length |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| xgboost | boosting | tabular | TABULAR_2D | INDICATORS | ENGINEERED | 5 | 200 | - |
+| lightgbm | boosting | tabular | TABULAR_2D | INDICATORS | ENGINEERED | 5 | 200 | - |
+| tcn | neural | sequence | SEQUENCE_3D | NONE | ENGINEERED | 5 | 120 | 60 |
+| patchtst | transformer | multi_stream | MULTI_TF_4D | MULTI_STREAM | RAW | 4 | 10 | 64 |
+```
+
+---
+
+### 23D Summary
+
+| Task | File | Description | Status |
+|------|------|-------------|--------|
+| 23D-1 | `experiment.py` | MTF mode in ExperimentConfig | DEFERRED |
+| 23D-2 | `experiment.py` | Per-model feature selection override | DEFERRED |
+| 23D-3 | `registry.py` (NEW) | Bundle registry & versioning | DEFERRED |
+| 23D-4 | `inference.py` | A/B testing configuration | DEFERRED |
+| 23D-5 | `monitoring.py` (NEW) | Drift detection configuration | DEFERRED |
+| 23D-6 | `inference.py` | Streaming inference configuration | DEFERRED |
+| 23D-7 | `docs/COMPATIBILITY.md` | Compatibility matrix docs | DEFERRED |
+
+**Total 23D Tasks:** 7 (all deferred to Phase 24)
 
 ---
 
@@ -602,6 +1010,8 @@ print('PASS: No PerformanceWarning')
 
 ## Summary Checklist
 
+### Active Tasks (23A-C)
+
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
 | 23A-1 | Add "label" to exclude_exact | CRITICAL | [ ] |
@@ -618,7 +1028,19 @@ print('PASS: No PerformanceWarning')
 | 23C-9 | regime.py batch assign | MEDIUM | [ ] |
 | 23C-10 | fillna deprecation fix | LOW | [ ] |
 
-**Total:** 13 active tasks + 3 deferred = 16 tasks
+### Deferred Tasks (23D - Phase 24)
+
+| Task | Description | Priority | Status |
+|------|-------------|----------|--------|
+| 23D-1 | MTF mode in ExperimentConfig | LOW | [ ] DEFERRED |
+| 23D-2 | Per-model feature selection override | LOW | [ ] DEFERRED |
+| 23D-3 | Bundle registry & versioning | LOW | [ ] DEFERRED |
+| 23D-4 | A/B testing configuration | LOW | [ ] DEFERRED |
+| 23D-5 | Drift detection configuration | LOW | [ ] DEFERRED |
+| 23D-6 | Streaming inference configuration | LOW | [ ] DEFERRED |
+| 23D-7 | Compatibility matrix documentation | LOW | [ ] DEFERRED |
+
+**Total:** 13 active tasks + 7 deferred = 20 tasks
 
 ---
 

@@ -238,14 +238,209 @@ class FeatureBuilder:
 
 ---
 
-## Phase 23D: Config Gaps (DEFERRED TO PHASE 24)
+## Phase 23D: Config Gaps (PRIORITY: LOW - DEFERRED TO PHASE 24)
 
-| Gap | Description | Why Deferred |
-|-----|-------------|--------------|
-| MTF Mode Config | No config for MTF indicator vs bars | Low priority |
-| Feature Selection Config | No UI for manual selection | Auto-selection covers 80% |
-| Inference Pipeline | Not integrated with factory | Separate concern |
-| Serving Bundle | No tar.gz packaging | Deferred from Phase 5 |
+**Status:** DEFERRED | Will be addressed in Phase 24
+**Reason:** System is functional without these; 23A-C fixes are blocking
+
+---
+
+### 23D Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                         PRODUCTION DEPLOYMENT GAPS                               │
+│                                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
+│  │  ExperimentConfig  │    │  BundleConfig   │    │  InferenceConfig │    │  Monitoring     │  │
+│  │                │    │                │    │                │    │                │  │
+│  │  ⚪ MTF mode   │    │  ⚪ Versioning  │    │  ⚪ Streaming  │    │  ⚪ Drift      │  │
+│  │  ⚪ Feature    │    │  ⚪ Registry    │    │  ⚪ A/B test   │    │  ⚪ Alerts     │  │
+│  │    selection  │    │  ⚪ Rollback    │    │  ⚪ Canary     │    │  ⚪ Retrain    │  │
+│  └──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘  │
+│                                                                                  │
+│  CURRENT STATE: All configs exist but lack production deployment features       │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Gap Analysis
+
+| Gap | Current State | Missing | Location | Priority |
+|-----|---------------|---------|----------|----------|
+| **MTF Mode** | MTFConfig has `mode` field | No ExperimentConfig exposure | `src/config/experiment.py` | LOW |
+| **Feature Selection** | FeatureConfig has `selection_*` | No per-model override | `src/config/experiment.py` | LOW |
+| **Compatibility Matrix** | MODEL_CONTRACTS has all data | No visual documentation | `docs/` | LOW |
+| **Bundle Versioning** | BundleConfig has `version` | No version strategy/registry | `src/inference/` | MEDIUM |
+| **A/B Testing** | None | Traffic split config | `src/config/inference.py` | MEDIUM |
+| **Drift Detection** | None | Threshold/alert config | `src/config/monitoring.py` | MEDIUM |
+| **Streaming Inference** | InferenceConfig has `mode` | Buffer management incomplete | `src/inference/` | LOW |
+
+---
+
+### Task 23D-1: MTF Mode in ExperimentConfig
+
+**Current:** MTFConfig exists with full mode options, but ExperimentConfig doesn't expose it clearly.
+
+```python
+# src/config/data.py (EXISTS)
+class MTFConfig:
+    mode: str = "indicators"  # 'none', 'indicators', 'bars', 'both', 'multi_stream'
+    timeframes: list[str] = ["5min", "15min", "1h"]
+
+# src/config/experiment.py (MISSING clear exposure)
+class ExperimentConfig:
+    # mtf_mode not directly accessible
+```
+
+**Fix:** Add `mtf_mode` parameter to `ExperimentConfig.__init__()` that maps to `MTFConfig.mode`.
+
+---
+
+### Task 23D-2: Per-Model Feature Selection Override
+
+**Current:** FeatureConfig has global selection settings.
+
+```python
+# src/config/data.py (EXISTS)
+class FeatureConfig:
+    selection_enabled: bool = True
+    selection_method: str = "mda"
+    selection_n_features: int = 50
+```
+
+**Missing:** Per-model overrides (e.g., PatchTST needs 10 features, LightGBM can use 200).
+
+**Fix:** Add `model_feature_overrides: dict[str, int]` to ExperimentConfig.
+
+---
+
+### Task 23D-3: Bundle Registry & Versioning
+
+**Current:** BundleConfig has version field but no registry.
+
+```python
+# src/inference/bundle.py (EXISTS)
+@dataclass
+class BundleConfig:
+    version: str = "1.0.0"  # Just a string, no strategy
+```
+
+**Missing:**
+- Version increment strategy (semver, timestamp, hash)
+- Bundle registry (catalog of deployed bundles)
+- Rollback support (link to previous version)
+
+**Fix:** Create `src/inference/registry.py` with:
+```python
+class BundleRegistry:
+    def register(bundle: ModelBundle) -> str: ...
+    def get(bundle_id: str) -> ModelBundle: ...
+    def rollback(bundle_id: str) -> ModelBundle: ...
+    def list_versions(model_name: str) -> list[str]: ...
+```
+
+---
+
+### Task 23D-4: A/B Testing Configuration
+
+**Current:** No A/B testing support.
+
+**Missing:** Traffic split configuration for comparing models.
+
+**Fix:** Add to `src/config/inference.py`:
+```python
+@dataclass
+class ABTestConfig:
+    enabled: bool = False
+    control_bundle_id: str = ""
+    treatment_bundle_id: str = ""
+    traffic_split: float = 0.5  # % to treatment
+    metric: str = "sharpe_ratio"
+    min_samples: int = 1000
+    significance_level: float = 0.05
+```
+
+---
+
+### Task 23D-5: Drift Detection Configuration
+
+**Current:** No drift monitoring.
+
+**Missing:** Feature/prediction drift thresholds and alerts.
+
+**Fix:** Create `src/config/monitoring.py`:
+```python
+@dataclass
+class DriftConfig:
+    enabled: bool = True
+    feature_drift_threshold: float = 0.1  # PSI threshold
+    prediction_drift_threshold: float = 0.15
+    check_interval_hours: int = 24
+    alert_channels: list[str] = ["log"]  # log, email, slack
+    auto_retrain_trigger: bool = False
+```
+
+---
+
+### Task 23D-6: Streaming Inference Buffer
+
+**Current:** InferenceConfig has `mode="streaming"` but implementation incomplete.
+
+```python
+# src/config/inference.py (EXISTS)
+class InferenceConfig:
+    mode: str = "single"  # single, batch, streaming
+```
+
+**Missing:** Buffer management for streaming mode.
+
+**Fix:** Add streaming config:
+```python
+@dataclass
+class StreamingConfig:
+    buffer_size: int = 1000
+    flush_interval_seconds: float = 1.0
+    max_latency_ms: float = 100.0
+    backpressure_strategy: str = "drop"  # drop, block, sample
+```
+
+---
+
+### Task 23D-7: Compatibility Matrix Documentation
+
+**Current:** MODEL_CONTRACTS contains all compatibility data but not documented visually.
+
+**Fix:** Generate `docs/COMPATIBILITY.md` from MODEL_CONTRACTS:
+
+```markdown
+## Model Compatibility Matrix
+
+| Model | Adapter | Rank | MTF Mode | Feature Mode | Max Features |
+|-------|---------|------|----------|--------------|--------------|
+| xgboost | tabular | 2D | indicators | engineered | 200 |
+| lightgbm | tabular | 2D | indicators | engineered | 200 |
+| tcn | sequence | 3D | none | engineered | 120 |
+| patchtst | multi_stream | 4D | multi_stream | raw | 10 |
+...
+```
+
+---
+
+### Why Deferred
+
+| Gap | Deferral Reason |
+|-----|-----------------|
+| MTF Mode | Current default works for most cases |
+| Feature Selection | Auto-selection in 23B-2 covers 80% |
+| Bundle Registry | Manual versioning works for now |
+| A/B Testing | Can do manually with separate runs |
+| Drift Detection | External tools (MLflow, Evidently) available |
+| Streaming | Batch mode sufficient for current use |
+| Compatibility Matrix | Users can check MODEL_CONTRACTS |
+
+**Blocking Issues (23A-C) take priority.** Config gaps don't prevent training.
 
 ---
 
@@ -284,12 +479,14 @@ grep -n '"label"' src/data/adapters/base.py | grep exclude_exact
 
 ## Summary
 
-| Category | Priority | Impact | Effort |
-|----------|----------|--------|--------|
-| **23A: Label Leakage** | CRITICAL | Training unusable | 1 line |
-| **23B: Validation** | HIGH | Training blocked | ~50 lines |
-| **23C: Performance** | MEDIUM | 2-5x speedup | ~200 lines |
-| **23D: Config** | LOW | Nice-to-have | Deferred |
+| Category | Priority | Impact | Effort | Tasks |
+|----------|----------|--------|--------|-------|
+| **23A: Label Leakage** | CRITICAL | Training unusable | 1 line | 1 |
+| **23B: Validation** | HIGH | Training blocked | ~50 lines | 2 |
+| **23C: Performance** | MEDIUM | 2-5x speedup | ~200 lines | 10 |
+| **23D: Config** | LOW | Production features | ~500 lines | 7 (deferred) |
+
+**Total Phase 23:** 13 active tasks + 7 deferred = 20 tasks
 
 ---
 
