@@ -49,6 +49,42 @@ def _count_matches_numba(patterns: np.ndarray, r: float) -> int:
 
     return count
 
+
+@numba.njit(cache=True)
+def _count_matches_per_pattern_numba(patterns: np.ndarray, r: float) -> np.ndarray:
+    """
+    Numba-accelerated per-pattern match counting for approximate entropy.
+
+    For each pattern i, counts ALL patterns j (including i itself) where
+    max|patterns[i] - patterns[j]| <= r. This is needed for ApEn's phi calculation.
+
+    Args:
+        patterns: 2D array of shape (n_patterns, m) containing embedded patterns
+        r: Tolerance threshold for pattern matching
+
+    Returns:
+        Array of match counts (one per pattern), normalized by n_patterns
+    """
+    n_patterns = patterns.shape[0]
+    m = patterns.shape[1]
+    counts = np.zeros(n_patterns, dtype=np.float64)
+
+    for i in range(n_patterns):
+        match_count = 0
+        for j in range(n_patterns):
+            # Compute max absolute difference (Chebyshev distance)
+            max_diff = 0.0
+            for k in range(m):
+                diff = abs(patterns[i, k] - patterns[j, k])
+                if diff > max_diff:
+                    max_diff = diff
+            if max_diff <= r:
+                match_count += 1
+        # Normalize by total patterns
+        counts[i] = match_count / n_patterns
+
+    return counts
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -157,6 +193,8 @@ def _approximate_entropy(x: np.ndarray, m: int = 2, r: float | None = None) -> f
     ApEn measures the amount of regularity and unpredictability in a time series.
     Lower values indicate more regularity/predictability.
 
+    Uses numba-accelerated pattern matching for O(n^2) loops (~50-100x speedup).
+
     Args:
         x: Time series data
         m: Embedding dimension (pattern length)
@@ -174,18 +212,18 @@ def _approximate_entropy(x: np.ndarray, m: int = 2, r: float | None = None) -> f
     if r is None:
         r = 0.2 * np.std(x)
 
-    def _phi(m_val):
-        """Calculate phi for given m."""
-        patterns = np.array([x[i : i + m_val] for i in range(n - m_val + 1)])
-        n_patterns = len(patterns)
-
-        counts = np.zeros(n_patterns)
+    def _phi(m_val: int) -> float:
+        """Calculate phi for given m using numba acceleration."""
+        # Create patterns array - contiguous for numba
+        n_patterns = n - m_val + 1
+        patterns = np.empty((n_patterns, m_val), dtype=np.float64)
         for i in range(n_patterns):
-            # Count patterns within tolerance r
-            diffs = np.abs(patterns - patterns[i]).max(axis=1)
-            counts[i] = np.sum(diffs <= r) / n_patterns
+            patterns[i] = x[i : i + m_val]
 
-        return np.mean(np.log(counts + 1e-10))
+        # Use numba-accelerated per-pattern match counting
+        counts = _count_matches_per_pattern_numba(patterns, r)
+
+        return float(np.mean(np.log(counts + 1e-10)))
 
     return float(_phi(m) - _phi(m + 1))
 

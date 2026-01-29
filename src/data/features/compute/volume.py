@@ -2,12 +2,48 @@
 Volume feature computation - OBV, VWAP, TWAP, dollar volume.
 
 PHASE_1 Unified Features: 15 VOLUME features.
+
+Performance: Uses DataFrame-id based caching to avoid recomputing base features
+when derived features are computed. Cache is cleared when DataFrame changes.
 """
 
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+
+# =============================================================================
+# CACHING INFRASTRUCTURE
+# =============================================================================
+
+# Module-level cache keyed by (DataFrame id, feature name)
+# Stores computed results to avoid redundant calculations
+_volume_cache: dict[tuple[int, str], pd.Series] = {}
+_cache_df_id: int | None = None
+
+
+def _get_cached(df: pd.DataFrame, key: str) -> pd.Series | None:
+    """Get cached result if DataFrame hasn't changed."""
+    global _cache_df_id
+    df_id = id(df)
+    if df_id != _cache_df_id:
+        # DataFrame changed, clear cache
+        _volume_cache.clear()
+        _cache_df_id = df_id
+        return None
+    return _volume_cache.get((df_id, key))
+
+
+def _set_cached(df: pd.DataFrame, key: str, value: pd.Series) -> pd.Series:
+    """Store result in cache and return it."""
+    global _cache_df_id
+    df_id = id(df)
+    if df_id != _cache_df_id:
+        _volume_cache.clear()
+        _cache_df_id = df_id
+    _volume_cache[(df_id, key)] = value
+    return value
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -47,6 +83,10 @@ def compute_obv(df: pd.DataFrame) -> pd.Series:
     OBV adds volume on up days and subtracts on down days.
     Measures buying/selling pressure.
     """
+    cached = _get_cached(df, "obv")
+    if cached is not None:
+        return cached
+
     close_diff = df["close"].diff()
     direction = np.sign(close_diff)
 
@@ -54,12 +94,12 @@ def compute_obv(df: pd.DataFrame) -> pd.Series:
     direction = direction.fillna(0)
 
     obv = (direction * df["volume"]).cumsum()
-    return obv
+    return _set_cached(df, "obv", obv)
 
 
 def compute_obv_sma_20(df: pd.DataFrame) -> pd.Series:
     """20-period SMA of OBV."""
-    obv = compute_obv(df)
+    obv = compute_obv(df)  # Uses cache
     return _sma(obv, window=20)
 
 
@@ -114,6 +154,10 @@ def compute_vwap(df: pd.DataFrame) -> pd.Series:
     Note: This computes a rolling VWAP. For true session VWAP,
     reset at session boundaries.
     """
+    cached = _get_cached(df, "vwap")
+    if cached is not None:
+        return cached
+
     typical_price = (df["high"] + df["low"] + df["close"]) / 3
     cum_tp_vol = (typical_price * df["volume"]).cumsum()
     cum_vol = df["volume"].cumsum()
@@ -121,7 +165,7 @@ def compute_vwap(df: pd.DataFrame) -> pd.Series:
     # Avoid division by zero
     cum_vol = cum_vol.replace(0, np.nan)
 
-    return cum_tp_vol / cum_vol
+    return _set_cached(df, "vwap", cum_tp_vol / cum_vol)
 
 
 def compute_price_to_vwap(df: pd.DataFrame) -> pd.Series:
@@ -131,7 +175,7 @@ def compute_price_to_vwap(df: pd.DataFrame) -> pd.Series:
     > 1.0 means price is above VWAP (bullish short-term)
     < 1.0 means price is below VWAP (bearish short-term)
     """
-    vwap = compute_vwap(df)
+    vwap = compute_vwap(df)  # Uses cache
     # Avoid division by zero
     vwap = vwap.replace(0, np.nan)
     return df["close"] / vwap
@@ -154,8 +198,12 @@ def compute_twap(df: pd.DataFrame) -> pd.Series:
 
 def compute_twap_10(df: pd.DataFrame) -> pd.Series:
     """10-period rolling TWAP."""
+    cached = _get_cached(df, "twap_10")
+    if cached is not None:
+        return cached
+
     typical_price = (df["high"] + df["low"] + df["close"]) / 3
-    return typical_price.rolling(window=10, min_periods=10).mean()
+    return _set_cached(df, "twap_10", typical_price.rolling(window=10, min_periods=10).mean())
 
 
 def compute_twap_20(df: pd.DataFrame) -> pd.Series:
@@ -170,7 +218,7 @@ def compute_price_to_twap_10(df: pd.DataFrame) -> pd.Series:
 
     Similar to price_to_vwap but using time-weighted average.
     """
-    twap_10 = compute_twap_10(df)
+    twap_10 = compute_twap_10(df)  # Uses cache
     # Avoid division by zero
     twap_10 = twap_10.replace(0, np.nan)
     return df["close"] / twap_10
@@ -187,18 +235,22 @@ def compute_dollar_volume(df: pd.DataFrame) -> pd.Series:
 
     Measures total value traded per bar.
     """
-    return df["close"] * df["volume"]
+    cached = _get_cached(df, "dollar_volume")
+    if cached is not None:
+        return cached
+
+    return _set_cached(df, "dollar_volume", df["close"] * df["volume"])
 
 
 def compute_dollar_volume_sma_10(df: pd.DataFrame) -> pd.Series:
     """10-period SMA of dollar volume."""
-    dollar_vol = compute_dollar_volume(df)
+    dollar_vol = compute_dollar_volume(df)  # Uses cache
     return _sma(dollar_vol, window=10)
 
 
 def compute_dollar_volume_sma_20(df: pd.DataFrame) -> pd.Series:
     """20-period SMA of dollar volume."""
-    dollar_vol = compute_dollar_volume(df)
+    dollar_vol = compute_dollar_volume(df)  # Uses cache
     return _sma(dollar_vol, window=20)
 
 
@@ -208,7 +260,7 @@ def compute_dollar_volume_ratio(df: pd.DataFrame) -> pd.Series:
 
     Measures relative liquidity.
     """
-    dollar_vol = compute_dollar_volume(df)
+    dollar_vol = compute_dollar_volume(df)  # Uses cache
     dollar_vol_sma = _sma(dollar_vol, window=20)
 
     # Avoid division by zero

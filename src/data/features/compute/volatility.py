@@ -2,12 +2,34 @@
 Volatility feature computation - ATR, Bollinger Bands, Keltner Channels, Historical Vol, GARCH.
 
 PHASE_1 Unified Features: 25 VOLATILITY features.
+
+Performance: Uses DataFrame-id based caching for ATR computations to avoid
+redundant calculations when multiple features use the same ATR period.
 """
 
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+
+# =============================================================================
+# CACHING INFRASTRUCTURE
+# =============================================================================
+
+# Module-level cache keyed by (DataFrame id, period)
+# Stores computed ATR results to avoid redundant calculations
+_atr_cache: dict[tuple[int, int], pd.Series] = {}
+_cache_df_id: int | None = None
+
+
+def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
+    """Clear cache if DataFrame has changed."""
+    global _cache_df_id
+    df_id = id(df)
+    if df_id != _cache_df_id:
+        _atr_cache.clear()
+        _cache_df_id = df_id
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -29,9 +51,18 @@ def _true_range(df: pd.DataFrame) -> pd.Series:
 
 
 def _atr(df: pd.DataFrame, period: int) -> pd.Series:
-    """Average True Range using Wilder's smoothing."""
+    """Average True Range using Wilder's smoothing. Uses caching."""
+    _clear_cache_if_df_changed(df)
+    df_id = id(df)
+    cache_key = (df_id, period)
+
+    if cache_key in _atr_cache:
+        return _atr_cache[cache_key]
+
     tr = _true_range(df)
-    return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    result = tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    _atr_cache[cache_key] = result
+    return result
 
 
 def _sma(series: pd.Series, window: int) -> pd.Series:
