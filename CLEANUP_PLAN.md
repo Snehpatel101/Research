@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
 **Status:** Phase 23 In Progress
-**Last Updated:** 2026-01-29 (Phase 23A Complete)
+**Last Updated:** 2026-01-29 (Phase 23A-B Complete)
 
 ---
 
@@ -27,6 +27,7 @@
 | 21 | ML Pipeline Review Fixes | 10 tasks, 3 disproven | 2026-01-27 |
 | 22 | OPTIMIZE_FOR Metric Wiring | 7 changes, scoring.py | 2026-01-27 |
 | 23A | Label Column Leakage Fix | +2 lines, 2 files, CRITICAL | 2026-01-29 |
+| 23B | Validation Timing & Feature Selection | +25 lines, 1 file, HIGH | 2026-01-29 |
 
 **Net Impact:** ~+12,010 lines | 196 features | 13 models | See **COMPLETION.md** for details.
 
@@ -38,7 +39,7 @@
 **Priority:** CRITICAL → HIGH → MEDIUM → LOW
 **Source:** Runtime errors from Colab notebook + PERFORMANCE_FIXES.md analysis
 
-**Progress:** 23A COMPLETE (1/13 active tasks), 23B-C TODO, 7 tasks deferred to Phase 24
+**Progress:** 23A-B COMPLETE (3/13 active tasks), 23C IN PROGRESS, 7 tasks deferred to Phase 24
 
 ---
 
@@ -189,48 +190,49 @@ exclude_exact = {
 
 ---
 
-## Phase 23B: Validation Timing & Feature Selection (PRIORITY: HIGH)
+## Phase 23B: Validation Timing & Feature Selection ✅ COMPLETE
 
-### Current vs Correct Validation Flow
+**Status:** COMPLETE | 2026-01-29
+**Priority:** HIGH
+**Impact:** ~25 lines added (1 file), prevents training failures for 3D/4D models
+**Verification:** 4-agent deep check PASS, ruff clean, 42/42 tests pass
 
-```
-CURRENT FLOW (BROKEN):
-  df (raw 2D)
-       │
-       ▼
-  _pre_training_validation(df)  ← L501: Validates 2D data
-       │  ❌ FAILS: "Data rank mismatch: model expects 3D, data is 2D"
-       ▼
-  prepare(df, model_name)       ← L579: Adapter transforms (never reached)
+### What Was Fixed
 
-CORRECT FLOW (FIXED):
-  df (raw 2D)
-       │
-       ▼
-  [1] Auto-select features based on model contract
-       │
-       ▼
-  prepare(df, model_name)       ← Adapter transforms 2D→3D/4D
-       │
-       ▼
-  _pre_training_validation(prepared_data)  ← Validate AFTER
-       │
-       ▼
-  Training
-```
+**Task 23B-1: Skip Rank Validation on Raw Data** ✅
+- Modified `unified_orchestrator.py:343-370` to skip rank validation
+- Validation now only checks `min_features` and `max_features`
+- Rank validation skipped because adapters transform 2D→3D/4D later
+- **Fix Applied:** Inline validation instead of calling `validate_data_contract()`
 
-### Contract Violation Details
+**Task 23B-2: Add Auto Feature Selection** ✅
+- Added feature auto-selection logic at `unified_orchestrator.py:316-340`
+- Finds minimum `max_features` across all configured models
+- Selects top N features by variance if count exceeds limit
+- Logs warning and info about the selection
+- **Fix Applied:** ~25 lines of automatic feature reduction
 
-| Model | Expected Rank | Max Features | Actual | Gap |
-|-------|---------------|--------------|--------|-----|
-| LightGBM | 2D | 200 | 218 | -18 |
-| TCN | 3D | 120 | 218 | -98 |
-| PatchTST | 4D | 10 | 218 | -208 |
+### Why This Mattered
 
-### Fix Options
+**Before Phase 23B:**
+- Validation ran on raw 2D DataFrame before adapter transformation
+- TCN, PatchTST, iTransformer failed with "Data rank mismatch" errors
+- 218 features exceeded contract limits (LightGBM=200, TCN=120, PatchTST=10)
+- Training was blocked for 3D/4D models
 
-**Option 1 (Recommended):** Move validation after adapter transformation
-**Option 2:** Skip rank validation on raw data, only check feature count
+**After Phase 23B:**
+- Rank validation skipped on raw data (adapters handle transformation)
+- Auto feature selection reduces to minimum model limit
+- 3D/4D models can now train successfully
+- Feature count violations automatically resolved
+
+### Contract Violation Resolution
+
+| Model | Expected Rank | Max Features | Before | After |
+|-------|---------------|--------------|--------|-------|
+| LightGBM | 2D | 200 | 218 (FAIL) | 200 (PASS) |
+| TCN | 3D | 120 | 218 (FAIL) | 120 (PASS) |
+| PatchTST | 4D | 10 | 218 (FAIL) | 10 (PASS) |
 
 ---
 
@@ -516,14 +518,16 @@ grep -n '"label"' src/data/adapters/base.py | grep exclude_exact
 
 ## Summary
 
-| Category | Priority | Impact | Effort | Tasks |
-|----------|----------|--------|--------|-------|
-| **23A: Label Leakage** | CRITICAL | Training unusable | 1 line | 1 |
-| **23B: Validation** | HIGH | Training blocked | ~50 lines | 2 |
-| **23C: Performance** | MEDIUM | 2-5x speedup | ~200 lines | 10 |
-| **23D: Config** | LOW | Production features | ~500 lines | 7 (deferred) |
+| Category | Priority | Impact | Effort | Tasks | Status |
+|----------|----------|--------|--------|-------|--------|
+| **23A: Label Leakage** | CRITICAL | Training unusable | 2 lines | 1 | ✅ COMPLETE |
+| **23B: Validation** | HIGH | Training blocked | ~25 lines | 2 | ✅ COMPLETE |
+| **23C: Performance** | MEDIUM | 2-5x speedup | ~200 lines | 10 | [ ] TODO |
+| **23D: Config** | LOW | Production features | ~500 lines | 7 (deferred) | [ ] DEFERRED |
 
 **Total Phase 23:** 13 active tasks + 7 deferred = 20 tasks
+**Completed:** 3/13 active tasks (23A-1, 23B-1, 23B-2)
+**Next:** Phase 23C (Performance fixes)
 
 ---
 

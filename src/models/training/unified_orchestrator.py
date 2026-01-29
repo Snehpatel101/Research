@@ -313,6 +313,33 @@ class UnifiedTrainingOrchestrator:
                 if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
             ]
 
+        # Auto-select features if count exceeds minimum model limit (Phase 23B-2)
+        if feature_names and len(feature_names) > 0:
+            from src.core.contracts import get_model_contract
+
+            # Find minimum max_features across all configured models
+            min_max_features = float("inf")
+            limiting_model = None
+            for model_name in self.config.models:
+                model_contract = get_model_contract(model_name)
+                if model_contract.max_features < min_max_features:
+                    min_max_features = model_contract.max_features
+                    limiting_model = model_name
+
+            # If we have too many features, auto-select top N by variance
+            if len(feature_names) > min_max_features:
+                logger.warning(
+                    f"Feature count ({len(feature_names)}) exceeds minimum model limit "
+                    f"({min_max_features} for {limiting_model}). Auto-selecting top {min_max_features} features by variance."
+                )
+
+                # Select features with highest variance (most informative)
+                X_subset = df[feature_names].dropna()
+                if len(X_subset) > 0:
+                    variances = X_subset.var().sort_values(ascending=False)
+                    feature_names = variances.head(int(min_max_features)).index.tolist()
+                    logger.info(f"    Selected {len(feature_names)} features by variance")
+
         # 1. Contract validation (if enabled)
         if self.config.strict_validation:
             logger.info("  [1/3] Validating data contracts...")
@@ -341,17 +368,32 @@ class UnifiedTrainingOrchestrator:
                     )
 
                     # Validate against model contracts
+                    # NOTE: Skip rank validation at this stage - we're validating raw 2D DataFrame
+                    # Adapters will transform to appropriate rank (3D/4D) later in prepare()
                     for model_name in self.config.models:
                         from src.core.contracts import get_model_contract
 
                         model_contract = get_model_contract(model_name)
-                        is_valid, issues = model_contract.validate_data_contract(data_contract)
-                        if not is_valid:
+
+                        # Only validate feature count at this stage, not rank
+                        # Rank validation would fail for 3D/4D models since we have raw 2D data
+                        issues = []
+                        if data_contract.n_features < model_contract.min_features:
+                            issues.append(
+                                f"Too few features: model needs >= {model_contract.min_features}, "
+                                f"data has {data_contract.n_features}"
+                            )
+                        if data_contract.n_features > model_contract.max_features:
+                            issues.append(
+                                f"Too many features: model max is {model_contract.max_features}, "
+                                f"data has {data_contract.n_features}"
+                            )
+
+                        if issues:
                             errors.append(
                                 f"Contract violation for {model_name}: {'; '.join(issues)}"
                             )
-                        elif issues:
-                            warnings.extend(issues)
+                        # No warnings to extend since we're only checking feature counts
 
                     logger.info(f"    Data contract: {data_contract.n_features} features")
                 else:

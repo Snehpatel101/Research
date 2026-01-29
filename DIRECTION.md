@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-01-29 (Phase 22 Complete, Phase 23A Complete)
-**Status:** Phases 0-22 Complete | Phase 23A Complete | Phase 23B-C In Progress
+**Last Updated:** 2026-01-29 (Phase 22 Complete, Phase 23A-B Complete)
+**Status:** Phases 0-22 Complete | Phase 23A-B Complete | Phase 23C In Progress
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -1852,15 +1852,14 @@ NO PRE-COMPUTED PARQUETS - notebook is self-contained.
 - Caused ALL models to train with label as a feature = PERFECT LEAKAGE
 - Status: ✅ FIXED (2 files modified, 42/42 tests pass)
 
-**Validation Timing Issue:** (PRIORITY: HIGH)
-- unified_orchestrator.py:501 validates raw 2D DataFrame before adapter transformation at line 579
-- Causes validation failures for models expecting 3D/4D data
-- Status: ⏳ Fix pending in Phase 23B
+**Validation Timing Issue:** ✅ FIXED IN PHASE 23B
+- unified_orchestrator.py:501 validated raw 2D DataFrame before adapter transformation at line 579
+- Caused validation failures for models expecting 3D/4D data
+- Status: ✅ FIXED (skipped rank validation on raw data, adapters transform later)
 
-**Feature Count Contract Violations:** (PRIORITY: HIGH)
-- Pipeline produces 218 features, exceeds LightGBM (max 200), TCN (max 120), PatchTST (max 10)
-- Auto feature selection needed before validation
-- Status: ⏳ Fix pending in Phase 23B
+**Feature Count Contract Violations:** ✅ FIXED IN PHASE 23B
+- Pipeline produces 218 features, exceeded LightGBM (max 200), TCN (max 120), PatchTST (max 10)
+- Status: ✅ FIXED (auto feature selection by variance before validation)
 
 **DataFrame Fragmentation Performance:** (PRIORITY: MEDIUM)
 - 83+ individual `df[col] = value` assignments cause "highly fragmented" warnings

@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
 **Status:** Phase 23 In Progress
-**Last Updated:** 2026-01-29 (Phase 23A Complete)
+**Last Updated:** 2026-01-29 (Phase 23A-B Complete)
 
 ---
 
@@ -16,6 +16,7 @@
 | 21 | 10/11 | ML pipeline fixes (3 disproven) | See COMPLETION.md |
 | 22 | 7/7 | OPTIMIZE_FOR metric wiring | See COMPLETION.md |
 | 23A | 1/1 | Label column leakage fix (CRITICAL) | See COMPLETION.md |
+| 23B | 2/2 | Validation timing + auto feature selection | See COMPLETION.md |
 
 **Net Impact:** ~+12,010 lines | See **COMPLETION.md** for implementation details.
 
@@ -24,16 +25,16 @@
 ## Phase 23: Critical Bugfixes, Validation Fixes & Performance
 
 **Status:** IN PROGRESS | 2026-01-29
-**Tasks:** 1/13 active tasks complete, 7 deferred to Phase 24
+**Tasks:** 3/13 active tasks complete, 7 deferred to Phase 24
 **Source:** Runtime error analysis (OBSERVED THINGS.MD), performance analysis (PERFORMANCE_FIXES.md)
-**Completion:** Phase 23A COMPLETE (2/2 files fixed, 42/42 tests pass)
+**Completion:** Phase 23A-B COMPLETE (2 files in 23A, 1 file in 23B, ~27 lines added total, 42/42 tests pass, 4-agent verification PASS)
 
 ### Phase Overview
 
 | Sub-Phase | Description | Priority | Tasks | Status |
 |-----------|-------------|----------|-------|--------|
 | 23A | Label column data leakage fix | CRITICAL | 1 | ✅ COMPLETE |
-| 23B | Validation timing + auto feature selection | HIGH | 2 | [ ] TODO |
+| 23B | Validation timing + auto feature selection | HIGH | 2 | ✅ COMPLETE |
 | 23C | Feature engineering performance (DataFrame fragmentation) | MEDIUM | 10 | [ ] TODO |
 | 23D | Config gaps (production deployment features) | LOW | 7 | DEFERRED |
 
@@ -99,35 +100,27 @@ pytest tests/ -v
 
 ---
 
-## Phase 23B: Validation Timing & Feature Selection
+## Phase 23B: Validation Timing & Feature Selection ✅ COMPLETE
 
 **Priority:** HIGH
-**Impact:** Contract validation fails - validation runs before adapter, feature counts exceed limits
+**Status:** COMPLETE | 2026-01-29
+**Impact:** ~25 lines added (1 file), enables 3D/4D model training
+**Verification:** 4-agent deep check PASS (Code Review, Contract, Integration, Runtime), ruff clean, 42/42 tests pass
 
-### Task 23B-1: Skip Rank Validation on Raw Data
+### Task 23B-1: Skip Rank Validation on Raw Data ✅ COMPLETE
 
 **File:** `src/models/training/unified_orchestrator.py`
-**Lines:** 343-352 (inside `_pre_training_validation`)
+**Lines:** 343-370 (modified contract validation loop)
+**Completed:** 2026-01-29
 
-#### BEFORE:
+#### What Was Fixed:
 
-```python
-# Lines 343-352
-for model_name in self.config.models:
-    from src.core.contracts import get_model_contract
+Modified the contract validation loop to **skip rank validation** on raw 2D data. Rank validation was causing failures for 3D/4D models (TCN, PatchTST, iTransformer) because validation ran BEFORE adapter transformation.
 
-    model_contract = get_model_contract(model_name)
-    is_valid, issues = model_contract.validate_data_contract(data_contract)
-    if not is_valid:
-        errors.append(
-            f"Contract violation for {model_name}: {'; '.join(issues)}"
-        )
-```
-
-#### AFTER:
+#### Change Applied:
 
 ```python
-# Lines 343-365
+# Lines 343-370
 for model_name in self.config.models:
     from src.core.contracts import get_model_contract
 
@@ -144,34 +137,41 @@ for model_name in self.config.models:
             f"data has {data_contract.n_features}"
         )
 
+    # Check min_features
+    if data_contract.n_features < model_contract.min_features:
+        issues.append(
+            f"Too few features: model min is {model_contract.min_features}, "
+            f"data has {data_contract.n_features}"
+        )
+
     if issues:
         errors.append(
             f"Contract violation for {model_name}: {'; '.join(issues)}"
         )
 ```
 
-#### Validation:
-
-```bash
-# Models with different ranks should not fail on rank mismatch
-python -c "
-from src.core.contracts import get_model_contract
-for m in ['lightgbm', 'tcn', 'patchtst']:
-    c = get_model_contract(m)
-    print(f'{m}: rank={c.input_rank}, max_features={c.max_features}')
-"
-```
+**Before:** Called `model_contract.validate_data_contract()` which checked rank compatibility
+**After:** Inline validation that only checks `min_features` and `max_features`
 
 ---
 
-### Task 23B-2: Add Auto Feature Selection Before Validation
+### Task 23B-2: Add Auto Feature Selection Before Validation ✅ COMPLETE
 
 **File:** `src/models/training/unified_orchestrator.py`
-**Insert Location:** Before line 343 (before model contract validation loop)
+**Lines:** 316-340 (added before contract validation)
+**Completed:** 2026-01-29
 
-#### Code to Insert:
+#### What Was Added:
+
+Automatic feature selection logic that runs BEFORE contract validation:
+1. Finds minimum `max_features` across all configured models
+2. If feature count exceeds that limit, selects top N features by variance
+3. Logs warning and info about the selection
+
+#### Code Added:
 
 ```python
+# Lines 316-340
 # Auto-select features if count exceeds minimum model limit
 min_max_features = float('inf')
 for model_name in self.config.models:
@@ -194,21 +194,10 @@ if feature_names and len(feature_names) > min_max_features:
         logger.info(f"Selected {len(feature_names)} features by variance")
 ```
 
-#### Validation:
+#### Why This Mattered:
 
-```bash
-python -c "
-# Verify feature selection reduces count
-import pandas as pd
-import numpy as np
-df = pd.DataFrame(np.random.randn(100, 250), columns=[f'f{i}' for i in range(250)])
-variances = df.var().sort_values(ascending=False)
-top_200 = variances.head(200).index.tolist()
-print(f'Reduced {len(df.columns)} -> {len(top_200)} features')
-assert len(top_200) == 200
-print('PASS')
-"
-```
+**Before:** 218 features exceeded limits for LightGBM (200), TCN (120), PatchTST (10) → Training blocked
+**After:** Auto-selection reduces to minimum model limit → Training proceeds
 
 ---
 
@@ -1007,19 +996,19 @@ print('PASS: No PerformanceWarning')
 
 | Task | Description | Priority | Status |
 |------|-------------|----------|--------|
-| 23A-1 | Add "label" to exclude_exact (2 files) | CRITICAL | [x] COMPLETE |
-| 23B-1 | Skip rank validation on raw data | HIGH | [ ] |
-| 23B-2 | Auto feature selection | HIGH | [ ] |
-| 23C-1 | temporal.py vectorization | MEDIUM | [ ] |
-| 23C-2 | microstructure.py batch concat | MEDIUM | [ ] |
-| 23C-3 | volatility.py batch assign | MEDIUM | [ ] |
-| 23C-4 | trend.py batch assign | MEDIUM | [ ] |
-| 23C-5 | entropy.py batch assign | MEDIUM | [ ] |
-| 23C-6 | wavelets.py batch assign | MEDIUM | [ ] |
-| 23C-7 | momentum.py batch assign | MEDIUM | [ ] |
-| 23C-8 | price_features.py autocorr loop | MEDIUM | [ ] |
-| 23C-9 | regime.py batch assign | MEDIUM | [ ] |
-| 23C-10 | fillna deprecation fix | LOW | [ ] |
+| 23A-1 | Add "label" to exclude_exact (2 files) | CRITICAL | [x] COMPLETE (2026-01-29) |
+| 23B-1 | Skip rank validation on raw data | HIGH | [x] COMPLETE (2026-01-29) |
+| 23B-2 | Auto feature selection | HIGH | [x] COMPLETE (2026-01-29) |
+| 23C-1 | temporal.py vectorization | MEDIUM | [ ] TODO |
+| 23C-2 | microstructure.py batch concat | MEDIUM | [ ] TODO |
+| 23C-3 | volatility.py batch assign | MEDIUM | [ ] TODO |
+| 23C-4 | trend.py batch assign | MEDIUM | [ ] TODO |
+| 23C-5 | entropy.py batch assign | MEDIUM | [ ] TODO |
+| 23C-6 | wavelets.py batch assign | MEDIUM | [ ] TODO |
+| 23C-7 | momentum.py batch assign | MEDIUM | [ ] TODO |
+| 23C-8 | price_features.py autocorr loop | MEDIUM | [ ] TODO |
+| 23C-9 | regime.py batch assign | MEDIUM | [ ] TODO |
+| 23C-10 | fillna deprecation fix | LOW | [ ] TODO |
 
 ### Deferred Tasks (23D - Phase 24)
 
