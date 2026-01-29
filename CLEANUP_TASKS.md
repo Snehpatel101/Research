@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 22 Complete
-**Last Updated:** 2026-01-27 (Phase 22: OPTIMIZE_FOR Metric Wiring)
+**Status:** Phase 22 Complete, Phase 23 In Progress
+**Last Updated:** 2026-01-28 (Phase 23: Critical Bugfixes & Validation Fixes)
 
 ---
 
@@ -31,6 +31,8 @@
 | 19 | 17/21 | 34 new features, 5 perf fixes, quick fixes, code quality |
 | 20 | 9/15 | -851 lines, 50-100x speedup, B018 fixes, nested CV warning |
 | 21 | 10/11 | ML Pipeline Review fixes (robustness + correctness, 3 disproven) |
+| 22 | 7/7 | OPTIMIZE_FOR metric wiring (7 changes, scoring.py) |
+| 23 | 0/9 | IN PROGRESS - Critical bugfixes & validation fixes |
 
 See **COMPLETION.md** for detailed implementation records.
 
@@ -338,6 +340,143 @@ See **COMPLETION.md** for detailed implementation records.
 
 #### 19D-4: pipeline_cli.py Status ✅
 - [x] Verified USED - CLI entry point in pyproject.toml
+
+---
+
+## Phase 23: Critical Bugfixes & Validation Fixes (IN PROGRESS)
+
+**Status:** IN PROGRESS | 2026-01-28
+**Tasks:** 0/9 (3 deferred to Phase 24)
+**Source:** 4 parallel verification agents (integration-checker, contract-verifier, codebase-analyzer, Explore)
+
+---
+
+### Phase 23A: Critical Label Leakage Bugfix (PRIORITY 1)
+
+#### 23A-1: Add "label" to exclude_exact Set 🔴 CRITICAL
+- [ ] File: `src/data/adapters/base.py:339-347`
+- [ ] Current code:
+  ```python
+  exclude_exact = {
+      "timestamp", "date", "datetime", "index",
+      "split", "fold", "sample_weight"
+      # "label" is MISSING - causes perfect leakage
+  }
+  ```
+- [ ] Fix: Add `"label"` to the exclude_exact set
+- [ ] Impact: Prevents ALL models from training with label as a feature (100% training accuracy bug)
+- [ ] Validation: `grep -n '"label"' src/data/adapters/base.py:339-347` should return match
+
+---
+
+### Phase 23B: Validation Timing & Feature Selection (PRIORITY 2)
+
+#### 23B-1: Move Validation After Adapter Transformation 🟠 HIGH
+- [ ] File: `src/models/training/unified_orchestrator.py:501,579`
+- [ ] Current issue: Line 501 validates raw 2D DataFrame, but adapters transform at line 579
+- [ ] Causes: Rank validation failures for 3D/4D models (expects (N,F) but gets (N,T,F) or (N,M,T,F))
+- [ ] **Option A:** Move `validate_data_contract()` call from line 501 to after line 579
+- [ ] **Option B:** Add `skip_rank_validation=True` for raw data at line 501
+- [ ] Validation: Ensure validation happens on transformed data (correct rank)
+
+#### 23B-2: Add Auto Feature Selection Before Validation 🟠 HIGH
+- [ ] File: `src/models/training/unified_orchestrator.py:499`
+- [ ] Current issue: Pipeline produces 218 features
+- [ ] Contract violations:
+  - [ ] LightGBM: max 200 features (need to reduce by 18)
+  - [ ] TCN: max 120 features (need to reduce by 98)
+  - [ ] PatchTST: max 10 features (need to reduce by 208)
+- [ ] Fix: Insert auto feature selection before line 499 validation
+- [ ] Implementation:
+  ```python
+  # Before line 499
+  if len(X_train.columns) > model_contract.feature_bounds["max"]:
+      X_train = auto_select_features(X_train, max_features=model_contract.feature_bounds["max"])
+  ```
+- [ ] Validation: `X_train.shape[1] <= model_contract.feature_bounds["max"]`
+
+---
+
+### Phase 23C: Feature Engineering Performance (PRIORITY 3)
+
+#### 23C-1: Vectorize temporal.py get_session Pattern ⚪ MEDIUM
+- [ ] File: `src/data/features/compute/temporal.py:64`
+- [ ] Current: `.apply(get_session)` pattern (10-50x slower than vectorized)
+- [ ] Fix: Replace with `np.select()` conditional assignment
+- [ ] Implementation:
+  ```python
+  # Replace:
+  df["session"] = df["timestamp"].apply(get_session)
+
+  # With:
+  conditions = [
+      (hour >= 14) & (hour < 21),  # NY session
+      (hour >= 8) & (hour < 16),   # London session
+      # ...
+  ]
+  choices = ["NY", "London", ...]
+  df["session"] = np.select(conditions, choices, default="overnight")
+  ```
+- [ ] Speedup: 10-50x
+- [ ] Validation: Compare output before/after, benchmark timing
+
+#### 23C-2: Replace Microstructure Loop with pd.concat ⚪ MEDIUM
+- [ ] File: `src/data/features/compute/microstructure.py:589-591`
+- [ ] Current: Loop with individual column assignments (5-20x slower than batch)
+- [ ] Fix: Replace with single `pd.concat()` or `assign()`
+- [ ] Implementation:
+  ```python
+  # Replace:
+  for col in columns:
+      df[f"{col}_feature"] = calculate_feature(df[col])
+
+  # With:
+  df = df.assign(**{f"{col}_feature": calculate_feature(df[col]) for col in columns})
+  # OR
+  df = pd.concat([df, pd.DataFrame({f"{col}_feature": calculate_feature(df[col]) for col in columns})], axis=1)
+  ```
+- [ ] Speedup: 5-20x
+- [ ] Validation: Compare output before/after
+
+#### 23C-3: Batch Bollinger Band Assignments ⚪ MEDIUM
+- [ ] File: `src/data/features/compute/volatility.py:97-116`
+- [ ] Current: Individual assignments for upper/middle/lower bands (2-5x slower than batch)
+- [ ] Fix: Single `assign()` with all 3 bands
+- [ ] Implementation:
+  ```python
+  # Replace:
+  df["bb_upper"] = sma + (std * multiplier)
+  df["bb_middle"] = sma
+  df["bb_lower"] = sma - (std * multiplier)
+
+  # With:
+  df = df.assign(
+      bb_upper=sma + (std * multiplier),
+      bb_middle=sma,
+      bb_lower=sma - (std * multiplier)
+  )
+  ```
+- [ ] Speedup: 2-5x
+- [ ] Validation: Compare output before/after
+
+---
+
+### Phase 23D: Config Gaps (DEFERRED TO PHASE 24)
+
+#### 23D-1: Bundle Registry/Versioning ⏭️ DEFERRED
+- [ ] Missing: Bundle version tracking, registry for deployed models
+- [ ] Priority: LOW (system functional without)
+- [ ] Deferred to: Phase 24
+
+#### 23D-2: A/B Testing Configuration ⏭️ DEFERRED
+- [ ] Missing: Config for model A/B testing in production
+- [ ] Priority: LOW (manual A/B testing works)
+- [ ] Deferred to: Phase 24
+
+#### 23D-3: Drift Detection Config ⏭️ DEFERRED
+- [ ] Missing: Drift monitoring thresholds, alert configs
+- [ ] Priority: LOW (drift detection exists, just missing config)
+- [ ] Deferred to: Phase 24
 
 ---
 

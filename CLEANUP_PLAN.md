@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 21 Complete
-**Last Updated:** 2026-01-27 (Phase 21: ML Pipeline Review Fixes)
+**Status:** Phase 22 Complete, Phase 23 In Progress
+**Last Updated:** 2026-01-28 (Phase 23: Critical Bugfixes & Validation Fixes)
 
 ---
 
@@ -34,6 +34,7 @@ All major phases complete. See **COMPLETION.md** for full implementation details
 | 20 | Performance & Quality Polish | -851 lines, 50-100x speedup | 2026-01-25 |
 | 21 | ML Pipeline Review Fixes | 10 tasks, 10 files modified (3 disproven) | 2026-01-27 |
 | 22 | OPTIMIZE_FOR Metric Wiring | 7 changes, 6 files + scoring.py | 2026-01-27 |
+| 23 | Critical Bugfixes & Validation | In Progress | 2026-01-28 |
 
 **Net Impact:** ~+12,010 lines of production infrastructure
 
@@ -167,7 +168,9 @@ grep -n "not exact multiple\|ratio.*validation" src/data/adapters/multi_stream.p
 
 ---
 
-## Phase 22: OPTIMIZE_FOR Metric Wiring (COMPLETE)
+---
+
+## Phase 22: OPTIMIZE_FOR Metric Wiring (COMPLETE ✅)
 
 **Status:** COMPLETE | 2026-01-27
 **Source:** OPTIMIZE_FOR_PLAN.md (3 research agents + 1 verification agent)
@@ -315,6 +318,102 @@ These are backlog items that were intentionally deferred:
 - ✅ Timeout protection
 - ✅ Retry with exponential backoff
 - ✅ Circuit breaker pattern
+
+---
+
+## Phase 23: Critical Bugfixes & Validation Fixes (IN PROGRESS)
+
+**Status:** IN PROGRESS | 2026-01-28
+**Source:** Integration checker, contract verifier, codebase analyzer agents (parallel verification)
+**Priority:** CRITICAL (label leakage) + HIGH (validation timing, feature count)
+
+### Overview
+
+Four agents ran parallel verification discovering critical bugs and validation issues:
+- **integration-checker** - Found label column leakage (CRITICAL)
+- **contract-verifier** - Found validation timing and feature count issues
+- **codebase-analyzer** - Found performance bottlenecks
+- **Explore agent** - Found config gaps
+
+### Phase 23A: Critical Label Leakage Bugfix (PRIORITY 1)
+
+**Issue:** Label column NOT excluded from training features - perfect data leakage
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 23A-1 | Add "label" to exclude_exact set | CRITICAL |
+
+**Location:** `src/data/adapters/base.py:339-347`
+
+**Impact:** ALL models currently train with label as a feature (100% accuracy in training, catastrophic in production)
+
+### Phase 23B: Validation Timing & Feature Selection (PRIORITY 2)
+
+**Issue 1:** Validation happens before adapter transformation (wrong data rank)
+**Issue 2:** Pipeline produces 218 features, exceeds model contracts
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 23B-1 | Move validation after adapter OR skip rank validation on raw data | HIGH |
+| 23B-2 | Add auto feature selection at orchestrator.py:499 before validation | HIGH |
+
+**Locations:**
+- `src/models/training/unified_orchestrator.py:501` - validation call
+- `src/models/training/unified_orchestrator.py:579` - adapter call
+- `src/models/training/unified_orchestrator.py:499` - feature selection insertion point
+
+**Contract Violations:**
+- LightGBM: max 200 features (pipeline produces 218)
+- TCN: max 120 features (pipeline produces 218)
+- PatchTST: max 10 features (pipeline produces 218)
+
+### Phase 23C: Feature Engineering Performance (PRIORITY 3)
+
+**Issue:** Unvectorized loops in feature computation (10-500x slower than optimal)
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| 23C-1 | Vectorize temporal.py:64 get_session pattern | MEDIUM |
+| 23C-2 | Replace microstructure.py:589-591 loop with pd.concat | MEDIUM |
+| 23C-3 | Batch volatility.py:97-116 Bollinger Band assignments | MEDIUM |
+
+**Performance Impact:**
+- temporal.py:64 - `.apply(get_session)` is 10-50x slower than vectorized
+- microstructure.py:589-591 - Loop column assignment is 5-20x slower than pd.concat
+- volatility.py:97-116 - Individual assignments are 2-5x slower than batch
+
+### Phase 23D: Config Gaps (DEFERRED)
+
+**Missing Configuration:**
+- Bundle registry/versioning system
+- A/B testing configuration
+- Drift detection config
+- Streaming inference configuration
+
+**Status:** Deferred to Phase 24 (low priority, system functional without)
+
+### Validation Criteria
+
+```bash
+# 23A-1: Label exclusion
+grep -n "exclude_exact.*label" src/data/adapters/base.py  # Should find "label" in set
+
+# 23B-1: Validation timing
+grep -n "validate_data_contract\|get_adapter" src/models/training/unified_orchestrator.py  # Order check
+
+# 23B-2: Feature selection
+grep -n "select_features\|feature_selection" src/models/training/unified_orchestrator.py:499  # Should exist
+
+# 23C: Vectorization patterns
+grep -n "np.select\|pd.concat\|assign" src/data/features/compute/{temporal,microstructure,volatility}.py
+```
+
+### Lessons Expected
+
+1. **Integration testing reveals leakage** - Unit tests passed but integration found critical bug
+2. **Validation timing matters** - Validating at wrong pipeline stage causes false failures
+3. **Contract enforcement catches overruns** - Feature count limits prevent model errors
+4. **Vectorization is essential** - Python loops in hot paths cause 10-500x slowdowns
 
 ---
 
