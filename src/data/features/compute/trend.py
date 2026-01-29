@@ -2,12 +2,32 @@
 Trend feature computation - ADX, Directional Indicators, Supertrend.
 
 PHASE_1 Unified Features: 6 TREND features.
+
+Phase 24: Added caching for ADX/DI and Supertrend to avoid redundant computation.
+- ADX/DI computed once per DataFrame, cached by id(df)
+- Supertrend computed once per DataFrame, cached by id(df)
 """
 
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+
+# =============================================================================
+# MODULE-LEVEL CACHES (Phase 24: Avoid redundant computation)
+# =============================================================================
+
+# Cache for ADX/DI computation: {id(df): (plus_di, minus_di, adx)}
+_di_adx_cache: dict[int, tuple[pd.Series, pd.Series, pd.Series]] = {}
+
+# Cache for Supertrend computation: {id(df): (supertrend, direction)}
+_supertrend_cache: dict[int, tuple[pd.Series, pd.Series]] = {}
+
+
+def clear_trend_cache() -> None:
+    """Clear all trend computation caches. Call between different DataFrames."""
+    _di_adx_cache.clear()
+    _supertrend_cache.clear()
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -85,6 +105,18 @@ def _compute_di_adx(df: pd.DataFrame, period: int = 14) -> tuple[pd.Series, pd.S
     return plus_di, minus_di, adx
 
 
+def _get_di_adx_cached(df: pd.DataFrame, period: int = 14) -> tuple[pd.Series, pd.Series, pd.Series]:
+    """
+    Get cached ADX/DI computation or compute if not cached.
+
+    Phase 24: Avoids computing ADX/DI 4x for the same DataFrame.
+    """
+    cache_key = id(df)
+    if cache_key not in _di_adx_cache:
+        _di_adx_cache[cache_key] = _compute_di_adx(df, period)
+    return _di_adx_cache[cache_key]
+
+
 # =============================================================================
 # ADX FEATURES
 # =============================================================================
@@ -98,7 +130,7 @@ def compute_adx_14(df: pd.DataFrame) -> pd.Series:
     - > 25: Strong trend
     - < 20: Weak trend / ranging market
     """
-    _, _, adx = _compute_di_adx(df, period=14)
+    _, _, adx = _get_di_adx_cached(df, period=14)
     return adx
 
 
@@ -108,7 +140,7 @@ def compute_plus_di_14(df: pd.DataFrame) -> pd.Series:
 
     Measures upward trend strength.
     """
-    plus_di, _, _ = _compute_di_adx(df, period=14)
+    plus_di, _, _ = _get_di_adx_cached(df, period=14)
     return plus_di
 
 
@@ -118,7 +150,7 @@ def compute_minus_di_14(df: pd.DataFrame) -> pd.Series:
 
     Measures downward trend strength.
     """
-    _, minus_di, _ = _compute_di_adx(df, period=14)
+    _, minus_di, _ = _get_di_adx_cached(df, period=14)
     return minus_di
 
 
@@ -128,7 +160,7 @@ def compute_adx_strong_trend(df: pd.DataFrame) -> pd.Series:
 
     Binary indicator for strong trending conditions.
     """
-    _, _, adx = _compute_di_adx(df, period=14)
+    _, _, adx = _get_di_adx_cached(df, period=14)
     return (adx > 25).astype(float)
 
 
@@ -213,6 +245,20 @@ def _compute_supertrend(
     return pd.Series(supertrend, index=df.index), pd.Series(direction, index=df.index)
 
 
+def _get_supertrend_cached(
+    df: pd.DataFrame, period: int = 10, multiplier: float = 3.0
+) -> tuple[pd.Series, pd.Series]:
+    """
+    Get cached Supertrend computation or compute if not cached.
+
+    Phase 24: Avoids computing Supertrend 2x for the same DataFrame.
+    """
+    cache_key = id(df)
+    if cache_key not in _supertrend_cache:
+        _supertrend_cache[cache_key] = _compute_supertrend(df, period, multiplier)
+    return _supertrend_cache[cache_key]
+
+
 def compute_supertrend(df: pd.DataFrame) -> pd.Series:
     """
     Supertrend line (10, 3.0).
@@ -220,7 +266,7 @@ def compute_supertrend(df: pd.DataFrame) -> pd.Series:
     The Supertrend value acts as dynamic support (in uptrend) or
     resistance (in downtrend).
     """
-    supertrend, _ = _compute_supertrend(df, period=10, multiplier=3.0)
+    supertrend, _ = _get_supertrend_cached(df, period=10, multiplier=3.0)
     return supertrend
 
 
@@ -232,7 +278,7 @@ def compute_supertrend_direction(df: pd.DataFrame) -> pd.Series:
         1.0 for uptrend
         -1.0 for downtrend
     """
-    _, direction = _compute_supertrend(df, period=10, multiplier=3.0)
+    _, direction = _get_supertrend_cached(df, period=10, multiplier=3.0)
     return direction
 
 
@@ -265,4 +311,5 @@ __all__ = [
     "compute_adx_strong_trend",
     "compute_supertrend",
     "compute_supertrend_direction",
+    "clear_trend_cache",
 ]

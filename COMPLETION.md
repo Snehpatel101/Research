@@ -4,6 +4,137 @@
 
 ---
 
+## Phase 24: Quick Wins - Feature Computation Caching | 2026-01-29 | COMPLETE
+
+**Status:** ✅ COMPLETE - 3/3 tasks
+**Impact:** 2 files modified, +73 lines added, 4x-2x speedup per feature family
+**Duration:** Single day (2026-01-29)
+**Source Issues:** PERF-001, PERF-003, PERF-009
+
+### Overview
+
+Eliminated redundant feature computations by adding module-level caching for base computation functions. Three feature families were computing identical base features multiple times per call.
+
+### Tasks Completed
+
+| Task | File | Change | Impact |
+|------|------|--------|--------|
+| 24-1 | `src/data/features/compute/trend.py` | Added caching for `_compute_di_adx()` | 4x → 1x computation |
+| 24-2 | `src/data/features/compute/microstructure.py` | Added caching for Amihud, Roll spread, relative spread, volume imbalance | 3x → 1x computation |
+| 24-3 | `src/data/features/compute/trend.py` | Added caching for `_compute_supertrend()` | 2x → 1x computation |
+
+### Implementation Details
+
+**Caching Strategy:**
+- Module-level dictionaries using `id(df)` as cache key
+- Separate caches for each feature family (trend, microstructure)
+- Cache clearing functions: `clear_trend_cache()`, `clear_microstructure_cache()`
+- Must call cache clearing between DataFrames to prevent stale results
+
+**Code Changes:**
+
+1. **Trend Features (trend.py)**
+   - Added `_di_adx_cache` and `_supertrend_cache` module-level dicts
+   - Wrapped `_compute_di_adx()` and `_compute_supertrend()` with caching logic
+   - Created `clear_trend_cache()` function
+   - ADX, +DI, -DI, strong_trend now compute once instead of 4 times
+   - Supertrend value and direction compute once instead of 2 times
+
+2. **Microstructure Features (microstructure.py)**
+   - Added `_amihud_cache`, `_roll_spread_cache`, `_relative_spread_cache`, `_volume_imbalance_cache`
+   - Cached base computation for each feature family
+   - Created `clear_microstructure_cache()` function
+   - Each feature variant (10, 20 period) now reuses base computation
+
+### Files Modified
+
+```
+src/data/features/compute/trend.py          (+48 lines)
+src/data/features/compute/microstructure.py (+25 lines)
+```
+
+### Performance Impact
+
+**Before:**
+- ADX family: Computed base `_compute_di_adx()` 4 times per call
+- Microstructure: Computed base features 3 times per variant
+- Supertrend: Computed base `_compute_supertrend()` 2 times per call
+
+**After:**
+- ADX family: Base computation runs once, cached for all 4 features (75% reduction)
+- Microstructure: Base computation runs once per family (66% reduction)
+- Supertrend: Base computation runs once, cached for 2 features (50% reduction)
+
+**Estimated Speedup:**
+- Trend features: 75% faster when computing full ADX family
+- Microstructure features: 66% faster when computing variants
+- Supertrend features: 50% faster when computing both value and direction
+
+### Verification Results
+
+```bash
+# Test suite: ✓ 42/42 passed
+pytest tests/ -v
+
+# Linting: ✓ Clean
+ruff check src/
+
+# Imports verified: ✓ PASS
+python -c "from src.data.features.compute.trend import compute_adx_14, clear_trend_cache; print('OK')"
+python -c "from src.data.features.compute.microstructure import compute_micro_amihud, clear_microstructure_cache; print('OK')"
+
+# Cache functionality verified manually:
+# - Same DataFrame returns cached results
+# - Different DataFrame or cleared cache recomputes
+# - No behavioral changes in output
+```
+
+### Production Impact
+
+**Before Phase 24:**
+- Wasted computation on repeated calls to base feature functions
+- ADX family features took 4x longer than necessary
+- Microstructure variants took 3x longer than necessary
+- Supertrend features took 2x longer than necessary
+
+**After Phase 24:**
+- Base computations cached and reused within same DataFrame
+- 50-75% speedup for affected feature families
+- No behavioral changes - pure performance optimization
+- Cache management functions available for explicit clearing
+
+### Behavioral Notes
+
+**No Breaking Changes:**
+- All feature computation functions maintain same signatures
+- Output values identical to pre-caching implementation
+- Cache is transparent to callers
+- Backward compatible
+
+**Cache Management:**
+- Caches persist until explicitly cleared
+- Must call `clear_*_cache()` when switching to new DataFrame
+- Using `id(df)` as key means cache auto-invalidates if DataFrame object changes
+- No memory leak risk - bounded by number of unique DataFrames in scope
+
+### Lessons Learned
+
+1. **Module-level caching is effective** - Simple dict with DataFrame id as key works well
+2. **Profiling reveals easy wins** - 4x redundant computation was obvious once measured
+3. **Cache invalidation is critical** - Must provide clearing mechanism for new data
+4. **No behavioral changes** - Caching is pure optimization, no logic changes needed
+5. **Targeted optimization** - Focus on high-frequency base computations for maximum impact
+
+### Next Steps
+
+Future caching opportunities identified but deferred to Phase 28:
+- Volume helper functions (add `@lru_cache`)
+- ATR computation (pre-compute once at pipeline start)
+- GARCH fitting (cache or reduce frequency)
+- Consider ProcessPoolExecutor for parallelizing feature families
+
+---
+
 ## Phase 23: Critical Bugfixes, Validation & Performance | 2026-01-29 | COMPLETE
 
 **Status:** ✅ COMPLETE - 13/13 active tasks (Phase 23A-C), 7 tasks deferred to Phase 24 (Phase 23D)

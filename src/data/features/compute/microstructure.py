@@ -4,12 +4,33 @@ Microstructure feature computation - Amihud, Roll, Kyle, spreads, imbalance.
 PHASE_1 Unified Features: 15 MICROSTRUCTURE features.
 
 These features measure market quality, liquidity, and microstructure effects.
+
+Phase 24: Added caching to avoid redundant computation for Amihud, Roll spread,
+relative spread, and volume imbalance base calculations.
 """
 
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+
+# =============================================================================
+# MODULE-LEVEL CACHES (Phase 24: Avoid redundant computation)
+# =============================================================================
+
+# Caches keyed by id(df)
+_amihud_cache: dict[int, pd.Series] = {}
+_roll_spread_cache: dict[int, pd.Series] = {}
+_rel_spread_cache: dict[int, pd.Series] = {}
+_volume_imbalance_cache: dict[int, pd.Series] = {}
+
+
+def clear_microstructure_cache() -> None:
+    """Clear all microstructure computation caches. Call between different DataFrames."""
+    _amihud_cache.clear()
+    _roll_spread_cache.clear()
+    _rel_spread_cache.clear()
+    _volume_imbalance_cache.clear()
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -41,9 +62,9 @@ def _log_returns(close: pd.Series) -> pd.Series:
 # =============================================================================
 
 
-def compute_micro_amihud(df: pd.DataFrame) -> pd.Series:
+def _compute_micro_amihud_base(df: pd.DataFrame) -> pd.Series:
     """
-    Amihud illiquidity measure.
+    Amihud illiquidity measure (internal computation).
 
     Amihud = |Return| / Dollar Volume
     Higher values indicate lower liquidity (price moves more per dollar traded).
@@ -57,15 +78,33 @@ def compute_micro_amihud(df: pd.DataFrame) -> pd.Series:
     return returns / dollar_volume
 
 
+def _get_amihud_cached(df: pd.DataFrame) -> pd.Series:
+    """Get cached Amihud or compute if not cached. Phase 24."""
+    cache_key = id(df)
+    if cache_key not in _amihud_cache:
+        _amihud_cache[cache_key] = _compute_micro_amihud_base(df)
+    return _amihud_cache[cache_key]
+
+
+def compute_micro_amihud(df: pd.DataFrame) -> pd.Series:
+    """
+    Amihud illiquidity measure.
+
+    Amihud = |Return| / Dollar Volume
+    Higher values indicate lower liquidity (price moves more per dollar traded).
+    """
+    return _get_amihud_cached(df)
+
+
 def compute_micro_amihud_10(df: pd.DataFrame) -> pd.Series:
     """10-period average Amihud illiquidity."""
-    amihud = compute_micro_amihud(df)
+    amihud = _get_amihud_cached(df)
     return _sma(amihud, window=10)
 
 
 def compute_micro_amihud_20(df: pd.DataFrame) -> pd.Series:
     """20-period average Amihud illiquidity."""
-    amihud = compute_micro_amihud(df)
+    amihud = _get_amihud_cached(df)
     return _sma(amihud, window=20)
 
 
@@ -74,9 +113,9 @@ def compute_micro_amihud_20(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def compute_micro_roll_spread(df: pd.DataFrame) -> pd.Series:
+def _compute_micro_roll_spread_base(df: pd.DataFrame) -> pd.Series:
     """
-    Roll spread estimator.
+    Roll spread estimator (internal computation).
 
     Roll Spread = 2 * sqrt(-Cov(Delta_P_t, Delta_P_t-1))
     Estimates effective bid-ask spread from price autocorrelation.
@@ -91,9 +130,27 @@ def compute_micro_roll_spread(df: pd.DataFrame) -> pd.Series:
     return roll_spread
 
 
+def _get_roll_spread_cached(df: pd.DataFrame) -> pd.Series:
+    """Get cached Roll spread or compute if not cached. Phase 24."""
+    cache_key = id(df)
+    if cache_key not in _roll_spread_cache:
+        _roll_spread_cache[cache_key] = _compute_micro_roll_spread_base(df)
+    return _roll_spread_cache[cache_key]
+
+
+def compute_micro_roll_spread(df: pd.DataFrame) -> pd.Series:
+    """
+    Roll spread estimator.
+
+    Roll Spread = 2 * sqrt(-Cov(Delta_P_t, Delta_P_t-1))
+    Estimates effective bid-ask spread from price autocorrelation.
+    """
+    return _get_roll_spread_cached(df)
+
+
 def compute_micro_roll_spread_pct(df: pd.DataFrame) -> pd.Series:
     """Roll spread as percentage of price."""
-    roll_spread = compute_micro_roll_spread(df)
+    roll_spread = _get_roll_spread_cached(df)
     # Avoid division by zero
     close = df["close"].replace(0, np.nan)
     return (roll_spread / close) * 100
@@ -170,9 +227,9 @@ def compute_micro_cs_spread(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def compute_micro_rel_spread(df: pd.DataFrame) -> pd.Series:
+def _compute_micro_rel_spread_base(df: pd.DataFrame) -> pd.Series:
     """
-    Relative spread proxy using high-low range.
+    Relative spread proxy using high-low range (internal computation).
 
     Approximates bid-ask spread as a fraction of the range.
     """
@@ -185,15 +242,51 @@ def compute_micro_rel_spread(df: pd.DataFrame) -> pd.Series:
     return hl_range / mid_price
 
 
+def _get_rel_spread_cached(df: pd.DataFrame) -> pd.Series:
+    """Get cached relative spread or compute if not cached. Phase 24."""
+    cache_key = id(df)
+    if cache_key not in _rel_spread_cache:
+        _rel_spread_cache[cache_key] = _compute_micro_rel_spread_base(df)
+    return _rel_spread_cache[cache_key]
+
+
+def compute_micro_rel_spread(df: pd.DataFrame) -> pd.Series:
+    """
+    Relative spread proxy using high-low range.
+
+    Approximates bid-ask spread as a fraction of the range.
+    """
+    return _get_rel_spread_cached(df)
+
+
 def compute_micro_rel_spread_10(df: pd.DataFrame) -> pd.Series:
     """10-period average relative spread."""
-    rel_spread = compute_micro_rel_spread(df)
+    rel_spread = _get_rel_spread_cached(df)
     return _sma(rel_spread, window=10)
 
 
 # =============================================================================
 # VOLUME IMBALANCE FEATURES
 # =============================================================================
+
+
+def _compute_micro_volume_imbalance_base(df: pd.DataFrame) -> pd.Series:
+    """
+    Volume imbalance indicator (internal computation).
+
+    Positive when buying pressure (price up with volume),
+    negative when selling pressure (price down with volume).
+    """
+    price_direction = np.sign(df["close"].diff())
+    return price_direction * df["volume"]
+
+
+def _get_volume_imbalance_cached(df: pd.DataFrame) -> pd.Series:
+    """Get cached volume imbalance or compute if not cached. Phase 24."""
+    cache_key = id(df)
+    if cache_key not in _volume_imbalance_cache:
+        _volume_imbalance_cache[cache_key] = _compute_micro_volume_imbalance_base(df)
+    return _volume_imbalance_cache[cache_key]
 
 
 def compute_micro_volume_imbalance(df: pd.DataFrame) -> pd.Series:
@@ -203,8 +296,7 @@ def compute_micro_volume_imbalance(df: pd.DataFrame) -> pd.Series:
     Positive when buying pressure (price up with volume),
     negative when selling pressure (price down with volume).
     """
-    price_direction = np.sign(df["close"].diff())
-    return price_direction * df["volume"]
+    return _get_volume_imbalance_cached(df)
 
 
 def compute_micro_cum_imbalance_20(df: pd.DataFrame) -> pd.Series:
@@ -213,7 +305,7 @@ def compute_micro_cum_imbalance_20(df: pd.DataFrame) -> pd.Series:
 
     Measures net buying/selling pressure over the window.
     """
-    imbalance = compute_micro_volume_imbalance(df)
+    imbalance = _get_volume_imbalance_cached(df)
     return imbalance.rolling(window=20, min_periods=20).sum()
 
 
@@ -329,6 +421,7 @@ __all__ = [
     "MICROSTRUCTURE_FEATURES",
     "FEATURE_FAMILY",
     "FEATURE_COUNT",
+    "clear_microstructure_cache",
     # Amihud
     "compute_micro_amihud",
     "compute_micro_amihud_10",
