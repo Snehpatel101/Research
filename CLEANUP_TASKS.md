@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
 **Status:** Phase 28 Partial Complete (3/5 tasks done, 2 deferred to Phase 32)
-**Last Updated:** 2026-01-29 (Phase 28 partial completion)
+**Last Updated:** 2026-01-29 (Phase 28 closeout - FINAL)
 
 ---
 
@@ -854,95 +854,30 @@ python -c "from src.contracts.model_contract import ModelContractViolation; prin
 **Priority:** HIGH
 **Completed:** 2026-01-29
 
-#### Problem
-
-Approximate entropy computation had O(n²) Python loop without numba acceleration (sample entropy already had numba). Expected ~50-100x speedup.
-
-#### AI Instructions
-
-1. **Read** `src/data/features/compute/entropy.py` lines 150-200
-2. **Add** numba-jitted helper function:
-   ```python
-   @nb.njit
-   def _count_matches_per_pattern_numba(patterns: np.ndarray, tolerance: float) -> int:
-       """Count matching patterns using numba for ~50-100x speedup."""
-       n = len(patterns)
-       count = 0
-       for i in range(n):
-           for j in range(n):
-               if i != j and np.abs(patterns[i] - patterns[j]) <= tolerance:
-                   count += 1
-       return count
-   ```
-3. **Update** `_approximate_entropy()` to use this function in `_phi()` inner function
-4. **Run** `ruff check src/data/features/compute/entropy.py --fix`
-5. **Run** `black src/data/features/compute/entropy.py`
-6. **Verify** with performance test
-
-#### Implementation
-
-**Changes:**
-- Added `_count_matches_per_pattern_numba()` numba-jitted function (+40 lines)
-- Updated `_phi()` function inside `_approximate_entropy()` to call numba version
-- Now both sample entropy and approximate entropy have numba acceleration
-
-**Files modified:**
-- `src/data/features/compute/entropy.py` (+40 lines)
-
-#### Verification
-
-```bash
-# Profile approximate entropy before/after
-python -c "
-import time
-from src.data.features.compute.entropy import compute_approximate_entropy
-import pandas as pd
-import numpy as np
-df = pd.DataFrame({'close': np.random.rand(500)*100})
-start = time.time()
-result = compute_approximate_entropy(df)
-print(f'Time: {time.time()-start:.3f}s')
-"
-# Expected: ~50-100x speedup
-```
+**Summary:** Added numba-jitted `_count_matches_per_pattern_numba()` function for O(n²) pattern matching. Updated `_approximate_entropy()` to use numba version. Expected ~50-100x speedup. Files modified: `entropy.py` (+40 lines).
 
 ---
 
-### Task 28-2: Feature Family Parallelization ⏭️ DEFERRED
+### Task 28-2: Feature Family Parallelization ⏭️ DEFERRED to Phase 32
 
 **File:** `src/data/features/compute/` (all feature modules)
 **Priority:** HIGH
 **Status:** DEFERRED to Phase 32
+**Completed:** N/A - Not implemented
 
-#### Deferral Reason
-
-ProcessPoolExecutor parallelization requires architectural changes:
-- Needs changes to entire feature computation flow
-- Affects orchestration layer in `src/data/pipeline/stages/features/`
-- Requires careful analysis of data sharing and serialization overhead
-- May conflict with existing caching strategies
-- Better addressed after cache optimizations are fully tested (Phase 28 tasks 28-4, 28-5)
-
-**Recommendation:** Move to Phase 32 with proper architectural design and benchmarking.
+**Deferral Reason:** ProcessPoolExecutor parallelization requires architectural changes to entire feature computation flow. Affects orchestration layer, needs analysis of serialization overhead, may conflict with existing caching strategies. Better addressed after cache optimizations are fully tested. Moved to Phase 32 with proper architectural design and benchmarking.
 
 ---
 
-### Task 28-3: GARCH Optimization ⏭️ DEFERRED
+### Task 28-3: GARCH Optimization ⏭️ DEFERRED to Phase 32
 
 **File:** `src/data/pipeline/stages/features/volatility.py`
-**Lines:** 548-586 (NOTE: Correct file path, not `src/data/features/compute/volatility.py`)
+**Lines:** 548-586
 **Priority:** MEDIUM
 **Status:** DEFERRED to Phase 32
+**Completed:** N/A - Not implemented
 
-#### Deferral Reason
-
-GARCH optimization needs accuracy analysis before implementation:
-- Fitting every N bars instead of every bar may affect model accuracy
-- Need benchmarking to determine optimal N value (10? 20? 50?)
-- EWMA alternative needs validation against GARCH results
-- File path in original task was incorrect: should be `src/data/pipeline/stages/features/volatility.py:548-586`, not `src/data/features/compute/volatility.py`
-
-**Recommendation:** Move to Phase 32 with proper accuracy testing and benchmarking framework.
+**Deferral Reason:** GARCH optimization needs accuracy analysis before implementation. Fitting every N bars instead of every bar may affect model accuracy. Need benchmarking to determine optimal N value (10? 20? 50?). EWMA alternative needs validation against GARCH results. Note: Original task had wrong file path - corrected to `src/data/pipeline/stages/features/volatility.py:548-586`. Moved to Phase 32 with accuracy testing and benchmarking framework.
 
 ---
 
@@ -952,74 +887,7 @@ GARCH optimization needs accuracy analysis before implementation:
 **Priority:** HIGH
 **Completed:** 2026-01-29
 
-#### Problem
-
-ATR (Average True Range) was computed multiple times:
-- `compute_atr_7`, `compute_atr_14`, `compute_atr_21` each compute ATR independently
-- `compute_atr_pct_14` recomputes ATR
-- Keltner channel features recompute ATR
-
-#### AI Instructions
-
-1. **Read** `src/data/features/compute/volatility.py` to identify all ATR computations
-2. **Add** module-level cache:
-   ```python
-   _atr_cache: dict[tuple[int, int], pd.Series] = {}
-
-   def _get_atr_cached(df: pd.DataFrame, period: int) -> pd.Series:
-       """Get ATR with DataFrame-id based caching."""
-       key = (id(df), period)
-       if key not in _atr_cache:
-           _atr_cache[key] = ta.atr(df['high'], df['low'], df['close'], length=period)
-       return _atr_cache[key]
-   ```
-3. **Update** all ATR-dependent functions to use cached version
-4. **Run** linting and formatting
-5. **Verify** with performance test
-
-#### Implementation
-
-**Changes:**
-- Added module-level `_atr_cache` dictionary (+25 lines)
-- Added `_get_atr_cached()` helper function
-- Updated all ATR-dependent features to use cache:
-  - `compute_atr_7`, `compute_atr_14`, `compute_atr_21`
-  - `compute_atr_pct_14`
-  - `compute_keltner_channel_upper_20`
-  - `compute_keltner_channel_lower_20`
-  - `compute_keltner_pct_20`
-
-**Files modified:**
-- `src/data/features/compute/volatility.py` (+25 lines)
-
-**Benefits:**
-- ATR computed once per (DataFrame, period) pair
-- Automatically invalidates when DataFrame changes (uses id(df))
-- All dependent features share cached results
-
-#### Verification
-
-```bash
-# Test ATR caching
-python -c "
-import pandas as pd
-import numpy as np
-from src.data.features.compute.volatility import (
-    compute_atr_14, compute_atr_pct_14,
-    compute_keltner_channel_upper_20
-)
-df = pd.DataFrame({
-    'high': np.random.rand(1000)*100+100,
-    'low': np.random.rand(1000)*100+99,
-    'close': np.random.rand(1000)*100+99.5
-})
-# All these should use same cached ATR
-atr = compute_atr_14(df)
-atr_pct = compute_atr_pct_14(df)
-kc = compute_keltner_channel_upper_20(df)
-print('Caching works if all features computed instantly')
-"
-```
+**Summary:** Implemented DataFrame-id based caching for ATR (Average True Range). Added `_atr_cache` dictionary and `_get_atr_cached()` helper. Updated all ATR-dependent features (atr_7/14/21, atr_pct_14, keltner channels) to use cache. ATR now computed once per (DataFrame, period) pair. Files modified: `volatility.py` (+25 lines).
 
 ---
 
@@ -1029,76 +897,7 @@ print('Caching works if all features computed instantly')
 **Priority:** MEDIUM
 **Completed:** 2026-01-29
 
-#### Problem
-
-Volume features had redundant computation:
-- `compute_obv_sma_20` recomputes OBV
-- `compute_price_to_vwap` recomputes VWAP
-- `compute_dollar_volume_sma_10`, `compute_dollar_volume_sma_20`, `compute_dollar_volume_ratio` all recompute dollar_volume
-
-#### AI Instructions
-
-1. **Read** `src/data/features/compute/volume.py` to identify all base computations
-2. **Add** module-level cache for base features:
-   ```python
-   _volume_cache: dict[tuple[int, str], pd.Series] = {}
-
-   def _get_cached_volume_feature(df: pd.DataFrame, feature_name: str, compute_fn) -> pd.Series:
-       """Cache base volume features."""
-       key = (id(df), feature_name)
-       if key not in _volume_cache:
-           _volume_cache[key] = compute_fn(df)
-       return _volume_cache[key]
-   ```
-3. **Update** derived features to use cached base values
-4. **Run** linting and formatting
-5. **Verify** with performance test
-
-#### Implementation
-
-**Changes:**
-- Added module-level `_volume_cache` dictionary (+35 lines)
-- Added caching for base computations:
-  - OBV (On Balance Volume)
-  - VWAP (Volume Weighted Average Price)
-  - TWAP_10 (Time Weighted Average Price)
-  - dollar_volume
-- Updated derived features to use cached values:
-  - `compute_obv_sma_20` uses cached OBV
-  - `compute_price_to_vwap` uses cached VWAP
-  - `compute_dollar_volume_sma_10`, `compute_dollar_volume_sma_20`, `compute_dollar_volume_ratio` use cached dollar_volume
-
-**Files modified:**
-- `src/data/features/compute/volume.py` (+35 lines)
-
-**Benefits:**
-- Base volume features computed once per DataFrame
-- All derived features share cached base values
-- Automatic invalidation on DataFrame change
-
-#### Verification
-
-```bash
-# Test volume caching
-python -c "
-import pandas as pd
-import numpy as np
-from src.data.features.compute.volume import (
-    compute_obv, compute_obv_sma_20,
-    compute_dollar_volume, compute_dollar_volume_sma_10
-)
-df = pd.DataFrame({
-    'close': np.random.rand(1000)*100,
-    'volume': np.random.rand(1000)*1e6
-})
-# Base and derived features should share cached values
-obv = compute_obv(df)
-obv_sma = compute_obv_sma_20(df)
-dv = compute_dollar_volume(df)
-dv_sma = compute_dollar_volume_sma_10(df)
-print('Caching works')
-"
-```
+**Summary:** Implemented DataFrame-id based caching for base volume features. Added `_volume_cache` dictionary for OBV, VWAP, TWAP_10, and dollar_volume. Updated derived features (obv_sma_20, price_to_vwap, dollar_volume_sma_10/20, dollar_volume_ratio) to use cached base values. Base volume features now computed once per DataFrame. Files modified: `volume.py` (+35 lines).
 
 ---
 
