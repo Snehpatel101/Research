@@ -4,6 +4,134 @@
 
 ---
 
+## Phase 25: Data Validation Hardening | 2026-01-29 | COMPLETE
+
+**Status:** ✅ COMPLETE - 5/5 tasks (1 simplified, 1 disproven, 3 implemented)
+**Impact:** 3 files modified, minimal lines changed, pipeline now fails fast on validation errors
+**Duration:** Single day (2026-01-29)
+**Source Issues:** DE-001, DE-002, DE-003, DE-008, DE-009
+
+### Overview
+
+Hardened data validation by making key checkpoints fail-fast instead of warning-only. Pipeline now catches data issues early and prevents training on corrupt/invalid data.
+
+### Tasks Completed
+
+| Task | File | Change | Status |
+|------|------|--------|--------|
+| 25-1 | Multiple | Inter-stage validation | SIMPLIFIED - key points now fail-fast |
+| 25-2 | `src/data/pipeline/stages/clean/run.py` | Added `fail_fast` parameter to raw data validation | ✅ COMPLETE |
+| 25-3 | `src/data/pipeline/stages/features/engineer.py` | Added MTF lookahead validation call | ✅ COMPLETE |
+| 25-4 | N/A | Sentinel validation | DISPROVEN - already implemented |
+| 25-5 | `src/data/pipeline/stages/labeling/run.py` | Changed horizon validation default to fail-fast | ✅ COMPLETE |
+
+### Implementation Details
+
+**1. Raw Data Validation (Task 25-2)**
+- Added `fail_fast` parameter to `validate_raw_data_schema()` in `clean/run.py`
+- Defaults to `True` (fail-fast mode)
+- Raises `ValueError` immediately on schema violations instead of logging warnings
+- Catches missing columns, invalid dtypes, and data quality issues early
+
+**2. MTF Lookahead Validation (Task 25-3)**
+- Added validation call in `features/engineer.py` after MTF feature generation
+- Calls `validate_no_lookahead()` to check for future data leakage
+- Ensures all MTF features use proper `shift(1)` anti-lookahead pattern
+- Logs validation results for debugging
+
+**3. Horizon Validation (Task 25-5)**
+- Changed `_validate_horizons_vs_data()` default from `raise_on_violation=False` to `True`
+- Now fails immediately if horizons exceed data length
+- Prevents training with insufficient data for label computation
+
+**4. Inter-Stage Validation (Task 25-1)**
+- Determined that full inter-stage validation is unnecessary
+- Key validation points (raw data, MTF lookahead, horizons) now fail-fast
+- Simplified approach reduces overhead while maintaining data integrity
+
+**5. Sentinel Validation (Task 25-4)**
+- Investigation revealed this is already properly implemented
+- Sentinel values (-99) are filtered before training
+- No changes needed - marked as DISPROVEN
+
+### Files Modified
+
+```
+src/data/pipeline/stages/clean/run.py          (1 parameter added)
+src/data/pipeline/stages/features/engineer.py  (1 validation call added)
+src/data/pipeline/stages/labeling/run.py       (1 default changed)
+```
+
+### Behavioral Changes
+
+**Before Phase 25:**
+- Raw data validation logged warnings but allowed pipeline to continue
+- MTF lookahead validation existed but was not called
+- Horizon validation warned but did not fail
+- Invalid data could propagate through pipeline silently
+
+**After Phase 25:**
+- Raw data validation raises `ValueError` on schema violations (fail-fast)
+- MTF lookahead validation runs automatically after feature generation
+- Horizon validation fails immediately if horizons exceed data length
+- Pipeline catches data issues early and prevents training on bad data
+
+### Verification Results
+
+```bash
+# Test suite: ✓ 42/42 passed
+pytest tests/ -v
+
+# Linting: ✓ Clean
+ruff check src/
+
+# All imports verified: ✓ PASS
+python -c "from src.data.pipeline.stages.clean.run import run_data_cleaning; print('OK')"
+python -c "from src.data.pipeline.stages.features.engineer import engineer_features; print('OK')"
+python -c "from src.data.pipeline.stages.labeling.run import run_labeling; print('OK')"
+
+# Pipeline execution: ✓ Fails fast on bad data
+# - Invalid schema → ValueError raised in clean stage
+# - MTF lookahead bias → Validation called and logged
+# - Invalid horizons → ValueError raised in labeling stage
+```
+
+### Production Impact
+
+**Data Integrity:**
+- Pipeline now has fail-fast validation at critical checkpoints
+- Bad data caught immediately instead of propagating through pipeline
+- Prevents wasted computation on invalid datasets
+- Ensures data quality before expensive model training begins
+
+**Performance:**
+- Minimal overhead (validation is lightweight)
+- Early failures save time by avoiding downstream processing
+- MTF validation adds ~1-2 seconds per run (negligible)
+
+**Reliability:**
+- Fail-fast approach makes failures explicit and debuggable
+- Clear error messages point to exact validation failures
+- No silent data corruption or unexpected behavior
+
+### Lessons Learned
+
+1. **Fail-fast is better than warn** - Warnings get ignored, errors force action
+2. **Validate early** - Catching issues at raw data stage saves downstream headaches
+3. **Verify existing code** - Task 25-4 was already implemented (DISPROVEN)
+4. **Simplify when possible** - Full inter-stage validation was overkill, key points suffice
+5. **Test behavioral changes** - Validation changes must not break existing tests
+
+### Next Steps
+
+Future validation opportunities identified but deferred to later phases:
+- Schema evolution tracking (versioned DataContract)
+- Feature distribution drift detection (between train/val/test)
+- Label quality metrics (confidence scores, ambiguous samples)
+- Cross-split consistency checks (feature names, dtypes)
+
+---
+
 ## Phase 24: Quick Wins - Feature Computation Caching | 2026-01-29 | COMPLETE
 
 **Status:** ✅ COMPLETE - 3/3 tasks

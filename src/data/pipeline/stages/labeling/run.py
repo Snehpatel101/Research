@@ -110,7 +110,7 @@ def _validate_horizons_vs_data(
     data_length: int,
     symbol: str = "",
     timeframe: str = "",
-    raise_on_violation: bool = False,
+    raise_on_violation: bool = True,
 ) -> list[str]:
     """
     Validate that horizons are appropriate for the data length.
@@ -130,7 +130,8 @@ def _validate_horizons_vs_data(
     timeframe : str, optional
         Timeframe for context in log messages
     raise_on_violation : bool, optional
-        If True, raise ValueError when validation fails. Default False for backward compat.
+        If True (default), raise ValueError when validation fails.
+        Set to False for warning-only behavior.
 
     Returns
     -------
@@ -145,7 +146,7 @@ def _validate_horizons_vs_data(
     Notes
     -----
     Phase 12.5H: Added raise_on_violation parameter for stricter validation.
-    Previously only logged warnings without option to fail.
+    Phase 25: Changed default to True for data integrity (fail-fast).
     """
     warnings = []
 

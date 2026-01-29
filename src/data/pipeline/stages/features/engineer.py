@@ -14,6 +14,7 @@ import pandas as pd
 
 # MTF Features - import from sibling module
 from ..mtf import add_mtf_features
+from ..mtf.generator import MTFFeatureGenerator
 from .entropy import add_entropy_features
 from .microstructure import add_microstructure_features
 from .momentum import add_cci, add_macd, add_mfi, add_roc, add_rsi, add_stochastic, add_williams_r
@@ -383,6 +384,15 @@ class FeatureEngineer:
                         [c for c in df.columns if any(c.endswith(s) for s in mtf_suffixes)]
                     )
                     logger.info(f"Added {mtf_cols_added} MTF feature columns")
+
+                    # Phase 25: Validate no lookahead bias in MTF features
+                    if mtf_cols_added > 0:
+                        mtf_generator = MTFFeatureGenerator(
+                            base_timeframe=self.timeframe,
+                            mtf_timeframes=valid_mtf_timeframes,
+                        )
+                        mtf_generator.validate_no_lookahead(df, verbose=False)
+                        logger.info("MTF lookahead validation PASSED")
                 else:
                     mtf_skipped = True
                     mtf_skip_reason = f"no_higher_timeframes_than_{self.timeframe}"

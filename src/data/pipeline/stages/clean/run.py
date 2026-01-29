@@ -63,7 +63,11 @@ class RawDataValidationResult:
         }
 
 
-def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValidationResult:
+def validate_raw_data_schema(
+    df: pd.DataFrame,
+    file_path: Path,
+    fail_fast: bool = True,
+) -> RawDataValidationResult:
     """
     Validate raw data schema for OHLCV requirements.
 
@@ -75,13 +79,18 @@ def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValida
     Args:
         df: DataFrame to validate
         file_path: Path to the file (for logging)
+        fail_fast: If True (default), raise ValueError on critical validation failure.
+            Set to False for non-blocking validation (legacy behavior).
 
     Returns:
         RawDataValidationResult with validation details
 
+    Raises:
+        ValueError: If fail_fast=True and validation fails (missing columns, bad dtypes)
+
     Note:
-        This function does NOT block the pipeline on validation failure.
-        It logs warnings and returns results for visibility.
+        Phase 25: Changed default to fail_fast=True for data integrity.
+        Previous behavior (warning-only) available via fail_fast=False.
     """
     warnings: list[str] = []
     dtype_issues: dict[str, str] = {}
@@ -139,17 +148,23 @@ def validate_raw_data_schema(df: pd.DataFrame, file_path: Path) -> RawDataValida
         warnings=warnings,
     )
 
-    # Log validation results
+    # Log validation results and optionally fail
     if is_valid:
         logger.info(f"Raw data validation PASSED for {file_path.name}: {len(df)} rows")
     else:
-        logger.warning(
-            f"Raw data validation issues for {file_path.name}: "
+        error_msg = (
+            f"Raw data validation FAILED for {file_path.name}: "
             f"missing_cols={missing_columns}, dtype_issues={dtype_issues}, "
             f"has_datetime={has_datetime}"
         )
         for warn in warnings:
             logger.warning(f"  - {warn}")
+
+        # Phase 25: Fail-fast by default for data integrity
+        if fail_fast:
+            raise ValueError(error_msg)
+        else:
+            logger.warning(error_msg)
 
     return result
 
