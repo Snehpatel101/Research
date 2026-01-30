@@ -358,7 +358,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
     ),
     "transformer": ModelContract(
         model_name="transformer",
-        model_family="neural",
+        model_family="transformer",
         input_rank=DataRank.SEQUENCE_3D,
         feature_mode=FeatureMode.HYBRID,
         mtf_mode=MTFMode.INDICATORS,

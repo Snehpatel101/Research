@@ -73,14 +73,12 @@ MODEL_FAMILIES: dict[str, list[str]] = {
         "lstm",
         "gru",
         "tcn",
-        "transformer",
-        "patchtst",
-        "itransformer",
         "tft",
         "nbeats",
         "inceptiontime",
         "resnet1d",
     ],
+    "transformer": ["transformer", "patchtst", "itransformer"],
     "ensemble": ["voting", "stacking", "blending"],
     "meta_learner": ["ridge_meta", "mlp_meta", "xgboost_meta", "calibrated_meta"],
 }
@@ -102,78 +100,59 @@ MODEL_TO_FAMILY: dict[str, str] = {
 # =============================================================================
 # MODEL -> DATA RANK MAPPING (2D/3D/4D)
 # =============================================================================
-
-MODEL_DATA_RANKS: dict[str, int] = {
-    # Boosting - 2D (tabular)
-    "xgboost": 2,
-    "lightgbm": 2,
-    "catboost": 2,
-    # Classical - 2D (tabular)
-    "random_forest": 2,
-    "logistic": 2,
-    "svm": 2,
-    # Neural RNN/CNN - 3D (sequence)
-    "lstm": 3,
-    "gru": 3,
-    "tcn": 3,
-    "transformer": 3,
-    "nbeats": 3,
-    "inceptiontime": 3,
-    "resnet1d": 3,
-    "tft": 3,  # TFT is 3D sequence (see PHASE_0 notes)
-    # Advanced Neural - 4D (multi-stream/multi-timeframe)
-    "patchtst": 4,
-    "itransformer": 4,
-    # Ensemble/Meta - 2D (OOF probabilities)
-    "voting": 2,
-    "stacking": 2,
-    "blending": 2,
-    "ridge_meta": 2,
-    "mlp_meta": 2,
-    "xgboost_meta": 2,
-    "calibrated_meta": 2,
-}
-
-# NOTE: TFT (Temporal Fusion Transformer) is classified as 3D sequence model.
-# While TFT can handle multi-timeframe data, the standard implementation
-# uses single-timeframe sequence input with engineered features.
-# PatchTST and iTransformer are the designated 4D multi-stream models.
+# Derived from MODEL_CONTRACTS - single source of truth
 
 
-# =============================================================================
-# MODEL -> ADAPTER MAPPING
-# =============================================================================
+def _get_model_data_ranks() -> dict[str, int]:
+    """Derive MODEL_DATA_RANKS from MODEL_CONTRACTS (lazy import)."""
+    from src.core.contracts.model_contract import MODEL_CONTRACTS
 
-MODEL_ADAPTER_MAP: dict[str, str] = {
-    # Boosting -> Tabular (2D)
-    "xgboost": "tabular",
-    "lightgbm": "tabular",
-    "catboost": "tabular",
-    # Classical -> Tabular (2D)
-    "random_forest": "tabular",
-    "logistic": "tabular",
-    "svm": "tabular",
-    # Neural -> Sequence (3D)
-    "lstm": "sequence",
-    "gru": "sequence",
-    "tcn": "sequence",
-    "transformer": "sequence",
-    "nbeats": "sequence",
-    "inceptiontime": "sequence",
-    "resnet1d": "sequence",
-    "tft": "sequence",  # TFT uses sequence adapter (3D)
-    # Advanced Neural -> Multi-Stream (4D)
-    "patchtst": "multi_stream",
-    "itransformer": "multi_stream",
-    # Ensemble/Meta -> Tabular (2D on OOF)
-    "voting": "tabular",
-    "stacking": "tabular",
-    "blending": "tabular",
-    "ridge_meta": "tabular",
-    "mlp_meta": "tabular",
-    "xgboost_meta": "tabular",
-    "calibrated_meta": "tabular",
-}
+    return {name: contract.input_rank.value for name, contract in MODEL_CONTRACTS.items()}
+
+
+def _get_model_adapter_map() -> dict[str, str]:
+    """Derive MODEL_ADAPTER_MAP from MODEL_CONTRACTS (lazy import)."""
+    from src.core.contracts.model_contract import MODEL_CONTRACTS
+
+    return {name: contract.adapter_id for name, contract in MODEL_CONTRACTS.items()}
+
+
+# Lazy-initialized caches
+_model_data_ranks_cache: dict[str, int] | None = None
+_model_adapter_map_cache: dict[str, str] | None = None
+
+
+def get_model_data_ranks() -> dict[str, int]:
+    """Get model -> data rank mapping (cached)."""
+    global _model_data_ranks_cache
+    if _model_data_ranks_cache is None:
+        _model_data_ranks_cache = _get_model_data_ranks()
+    return _model_data_ranks_cache
+
+
+def get_model_adapter_map() -> dict[str, str]:
+    """Get model -> adapter mapping (cached)."""
+    global _model_adapter_map_cache
+    if _model_adapter_map_cache is None:
+        _model_adapter_map_cache = _get_model_adapter_map()
+    return _model_adapter_map_cache
+
+
+# Backward compatibility: MODULE-LEVEL access via __getattr__
+# This allows existing code like `from src.core.constants import MODEL_DATA_RANKS` to work
+def __getattr__(name: str) -> dict[str, int] | dict[str, str]:
+    """Lazy initialization for derived constants."""
+    if name == "MODEL_DATA_RANKS":
+        return get_model_data_ranks()
+    elif name == "MODEL_ADAPTER_MAP":
+        return get_model_adapter_map()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# NOTE: MODEL_DATA_RANKS and MODEL_ADAPTER_MAP are now derived from MODEL_CONTRACTS.
+# Use get_model_data_ranks() and get_model_adapter_map() for direct access.
+# Module-level MODEL_DATA_RANKS and MODEL_ADAPTER_MAP are available for backward
+# compatibility via __getattr__ lazy initialization.
 
 
 # =============================================================================

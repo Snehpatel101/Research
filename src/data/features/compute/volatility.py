@@ -18,18 +18,24 @@ from src.data.features.compute._helpers import log_returns as _log_returns
 # CACHING INFRASTRUCTURE
 # =============================================================================
 
-# Module-level cache keyed by (DataFrame id, period)
-# Stores computed ATR results to avoid redundant calculations
+# Module-level caches keyed by (DataFrame id, period/window)
+# Stores computed results to avoid redundant calculations
 _atr_cache: dict[tuple[int, int], pd.Series] = {}
+_sma_cache: dict[tuple[int, int], pd.Series] = {}
+_ema_cache: dict[tuple[int, int], pd.Series] = {}
+_std_cache: dict[tuple[int, int], pd.Series] = {}
 _cache_df_id: int | None = None
 
 
 def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
-    """Clear cache if DataFrame has changed."""
+    """Clear all caches if DataFrame has changed."""
     global _cache_df_id
     df_id = id(df)
     if df_id != _cache_df_id:
         _atr_cache.clear()
+        _sma_cache.clear()
+        _ema_cache.clear()
+        _std_cache.clear()
         _cache_df_id = df_id
 
 
@@ -67,18 +73,48 @@ def _atr(df: pd.DataFrame, period: int) -> pd.Series:
     return result
 
 
+def _get_sma_cached(df: pd.DataFrame, column: str, window: int) -> pd.Series:
+    """Get cached SMA or compute and cache it."""
+    cache_key = (_cache_df_id, column, window)
+    if cache_key in _sma_cache:
+        return _sma_cache[cache_key]
+    result = df[column].rolling(window=window, min_periods=window).mean()
+    _sma_cache[cache_key] = result
+    return result
+
+
+def _get_ema_cached(df: pd.DataFrame, column: str, span: int) -> pd.Series:
+    """Get cached EMA or compute and cache it."""
+    cache_key = (_cache_df_id, column, span)
+    if cache_key in _ema_cache:
+        return _ema_cache[cache_key]
+    result = df[column].ewm(span=span, min_periods=span, adjust=False).mean()
+    _ema_cache[cache_key] = result
+    return result
+
+
+def _get_std_cached(df: pd.DataFrame, column: str, window: int) -> pd.Series:
+    """Get cached rolling std or compute and cache it."""
+    cache_key = (_cache_df_id, column, window)
+    if cache_key in _std_cache:
+        return _std_cache[cache_key]
+    result = df[column].rolling(window=window, min_periods=window).std()
+    _std_cache[cache_key] = result
+    return result
+
+
 def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
+    """Simple moving average (non-cached, for arbitrary series)."""
     return series.rolling(window=window, min_periods=window).mean()
 
 
 def _ema(series: pd.Series, span: int) -> pd.Series:
-    """Exponential moving average."""
+    """Exponential moving average (non-cached, for arbitrary series)."""
     return series.ewm(span=span, min_periods=span, adjust=False).mean()
 
 
 def _rolling_std(series: pd.Series, window: int) -> pd.Series:
-    """Rolling standard deviation."""
+    """Rolling standard deviation (non-cached, for arbitrary series)."""
     return series.rolling(window=window, min_periods=window).std()
 
 
@@ -117,27 +153,31 @@ def compute_atr_pct_14(df: pd.DataFrame) -> pd.Series:
 
 def compute_bb_upper(df: pd.DataFrame) -> pd.Series:
     """Bollinger Band upper (SMA + 2 * STD)."""
-    sma_20 = _sma(df["close"], window=20)
-    std_20 = _rolling_std(df["close"], window=20)
+    _clear_cache_if_df_changed(df)
+    sma_20 = _get_sma_cached(df, "close", 20)
+    std_20 = _get_std_cached(df, "close", 20)
     return sma_20 + (2 * std_20)
 
 
 def compute_bb_middle(df: pd.DataFrame) -> pd.Series:
     """Bollinger Band middle (20-period SMA)."""
-    return _sma(df["close"], window=20)
+    _clear_cache_if_df_changed(df)
+    return _get_sma_cached(df, "close", 20)
 
 
 def compute_bb_lower(df: pd.DataFrame) -> pd.Series:
     """Bollinger Band lower (SMA - 2 * STD)."""
-    sma_20 = _sma(df["close"], window=20)
-    std_20 = _rolling_std(df["close"], window=20)
+    _clear_cache_if_df_changed(df)
+    sma_20 = _get_sma_cached(df, "close", 20)
+    std_20 = _get_std_cached(df, "close", 20)
     return sma_20 - (2 * std_20)
 
 
 def compute_bb_width(df: pd.DataFrame) -> pd.Series:
     """Bollinger Band width (upper - lower) / middle."""
-    sma_20 = _sma(df["close"], window=20)
-    std_20 = _rolling_std(df["close"], window=20)
+    _clear_cache_if_df_changed(df)
+    sma_20 = _get_sma_cached(df, "close", 20)
+    std_20 = _get_std_cached(df, "close", 20)
     upper = sma_20 + (2 * std_20)
     lower = sma_20 - (2 * std_20)
 
@@ -152,8 +192,9 @@ def compute_bb_position(df: pd.DataFrame) -> pd.Series:
 
     %B = (Close - Lower) / (Upper - Lower)
     """
-    sma_20 = _sma(df["close"], window=20)
-    std_20 = _rolling_std(df["close"], window=20)
+    _clear_cache_if_df_changed(df)
+    sma_20 = _get_sma_cached(df, "close", 20)
+    std_20 = _get_std_cached(df, "close", 20)
     upper = sma_20 + (2 * std_20)
     lower = sma_20 - (2 * std_20)
 
@@ -170,13 +211,14 @@ def compute_close_bb_zscore(df: pd.DataFrame) -> pd.Series:
 
     z = (Close - SMA) / STD
     """
-    sma_20 = _sma(df["close"], window=20)
-    std_20 = _rolling_std(df["close"], window=20)
+    _clear_cache_if_df_changed(df)
+    sma_20 = _get_sma_cached(df, "close", 20)
+    std_20 = _get_std_cached(df, "close", 20)
 
     # Avoid division by zero
-    std_20 = std_20.replace(0, np.nan)
+    std_safe = std_20.replace(0, np.nan)
 
-    return (df["close"] - sma_20) / std_20
+    return (df["close"] - sma_20) / std_safe
 
 
 # =============================================================================
@@ -186,19 +228,22 @@ def compute_close_bb_zscore(df: pd.DataFrame) -> pd.Series:
 
 def compute_kc_upper(df: pd.DataFrame) -> pd.Series:
     """Keltner Channel upper (EMA + 2 * ATR)."""
-    ema_20 = _ema(df["close"], span=20)
+    _clear_cache_if_df_changed(df)
+    ema_20 = _get_ema_cached(df, "close", 20)
     atr_10 = _atr(df, period=10)
     return ema_20 + (2 * atr_10)
 
 
 def compute_kc_middle(df: pd.DataFrame) -> pd.Series:
     """Keltner Channel middle (20-period EMA)."""
-    return _ema(df["close"], span=20)
+    _clear_cache_if_df_changed(df)
+    return _get_ema_cached(df, "close", 20)
 
 
 def compute_kc_lower(df: pd.DataFrame) -> pd.Series:
     """Keltner Channel lower (EMA - 2 * ATR)."""
-    ema_20 = _ema(df["close"], span=20)
+    _clear_cache_if_df_changed(df)
+    ema_20 = _get_ema_cached(df, "close", 20)
     atr_10 = _atr(df, period=10)
     return ema_20 - (2 * atr_10)
 
@@ -209,7 +254,8 @@ def compute_kc_position(df: pd.DataFrame) -> pd.Series:
 
     Similar to BB position but using Keltner Channels.
     """
-    ema_20 = _ema(df["close"], span=20)
+    _clear_cache_if_df_changed(df)
+    ema_20 = _get_ema_cached(df, "close", 20)
     atr_10 = _atr(df, period=10)
     upper = ema_20 + (2 * atr_10)
     lower = ema_20 - (2 * atr_10)
