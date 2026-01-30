@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
 **Status:** Phase 29 Complete (2 implemented, 2 disproven, 1 deferred to Phase 31)
-**Last Updated:** 2026-01-30 (Phase 29 closeout)
+**Last Updated:** 2026-01-30 (Phase 26 closeout complete)
 
 ---
 
@@ -164,11 +164,15 @@ All phases 0-25 are complete. See **COMPLETION.md** for full details.
 
 | Metric | Before | After | How to Verify |
 |--------|--------|-------|---------------|
-| `Any` in public APIs | 8 | 0 | `grep -r ": Any" src/ \| wc -l` |
+| `Any` in module caches/signatures | 8 | 0 | `grep -rn ": Any" src/ \| grep -v "dict\[str, Any\]"` |
 | Bare except handlers | 11 | 11 (deferred) | Moved to Phase 31 |
 | Missing return types | 6 | 0 | mypy check |
 | Deprecated aliases | 1 | 1 (with warning) | Runtime deprecation warning added |
 | **Type coverage** | ~70% | **~85%** | Significant improvement |
+
+**Note:** Legitimate `dict[str, Any]` for kwargs remain. Phase 26 fixed all module-level caches and function signatures.
+
+**Post-Phase Fix (2026-01-30):** Fixed remaining `Any` types in `cli/run_commands_core.py:10, 90-92` that were missed during initial verification.
 
 ---
 
@@ -469,8 +473,9 @@ grep -r "validate_stage_transition" src/data/pipeline/stages/*/run.py
 
 ### Phase 26
 ```bash
-# Count Any types
-grep -rn ": Any" src/ --include="*.py" | grep -v "test" | wc -l
+# Count Any types in module-level caches and function signatures
+grep -rn ": Any" src/ --include="*.py" | grep -v "test" | grep -v "dict\[str, Any\]" | wc -l
+# Should be 0 (legitimate kwargs with dict[str, Any] excluded)
 
 # Count bare excepts
 grep -rn "except Exception:" src/ --include="*.py" | wc -l

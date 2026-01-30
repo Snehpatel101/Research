@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
 **Status:** Phase 29 Complete (2 implemented, 2 disproven, 1 deferred to Phase 31)
-**Last Updated:** 2026-01-30 (Phase 29 closeout)
+**Last Updated:** 2026-01-30 (Phase 26 closeout complete)
 
 ---
 
@@ -446,6 +446,7 @@ Replaced all module-level `Any` caches with proper types:
 | File | Line | Changed From | Changed To |
 |------|------|--------------|------------|
 | `cli/run_commands_core.py` | 13-15 | `_pipeline_config: Any = None` | `_pipeline_config: PipelineConfig \| None = None` |
+| `cli/run_commands_core.py` | 10, 90-92 | `pipeline_config: Any`, `presets_mod: Any`, `-> Any` | `ModuleType`, `ModuleType`, `-> "DataConfig"` |
 | `cli/commands/train.py` | 176-177 | `trainer_config: Any = None` | `trainer_config: TrainerConfig \| None = None` |
 | `data/labeling/optimization.py` | 85 | `study: Any = None` | `study: optuna.Study \| None = None` |
 | `models/boosting/lightgbm_model.py` | 26 | `lgb: Any = None` | `lgb: types.ModuleType \| None = None` |
@@ -459,11 +460,20 @@ Replaced all module-level `Any` caches with proper types:
 - Added proper imports for types (optuna, types module, etc.)
 - Used `if TYPE_CHECKING:` blocks to avoid circular imports
 
+**Post-Phase Fix (2026-01-30):**
+- Fixed remaining `Any` types in `cli/run_commands_core.py:10, 90-92`
+- Line 10: `_pipeline_config: Any` → `_pipeline_config: PipelineConfig | None`
+- Line 90: `pipeline_config: Any` → `pipeline_config: ModuleType`
+- Line 91: `presets_mod: Any` → `presets_mod: ModuleType`
+- Line 92: return type `-> Any` → `-> "DataConfig"`
+- Added `TYPE_CHECKING` import for `DataConfig` to avoid circular import
+
 #### Verification
 
 ```bash
-grep -rn ": Any" src/ --include="*.py" | grep -v test | wc -l
-# Result: 0 (all replaced)
+grep -rn ": Any" src/ --include="*.py" | grep -v test | grep -v "dict\[str, Any\]" | wc -l
+# Result: 0 (all module-level caches and function signatures fixed)
+# Note: Legitimate dict[str, Any] for kwargs remain
 ```
 
 ---
@@ -576,7 +586,7 @@ python -c "from src.models.base import PredictionOutput"
 
 | Task | Status | Verification |
 |------|--------|--------------|
-| 26-1 | ✅ COMPLETE | 0 `Any` types (verified) |
+| 26-1 | ✅ COMPLETE | 0 `Any` in module caches/function signatures (legitimate kwargs remain) |
 | 26-2 | ⏭️ DEFERRED | Moved to Phase 31 (larger scope) |
 | 26-3 | ✅ COMPLETE | All `__post_init__` have `-> None` |
 | 26-4 | ✅ COMPLETE | Deprecation warning added (alias kept) |

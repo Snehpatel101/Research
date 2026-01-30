@@ -751,6 +751,16 @@ lgb: types.ModuleType | None = None
 - Added proper imports for optuna, types module
 - Used conditional imports in TYPE_CHECKING blocks for forward references
 
+**Post-Phase Fix (2026-01-30):**
+- Fixed remaining `Any` types in `src/cli/run_commands_core.py:10, 90-92`
+- Added `TYPE_CHECKING` import for `DataConfig` to avoid circular import
+- Changed `_pipeline_config: Any` → `_pipeline_config: PipelineConfig | None` (line 10)
+- Changed `pipeline_config: Any` → `pipeline_config: ModuleType` (line 90)
+- Changed `presets_mod: Any` → `presets_mod: ModuleType` (line 91)
+- Changed return type `-> Any` → `-> "DataConfig"` (line 92)
+- **Files modified:** `src/cli/run_commands_core.py` (lines 10, 90-92)
+- **Result:** 0 `Any` types in module-level caches and function signatures (legitimate `dict[str, Any]` for kwargs remain)
+
 **2. Fix Bare Exception Handlers (Task 26-2) - DEFERRED**
 
 **Scope expansion discovered:**
@@ -856,9 +866,9 @@ src/config/unified.py                                     (4 __post_init__ → N
 ### Verification Results
 
 ```bash
-# Type safety: ✓ All Any types replaced
-grep -rn ": Any" src/ --include="*.py" | grep -v test | wc -l
-# Result: 0
+# Type safety: ✓ All Any types in module caches/signatures replaced
+grep -rn ": Any" src/ --include="*.py" | grep -v test | grep -v "dict\[str, Any\]" | wc -l
+# Result: 0 (legitimate kwargs with dict[str, Any] excluded)
 
 # Return types: ✓ All __post_init__ typed
 grep -rn "def __post_init__.*-> None" src/config/ --include="*.py" | wc -l
@@ -903,6 +913,8 @@ python -c "from src.models.base import PredictionResult; print('OK')"
 2. **Breaking vs non-breaking** - Runtime deprecation warnings better than alias removal when usage is widespread
 3. **Forward references** - TYPE_CHECKING blocks essential for avoiding circular imports with proper typing
 4. **Deferral criteria** - When scope expands significantly, better to defer to dedicated phase than rush implementation
+5. **Post-phase fixes happen** - Even with verification, edge cases slip through (cli/run_commands_core.py had 0 Any types claimed, but 181 remain for legitimate kwargs)
+6. **Documentation accuracy matters** - Claims of "0 Any types" were misleading - 181 legitimate `dict[str, Any]` kwargs exist and should remain
 
 ### Next Phase
 

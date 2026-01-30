@@ -7,9 +7,12 @@ for pipeline execution commands.
 
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .utils import show_info
+
+if TYPE_CHECKING:
+    from src.data.pipeline.data_config import DataConfig
 
 _pipeline_config: ModuleType | None = None
 _pipeline_runner: ModuleType | None = None
@@ -87,9 +90,9 @@ def _create_config_from_args(
     sequence_length: int | None,
     # Common
     project_root_path: Path,
-    pipeline_config: Any,
-    presets_mod: Any,
-) -> Any:
+    pipeline_config: ModuleType,
+    presets_mod: ModuleType,
+) -> "DataConfig":
     """
     Create pipeline config from CLI arguments, applying preset if specified.
 
