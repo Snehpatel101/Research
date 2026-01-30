@@ -8,8 +8,9 @@ These features identify market regimes for regime-aware trading strategies.
 
 from collections.abc import Callable
 
-import numpy as np
 import pandas as pd
+
+from src.data.features.compute._helpers import log_returns as _log_returns
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -31,9 +32,7 @@ def _rolling_std(series: pd.Series, window: int) -> pd.Series:
     return series.rolling(window=window, min_periods=window).std()
 
 
-def _log_returns(close: pd.Series) -> pd.Series:
-    """Calculate log returns."""
-    return np.log(close / close.shift(1))
+# _log_returns imported from _helpers.py (Phase 29 consolidation)
 
 
 def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:

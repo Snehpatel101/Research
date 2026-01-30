@@ -14,6 +14,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import log_returns as _log_returns
+
 # =============================================================================
 # MODULE-LEVEL CACHES (Phase 24: Avoid redundant computation)
 # =============================================================================
@@ -52,9 +54,7 @@ def _rolling_var(series: pd.Series, window: int) -> pd.Series:
     return series.rolling(window=window, min_periods=window).var()
 
 
-def _log_returns(close: pd.Series) -> pd.Series:
-    """Calculate log returns."""
-    return np.log(close / close.shift(1))
+# _log_returns imported from _helpers.py (Phase 29 consolidation)
 
 
 # =============================================================================

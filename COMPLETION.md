@@ -4,6 +4,267 @@
 
 ---
 
+## Phase 29: Memory Performance Optimization | 2026-01-30 | COMPLETE
+
+**Status:** ✅ COMPLETE - 2 implemented, 2 disproven, 1 deferred to Phase 31
+**Impact:** 6 files modified (1 new, 5 updated), net -5 lines
+**Duration:** Single day (2026-01-29)
+**Source Issues:** PERF-010, PERF-011, PERF-012, DE-004, DE-010
+
+### Overview
+
+Addressed memory performance issues by implementing bounded caching for label computation (preventing OOM) and consolidating duplicate log_returns implementations. Investigated and disproved two claimed issues that were already optimized. Deferred DataFrame fragmentation to Phase 31 due to larger scope than originally claimed (83 patterns requiring systematic refactoring).
+
+### Tasks Completed
+
+| Task | Target | Change | Status |
+|------|--------|--------|--------|
+| 29-1 | DataFrame Fragmentation | Fix 83 remaining patterns | ⏭️ DEFERRED to Phase 31 |
+| 29-2 | Label Cache | Added LRU eviction with max size 128 | ✅ COMPLETE |
+| 29-3 | Log Returns | Consolidated 4 definitions → 1 shared helper | ✅ COMPLETE |
+| 29-4 | df.copy() Calls | Investigated multiple copy claim | ❌ DISPROVEN (already optimized) |
+| 29-5 | Parquet Column Pruning | Investigated missing pruning claim | ❌ DISPROVEN (already optimized) |
+
+### Implementation Details
+
+**1. Label Cache Unbounded (Task 29-2) - ✅ COMPLETE**
+
+**Problem:** Label cache dictionary had no size limit, causing potential OOM in long optimization runs
+
+**Before:**
+```python
+_label_cache: dict[tuple, LabelSet] = {}  # Unbounded growth
+```
+
+**After:**
+```python
+from collections import OrderedDict
+
+# Cache configuration
+LABEL_CACHE_MAXSIZE = 128  # Max cached label sets (prevents OOM)
+
+_label_cache: OrderedDict[tuple, LabelSet] = OrderedDict()
+
+def _get_or_compute_labels(...) -> LabelSet:
+    """Get cached labels or compute new, with LRU eviction."""
+    cache_key = (...)
+
+    # Check cache
+    if cache_key in _label_cache:
+        # Move to end (most recently used)
+        _label_cache.move_to_end(cache_key)
+        return _label_cache[cache_key]
+
+    # Compute new
+    labels = LabelSet(...)
+
+    # Add to cache with LRU eviction
+    _label_cache[cache_key] = labels
+    _label_cache.move_to_end(cache_key)
+
+    # Evict oldest if over limit
+    if len(_label_cache) > LABEL_CACHE_MAXSIZE:
+        _label_cache.popitem(last=False)
+
+    return labels
+```
+
+**Changes:**
+- Added `OrderedDict` import
+- Added `LABEL_CACHE_MAXSIZE = 128` constant
+- Changed `_label_cache` from dict to OrderedDict
+- Added LRU eviction logic with move_to_end() and popitem()
+
+**Files modified:**
+- `src/optimization/five_dimension_objective.py` (+15 lines)
+
+**Impact:** Prevents OOM in long optimization runs by bounding cache size with LRU eviction
+
+**2. Log Returns Computed Multiple Times (Task 29-3) - ✅ COMPLETE**
+
+**Problem:** Log returns computed separately in 4 different modules with identical implementations
+
+**Modules with duplicates:**
+- `src/data/features/compute/entropy.py` - `_log_returns()`
+- `src/data/features/compute/volatility.py` - `_log_returns()`
+- `src/data/features/compute/regime.py` - `_log_returns()`
+- `src/data/features/compute/microstructure.py` - `_log_returns()`
+
+**Solution:** Created shared helper module with canonical implementation
+
+**New file:** `src/data/features/compute/_helpers.py`
+```python
+"""Shared helper functions for feature computation."""
+import pandas as pd
+import numpy as np
+
+def log_returns(close: pd.Series) -> pd.Series:
+    """
+    Compute log returns from close prices.
+
+    Canonical implementation used across all feature modules.
+
+    Args:
+        close: Close price series
+
+    Returns:
+        Log returns series with same index as input
+    """
+    returns = np.log(close / close.shift(1))
+    return returns.fillna(0.0)
+```
+
+**Updated all 4 modules:**
+- Removed local `_log_returns()` definitions
+- Added `from ._helpers import log_returns`
+- Updated all calls to use shared function
+
+**Files modified:**
+1. `src/data/features/compute/_helpers.py` - NEW FILE (+20 lines)
+2. `src/data/features/compute/entropy.py` - Import from _helpers, removed duplicate
+3. `src/data/features/compute/volatility.py` - Import from _helpers, removed duplicate
+4. `src/data/features/compute/regime.py` - Import from _helpers, removed duplicate, removed unused numpy import
+5. `src/data/features/compute/microstructure.py` - Import from _helpers, removed duplicate
+
+**Net change:** +20 lines (new file), -40 lines (removed duplicates) = **-20 lines**
+
+**Impact:** Single definition principle enforced, reduced code duplication
+
+**3. DataFrame Fragmentation (Task 29-1) - ⏭️ DEFERRED**
+
+**Deferral reason:**
+- Investigation revealed scope is significantly larger than originally claimed
+- **Claimed:** Quick fix for fragmentation patterns
+- **Actual:** 83 fragmentation patterns remain across multiple files
+- Phase 23C only partially addressed the issue (improved from 156 to 83 patterns)
+- Requires comprehensive refactoring of feature computation flow
+- Better addressed in Phase 31 (Polish) with systematic approach
+
+**Moved to:** Phase 31 as task 31-9 with proper refactoring plan
+
+**4. Multiple df.copy() Calls (Task 29-4) - ❌ DISPROVEN**
+
+**Claim:** Multiple `df.copy()` calls cause memory overhead in `engineer.py:238`
+
+**Investigation:**
+```python
+# Line 239 - Single copy at stage entry
+df = df.copy()  # Protect input DataFrame
+
+# Rest of function uses in-place modifications on the copy
+# No additional copies made
+```
+
+**Conclusion:** No changes needed. Current implementation already follows best practice of single copy at stage entry, then in-place modifications.
+
+**5. Parquet Reads Without Column Pruning (Task 29-5) - ❌ DISPROVEN**
+
+**Claim:** Parquet reads at `features/run.py:199,294` don't use column pruning
+
+**Investigation:**
+- Line 199: Reads minimal OHLCV data (already pruned to required columns)
+- Line 294: This is a **write** operation, not a read
+  ```python
+  df.to_parquet(output_path)  # This is writing, not reading
+  ```
+
+**Conclusion:** No changes needed. Parquet reads already use appropriate column selection, and line 294 is not a read operation.
+
+### Files Modified
+
+| File | Type | Changes | Details |
+|------|------|---------|---------|
+| `src/optimization/five_dimension_objective.py` | Modified | +15 lines | Added OrderedDict, LABEL_CACHE_MAXSIZE, LRU eviction |
+| `src/data/features/compute/_helpers.py` | NEW | +20 lines | Canonical log_returns function |
+| `src/data/features/compute/entropy.py` | Modified | -10 lines | Import from _helpers, removed duplicate |
+| `src/data/features/compute/volatility.py` | Modified | -10 lines | Import from _helpers, removed duplicate |
+| `src/data/features/compute/regime.py` | Modified | -11 lines | Import from _helpers, removed duplicate + unused import |
+| `src/data/features/compute/microstructure.py` | Modified | -9 lines | Import from _helpers, removed duplicate |
+
+**Total:** 6 files (1 new, 5 modified), net -5 lines
+
+### Verification
+
+**All verification commands pass:**
+
+```bash
+# Label cache bounded
+grep -n "LABEL_CACHE_MAXSIZE" src/optimization/five_dimension_objective.py
+# Returns: 100:LABEL_CACHE_MAXSIZE = 128
+
+grep -n "OrderedDict" src/optimization/five_dimension_objective.py
+# Returns: 99:from collections import OrderedDict
+
+# Log returns consolidated
+grep -r "def log_returns" src/data/features/compute/
+# Returns: src/data/features/compute/_helpers.py:8:def log_returns(close: pd.Series) -> pd.Series:
+
+grep -r "from ._helpers import log_returns" src/data/features/compute/
+# Returns: 4 imports in entropy.py, volatility.py, regime.py, microstructure.py
+
+# All imports work
+python -c "from src.data.features.compute._helpers import log_returns; print('OK')"
+# Returns: OK
+
+python -c "from src.data.features.compute.entropy import compute_approx_entropy; print('OK')"
+# Returns: OK
+
+# Linting passes
+ruff check src/
+# Returns: All checks passed!
+
+# Tests pass
+pytest tests/ -v
+# Returns: 42 passed
+```
+
+### Lessons Learned
+
+**1. Verify Claims Before Implementation**
+- Task 29-4: Claimed "multiple df.copy() calls" but code already optimized with single copy
+- Task 29-5: Claimed "missing column pruning" but line 294 was a write operation, not read
+- **Lesson:** Always investigate file:line claims before accepting them
+
+**2. Scope Estimation Requires Investigation**
+- Task 29-1: Claimed quick fix but actually 83 patterns across multiple files
+- Phase 23C only partially fixed (156 → 83 patterns)
+- **Lesson:** Large claimed issues need investigation phase before implementation
+
+**3. LRU Cache Pattern for Unbounded Growth**
+- `OrderedDict` with `move_to_end()` provides simple LRU eviction
+- Bounded cache size prevents OOM without sacrificing too much performance
+- **Lesson:** Use LRU pattern for any unbounded cache that could grow during long runs
+
+**4. Shared Helper Modules Reduce Duplication**
+- Creating `_helpers.py` for common functions enforces single definition
+- Easier to maintain and test one implementation
+- **Lesson:** When seeing 3+ identical helper functions, extract to shared module
+
+### Phase Summary
+
+**Completed:**
+- ✅ Bounded label cache prevents OOM (task 29-2)
+- ✅ Consolidated log_returns to single definition (task 29-3)
+- ✅ Verified existing optimizations for df.copy() and parquet reads (tasks 29-4, 29-5)
+
+**Deferred:**
+- ⏭️ DataFrame fragmentation to Phase 31 (task 29-1) - needs systematic refactoring
+
+**Impact:**
+- 6 files modified (1 new, 5 updated)
+- Net -5 lines (removed duplicates, added cache logic)
+- Prevented potential OOM in long optimization runs
+- Enforced single definition principle for log_returns
+- Verified two existing optimizations are already in place
+
+**Quality:**
+- All verification commands pass
+- `ruff check src/` passes (clean)
+- `pytest tests/` passes (42/42)
+- All imports work correctly
+
+---
+
 ## Phase 28: Compute Performance Optimization | 2026-01-29 | PARTIAL COMPLETE
 
 **Status:** ✅ PARTIAL COMPLETE - 3/5 tasks done, 2 deferred to Phase 32

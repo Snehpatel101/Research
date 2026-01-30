@@ -12,6 +12,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import log_returns as _log_returns
+
 # =============================================================================
 # CACHING INFRASTRUCTURE
 # =============================================================================
@@ -222,11 +224,7 @@ def compute_kc_position(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 # HISTORICAL VOLATILITY FEATURES
 # =============================================================================
-
-
-def _log_returns(close: pd.Series) -> pd.Series:
-    """Calculate log returns."""
-    return np.log(close / close.shift(1))
+# _log_returns imported from _helpers.py (Phase 29 consolidation)
 
 
 def compute_hvol_10(df: pd.DataFrame) -> pd.Series:

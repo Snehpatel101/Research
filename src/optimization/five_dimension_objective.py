@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -96,7 +97,11 @@ MAX_FEATURES_TO_SEARCH = 40  # Limit feature search space for efficiency
 DEFAULT_TIMEFRAMES = ["5min", "15min", "30min", "60min"]
 
 # Label cache for trials with same barrier params (optimization)
-_label_cache: dict[tuple[float, float, int, str], tuple[np.ndarray, np.ndarray]] = {}
+# Phase 29: Bounded LRU cache to prevent OOM in long optimization runs
+LABEL_CACHE_MAXSIZE = 128  # Maximum cached label configurations
+_label_cache: OrderedDict[
+    tuple[float, float, int, str], tuple[np.ndarray, np.ndarray]
+] = OrderedDict()
 
 
 # =============================================================================
@@ -290,6 +295,8 @@ def generate_labels_for_trial(
     if use_cache:
         full_cache_key = (upper_mult, lower_mult, max_holding_bars, cache_key)
         if full_cache_key in _label_cache:
+            # Move to end (most recently used) for LRU behavior
+            _label_cache.move_to_end(full_cache_key)
             cached = _label_cache[full_cache_key]
             # Return cached labels if data length matches (basic sanity check)
             if len(cached[0]) == len(data):
@@ -318,9 +325,12 @@ def generate_labels_for_trial(
     result = labeler.compute_labels(data, horizon=max_holding_bars)
     labels = result.labels
 
-    # Cache for reuse
+    # Cache for reuse with LRU eviction (Phase 29: bounded cache)
     if use_cache:
         _label_cache[full_cache_key] = (labels.copy(), labels.copy())
+        # Evict oldest entry if cache exceeds maxsize
+        while len(_label_cache) > LABEL_CACHE_MAXSIZE:
+            _label_cache.popitem(last=False)  # Remove oldest (first) entry
 
     return labels
 
