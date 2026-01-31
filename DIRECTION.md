@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-01-30 (Phase 30 complete - transformer family split, derived constants, SMA/EMA/STD caching)
-**Status:** Phases 0-30 Complete (Phase 26: 3/4 tasks, Phase 28: 5/5 tasks, Phase 29: 2/5 tasks, Phase 30: 3/5 tasks, others deferred) | Phase 31 Ready to Start
+**Last Updated:** 2026-01-31 (Phase 31 complete - code polish, latency tracking, constants cleanup, adapter consolidation)
+**Status:** Phases 0-31 Complete (Phase 31: 7/9 tasks, 1 disproven, 1 deferred to Phase 32) | Phase 32 Ready to Start
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -2055,7 +2055,7 @@ All verified action items from batch verification have been fixed in Phase 19:
 ---
 
 *Document maintained as single source of truth for ML Factory architecture.*
-*Last updated: 2026-01-29 (Phase 27 Complete, Phase 28 Ready to Start)*
+*Last updated: 2026-01-31 (Phase 31 Complete, Phase 32 Ready to Start)*
 
 ---
 

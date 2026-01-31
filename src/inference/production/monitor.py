@@ -99,6 +99,48 @@ class ProductionMonitor:
         # Performance tracking
         self.prediction_history: list[dict[str, Any]] = []
 
+        # Latency and error tracking
+        self._latency_samples: list[float] = []  # Recent latency samples in ms
+        self._error_count: int = 0
+        self._total_predictions: int = 0
+        self._max_latency_samples: int = 1000  # Keep last 1000 samples
+
+    def record_prediction(
+        self,
+        latency_ms: float,
+        success: bool = True,
+    ) -> None:
+        """
+        Record a prediction for latency and error tracking.
+
+        Call this after each inference to track metrics.
+
+        Args:
+            latency_ms: Inference latency in milliseconds
+            success: Whether the prediction succeeded (False for errors)
+        """
+        self._total_predictions += 1
+
+        if success:
+            self._latency_samples.append(latency_ms)
+            # Keep only recent samples
+            if len(self._latency_samples) > self._max_latency_samples:
+                self._latency_samples = self._latency_samples[-self._max_latency_samples :]
+        else:
+            self._error_count += 1
+
+    def get_avg_latency_ms(self) -> float:
+        """Get average inference latency in milliseconds."""
+        if not self._latency_samples:
+            return 0.0
+        return sum(self._latency_samples) / len(self._latency_samples)
+
+    def get_error_rate(self) -> float:
+        """Get error rate (0-1) from prediction history."""
+        if self._total_predictions == 0:
+            return 0.0
+        return self._error_count / self._total_predictions
+
     def _create_drift_monitor(self) -> Any:
         """Create and configure drift monitor."""
         try:
@@ -261,8 +303,8 @@ class ProductionMonitor:
             accuracy=perf_metrics.get("current", 0.0),
             drift_features_count=drift_count,
             model_age_days=model_age_days,
-            avg_latency_ms=0.0,  # TODO: track from inference pipeline
-            error_rate=0.0,  # TODO: track from prediction history
+            avg_latency_ms=self.get_avg_latency_ms(),
+            error_rate=self.get_error_rate(),
             last_checked=datetime.now(),
         )
 

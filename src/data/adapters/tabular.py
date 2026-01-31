@@ -189,70 +189,8 @@ class TabularAdapter(BaseAdapter):
             weight_column=self.weight_column or "",
         )
 
-    def _get_metadata_value(
-        self,
-        df: pd.DataFrame,
-        column: str,
-        default: str,
-    ) -> str:
-        """
-        Extract a single metadata value from DataFrame column.
-
-        If the column exists and has a single unique non-null value,
-        return that value. Otherwise return the default.
-
-        Args:
-            df: DataFrame to extract from
-            column: Column name to look for
-            default: Default value if column missing or ambiguous
-
-        Returns:
-            Extracted metadata value or default
-        """
-        if column not in df.columns:
-            return default
-
-        unique_values = df[column].dropna().unique()
-        if len(unique_values) == 1:
-            return str(unique_values[0])
-        elif len(unique_values) == 0:
-            return default
-        else:
-            # Multiple values - log warning and use first
-            logger.warning(
-                f"Multiple values for metadata column '{column}': {unique_values[:5]}. "
-                f"Using first value."
-            )
-            return str(unique_values[0])
-
-    def _parse_horizon_from_label_column(self, label_column: str) -> int:
-        """
-        Parse horizon from label column name.
-
-        Examples:
-            "label_h20" -> 20
-            "label_h5" -> 5
-            "label_h10" -> 10
-            "label" -> 20 (default)
-
-        Args:
-            label_column: Label column name
-
-        Returns:
-            Extracted horizon or default of 20
-        """
-        # Pattern: label_h{number}
-        match = re.search(r"label_h(\d+)", label_column)
-        if match:
-            return int(match.group(1))
-
-        # Fallback: check for just a number at the end
-        match = re.search(r"_(\d+)$", label_column)
-        if match:
-            return int(match.group(1))
-
-        # Default horizon
-        return 20
+    # NOTE: _get_metadata_value and _parse_horizon_from_label_column
+    # are now inherited from BaseAdapter (Phase 31 consolidation)
 
 
 __all__ = [

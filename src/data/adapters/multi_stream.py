@@ -487,13 +487,18 @@ class MultiStreamAdapter(BaseAdapter):
         for tf_idx, tf in enumerate(timeframes):
             tf_df = tf_dfs[tf]
             tf_minutes = get_timeframe_minutes(tf)
-            ratio = tf_minutes // anchor_minutes
-            if tf_minutes % anchor_minutes != 0:
+            remainder = tf_minutes % anchor_minutes
+            if remainder != 0:
+                # Phase 31: Proper handling for non-integer ratios
+                # Use ceiling to ensure we don't miss data from higher timeframes
+                ratio = (tf_minutes + anchor_minutes - 1) // anchor_minutes  # ceiling division
                 logger.warning(
                     f"Timeframe {tf} ({tf_minutes}min) is not an exact multiple of "
-                    f"anchor ({anchor_minutes}min). Floor division may cause temporal "
-                    f"misalignment (ratio={ratio}, remainder={tf_minutes % anchor_minutes})."
+                    f"anchor ({anchor_minutes}min). Using ceiling ratio={ratio} "
+                    f"(remainder={remainder}min). Consider using compatible timeframes."
                 )
+            else:
+                ratio = tf_minutes // anchor_minutes
 
             # Extract feature values as numpy array for efficiency
             tf_values = tf_df[feature_cols].values.astype(np.float32)
@@ -639,67 +644,8 @@ class MultiStreamAdapter(BaseAdapter):
 
         return result[:target_len]
 
-    def _get_metadata_value(
-        self,
-        df: pd.DataFrame,
-        column: str,
-        default: str,
-    ) -> str:
-        """
-        Extract a single metadata value from DataFrame column.
-
-        If the column exists and has a single unique non-null value,
-        return that value. Otherwise return the default.
-
-        Args:
-            df: DataFrame to extract from.
-            column: Column name to look for.
-            default: Default value if column missing or ambiguous.
-
-        Returns:
-            Extracted metadata value or default.
-        """
-        if column not in df.columns:
-            return default
-
-        unique_values = df[column].dropna().unique()
-        if len(unique_values) == 1:
-            return str(unique_values[0])
-        elif len(unique_values) == 0:
-            return default
-        else:
-            # Multiple values - use first
-            return str(unique_values[0])
-
-    def _parse_horizon_from_label_column(self, label_column: str) -> int:
-        """
-        Parse horizon from label column name.
-
-        Examples:
-            "label_h20" -> 20
-            "label_h5" -> 5
-            "label" -> 20 (default)
-
-        Args:
-            label_column: Label column name.
-
-        Returns:
-            Extracted horizon or default of 20.
-        """
-        import re
-
-        # Pattern: label_h{number}
-        match = re.search(r"label_h(\d+)", label_column)
-        if match:
-            return int(match.group(1))
-
-        # Fallback: check for just a number at the end
-        match = re.search(r"_(\d+)$", label_column)
-        if match:
-            return int(match.group(1))
-
-        # Default horizon
-        return 20
+    # NOTE: _get_metadata_value and _parse_horizon_from_label_column
+    # are now inherited from BaseAdapter (Phase 31 consolidation)
 
     @classmethod
     def from_store(

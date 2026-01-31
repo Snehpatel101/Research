@@ -60,6 +60,16 @@ DEFAULT_SPLIT_RATIOS: dict[str, float] = {
 
 DEFAULT_PURGE_BARS: int = 60  # Gap before test fold
 DEFAULT_EMBARGO_BARS: int = 1440  # Gap after test fold (1 day at 1min)
+MINUTES_PER_DAY: int = 1440  # 24 * 60 minutes
+
+
+# =============================================================================
+# FINANCIAL CONSTANTS
+# =============================================================================
+
+TRADING_DAYS_PER_YEAR: int = 252  # Standard US equity trading days
+DEFAULT_ANNUALIZATION_FACTOR: float = 252.0  # For Sharpe ratio annualization
+DEFAULT_BOOTSTRAP_SAMPLES: int = 1000  # Bootstrap resampling iterations
 
 
 # =============================================================================
@@ -275,6 +285,11 @@ __all__ = [
     # Purge/Embargo
     "DEFAULT_PURGE_BARS",
     "DEFAULT_EMBARGO_BARS",
+    "MINUTES_PER_DAY",
+    # Financial constants
+    "TRADING_DAYS_PER_YEAR",
+    "DEFAULT_ANNUALIZATION_FACTOR",
+    "DEFAULT_BOOTSTRAP_SAMPLES",
     # Models
     "MODEL_FAMILIES",
     "ALL_MODELS",

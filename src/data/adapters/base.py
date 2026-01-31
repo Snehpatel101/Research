@@ -6,6 +6,8 @@ Phase 2 SNwH Implementation.
 
 from __future__ import annotations
 
+import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.core.contracts import DataContract, ModelContract
@@ -326,6 +330,7 @@ class BaseAdapter(ABC):
             return self.feature_columns
 
         # Auto-detect: exclude metadata and labels
+        # Phase 31: Comprehensive exclusion list to prevent data leakage
         exclude_prefixes = (
             "label_",
             "sample_weight_",
@@ -335,16 +340,36 @@ class BaseAdapter(ABC):
             "symbol",
             "timeframe",
             "split",
+            "index",  # Index columns
+            "date",  # Date columns
+            "time",  # Time columns
+            "target_",  # Target/label prefixes
+            "meta_",  # Metadata prefixes
+            "mtf_raw_",  # Raw MTF data (should use processed features)
         )
         exclude_exact = {
+            # OHLCV columns (raw price data)
             "open",
             "high",
             "low",
             "close",
             "volume",
+            # Index and metadata columns
             "bar_index",
             "session_id",
-            "label",  # CRITICAL: Exclude bare label column to prevent data leakage
+            "index",
+            "date",
+            "time",
+            "source",
+            "exchange",
+            # Label columns - CRITICAL for leakage prevention
+            "label",
+            "target",
+            "y",
+            # Weight and split columns
+            "weight",
+            "sample_weight",
+            "fold",
         }
 
         def is_feature_col(col: str) -> bool:
@@ -408,6 +433,74 @@ class BaseAdapter(ABC):
         if self.weight_column and self.weight_column in df.columns:
             return np.asarray(df[self.weight_column].values.astype(np.float32))
         return None
+
+    def _get_metadata_value(
+        self,
+        df: pd.DataFrame,
+        column: str,
+        default: str,
+    ) -> str:
+        """
+        Extract a single metadata value from DataFrame column.
+
+        Phase 31: Consolidated from TabularAdapter, SequenceAdapter, MultiStreamAdapter.
+
+        If the column exists and has a single unique non-null value,
+        return that value. Otherwise return the default.
+
+        Args:
+            df: DataFrame to extract from
+            column: Column name to look for
+            default: Default value if column missing or ambiguous
+
+        Returns:
+            Extracted metadata value or default
+        """
+        if column not in df.columns:
+            return default
+
+        unique_values = df[column].dropna().unique()
+        if len(unique_values) == 1:
+            return str(unique_values[0])
+        elif len(unique_values) == 0:
+            return default
+        else:
+            # Multiple values - log warning and use first
+            logger.warning(
+                f"Multiple values for metadata column '{column}': {unique_values[:5]}. "
+                f"Using first value."
+            )
+            return str(unique_values[0])
+
+    def _parse_horizon_from_label_column(self, label_column: str) -> int:
+        """
+        Parse horizon from label column name.
+
+        Phase 31: Consolidated from TabularAdapter, SequenceAdapter, MultiStreamAdapter.
+
+        Examples:
+            "label_h20" -> 20
+            "label_h5" -> 5
+            "label_h10" -> 10
+            "label" -> 20 (default)
+
+        Args:
+            label_column: Label column name
+
+        Returns:
+            Extracted horizon or default of 20
+        """
+        # Pattern: label_h{number}
+        match = re.search(r"label_h(\d+)", label_column)
+        if match:
+            return int(match.group(1))
+
+        # Fallback: check for just a number at the end
+        match = re.search(r"_(\d+)$", label_column)
+        if match:
+            return int(match.group(1))
+
+        return 20  # Default horizon
 
     def load_data_lazy(self, file_path: Path | str) -> pd.DataFrame:
         """

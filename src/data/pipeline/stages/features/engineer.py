@@ -50,6 +50,103 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
+# =============================================================================
+# FEATURE DEPENDENCY DAG
+# =============================================================================
+# Phase 31: Explicit feature dependency graph
+# Each feature family lists the families it depends on (must be computed first)
+#
+# DAG ensures proper computation order and documents data flow.
+
+FEATURE_DEPENDENCIES: dict[str, list[str]] = {
+    # Base features (no dependencies - computed from raw OHLCV)
+    "returns": [],  # log returns, pct returns
+    "price_ratios": [],  # high/low, close/open ratios
+    "sma": [],  # simple moving averages
+    "ema": [],  # exponential moving averages
+    "temporal": [],  # hour, day_of_week encoding
+    # First-order derived features (depend on base features)
+    "rsi": ["returns"],  # RSI uses price changes
+    "macd": ["ema"],  # MACD uses EMA(12), EMA(26), EMA(9)
+    "stochastic": [],  # K%/D% from high/low/close directly
+    "williams_r": [],  # Williams %R from high/low/close
+    "roc": ["returns"],  # Rate of change
+    "cci": ["sma"],  # CCI uses SMA(typical price)
+    "mfi": [],  # Money Flow Index from OHLCV directly
+    # Volatility features (depend on base)
+    "atr": [],  # ATR from high/low/close
+    "bollinger": ["sma"],  # Bollinger uses SMA + STD
+    "keltner": ["ema", "atr"],  # Keltner uses EMA + ATR
+    "hvol": ["returns"],  # Historical volatility uses returns
+    "parkinson": [],  # Parkinson vol from high/low
+    "garman_klass": [],  # GK vol from OHLCV
+    "rogers_satchell": [],  # RS vol from OHLCV
+    "yang_zhang": [],  # YZ vol from OHLCV
+    "garch": ["returns"],  # GARCH fits on returns
+    "higher_moments": ["returns"],  # Skew/kurtosis of returns
+    # Volume features (depend on price)
+    "volume": [],  # OBV, volume SMA
+    "vwap": [],  # VWAP from price * volume
+    "twap": [],  # TWAP from price
+    "dollar_volume": [],  # Dollar volume = price * volume
+    # Trend features (second-order)
+    "adx": [],  # ADX/DI from high/low/close
+    "supertrend": ["atr"],  # Supertrend uses ATR
+    "autocorrelation": ["returns"],  # Autocorrelation of returns
+    "clv": [],  # Close Location Value
+    # Higher-order features
+    "entropy": ["returns"],  # Entropy features use returns
+    "wavelets": [],  # Wavelet decomposition of close
+    "microstructure": [],  # Spread/liquidity proxies
+    "regime": ["hvol", "returns"],  # Regime uses volatility + returns
+    # Multi-timeframe (last - aggregates other TF features)
+    "mtf": ["*"],  # MTF features depend on all single-TF features
+}
+
+# Compute order derived from DAG (topological sort)
+FEATURE_COMPUTE_ORDER: list[str] = [
+    # Level 0: No dependencies
+    "returns",
+    "price_ratios",
+    "sma",
+    "ema",
+    "temporal",
+    "stochastic",
+    "williams_r",
+    "mfi",
+    "atr",
+    "parkinson",
+    "garman_klass",
+    "rogers_satchell",
+    "yang_zhang",
+    "volume",
+    "vwap",
+    "twap",
+    "dollar_volume",
+    "adx",
+    "clv",
+    "wavelets",
+    "microstructure",
+    # Level 1: Depend on returns/sma/ema
+    "rsi",
+    "macd",
+    "roc",
+    "cci",
+    "hvol",
+    "garch",
+    "higher_moments",
+    "autocorrelation",
+    "entropy",
+    # Level 2: Depend on level 1
+    "bollinger",
+    "keltner",
+    "supertrend",
+    "regime",
+    # Level 3: Depends on all
+    "mtf",
+]
+
+
 class FeatureEngineer:
     """
     Comprehensive feature engineering for financial time series.

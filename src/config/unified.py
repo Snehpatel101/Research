@@ -65,6 +65,26 @@ def _generate_run_id() -> str:
 
 
 # =============================================================================
+# SECTION DEFAULTS - Single source of truth for default values
+# =============================================================================
+
+# Import canonical constants
+from src.core.constants import (
+    CANONICAL_TIMEFRAMES,
+    DEFAULT_EMBARGO_BARS,
+    DEFAULT_HORIZONS,
+    DEFAULT_PURGE_BARS,
+    DEFAULT_SPLIT_RATIOS,
+)
+
+# Extended timeframes (beyond canonical 9)
+_EXTENDED_TIMEFRAMES: list[str] = ["240min", "1440min"]
+
+# Horizon defaults
+_SUPPORTED_HORIZONS: list[int] = [1, 5, 10, 15, 20, 30, 60, 120]
+
+
+# =============================================================================
 # SECTION DATACLASSES
 # =============================================================================
 
@@ -74,39 +94,15 @@ class TimeframesSection:
     """Timeframe configuration section."""
 
     default_primary: str = "5min"
-    canonical_ladder: list[str] = field(
-        default_factory=lambda: [
-            "1min",
-            "5min",
-            "10min",
-            "15min",
-            "20min",
-            "25min",
-            "30min",
-            "45min",
-            "60min",
-        ]
-    )
-    extended: list[str] = field(default_factory=lambda: ["240min", "1440min"])
+    canonical_ladder: list[str] = field(default_factory=lambda: list(CANONICAL_TIMEFRAMES))
+    extended: list[str] = field(default_factory=lambda: list(_EXTENDED_TIMEFRAMES))
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TimeframesSection:
-        default_canonical_ladder = [
-            "1min",
-            "5min",
-            "10min",
-            "15min",
-            "20min",
-            "25min",
-            "30min",
-            "45min",
-            "60min",
-        ]
-        default_extended = ["240min", "1440min"]
         return cls(
             default_primary=data.get("default_primary", "5min"),
-            canonical_ladder=data.get("canonical_ladder") or default_canonical_ladder,
-            extended=data.get("extended") or default_extended,
+            canonical_ladder=data.get("canonical_ladder") or list(CANONICAL_TIMEFRAMES),
+            extended=data.get("extended") or list(_EXTENDED_TIMEFRAMES),
         )
 
 
@@ -114,9 +110,9 @@ class TimeframesSection:
 class SplitsSection:
     """Train/val/test split configuration."""
 
-    train: float = 0.70
-    val: float = 0.15
-    test: float = 0.15
+    train: float = field(default_factory=lambda: DEFAULT_SPLIT_RATIOS["train"])
+    val: float = field(default_factory=lambda: DEFAULT_SPLIT_RATIOS["val"])
+    test: float = field(default_factory=lambda: DEFAULT_SPLIT_RATIOS["test"])
 
     def __post_init__(self) -> None:
         total = self.train + self.val + self.test
@@ -129,9 +125,9 @@ class SplitsSection:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SplitsSection:
         return cls(
-            train=data.get("train", 0.70),
-            val=data.get("val", 0.15),
-            test=data.get("test", 0.15),
+            train=data.get("train", DEFAULT_SPLIT_RATIOS["train"]),
+            val=data.get("val", DEFAULT_SPLIT_RATIOS["val"]),
+            test=data.get("test", DEFAULT_SPLIT_RATIOS["test"]),
         )
 
 
@@ -141,7 +137,7 @@ class PurgeEmbargoSection:
 
     purge_multiplier: float = 3.0
     embargo_time_minutes: int = 7200  # 5 days
-    min_embargo_bars: int = 1440  # Legacy, for backward compat
+    min_embargo_bars: int = DEFAULT_EMBARGO_BARS  # Legacy, for backward compat
 
     def compute_purge_bars(self, max_horizon: int) -> int:
         """Compute purge bars based on max horizon."""
@@ -158,7 +154,7 @@ class PurgeEmbargoSection:
         return cls(
             purge_multiplier=data.get("purge_multiplier", 3.0),
             embargo_time_minutes=data.get("embargo_time_minutes", 7200),
-            min_embargo_bars=data.get("min_embargo_bars", 1440),
+            min_embargo_bars=data.get("min_embargo_bars", DEFAULT_EMBARGO_BARS),
         )
 
 
@@ -166,9 +162,9 @@ class PurgeEmbargoSection:
 class HorizonsSection:
     """Horizon configuration."""
 
-    supported: list[int] = field(default_factory=lambda: [1, 5, 10, 15, 20, 30, 60, 120])
-    active: list[int] = field(default_factory=lambda: [5, 10, 15, 20])
-    default: list[int] = field(default_factory=lambda: [5, 10, 15, 20])
+    supported: list[int] = field(default_factory=lambda: list(_SUPPORTED_HORIZONS))
+    active: list[int] = field(default_factory=lambda: list(DEFAULT_HORIZONS))
+    default: list[int] = field(default_factory=lambda: list(DEFAULT_HORIZONS))
 
     def __post_init__(self) -> None:
         # Validate active is subset of supported
@@ -183,13 +179,10 @@ class HorizonsSection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HorizonsSection:
-        default_supported = [1, 5, 10, 15, 20, 30, 60, 120]
-        default_active = [5, 10, 15, 20]
-        default_default = [5, 10, 15, 20]
         return cls(
-            supported=data.get("supported") or default_supported,
-            active=data.get("active") or default_active,
-            default=data.get("default") or default_default,
+            supported=data.get("supported") or list(_SUPPORTED_HORIZONS),
+            active=data.get("active") or list(DEFAULT_HORIZONS),
+            default=data.get("default") or list(DEFAULT_HORIZONS),
         )
 
 

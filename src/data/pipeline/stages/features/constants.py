@@ -18,6 +18,9 @@ import math
 
 import numpy as np
 
+# Import canonical trading days constant (Phase 31 consolidation)
+from src.core.constants import TRADING_DAYS_PER_YEAR
+
 # =============================================================================
 # TRADING TIME CONSTANTS
 # =============================================================================
@@ -28,8 +31,7 @@ import numpy as np
 TRADING_HOURS_REGULAR = 6.5
 TRADING_HOURS_EXTENDED = 23.0
 
-# Trading days per year (standard for US markets)
-TRADING_DAYS_PER_YEAR = 252
+# Note: TRADING_DAYS_PER_YEAR imported from src.core.constants (252)
 
 # Timeframe to minutes mapping
 TIMEFRAME_MINUTES: dict[str, int] = {
