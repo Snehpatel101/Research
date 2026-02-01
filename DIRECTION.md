@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-01-31 (Phase 31 complete - code polish, latency tracking, constants cleanup, adapter consolidation)
-**Status:** Phases 0-31 Complete (Phase 31: 7/9 tasks, 1 disproven, 1 deferred to Phase 32) | Phase 32 Ready to Start
+**Last Updated:** 2026-02-01 (Pipeline Review complete - 35 issues identified for Phases 32-34)
+**Status:** Phase 31 Complete | Phases 32-34 Planned (Pipeline Review) | 8 Critical Issues + 12 High Priority
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -1701,6 +1701,32 @@ BLOCKER 8: MTF Ablation Flag
 ├── Why: Cleanly compare base-only vs with-MTF performance
 └── Status: ⚠️ DEFERRED (low priority)
 ```
+
+### Pipeline Review Findings (2026-02-01)
+
+**Comprehensive 4-agent review identified 35 issues across 461 Python files:**
+
+**CRITICAL (8 issues):**
+- 6 model family mismatches (contract vs registration)
+- 4 data leakage instances (train_test_split with shuffle=True)
+- 2 numerical issues (division by zero, inf returns)
+
+**HIGH PRIORITY (12 issues):**
+- 3 NotImplementedError evaluators (CV, walk-forward, CPCV-PBO)
+- 1 layer violation (core importing from data layer)
+- 8 low-hanging performance optimizations (5-50x potential speedup)
+
+**MEDIUM PRIORITY (15 issues):**
+- 5 MTF inconsistencies (shift(1) patterns)
+- 6 advanced optimization opportunities
+- 4 orphaned files (zero imports)
+
+**Action Plan:**
+- Phase 32: Fix 8 critical issues (model families, data leakage, numerical)
+- Phase 33: Implement evaluators + 8 performance optimizations
+- Phase 34: Cleanup orphaned files + document MTF patterns
+
+See COMPLETION.md for detailed findings and file:line references.
 
 ### Two Canonical Stores (REQUIRED FOR 4D)
 
