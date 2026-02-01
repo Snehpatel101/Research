@@ -200,8 +200,6 @@ The following production systems are implemented but were not in the original re
 | Gap | Impact | Priority |
 |-----|--------|----------|
 | No model serving layer | Can't deploy to production | HIGH |
-| No CI/CD pipeline | Manual deployments | HIGH |
-| No production monitoring | Silent failures | HIGH |
 | No data drift detection | Model degradation undetected | MEDIUM |
 | No feature store | Feature inconsistency | MEDIUM |
 | No model versioning | No semantic versions | MEDIUM |
@@ -216,16 +214,12 @@ The following production systems are implemented but were not in the original re
 | Model Registry | 5/10 | Local only, no versioning/staging |
 | Hyperparameter Optimization | 7/10 | Comprehensive Optuna, missing multi-objective |
 | Inference Pipeline | 7/10 | Good batch support, no streaming |
-| Monitoring/Alerting | 3/10 | Minimal |
-| CI/CD | 2/10 | None |
 
 ### Recommendations
 
 1. Add FastAPI/TorchServe serving endpoint in `inference/server.py`
-2. Add GitHub Actions for lint/test/train/deploy
-3. Add Prometheus metrics + Grafana dashboards
-4. Add Great Expectations for data quality
-5. Add Feast for feature store
+2. Add Great Expectations for data quality
+3. Add Feast for feature store
 
 ---
 
@@ -397,9 +391,7 @@ The following production systems are implemented but were not in the original re
 | # | Action | Component | Impact |
 |---|--------|-----------|--------|
 | 4 | Add model serving layer | `inference/server.py` (new) | Production deployment |
-| 5 | Add CI/CD pipeline | GitHub Actions | Automated deployments |
-| 6 | Add production monitoring | Prometheus/Grafana | Failure detection |
-| 7 | ~~Resolve dual AdapterResult~~ | ~~`core/interfaces.py`~~ | ~~Architecture~~ **DOCUMENTED EXCEPTION** |
+| 5 | ~~Resolve dual AdapterResult~~ | ~~`core/interfaces.py`~~ | ~~Architecture~~ **DOCUMENTED EXCEPTION** |
 
 ### LOW PRIORITY (Optimization)
 
@@ -446,7 +438,7 @@ The ML Factory pipeline demonstrates **production-grade financial ML safety**:
 ### Next Steps
 
 1. **Immediate:** Fix MTF timeframe inconsistency before training (HIGH PRIORITY - UNFIXED)
-2. **Short-term:** Add serving layer and CI/CD for deployment
+2. **Short-term:** Add serving layer for deployment
 3. **Medium-term:** Performance optimizations for scale (Hurst exponent, CCI)
 
 ---
