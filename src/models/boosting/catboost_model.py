@@ -53,7 +53,8 @@ def _check_cuda_available() -> bool:
     except ImportError:
         # Fallback: assume GPU available if use_gpu=True in config
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning(f"GPU detection failed: {e}. Assuming no GPU available.")
         return False
 
 
@@ -275,6 +276,8 @@ class CatBoostModel(BaseModel):
         metadata_path = path / "metadata.pkl"
         if metadata_path.exists():
             with open(metadata_path, "rb") as f:
+                # SECURITY: Only load from trusted internal paths (model metadata from this system)
+                # External/untrusted pickle files could execute arbitrary code
                 metadata = pickle.load(f)
             self._config = metadata.get("config", self._config)
             self._feature_names = metadata.get("feature_names")

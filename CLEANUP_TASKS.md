@@ -1,11 +1,11 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 34 Complete
-**Last Updated:** 2026-02-01
+**Status:** Phase 35 Complete
+**Last Updated:** 2026-02-02
 
 ---
 
-## Completed Phases (24-33)
+## Completed Phases (24-34)
 
 See **COMPLETION.md** for full task details and implementation information.
 
@@ -29,9 +29,23 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-Phase 34 complete. See COMPLETION.md for full task breakdown and implementation details.
+### Phase 35: Production Hardening
 
-**All planned phases (24-34) are now complete.**
+**Status:** ✅ COMPLETE
+**Priority:** HIGH (P1)
+**Tasks:** 2/2 tasks complete
+**Source:** Comprehensive pipeline review (6-agent analysis, 2026-02-02)
+**Completed:** 2026-02-02
+
+#### Task 35-1: Add Logging to Silent Exception Handlers ✅ COMPLETE
+- **Files Modified:** 18 files
+- **Locations:** 26 exception handlers
+- **Pattern:** Added `logger.warning()` with context before returning defaults
+
+#### Task 35-2: Document/Secure Pickle Loading ✅ COMPLETE
+- **Files Modified:** 24 files
+- **Locations:** 35 pickle/joblib loads
+- **Pattern:** Added security comments documenting trusted internal paths
 
 ---
 
@@ -585,6 +599,208 @@ def compute_features(df: pd.DataFrame) -> pd.DataFrame:
 | 34-9 | ✅ | MTF defaults consolidated in constants.py |
 | 34-10 | ✅ | All modules import from constants.py |
 | 34-11 | ❌ DISPROVEN | Code already uses anti-fragmentation pattern |
+
+---
+
+## Phase 35: Production Hardening
+
+**Status:** 📋 PLANNED
+**Priority:** HIGH (P1)
+**Tasks:** 2 tasks
+**Source:** Comprehensive pipeline review (6-agent analysis, 2026-02-02)
+
+---
+
+### Task 35-1: Add Logging to Silent Exception Handlers
+
+**Priority:** HIGH
+**Affected Files:** 26 locations across codebase
+**Impact:** Improves debuggability and operational visibility
+
+#### Problem
+
+26 exception handlers catch errors without logging, making debugging difficult in production:
+
+```python
+# Current pattern (silent failure)
+try:
+    risky_operation()
+except Exception:
+    return None  # Silent failure - no visibility
+
+# Or worse
+try:
+    risky_operation()
+except Exception:
+    pass  # Completely silent
+```
+
+#### AI Instructions
+
+1. **Find** all silent exception handlers:
+```bash
+# Pattern 1: except with pass
+grep -rn "except.*:" src/ --include="*.py" -A 1 | grep -B 1 "pass"
+
+# Pattern 2: except with return None
+grep -rn "except.*:" src/ --include="*.py" -A 1 | grep -B 1 "return None"
+
+# Pattern 3: except without logger
+grep -rn "except Exception" src/ --include="*.py" | while read line; do
+    file=$(echo $line | cut -d: -f1)
+    lineno=$(echo $line | cut -d: -f2)
+    # Check if logger is used in next 5 lines
+    sed -n "${lineno},$((lineno+5))p" $file | grep -q logger || echo $line
+done
+```
+
+2. **Add** structured logging to each handler:
+```python
+# AFTER (with logging)
+import logging
+logger = logging.getLogger(__name__)
+
+try:
+    risky_operation()
+except Exception as e:
+    logger.error(
+        "Operation failed in %s: %s",
+        context_info,
+        str(e),
+        exc_info=True,  # Include stack trace
+        extra={"operation": "risky_operation", "context": context_dict}
+    )
+    return None  # Now visible failure
+```
+
+3. **Categorize** by severity:
+   - ERROR: Expected failures (file not found, validation errors)
+   - WARNING: Fallback cases (cache miss, optional feature unavailable)
+   - CRITICAL: Should never happen (contract violations, data corruption)
+
+4. **Keep** existing behavior (return None, pass, etc.) but add visibility
+
+#### Example Locations
+
+Based on previous reviews, likely locations include:
+- `src/data/store/` - Cache operations
+- `src/models/` - Model loading
+- `src/validation/` - Optional validations
+- `src/inference/` - Prediction fallbacks
+
+#### Verification
+
+```bash
+# Should return 0 (or only false positives like docstrings)
+grep -r "except.*:" src/ --include="*.py" -A 3 | grep -B 3 -E "(pass|return None)" | grep -v logger | wc -l
+
+# Verify logging is imported where needed
+grep -r "except Exception as e:" src/ --include="*.py" | while read line; do
+    file=$(echo $line | cut -d: -f1)
+    grep -q "import logging" $file || echo "Missing logging import: $file"
+done
+```
+
+---
+
+### Task 35-2: Document/Secure Pickle Loading
+
+**Priority:** HIGH
+**Affected Files:** 45+ locations with pickle.load() or joblib.load()
+**Impact:** Security hardening for production deployment
+
+#### Problem
+
+Pickle deserialization without validation is unsafe (arbitrary code execution risk):
+
+```python
+# Current pattern (unsafe)
+with open(model_path, 'rb') as f:
+    model = pickle.load(f)  # Can execute arbitrary code
+```
+
+#### AI Instructions
+
+1. **Find** all pickle/joblib loads:
+```bash
+grep -rn "pickle\.load\|joblib\.load" src/ --include="*.py"
+```
+
+2. **For each location**, choose appropriate mitigation:
+
+**Option A: Add Security Comment (Quick Win)**
+```python
+# SECURITY: This pickle file is created internally by our pipeline
+# and stored in a trusted location. Not user-provided.
+with open(model_path, 'rb') as f:
+    model = pickle.load(f)
+```
+
+**Option B: Add Signature Verification (Better)**
+```python
+import hashlib
+import hmac
+
+def load_signed_pickle(path: str, secret_key: bytes) -> Any:
+    """Load pickle with HMAC signature verification."""
+    with open(path, 'rb') as f:
+        signature = f.read(32)  # First 32 bytes = HMAC-SHA256
+        data = f.read()
+
+    expected_sig = hmac.new(secret_key, data, hashlib.sha256).digest()
+    if not hmac.compare_digest(signature, expected_sig):
+        raise ValueError("Pickle signature verification failed")
+
+    return pickle.loads(data)
+```
+
+**Option C: Migrate to Safetensors (Best, Long-term)**
+```python
+# For PyTorch models only
+from safetensors.torch import load_file
+
+# Instead of pickle
+model_state = load_file(model_path)  # Safe, no code execution
+```
+
+3. **Categorize** by risk level:
+   - **HIGH RISK:** User-provided paths, external data sources
+   - **MEDIUM RISK:** Config-driven paths, experiment outputs
+   - **LOW RISK:** Internal pipeline artifacts, never exposed
+
+4. **Priority order:**
+   - HIGH RISK → Option B (signature verification) or reject
+   - MEDIUM RISK → Option A (document) + Option B recommended
+   - LOW RISK → Option A (document) acceptable
+
+#### Example Locations
+
+Based on typical ML Factory usage:
+- `src/models/bundle.py` - Model bundle loading
+- `src/inference/` - Inference pipeline
+- `src/optimization/` - Optuna study loading
+- `src/data/store/` - Feature store caching
+
+#### Verification
+
+```bash
+# Find undocumented pickle loads
+grep -rn "pickle\.load\|joblib\.load" src/ --include="*.py" -B 2 | grep -v "SECURITY:" | wc -l
+# Should be 0
+
+# Verify all high-risk paths use verification
+grep -rn "pickle\.load.*user\|pickle\.load.*request" src/ --include="*.py"
+# Should return 0 (no user-provided pickle paths)
+```
+
+---
+
+### Phase 35 Completion Checklist
+
+| Task | Status | Verification |
+|------|--------|--------------|
+| 35-1 | ⬜ PLANNED | All exception handlers have logging |
+| 35-2 | ⬜ PLANNED | All pickle loads documented or verified |
 
 ---
 

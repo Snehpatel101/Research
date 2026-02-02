@@ -426,6 +426,8 @@ class PreprocessingGraph:
     def _load_scaler(self, path: Path) -> None:
         """Load fitted scaler from disk."""
         with open(path, "rb") as f:
+            # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
+            # External/untrusted pickle files could execute arbitrary code
             self._scaler = pickle.load(f)
         logger.info(f"Loaded scaler from {path}")
 

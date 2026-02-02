@@ -6,10 +6,13 @@ PHASE_1 Unified Features: 15 WAVELETS features.
 Uses PyWavelets (pywt) if available, otherwise returns NaN stubs.
 """
 
+import logging
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # Try to import pywt, set flag if not available
 try:
@@ -55,7 +58,8 @@ def _wavelet_decompose(
         coeffs = pywt.wavedec(data, wavelet, level=level)
         # coeffs[0] is approximation, coeffs[1:] are details
         return coeffs[0], coeffs[1:]
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Wavelet decomposition failed: {e}. Returning None.")
         return None, None
 
 
@@ -105,7 +109,8 @@ def _rolling_wavelet_feature(
             window_series = pd.Series(window_data)
             value = extract_fn(window_series)
             result[window - 1 + i] = value
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Wavelet rolling extraction failed for window {i}: {e}")
             pass
 
     return pd.Series(result, index=series.index)
@@ -120,7 +125,8 @@ def _get_wavelet_coeffs(series: pd.Series, wavelet: str = "db4", level: int = 3)
     try:
         coeffs = pywt.wavedec(data, wavelet, level=level)
         return coeffs
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Wavelet coefficient extraction failed: {e}")
         return None
 
 

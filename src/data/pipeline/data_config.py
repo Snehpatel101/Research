@@ -55,7 +55,8 @@ def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
         for part in parts:
             value = getattr(value, part)
         return value
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to get config attribute '{attr_path}': {e}. Using fallback: {fallback}")
         return fallback
 
 

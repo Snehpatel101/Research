@@ -24,11 +24,14 @@ Usage in Colab:
     ```
 """
 
+import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def is_colab() -> bool:
@@ -44,7 +47,8 @@ def _git_repo_root(start_dir: Path) -> Path | None:
             text=True,
         ).strip()
         return Path(out)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to find git repo root: {e}")
         return None
 
 

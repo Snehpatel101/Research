@@ -125,8 +125,9 @@ def bootstrap_metric(
         bootstrap_sample = data[indices]
         try:
             bootstrap_estimates[i] = metric_fn(bootstrap_sample)
-        except Exception:
+        except Exception as e:
             # Handle edge cases (e.g., zero std in Sharpe)
+            logger.warning(f"Bootstrap sample {i} failed: {e}. Using NaN.")
             bootstrap_estimates[i] = np.nan
 
     # Remove NaN values
@@ -194,7 +195,8 @@ def _bca_interval(
         jackknife_sample = np.delete(data, i)
         try:
             jackknife_estimates[i] = metric_fn(jackknife_sample)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Jackknife sample {i} failed: {e}. Using NaN.")
             jackknife_estimates[i] = np.nan
 
     valid_jack = jackknife_estimates[~np.isnan(jackknife_estimates)]
@@ -493,7 +495,8 @@ def bootstrap_multiple_metrics(
         for name, fn in metric_fns.items():
             try:
                 bootstrap_results[name].append(fn(bootstrap_sample))
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Multi-metric bootstrap {name} sample {i} failed: {e}. Using NaN.")
                 bootstrap_results[name].append(np.nan)
 
     # Compute CIs for each metric

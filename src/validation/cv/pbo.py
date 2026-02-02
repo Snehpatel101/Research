@@ -303,7 +303,8 @@ def compute_pbo(
             try:
                 rank_corr, _ = stats.spearmanr(last_is, last_oos)
                 rank_corr = float(rank_corr) if not np.isnan(rank_corr) else 0.0
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Spearman correlation failed: {e}. Using default 0.0.")
                 rank_corr = 0.0
         else:
             rank_corr = 0.0

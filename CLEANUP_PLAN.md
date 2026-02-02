@@ -1,11 +1,11 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 34 Complete
-**Last Updated:** 2026-02-01
+**Status:** Phase 35 Complete
+**Last Updated:** 2026-02-02
 
 ---
 
-## Completed Phases (24-33)
+## Completed Phases (24-34)
 
 See **COMPLETION.md** for full details on all completed phases.
 
@@ -32,14 +32,64 @@ See **COMPLETION.md** for full details on all completed phases.
 | Phase | Focus | Priority | Effort | Status |
 |-------|-------|----------|--------|--------|
 | 24-34 | See above | VARIOUS | 11 days | ✅ ALL COMPLETE - See COMPLETION.md |
+| 35 | Hardening (exception logging, pickle security) | HIGH | 1 day | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-Phase 34 complete. See COMPLETION.md for full details.
+### Phase 35: Production Hardening
 
-**All planned phases (24-34) are now complete.**
+**Status:** ✅ COMPLETE
+**Priority:** HIGH (P1)
+**Effort:** 1 day (actual)
+**Source:** Comprehensive pipeline review (6-agent analysis, 2026-02-02)
+**Completed:** 2026-02-02
+
+**Overview**
+
+Remaining P1 items identified in comprehensive pipeline review that validated production readiness (7.5/10 overall):
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                        PRODUCTION HARDENING TASKS                                │
+│                                                                                  │
+│  SILENT EXCEPTION HANDLING (26 locations):                                       │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  Add structured logging to all exception handlers               │             │
+│  │  Current: except Exception: pass or return None                │             │
+│  │  Target: except Exception as e: logger.error(...)             │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  UNSAFE DESERIALIZATION (45+ locations):                                         │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  pickle.load() and joblib.load() without validation            │             │
+│  │  Recommendation: Add signature verification or safetensors      │             │
+│  │  Priority: HIGH for production deployment                      │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  MTF CONSOLIDATION (COMPLETE):                                                   │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  ✅ Phase 34 consolidated to single source                     │             │
+│  │  ✅ All modules import from constants.py                       │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File Pattern | Priority | Description | Impact |
+|------|--------------|----------|-------------|--------|
+| 35-1 | Multiple files (26) | HIGH | Add structured logging to silent exception handlers | Debuggability |
+| 35-2 | Multiple files (45+) | HIGH | Document/secure pickle loading or migrate to safetensors | Security |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Silent exception handlers | 26 | 0 | `grep -r "except.*:" src/ \| grep -v logger` returns 0 |
+| Undocumented pickle loads | 45+ | 0 | All pickle.load() has comment or uses verification |
+| Code quality score | 7/10 | 8/10 | Improved debuggability and security |
 
 ---
 

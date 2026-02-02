@@ -185,6 +185,8 @@ class DataCache:
             return None
         try:
             with open(disk_path, "rb") as f:
+                # SECURITY: Only load from trusted internal paths (cache files created by this system)
+                # External/untrusted pickle files could execute arbitrary code
                 cached = pickle.load(f)
             return cached["data"], cached["metadata"]
         except Exception as e:

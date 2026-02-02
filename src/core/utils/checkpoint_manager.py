@@ -203,6 +203,8 @@ class CheckpointManager:
         print(f"📂 Loading checkpoint: {latest_checkpoint}")
 
         with open(latest_checkpoint, "rb") as f:
+            # SECURITY: Only load from trusted internal paths (checkpoints created by this system)
+            # External/untrusted pickle files could execute arbitrary code
             checkpoint: dict[str, Any] = pickle.load(f)
 
         return checkpoint
@@ -217,6 +219,8 @@ class CheckpointManager:
             checkpoint_files = list(Path(artifact_dir).glob("*.pkl"))
             if checkpoint_files:
                 with open(checkpoint_files[0], "rb") as f:
+                    # SECURITY: Only load from trusted internal paths (W&B artifacts from this system)
+                    # External/untrusted pickle files could execute arbitrary code
                     result: dict[str, Any] = pickle.load(f)
                     return result
         except Exception as e:

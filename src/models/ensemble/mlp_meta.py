@@ -274,14 +274,20 @@ class MLPMetaLearner(BaseModel):
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
+        # SECURITY: Only load from trusted internal paths (models trained by this system)
+        # External/untrusted joblib files could execute arbitrary code
         self._model = joblib.load(model_path)
 
         scaler_path = path / "scaler.joblib"
         if scaler_path.exists():
+            # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
+            # External/untrusted joblib files could execute arbitrary code
             self._scaler = joblib.load(scaler_path)
 
         metadata_path = path / "metadata.joblib"
         if metadata_path.exists():
+            # SECURITY: Only load from trusted internal paths (model metadata from this system)
+            # External/untrusted joblib files could execute arbitrary code
             metadata = joblib.load(metadata_path)
             self._config = metadata.get("config", self._config)
             self._feature_names = metadata.get("feature_names")

@@ -26,9 +26,12 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
@@ -41,7 +44,8 @@ def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
         for part in parts:
             value = getattr(value, part)
         return value if value is not None else fallback
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to get config attribute '{attr_path}': {e}. Using fallback: {fallback}")
         return fallback
 
 

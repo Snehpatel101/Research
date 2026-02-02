@@ -600,9 +600,10 @@ def _fit_garch_rolling(
                     last_vol_h = last_vol_1
                 vol_forecast_h[i] = last_vol_h
 
-            except Exception:
+            except Exception as e:
                 # GARCH estimation can fail for various reasons (non-convergence, etc.)
                 # Forward-fill from last successful fit
+                logger.warning(f"GARCH forecast failed at index {i}: {e}. Using forward-fill.")
                 vol_forecast_1[i] = last_vol_1
                 vol_forecast_h[i] = last_vol_h
         else:

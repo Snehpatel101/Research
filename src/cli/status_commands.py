@@ -3,6 +3,7 @@ CLI Status Commands - status, list, validate, compare, and clean commands.
 """
 
 import json
+import logging
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +12,8 @@ import typer
 from rich.table import Table
 
 from .utils import console, get_project_root, show_error, show_info, show_success, show_warning
+
+logger = logging.getLogger(__name__)
 
 # Lazy imports to avoid circular dependencies
 _pipeline_config = None
@@ -122,8 +125,9 @@ def _display_pipeline_state(run_dir: Path) -> None:
 
         stage_defs = get_stage_definitions()
         all_stages = [stage["name"] for stage in stage_defs]
-    except Exception:
+    except Exception as e:
         # Fallback for legacy runs if stage registry is unavailable
+        logger.warning(f"Stage registry unavailable: {e}. Using fallback.")
         all_stages = list(stage_results.keys())
 
     for stage in all_stages:
@@ -344,7 +348,8 @@ def list_runs_command(
                 from src.data.pipeline.stage_registry import get_stage_definitions
 
                 total = len(get_stage_definitions())
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Stage registry unavailable: {e}. Using fallback count 12.")
                 total = 12  # Fallback to known count
             status = f"{completed}/{total} stages"
         else:

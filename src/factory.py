@@ -469,6 +469,8 @@ class MLFactory:
         training_cache_path = self.output_dir / "cache" / "training_result.pkl"
         if training_cache_path.exists():
             with open(training_cache_path, "rb") as f:
+                # SECURITY: Only load from trusted internal paths (training results from this system)
+                # External/untrusted pickle files could execute arbitrary code
                 return pickle.load(f)
         raise FileNotFoundError(f"Cached training result not found at {training_cache_path}")
 

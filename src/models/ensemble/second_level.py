@@ -589,6 +589,8 @@ class SecondLevelStacker:
             raise FileNotFoundError(f"Metadata not found at {path}")
 
         # Load metadata
+        # SECURITY: Only load from trusted internal paths (second-level metadata from this system)
+        # External/untrusted joblib files could execute arbitrary code
         metadata = joblib.load(path / "second_level_metadata.joblib")
 
         # Restore config

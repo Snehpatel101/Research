@@ -732,7 +732,8 @@ def _calculate_hurst_rs(prices: np.ndarray) -> float:
         # Clip to reasonable range
         hurst = np.clip(hurst, 0.0, 1.0)
         return int(float(hurst))
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Hurst exponent calculation failed: {e}. Returning NaN.")
         return np.nan
 
 

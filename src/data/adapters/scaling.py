@@ -368,6 +368,8 @@ class AdapterScaler:
         # Load sklearn scaler if it exists
         scaler_path = path / "scaler.pkl"
         if scaler_path.exists():
+            # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
+            # External/untrusted joblib files could execute arbitrary code
             instance._scaler = joblib.load(scaler_path)
             logger.debug(f"Loaded sklearn scaler from {scaler_path}")
 

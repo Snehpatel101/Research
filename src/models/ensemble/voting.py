@@ -503,6 +503,8 @@ class VotingEnsemble(BaseModel):
         if not metadata_path.exists():
             raise FileNotFoundError(f"Ensemble metadata not found: {metadata_path}")
 
+        # SECURITY: Only load from trusted internal paths (ensemble metadata from this system)
+        # External/untrusted joblib files could execute arbitrary code
         metadata = joblib.load(metadata_path)
         self._config = metadata.get("config", self._config)
         self._base_model_names = metadata.get("base_model_names", [])

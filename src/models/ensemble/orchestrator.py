@@ -327,7 +327,8 @@ class EnsembleOrchestrator:
         # Log loss if probabilities available
         try:
             val_logloss = float(log_loss(y_val_meta, output.class_probabilities))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Log loss calculation failed: {e}. Using NaN.")
             val_logloss = float("nan")
 
         metrics = {

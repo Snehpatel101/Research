@@ -28,6 +28,8 @@ from src.cli.utils import (
     show_warning,
 )
 
+logger = logging.getLogger(__name__)
+
 train_app = typer.Typer(
     name="train",
     help="Model training commands",
@@ -268,7 +270,8 @@ def _list_models() -> None:
                 meta = ModelRegistry.get_metadata(model_name)
                 desc = meta.get("description", "")
                 console.print(f"  - {model_name}: {desc}")
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to get metadata for {model_name}: {e}")
                 console.print(f"  - {model_name}")
 
     console.print(f"\n[bold]Total: {ModelRegistry.count()} models[/bold]")

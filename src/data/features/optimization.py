@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -5,6 +6,8 @@ import optuna
 import pandas as pd
 
 from .strategies import get_strategy_for_model
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -100,7 +103,8 @@ def optimize_features_for_model(
         )
         baseline_preds = baseline_model.predict(X_val_baseline.values)
         baseline_score = f1_score(y_val.values, baseline_preds.class_predictions, average="macro")
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Baseline model training/scoring failed: {e}. Using default score 0.0.")
         baseline_score = 0.0
 
     def objective(trial: optuna.Trial) -> float:
@@ -306,7 +310,8 @@ class FeatureOptimizer:
             )
             baseline_preds = baseline_model.predict(X_val)
             baseline_score = score_fn(y_val, baseline_preds.class_predictions)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Baseline model training/scoring failed: {e}. Using default score 0.0.")
             baseline_score = 0.0
 
         def objective(trial: optuna.Trial) -> float:
@@ -367,7 +372,8 @@ class FeatureOptimizer:
                 predictions = model.predict(X_val_subset)
                 score = score_fn(y_val, predictions.class_predictions)
                 return float(score)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Trial evaluation failed: {e}. Returning 0.0.")
                 return 0.0
 
         # Create study with TPE sampler for efficient search

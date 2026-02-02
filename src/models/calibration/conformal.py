@@ -477,6 +477,8 @@ class ConformalPredictor:
         path = Path(path)
 
         with open(path, "rb") as f:
+            # SECURITY: Only load from trusted internal paths (conformal predictors fitted by this system)
+            # External/untrusted pickle files could execute arbitrary code
             state = pickle.load(f)
 
         predictor = cls(config=state["config"])

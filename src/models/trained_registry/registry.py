@@ -455,7 +455,8 @@ class TrainedModelRegistry:
             info = ModelRegistry.get_model_info(model_name)
             if info:
                 return str(info.get("family", "unknown"))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to get model family from registry for {model_name}: {e}. Using fallback.")
             pass
 
         # Fallback based on name

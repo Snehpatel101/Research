@@ -66,7 +66,8 @@ def setup_notebook(
         plt.style.use("seaborn-v0_8-whitegrid")
         plt.rcParams["figure.figsize"] = (10, 6)
         plt.rcParams["figure.dpi"] = 100
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Matplotlib configuration failed: {e}")
         pass
 
     # Get environment info
