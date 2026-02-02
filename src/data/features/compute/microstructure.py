@@ -213,10 +213,7 @@ def compute_micro_cs_spread(df: pd.DataFrame) -> pd.Series:
     # Alpha parameter
     sqrt_2 = np.sqrt(2)
     denom = 3 - 2 * sqrt_2
-    # Clip beta and gamma to avoid sqrt of negative values (can happen with noisy data)
-    beta_safe = beta.clip(lower=0)
-    gamma_safe = gamma.clip(lower=0)
-    alpha_sq = (np.sqrt(2 * beta_safe) - np.sqrt(beta_safe)) / denom - np.sqrt(gamma_safe / denom)
+    alpha_sq = (np.sqrt(2 * beta) - np.sqrt(beta)) / denom - np.sqrt(gamma / denom)
     alpha_sq = alpha_sq.clip(lower=0)
 
     # Spread estimate
