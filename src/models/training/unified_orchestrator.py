@@ -538,6 +538,19 @@ class UnifiedTrainingOrchestrator:
         logger.info(f"Models: {self.config.models}")
         logger.info(f"Horizons: {self.config.horizons}")
 
+        # Filter out invalid labels (-99 sentinel) before training
+        # These are rows where labeling couldn't compute a valid label
+        label_cols = [col for col in df.columns if col.startswith("label_")]
+        if label_cols:
+            # Lazy import to avoid circular import
+            from src.data.pipeline.stages.validation import filter_invalid_labels
+
+            original_len = len(df)
+            df = filter_invalid_labels(df, label_cols)
+            filtered_count = original_len - len(df)
+            if filtered_count > 0:
+                logger.info(f"  Filtered {filtered_count} rows with invalid labels (-99)")
+
         # Run pre-training validation (Phase 1: Contract Enforcement)
         # This will raise PreTrainingValidationError if validation fails
         self._pre_training_validation(df)
