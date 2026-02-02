@@ -239,7 +239,7 @@ class PatchTSTNetwork(nn.Module):
 
 @register(
     name="patchtst",
-    family="neural",
+    family="transformer",
     description="PatchTST: Patched Time Series Transformer with channel-independent patches",
     aliases=["patch_tst", "ptst"],
 )

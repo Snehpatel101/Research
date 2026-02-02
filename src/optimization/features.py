@@ -315,15 +315,13 @@ class FeatureOptimizer:
 
         # Split data if no validation set provided
         if X_val is None or y_val is None:
-            from sklearn.model_selection import train_test_split
-
-            X_train, X_val, y_train, y_val = train_test_split(
-                X_train,
-                y_train,
-                test_size=0.2,
-                random_state=self.random_state,
-                stratify=y_train,
-            )
+            # Time-based split to prevent data leakage in time series
+            if len(X_train) < 2:
+                raise ValueError(f"Cannot split dataset with {len(X_train)} samples (minimum 2 required)")
+            split_idx = int(len(X_train) * 0.8)
+            split_idx = max(1, split_idx)  # Ensure at least 1 training sample
+            X_train, X_val = X_train[:split_idx], X_train[split_idx:]
+            y_train, y_val = y_train[:split_idx], y_train[split_idx:]
 
         score_fn = self._get_score_fn()
 
@@ -479,15 +477,13 @@ class FeatureOptimizer:
 
         # Split data if no validation set provided
         if X_val is None or y_val is None:
-            from sklearn.model_selection import train_test_split
-
-            X_train, X_val, y_train, y_val = train_test_split(
-                X_train,
-                y_train,
-                test_size=0.2,
-                random_state=self.random_state,
-                stratify=y_train,
-            )
+            # Time-based split to prevent data leakage in time series
+            if len(X_train) < 2:
+                raise ValueError(f"Cannot split dataset with {len(X_train)} samples (minimum 2 required)")
+            split_idx = int(len(X_train) * 0.8)
+            split_idx = max(1, split_idx)  # Ensure at least 1 training sample
+            X_train, X_val = X_train[:split_idx], X_train[split_idx:]
+            y_train, y_val = y_train[:split_idx], y_train[split_idx:]
 
         score_fn = self._get_score_fn()
 
@@ -610,16 +606,13 @@ class FeatureOptimizer:
         Returns:
             Dict mapping feature name to importance score
         """
-        from sklearn.model_selection import train_test_split
-
-        # Split for importance calculation
-        X_tr, X_val, y_tr, y_val = train_test_split(
-            X_train,
-            y_train,
-            test_size=0.2,
-            random_state=self.random_state,
-            stratify=y_train,
-        )
+        # Time-based split for importance calculation (no data leakage)
+        if len(X_train) < 2:
+            raise ValueError(f"Cannot split dataset with {len(X_train)} samples (minimum 2 required)")
+        split_idx = int(len(X_train) * 0.8)
+        split_idx = max(1, split_idx)  # Ensure at least 1 training sample
+        X_tr, X_val = X_train[:split_idx], X_train[split_idx:]
+        y_tr, y_val = y_train[:split_idx], y_train[split_idx:]
 
         # Train model
         try:

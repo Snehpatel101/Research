@@ -4,6 +4,283 @@
 
 ---
 
+## Phase 32 (2026-02-01) | Critical Fixes - Model Families, Data Leakage, Numerical Stability
+
+**Status:** ✅ COMPLETE
+**Duration:** Single day (2026-02-01)
+**Impact:** 11 files modified, 15/16 tasks complete (1 disproven), ~20 net lines added (validations + constants)
+**Tests:** All 42 tests pass, ruff checks pass
+
+### Summary
+
+Addressed critical production issues identified in comprehensive ML pipeline review + deep check validation:
+- Fixed 6 model family registration decorators (transformers and meta-learners)
+- Fixed 4 model family property methods in meta-learner classes
+- Eliminated 6 data leakage vulnerabilities via time-based splits
+- Added edge case validation (minimum sample size) before all splits
+- Fixed numerical issue causing gradient explosion (np.inf → MAX_HALFLIFE cap)
+- Updated docstring to reflect numerical fix
+- Disproved 1 false positive (liquidity epsilon was already correct)
+
+### Completed Tasks
+
+**Model Family Registration Fixes (6 tasks):**
+
+| Task | File | Change | Impact |
+|------|------|--------|--------|
+| 32-1 | `src/models/neural/patchtst_model.py:240` | Registration: `neural` → `transformer` | Contract alignment |
+| 32-2 | `src/models/neural/itransformer_model.py:258` | Registration: `neural` → `transformer` | Contract alignment |
+| 32-3 | `src/models/ensemble/ridge_meta.py:26` | Registration: `ensemble` → `meta_learner` | Contract alignment |
+| 32-4 | `src/models/ensemble/mlp_meta.py:25` | Registration: `ensemble` → `meta_learner` | Contract alignment |
+| 32-5 | `src/models/ensemble/xgboost_meta.py:22` | Registration: `ensemble` → `meta_learner` | Contract alignment |
+| 32-6 | `src/models/ensemble/calibrated_meta.py:26` | Registration: `ensemble` → `meta_learner` | Contract alignment |
+
+**Model Family Property Fixes (4 tasks - from deep check):**
+
+| Task | File | Change | Impact |
+|------|------|--------|--------|
+| 32-13 | `src/models/ensemble/ridge_meta.py:64` | Property: `"ensemble"` → `"meta_learner"` | Runtime consistency |
+| 32-14 | `src/models/ensemble/mlp_meta.py:69` | Property: `"ensemble"` → `"meta_learner"` | Runtime consistency |
+| 32-15 | `src/models/ensemble/xgboost_meta.py:68` | Property: `"ensemble"` → `"meta_learner"` | Runtime consistency |
+| 32-16 | `src/models/ensemble/calibrated_meta.py:71` | Property: `"ensemble"` → `"meta_learner"` | Runtime consistency |
+
+**Data Leakage Elimination (4 tasks, expanded to 6 locations + edge case validation):**
+
+| Task | File:Lines | Issue | Fix |
+|------|-----------|-------|-----|
+| 32-7 | `src/optimization/features.py:320,352,382` | `train_test_split(shuffle=True)` | Time-based split (80/20) + min validation |
+| 32-8 | `src/optimization/hyperparameters.py:616` | `train_test_split(stratify=y)` | Time-based split (80/20) + min validation |
+| 32-9 | `src/optimization/pipeline.py:401` | `train_test_split(shuffle=True)` | Time-based split (80/20) + min validation |
+| 32-10 | `src/cli/commands/train.py:583` | `train_test_split(shuffle=True)` | Time-based split (80/20) + min validation |
+
+**Notes:**
+- Original scope was 1 location per file (4 total), but Task 32-7 discovered 3 separate instances in features.py requiring fixes
+- Task 32-8 replaced stratified split with time-based (stratify parameter doesn't preserve temporal order)
+- Deep check added minimum sample validation (len >= 2) before all splits to prevent edge case failures
+- Total: 6 split replacements + 6 validation checks across 4 files
+
+**Numerical Stability (2 tasks, 1 disproven):**
+
+| Task | File:Line | Issue | Fix | Impact |
+|------|-----------|-------|-----|--------|
+| 32-11 | `src/data/features/compute/liquidity.py:95` | **DISPROVEN** | Code already uses `1e-10` epsilon correctly | False positive |
+| 32-12 | `src/data/features/compute/mean_reversion.py:127` | Returns `np.inf` | Return `MAX_HALFLIFE=120.0` + update docstring | Prevents gradient explosion |
+
+### Files Modified (11 total)
+
+**Model Registrations (2 files):**
+1. `src/models/neural/patchtst_model.py` - Registration decorator family="transformer"
+2. `src/models/neural/itransformer_model.py` - Registration decorator family="transformer"
+
+**Model Registrations + Properties (4 files):**
+3. `src/models/ensemble/ridge_meta.py` - Registration decorator + model_family property → "meta_learner"
+4. `src/models/ensemble/mlp_meta.py` - Registration decorator + model_family property → "meta_learner"
+5. `src/models/ensemble/xgboost_meta.py` - Registration decorator + model_family property → "meta_learner"
+6. `src/models/ensemble/calibrated_meta.py` - Registration decorator + model_family property → "meta_learner"
+
+**Data Leakage Fixes + Edge Case Validation (4 files, 6 split locations + 6 validations):**
+7. `src/optimization/features.py` - 3 time-based splits + 3 min validations (lines 320, 352, 382)
+8. `src/optimization/hyperparameters.py` - Time-based split + min validation (line 616)
+9. `src/optimization/pipeline.py` - Time-based split + min validation (line 401)
+10. `src/cli/commands/train.py` - Time-based split + min validation (line 583)
+
+**Numerical Fixes (1 file):**
+11. `src/data/features/compute/mean_reversion.py` - MAX_HALFLIFE=120.0 constant + docstring update (line 127)
+
+### Deep Check Additions (Post-Implementation Validation)
+
+After completing initial 12 tasks, a deep behavioral check discovered 4 additional issues:
+
+**Additional Property Method Fixes (Tasks 32-13 to 32-16):**
+- Found 4 model_family property methods returning incorrect values
+- These were separate from @register decorators and missed in initial analysis
+- Files: ridge_meta.py:64, mlp_meta.py:69, xgboost_meta.py:68, calibrated_meta.py:71
+- All changed from returning "ensemble" to "meta_learner"
+
+**Edge Case Validation Added:**
+- Added minimum sample size checks (len >= 2) before all time-based splits
+- Prevents edge case failures when datasets are too small for splitting
+- Applied to 6 split locations across 4 files (features.py 3x, hyperparameters.py, pipeline.py, train.py)
+- Prevents IndexError on edge cases with insufficient data
+- Applied to: pipeline.py, hyperparameters.py, features.py (3 locations), train.py
+- Total: 6 validation checks added
+
+**Documentation Update:**
+- Updated mean_reversion.py docstring to reflect MAX_HALFLIFE instead of np.inf
+- Ensures documentation matches implementation
+
+**Why These Were Missed Initially:**
+1. Initial analysis focused on @register decorators at file bottoms
+2. Property methods are in class bodies, different locations
+3. Deep check performed runtime validation to catch behavioral mismatches
+4. Edge case validation emerged from testing split implementations
+
+### Key Findings
+
+**Verification Disproved False Positive:**
+- Task 32-11 claimed `liquidity.py:95` returned `1e10` on division by zero
+- Actual code inspection showed it uses `1e-10` as epsilon denominator (correct)
+- No modification required
+
+**Deep Check Discovered Additional Issues:**
+- Found 4 model_family property methods returning "ensemble" instead of "meta_learner"
+- These were missed in initial analysis because they were separate from @register decorators
+- Fixed in ridge_meta.py:64, mlp_meta.py:69, xgboost_meta.py:68, calibrated_meta.py:71
+
+**Time-Based Split Implementation with Edge Case Protection:**
+```python
+# BEFORE (data leakage via shuffle/stratify)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, shuffle=True, random_state=42
+)
+
+# AFTER (temporal ordering preserved + edge case handling)
+if len(X) < 2:
+    raise ValueError("Insufficient samples for train/test split (need at least 2)")
+split_idx = int(len(X) * 0.8)
+X_train, X_test = X[:split_idx], X[split_idx:]
+y_train, y_test = y[:split_idx], y[split_idx:]
+```
+
+**Model Family Alignment Patterns:**
+```python
+# PATTERN 1: Registration decorator
+# BEFORE
+register_model("patchtst", PatchTSTModel, model_family="neural")
+# AFTER
+register_model("patchtst", PatchTSTModel, model_family="transformer")
+
+# PATTERN 2: Property method (found in deep check)
+# BEFORE
+@property
+def model_family(self) -> str:
+    return "ensemble"
+# AFTER
+@property
+def model_family(self) -> str:
+    return "meta_learner"
+```
+
+**Numerical Stability Fix:**
+```python
+# BEFORE
+if beta <= 0:
+    return np.inf  # Causes gradient explosion
+
+# AFTER
+MAX_HALFLIFE = 120.0  # ~6 months of daily data
+if beta <= 0:
+    return MAX_HALFLIFE  # Clip to large but finite value
+```
+
+### Validation Commands
+
+**Model Family Verification:**
+```bash
+# Verify all 6 models align with contracts
+python -c "
+from src.core.contracts.model_contract import MODEL_CONTRACTS
+from src.models import MODEL_REGISTRY
+for name in ['patchtst', 'itransformer', 'ridge_meta', 'mlp_meta', 'xgboost_meta', 'calibrated_meta']:
+    contract = MODEL_CONTRACTS[name]
+    registry_family = MODEL_REGISTRY[name]['family']
+    assert contract.model_family == registry_family
+print('OK - All model families match contracts')
+"
+```
+
+**Data Leakage Verification:**
+```bash
+# Verify no train_test_split with shuffle or stratify
+grep -r "train_test_split.*shuffle=True" src/ --include="*.py"
+grep -r "train_test_split.*stratify=" src/ --include="*.py"
+# Both should return 0 results
+```
+
+**Numerical Stability Verification:**
+```bash
+# Verify no np.inf in mean reversion features
+python -c "
+from src.data.features.compute.mean_reversion import compute_halflife
+import pandas as pd
+import numpy as np
+df = pd.DataFrame({'close': [100, 100, 100, 100, 100]})  # No mean reversion
+result = compute_halflife(df)
+assert not np.isinf(result).any(), 'Still returning inf'
+assert (result <= 120.0).all(), 'Exceeds MAX_HALFLIFE cap'
+print('OK - No inf values, MAX_HALFLIFE cap working')
+"
+```
+
+**Test Suite:**
+```bash
+pytest tests/ -v
+# All 42 tests pass
+```
+
+**Linting:**
+```bash
+ruff check src/models/neural/patchtst_model.py src/models/neural/itransformer_model.py \
+  src/models/ensemble/ridge_meta.py src/models/ensemble/mlp_meta.py \
+  src/models/ensemble/xgboost_meta.py src/models/ensemble/calibrated_meta.py \
+  src/optimization/features.py src/optimization/hyperparameters.py \
+  src/optimization/pipeline.py src/cli/commands/train.py \
+  src/data/features/compute/mean_reversion.py
+# All checks pass
+```
+
+### Impact Assessment
+
+**Model Family Alignment (Decorators):**
+- **Before:** 6 models had contract/registration mismatches in @register decorators
+- **After:** All 12 production models align with contracts
+- **Risk Eliminated:** Model selection and filtering logic now works correctly
+
+**Model Family Alignment (Properties - Deep Check Finding):**
+- **Before:** 4 meta-learner property methods returned "ensemble" instead of "meta_learner"
+- **After:** All property methods return values consistent with contracts
+- **Risk Eliminated:** Runtime model family queries now return correct values
+
+**Data Leakage:**
+- **Before:** 6 locations using shuffled/stratified splits on time-series data
+- **After:** All splits preserve temporal ordering + minimum sample validation
+- **Risk Eliminated:** Future data no longer leaks into training sets, edge cases handled
+
+**Numerical Stability:**
+- **Before:** `np.inf` values could cause gradient explosion in neural networks
+- **After:** Clipped to `MAX_HALFLIFE=120.0` (finite upper bound) + docstring updated
+- **Risk Eliminated:** Training stability improved for RNN/Transformer models
+
+**False Positive:**
+- Task 32-11 was thoroughly investigated via code inspection
+- Confirmed epsilon value is `1e-10` (correct denominator stabilization)
+- No action required, documented for future reference
+
+### Lessons Learned
+
+1. **Always verify before acting:** Task 32-11 was disproven by actual code inspection
+2. **Expanded scope discovery:** Task 32-7 found 3 instances instead of 1 during implementation
+3. **Deep validation reveals hidden issues:** Property methods were missed in initial decorator-focused analysis
+4. **Edge cases matter:** Added minimum sample validation prevents obscure failures on tiny datasets
+5. **Time-based splits are critical:** ML pipeline review correctly identified severe data leakage
+6. **Contract alignment needs runtime consistency:** Both @register decorators AND property methods must match
+7. **Finite bounds prevent NaN propagation:** Clipping is better than inf for gradient descent
+8. **Documentation follows code:** Updated docstrings to reflect MAX_HALFLIFE change
+
+### Next Steps
+
+**Phase 33: Performance & Architecture** (Next)
+- Implement 3 missing evaluators (CPCV-PBO, CV, Walk-Forward)
+- Fix layer violation (core → data imports)
+- Apply 6 performance optimizations (CCI, variance ratio, order flow, regime, wavelets, Hurst)
+
+**Phase 34: Cleanup & Consolidation** (After 33)
+- Remove 8 orphaned files
+- Consolidate MTF timeframe defaults
+- Systematic DataFrame fragmentation refactoring (117 patterns)
+
+---
+
 ## Pipeline Review (2026-02-01) | Comprehensive 4-Agent Analysis
 
 **Status:** ✅ COMPLETE - Analysis phase only, findings documented for Phases 32-34

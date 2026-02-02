@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @register(
     name="calibrated_meta",
-    family="ensemble",
+    family="meta_learner",
     description="Calibration wrapper meta-learner using Isotonic/Platt scaling",
     aliases=["calibrated_meta_learner", "isotonic_meta", "platt_meta"],
 )
@@ -68,7 +68,7 @@ class CalibratedMetaLearner(BaseModel):
 
     @property
     def model_family(self) -> str:
-        return "ensemble"
+        return "meta_learner"
 
     @property
     def requires_scaling(self) -> bool:

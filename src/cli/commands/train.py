@@ -566,8 +566,6 @@ def _train_on_stacking_data(
     stacking_source: str,
 ) -> dict:
     """Train meta-learner on Phase 3 OOF predictions."""
-    from sklearn.model_selection import train_test_split  # type: ignore[import-untyped]
-
     from src.models.trainer import Trainer, compute_classification_metrics
 
     logger = logging.getLogger(__name__)
@@ -579,14 +577,13 @@ def _train_on_stacking_data(
     X_stacking = stacking_df[feature_cols].values
     y_stacking = stacking_df["y_true"].values
 
-    # Split into train/val (80/20 on the stacking data)
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_stacking,
-        y_stacking,
-        test_size=0.2,
-        random_state=42,
-        stratify=y_stacking,
-    )
+    # Time-based split into train/val (80/20) to prevent data leakage
+    if len(X_stacking) < 2:
+        raise ValueError(f"Cannot split stacking data with {len(X_stacking)} samples (minimum 2 required)")
+    split_idx = int(len(X_stacking) * 0.8)
+    split_idx = max(1, split_idx)  # Ensure at least 1 training sample
+    X_train, X_val = X_stacking[:split_idx], X_stacking[split_idx:]
+    y_train, y_val = y_stacking[:split_idx], y_stacking[split_idx:]
 
     logger.info(
         f"Stacking data split: train={len(X_train)}, val={len(X_val)}\n"

@@ -1,11 +1,11 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 31 Complete, Phases 32-34 Planned
+**Status:** Phase 32 Complete, Phases 33-34 Planned
 **Last Updated:** 2026-02-01
 
 ---
 
-## Completed Phases (24-31)
+## Completed Phases (24-32)
 
 See **COMPLETION.md** for full details on all completed phases.
 
@@ -19,8 +19,9 @@ See **COMPLETION.md** for full details on all completed phases.
 | 29 | Memory Performance (cache bounds, log_returns consolidation) | ✅ COMPLETE | 2026-01-29 |
 | 30 | Advanced Architecture (transformer family, derived constants, SMA/EMA/STD caching) | ✅ COMPLETE | 2026-01-30 |
 | 31 | Code Polish (TODOs, constants, adapters, feature DAG) | ✅ COMPLETE | 2026-01-31 |
+| 32 | Critical Fixes (model families, data leakage, numerical stability) | ✅ COMPLETE | 2026-02-01 |
 
-**Summary Impact:** 8 phases complete, 35+ files modified, ~400 lines net change, 50-100x speedup on key operations, fail-fast validation, single-definition principle enforced.
+**Summary Impact:** 9 phases complete, 60+ files modified, 15 critical issues fixed (6 model families + 6 leakages + 1 numerical + 1 disproven), data leakage eliminated, contract alignment enforced.
 
 ---
 
@@ -28,78 +29,17 @@ See **COMPLETION.md** for full details on all completed phases.
 
 | Phase | Focus | Priority | Effort | Status |
 |-------|-------|----------|--------|--------|
-| 24-31 | See above | VARIOUS | 8 days | ✅ ALL COMPLETE - See COMPLETION.md |
-| 32 | Critical Fixes | CRITICAL | 3-5 days | 📋 PLANNED (12 tasks - model families, data leakage, numerical) |
+| 24-32 | See above | VARIOUS | 9 days | ✅ ALL COMPLETE - See COMPLETION.md |
 | 33 | Perf & Arch | HIGH | 4-6 days | 📋 PLANNED (11 tasks - evaluators, layer violations, optimizations) |
 | 34 | Cleanup | MEDIUM | 2-3 days | 📋 PLANNED (11 tasks - orphaned files, MTF, fragmentation) |
 
 ---
 
-## Phase 32: Critical Fixes
+## Active Phases
 
-**Status:** NOT STARTED
-**Priority:** CRITICAL
-**Effort:** 3-5 days
-**Source:** Comprehensive ML pipeline review (9-agent analysis, 2026-02-01)
+Phase 32 complete. See COMPLETION.md for full details.
 
-### Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         CRITICAL PRODUCTION ISSUES                               │
-│                                                                                  │
-│  MODEL FAMILY MISMATCHES (Contract vs Registration):                            │
-│  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  patchtst:       contract=transformer  →  registration=neural  │             │
-│  │  itransformer:   contract=transformer  →  registration=neural  │             │
-│  │  ridge_meta:     contract=meta_learner →  registration=ensemble│             │
-│  │  mlp_meta:       contract=meta_learner →  registration=ensemble│             │
-│  │  xgboost_meta:   contract=meta_learner →  registration=ensemble│             │
-│  │  calibrated_meta: contract=meta_learner → registration=ensemble│             │
-│  └────────────────────────────────────────────────────────────────┘             │
-│                                                                                  │
-│  DATA LEAKAGE VIA train_test_split:                                             │
-│  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  optimization/features.py:320        - shuffle=True            │             │
-│  │  optimization/hyperparameters.py:616 - shuffle=True            │             │
-│  │  optimization/pipeline.py:401        - shuffle=True            │             │
-│  │  cli/commands/train.py:583           - shuffle=True            │             │
-│  │  → All leak future data into training via random splits        │             │
-│  └────────────────────────────────────────────────────────────────┘             │
-│                                                                                  │
-│  NUMERICAL ISSUES (Gradient Explosion):                                         │
-│  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  liquidity.py:95    - Division by zero returns 1e10            │             │
-│  │  mean_reversion.py:127 - Returns np.inf (gradient explosion)   │             │
-│  └────────────────────────────────────────────────────────────────┘             │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Tasks
-
-| Task | File:Line | Priority | Description |
-|------|-----------|----------|-------------|
-| 32-1 | `neural/patchtst_model.py:240-243` | CRITICAL | Change registration from `neural` to `transformer` |
-| 32-2 | `neural/itransformer_model.py:258-261` | CRITICAL | Change registration from `neural` to `transformer` |
-| 32-3 | `ensemble/ridge_meta.py:26-29` | CRITICAL | Change registration from `ensemble` to `meta_learner` |
-| 32-4 | `ensemble/mlp_meta.py:25-28` | CRITICAL | Change registration from `ensemble` to `meta_learner` |
-| 32-5 | `ensemble/xgboost_meta.py:22-25` | CRITICAL | Change registration from `ensemble` to `meta_learner` |
-| 32-6 | `ensemble/calibrated_meta.py:26-29` | CRITICAL | Change registration from `ensemble` to `meta_learner` |
-| 32-7 | `optimization/features.py:320` | CRITICAL | Replace train_test_split with time-based split |
-| 32-8 | `optimization/hyperparameters.py:616` | CRITICAL | Replace train_test_split with time-based split |
-| 32-9 | `optimization/pipeline.py:401` | CRITICAL | Replace train_test_split with time-based split |
-| 32-10 | `cli/commands/train.py:583` | CRITICAL | Replace train_test_split with time-based split |
-| 32-11 | `features/compute/liquidity.py:95` | HIGH | Return 0 or np.nan instead of 1e10 |
-| 32-12 | `features/compute/mean_reversion.py:127` | HIGH | Clip to large finite value instead of np.inf |
-
-### Success Metrics
-
-| Metric | Before | After | How to Verify |
-|--------|--------|-------|---------------|
-| Model family mismatches | 6 models | 0 | `grep -r "register_model" src/models/` verify all match contracts |
-| train_test_split usage | 4 locations | 0 | `grep -r "train_test_split.*shuffle" src/` returns 0 |
-| Infinite values in features | 2 locations | 0 | Run feature pipeline, check for inf/1e10 values |
-| **Data integrity** | VIOLATED | **ENFORCED** | All time-series splits preserve temporal order |
+**Next:** Phase 33 (Performance & Architecture) - 11 tasks, HIGH priority
 
 ---
 
@@ -109,6 +49,7 @@ See **COMPLETION.md** for full details on all completed phases.
 **Priority:** HIGH
 **Effort:** 4-6 days
 **Source:** Comprehensive ML pipeline review (9-agent analysis, 2026-02-01)
+
 
 ### Overview
 

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @register(
     name="ridge_meta",
-    family="ensemble",
+    family="meta_learner",
     description="Ridge regression meta-learner for combining OOF predictions",
     aliases=["ridge_meta_learner", "ridge_stacking"],
 )
@@ -61,7 +61,7 @@ class RidgeMetaLearner(BaseModel):
 
     @property
     def model_family(self) -> str:
-        return "ensemble"
+        return "meta_learner"
 
     @property
     def requires_scaling(self) -> bool:

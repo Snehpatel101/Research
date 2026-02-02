@@ -257,7 +257,7 @@ class iTransformerNetwork(nn.Module):
 
 @register(
     name="itransformer",
-    family="neural",
+    family="transformer",
     description="iTransformer: Inverted Transformer with attention over features",
     aliases=["i_transformer", "inverted_transformer"],
 )

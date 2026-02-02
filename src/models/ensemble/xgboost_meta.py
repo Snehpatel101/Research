@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @register(
     name="xgboost_meta",
-    family="ensemble",
+    family="meta_learner",
     description="XGBoost gradient boosting as meta-learner for stacking",
     aliases=["xgb_meta", "xgboost_stacking"],
 )
@@ -65,7 +65,7 @@ class XGBoostMeta(BaseModel):
 
     @property
     def model_family(self) -> str:
-        return "ensemble"
+        return "meta_learner"
 
     @property
     def requires_scaling(self) -> bool:

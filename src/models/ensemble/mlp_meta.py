@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @register(
     name="mlp_meta",
-    family="ensemble",
+    family="meta_learner",
     description="Multi-layer perceptron meta-learner for non-linear combinations",
     aliases=["mlp_meta_learner", "mlp_stacking", "nn_meta"],
 )
@@ -66,7 +66,7 @@ class MLPMetaLearner(BaseModel):
 
     @property
     def model_family(self) -> str:
-        return "ensemble"
+        return "meta_learner"
 
     @property
     def requires_scaling(self) -> bool:

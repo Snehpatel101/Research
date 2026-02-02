@@ -123,11 +123,13 @@ def _calc_halflife(x: np.ndarray) -> float:
     beta = numerator / denominator
 
     # Half-life = -ln(2) / ln(beta)
+    # Cap at MAX_HALFLIFE instead of returning inf to prevent gradient explosion
+    MAX_HALFLIFE = 120.0
     if beta <= 0 or beta >= 1:
-        return np.inf  # No mean reversion
+        return MAX_HALFLIFE  # No mean reversion - return max cap instead of inf
 
     halflife = -np.log(2) / np.log(beta)
-    return min(halflife, 120.0)  # Cap at 2x window
+    return min(halflife, MAX_HALFLIFE)  # Cap at 2x window
 
 
 def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
@@ -141,7 +143,7 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
         df: DataFrame with 'close' column
 
     Returns:
-        Series with half-life in bars (np.inf if no mean reversion)
+        Series with half-life in bars (capped at MAX_HALFLIFE=120.0 if no mean reversion)
     """
     log_prices = np.log(df["close"])
 

@@ -396,15 +396,13 @@ class OptimizationPipeline:
             print(f"  Features: {len(feature_names)}")
 
         # Split data for optimization (use first model for feature/label optimization)
-        from sklearn.model_selection import train_test_split
-
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_all,
-            y_all,
-            test_size=0.2,
-            random_state=self.random_state,
-            stratify=y_all,
-        )
+        # Time-based split to prevent data leakage in time series
+        if len(X_all) < 2:
+            raise ValueError(f"Cannot split dataset with {len(X_all)} samples (minimum 2 required)")
+        split_idx = int(len(X_all) * 0.8)
+        split_idx = max(1, split_idx)  # Ensure at least 1 training sample
+        X_train, X_val = X_all[:split_idx], X_all[split_idx:]
+        y_train, y_val = y_all[:split_idx], y_all[split_idx:]
 
         # Get a representative model factory for feature optimization
         representative_model = models[0] if models else "xgboost"

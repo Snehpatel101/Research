@@ -611,23 +611,14 @@ class HyperparameterOptimizer:
 
         # Split data if no validation set provided
         if X_val is None or y_val is None:
-            from sklearn.model_selection import train_test_split
-
-            X_train, X_val, y_train, y_val = train_test_split(
-                X,
-                y,
-                test_size=0.2,
-                random_state=self.random_state,
-                stratify=y,
-            )
-            if sample_weights is not None:
-                sw_train, sw_val = train_test_split(
-                    sample_weights,
-                    test_size=0.2,
-                    random_state=self.random_state,
-                )
-            else:
-                sw_train = None
+            # Time-based split to prevent data leakage in time series
+            if len(X) < 2:
+                raise ValueError(f"Cannot split dataset with {len(X)} samples (minimum 2 required)")
+            split_idx = int(len(X) * 0.8)
+            split_idx = max(1, split_idx)  # Ensure at least 1 training sample
+            X_train, X_val = X[:split_idx], X[split_idx:]
+            y_train, y_val = y[:split_idx], y[split_idx:]
+            sw_train = sample_weights[:split_idx] if sample_weights is not None else None
         else:
             X_train, y_train = X, y
             sw_train = sample_weights

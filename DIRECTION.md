@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-01 (Pipeline Review complete - 35 issues identified for Phases 32-34)
-**Status:** Phase 31 Complete | Phases 32-34 Planned (Pipeline Review) | 8 Critical Issues + 12 High Priority
+**Last Updated:** 2026-02-01 (Phase 32 Complete - Model families aligned, data leakage eliminated)
+**Status:** Phase 32 Complete | Phases 33-34 Planned | 15/16 critical fixes complete
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -1702,31 +1702,28 @@ BLOCKER 8: MTF Ablation Flag
 └── Status: ⚠️ DEFERRED (low priority)
 ```
 
-### Pipeline Review Findings (2026-02-01)
+### Phase 32 Complete (2026-02-01)
 
-**Comprehensive 4-agent review identified 35 issues across 461 Python files:**
+**Status:** ✅ 15/16 tasks complete (1 disproven)
 
-**CRITICAL (8 issues):**
-- 6 model family mismatches (contract vs registration)
-- 4 data leakage instances (train_test_split with shuffle=True)
-- 2 numerical issues (division by zero, inf returns)
+**Fixed:**
+- 6 model family registration mismatches (transformers + meta-learners)
+- 4 model family property methods (deep check discovery)
+- 6 data leakage vulnerabilities (time-based splits + edge case validation)
+- 1 numerical stability issue (MAX_HALFLIFE cap)
+- 1 false positive disproven (liquidity epsilon was correct)
 
-**HIGH PRIORITY (12 issues):**
-- 3 NotImplementedError evaluators (CV, walk-forward, CPCV-PBO)
-- 1 layer violation (core importing from data layer)
-- 8 low-hanging performance optimizations (5-50x potential speedup)
+**Impact:**
+- All 12 production models now align with contracts
+- Time-series data leakage eliminated across optimization modules
+- Training stability improved for neural networks
+- Edge case failures prevented with minimum sample validation
 
-**MEDIUM PRIORITY (15 issues):**
-- 5 MTF inconsistencies (shift(1) patterns)
-- 6 advanced optimization opportunities
-- 4 orphaned files (zero imports)
+**Next:**
+- Phase 33: Implement 3 evaluators + 8 performance optimizations
+- Phase 34: Cleanup orphaned files + MTF consolidation
 
-**Action Plan:**
-- Phase 32: Fix 8 critical issues (model families, data leakage, numerical)
-- Phase 33: Implement evaluators + 8 performance optimizations
-- Phase 34: Cleanup orphaned files + document MTF patterns
-
-See COMPLETION.md for detailed findings and file:line references.
+See COMPLETION.md for detailed implementation and lessons learned.
 
 ### Two Canonical Stores (REQUIRED FOR 4D)
 
