@@ -73,7 +73,7 @@ from src.core.constants import (
     CANONICAL_TIMEFRAMES,
     DEFAULT_EMBARGO_BARS,
     DEFAULT_HORIZONS,
-    DEFAULT_PURGE_BARS,
+    DEFAULT_MTF_TIMEFRAMES,
     DEFAULT_SPLIT_RATIOS,
 )
 
@@ -267,15 +267,17 @@ class MTFSection:
 
     enabled: bool = True
     default_mode: str = "indicators"  # indicators, bars, both
-    default_timeframes: list[str] = field(default_factory=lambda: ["1min", "15min", "60min"])
+    default_timeframes: list[str] = field(
+        default_factory=lambda: list(DEFAULT_MTF_TIMEFRAMES)
+    )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MTFSection:
-        default_timeframes = ["1min", "15min", "60min"]
         return cls(
             enabled=data.get("enabled", True),
             default_mode=data.get("default_mode", "indicators"),
-            default_timeframes=data.get("default_timeframes") or default_timeframes,
+            default_timeframes=data.get("default_timeframes")
+            or list(DEFAULT_MTF_TIMEFRAMES),
         )
 
 

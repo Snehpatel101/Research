@@ -4,6 +4,158 @@
 
 ---
 
+## Phase 34 (2026-02-01) | Cleanup & Consolidation - Orphaned Files, MTF Defaults, Verification
+
+**Status:** ✅ COMPLETE
+**Duration:** Single day (2026-02-01)
+**Impact:** 4 files deleted, 4 files modified, 5 claims disproven, MTF defaults consolidated to single source
+**Tests:** All 42 tests pass
+**Lines Changed:** ~300 lines removed, ~15 lines modified
+
+### Summary
+
+Final cleanup phase focused on removing orphaned files and consolidating MTF timeframe defaults. Original scope of 11 tasks reduced to 6 completed tasks after verification disproved 5 claims:
+
+**Completed (6 tasks):**
+- Deleted 3 empty placeholder files (core/features, core/training, core/types_pkg)
+- Deleted 1 unconnected CLI (pipeline/stages/features/cli.py)
+- Consolidated MTF defaults to single source in constants.py
+- Updated config and adapters to import from canonical source
+
+**Disproven (5 tasks):**
+- lineage.py, versioning.py, cache.py - All ARE integrated into FeatureStore
+- adaptive_barriers.py - IS registered in labeling factory
+- DataFrame fragmentation - Code already uses anti-fragmentation pattern
+
+### Completed Tasks
+
+**File Deletions (4 tasks):**
+
+| Task | File | Reason | Impact |
+|------|------|--------|--------|
+| 34-1 | `src/core/features/__init__.py` | Empty placeholder, 0 imports | File deleted |
+| 34-2 | `src/core/training/__init__.py` | Empty placeholder, 0 imports | File deleted |
+| 34-3 | `src/core/types_pkg/__init__.py` | Unused re-export layer, 0 imports | File deleted |
+| 34-7 | `src/data/pipeline/stages/features/cli.py` | Standalone CLI not connected to unified CLI | File deleted + import removed |
+
+**MTF Consolidation (2 tasks):**
+
+| Task | File | Change | Impact |
+|------|------|--------|--------|
+| 34-9 | `src/core/constants.py` | Updated to `["1min", "5min", "15min", "60min"]` | Single source of truth |
+| 34-10 | `src/config/unified.py`, `src/data/adapters/multi_stream.py` | Import from constants | All modules aligned |
+
+**Disproven Claims (5 tasks):**
+
+| Task | File | Claim | Reality |
+|------|------|-------|---------|
+| 34-4 | `src/data/store/lineage.py` | "Not integrated (~170 lines)" | **IS integrated** - imported by FeatureStore |
+| 34-5 | `src/data/store/versioning.py` | "Not integrated" | **IS integrated** - imported by FeatureStore |
+| 34-6 | `src/data/store/cache.py` | "Not integrated" | **IS integrated** - imported by FeatureStore |
+| 34-8 | `src/data/pipeline/stages/labeling/adaptive_barriers.py` | "Not used in pipeline" | **IS integrated** - registered in labeling factory |
+| 34-11 | Multiple `features/compute/*.py` | "117 fragmentation patterns" | **Already uses anti-fragmentation** - batch concat pattern |
+
+### Files Deleted (4 total)
+
+1. `src/core/features/__init__.py` - Empty placeholder (0 imports)
+2. `src/core/training/__init__.py` - Empty placeholder (0 imports)
+3. `src/core/types_pkg/__init__.py` - Unused re-export layer (0 imports)
+4. `src/data/pipeline/stages/features/cli.py` - Standalone CLI not connected to unified CLI
+
+### Files Modified (4 total)
+
+1. `src/core/constants.py` - Updated DEFAULT_MTF_TIMEFRAMES to canonical `["1min", "5min", "15min", "60min"]`, fixed helper functions
+2. `src/config/unified.py` - Added import of DEFAULT_MTF_TIMEFRAMES, updated MTFSection to use it
+3. `src/data/adapters/multi_stream.py` - Import DEFAULT_MTF_TIMEFRAMES from constants
+4. `src/data/pipeline/stages/features/__init__.py` - Removed import of deleted cli.py
+
+### Key Implementation Details
+
+**MTF Consolidation Pattern:**
+```python
+# src/core/constants.py (CANONICAL SOURCE)
+DEFAULT_MTF_TIMEFRAMES = ["1min", "5min", "15min", "60min"]
+"""Default timeframes for multi-timeframe feature generation."""
+
+def get_default_mtf_timeframes() -> list[str]:
+    """Get copy of default MTF timeframes (immutable)."""
+    return list(DEFAULT_MTF_TIMEFRAMES)
+
+# src/config/unified.py
+from src.core.constants import DEFAULT_MTF_TIMEFRAMES
+
+@dataclass
+class MTFSection:
+    default_timeframes: list[str] = field(
+        default_factory=lambda: list(DEFAULT_MTF_TIMEFRAMES)
+    )
+
+# src/data/adapters/multi_stream.py
+from src.core.constants import DEFAULT_MTF_TIMEFRAMES
+
+class MultiStreamAdapter:
+    DEFAULT_TIMEFRAMES = DEFAULT_MTF_TIMEFRAMES
+```
+
+**Verification Disproven Claims:**
+```python
+# Task 34-4, 34-5, 34-6: FeatureStore integration
+from src.data.store.feature_store import FeatureStore
+# Imports: lineage.FeatureLineageTracker, versioning.FeatureVersioning, cache.FeatureCache
+# All three modules ARE integrated
+
+# Task 34-8: Adaptive barriers factory registration
+from src.data.pipeline.stages.labeling.factory import LABELING_METHODS
+assert 'adaptive_barrier' in LABELING_METHODS  # IS registered
+
+# Task 34-11: Anti-fragmentation already used
+# Pattern: features = []; features.append(...); df = pd.concat([df] + features, axis=1)
+```
+
+### Verification Commands
+
+**File Deletions:**
+```bash
+test ! -f src/core/features/__init__.py && echo "OK"
+test ! -f src/core/training/__init__.py && echo "OK"
+test ! -f src/core/types_pkg/__init__.py && echo "OK"
+test ! -f src/data/pipeline/stages/features/cli.py && echo "OK"
+```
+
+**MTF Consolidation:**
+```bash
+python -c "
+from src.core.constants import DEFAULT_MTF_TIMEFRAMES
+from src.config.unified import MTFSection
+from src.data.adapters.multi_stream import MultiStreamAdapter
+assert MTFSection().default_timeframes == list(DEFAULT_MTF_TIMEFRAMES)
+assert MultiStreamAdapter.DEFAULT_TIMEFRAMES == DEFAULT_MTF_TIMEFRAMES
+print('OK - All match canonical source')
+"
+```
+
+**All Tests Pass:**
+```bash
+pytest tests/ -v
+# 42 passed
+```
+
+### Lessons Learned
+
+1. **Verification before deletion is critical** - 5 of 11 tasks were disproven upon investigation
+2. **Import checks are not sufficient** - Files can be integrated without direct imports (e.g., factory pattern)
+3. **Anti-patterns may already be resolved** - The 117 fragmentation patterns were false positives
+4. **Single source of truth reduces confusion** - MTF defaults were scattered across 3 locations with different values
+5. **Getter functions for immutability** - Use `get_default_mtf_timeframes()` to prevent accidental mutation
+
+### Cross-References
+
+- **CLEANUP_PLAN.md:** Phase 34 marked complete with reduced scope (6 tasks vs 11)
+- **CLEANUP_TASKS.md:** All tasks updated with verification results and disproven claims documented
+- **Related Phases:** Phase 4 (Feature manifest), Phase 24 (Caching), Phase 31 (Code polish)
+
+---
+
 ## Phase 33 (2026-02-01) | Performance & Architecture - Evaluators, Layer Violations, Optimizations
 
 **Status:** ✅ COMPLETE

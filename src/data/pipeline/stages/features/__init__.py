@@ -37,7 +37,6 @@ from ..mtf import (
     add_mtf_features,
     validate_mtf_alignment,
 )
-from .cli import main
 
 # Constants
 from .constants import (
@@ -193,7 +192,6 @@ from .wavelets import (
 __all__ = [
     # Main class
     "FeatureEngineer",
-    "main",
     # Constants
     "ANNUALIZATION_FACTOR",
     "ANNUALIZATION_FACTOR_MAP",

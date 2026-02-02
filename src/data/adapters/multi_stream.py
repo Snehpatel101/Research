@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
+from src.core.constants import DEFAULT_MTF_TIMEFRAMES
 from src.core.contracts import DataContract, DataRank
 from src.data.store import TIMEFRAMES as STORE_TIMEFRAMES
 from src.data.store import load_all_timeframes, load_raw_mtf
@@ -103,7 +104,8 @@ class MultiStreamAdapter(BaseAdapter):
 
     # Default raw OHLCV features for multi-stream models
     DEFAULT_FEATURE_COLUMNS = ["open", "high", "low", "close", "volume"]
-    DEFAULT_TIMEFRAMES = ["1min", "5min", "15min"]
+    # Import from constants.py for single source of truth
+    DEFAULT_TIMEFRAMES = DEFAULT_MTF_TIMEFRAMES
 
     def __init__(
         self,

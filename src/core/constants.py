@@ -32,7 +32,9 @@ CANONICAL_TIMEFRAMES: list[str] = [
 BASE_TIMEFRAME: str = "1min"
 
 # Default MTF timeframes for multi-timeframe features
-DEFAULT_MTF_TIMEFRAMES: list[str] = ["5min", "15min", "60min"]
+# Canonical default: covers short, medium, and long-term patterns
+# All other modules should import from here
+DEFAULT_MTF_TIMEFRAMES: list[str] = ["1min", "5min", "15min", "60min"]
 
 
 # =============================================================================
@@ -257,12 +259,12 @@ def get_models_for_family(family: str) -> list[str]:
 
 def get_models_for_rank(rank: int) -> list[str]:
     """Get all models requiring a specific data rank."""
-    return [model for model, r in MODEL_DATA_RANKS.items() if r == rank]
+    return [model for model, r in get_model_data_ranks().items() if r == rank]
 
 
 def get_adapter_for_model(model_name: str) -> str:
     """Get the adapter type for a model."""
-    adapter = MODEL_ADAPTER_MAP.get(model_name.lower())
+    adapter = get_model_adapter_map().get(model_name.lower())
     if adapter is None:
         raise ValueError(f"Unknown model: {model_name}")
     return adapter
@@ -294,8 +296,8 @@ __all__ = [
     "MODEL_FAMILIES",
     "ALL_MODELS",
     "MODEL_TO_FAMILY",
-    "MODEL_DATA_RANKS",
-    "MODEL_ADAPTER_MAP",
+    "MODEL_DATA_RANKS",  # noqa: F822 - lazy-loaded via __getattr__
+    "MODEL_ADAPTER_MAP",  # noqa: F822 - lazy-loaded via __getattr__
     # Features
     "FEATURE_FAMILY_COUNTS",
     "TOTAL_BASE_FEATURES",
