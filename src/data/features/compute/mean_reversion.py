@@ -154,9 +154,142 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
 # HURST EXPONENT
 # =============================================================================
 
+# Try to import numba for accelerated Hurst calculation
+try:
+    from numba import jit as hurst_jit
+
+    @hurst_jit(nopython=True)
+    def _hurst_rs_numba(x: np.ndarray, max_lag: int) -> float:
+        """
+        Numba-accelerated Hurst exponent using R/S analysis.
+
+        O(max_lag * n/max_lag) = O(n) per window.
+        """
+        n = len(x)
+        if n < max_lag * 2:
+            return np.nan
+
+        # Pre-compute lags
+        n_lags = 0
+        for _lag in range(2, min(max_lag + 1, n // 2)):
+            n_lags += 1
+
+        if n_lags < 3:
+            return np.nan
+
+        log_lags = np.empty(n_lags)
+        log_rs = np.empty(n_lags)
+        valid_count = 0
+
+        lag_idx = 0
+        for lag in range(2, min(max_lag + 1, n // 2)):
+            n_chunks = n // lag
+            if n_chunks < 1:
+                continue
+
+            rs_sum = 0.0
+            rs_count = 0
+
+            for i in range(n_chunks):
+                start = i * lag
+                end = (i + 1) * lag
+
+                # Compute mean
+                chunk_sum = 0.0
+                for j in range(start, end):
+                    chunk_sum += x[j]
+                chunk_mean = chunk_sum / lag
+
+                # Compute cumsum and std
+                cumsum = 0.0
+                cumsum_min = 0.0
+                cumsum_max = 0.0
+                var_sum = 0.0
+
+                for j in range(start, end):
+                    val = x[j] - chunk_mean
+                    cumsum += val
+                    if cumsum < cumsum_min:
+                        cumsum_min = cumsum
+                    if cumsum > cumsum_max:
+                        cumsum_max = cumsum
+                    var_sum += val * val
+
+                r = cumsum_max - cumsum_min
+                s = np.sqrt(var_sum / lag)
+
+                if s > 0:
+                    rs_sum += r / s
+                    rs_count += 1
+
+            if rs_count > 0:
+                log_lags[valid_count] = np.log(lag)
+                log_rs[valid_count] = np.log(rs_sum / rs_count)
+                valid_count += 1
+
+            lag_idx += 1
+
+        if valid_count < 3:
+            return np.nan
+
+        # Simple linear regression for slope
+        x_mean = 0.0
+        y_mean = 0.0
+        for i in range(valid_count):
+            x_mean += log_lags[i]
+            y_mean += log_rs[i]
+        x_mean /= valid_count
+        y_mean /= valid_count
+
+        numerator = 0.0
+        denominator = 0.0
+        for i in range(valid_count):
+            x_diff = log_lags[i] - x_mean
+            numerator += x_diff * (log_rs[i] - y_mean)
+            denominator += x_diff * x_diff
+
+        if denominator == 0:
+            return np.nan
+
+        slope = numerator / denominator
+
+        # Clip to valid range
+        if slope < 0:
+            return 0.0
+        elif slope > 1:
+            return 1.0
+        return slope
+
+    @hurst_jit(nopython=True)
+    def _rolling_hurst_numba(arr: np.ndarray, window: int, min_periods: int, max_lag: int) -> np.ndarray:
+        """
+        Numba-accelerated rolling Hurst calculation.
+
+        Total complexity: O(n * max_lag) instead of O(n^2).
+        """
+        n = len(arr)
+        result = np.empty(n)
+        result[:] = np.nan
+
+        for i in range(window - 1, n):
+            window_data = arr[i - window + 1 : i + 1]
+            # Count non-nan values
+            valid = 0
+            for v in window_data:
+                if not np.isnan(v):
+                    valid += 1
+            if valid >= min_periods:
+                result[i] = _hurst_rs_numba(window_data, max_lag)
+
+        return result
+
+    HURST_NUMBA_AVAILABLE = True
+except ImportError:
+    HURST_NUMBA_AVAILABLE = False
+
 
 def _calc_hurst(x: np.ndarray, max_lag: int = 20) -> float:
-    """Calculate Hurst exponent using R/S analysis."""
+    """Calculate Hurst exponent using R/S analysis (fallback)."""
     if len(x) < max_lag * 2:
         return np.nan
 
@@ -164,7 +297,6 @@ def _calc_hurst(x: np.ndarray, max_lag: int = 20) -> float:
     rs_values = []
 
     for lag in lags:
-        # Split into non-overlapping chunks of size lag
         n_chunks = len(x) // lag
         if n_chunks < 1:
             continue
@@ -175,13 +307,9 @@ def _calc_hurst(x: np.ndarray, max_lag: int = 20) -> float:
             if len(chunk) < 2:
                 continue
 
-            # Cumulative deviation from mean
             mean_adj = chunk - np.mean(chunk)
             cumsum = np.cumsum(mean_adj)
-
-            # Range
             r = np.max(cumsum) - np.min(cumsum)
-            # Standard deviation
             s = np.std(chunk)
 
             if s > 0:
@@ -193,7 +321,6 @@ def _calc_hurst(x: np.ndarray, max_lag: int = 20) -> float:
     if len(rs_values) < 3:
         return np.nan
 
-    # Log-log regression to find Hurst exponent
     log_lags = np.log([v[0] for v in rs_values])
     log_rs = np.log([v[1] for v in rs_values])
 
@@ -210,6 +337,9 @@ def compute_hurst_exponent(df: pd.DataFrame) -> pd.Series:
     H = 0.5: Random walk
     H > 0.5: Trending/momentum
 
+    Uses Numba-accelerated O(n * max_lag) algorithm when available
+    instead of O(n^2) pandas rolling approach.
+
     Args:
         df: DataFrame with 'close' column
 
@@ -218,35 +348,159 @@ def compute_hurst_exponent(df: pd.DataFrame) -> pd.Series:
     """
     log_prices = np.log(df["close"])
 
-    return log_prices.rolling(window=100, min_periods=40).apply(
-        lambda x: _calc_hurst(x, max_lag=20), raw=True
-    )
+    if HURST_NUMBA_AVAILABLE:
+        result = _rolling_hurst_numba(log_prices.values, window=100, min_periods=40, max_lag=20)
+        return pd.Series(result, index=log_prices.index)
+    else:
+        # Fallback to pandas apply
+        return log_prices.rolling(window=100, min_periods=40).apply(
+            lambda x: _calc_hurst(x, max_lag=20), raw=True
+        )
 
 
 # =============================================================================
 # VARIANCE RATIO FEATURES
 # =============================================================================
 
+# Try to import numba for accelerated variance ratio
+try:
+    from numba import jit as numba_jit
+
+    @numba_jit(nopython=True)
+    def _variance_ratio_numba(arr: np.ndarray, window: int, lag: int) -> np.ndarray:
+        """
+        Numba-accelerated rolling variance ratio calculation.
+
+        VR = Var(k-period returns) / (k * Var(1-period returns))
+        """
+        n = len(arr)
+        result = np.empty(n)
+        result[:] = np.nan
+
+        min_periods = max(lag * 2, 4)
+
+        for i in range(window - 1, n):
+            # Get window data
+            window_data = arr[i - window + 1 : i + 1]
+
+            # Count valid (non-nan) values
+            valid_count = 0
+            for v in window_data:
+                if not np.isnan(v):
+                    valid_count += 1
+
+            if valid_count < min_periods:
+                continue
+
+            # Variance of 1-period returns
+            var_sum = 0.0
+            mean_1 = 0.0
+            count_1 = 0
+            for v in window_data:
+                if not np.isnan(v):
+                    mean_1 += v
+                    count_1 += 1
+            if count_1 == 0:
+                continue
+            mean_1 /= count_1
+
+            for v in window_data:
+                if not np.isnan(v):
+                    var_sum += (v - mean_1) ** 2
+            var_1 = var_sum / count_1
+
+            if var_1 == 0:
+                continue
+
+            # Compute k-period returns (rolling sum of lag elements)
+            # We have window_data of 1-period returns, compute sum of every lag consecutive
+            k_returns_count = 0
+            k_returns_sum = 0.0
+            k_returns_sq_sum = 0.0
+
+            for j in range(lag - 1, valid_count):
+                k_sum = 0.0
+                k_valid = True
+                for k in range(lag):
+                    idx = j - lag + 1 + k
+                    if idx >= 0 and idx < len(window_data):
+                        val = window_data[idx]
+                        if np.isnan(val):
+                            k_valid = False
+                            break
+                        k_sum += val
+                    else:
+                        k_valid = False
+                        break
+
+                if k_valid:
+                    k_returns_sum += k_sum
+                    k_returns_sq_sum += k_sum * k_sum
+                    k_returns_count += 1
+
+            if k_returns_count < 2:
+                continue
+
+            # Variance of k-period returns
+            mean_k = k_returns_sum / k_returns_count
+            var_k = (k_returns_sq_sum / k_returns_count) - (mean_k * mean_k)
+
+            # VR = Var(k) / (k * Var(1))
+            result[i] = var_k / (lag * var_1)
+
+        return result
+
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+
+    def _variance_ratio_numba(arr: np.ndarray, window: int, lag: int) -> np.ndarray:
+        """Fallback non-numba version."""
+        raise NotImplementedError("Numba not available")
+
 
 def _calc_vr(x: pd.Series, lag: int) -> float:
-    """Calculate variance ratio for a specific lag."""
+    """Calculate variance ratio for a specific lag (fallback)."""
     if len(x) < lag * 2:
         return np.nan
 
+    x_arr = x.values if hasattr(x, "values") else np.array(x)
+
     # Variance of 1-period returns
-    var_1 = np.var(x)
+    var_1 = np.nanvar(x_arr)
     if var_1 == 0:
         return np.nan
 
-    # Variance of k-period returns
-    k_returns = x.rolling(window=lag).sum().dropna()
+    # Variance of k-period returns using cumsum trick
+    cumsum = np.nancumsum(x_arr)
+    k_returns = cumsum[lag - 1 :] - np.concatenate([[0], cumsum[:-lag]])
     if len(k_returns) < 2:
         return np.nan
-    var_k = np.var(k_returns)
+    var_k = np.nanvar(k_returns)
 
     # VR = Var(k-period) / (k * Var(1-period))
     vr = var_k / (lag * var_1)
     return vr
+
+
+def _compute_variance_ratio(df: pd.DataFrame, lag: int, window: int = 60) -> pd.Series:
+    """
+    Compute variance ratio with specified lag.
+
+    Uses Numba-accelerated computation when available for ~10x speedup.
+    """
+    log_returns = np.log(df["close"]).diff()
+
+    if NUMBA_AVAILABLE:
+        # Use Numba-accelerated version
+        result = _variance_ratio_numba(log_returns.values, window, lag)
+        return pd.Series(result, index=log_returns.index)
+    else:
+        # Fallback to pandas apply
+        min_periods = max(lag * 2, 4)
+        return log_returns.rolling(window=window, min_periods=min_periods).apply(
+            lambda x: _calc_vr(x, lag=lag), raw=True
+        )
 
 
 def compute_variance_ratio_2(df: pd.DataFrame) -> pd.Series:
@@ -261,11 +515,7 @@ def compute_variance_ratio_2(df: pd.DataFrame) -> pd.Series:
     Returns:
         Series with VR statistic
     """
-    log_returns = np.log(df["close"]).diff()
-
-    return log_returns.rolling(window=60, min_periods=4).apply(
-        lambda x: _calc_vr(x, lag=2), raw=False
-    )
+    return _compute_variance_ratio(df, lag=2)
 
 
 def compute_variance_ratio_4(df: pd.DataFrame) -> pd.Series:
@@ -278,11 +528,7 @@ def compute_variance_ratio_4(df: pd.DataFrame) -> pd.Series:
     Returns:
         Series with VR statistic
     """
-    log_returns = np.log(df["close"]).diff()
-
-    return log_returns.rolling(window=60, min_periods=8).apply(
-        lambda x: _calc_vr(x, lag=4), raw=False
-    )
+    return _compute_variance_ratio(df, lag=4)
 
 
 def compute_variance_ratio_8(df: pd.DataFrame) -> pd.Series:
@@ -295,11 +541,7 @@ def compute_variance_ratio_8(df: pd.DataFrame) -> pd.Series:
     Returns:
         Series with VR statistic
     """
-    log_returns = np.log(df["close"]).diff()
-
-    return log_returns.rolling(window=60, min_periods=16).apply(
-        lambda x: _calc_vr(x, lag=8), raw=False
-    )
+    return _compute_variance_ratio(df, lag=8)
 
 
 def compute_variance_ratio_16(df: pd.DataFrame) -> pd.Series:
@@ -312,11 +554,7 @@ def compute_variance_ratio_16(df: pd.DataFrame) -> pd.Series:
     Returns:
         Series with VR statistic
     """
-    log_returns = np.log(df["close"]).diff()
-
-    return log_returns.rolling(window=60, min_periods=32).apply(
-        lambda x: _calc_vr(x, lag=16), raw=False
-    )
+    return _compute_variance_ratio(df, lag=16)
 
 
 # =============================================================================

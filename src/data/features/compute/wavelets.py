@@ -59,6 +59,16 @@ def _wavelet_decompose(
         return None, None
 
 
+def _create_rolling_windows(arr: np.ndarray, window: int) -> np.ndarray:
+    """
+    Create rolling windows using stride tricks for efficient memory access.
+
+    Returns shape (n_windows, window) where n_windows = len(arr) - window + 1.
+    """
+    from numpy.lib.stride_tricks import sliding_window_view
+    return sliding_window_view(arr, window)
+
+
 def _rolling_wavelet_feature(
     series: pd.Series,
     extract_fn: Callable,
@@ -66,6 +76,8 @@ def _rolling_wavelet_feature(
 ) -> pd.Series:
     """
     Apply wavelet feature extraction on a rolling basis.
+
+    Uses numpy stride tricks for efficient windowing and batch processing.
 
     Args:
         series: Input time series
@@ -75,17 +87,28 @@ def _rolling_wavelet_feature(
     if not PYWT_AVAILABLE:
         return pd.Series(np.nan, index=series.index)
 
-    result = pd.Series(np.nan, index=series.index)
+    n = len(series)
+    result = np.full(n, np.nan)
 
-    for i in range(window, len(series) + 1):
-        window_data = series.iloc[i - window : i]
+    if n < window:
+        return pd.Series(result, index=series.index)
+
+    # Create all windows efficiently using stride tricks
+    arr = series.values
+    windows = _create_rolling_windows(arr, window)
+
+    # Process windows (pywt not Numba-compatible, so still need loop)
+    # But the windowing is now efficient
+    for i, window_data in enumerate(windows):
         try:
-            value = extract_fn(window_data)
-            result.iloc[i - 1] = value
+            # Pass as pandas Series for compatibility with extract_fn
+            window_series = pd.Series(window_data)
+            value = extract_fn(window_series)
+            result[window - 1 + i] = value
         except Exception:
-            result.iloc[i - 1] = np.nan
+            pass
 
-    return result
+    return pd.Series(result, index=series.index)
 
 
 def _get_wavelet_coeffs(series: pd.Series, wavelet: str = "db4", level: int = 3):

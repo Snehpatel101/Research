@@ -5,12 +5,51 @@ PHASE_19A ML Pipeline Enhancement: ORDER_FLOW features.
 
 These features estimate buy/sell pressure and order flow dynamics
 from OHLCV bar structure without requiring tick-level data.
+
+Performance: Uses DataFrame-id based caching to avoid redundant
+order imbalance calculations across features.
 """
 
 from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
+
+# =============================================================================
+# CACHING INFRASTRUCTURE
+# =============================================================================
+
+# Module-level cache for order imbalance
+_order_imbalance_cache: dict[int, pd.Series] = {}
+_cache_df_id: int | None = None
+
+
+def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
+    """Clear cache if DataFrame has changed."""
+    global _cache_df_id
+    df_id = id(df)
+    if df_id != _cache_df_id:
+        _order_imbalance_cache.clear()
+        _cache_df_id = df_id
+
+
+def _get_order_imbalance_cached(df: pd.DataFrame) -> pd.Series:
+    """Get cached order imbalance or compute and cache it."""
+    _clear_cache_if_df_changed(df)
+    df_id = id(df)
+
+    if df_id in _order_imbalance_cache:
+        return _order_imbalance_cache[df_id]
+
+    # Compute order imbalance
+    hl_range = df["high"] - df["low"]
+    hl_range = hl_range.replace(0, np.nan)
+    buy_pressure = (df["close"] - df["low"]) / hl_range
+    result = buy_pressure.fillna(0.5)
+
+    _order_imbalance_cache[df_id] = result
+    return result
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -34,20 +73,15 @@ def compute_order_imbalance(df: pd.DataFrame) -> pd.Series:
     Uses the position of close within high-low range to estimate
     what proportion of volume was buyer-initiated vs seller-initiated.
 
+    Uses caching to avoid redundant computation when called multiple times.
+
     Args:
         df: DataFrame with 'open', 'high', 'low', 'close', 'volume' columns
 
     Returns:
         Series with order imbalance ratio (0-1, where 1 = all buying)
     """
-    hl_range = df["high"] - df["low"]
-    # Avoid division by zero
-    hl_range = hl_range.replace(0, np.nan)
-
-    # Close position within range indicates buying pressure
-    buy_pressure = (df["close"] - df["low"]) / hl_range
-
-    return buy_pressure.fillna(0.5)  # Neutral when no range
+    return _get_order_imbalance_cached(df)
 
 
 def compute_net_order_flow_5(df: pd.DataFrame) -> pd.Series:

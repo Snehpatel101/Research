@@ -4,6 +4,9 @@ Regime feature computation - Volatility, trend, and composite regime detection.
 PHASE_1 Unified Features: 9 REGIME features.
 
 These features identify market regimes for regime-aware trading strategies.
+
+Performance: Uses DataFrame-id based caching to avoid redundant regime
+calculations across dependent features.
 """
 
 from collections.abc import Callable
@@ -11,6 +14,26 @@ from collections.abc import Callable
 import pandas as pd
 
 from src.data.features.compute._helpers import log_returns as _log_returns
+
+# =============================================================================
+# CACHING INFRASTRUCTURE
+# =============================================================================
+
+# Module-level caches for regime calculations
+_volatility_regime_cache: dict[int, pd.Series] = {}
+_trend_regime_cache: dict[int, pd.Series] = {}
+_cache_df_id: int | None = None
+
+
+def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
+    """Clear cache if DataFrame has changed."""
+    global _cache_df_id
+    df_id = id(df)
+    if df_id != _cache_df_id:
+        _volatility_regime_cache.clear()
+        _trend_regime_cache.clear()
+        _cache_df_id = df_id
+
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -55,10 +78,18 @@ def compute_volatility_regime(df: pd.DataFrame) -> pd.Series:
     Volatility regime indicator.
 
     Compares short-term volatility to long-term volatility.
+    Uses caching to avoid redundant computation when called multiple times.
+
     Returns:
         0: Low volatility (short-term vol < long-term vol)
         1: High volatility (short-term vol >= long-term vol)
     """
+    _clear_cache_if_df_changed(df)
+    df_id = id(df)
+
+    if df_id in _volatility_regime_cache:
+        return _volatility_regime_cache[df_id]
+
     log_ret = _log_returns(df["close"])
 
     # Short-term volatility (20-period)
@@ -70,6 +101,7 @@ def compute_volatility_regime(df: pd.DataFrame) -> pd.Series:
     # Regime classification
     regime = (short_vol >= long_vol).astype(float)
 
+    _volatility_regime_cache[df_id] = regime
     return regime
 
 
@@ -94,11 +126,19 @@ def compute_trend_regime(df: pd.DataFrame) -> pd.Series:
     """
     Trend regime indicator using multiple moving average alignment.
 
+    Uses caching to avoid redundant computation when called multiple times.
+
     Returns:
         1: Uptrend (price > SMA20 > SMA50)
         -1: Downtrend (price < SMA20 < SMA50)
         0: Sideways/mixed
     """
+    _clear_cache_if_df_changed(df)
+    df_id = id(df)
+
+    if df_id in _trend_regime_cache:
+        return _trend_regime_cache[df_id]
+
     sma_20 = _sma(df["close"], window=20)
     sma_50 = _sma(df["close"], window=50)
 
@@ -114,6 +154,7 @@ def compute_trend_regime(df: pd.DataFrame) -> pd.Series:
     regime[uptrend] = 1.0
     regime[downtrend] = -1.0
 
+    _trend_regime_cache[df_id] = regime
     return regime
 
 

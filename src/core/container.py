@@ -670,24 +670,21 @@ class TimeSeriesDataContainer:
         if stride <= 0:
             raise ValueError(f"stride must be positive, got {stride}")
 
-        from src.data.adapters import MultiResolution4DAdapter
+        # Use factory function to avoid direct class import from data layer
+        from src.data.adapters import create_multi_resolution_dataset
 
         split_data = self.get_split(split)
 
-        # Create adapter
-        adapter = MultiResolution4DAdapter(
+        return create_multi_resolution_dataset(
+            df=split_data.df,
+            label_column=split_data.label_column,
+            weight_column=split_data.weight_column,
+            symbol_column=split_data.symbol_column if symbol_isolated else None,
             timeframes=timeframes,
             seq_len=seq_len,
             stride=stride,
             features_per_timeframe=features_per_timeframe,
             include_base_features=include_base_features,
-        )
-
-        return adapter.create_dataset(
-            df=split_data.df,
-            label_column=split_data.label_column,
-            weight_column=split_data.weight_column,
-            symbol_column=split_data.symbol_column if symbol_isolated else None,
         )
 
     def get_multi_stream_4d(
@@ -736,7 +733,8 @@ class TimeSeriesDataContainer:
             ... )
             >>> X_4d.shape  # (n_samples, 4, 60, 5)
         """
-        from src.data.adapters import MultiStreamAdapter
+        # Use registry to avoid direct class import from data layer
+        from src.data.adapters import get_adapter
 
         # Validate split exists in container
         _validate_split_name(split)
@@ -745,8 +743,9 @@ class TimeSeriesDataContainer:
 
         split_data = self.get_split(split)
 
-        # Create adapter configured to load from raw MTF store
-        adapter = MultiStreamAdapter.from_store(
+        # Get adapter from registry and configure for store loading
+        adapter = get_adapter(
+            adapter_id="multi_stream",
             symbol=symbol,
             split=split,
             timeframes=timeframes,
