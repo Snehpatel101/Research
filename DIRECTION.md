@@ -26,7 +26,7 @@ The key insight: The -99 label filtering existed in the container, but the **Opt
 |-------|-----|---------------|
 | Label -99 reaches training | Added filter_invalid_labels() to PreparedData; filter in tuning and training services | 3 files |
 | sqrt of negative variance | Added np.maximum(..., 0) before sqrt | volatility.py (3 locations) |
-| autocorr lag20 all NaN | Changed window to max(period, lag+1) | price_features.py |
+| autocorr lag20 all NaN | Changed window to max(period, lag+2) | price_features.py |
 | Missing global.yaml | Created config/global.yaml | New file |
 
 ### Code Changes Summary
@@ -58,9 +58,9 @@ df["gk_vol"] = np.sqrt(np.maximum(gk.rolling(window).mean(), 0))
 # Before (bug: 20 > 20 = False)
 returns.rolling(period).apply(lambda x: x.autocorr(lag) if len(x) > lag else np.nan)
 
-# After (fixed)
-window = max(period, lag + 1)
-returns.rolling(window).apply(lambda x: x.autocorr(lag) if len(x) >= lag + 1 else np.nan)
+# After (fixed - pandas autocorr(lag=k) requires k+2 samples)
+window = max(period, lag + 2)
+returns.rolling(window).apply(lambda x: x.autocorr(lag) if len(x) >= lag + 2 else np.nan)
 ```
 
 ### Impact on Production Readiness
@@ -78,9 +78,9 @@ returns.rolling(window).apply(lambda x: x.autocorr(lag) if len(x) >= lag + 1 els
 | Code Review | ⚠️ WARN | 3 minor style issues (P2) |
 | Contracts | ✅ PASS | All verified |
 | Integration | ✅ PASS | Clean imports |
-| Runtime | ✅ 3/4 PASS | Minor autocorr edge case |
+| Runtime | ✅ 4/4 PASS | All runtime tests pass (autocorr: 4.6% NaN) |
 
-**Verdict:** Phase 36 VERIFIED COMPLETE. All P0/P1 issues resolved. Minor P2 style improvements documented.
+**Verdict:** Phase 36 FULLY COMPLETE. All P0/P1 issues resolved. Autocorr fix corrected from lag+1 to lag+2 after check-deep verification. Minor P2 style improvements documented.
 
 ---
 
