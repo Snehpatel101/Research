@@ -29,6 +29,7 @@ Example:
 
 from __future__ import annotations
 
+import gc
 import logging
 import time
 from dataclasses import dataclass, field
@@ -567,6 +568,12 @@ class UnifiedTrainingOrchestrator:
             logger.info("=" * 60)
             aligned_oof, stacking_dataset, ensemble_result = self._build_ensemble(df)
 
+            # Clear OOF predictions to free memory after ensemble building (Phase 37 fix)
+            # Each OOF dict entry is 50-200MB; clearing saves 750MB-1.5GB for typical runs
+            oof_count = len(self._oof_predictions)
+            self._oof_predictions.clear()
+            logger.debug(f"Cleared {oof_count} OOF predictions from memory")
+
         # Save results
         self._save_results()
 
@@ -649,6 +656,11 @@ class UnifiedTrainingOrchestrator:
                     f"val_f1={result.metrics.get('val_f1', 0):.4f}, "
                     f"time={result.training_time_seconds:.1f}s"
                 )
+
+                # Clean up prepared data to prevent memory fragmentation (Phase 37 fix)
+                # Each PreparedData can be 500MB-2GB for neural models with MTF
+                del prepared
+                gc.collect()
 
     def _train_single_model(
         self,
@@ -1048,6 +1060,10 @@ class UnifiedTrainingOrchestrator:
                 data_rank=prepared.data_rank,
             )
 
+        # Clean up prepared data after walk-forward training (Phase 37 fix)
+        del prepared
+        gc.collect()
+
     def _train_regime_aware(
         self,
         df: pd.DataFrame,
@@ -1159,6 +1175,10 @@ class UnifiedTrainingOrchestrator:
                     data_rank=prepared.data_rank,
                 )
 
+                # Clean up prepared data after regime training (Phase 37 fix)
+                del prepared
+                gc.collect()
+
         logger.info("\nRegime-aware training complete")
 
     def _train_meta_labeling(
@@ -1212,6 +1232,9 @@ class UnifiedTrainingOrchestrator:
                 f"combined_acc={result.metrics.get('combined_accuracy', 0):.4f}, "
                 f"trade_fraction={result.metrics.get('trade_fraction', 0)*100:.1f}%"
             )
+
+            # Clean up after each horizon to prevent memory accumulation (Phase 37 fix)
+            gc.collect()
 
         total_time = time.time() - start_time
         logger.info(f"\nMeta-labeling total time: {total_time:.1f}s")
