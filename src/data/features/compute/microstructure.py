@@ -211,9 +211,12 @@ def compute_micro_cs_spread(df: pd.DataFrame) -> pd.Series:
     gamma = gamma.rolling(window=20, min_periods=20).mean()
 
     # Alpha parameter
+    # np.maximum(..., 0) prevents sqrt of negative values from numerical precision issues
     sqrt_2 = np.sqrt(2)
     denom = 3 - 2 * sqrt_2
-    alpha_sq = (np.sqrt(2 * beta) - np.sqrt(beta)) / denom - np.sqrt(gamma / denom)
+    beta_safe = np.maximum(beta, 0)
+    gamma_safe = np.maximum(gamma, 0)
+    alpha_sq = (np.sqrt(2 * beta_safe) - np.sqrt(beta_safe)) / denom - np.sqrt(gamma_safe / denom)
     alpha_sq = alpha_sq.clip(lower=0)
 
     # Spread estimate

@@ -7,12 +7,67 @@
 # Random seed for reproducibility
 random_seed: 42
 
+# Timeframe configuration
+timeframes:
+  default_primary: "5min"
+  canonical_ladder: ["1min", "5min", "15min", "30min", "60min"]
+  extended: ["1min", "5min", "10min", "15min", "20min", "30min", "45min", "60min"]
+
+# Data split ratios
+splits:
+  train: 0.7
+  val: 0.15
+  test: 0.15
+
+# Purge/embargo configuration for cross-validation
+purge_embargo:
+  purge_multiplier: 3.0
+  embargo_time_minutes: 7200  # 5 days in minutes
+  min_embargo_bars: 1440
+
+# Horizon configuration
+horizons:
+  supported: [1, 5, 10, 15, 20, 30, 60, 120]
+  active: [5, 10, 15, 20]
+  default: [5, 10, 15, 20]
+
+# Feature configuration
+features:
+  sma_periods: [5, 10, 20, 50, 100, 200]
+  ema_periods: [5, 10, 20, 50, 100, 200]
+  atr_periods: [7, 14, 21]
+  rsi_period: 14
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+  bollinger:
+    period: 20
+    std: 2.0
+  selection:
+    enabled: true
+    method: "mda"
+    cv_splits: 5
+  generation:
+    default: "full"
+    modes:
+      minimal: "price,volume"
+      standard: "price,volume,momentum,volatility"
+      full: "price,volume,momentum,volatility,microstructure,wavelet"
+
+# Multi-timeframe configuration
+mtf:
+  default_mode: "indicators"
+  default_timeframes: ["1min", "5min", "15min", "60min"]
+  enabled: true
+
 # Training configuration
 training:
+  sequence_length: 60
   batch_size: 256
   max_epochs: 100
   early_stopping_patience: 15
-  device: "auto"  # "auto", "cuda", "cpu"
+  device: "auto"
   mixed_precision: true
   num_workers: 4
   pin_memory: true
@@ -20,19 +75,41 @@ training:
 # Model calibration settings
 calibration:
   enabled: true
-  method: "auto"  # "auto", "isotonic", "sigmoid"
+  method: "auto"
 
-# Feature selection configuration
-features:
-  selection:
-    enabled: true
-    method: "mda"  # "mda" (Mean Decrease Accuracy), "mdi" (Mean Decrease Impurity)
-    cv_splits: 5
+# Optimization configuration
+optimization:
+  ga:
+    population_size: 50
+    generations: 100
+    crossover_rate: 0.8
+    mutation_rate: 0.1
+    elite_size: 5
+    safe_mode: true
+  optuna:
+    n_trials: 100
+    timeout: 3600
+    n_jobs: 1
+
+# Cross-validation configuration
+cross_validation:
+  n_splits: 5
+  purge_multiplier: 3.0
+  embargo_time_minutes: 7200
+
+# Processing configuration
+processing:
+  n_jobs: -1
+  allow_batch_symbols: true
+
+# Scaler configuration
+scaler:
+  default: "robust"
 
 # Experiment tracking
 tracking:
   enabled: true
-  backend: "local"  # "local", "mlflow", "wandb"
+  backend: "local"
 
 # Out-of-memory recovery settings
 oom_recovery:
@@ -40,7 +117,3 @@ oom_recovery:
   max_retries: 3
   batch_reduction_factor: 0.5
   min_batch_size: 8
-
-# Timeframe configuration
-timeframes:
-  default_primary: "5min"

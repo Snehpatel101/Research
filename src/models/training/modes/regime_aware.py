@@ -239,8 +239,10 @@ def detect_trend_regime(
             raise ValueError("Neither ADX nor close price found for trend detection")
 
         close_returns = df[close_col].pct_change()
+        # FIX: pandas autocorr(lag=1) requires at least 3 data points (lag+2)
+        # to compute covariance without "Degrees of freedom <= 0" warning
         abs_autocorr = close_returns.rolling(20).apply(
-            lambda x: abs(x.autocorr(lag=1)) if len(x) > 1 else 0, raw=False
+            lambda x: abs(x.autocorr(lag=1)) if len(x) >= 3 else 0, raw=False
         )
         trending = abs_autocorr > 0.3
 

@@ -69,7 +69,8 @@ def compute_edge_spread_numba(high, low, open_price, close_price):
             # Edge estimator (simplified formula)
             # Full formula in paper accounts for more nuances
             if ratio <= 1.0:
-                spread = 2 * np.sqrt(1 - ratio**2) * hl_range
+                # max(0, ...) prevents sqrt of negative from numerical precision
+                spread = 2 * np.sqrt(max(0, 1 - ratio**2)) * hl_range
                 spreads[i] = spread / close_price[i]  # As fraction of price
             else:
                 # Degenerate case: open-close exceeds high-low (data quality issue)
@@ -127,7 +128,8 @@ def compute_roll_spread(df, window=20):
     )
 
     # Spread = 2 * sqrt(-cov) if cov < 0, else 0
-    spread = np.where(cov_lag1 < 0, 2 * np.sqrt(-cov_lag1), 0)
+    # Use np.maximum to prevent sqrt of negative from numerical precision issues
+    spread = np.where(cov_lag1 < 0, 2 * np.sqrt(np.maximum(-cov_lag1, 0)), 0)
     spread_pct = (spread / close_prices) * 100  # As % of price
 
     return pd.Series(spread_pct, index=df.index, name="roll_spread_pct")

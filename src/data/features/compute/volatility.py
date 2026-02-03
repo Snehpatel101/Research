@@ -304,7 +304,8 @@ def compute_parkinson_vol(df: pd.DataFrame) -> pd.Series:
     """
     log_hl = np.log(df["high"] / df["low"])
     factor = 1.0 / (4 * np.log(2))
-    parkinson = np.sqrt(factor * (log_hl**2).rolling(window=20, min_periods=20).mean())
+    # np.maximum(..., 0) prevents sqrt of negative values from numerical precision issues
+    parkinson = np.sqrt(np.maximum(factor * (log_hl**2).rolling(window=20, min_periods=20).mean(), 0))
     return parkinson * np.sqrt(252)
 
 

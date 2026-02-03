@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 36 COMPLETE (with autocorr correction)
+**Status:** Phase 37 COMPLETE (6/6 tasks)
 **Last Updated:** 2026-02-02
 
 ---
@@ -34,10 +34,101 @@ See **COMPLETION.md** for full details on all completed phases.
 | 24-34 | See above | VARIOUS | 11 days | ✅ ALL COMPLETE - See COMPLETION.md |
 | 35 | Hardening (exception logging, pickle security) | HIGH | 1 day | ✅ COMPLETE |
 | 36 | Pipeline Runtime Issues (label -99, sqrt, autocorr) | CRITICAL | 1 day | ✅ COMPLETE |
+| 37 | Runtime Warning Fixes (Additional sqrt/autocorr protection) | HIGH | 1 day | ✅ COMPLETE |
 
 ---
 
-## Active Phases
+## Completed Recent Phases
+
+### Phase 37: Runtime Warning Fixes (Additional sqrt/autocorr protection)
+
+**Status:** ✅ COMPLETE
+**Priority:** HIGH (P1) - Runtime warnings during production pipeline execution
+**Effort:** 1 day (actual)
+**Source:** User-reported runtime warnings during pipeline execution (2026-02-02)
+**Completed:** 2026-02-02
+
+**Overview**
+
+Additional runtime warning fixes discovered during production pipeline execution. Built on Phase 36's foundation to eliminate remaining edge cases in mathematical operations.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                   PHASE 37 FIXES IMPLEMENTED (2026-02-02)                        │
+│                                                                                  │
+│  ✅ FIXED - AUTOCORR DEGREES OF FREEDOM:                                        │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: models/training/modes/regime_aware.py:243               │             │
+│  │  Problem: len(x) > 1 allows autocorr(lag=1) with 2 samples    │             │
+│  │  Fix: Changed to len(x) >= 3 for sufficient degrees of freedom│             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ FIXED - PARKINSON VOLATILITY SQRT:                                          │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/features/compute/volatility.py:307                 │             │
+│  │  Problem: Edge cases caused negative values in sqrt            │             │
+│  │  Fix: Added np.maximum(..., 0) protection                      │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ FIXED - CORWIN-SCHULTZ SPREAD SQRT:                                         │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/features/compute/microstructure.py:216             │             │
+│  │  Problem: beta/gamma could be negative in sqrt operations      │             │
+│  │  Fix: Added beta_safe/gamma_safe with np.maximum protection    │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ FIXED - EDGE SPREAD SQRT (NUMBA):                                           │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: pipeline/stages/features/microstructure_proxies.py:72   │             │
+│  │  Problem: 1 - ratio**2 could be negative in sqrt               │             │
+│  │  Fix: Changed to np.sqrt(max(0, 1 - ratio**2))                 │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ FIXED - ROLL SPREAD SQRT:                                                   │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: pipeline/stages/features/microstructure_proxies.py:131  │             │
+│  │  Problem: -cov_lag1 could be positive (double negative)        │             │
+│  │  Fix: Changed to 2 * np.sqrt(np.maximum(-cov_lag1, 0))         │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ FIXED - INCOMPLETE CONFIG FILE:                                             │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: config/global.yaml                                      │             │
+│  │  Problem: Missing required TimeframeConfig fields              │             │
+│  │  Fix: Completed global.yaml with all required sections         │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Priority | Status | Description |
+|------|------|----------|--------|-------------|
+| 37-1 | `models/training/modes/regime_aware.py:243` | HIGH | ✅ COMPLETE | Fix autocorr degrees of freedom warning |
+| 37-2 | `data/features/compute/volatility.py:307` | HIGH | ✅ COMPLETE | Add sqrt protection to Parkinson vol |
+| 37-3 | `data/features/compute/microstructure.py:216` | HIGH | ✅ COMPLETE | Add sqrt protection to Corwin-Schultz |
+| 37-4 | `pipeline/stages/features/microstructure_proxies.py:72` | HIGH | ✅ COMPLETE | Add sqrt protection to edge spread (numba) |
+| 37-5 | `pipeline/stages/features/microstructure_proxies.py:131` | HIGH | ✅ COMPLETE | Add sqrt protection to roll spread |
+| 37-6 | `config/global.yaml` | HIGH | ✅ COMPLETE | Complete global config with all required fields |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Runtime warnings | 5 | 0 | No RuntimeWarning in pipeline output |
+| Autocorr edge case | Warning on df<3 | Safe return | No "Degrees of freedom <= 0" warning |
+| Sqrt edge cases | 4 warnings | 0 | All sqrt operations protected |
+| Config initialization | ERROR | SUCCESS | TimeframeConfig.__init__() succeeds |
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Ruff linting | ✅ PASS | No new issues |
+| Import tests | ✅ PASS | All modules importable |
+| Runtime tests | ✅ PASS | No warnings during execution |
+
+---
 
 ### Phase 36: Pipeline Runtime Issues
 
