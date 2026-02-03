@@ -1,0 +1,46 @@
+# ML Factory Global Configuration
+# This file provides default configuration values for the ML Factory pipeline.
+# Override these values for your specific use case.
+#
+# See src/config/global_config.py for all available options.
+
+# Random seed for reproducibility
+random_seed: 42
+
+# Training configuration
+training:
+  batch_size: 256
+  max_epochs: 100
+  early_stopping_patience: 15
+  device: "auto"  # "auto", "cuda", "cpu"
+  mixed_precision: true
+  num_workers: 4
+  pin_memory: true
+
+# Model calibration settings
+calibration:
+  enabled: true
+  method: "auto"  # "auto", "isotonic", "sigmoid"
+
+# Feature selection configuration
+features:
+  selection:
+    enabled: true
+    method: "mda"  # "mda" (Mean Decrease Accuracy), "mdi" (Mean Decrease Impurity)
+    cv_splits: 5
+
+# Experiment tracking
+tracking:
+  enabled: true
+  backend: "local"  # "local", "mlflow", "wandb"
+
+# Out-of-memory recovery settings
+oom_recovery:
+  enabled: true
+  max_retries: 3
+  batch_reduction_factor: 0.5
+  min_batch_size: 8
+
+# Timeframe configuration
+timeframes:
+  default_primary: "5min"

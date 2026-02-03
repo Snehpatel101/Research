@@ -302,7 +302,8 @@ def add_garman_klass_volatility(
 
     gk = 0.5 * hl**2 - (2 * np.log(2) - 1) * co**2
     # ANTI-LOOKAHEAD: shift(1) ensures gk_vol at bar[t] uses data up to bar[t-1]
-    df["gk_vol"] = (np.sqrt(gk.rolling(window=period).mean()) * annualization_factor).shift(1)
+    # np.maximum(..., 0) prevents sqrt of negative values from numerical precision issues
+    df["gk_vol"] = (np.sqrt(np.maximum(gk.rolling(window=period).mean(), 0)) * annualization_factor).shift(1)
 
     feature_metadata["gk_vol"] = f"Garman-Klass volatility ({period}, lagged)"
 
@@ -401,7 +402,8 @@ def add_rogers_satchell_volatility(
     )
 
     # Rolling mean and sqrt for volatility
-    rs_vol_raw = np.sqrt(rs_component.rolling(window=period).mean()) * annualization_factor
+    # np.maximum(..., 0) prevents sqrt of negative values from numerical precision issues
+    rs_vol_raw = np.sqrt(np.maximum(rs_component.rolling(window=period).mean(), 0)) * annualization_factor
 
     # ANTI-LOOKAHEAD: shift(1) ensures rs_vol at bar[t] uses data up to bar[t-1]
     df["rs_vol"] = rs_vol_raw.shift(1)
@@ -483,7 +485,8 @@ def add_yang_zhang_volatility(
 
     # Yang-Zhang volatility: combines all three components
     yz_var = overnight_var + k * open_close_var + (1 - k) * rs_var
-    yz_vol_raw = np.sqrt(yz_var) * annualization_factor
+    # np.maximum(..., 0) prevents sqrt of negative values from numerical precision issues
+    yz_vol_raw = np.sqrt(np.maximum(yz_var, 0)) * annualization_factor
 
     # ANTI-LOOKAHEAD: shift(1) ensures yz_vol at bar[t] uses data up to bar[t-1]
     df["yz_vol"] = yz_vol_raw.shift(1)

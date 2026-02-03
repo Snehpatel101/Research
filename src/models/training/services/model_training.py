@@ -113,6 +113,10 @@ class ModelTrainingService:
             output_dir=model_output_dir,
         )
 
+        # CRITICAL: Filter invalid labels (-99) before any training
+        # The sentinel value marks invalid/ambiguous samples that must be excluded
+        prepared = prepared.filter_invalid_labels()
+
         # Hyperparameter optimization if enabled
         if request.optimize_hyperparams:
             trainer_config = self._optimize_hyperparams(trainer_config, prepared, request)

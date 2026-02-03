@@ -180,7 +180,82 @@ class PreparedData:
                 f"Data rank mismatch: declared={self.data_rank}, actual={self.X_train.ndim}"
             )
 
+        # Check for invalid labels (-99 sentinel)
+        INVALID_LABEL = -99
+        for name, arr in [("y_train", self.y_train), ("y_val", self.y_val)]:
+            n_invalid = (arr == INVALID_LABEL).sum()
+            if n_invalid > 0:
+                issues.append(
+                    f"{name} contains {n_invalid} invalid labels (-99). "
+                    f"Call filter_invalid_labels() before training."
+                )
+        if self.has_test and self.y_test is not None:
+            n_invalid = (self.y_test == INVALID_LABEL).sum()
+            if n_invalid > 0:
+                issues.append(f"y_test contains {n_invalid} invalid labels (-99)")
+
         return len(issues) == 0, issues
+
+    def filter_invalid_labels(self, invalid_label: int = -99) -> "PreparedData":
+        """
+        Filter out samples with invalid labels.
+
+        The sentinel value -99 marks invalid/ambiguous samples (e.g., end-of-data,
+        unclear triple barrier outcomes) that should be excluded from training.
+
+        Returns:
+            New PreparedData with invalid samples removed
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        # Filter training data
+        train_valid = self.y_train != invalid_label
+        n_invalid_train = (~train_valid).sum()
+
+        # Filter validation data
+        val_valid = self.y_val != invalid_label
+        n_invalid_val = (~val_valid).sum()
+
+        # Filter test data if present
+        if self.y_test is not None:
+            test_valid = self.y_test != invalid_label
+            n_invalid_test = (~test_valid).sum()
+        else:
+            test_valid = None
+            n_invalid_test = 0
+
+        total_invalid = n_invalid_train + n_invalid_val + n_invalid_test
+        if total_invalid > 0:
+            logger.info(
+                f"Filtering {total_invalid} invalid labels (-99): "
+                f"train={n_invalid_train}, val={n_invalid_val}, test={n_invalid_test}"
+            )
+
+        # Create filtered arrays
+        return PreparedData(
+            X_train=self.X_train[train_valid],
+            y_train=self.y_train[train_valid],
+            X_val=self.X_val[val_valid],
+            y_val=self.y_val[val_valid],
+            X_test=self.X_test[test_valid] if self.X_test is not None and test_valid is not None else None,
+            y_test=self.y_test[test_valid] if self.y_test is not None and test_valid is not None else None,
+            train_weights=self.train_weights[train_valid] if self.train_weights is not None else None,
+            val_weights=self.val_weights[val_valid] if self.val_weights is not None else None,
+            test_weights=self.test_weights[test_valid] if self.test_weights is not None and test_valid is not None else None,
+            model_name=self.model_name,
+            adapter_type=self.adapter_type,
+            data_rank=self.data_rank,
+            feature_names=self.feature_names,
+            train_indices=self.train_indices[train_valid] if self.train_indices is not None else None,
+            val_indices=self.val_indices[val_valid] if self.val_indices is not None else None,
+            test_indices=self.test_indices[test_valid] if self.test_indices is not None and test_valid is not None else None,
+            scaler=self.scaler,
+            sequence_length=self.sequence_length,
+            n_timeframes=self.n_timeframes,
+            timeframe_names=self.timeframe_names,
+        )
 
     def summary(self) -> str:
         """Generate a summary string for logging."""

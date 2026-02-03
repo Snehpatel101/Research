@@ -142,13 +142,16 @@ def add_autocorrelation(
     for lag in lags:
         col = f"return_autocorr_lag{lag}"
         # ANTI-LOOKAHEAD: shift(1) ensures autocorr at bar[t] uses data up to bar[t-1]
+        # FIX: Use max(period, lag + 1) to ensure enough data for autocorrelation
+        # Bug was: period=20, lag=20 → len(x) > lag → 20 > 20 → False → always NaN
+        window = max(period, lag + 1)
         autocorr = (
-            returns.rolling(period)
-            .apply(lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan, raw=False)  # noqa: B023
+            returns.rolling(window)
+            .apply(lambda x: x.autocorr(lag=lag) if len(x) >= lag + 1 else np.nan, raw=False)  # noqa: B023
             .shift(1)
         )
         df[col] = autocorr
-        feature_metadata[col] = f"Return autocorrelation lag {lag} ({period}-period, lagged)"
+        feature_metadata[col] = f"Return autocorrelation lag {lag} ({window}-period, lagged)"
 
     return df
 

@@ -82,6 +82,19 @@ class HyperparameterTuningService:
         X_df = pd.DataFrame(X_train_2d)
         y_series = pd.Series(request.prepared_data.y_train)
 
+        # CRITICAL: Filter invalid labels (-99) before tuning
+        # The sentinel value -99 marks invalid/ambiguous samples that should be excluded
+        INVALID_LABEL = -99
+        valid_mask = y_series != INVALID_LABEL
+        n_invalid = (~valid_mask).sum()
+        if n_invalid > 0:
+            logger.warning(
+                f"  Filtering {n_invalid} invalid labels (-99) from tuning data "
+                f"({n_invalid / len(y_series) * 100:.2f}% of samples)"
+            )
+            X_df = X_df.loc[valid_mask].reset_index(drop=True)
+            y_series = y_series.loc[valid_mask].reset_index(drop=True)
+
         result = tuner.tune(
             X=X_df,
             y=y_series,
