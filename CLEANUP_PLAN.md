@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 36 VERIFIED COMPLETE
+**Status:** Phase 36 COMPLETE (with autocorr correction)
 **Last Updated:** 2026-02-02
 
 ---
@@ -33,7 +33,7 @@ See **COMPLETION.md** for full details on all completed phases.
 |-------|-------|----------|--------|--------|
 | 24-34 | See above | VARIOUS | 11 days | ✅ ALL COMPLETE - See COMPLETION.md |
 | 35 | Hardening (exception logging, pickle security) | HIGH | 1 day | ✅ COMPLETE |
-| 36 | Pipeline Runtime Issues (label -99, sqrt, autocorr) | CRITICAL | 1 day | 📋 IN PROGRESS |
+| 36 | Pipeline Runtime Issues (label -99, sqrt, autocorr) | CRITICAL | 1 day | ✅ COMPLETE |
 
 ---
 
@@ -73,7 +73,8 @@ Pipeline failed after 10,782 seconds with label validation error. Initial static
 │  ✅ FIXED - AUTOCORRELATION LAG20 ALL NaN:                                      │
 │  ┌────────────────────────────────────────────────────────────────┐             │
 │  │  Bug: window=20, lag=20 → len(x) > lag → 20 > 20 → False → NaN│             │
-│  │  Fix: window=max(period, lag+1), condition len(x) >= lag+1    │             │
+│  │  Fix: window=max(period, lag+2), condition len(x) >= lag+2    │             │
+│  │  Note: Initial lag+1 fix was incomplete, required lag+2       │             │
 │  └────────────────────────────────────────────────────────────────┘             │
 │                                                                                  │
 │  ✅ FIXED - MISSING CONFIG FILE:                                                │
@@ -110,12 +111,10 @@ Pipeline failed after 10,782 seconds with label validation error. Initial static
 | Code Review | ⚠️ WARN | 3 minor style issues: magic numbers, local imports |
 | Contracts | ✅ PASS | All types, schemas, and API contracts verified |
 | Integration | ✅ PASS | No circular deps, imports clean |
-| Runtime | ✅ 3/4 PASS | Autocorr may need window=lag+2 for full coverage |
+| Runtime | ✅ 4/4 PASS | All runtime tests pass after autocorr correction |
 
-**Minor Recommendations (P2):**
-1. Import `INVALID_LABEL_SENTINEL` from canonical location (`src/core/constants.py`)
-2. Remove local logging imports (use module-level logger pattern)
-3. Investigate autocorr window size (may need `lag+2` for lag=20 case)
+**Autocorrelation Fix Correction:**
+Initial fix used `window=max(period, lag+1)` but check-deep verification revealed this was still off-by-one. Corrected to `window=max(period, lag+2)` and `len(x) >= lag+2`. NaN percentage reduced from 100% to 4.6%.
 
 ---
 

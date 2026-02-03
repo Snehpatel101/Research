@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 36 VERIFIED COMPLETE
+**Status:** Phase 36 COMPLETE (with autocorr correction)
 **Last Updated:** 2026-02-02
 
 ---
@@ -156,41 +156,39 @@ Mathematical proofs assume perfect data; defensive programming handles reality.
 **File:** `src/data/pipeline/stages/features/price_features.py`
 **Line:** 147
 **Priority:** HIGH - Feature produces 100% NaN
+**Status:** ✅ COMPLETE - Required two corrections to fully resolve
 
 ##### Problem
 
 ```python
-# Current: window=20, lag=20
+# Original: window=20, lag=20
 # Condition: len(x) > lag → 20 > 20 → False → Always returns NaN
 returns.rolling(period=20).apply(
     lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan, raw=False
 )
 ```
 
-##### AI Instructions
+##### Fix Implementation (Two-Stage)
 
-1. **Read** `src/data/pipeline/stages/features/price_features.py` lines 140-155
-2. **Fix** by changing window size:
-
-**Option A (Recommended):**
+**Stage 1: Initial Fix (Incomplete)**
 ```python
-# BEFORE
-returns.rolling(period=20)
-
-# AFTER (increase window to lag + 1)
-returns.rolling(period=21)  # Now 21 > 20 → True → computes autocorr
-```
-
-**Option B (Alternative):**
-```python
-# BEFORE
-lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan
-
-# AFTER
+# Changed to lag+1
+window = max(period, lag + 1)  # 21 for lag=20
 lambda x: x.autocorr(lag=lag) if len(x) >= lag + 1 else np.nan
+# Result: Still produced 100% NaN
 ```
 
-3. **Run** tests to verify feature has values
+**Stage 2: Corrected Fix (Complete)**
+```python
+# Changed to lag+2 after check-deep verification
+window = max(period, lag + 2)  # 22 for lag=20
+lambda x: x.autocorr(lag=lag) if len(x) >= lag + 2 else np.nan
+# Result: NaN percentage 4.6% (expected warmup period)
+```
+
+##### Lesson Learned
+
+The pandas `Series.autocorr(lag=k)` method requires `k+2` samples (not `k+1`) for valid computation due to internal variance calculation. Always verify fixes with actual data.
 
 ##### Verification
 
@@ -202,7 +200,7 @@ from src.data.pipeline.stages.features.price_features import add_autocorrelation
 df = pd.DataFrame({'close': np.random.rand(1000)*100})
 result = add_autocorrelation(df)
 nan_pct = result['return_autocorr_lag20'].isna().sum() / len(result) * 100
-print(f'NaN percentage: {nan_pct:.1f}% (should be <5%)')
+print(f'NaN percentage: {nan_pct:.1f}% (should be ~4-5%)')
 assert nan_pct < 10, 'Too many NaN values'
 print('OK - autocorr_lag20 has values')
 "
@@ -333,17 +331,18 @@ print('OK - No config warnings')
 | **Code Review** | ⚠️ WARN | 3 minor style issues identified |
 | **Contracts** | ✅ PASS | All types and schemas verified |
 | **Integration** | ✅ PASS | No circular dependencies |
-| **Runtime** | ✅ 3/4 PASS | Autocorr needs investigation |
+| **Runtime** | ✅ 4/4 PASS | All tests pass after autocorr correction |
 
-#### Code Review Findings (P2 - Minor)
+#### Autocorrelation Fix Correction
 
-| Finding | File | Recommendation |
-|---------|------|----------------|
-| Magic number -99 | `hyperparameter_tuning.py:77` | Import INVALID_LABEL_SENTINEL from constants |
-| Local logging import | `model_training.py` | Use module-level logger pattern |
-| Window size | `price_features.py:147` | May need window=lag+2 for lag=20 |
+Check-deep verification identified that the initial fix (`lag+1`) was incomplete. Additional correction applied:
 
-**Status:** All P0/P1 issues resolved. Minor P2 style issues documented for future cleanup.
+| Fix Stage | Change | Result |
+|-----------|--------|--------|
+| Initial | `window=max(period, lag+1)` | Still 100% NaN |
+| Corrected | `window=max(period, lag+2)` | 4.6% NaN (expected) |
+
+**Status:** All P0/P1 issues fully resolved. Minor P2 style issues documented for future cleanup.
 
 ---
 

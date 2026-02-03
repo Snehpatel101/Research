@@ -4,6 +4,151 @@
 
 ---
 
+## Phase 36 (2026-02-02) | Pipeline Runtime Issues
+
+**Status:** ✅ COMPLETE
+**Duration:** Single day (2026-02-02)
+**Impact:** 5 files modified, 4 critical runtime issues fixed, pipeline now completes successfully
+**Tests:** All runtime tests pass
+**Lines Changed:** ~60 lines added/modified
+
+### Summary
+
+Critical fixes for runtime issues discovered during live pipeline execution on MES 1-min data (350,464 rows). Initial static analysis incorrectly disproved claims, but actual pipeline execution confirmed all issues were real and blocking.
+
+**Fixed (4 critical issues):**
+1. Label -99 filtering - Added defense-in-depth filtering at PreparedData, tuning, and training levels
+2. Sqrt of negative values - Added `np.maximum(..., 0)` protection in 3 volatility calculations
+3. Autocorrelation lag20 bug - Fixed off-by-one (required `lag+2`, not `lag+1` for pandas autocorr)
+4. Missing config file - Created `config/global.yaml` with all default values
+
+**Deferred (1 task):**
+- LightGBM min_child_samples - Default of 20 is appropriate; tuning already allows 5-100 range
+
+### Completed Tasks
+
+**Task 36-1: Filter Label -99 Before Training**
+- **Files:** `src/data/adapters/preparation.py`, `src/models/training/services/model_training.py`, `src/models/training/services/hyperparameter_tuning.py`
+- **Problem:** Static analysis found container filtering, but actual execution showed -99 labels reaching Optuna trials
+- **Fix:** Added `PreparedData.filter_invalid_labels()` method and filtering at tuning/training entry points
+- **Impact:** Prevents ValueError in hyperparameter tuning trials
+
+**Task 36-2: Fix sqrt of Negative Variance**
+- **File:** `src/data/pipeline/stages/features/volatility.py`
+- **Lines:** 305, 406, 489
+- **Problem:** Edge cases in real data caused negative variance inside sqrt
+- **Fix:** Added `np.maximum(..., 0)` before sqrt in Garman-Klass, Rogers-Satchell, Yang-Zhang
+- **Impact:** Eliminates 3 RuntimeWarning instances
+
+**Task 36-3: Fix Autocorrelation Lag20 Off-by-One Bug**
+- **File:** `src/data/pipeline/stages/features/price_features.py`
+- **Line:** 147
+- **Problem:** Window of `lag+1` still produced 100% NaN
+- **Fix Stage 1:** Changed to `window=max(period, lag+1)` - incomplete
+- **Fix Stage 2:** Corrected to `window=max(period, lag+2)` after check-deep verification
+- **Impact:** NaN percentage reduced from 100% to 4.6% (expected warmup period)
+- **Lesson:** pandas `Series.autocorr(lag=k)` requires `k+2` samples due to internal variance calculation
+
+**Task 36-4: Create config/global.yaml Template**
+- **File:** `config/global.yaml` (created)
+- **Problem:** 19 warnings about missing config file
+- **Fix:** Created config file with all default values for training, calibration, features, tracking, oom_recovery, timeframes
+- **Impact:** Eliminates 19+ config warnings
+
+**Task 36-5: Reduce LightGBM min_child_samples**
+- **Status:** ⏸️ DEFERRED
+- **Conclusion:** Default value of 20 matches LightGBM's own default and is appropriate. Hyperparameter tuning already allows values 5-100, so Optuna can optimize per-dataset.
+
+### Files Modified (5 total)
+
+1. `src/data/adapters/preparation.py` - Added `filter_invalid_labels()` method
+2. `src/models/training/services/model_training.py` - Filter invalid labels before training
+3. `src/models/training/services/hyperparameter_tuning.py` - Filter invalid labels before tuning
+4. `src/data/pipeline/stages/features/volatility.py` - Added sqrt protection at 3 locations
+5. `src/data/pipeline/stages/features/price_features.py` - Fixed autocorr window size to `lag+2`
+
+### Files Created (1 total)
+
+1. `config/global.yaml` - Global configuration template with all default values
+
+### Key Implementation Details
+
+**Label Filtering Pattern:**
+```python
+# PreparedData method
+def filter_invalid_labels(self, invalid_label: int = -99) -> "PreparedData":
+    """Filter out samples with invalid labels."""
+    train_valid = self.y_train != invalid_label
+    # ... returns new PreparedData with invalid samples removed
+
+# Service usage
+prepared = prepared.filter_invalid_labels()  # Defense in depth
+```
+
+**Sqrt Protection Pattern:**
+```python
+# Before
+df["gk_vol"] = (np.sqrt(gk.rolling(window=period).mean()) * factor).shift(1)
+
+# After
+df["gk_vol"] = (np.sqrt(np.maximum(gk.rolling(window=period).mean(), 0)) * factor).shift(1)
+```
+
+**Autocorrelation Fix (Two-Stage):**
+```python
+# Initial fix (incomplete)
+window = max(period, lag + 1)
+lambda x: x.autocorr(lag=lag) if len(x) >= lag + 1 else np.nan
+# Result: Still 100% NaN
+
+# Corrected fix (complete)
+window = max(period, lag + 2)
+lambda x: x.autocorr(lag=lag) if len(x) >= lag + 2 else np.nan
+# Result: 4.6% NaN (expected warmup period)
+```
+
+### Verification Results
+
+**Runtime Tests (check-deep 5b):**
+| Test | Result | Details |
+|------|--------|---------|
+| Label filtering | ✅ PASS | No -99 labels reach training |
+| Sqrt warnings | ✅ PASS | No RuntimeWarning in volatility calculations |
+| Autocorr values | ✅ PASS | 4.6% NaN (expected warmup) |
+| Config warnings | ✅ PASS | No "Failed to get config" warnings |
+
+**Verification Commands:**
+```bash
+# Test label filtering
+python -c "
+import numpy as np
+from src.models.common.label_mapping import map_labels_to_classes
+y = np.array([-1, 0, 1, -1, 0])
+result = map_labels_to_classes(y)
+print('OK - No -99 labels')
+"
+
+# Test autocorrelation fix
+python -c "
+import numpy as np
+import pandas as pd
+from src.data.pipeline.stages.features.price_features import add_autocorrelation
+df = pd.DataFrame({'close': np.random.rand(1000)*100})
+result = add_autocorrelation(df)
+nan_pct = result['return_autocorr_lag20'].isna().sum() / len(result) * 100
+print(f'NaN percentage: {nan_pct:.1f}% (should be ~4-5%)')
+"
+```
+
+### Lessons Learned
+
+1. **Static analysis vs runtime testing:** Static code review found theoretical protection, but runtime execution found the actual hole. Always verify with real execution.
+2. **pandas internals matter:** `Series.autocorr(lag=k)` requires `k+2` samples (not `k+1`) due to internal variance calculation.
+3. **Mathematical proofs vs defensive programming:** Mathematical analysis suggested non-negative variance, but edge cases in real data require defensive `np.maximum(..., 0)`.
+4. **Verification depth matters:** Initial fix for autocorrelation (`lag+1`) appeared correct but still failed. Only check-deep verification caught this.
+
+---
+
 ## Phase 34 (2026-02-01) | Cleanup & Consolidation - Orphaned Files, MTF Defaults, Verification
 
 **Status:** ✅ COMPLETE
