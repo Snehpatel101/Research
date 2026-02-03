@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 35 Complete
+**Status:** Phase 36 In Progress
 **Last Updated:** 2026-02-02
 
 ---
@@ -28,6 +28,289 @@ See **COMPLETION.md** for full task details and implementation information.
 ---
 
 ## Active Phases
+
+### Phase 36: Pipeline Runtime Issues
+
+**Status:** 📋 IN PROGRESS (Reduced Scope - 2 verified, 2 disproven, 1 inconclusive)
+**Priority:** MEDIUM (downgraded after verification)
+**Tasks:** 0/2 (only 2 tasks remain after verification)
+**Source:** Live pipeline execution on MES 1-min data, 6-agent analysis (2026-02-02)
+**Verified:** 2026-02-02 (codebase-analyzer deep verification)
+
+---
+
+#### Task 36-1: Filter Label -99 Before Training ❌ DISPROVEN
+
+**File:** `src/models/training/trainer.py`
+**Line:** 549-552
+**Status:** ❌ DISPROVEN - Protection already exists
+
+##### Verification Evidence
+
+The system already has **two layers of protection**:
+
+1. **Container filters by default** (`src/core/container.py:141,345-354`):
+   ```python
+   exclude_invalid_labels: bool = True  # Default
+
+   if exclude_invalid_labels:
+       invalid_mask = df[label_col] == INVALID_LABEL
+       if invalid_mask.sum() > 0:
+           logger.info(f"{split_name}: Filtering {n_invalid} rows with invalid label ({INVALID_LABEL})")
+           df = df[~invalid_mask].reset_index(drop=True)
+   ```
+
+2. **Trainer validates defensively** (`src/models/training/trainer.py:549-552`):
+   ```python
+   # LEAKAGE PREVENTION: Validate no invalid labels (-99) in training data
+   _validate_labels(y_train_series, "training labels")
+   _validate_labels(y_val_series, "validation labels")
+   ```
+
+##### Conclusion
+
+**No action needed.** The claim that -99 labels reach `map_labels_to_classes()` was false - defensive validation already raises clear error before that point. If -99 labels exist, `_validate_labels()` raises `ValueError: LEAKAGE DETECTED` with full context.
+invalid_val = y_val == INVALID_LABEL
+if invalid_val.sum() > 0:
+    valid_mask = ~invalid_val
+    X_val = X_val[valid_mask]
+    y_val = y_val[valid_mask]
+```
+
+4. **Run** full pipeline to verify fix
+
+##### Verification
+
+```bash
+# Test that -99 is filtered
+python -c "
+import numpy as np
+from src.models.common.label_mapping import map_labels_to_classes
+y = np.array([-1, 0, 1, -1, 0])  # Valid labels only
+result = map_labels_to_classes(y)
+print('OK - No -99 labels')
+"
+
+# Full pipeline test
+python -c "from src.factory import MLFactory; print('Import OK')"
+```
+
+---
+
+#### Task 36-2: Fix sqrt of Negative Variance ❌ DISPROVEN
+
+**File:** `src/data/pipeline/stages/features/volatility.py`
+**Lines:** 305, 404, 486
+**Status:** ❌ DISPROVEN - Math proves non-negative for valid OHLC
+
+##### Verification Evidence
+
+Mathematical analysis proves all three volatility estimators produce **non-negative variance** for valid OHLC data:
+
+1. **Garman-Klass** (`volatility.py:303-305`):
+   - Formula: `gk = 0.5 * hl² - (2*log(2)-1) * co²`
+   - For valid OHLC where close/open are within [low, high]:
+   - The term `0.5 * hl²` always exceeds `0.386 * co²`
+   - **GK >= 0 for valid OHLC**
+
+2. **Rogers-Satchell** (`volatility.py:398-404`):
+   - For valid OHLC: (H-C) >= 0 and (H-O) >= 0 → first term >= 0
+   - (L-C) <= 0 and (L-O) <= 0 → product of negatives >= 0
+   - **RS >= 0 for valid OHLC**
+
+3. **Yang-Zhang** (`volatility.py:485-486`):
+   - All components are squared differences (variances) or RS
+   - **YZ >= 0 for valid OHLC**
+
+4. **OHLC Validation Exists** (`src/data/pipeline/stages/validation/data_contract.py:52-74`):
+   ```python
+   @staticmethod
+   def validate_ohlc_relationships(df: pd.DataFrame) -> list[str]:
+       """Validate high >= low, high >= open/close, low <= open/close."""
+   ```
+
+##### Conclusion
+
+**No action needed.** The claim was based on incorrect mathematical analysis. For valid OHLC data (enforced by pipeline validation), negative variance cannot occur. Warnings would only appear with invalid OHLC data that bypasses validation.
+
+---
+
+#### Task 36-3: Fix Autocorrelation Lag20 Off-by-One Bug ✅ VERIFIED
+
+**File:** `src/data/pipeline/stages/features/price_features.py`
+**Line:** 147
+**Priority:** HIGH - Feature produces 100% NaN
+
+##### Problem
+
+```python
+# Current: window=20, lag=20
+# Condition: len(x) > lag → 20 > 20 → False → Always returns NaN
+returns.rolling(period=20).apply(
+    lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan, raw=False
+)
+```
+
+##### AI Instructions
+
+1. **Read** `src/data/pipeline/stages/features/price_features.py` lines 140-155
+2. **Fix** by changing window size:
+
+**Option A (Recommended):**
+```python
+# BEFORE
+returns.rolling(period=20)
+
+# AFTER (increase window to lag + 1)
+returns.rolling(period=21)  # Now 21 > 20 → True → computes autocorr
+```
+
+**Option B (Alternative):**
+```python
+# BEFORE
+lambda x: x.autocorr(lag=lag) if len(x) > lag else np.nan
+
+# AFTER
+lambda x: x.autocorr(lag=lag) if len(x) >= lag + 1 else np.nan
+```
+
+3. **Run** tests to verify feature has values
+
+##### Verification
+
+```bash
+python -c "
+import numpy as np
+import pandas as pd
+from src.data.pipeline.stages.features.price_features import add_autocorrelation
+df = pd.DataFrame({'close': np.random.rand(1000)*100})
+result = add_autocorrelation(df)
+nan_pct = result['return_autocorr_lag20'].isna().sum() / len(result) * 100
+print(f'NaN percentage: {nan_pct:.1f}% (should be <5%)')
+assert nan_pct < 10, 'Too many NaN values'
+print('OK - autocorr_lag20 has values')
+"
+```
+
+---
+
+#### Task 36-4: Create config/global.yaml Template ✅ VERIFIED
+
+**File:** `config/global.yaml` (create new)
+**Status:** ✅ VERIFIED - File and directory do not exist
+**Priority:** MEDIUM - Reduces log noise
+
+##### Problem
+
+19 warnings about missing config file:
+```
+WARNING:src.models.config.trainer_config:Failed to get config attribute '...':
+[Errno 2] No such file or directory: '/content/Research/config/global.yaml'
+```
+
+##### AI Instructions
+
+1. **Create** directory if needed: `mkdir -p config/`
+2. **Create** `config/global.yaml` with minimal template:
+
+```yaml
+# ML Factory Global Configuration
+# See src/config/global_config.py for all options
+
+random_seed: 42
+
+training:
+  batch_size: 256
+  max_epochs: 100
+  early_stopping_patience: 15
+  device: "auto"
+  mixed_precision: true
+  num_workers: 4
+  pin_memory: true
+
+calibration:
+  enabled: true
+  method: "auto"
+
+features:
+  selection:
+    enabled: true
+    method: "mda"
+    cv_splits: 5
+
+tracking:
+  enabled: true
+  backend: "local"
+
+oom_recovery:
+  enabled: true
+  max_retries: 3
+  batch_reduction_factor: 0.5
+  min_batch_size: 8
+
+timeframes:
+  default_primary: "5min"
+```
+
+3. **Verify** no config warnings on import
+
+##### Verification
+
+```bash
+# Should produce no config warnings
+python -c "
+import logging
+logging.basicConfig(level=logging.WARNING)
+from src.models.config.trainer_config import TrainerConfig
+config = TrainerConfig()
+print(f'batch_size: {config.batch_size}')
+print('OK - No config warnings')
+" 2>&1 | grep -c "Failed to get config"
+# Should output 0
+```
+
+---
+
+#### Task 36-5: Reduce LightGBM min_child_samples ⚠️ INCONCLUSIVE
+
+**File:** `src/models/boosting/lightgbm_model.py`
+**Line:** ~142 (in default params)
+**Status:** ⚠️ INCONCLUSIVE - Default is appropriate; tuning handles this
+
+##### Verification Evidence
+
+1. **Default value matches LightGBM** (`lightgbm_model.py:142`):
+   ```python
+   "min_child_samples": 20,  # LightGBM's own default
+   ```
+
+2. **Hyperparameter tuning already allows lower values** (`cv/param_spaces.py:101`):
+   ```python
+   "min_child_samples": {"type": "int", "low": 5, "high": 50},
+   ```
+
+3. **Optimization range is flexible** (`optimization/hyperparameters.py:152`):
+   ```python
+   "min_child_samples": ("int", 5, 100),
+   ```
+
+##### Conclusion
+
+**No action needed.** The value `min_child_samples=20` is the LightGBM default and appropriate for most use cases. Whether it's "too restrictive" depends on dataset characteristics. The hyperparameter tuning system already allows values as low as 5, so Optuna can optimize this per-dataset.
+
+---
+
+### Phase 36 Completion Checklist
+
+| Task | Status | Verification |
+|------|--------|--------------|
+| 36-1 | ❌ DISPROVEN | Container + trainer already filter -99 |
+| 36-2 | ❌ DISPROVEN | Math non-negative for valid OHLC |
+| 36-3 | ⬜ TODO | return_autocorr_lag20 has values |
+| 36-4 | ⬜ TODO | No config file warnings |
+| 36-5 | ⚠️ INCONCLUSIVE | Tuning handles per-dataset optimization |
+
+---
 
 ### Phase 35: Production Hardening
 

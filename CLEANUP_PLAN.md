@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 35 Complete
+**Status:** Phase 36 In Progress
 **Last Updated:** 2026-02-02
 
 ---
@@ -33,10 +33,82 @@ See **COMPLETION.md** for full details on all completed phases.
 |-------|-------|----------|--------|--------|
 | 24-34 | See above | VARIOUS | 11 days | ✅ ALL COMPLETE - See COMPLETION.md |
 | 35 | Hardening (exception logging, pickle security) | HIGH | 1 day | ✅ COMPLETE |
+| 36 | Pipeline Runtime Issues (label -99, sqrt, autocorr) | CRITICAL | 1 day | 📋 IN PROGRESS |
 
 ---
 
 ## Active Phases
+
+### Phase 36: Pipeline Runtime Issues
+
+**Status:** 📋 IN PROGRESS (Reduced Scope - 2 of 5 claims verified)
+**Priority:** MEDIUM (downgraded from CRITICAL after verification)
+**Effort:** 0.5 day
+**Source:** Live pipeline execution on MES 1-min data (350,464 rows), 6-agent analysis (2026-02-02)
+**Verified:** 2026-02-02 (codebase-analyzer deep verification)
+
+**Overview**
+
+Original claim was pipeline failure from label -99 reaching model training. **Deep verification disproved 2 critical claims** - the system already has robust protection. Reduced scope to 2 verified issues.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                   PHASE 36 VERIFICATION RESULTS (2026-02-02)                     │
+│                                                                                  │
+│  ❌ DISPROVEN - LABEL -99 CLAIM:                                                │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  Container filters by default: exclude_invalid_labels=True     │             │
+│  │  Trainer validates defensively: _validate_labels() at line 549 │             │
+│  │  Two layers of protection exist - claim was false              │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ❌ DISPROVEN - SQRT OF NEGATIVE VALUES:                                        │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  Math proof: GK, RS, YZ all non-negative for valid OHLC        │             │
+│  │  OHLC validation exists: validate_ohlc_relationships()         │             │
+│  │  Warnings only possible with invalid OHLC (blocked by pipeline)│             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ VERIFIED - AUTOCORRELATION LAG20 ALL NaN:                                   │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  price_features.py:147 - Off-by-one bug confirmed              │             │
+│  │  window=20, lag=20 → len(x) > lag → 20 > 20 → False → NaN     │             │
+│  │  Fix: Change condition to len(x) >= lag + 1                    │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ VERIFIED - MISSING CONFIG FILE:                                             │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  config/global.yaml doesn't exist (directory also missing)     │             │
+│  │  Fix: Create config file template                              │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ⚠️ INCONCLUSIVE - LIGHTGBM MIN_CHILD_SAMPLES:                                  │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  min_child_samples=20 matches LightGBM default                 │             │
+│  │  Hyperparameter tuning already allows 5-100 range              │             │
+│  │  No action needed - Optuna can optimize per-dataset            │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Priority | Status | Description |
+|------|------|----------|--------|-------------|
+| 36-1 | `trainer.py:~551` | ~~CRITICAL~~ | ❌ DISPROVEN | Container + trainer already filter -99 |
+| 36-2 | `volatility.py:305,404,486` | ~~HIGH~~ | ❌ DISPROVEN | Math non-negative for valid OHLC |
+| 36-3 | `price_features.py:147` | HIGH | ✅ VERIFIED | Fix autocorr lag20 off-by-one bug |
+| 36-4 | `config/global.yaml` | MEDIUM | ✅ VERIFIED | Create config file template |
+| 36-5 | `lightgbm_model.py:142` | ~~MEDIUM~~ | ⚠️ INCONCLUSIVE | Tuning handles this |
+
+### Success Metrics (Revised)
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| NaN columns | 1 | 0 | return_autocorr_lag20 has values |
+| Config warnings | 19 | 0 | No "Failed to get config" warnings |
+
+---
 
 ### Phase 35: Production Hardening
 

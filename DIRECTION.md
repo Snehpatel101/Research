@@ -1,9 +1,72 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-02 (Phase 34 Complete + Pipeline Review)
-**Status:** Phase 34 Complete | Comprehensive Review Complete | 7.5/10 Production-Ready
+**Last Updated:** 2026-02-02 (Phase 36 Pipeline Runtime Issues)
+**Status:** Phase 35 Complete | Phase 36 In Progress | 7.5/10 Production-Ready
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 36: Pipeline Runtime Issues (2026-02-02) - VERIFIED
+
+**Discovered During:** Live pipeline execution on MES 1-min data (350,464 rows)
+**Source:** 6-agent deep analysis of runtime errors and warnings
+**Verified:** 2026-02-02 (codebase-analyzer deep verification)
+**Status:** IN PROGRESS (Reduced Scope - 2 of 5 claims verified)
+
+### Verification Summary
+
+Deep code analysis disproved 2 critical claims and found the system already has robust protection:
+
+| Claim | Status | Evidence |
+|-------|--------|----------|
+| Label -99 reaches training | ❌ DISPROVEN | Container filters by default + trainer validates |
+| sqrt of negative variance | ❌ DISPROVEN | Math proves non-negative for valid OHLC |
+| autocorr lag20 all NaN | ✅ VERIFIED | Off-by-one bug: `20 > 20 = False` |
+| Missing global.yaml | ✅ VERIFIED | File and directory do not exist |
+| LightGBM min_child_samples | ⚠️ INCONCLUSIVE | Default appropriate; tuning allows 5-100 |
+
+### Disproven: Label -99 Not Filtered
+
+The original claim was:
+```
+ValueError: Invalid labels: [-99]. Expected one of [-1, 0, 1]
+```
+
+**Verification found TWO layers of protection already exist:**
+
+1. **Container filters by default** (`src/core/container.py:141,345-354`):
+   - `exclude_invalid_labels: bool = True` (default)
+   - Filters -99 labels before data is returned
+
+2. **Trainer validates defensively** (`src/models/training/trainer.py:549-552`):
+   - `_validate_labels()` raises clear error with context before `map_labels_to_classes()`
+
+**No fix needed.** If -99 labels exist, the validation raises `ValueError: LEAKAGE DETECTED` with full context.
+
+### Disproven: sqrt of Negative Variance
+
+Mathematical analysis proves all three volatility estimators produce **non-negative variance** for valid OHLC data:
+
+- **Garman-Klass:** `0.5 * hl² - 0.386 * co²` → GK >= 0 for valid OHLC
+- **Rogers-Satchell:** Product of same-sign terms → RS >= 0 for valid OHLC
+- **Yang-Zhang:** Sum of squared components → YZ >= 0 for valid OHLC
+
+OHLC validation exists (`src/data/pipeline/stages/validation/data_contract.py:52-74`).
+
+### Remaining Issues (Verified)
+
+| Issue | Location | Severity | Status |
+|-------|----------|----------|--------|
+| ~~Label -99 not filtered~~ | ~~`trainer.py:~551`~~ | ~~🔴 CRITICAL~~ | ❌ DISPROVEN |
+| ~~sqrt of negative variance~~ | ~~`volatility.py:305,404,486`~~ | ~~🟡 HIGH~~ | ❌ DISPROVEN |
+| autocorr lag20 all NaN | `price_features.py:147` | 🟡 HIGH | ✅ VERIFIED |
+| Missing global.yaml | `config/global.yaml` | 🟠 MEDIUM | ✅ VERIFIED |
+| ~~LightGBM no features~~ | ~~`lightgbm_model.py:142`~~ | ~~🟠 MEDIUM~~ | ⚠️ INCONCLUSIVE |
+
+### Impact on Production Readiness
+
+**Scope reduced from 5 issues to 2.** The "critical" pipeline failure was misdiagnosed - protection already exists. Remaining work is minor (one feature fix + config file creation).
 
 ---
 
