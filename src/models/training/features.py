@@ -287,11 +287,11 @@ class TrainerFeaturesMixin:
         # Import using importlib to avoid circular imports through __init__.py chain
         import importlib
 
-        feature_sets_config = importlib.import_module("src.pipeline.config.feature_sets")
+        feature_sets_config = importlib.import_module("src.data.pipeline.config.feature_sets")
         FEATURE_SET_ALIASES = feature_sets_config.FEATURE_SET_ALIASES
         FEATURE_SET_DEFINITIONS = feature_sets_config.FEATURE_SET_DEFINITIONS
 
-        feature_sets_utils = importlib.import_module("src.pipeline.utils.feature_sets")
+        feature_sets_utils = importlib.import_module("src.data.pipeline.utils.feature_sets")
         resolve_feature_set = feature_sets_utils.resolve_feature_set
 
         feature_set_name = self.config.feature_set
@@ -418,7 +418,7 @@ class TrainerFeaturesMixin:
         """
         import importlib
 
-        feature_sets_config = importlib.import_module("src.pipeline.config.feature_sets")
+        feature_sets_config = importlib.import_module("src.data.pipeline.config.feature_sets")
         FEATURE_SET_ALIASES = feature_sets_config.FEATURE_SET_ALIASES
 
         # Get the optimal feature set for this model

@@ -105,7 +105,8 @@ def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any
     return {
         "version": METADATA_COLUMNS_VERSION,
         "metadata_columns_found": list(metadata_found),
-        "valid": True,  # Simplified validation
+        "is_valid": True,  # Simplified validation
+        "unexpected_columns": [],  # No unexpected columns in simplified validation
     }
 
 
