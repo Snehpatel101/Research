@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from src.data.pipeline.constants import EXCLUDED_COLUMNS, EXCLUDED_PREFIXES
 from src.data.pipeline.stages.scaling import (
     FeatureScaler,
     ScalerConfig,
@@ -43,44 +44,12 @@ def _identify_feature_columns(df: pd.DataFrame) -> list[str]:
     Returns:
         List of feature column names to scale
     """
-    excluded_cols = {
-        "datetime",
-        "symbol",
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "timestamp",
-        "date",
-        "time",
-        "timeframe",
-        "session_id",
-        "missing_bar",
-        "roll_event",
-        "roll_window",
-        "filled",
-    }
-    excluded_prefixes = (
-        "label_",
-        "bars_to_hit_",
-        "mae_",
-        "mfe_",
-        "quality_",
-        "sample_weight_",
-        "touch_type_",
-        "pain_to_gain_",
-        "time_weighted_dd_",
-        "fwd_return_",
-        "fwd_return_log_",
-        "time_to_hit_",
-    )
-
+    # Use canonical constants from pipeline.constants
     feature_cols = []
     for col in df.columns:
-        if col.lower() in excluded_cols:
+        if col.lower() in EXCLUDED_COLUMNS:
             continue
-        if any(col.startswith(prefix) for prefix in excluded_prefixes):
+        if any(col.startswith(prefix) for prefix in EXCLUDED_PREFIXES):
             continue
         if df[col].dtype in [np.float64, np.float32, np.int64, np.int32, float, int]:
             feature_cols.append(col)

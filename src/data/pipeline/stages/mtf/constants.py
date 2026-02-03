@@ -8,8 +8,6 @@ NOTE: This module imports canonical timeframe definitions from src.core.common.t
 Do not redefine timeframe constants here - use the common module instead.
 """
 
-from enum import Enum
-
 # Import canonical timeframe definitions from the single source of truth
 from src.core.common.timeframes import (
     CANONICAL_TIMEFRAMES,
@@ -23,12 +21,8 @@ from src.core.common.timeframes import (
 )
 
 
-class MTFMode(str, Enum):
-    """Mode for MTF feature generation."""
-
-    BARS = "bars"  # Only generate MTF OHLCV bars
-    INDICATORS = "indicators"  # Only generate MTF indicators
-    BOTH = "both"  # Generate both bars and indicators
+# MTFMode imported from canonical location (src/config/data)
+from src.config.data import MTFMode
 
 
 # Supported MTF timeframes with their minute equivalents

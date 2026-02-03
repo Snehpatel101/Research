@@ -21,7 +21,12 @@ from src.core.types import ModelFamily
 
 
 class ScalerType(str, Enum):
-    """Supported scaler types for data normalization."""
+    """
+    Supported scaler types for data normalization.
+
+    NOTE: This is a local copy for model data requirements. The canonical
+    definition is in src/config/data.py. These are kept in sync.
+    """
 
     NONE = "none"
     STANDARD = "standard"

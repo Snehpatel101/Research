@@ -24,14 +24,6 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-def _safe_divide(
-    numerator: pd.Series, denominator: pd.Series, fill_value: float = np.nan
-) -> pd.Series:
-    """Safely divide, returning fill_value when denominator is zero or NaN."""
-    result = numerator / denominator.replace(0, np.nan)
-    return result.fillna(fill_value)
-
-
 def add_amihud_illiquidity(
     df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:

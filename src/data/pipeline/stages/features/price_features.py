@@ -12,6 +12,8 @@ import pandas as pd
 
 from src.core.utils import safe_divide
 
+from .numba_functions import calculate_rolling_autocorr_numba
+
 logger = logging.getLogger(__name__)
 
 
@@ -146,12 +148,10 @@ def add_autocorrelation(
         # pandas.Series.autocorr(lag=N) requires at least N+2 data points
         # Bug was: lag+1 gave window=21 for lag=20, but autocorr needs window>=22
         window = max(period, lag + 2)
-        autocorr = (
-            returns.rolling(window)
-            .apply(lambda x: x.autocorr(lag=lag) if len(x) >= lag + 2 else np.nan, raw=False)  # noqa: B023
-            .shift(1)
-        )
-        df[col] = autocorr
+        # Use Numba-optimized autocorrelation (10-100x faster than .apply(lambda))
+        autocorr_values = calculate_rolling_autocorr_numba(returns.values, window, lag)
+        # Apply shift(1) for anti-lookahead
+        df[col] = pd.Series(autocorr_values, index=df.index).shift(1)
         feature_metadata[col] = f"Return autocorrelation lag {lag} ({window}-period, lagged)"
 
     return df

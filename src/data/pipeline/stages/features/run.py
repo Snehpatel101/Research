@@ -18,6 +18,7 @@ import pandas as pd
 from joblib import Parallel, delayed
 
 from src.core.exceptions import FeatureSchemaError
+from src.data.pipeline.constants import EXCLUDED_COLUMNS
 from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 from src.data.store.store import FeatureStore
 
@@ -392,22 +393,8 @@ def run_feature_engineering(
         feature_store = FeatureStore(cache_dir=feature_cache_dir)
         logger.info(f"FeatureStore initialized at: {feature_cache_dir}")
 
-        # OHLCV columns to exclude from feature count
-        ohlcv_cols = {
-            "datetime",
-            "symbol",
-            "open",
-            "high",
-            "low",
-            "close",
-            "volume",
-            "timeframe",
-            "session_id",
-            "missing_bar",
-            "roll_event",
-            "roll_window",
-            "filled",
-        }
+        # OHLCV columns to exclude from feature count (use canonical constant)
+        ohlcv_cols = EXCLUDED_COLUMNS
 
         # Build list of all symbol/timeframe combinations
         tasks = [(symbol, tf) for symbol in config.symbols for tf in output_timeframes]

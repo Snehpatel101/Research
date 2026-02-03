@@ -233,6 +233,84 @@ def calculate_stochastic_numba(
 
 
 @jit(nopython=True)
+def calculate_rolling_autocorr_numba(returns: np.ndarray, window: int, lag: int) -> np.ndarray:
+    """
+    Calculate rolling autocorrelation using Numba.
+
+    Computes autocorrelation (Pearson correlation between series and its lagged self)
+    over a rolling window. This is 10-100x faster than pandas .apply(lambda).
+
+    Parameters
+    ----------
+    returns : np.ndarray
+        Return values (e.g., from pct_change)
+    window : int
+        Rolling window size
+    lag : int
+        Lag for autocorrelation (must be < window - 1)
+
+    Returns
+    -------
+    np.ndarray
+        Rolling autocorrelation values with NaN for initial warmup period
+    """
+    n = len(returns)
+    result = np.full(n, np.nan)
+
+    for i in range(window - 1, n):
+        window_data = returns[i - window + 1 : i + 1]
+
+        # Need at least lag + 2 points for meaningful autocorrelation
+        valid_count = 0
+        for j in range(len(window_data)):
+            if not np.isnan(window_data[j]):
+                valid_count += 1
+
+        if valid_count < lag + 2:
+            continue
+
+        # Autocorrelation: correlation between series and lagged series
+        x = window_data[lag:]  # Series from position lag to end
+        y = window_data[:-lag]  # Series from start to position -lag
+
+        # Handle NaN values in Pearson correlation calculation
+        # Count valid pairs
+        valid_pairs = 0
+        x_sum = 0.0
+        y_sum = 0.0
+        for j in range(len(x)):
+            if not np.isnan(x[j]) and not np.isnan(y[j]):
+                valid_pairs += 1
+                x_sum += x[j]
+                y_sum += y[j]
+
+        if valid_pairs < 2:
+            continue
+
+        x_mean = x_sum / valid_pairs
+        y_mean = y_sum / valid_pairs
+
+        # Calculate correlation
+        num = 0.0
+        x_sq_sum = 0.0
+        y_sq_sum = 0.0
+
+        for j in range(len(x)):
+            if not np.isnan(x[j]) and not np.isnan(y[j]):
+                x_dev = x[j] - x_mean
+                y_dev = y[j] - y_mean
+                num += x_dev * y_dev
+                x_sq_sum += x_dev * x_dev
+                y_sq_sum += y_dev * y_dev
+
+        denom = np.sqrt(x_sq_sum * y_sq_sum)
+        if denom > 0:
+            result[i] = num / denom
+
+    return result
+
+
+@jit(nopython=True)
 def calculate_adx_numba(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -322,5 +400,6 @@ __all__ = [
     "calculate_rsi_numba",
     "calculate_atr_numba",
     "calculate_stochastic_numba",
+    "calculate_rolling_autocorr_numba",
     "calculate_adx_numba",
 ]

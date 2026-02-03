@@ -310,7 +310,6 @@ class DataCleaner:
         logger.info(f"Detecting outliers using method: {self.outlier_method}")
 
         df = df.copy()
-        len(df)
 
         outliers_by_method = {}
         total_outlier_mask = pd.Series(False, index=df.index)

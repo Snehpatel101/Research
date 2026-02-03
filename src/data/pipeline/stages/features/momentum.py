@@ -10,6 +10,8 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.math_utils import safe_divide
+
 from .numba_functions import (
     calculate_ema_numba,
     calculate_rsi_numba,
@@ -17,11 +19,6 @@ from .numba_functions import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-    """Safely divide, returning NaN when denominator is zero."""
-    return numerator / denominator.replace(0, np.nan)
 
 
 def add_rsi(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14) -> pd.DataFrame:
@@ -112,13 +109,15 @@ def add_macd(
     macd_line_s = pd.Series(macd_line, index=df.index)
     macd_signal_s = pd.Series(macd_signal, index=df.index)
     macd_cross_up = (
-        (macd_line_s > macd_signal_s)
-        & (macd_line_s.shift(1) <= macd_signal_s.shift(1))
-    ).astype(int).values
+        ((macd_line_s > macd_signal_s) & (macd_line_s.shift(1) <= macd_signal_s.shift(1)))
+        .astype(int)
+        .values
+    )
     macd_cross_down = (
-        (macd_line_s < macd_signal_s)
-        & (macd_line_s.shift(1) >= macd_signal_s.shift(1))
-    ).astype(int).values
+        ((macd_line_s < macd_signal_s) & (macd_line_s.shift(1) >= macd_signal_s.shift(1)))
+        .astype(int)
+        .values
+    )
 
     # Batch concat to avoid fragmentation
     new_cols = {
@@ -221,7 +220,9 @@ def add_williams_r(
 
     # Safe division: (high_max - low_min) could be 0 when price is flat
     # ANTI-LOOKAHEAD: shift(1) ensures Williams %R at bar[t] uses data up to bar[t-1]
-    williams_r_raw = -100 * _safe_divide(high_max - df["close"], high_max - low_min)
+    williams_r_raw = -100 * safe_divide(
+        high_max - df["close"], high_max - low_min, fill_value=np.nan
+    )
     df["williams_r"] = williams_r_raw.shift(1)
 
     feature_metadata["williams_r"] = f"Williams %R ({period}, lagged)"
@@ -287,12 +288,14 @@ def add_cci(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 20
     logger.info(f"Adding CCI with period: {period}")
 
     tp = (df["high"] + df["low"] + df["close"]) / 3
-    sma_tp = tp.rolling(window=period).mean()
-    mad = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean())
+    sma_tp = tp.rolling(window=period, min_periods=period).mean()
+    # Vectorized MAD: compute deviation from rolling mean, then rolling mean of absolute deviations
+    # This is 10-100x faster than .apply(lambda x: np.abs(x - x.mean()).mean())
+    mad = (tp - sma_tp).abs().rolling(window=period, min_periods=period).mean()
 
     # Safe division: mad could be 0 when price is constant
     # ANTI-LOOKAHEAD: shift(1) ensures CCI at bar[t] uses data up to bar[t-1]
-    cci_raw = _safe_divide(tp - sma_tp, 0.015 * mad)
+    cci_raw = safe_divide(tp - sma_tp, 0.015 * mad, fill_value=np.nan)
     col_name = f"cci_{period}"
     df[col_name] = cci_raw.shift(1)
 
@@ -333,7 +336,7 @@ def add_mfi(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
 
     # Safe division: mf_neg could be 0 when no down periods
     # ANTI-LOOKAHEAD: shift(1) ensures MFI at bar[t] uses data up to bar[t-1]
-    mfr = _safe_divide(mf_pos, mf_neg)
+    mfr = safe_divide(mf_pos, mf_neg, fill_value=np.nan)
     mfi_raw = 100 - (100 / (1 + mfr))
     col_name = f"mfi_{period}"
     df[col_name] = mfi_raw.shift(1)

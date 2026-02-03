@@ -40,7 +40,17 @@ class FeatureMode(str, Enum):
 
 
 class MTFMode(str, Enum):
-    """Multi-timeframe mode for models."""
+    """
+    Multi-timeframe mode for MODEL CONTRACTS.
+
+    This describes what MTF mode a model expects as input, not what the
+    pipeline generates. For pipeline generation modes, see src.config.data.MTFMode.
+
+    Values:
+        NONE: Model uses single timeframe only (no MTF features)
+        INDICATORS: Model expects MTF indicator features flattened into primary TF
+        MULTI_STREAM: Model expects 4D multi-timeframe tensor input
+    """
 
     NONE = "none"  # Single timeframe, no MTF
     INDICATORS = "indicators"  # MTF indicator features added to primary TF
@@ -58,7 +68,7 @@ class DataContractSchema:
 
     # Required OHLCV columns
     REQUIRED_OHLCV: tuple[str, ...] = (
-        "timestamp",
+        "datetime",
         "open",
         "high",
         "low",

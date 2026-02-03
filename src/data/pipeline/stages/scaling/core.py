@@ -55,7 +55,6 @@ Updated: 2025-12-24 - Added model-family scaling documentation
 
 import logging
 from dataclasses import asdict, dataclass
-from enum import Enum
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -67,13 +66,8 @@ logger.addHandler(logging.NullHandler())
 # =============================================================================
 
 
-class ScalerType(Enum):
-    """Supported scaler types."""
-
-    STANDARD = "standard"
-    ROBUST = "robust"
-    MINMAX = "minmax"
-    NONE = "none"
+# ScalerType imported from canonical location (src/config/data)
+from src.config.data import ScalerType
 
 
 @dataclass
@@ -108,24 +102,17 @@ class ScalerConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ScalerConfig":
+        raw_range = d.get("clip_range", (-5.0, 5.0))
+        clip_range: tuple[float, float] = (float(raw_range[0]), float(raw_range[1]))
         return cls(
             scaler_type=d.get("scaler_type", "robust"),
             clip_outliers=d.get("clip_outliers", True),
-            clip_range=tuple(d.get("clip_range", (-5.0, 5.0))),
+            clip_range=clip_range,
         )
 
 
-class FeatureCategory(Enum):
-    """Feature categories for scaling strategy selection."""
-
-    RETURNS = "returns"  # Already normalized returns/percentages
-    OSCILLATOR = "oscillator"  # RSI, Stochastic (0-100 bounded)
-    PRICE_LEVEL = "price_level"  # Raw prices, SMAs
-    VOLATILITY = "volatility"  # ATR, std dev features
-    VOLUME = "volume"  # OBV, volume features
-    TEMPORAL = "temporal"  # Sin/cos encoded time features
-    BINARY = "binary"  # 0/1 flags
-    UNKNOWN = "unknown"  # Default category
+# FeatureCategory imported from canonical location (src/config/data)
+from src.config.data import FeatureCategory
 
 
 # Feature categorization rules

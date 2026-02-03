@@ -10,14 +10,11 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.math_utils import safe_divide
+
 from .numba_functions import calculate_ema_numba, calculate_sma_numba
 
 logger = logging.getLogger(__name__)
-
-
-def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-    """Safely divide, returning NaN when denominator is zero."""
-    return numerator / denominator.replace(0, np.nan)
 
 
 def add_sma(
@@ -54,7 +51,9 @@ def add_sma(
 
         # Price position relative to SMA uses previous close vs shifted SMA
         # This compares close[t-1] to SMA[t-1], available at bar[t]
-        df[f"price_to_sma_{period}"] = _safe_divide(df["close"].shift(1), df[f"sma_{period}"]) - 1
+        df[f"price_to_sma_{period}"] = (
+            safe_divide(df["close"].shift(1), df[f"sma_{period}"], fill_value=np.nan) - 1
+        )
 
         feature_metadata[f"sma_{period}"] = f"{period}-period Simple Moving Average (lagged)"
         feature_metadata[f"price_to_sma_{period}"] = f"Price deviation from SMA-{period} (lagged)"
@@ -96,7 +95,9 @@ def add_ema(
 
         # Price position relative to EMA uses previous close vs shifted EMA
         # This compares close[t-1] to EMA[t-1], available at bar[t]
-        df[f"price_to_ema_{period}"] = _safe_divide(df["close"].shift(1), df[f"ema_{period}"]) - 1
+        df[f"price_to_ema_{period}"] = (
+            safe_divide(df["close"].shift(1), df[f"ema_{period}"], fill_value=np.nan) - 1
+        )
 
         feature_metadata[f"ema_{period}"] = f"{period}-period Exponential Moving Average (lagged)"
         feature_metadata[f"price_to_ema_{period}"] = f"Price deviation from EMA-{period} (lagged)"

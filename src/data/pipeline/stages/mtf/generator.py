@@ -204,15 +204,19 @@ class MTFFeatureGenerator:
         -------
         pd.DataFrame
             DataFrame with MTF bar columns added (open_4h, high_4h, etc.)
+
+        Notes
+        -----
+        No copy needed here - we're only adding new columns with suffixed names.
+        The caller owns df_tf and expects it to be modified.
         """
-        result = df_tf.copy()
         tf_suffix = self._get_tf_suffix(timeframe)
 
         # Add OHLCV columns with timeframe suffix
         for col in REQUIRED_OHLCV_COLS:
-            result[f"{col}{tf_suffix}"] = result[col]
+            df_tf[f"{col}{tf_suffix}"] = df_tf[col]
 
-        return result
+        return df_tf
 
     def compute_mtf_indicators(self, df_tf: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         """
@@ -229,59 +233,66 @@ class MTFFeatureGenerator:
         -------
         pd.DataFrame
             DataFrame with indicator columns added
+
+        Notes
+        -----
+        No copy needed here - we're only adding new indicator columns.
+        The caller owns df_tf and expects it to be modified.
         """
-        result = df_tf.copy()
         tf_suffix = self._get_tf_suffix(timeframe)
 
         # Moving Averages
         for period in [20, 50]:
-            result[f"sma_{period}{tf_suffix}"] = (
-                result["close"].rolling(period, min_periods=period).mean()
+            df_tf[f"sma_{period}{tf_suffix}"] = (
+                df_tf["close"].rolling(period, min_periods=period).mean()
             )
         for period in [9, 21]:
-            result[f"ema_{period}{tf_suffix}"] = (
-                result["close"].ewm(span=period, min_periods=period, adjust=False).mean()
+            df_tf[f"ema_{period}{tf_suffix}"] = (
+                df_tf["close"].ewm(span=period, min_periods=period, adjust=False).mean()
             )
 
-        # RSI
-        delta = result["close"].diff()
+        # RSI - Use Wilder's smoothing (EMA with alpha=1/period) for industry standard
+        # This matches the implementation in numba_functions.calculate_rsi_numba
+        delta = df_tf["close"].diff()
         gain = delta.where(delta > 0, 0.0)
         loss = -delta.where(delta < 0, 0.0)
-        avg_gain = gain.rolling(14, min_periods=14).mean()
-        avg_loss = loss.rolling(14, min_periods=14).mean()
+        # Wilder's smoothing: alpha = 1/period (NOT rolling mean!)
+        alpha = 1.0 / 14
+        avg_gain = gain.ewm(alpha=alpha, min_periods=14, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=alpha, min_periods=14, adjust=False).mean()
         rs = avg_gain / avg_loss.replace(0, np.inf)
-        result[f"rsi_14{tf_suffix}"] = 100 - (100 / (1 + rs))
+        df_tf[f"rsi_14{tf_suffix}"] = 100 - (100 / (1 + rs))
 
         # ATR
-        high_low = result["high"] - result["low"]
-        high_close = (result["high"] - result["close"].shift(1)).abs()
-        low_close = (result["low"] - result["close"].shift(1)).abs()
+        high_low = df_tf["high"] - df_tf["low"]
+        high_close = (df_tf["high"] - df_tf["close"].shift(1)).abs()
+        low_close = (df_tf["low"] - df_tf["close"].shift(1)).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-        result[f"atr_14{tf_suffix}"] = tr.rolling(14, min_periods=14).mean()
+        df_tf[f"atr_14{tf_suffix}"] = tr.rolling(14, min_periods=14).mean()
 
         # Bollinger Band Position
         bb_period = 20
-        bb_middle = result["close"].rolling(bb_period, min_periods=bb_period).mean()
-        bb_std = result["close"].rolling(bb_period, min_periods=bb_period).std()
+        bb_middle = df_tf["close"].rolling(bb_period, min_periods=bb_period).mean()
+        bb_std = df_tf["close"].rolling(bb_period, min_periods=bb_period).std()
         bb_upper = bb_middle + 2 * bb_std
         bb_lower = bb_middle - 2 * bb_std
         band_range = bb_upper - bb_lower
         band_range_safe = band_range.replace(0, np.nan)
-        result[f"bb_position{tf_suffix}"] = (result["close"] - bb_lower) / band_range_safe
+        df_tf[f"bb_position{tf_suffix}"] = (df_tf["close"] - bb_lower) / band_range_safe
 
         # MACD Histogram
-        ema_12 = result["close"].ewm(span=12, min_periods=12, adjust=False).mean()
-        ema_26 = result["close"].ewm(span=26, min_periods=26, adjust=False).mean()
+        ema_12 = df_tf["close"].ewm(span=12, min_periods=12, adjust=False).mean()
+        ema_26 = df_tf["close"].ewm(span=26, min_periods=26, adjust=False).mean()
         macd_line = ema_12 - ema_26
         signal_line = macd_line.ewm(span=9, min_periods=9, adjust=False).mean()
-        result[f"macd_hist{tf_suffix}"] = macd_line - signal_line
+        df_tf[f"macd_hist{tf_suffix}"] = macd_line - signal_line
 
         # Price to SMA Ratio
-        sma_20 = result[f"sma_20{tf_suffix}"]
+        sma_20 = df_tf[f"sma_20{tf_suffix}"]
         sma_20_safe = sma_20.replace(0, np.nan)
-        result[f"close_sma20_ratio{tf_suffix}"] = result["close"] / sma_20_safe
+        df_tf[f"close_sma20_ratio{tf_suffix}"] = df_tf["close"] / sma_20_safe
 
-        return result
+        return df_tf
 
     def align_to_base_tf(
         self, df_base: pd.DataFrame, df_mtf: pd.DataFrame, mtf_columns: list[str]
@@ -313,8 +324,10 @@ class MTFFeatureGenerator:
         if "datetime" not in df_mtf.columns:
             raise ValueError("df_mtf must have 'datetime' column")
 
+        # Copy df_base since we set_index (mutation safety for caller's data)
         df_base_idx = df_base.set_index("datetime").copy()
-        df_mtf_idx = df_mtf.set_index("datetime")[mtf_columns].copy()
+        # No copy needed for df_mtf - we only select columns and shift, creating new data
+        df_mtf_idx = df_mtf.set_index("datetime")[mtf_columns]
 
         # ANTI-LOOKAHEAD: Shift MTF data by 1 period
         # This ensures we use COMPLETED higher TF bars only

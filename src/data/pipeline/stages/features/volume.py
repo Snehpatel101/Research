@@ -10,12 +10,9 @@ import logging
 import numpy as np
 import pandas as pd
 
+from src.core.utils.math_utils import safe_divide
+
 logger = logging.getLogger(__name__)
-
-
-def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
-    """Safely divide, returning NaN when denominator is zero."""
-    return numerator / denominator.replace(0, np.nan)
 
 
 def add_volume_features(
@@ -64,7 +61,7 @@ def add_volume_features(
     # Volume z-score (safe: std could be 0 when volume is constant)
     vol_mean = df["volume"].rolling(window=period).mean()
     vol_std = df["volume"].rolling(window=period).std()
-    volume_zscore_raw = _safe_divide(df["volume"] - vol_mean, vol_std)
+    volume_zscore_raw = safe_divide(df["volume"] - vol_mean, vol_std, fill_value=np.nan)
     df["volume_zscore"] = volume_zscore_raw.shift(1)
 
     feature_metadata["obv"] = "On Balance Volume (lagged)"
@@ -270,7 +267,7 @@ def add_twap_features(
         # Price to TWAP ratio - compare lagged close to lagged TWAP
         ratio_col = f"price_to_twap_{period}"
         close_lagged = df["close"].shift(1)
-        df[ratio_col] = _safe_divide(close_lagged, df[twap_col])
+        df[ratio_col] = safe_divide(close_lagged, df[twap_col], fill_value=np.nan)
         feature_metadata[ratio_col] = f"Close/TWAP ratio ({period}-period, lagged)"
 
         # TWAP slope (momentum) - ANTI-LOOKAHEAD: shift(1)
