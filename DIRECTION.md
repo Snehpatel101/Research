@@ -7,66 +7,69 @@
 
 ---
 
-## Phase 36: Pipeline Runtime Issues (2026-02-02) - VERIFIED
+## Phase 36: Pipeline Runtime Issues (2026-02-02) - COMPLETE
 
 **Discovered During:** Live pipeline execution on MES 1-min data (350,464 rows)
 **Source:** 6-agent deep analysis of runtime errors and warnings
-**Verified:** 2026-02-02 (codebase-analyzer deep verification)
-**Status:** IN PROGRESS (Reduced Scope - 2 of 5 claims verified)
+**Completed:** 2026-02-02
+**Status:** ✅ COMPLETE - All 4 fixes implemented
 
-### Verification Summary
+### Lesson Learned: Static Analysis vs Runtime Reality
 
-Deep code analysis disproved 2 critical claims and found the system already has robust protection:
+Initial static code analysis incorrectly "disproved" 2 critical claims by finding theoretical protections that weren't triggered in the actual runtime code path. **Actual pipeline execution confirmed all issues were real.**
 
-| Claim | Status | Evidence |
-|-------|--------|----------|
-| Label -99 reaches training | ❌ DISPROVEN | Container filters by default + trainer validates |
-| sqrt of negative variance | ❌ DISPROVEN | Math proves non-negative for valid OHLC |
-| autocorr lag20 all NaN | ✅ VERIFIED | Off-by-one bug: `20 > 20 = False` |
-| Missing global.yaml | ✅ VERIFIED | File and directory do not exist |
-| LightGBM min_child_samples | ⚠️ INCONCLUSIVE | Default appropriate; tuning allows 5-100 |
+The key insight: The -99 label filtering existed in the container, but the **Optuna hyperparameter tuning code path bypassed** this protection entirely. Static analysis found the defense; runtime testing found the hole.
 
-### Disproven: Label -99 Not Filtered
+### Fixes Implemented
 
-The original claim was:
+| Issue | Fix | Files Changed |
+|-------|-----|---------------|
+| Label -99 reaches training | Added filter_invalid_labels() to PreparedData; filter in tuning and training services | 3 files |
+| sqrt of negative variance | Added np.maximum(..., 0) before sqrt | volatility.py (3 locations) |
+| autocorr lag20 all NaN | Changed window to max(period, lag+1) | price_features.py |
+| Missing global.yaml | Created config/global.yaml | New file |
+
+### Code Changes Summary
+
+**1. Label -99 Filtering (3 files):**
+```python
+# src/data/adapters/preparation.py - New method
+def filter_invalid_labels(self, invalid_label=-99) -> PreparedData:
+    """Filter samples with -99 sentinel value."""
+
+# src/models/training/services/model_training.py
+prepared = prepared.filter_invalid_labels()  # Before training
+
+# src/models/training/services/hyperparameter_tuning.py
+valid_mask = y_series != INVALID_LABEL  # Before Optuna
 ```
-ValueError: Invalid labels: [-99]. Expected one of [-1, 0, 1]
+
+**2. Volatility sqrt Protection:**
+```python
+# Before (vulnerable)
+df["gk_vol"] = np.sqrt(gk.rolling(window).mean())
+
+# After (safe)
+df["gk_vol"] = np.sqrt(np.maximum(gk.rolling(window).mean(), 0))
 ```
 
-**Verification found TWO layers of protection already exist:**
+**3. Autocorrelation Fix:**
+```python
+# Before (bug: 20 > 20 = False)
+returns.rolling(period).apply(lambda x: x.autocorr(lag) if len(x) > lag else np.nan)
 
-1. **Container filters by default** (`src/core/container.py:141,345-354`):
-   - `exclude_invalid_labels: bool = True` (default)
-   - Filters -99 labels before data is returned
-
-2. **Trainer validates defensively** (`src/models/training/trainer.py:549-552`):
-   - `_validate_labels()` raises clear error with context before `map_labels_to_classes()`
-
-**No fix needed.** If -99 labels exist, the validation raises `ValueError: LEAKAGE DETECTED` with full context.
-
-### Disproven: sqrt of Negative Variance
-
-Mathematical analysis proves all three volatility estimators produce **non-negative variance** for valid OHLC data:
-
-- **Garman-Klass:** `0.5 * hl² - 0.386 * co²` → GK >= 0 for valid OHLC
-- **Rogers-Satchell:** Product of same-sign terms → RS >= 0 for valid OHLC
-- **Yang-Zhang:** Sum of squared components → YZ >= 0 for valid OHLC
-
-OHLC validation exists (`src/data/pipeline/stages/validation/data_contract.py:52-74`).
-
-### Remaining Issues (Verified)
-
-| Issue | Location | Severity | Status |
-|-------|----------|----------|--------|
-| ~~Label -99 not filtered~~ | ~~`trainer.py:~551`~~ | ~~🔴 CRITICAL~~ | ❌ DISPROVEN |
-| ~~sqrt of negative variance~~ | ~~`volatility.py:305,404,486`~~ | ~~🟡 HIGH~~ | ❌ DISPROVEN |
-| autocorr lag20 all NaN | `price_features.py:147` | 🟡 HIGH | ✅ VERIFIED |
-| Missing global.yaml | `config/global.yaml` | 🟠 MEDIUM | ✅ VERIFIED |
-| ~~LightGBM no features~~ | ~~`lightgbm_model.py:142`~~ | ~~🟠 MEDIUM~~ | ⚠️ INCONCLUSIVE |
+# After (fixed)
+window = max(period, lag + 1)
+returns.rolling(window).apply(lambda x: x.autocorr(lag) if len(x) >= lag + 1 else np.nan)
+```
 
 ### Impact on Production Readiness
 
-**Scope reduced from 5 issues to 2.** The "critical" pipeline failure was misdiagnosed - protection already exists. Remaining work is minor (one feature fix + config file creation).
+**All blocking issues resolved.** Pipeline should now complete successfully:
+- No ValueError from -99 labels
+- No RuntimeWarning from sqrt
+- return_autocorr_lag20 feature has values
+- No config file warnings
 
 ---
 

@@ -31,45 +31,59 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ### Phase 36: Pipeline Runtime Issues
 
-**Status:** 📋 IN PROGRESS (Reduced Scope - 2 verified, 2 disproven, 1 inconclusive)
-**Priority:** MEDIUM (downgraded after verification)
-**Tasks:** 0/2 (only 2 tasks remain after verification)
+**Status:** ✅ COMPLETE
+**Priority:** CRITICAL (P0) - Was blocking pipeline execution
+**Tasks:** 4/4 complete (1 deferred)
 **Source:** Live pipeline execution on MES 1-min data, 6-agent analysis (2026-02-02)
-**Verified:** 2026-02-02 (codebase-analyzer deep verification)
+**Completed:** 2026-02-02
 
 ---
 
-#### Task 36-1: Filter Label -99 Before Training ❌ DISPROVEN
+#### Task 36-1: Filter Label -99 Before Training ✅ COMPLETE
 
-**File:** `src/models/training/trainer.py`
-**Line:** 549-552
-**Status:** ❌ DISPROVEN - Protection already exists
+**Files:** Multiple
+**Status:** ✅ COMPLETE - Filtering added at 3 levels
 
-##### Verification Evidence
+##### Problem (Confirmed by Runtime)
 
-The system already has **two layers of protection**:
+Initial static analysis found container filtering, but **actual pipeline execution showed -99 labels reaching Optuna trials**. The Optuna hyperparameter tuning code path bypassed the container's protection.
 
-1. **Container filters by default** (`src/core/container.py:141,345-354`):
+```
+[W 2026-02-02 22:57:58,275] Trial 0 failed with parameters: {...} because of the following error:
+ValueError('Invalid labels: [-99]. Expected one of [-1, 0, 1]').
+```
+
+##### Fix Implemented
+
+Added filtering at 3 levels for defense in depth:
+
+1. **PreparedData.filter_invalid_labels()** (`src/data/adapters/preparation.py`):
    ```python
-   exclude_invalid_labels: bool = True  # Default
-
-   if exclude_invalid_labels:
-       invalid_mask = df[label_col] == INVALID_LABEL
-       if invalid_mask.sum() > 0:
-           logger.info(f"{split_name}: Filtering {n_invalid} rows with invalid label ({INVALID_LABEL})")
-           df = df[~invalid_mask].reset_index(drop=True)
+   def filter_invalid_labels(self, invalid_label: int = -99) -> "PreparedData":
+       """Filter out samples with invalid labels."""
+       train_valid = self.y_train != invalid_label
+       # ... returns new PreparedData with invalid samples removed
    ```
 
-2. **Trainer validates defensively** (`src/models/training/trainer.py:549-552`):
+2. **ModelTrainingService** (`src/models/training/services/model_training.py`):
    ```python
-   # LEAKAGE PREVENTION: Validate no invalid labels (-99) in training data
-   _validate_labels(y_train_series, "training labels")
-   _validate_labels(y_val_series, "validation labels")
+   # CRITICAL: Filter invalid labels (-99) before any training
+   prepared = prepared.filter_invalid_labels()
    ```
 
-##### Conclusion
+3. **HyperparameterTuningService** (`src/models/training/services/hyperparameter_tuning.py`):
+   ```python
+   # CRITICAL: Filter invalid labels (-99) before tuning
+   INVALID_LABEL = -99
+   valid_mask = y_series != INVALID_LABEL
+   if (~valid_mask).sum() > 0:
+       X_df = X_df.loc[valid_mask].reset_index(drop=True)
+       y_series = y_series.loc[valid_mask].reset_index(drop=True)
+   ```
 
-**No action needed.** The claim that -99 labels reach `map_labels_to_classes()` was false - defensive validation already raises clear error before that point. If -99 labels exist, `_validate_labels()` raises `ValueError: LEAKAGE DETECTED` with full context.
+##### Lesson Learned
+
+Static code analysis found theoretical protection; runtime testing found the actual hole. **Always verify with real execution.**
 invalid_val = y_val == INVALID_LABEL
 if invalid_val.sum() > 0:
     valid_mask = ~invalid_val
@@ -97,45 +111,47 @@ python -c "from src.factory import MLFactory; print('Import OK')"
 
 ---
 
-#### Task 36-2: Fix sqrt of Negative Variance ❌ DISPROVEN
+#### Task 36-2: Fix sqrt of Negative Variance ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/volatility.py`
-**Lines:** 305, 404, 486
-**Status:** ❌ DISPROVEN - Math proves non-negative for valid OHLC
+**Lines:** 305, 406, 489
+**Status:** ✅ COMPLETE - np.maximum protection added
 
-##### Verification Evidence
+##### Problem (Confirmed by Runtime)
 
-Mathematical analysis proves all three volatility estimators produce **non-negative variance** for valid OHLC data:
+Actual pipeline execution showed:
+```
+RuntimeWarning: invalid value encountered in sqrt
+```
 
-1. **Garman-Klass** (`volatility.py:303-305`):
-   - Formula: `gk = 0.5 * hl² - (2*log(2)-1) * co²`
-   - For valid OHLC where close/open are within [low, high]:
-   - The term `0.5 * hl²` always exceeds `0.386 * co²`
-   - **GK >= 0 for valid OHLC**
+While mathematical analysis suggested non-negative variance for "valid" OHLC, edge cases in real data (numerical precision, slight OHLC violations) can cause negative values.
 
-2. **Rogers-Satchell** (`volatility.py:398-404`):
-   - For valid OHLC: (H-C) >= 0 and (H-O) >= 0 → first term >= 0
-   - (L-C) <= 0 and (L-O) <= 0 → product of negatives >= 0
-   - **RS >= 0 for valid OHLC**
+##### Fix Implemented
 
-3. **Yang-Zhang** (`volatility.py:485-486`):
-   - All components are squared differences (variances) or RS
-   - **YZ >= 0 for valid OHLC**
+Added `np.maximum(..., 0)` before sqrt at all 3 locations:
 
-4. **OHLC Validation Exists** (`src/data/pipeline/stages/validation/data_contract.py:52-74`):
-   ```python
-   @staticmethod
-   def validate_ohlc_relationships(df: pd.DataFrame) -> list[str]:
-       """Validate high >= low, high >= open/close, low <= open/close."""
-   ```
+**Line 305 (Garman-Klass):**
+```python
+df["gk_vol"] = (np.sqrt(np.maximum(gk.rolling(window=period).mean(), 0)) * annualization_factor).shift(1)
+```
 
-##### Conclusion
+**Line 406 (Rogers-Satchell):**
+```python
+rs_vol_raw = np.sqrt(np.maximum(rs_component.rolling(window=period).mean(), 0)) * annualization_factor
+```
 
-**No action needed.** The claim was based on incorrect mathematical analysis. For valid OHLC data (enforced by pipeline validation), negative variance cannot occur. Warnings would only appear with invalid OHLC data that bypasses validation.
+**Line 489 (Yang-Zhang):**
+```python
+yz_vol_raw = np.sqrt(np.maximum(yz_var, 0)) * annualization_factor
+```
+
+##### Lesson Learned
+
+Mathematical proofs assume perfect data; defensive programming handles reality.
 
 ---
 
-#### Task 36-3: Fix Autocorrelation Lag20 Off-by-One Bug ✅ VERIFIED
+#### Task 36-3: Fix Autocorrelation Lag20 Off-by-One Bug ✅ COMPLETE
 
 **File:** `src/data/pipeline/stages/features/price_features.py`
 **Line:** 147
@@ -194,11 +210,11 @@ print('OK - autocorr_lag20 has values')
 
 ---
 
-#### Task 36-4: Create config/global.yaml Template ✅ VERIFIED
+#### Task 36-4: Create config/global.yaml Template ✅ COMPLETE
 
-**File:** `config/global.yaml` (create new)
-**Status:** ✅ VERIFIED - File and directory do not exist
-**Priority:** MEDIUM - Reduces log noise
+**File:** `config/global.yaml` (created)
+**Status:** ✅ COMPLETE - File created with all default values
+**Priority:** MEDIUM - Eliminates 19+ warnings
 
 ##### Problem
 
@@ -304,11 +320,11 @@ print('OK - No config warnings')
 
 | Task | Status | Verification |
 |------|--------|--------------|
-| 36-1 | ❌ DISPROVEN | Container + trainer already filter -99 |
-| 36-2 | ❌ DISPROVEN | Math non-negative for valid OHLC |
-| 36-3 | ⬜ TODO | return_autocorr_lag20 has values |
-| 36-4 | ⬜ TODO | No config file warnings |
-| 36-5 | ⚠️ INCONCLUSIVE | Tuning handles per-dataset optimization |
+| 36-1 | ✅ COMPLETE | filter_invalid_labels() added to PreparedData, tuning, training |
+| 36-2 | ✅ COMPLETE | np.maximum(..., 0) added at 3 volatility locations |
+| 36-3 | ✅ COMPLETE | window=max(period, lag+1), condition len(x) >= lag+1 |
+| 36-4 | ✅ COMPLETE | config/global.yaml created with all defaults |
+| 36-5 | ⏸️ DEFERRED | LightGBM tuning already allows 5-100 range |
 
 ---
 

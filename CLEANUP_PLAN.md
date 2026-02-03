@@ -41,52 +41,45 @@ See **COMPLETION.md** for full details on all completed phases.
 
 ### Phase 36: Pipeline Runtime Issues
 
-**Status:** 📋 IN PROGRESS (Reduced Scope - 2 of 5 claims verified)
-**Priority:** MEDIUM (downgraded from CRITICAL after verification)
-**Effort:** 0.5 day
+**Status:** ✅ COMPLETE
+**Priority:** CRITICAL (P0) - Was blocking pipeline execution
+**Effort:** 1 day
 **Source:** Live pipeline execution on MES 1-min data (350,464 rows), 6-agent analysis (2026-02-02)
-**Verified:** 2026-02-02 (codebase-analyzer deep verification)
+**Completed:** 2026-02-02
 
 **Overview**
 
-Original claim was pipeline failure from label -99 reaching model training. **Deep verification disproved 2 critical claims** - the system already has robust protection. Reduced scope to 2 verified issues.
+Pipeline failed after 10,782 seconds with label validation error. Initial static analysis incorrectly disproved claims, but actual pipeline execution confirmed all issues were real. All 4 fixes implemented and verified.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                   PHASE 36 VERIFICATION RESULTS (2026-02-02)                     │
+│                   PHASE 36 FIXES IMPLEMENTED (2026-02-02)                        │
 │                                                                                  │
-│  ❌ DISPROVEN - LABEL -99 CLAIM:                                                │
+│  ✅ FIXED - LABEL -99 FILTERING:                                                │
 │  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  Container filters by default: exclude_invalid_labels=True     │             │
-│  │  Trainer validates defensively: _validate_labels() at line 549 │             │
-│  │  Two layers of protection exist - claim was false              │             │
+│  │  Problem: -99 labels reached Optuna hyperparameter tuning      │             │
+│  │  Fix 1: PreparedData.filter_invalid_labels() method added      │             │
+│  │  Fix 2: HyperparameterTuningService filters before tuning      │             │
+│  │  Fix 3: ModelTrainingService filters before training           │             │
 │  └────────────────────────────────────────────────────────────────┘             │
 │                                                                                  │
-│  ❌ DISPROVEN - SQRT OF NEGATIVE VALUES:                                        │
+│  ✅ FIXED - SQRT OF NEGATIVE VALUES:                                            │
 │  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  Math proof: GK, RS, YZ all non-negative for valid OHLC        │             │
-│  │  OHLC validation exists: validate_ohlc_relationships()         │             │
-│  │  Warnings only possible with invalid OHLC (blocked by pipeline)│             │
+│  │  Problem: Edge cases caused negative values inside sqrt        │             │
+│  │  Fix: Added np.maximum(..., 0) before sqrt at 3 locations      │             │
+│  │  - volatility.py: Garman-Klass, Rogers-Satchell, Yang-Zhang   │             │
 │  └────────────────────────────────────────────────────────────────┘             │
 │                                                                                  │
-│  ✅ VERIFIED - AUTOCORRELATION LAG20 ALL NaN:                                   │
+│  ✅ FIXED - AUTOCORRELATION LAG20 ALL NaN:                                      │
 │  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  price_features.py:147 - Off-by-one bug confirmed              │             │
-│  │  window=20, lag=20 → len(x) > lag → 20 > 20 → False → NaN     │             │
-│  │  Fix: Change condition to len(x) >= lag + 1                    │             │
+│  │  Bug: window=20, lag=20 → len(x) > lag → 20 > 20 → False → NaN│             │
+│  │  Fix: window=max(period, lag+1), condition len(x) >= lag+1    │             │
 │  └────────────────────────────────────────────────────────────────┘             │
 │                                                                                  │
-│  ✅ VERIFIED - MISSING CONFIG FILE:                                             │
+│  ✅ FIXED - MISSING CONFIG FILE:                                                │
 │  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  config/global.yaml doesn't exist (directory also missing)     │             │
-│  │  Fix: Create config file template                              │             │
-│  └────────────────────────────────────────────────────────────────┘             │
-│                                                                                  │
-│  ⚠️ INCONCLUSIVE - LIGHTGBM MIN_CHILD_SAMPLES:                                  │
-│  ┌────────────────────────────────────────────────────────────────┐             │
-│  │  min_child_samples=20 matches LightGBM default                 │             │
-│  │  Hyperparameter tuning already allows 5-100 range              │             │
-│  │  No action needed - Optuna can optimize per-dataset            │             │
+│  │  Created config/global.yaml with all default values            │             │
+│  │  Eliminates 19+ "Failed to get config" warnings                │             │
 │  └────────────────────────────────────────────────────────────────┘             │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -95,16 +88,18 @@ Original claim was pipeline failure from label -99 reaching model training. **De
 
 | Task | File | Priority | Status | Description |
 |------|------|----------|--------|-------------|
-| 36-1 | `trainer.py:~551` | ~~CRITICAL~~ | ❌ DISPROVEN | Container + trainer already filter -99 |
-| 36-2 | `volatility.py:305,404,486` | ~~HIGH~~ | ❌ DISPROVEN | Math non-negative for valid OHLC |
-| 36-3 | `price_features.py:147` | HIGH | ✅ VERIFIED | Fix autocorr lag20 off-by-one bug |
-| 36-4 | `config/global.yaml` | MEDIUM | ✅ VERIFIED | Create config file template |
-| 36-5 | `lightgbm_model.py:142` | ~~MEDIUM~~ | ⚠️ INCONCLUSIVE | Tuning handles this |
+| 36-1 | Multiple files | CRITICAL | ✅ COMPLETE | Filter -99 labels in PreparedData, tuning, training |
+| 36-2 | `volatility.py:305,404,488` | HIGH | ✅ COMPLETE | Added np.maximum(..., 0) before sqrt |
+| 36-3 | `price_features.py:147` | HIGH | ✅ COMPLETE | Fixed autocorr lag20 off-by-one bug |
+| 36-4 | `config/global.yaml` | MEDIUM | ✅ COMPLETE | Created config file template |
+| 36-5 | N/A | LOW | DEFERRED | LightGBM tuning handles per-dataset |
 
-### Success Metrics (Revised)
+### Success Metrics
 
 | Metric | Before | After | How to Verify |
 |--------|--------|-------|---------------|
+| Pipeline completion | FAILED | SUCCESS | Full pipeline run completes |
+| sqrt warnings | 3 | 0 | No RuntimeWarning in output |
 | NaN columns | 1 | 0 | return_autocorr_lag20 has values |
 | Config warnings | 19 | 0 | No "Failed to get config" warnings |
 
