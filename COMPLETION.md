@@ -4,6 +4,55 @@
 
 ---
 
+## Phase 40 (2026-02-04) | Skip Hyperparameter Tuning for Sequence Models
+
+**Status:** ✅ COMPLETE
+**Duration:** Single session (2026-02-04)
+**Impact:** 1 file modified, sequence models no longer get incorrectly tuned hyperparameters
+**Tests:** ruff clean, imports verified, manual test passed
+**Lines Changed:** ~20 lines added
+
+### Summary
+
+Fixed issue where hyperparameter tuning flattened 3D/4D data to 2D, producing hyperparameters optimized for the wrong data structure.
+
+**Problem:** `HyperparameterTuningService.optimize()` always flattened data:
+```python
+X_train_2d = X_train.reshape(X_train.shape[0], -1) if X_train.ndim > 2 else X_train
+```
+This meant LSTM/TFT hyperparameters were optimized for flattened 2D data, then applied to 3D training.
+
+**Fix:** Skip hyperparameter tuning entirely for 3D/4D models and use default hyperparameters. Added early return with warning message.
+
+### Completed Tasks
+
+**Task 40-1: Skip Tuning for 3D/4D Data**
+- **File:** `src/models/training/services/hyperparameter_tuning.py:67-80`
+- **Problem:** Optuna tuner flattens 3D→2D, optimizing wrong data structure
+- **Fix:** Check `data_rank >= 3` at start of `optimize()`, return empty params with warning
+- **Impact:** Sequence models use default hyperparameters (safer than wrong hyperparameters)
+
+### Files Modified (1 total)
+
+1. `src/models/training/services/hyperparameter_tuning.py` - Added data rank check and early return
+
+### Verification
+
+```bash
+python -c "
+from src.models.training.services.hyperparameter_tuning import HyperparameterTuningService, TuningRequest
+from src.data.adapters import PreparedData
+import numpy as np
+
+prepared = PreparedData(X_train=np.random.randn(100,60,50).astype(np.float32), y_train=np.random.randint(0,3,100), X_val=np.random.randn(20,60,50).astype(np.float32), y_val=np.random.randint(0,3,20), X_test=np.random.randn(20,60,50).astype(np.float32), y_test=np.random.randint(0,3,20), feature_names=[f'f{i}' for i in range(50)], data_rank=3, model_name='lstm')
+result = HyperparameterTuningService().optimize(TuningRequest(model_name='lstm', horizon=20, prepared_data=prepared, n_trials=50))
+assert result.n_trials_completed == 0
+print('PASS: 3D data skipped tuning')
+"
+```
+
+---
+
 ## Phase 39 (2026-02-04) | Sequence Model Data Shape Fix
 
 **Status:** ✅ COMPLETE

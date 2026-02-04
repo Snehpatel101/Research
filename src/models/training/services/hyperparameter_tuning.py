@@ -53,10 +53,31 @@ class HyperparameterTuningService:
 
         Returns:
             TuningResult with best parameters and score
+
+        Note:
+            Hyperparameter tuning is only supported for tabular (2D) models.
+            For sequence models (3D/4D), tuning is skipped and default
+            hyperparameters are used. This is because the Optuna tuner
+            operates on flattened 2D data, which would produce hyperparameters
+            optimized for the wrong data structure.
         """
         import pandas as pd
 
         from src.validation.cv import PurgedKFold, PurgedKFoldConfig
+
+        # Check data rank - skip tuning for sequence models (3D/4D)
+        data_rank = request.prepared_data.data_rank
+        if data_rank >= 3:
+            logger.warning(
+                f"  Skipping hyperparameter tuning for {data_rank}D data "
+                f"(model: {request.model_name}). "
+                f"Tuner requires 2D tabular data. Using default hyperparameters."
+            )
+            return TuningResult(
+                best_params={},  # Empty = use defaults
+                best_score=float("nan"),
+                n_trials_completed=0,
+            )
 
         logger.info("  Running hyperparameter optimization...")
 
@@ -74,12 +95,11 @@ class HyperparameterTuningService:
             metric=request.scoring,
         )
 
-        # Flatten to 2D for tuning
+        # Data is already 2D at this point (checked above)
         X_train = request.prepared_data.X_train
-        X_train_2d = X_train.reshape(X_train.shape[0], -1) if X_train.ndim > 2 else X_train
 
         # Convert to pandas for tuner API
-        X_df = pd.DataFrame(X_train_2d)
+        X_df = pd.DataFrame(X_train)
         y_series = pd.Series(request.prepared_data.y_train)
 
         # CRITICAL: Filter invalid labels (-99) before tuning
