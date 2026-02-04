@@ -1,9 +1,78 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-02 (Phase 36 VERIFIED COMPLETE)
-**Status:** Phase 36 VERIFIED COMPLETE | 7.5/10 Production-Ready
+**Last Updated:** 2026-02-04 (Phase 39-40 COMPLETE)
+**Status:** Phase 39-40 COMPLETE | Sequence Models Fixed
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 39-40: Sequence Model Fixes (2026-02-04) - COMPLETE
+
+**Discovered During:** Model training attempts with LSTM/TFT models
+**Source:** Runtime shape errors during sequence model training
+**Completed:** 2026-02-04
+**Status:** ✅ COMPLETE - 2 critical fixes implemented
+
+### Summary
+
+Two critical bugs affecting sequence models (LSTM, GRU, TCN, TFT, etc.) were discovered and fixed:
+
+**Phase 39: Data Shape Routing**
+- **Problem:** 3D/4D data was being double-processed (flattened by container, then re-sequenced incorrectly)
+- **Fix:** Added `Trainer.run_prepared()` method to accept pre-shaped PreparedData directly
+- **Fix:** Modified `ModelTrainingService` to route based on data rank (2D → `run()`, 3D/4D → `run_prepared()`)
+- **Impact:** Sequence models now train with correct data shapes
+
+**Phase 40: Hyperparameter Tuning Skip**
+- **Problem:** Optuna tuning flattened 3D→2D data, optimizing hyperparameters for wrong structure
+- **Fix:** Skip hyperparameter tuning for 3D/4D models, use defaults instead
+- **Impact:** Sequence models use safe default hyperparameters (not wrong ones)
+
+### Code Changes Summary
+
+**Phase 39 (3 files modified):**
+```python
+# src/models/training/trainer.py - New method
+def run_prepared(self, prepared: PreparedData, ...) -> TrainingResult:
+    """Train with pre-shaped PreparedData (bypasses container)."""
+    # Direct use of 3D/4D arrays without flattening
+
+# src/models/training/services/model_training.py - Routing logic
+if prepared.data_rank >= 3:
+    result = trainer.run_prepared(prepared, ...)  # 3D/4D path
+else:
+    container = self._build_container(...)       # 2D path
+    result = trainer.run(container, ...)
+```
+
+**Phase 40 (1 file modified):**
+```python
+# src/models/training/services/hyperparameter_tuning.py - Early return
+def optimize(self, request: TuningRequest) -> TuningResult:
+    if request.prepared_data.data_rank >= 3:
+        logger.warning("Skipping tuning for 3D/4D data")
+        return TuningResult(best_params={}, n_trials_completed=0)
+```
+
+### Impact on Production Readiness
+
+**Sequence models now fully functional:**
+- LSTM, GRU training works correctly with 3D data
+- TFT, Transformer models work correctly with 4D data
+- No more shape mismatches or double-processing
+- Hyperparameters use safe defaults instead of wrong optimizations
+
+### Files Modified
+
+**Phase 39:**
+1. `src/models/training/trainer.py` - Added `run_prepared()` method (~120 lines)
+2. `src/models/training/services/model_training.py` - Added routing logic (~15 lines)
+
+**Phase 40:**
+1. `src/models/training/services/hyperparameter_tuning.py` - Added early return (~15 lines)
+
+**Total:** 3 files, ~150 lines added
 
 ---
 

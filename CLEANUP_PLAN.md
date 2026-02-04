@@ -1,11 +1,11 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 37 COMPLETE (6/6 tasks)
-**Last Updated:** 2026-02-02
+**Status:** Phase 39-40 COMPLETE (5 tasks)
+**Last Updated:** 2026-02-04
 
 ---
 
-## Completed Phases (24-34)
+## Completed Phases (24-40)
 
 See **COMPLETION.md** for full details on all completed phases.
 
@@ -22,8 +22,13 @@ See **COMPLETION.md** for full details on all completed phases.
 | 32 | Critical Fixes (model families, data leakage, numerical stability) | ✅ COMPLETE | 2026-02-01 |
 | 33 | Performance & Architecture (evaluators, layer violations, optimizations) | ✅ COMPLETE | 2026-02-01 |
 | 34 | Cleanup & Consolidation (orphaned files, MTF defaults, verification) | ✅ COMPLETE | 2026-02-01 |
+| 35 | Production Hardening (exception logging, pickle security) | ✅ COMPLETE | 2026-02-02 |
+| 36 | Pipeline Runtime Issues (label -99, sqrt, autocorr) | ✅ COMPLETE | 2026-02-02 |
+| 37 | Runtime Warning Fixes (Additional sqrt/autocorr protection) | ✅ COMPLETE | 2026-02-02 |
+| 39 | Sequence Model Data Shape Fix (route 3D/4D to run_prepared) | ✅ COMPLETE | 2026-02-04 |
+| 40 | Skip Hyperparameter Tuning for Sequence Models | ✅ COMPLETE | 2026-02-04 |
 
-**Summary Impact:** 11 phases complete, 73+ files modified, production-ready evaluators, 30-40% pipeline speedup, layer violations fixed, MTF consolidation.
+**Summary Impact:** 17 phases complete, 90+ files modified, production-ready evaluators, 30-40% pipeline speedup, sequence models fully functional.
 
 ---
 
@@ -35,10 +40,128 @@ See **COMPLETION.md** for full details on all completed phases.
 | 35 | Hardening (exception logging, pickle security) | HIGH | 1 day | ✅ COMPLETE |
 | 36 | Pipeline Runtime Issues (label -99, sqrt, autocorr) | CRITICAL | 1 day | ✅ COMPLETE |
 | 37 | Runtime Warning Fixes (Additional sqrt/autocorr protection) | HIGH | 1 day | ✅ COMPLETE |
+| 39 | Sequence Model Data Shape Fix | CRITICAL | 1 session | ✅ COMPLETE |
+| 40 | Skip Hyperparameter Tuning for Sequence Models | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Completed Recent Phases
+
+### Phase 40: Skip Hyperparameter Tuning for Sequence Models
+
+**Status:** ✅ COMPLETE
+**Priority:** HIGH (P1) - Sequence models getting wrong hyperparameters
+**Effort:** Single session (2026-02-04)
+**Source:** Analysis of hyperparameter tuning for 3D/4D models
+**Completed:** 2026-02-04
+
+**Overview**
+
+Fixed issue where hyperparameter tuning flattened 3D/4D data to 2D, producing hyperparameters optimized for the wrong data structure.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                   PHASE 40 FIX IMPLEMENTED (2026-02-04)                          │
+│                                                                                  │
+│  ✅ FIXED - SKIP TUNING FOR SEQUENCE MODELS:                                    │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: models/training/services/hyperparameter_tuning.py:67-80│             │
+│  │  Problem: Optuna flattens 3D→2D, optimizing wrong structure   │             │
+│  │  Fix: Check data_rank >= 3, return empty params with warning  │             │
+│  │  Impact: Sequence models use defaults (safer than wrong ones) │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Priority | Status | Description |
+|------|------|----------|--------|-------------|
+| 40-1 | `models/training/services/hyperparameter_tuning.py:67-80` | HIGH | ✅ COMPLETE | Skip tuning for 3D/4D data, use defaults |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| 3D/4D tuning | Flattened data | Skipped with warning | `n_trials_completed == 0` for 3D/4D |
+| Hyperparameter quality | Wrong (optimized for 2D) | Safe (defaults) | Models train correctly |
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Ruff linting | ✅ PASS | No issues |
+| Import tests | ✅ PASS | All modules importable |
+| Manual test | ✅ PASS | 3D data skips tuning correctly |
+
+---
+
+### Phase 39: Sequence Model Data Shape Fix
+
+**Status:** ✅ COMPLETE
+**Priority:** CRITICAL (P0) - LSTM/TFT models completely broken
+**Effort:** Single session (2026-02-04)
+**Source:** Runtime shape error during model training
+**Completed:** 2026-02-04
+
+**Overview**
+
+Fixed critical bug where sequential models failed with shape error due to double-processing of data.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                   PHASE 39 FIXES IMPLEMENTED (2026-02-04)                        │
+│                                                                                  │
+│  ✅ FIXED - DATA ROUTING FOR SEQUENCE MODELS:                                   │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  Root Cause: Double-processing of sequence data                │             │
+│  │  1. Container flattened 3D→2D during build                     │             │
+│  │  2. Trainer called get_pytorch_sequences() on flattened data   │             │
+│  │  3. Result: Unusable data shape                                │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ SOLUTION - NEW PATHWAY:                                                     │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: models/training/trainer.py:885-1008                     │             │
+│  │  Added: run_prepared() method for pre-shaped data              │             │
+│  │  Bypasses: Container creation and reshaping                    │             │
+│  │  Uses: Data arrays as-is for training                          │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ ROUTING LOGIC:                                                               │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: models/training/services/model_training.py:124-135      │             │
+│  │  Logic: if data_rank >= 3: use run_prepared()                 │             │
+│  │         else: use run() with container                         │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Priority | Status | Description |
+|------|------|----------|--------|-------------|
+| 39-1 | `models/training/trainer.py:885-1008` | CRITICAL | ✅ COMPLETE | Add run_prepared() method |
+| 39-2 | `models/training/trainer.py:994-997` | HIGH | ✅ COMPLETE | Fix _save_metrics() bug |
+| 39-3 | `models/training/services/model_training.py:124-135` | CRITICAL | ✅ COMPLETE | Route 3D/4D to run_prepared() |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| LSTM training | Shape error | Success | Model trains without error |
+| TFT training | Shape error | Success | Model trains without error |
+| Data shape | (n, 13140) wrong | (n, 60, 219) correct | Verify with print statement |
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Ruff linting | ✅ PASS | No new issues |
+| Import tests | ✅ PASS | All modules importable |
+| Shape verification | ✅ PASS | 3D data remains 3D through training |
+
+---
 
 ### Phase 37: Runtime Warning Fixes (Additional sqrt/autocorr protection)
 
