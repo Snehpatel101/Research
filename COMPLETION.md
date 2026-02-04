@@ -4,6 +4,105 @@
 
 ---
 
+## Phase 39 (2026-02-04) | Sequence Model Data Shape Fix
+
+**Status:** ✅ COMPLETE
+**Duration:** Single session (2026-02-04)
+**Impact:** 2 files modified, LSTM/TFT/sequence models now work correctly
+**Tests:** ruff clean, imports verified, no syntax errors
+**Lines Changed:** ~150 lines added (new `run_prepared()` method + routing logic)
+
+### Summary
+
+Fixed critical bug where sequential models (LSTM, TFT, etc.) failed with shape error:
+```
+X_train must be 3D (n_samples, seq_len, n_features) for sequential models, got shape (132798, 13140)
+```
+
+**Root Cause:** Data was being double-processed for sequence models:
+1. `model_training.py._build_container()` flattened 3D→2D data
+2. `Trainer.run()` then called `prepare_training_data(requires_sequences=True)`
+3. `prepare_training_data()` called `container.get_pytorch_sequences()` which created NEW sequences from already-flattened data
+4. Result: Data that was `(n, 60, 219)` became `(n, 13140)` after flattening, making it unusable
+
+**Fix:** Added `Trainer.run_prepared()` method that accepts PreparedData directly, bypassing the container pathway for 3D/4D data. Modified `ModelTrainingService.train_model()` to route based on data rank.
+
+### Completed Tasks
+
+**Task 39-1: Add Trainer.run_prepared() Method**
+- **File:** `src/models/training/trainer.py:885-1008`
+- **Problem:** No way to pass pre-shaped 3D/4D data to Trainer without going through container
+- **Fix:** Added `run_prepared()` method that:
+  - Accepts PreparedData directly with pre-shaped arrays
+  - Skips container creation and `get_pytorch_sequences()` calls
+  - Uses data arrays as-is for training
+  - Includes full training workflow (metrics, calibration, tracking, artifacts)
+- **Impact:** Enables correct training of sequence models with properly shaped data
+
+**Task 39-2: Fix _save_metrics() Bug**
+- **File:** `src/models/training/trainer.py:994-997`
+- **Problem:** `run_prepared()` called `_save_metrics()` which doesn't exist (would cause AttributeError)
+- **Fix:** Changed to use `_save_artifacts()` matching the pattern in `run()`
+- **Impact:** Artifacts now saved correctly for sequence models
+
+**Task 39-3: Route 3D/4D Data to run_prepared()**
+- **File:** `src/models/training/services/model_training.py:124-135`
+- **Problem:** All data went through `_build_container()` which flattened 3D→2D
+- **Fix:** Added routing logic in `train_model()`:
+  - For `data_rank >= 3`: Use `trainer.run_prepared(prepared)` directly
+  - For `data_rank == 2`: Continue using container path via `trainer.run(container)`
+- **Impact:** Sequence models receive correctly shaped 3D data, tabular models unchanged
+
+### Files Modified (2 total)
+
+1. `src/models/training/trainer.py` - Added `run_prepared()` method (~120 lines)
+2. `src/models/training/services/model_training.py` - Added data rank routing (~10 lines)
+
+### Key Implementation Details
+
+**New run_prepared() Method:**
+```python
+def run_prepared(
+    self,
+    prepared: PreparedData,
+    skip_save: bool = False,
+) -> dict[str, Any]:
+    """
+    Execute training with pre-prepared data (bypasses container).
+    Use for 3D/4D data that's already correctly shaped.
+    """
+    # Use data directly without reshape
+    X_train = prepared.X_train  # Already (n, seq_len, features)
+    y_train = prepared.y_train
+    # ... full training workflow
+```
+
+**Routing Logic:**
+```python
+if prepared.data_rank >= 3:
+    # Sequence/multi-stream: use pre-shaped data directly
+    training_results = trainer.run_prepared(prepared)
+else:
+    # Tabular: use container path
+    container = self._build_container(prepared, horizon)
+    training_results = trainer.run(container)
+```
+
+### Verification
+
+```bash
+ruff check src/models/training/trainer.py src/models/training/services/model_training.py
+# All checks passed!
+
+python -c "from src.models.training.trainer import Trainer; print('OK')"
+# Trainer import OK
+
+python -c "from src.models.training.services.model_training import ModelTrainingService; print('OK')"
+# ModelTrainingService import OK
+```
+
+---
+
 ## Phase 37 (2026-02-02) | Runtime Warning Fixes
 
 **Status:** ✅ COMPLETE

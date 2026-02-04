@@ -49,6 +49,7 @@ from .features import TrainerFeaturesMixin
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
     from src.core.coordination import TimeframeCoordinator
+    from src.data.adapters import PreparedData
     from src.optimization.feature_selection import FeatureSelectionManager
 
 logger = logging.getLogger(__name__)
@@ -876,6 +877,151 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         )
 
         # Log final metrics and end tracking run
+        self.tracker.log_metrics({"total_time_seconds": total_time})
+        self.tracker.end_run(status="FINISHED")
+
+        return results
+
+    def run_prepared(
+        self,
+        prepared: PreparedData,
+        skip_save: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Execute training with pre-prepared data (bypasses container).
+
+        Use this method when PreparedData already has correctly shaped arrays
+        (3D for sequence models, 4D for multi-stream models). This bypasses
+        the container pathway which would incorrectly reshape the data.
+
+        Args:
+            prepared: PreparedData with X_train, y_train, X_val, y_val arrays.
+                For sequence models, X should be 3D (n_samples, seq_len, n_features).
+                For multi-stream models, X should be 4D.
+            skip_save: If True, skip saving artifacts (for testing)
+
+        Returns:
+            Dict with training results including metrics, predictions, etc.
+        """
+
+        start_time = time.time()
+
+        # Setup
+        self._setup_output_dir()
+        self._save_config()
+
+        # Start experiment tracking
+        tracking_run_id = self.tracker.start_run(
+            run_name=self.run_id,
+            tags={
+                "model_family": self.model.model_family,
+                "feature_set": self.config.feature_set,
+                "data_rank": str(prepared.data_rank),
+            },
+        )
+        logger.info(f"Started experiment tracking run: {tracking_run_id}")
+        self.tracker.log_params(self.config.to_dict())
+
+        # Extract data directly from PreparedData (no reshaping needed)
+        X_train = prepared.X_train
+        y_train = prepared.y_train
+        w_train = prepared.train_weights if prepared.has_weights else np.ones(len(y_train))
+        X_val = prepared.X_val
+        y_val = prepared.y_val
+
+        # Log data shapes
+        logger.info(
+            f"Data shapes (from PreparedData): "
+            f"X_train={X_train.shape}, y_train={y_train.shape}, "
+            f"X_val={X_val.shape}, y_val={y_val.shape}, "
+            f"data_rank={prepared.data_rank}D"
+        )
+
+        # Train model
+        logger.info(f"Training {self.config.model_name}...")
+        fit_kwargs: dict[str, Any] = {
+            "X_train": X_train,
+            "y_train": y_train,
+            "X_val": X_val,
+            "y_val": y_val,
+            "sample_weights": w_train,
+            "config": self.config.model_config,
+        }
+
+        training_metrics = self.model.fit(**fit_kwargs)
+
+        # Evaluate
+        logger.info("Evaluating on validation set...")
+        val_predictions = self.model.predict(X_val)
+
+        eval_metrics = compute_classification_metrics(
+            y_true=y_val,
+            y_pred=val_predictions.class_predictions,
+            y_proba=val_predictions.class_probabilities,
+        )
+
+        # Add trading metrics
+        eval_metrics["trading"] = compute_trading_metrics(
+            y_true=y_val,
+            y_pred=val_predictions.class_predictions,
+        )
+
+        # Probability calibration
+        self.calibrator = None
+        if self.config.use_calibration:
+            logger.info("Applying probability calibration...")
+            calibration_method = self.config.calibration_method
+            if calibration_method not in ("isotonic", "sigmoid", "auto"):
+                calibration_method = "auto"
+            cal_config = CalibrationConfig(method=calibration_method)
+            self.calibrator = ProbabilityCalibrator(cal_config)
+            calibration_metrics = self.calibrator.fit(
+                y_true=y_val,
+                probabilities=val_predictions.class_probabilities,
+            )
+            eval_metrics["calibration"] = calibration_metrics.to_dict()
+
+        # Log metrics to tracker
+        flat_metrics = {
+            "val_accuracy": eval_metrics["accuracy"],
+            "val_macro_f1": eval_metrics["macro_f1"],
+            "val_precision": eval_metrics["precision"],
+            "val_recall": eval_metrics["recall"],
+        }
+        self.tracker.log_metrics(flat_metrics)
+
+        # Save artifacts if not skipped
+        if not skip_save:
+            self._save_artifacts(
+                training_metrics=training_metrics,
+                eval_metrics=eval_metrics,
+                predictions=val_predictions,
+            )
+            self._save_model()
+
+        total_time = time.time() - start_time
+
+        results = {
+            "run_id": self.run_id,
+            "model_name": self.config.model_name,
+            "horizon": self.config.horizon,
+            "training_metrics": training_metrics.to_dict(),
+            "evaluation_metrics": eval_metrics,
+            "test_metrics": None,  # Test eval not supported in run_prepared yet
+            "output_path": str(self.output_path),
+            "total_time_seconds": total_time,
+            "val_predictions": val_predictions.class_predictions,
+            "val_true": y_val,
+            "feature_selection": None,  # Not applicable for pre-prepared data
+        }
+
+        logger.info(
+            f"Training complete: "
+            f"val_f1={eval_metrics['macro_f1']:.4f}, "
+            f"val_accuracy={eval_metrics['accuracy']:.4f}, "
+            f"time={total_time:.1f}s"
+        )
+
         self.tracker.log_metrics({"total_time_seconds": total_time})
         self.tracker.end_run(status="FINISHED")
 

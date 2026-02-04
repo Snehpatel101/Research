@@ -124,10 +124,19 @@ class ModelTrainingService:
         # Create trainer and run
         trainer = Trainer(trainer_config)
 
-        # Build container from prepared data
-        container = self._build_container(prepared, horizon)
-
-        training_results = trainer.run(container)
+        # For 3D/4D data, use run_prepared() to bypass container flattening
+        # For 2D data, use traditional container path
+        if prepared.data_rank >= 3:
+            # Sequence/multi-stream models: use pre-shaped data directly
+            logger.info(
+                f"Using run_prepared() for {prepared.data_rank}D data "
+                f"(shape: {prepared.X_train.shape})"
+            )
+            training_results = trainer.run_prepared(prepared)
+        else:
+            # Tabular models: use container path
+            container = self._build_container(prepared, horizon)
+            training_results = trainer.run(container)
 
         training_time = time.time() - start
 
