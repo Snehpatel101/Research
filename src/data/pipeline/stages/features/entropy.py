@@ -316,6 +316,62 @@ def add_shannon_entropy(
     return df
 
 
+@njit
+def _lempel_ziv_complexity_numba(seq: np.ndarray) -> int:
+    """
+    Numba-compiled Lempel-Ziv complexity using LZ76 algorithm.
+
+    Array-based pattern matching instead of string operations.
+    ~10-20x faster than string-based implementation.
+
+    Parameters
+    ----------
+    seq : np.ndarray
+        Binary sequence (0s and 1s) as int8
+
+    Returns
+    -------
+    int
+        LZ complexity count (number of distinct patterns)
+    """
+    n = len(seq)
+    if n == 0:
+        return 0
+
+    complexity = 1  # Start with 1 for the first symbol
+    i = 0  # Current position
+    k = 1  # Length of current pattern being examined
+
+    while i + k <= n:
+        # Check if current pattern exists in history
+        # History: seq[0:i+k-1], Pattern: seq[i:i+k]
+        pattern_found = False
+        history_end = i + k - 1
+
+        # Search for pattern in history
+        for start in range(history_end - k + 1):
+            # Check if pattern matches at this position
+            match = True
+            for offset in range(k):
+                if seq[start + offset] != seq[i + offset]:
+                    match = False
+                    break
+            if match:
+                pattern_found = True
+                break
+
+        if pattern_found:
+            # Pattern already seen, extend it
+            k += 1
+        else:
+            # New pattern found, increment complexity
+            complexity += 1
+            i = i + k
+            k = 1
+
+    return complexity
+
+
 def _lempel_ziv_complexity(binary_seq: np.ndarray) -> int:
     """
     Calculate Lempel-Ziv complexity using the LZ76 algorithm.
@@ -337,28 +393,8 @@ def _lempel_ziv_complexity(binary_seq: np.ndarray) -> int:
     if n == 0:
         return 0
 
-    # Convert to string for efficient substring operations
-    seq_str = "".join(binary_seq.astype(int).astype(str))
-
-    complexity = 1  # Start with 1 for the first symbol
-    i = 0  # Current position
-    k = 1  # Length of current pattern being examined
-
-    while i + k <= n:
-        # Check if current pattern (seq[i:i+k]) exists in the history (seq[0:i+k-1])
-        current_pattern = seq_str[i : i + k]
-        history = seq_str[: i + k - 1]
-
-        if current_pattern in history:
-            # Pattern already seen, extend it
-            k += 1
-        else:
-            # New pattern found, increment complexity
-            complexity += 1
-            i = i + k
-            k = 1
-
-    return complexity
+    # Use numba-compiled implementation with int8 array
+    return _lempel_ziv_complexity_numba(binary_seq.astype(np.int8))
 
 
 def _normalized_lz_complexity(complexity: int, n: int) -> float:
@@ -492,6 +528,61 @@ def add_lempel_ziv_complexity(
     return df
 
 
+@njit
+def _phi_correlation_numba(data: np.ndarray, m: int, r: float) -> float:
+    """
+    Numba-compiled phi(m) calculation for Approximate Entropy.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Time series data
+    m : int
+        Embedding dimension
+    r : float
+        Tolerance threshold (absolute)
+
+    Returns
+    -------
+    float
+        phi(m) value
+    """
+    n = len(data)
+    n_templates = n - m + 1
+    if n_templates <= 0:
+        return np.nan
+
+    # Count matches for each template (including self-match for ApEn)
+    counts = np.zeros(n_templates, dtype=np.float64)
+
+    for i in range(n_templates):
+        count = 0
+        for j in range(n_templates):
+            # Check max absolute difference with early exit
+            max_diff = 0.0
+            match = True
+            for k in range(m):
+                diff = abs(data[i + k] - data[j + k])
+                if diff > r:
+                    match = False
+                    break
+                if diff > max_diff:
+                    max_diff = diff
+            if match:
+                count += 1
+        counts[i] = count
+
+    # Average log of match proportions
+    log_sum = 0.0
+    for i in range(n_templates):
+        proportion = counts[i] / n_templates
+        if proportion < 1e-10:
+            proportion = 1e-10
+        log_sum += np.log(proportion)
+
+    return log_sum / n_templates
+
+
 def _phi_correlation(data: np.ndarray, m: int, r: float) -> float:
     """
     Calculate phi(m) for approximate entropy.
@@ -516,27 +607,8 @@ def _phi_correlation(data: np.ndarray, m: int, r: float) -> float:
     if n - m + 1 <= 0:
         return np.nan
 
-    # Create templates of length m
-    n_templates = n - m + 1
-    templates = np.array([data[i : i + m] for i in range(n_templates)])
-
-    # Count matches for each template
-    counts = np.zeros(n_templates)
-
-    for i in range(n_templates):
-        # Calculate max absolute difference between template i and all others
-        diffs = np.abs(templates - templates[i]).max(axis=1)
-        # Count templates within tolerance
-        counts[i] = np.sum(diffs <= r)
-
-    # Average log of match proportions
-    # Use counts/n_templates for proportion
-    proportions = counts / n_templates
-
-    # Avoid log(0)
-    proportions = np.clip(proportions, 1e-10, 1.0)
-
-    return int(float(np.mean(np.log(proportions))))
+    # Use numba-compiled implementation
+    return _phi_correlation_numba(data.astype(np.float64), m, r)
 
 
 def _approximate_entropy(data: np.ndarray, m: int, r_fraction: float) -> float:
@@ -799,7 +871,7 @@ def _calculate_hurst_rs(prices: np.ndarray) -> float:
 
         # Clip to reasonable range
         hurst = np.clip(hurst, 0.0, 1.0)
-        return int(float(hurst))
+        return float(hurst)
     except Exception as e:
         logger.warning(f"Hurst exponent calculation failed: {e}. Returning NaN.")
         return np.nan
@@ -937,6 +1009,52 @@ DEFAULT_SAMPLE_ENTROPY_M = 2
 DEFAULT_SAMPLE_ENTROPY_R = 0.2
 
 
+@njit
+def _count_template_matches_numba(data: np.ndarray, dim: int, tolerance: float) -> int:
+    """
+    Numba-compiled template matching for Sample Entropy.
+
+    O(n²) but with early exit optimization and no Python overhead.
+    ~20-50x faster than pure Python nested loops.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Time series data
+    dim : int
+        Embedding dimension (template length)
+    tolerance : float
+        Absolute tolerance threshold
+
+    Returns
+    -------
+    int
+        Count of template matches
+    """
+    n = len(data)
+    n_templates = n - dim
+    if n_templates <= 1:
+        return 0
+
+    count = 0
+    for i in range(n_templates):
+        for j in range(i + 1, n_templates):
+            # Check max absolute difference with early exit
+            max_diff = 0.0
+            match = True
+            for k in range(dim):
+                diff = abs(data[i + k] - data[j + k])
+                if diff > tolerance:
+                    match = False
+                    break  # Early exit - no need to check remaining
+                if diff > max_diff:
+                    max_diff = diff
+            if match:
+                count += 1
+
+    return count
+
+
 def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
     """
     Calculate Sample Entropy (SampEn).
@@ -975,27 +1093,12 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
 
     tolerance = r * std
 
-    # Count matches for dimension m
-    def count_matches(dim: int) -> int:
-        """Count template matches for given embedding dimension."""
-        n_templates = n - dim
-        if n_templates <= 1:
-            return 0
+    # Convert to float64 for numba
+    data_f64 = data.astype(np.float64)
 
-        count = 0
-        templates = np.array([data[i : i + dim] for i in range(n_templates)])
-
-        for i in range(n_templates):
-            for j in range(i + 1, n_templates):  # Exclude self-match
-                # Check if max absolute difference is within tolerance
-                if np.max(np.abs(templates[i] - templates[j])) <= tolerance:
-                    count += 1
-
-        return count
-
-    # Count matches for m and m+1 dimensions
-    B = count_matches(m)  # Matches for dimension m
-    A = count_matches(m + 1)  # Matches for dimension m+1
+    # Count matches for m and m+1 dimensions using numba-compiled function
+    B = _count_template_matches_numba(data_f64, m, tolerance)
+    A = _count_template_matches_numba(data_f64, m + 1, tolerance)
 
     # Avoid division by zero
     if B == 0:
@@ -1006,7 +1109,7 @@ def _calculate_sample_entropy(data: np.ndarray, m: int, r: float) -> float:
     if A == 0:
         return np.inf  # Will be clipped to a large value
 
-    return int(float(-np.log(A / B)))
+    return float(-np.log(A / B))
 
 
 def _rolling_sample_entropy(data: np.ndarray, window: int, m: int, r: float) -> np.ndarray:

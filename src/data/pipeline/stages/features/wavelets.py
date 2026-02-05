@@ -14,6 +14,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+from numba import njit
 
 logger = logging.getLogger(__name__)
 
@@ -104,17 +105,51 @@ def _compute_energy_ratio(
         return np.where(total_energy > 0, approx_energy / total_energy, np.nan)
 
 
+@njit
+def _normalize_coefficients_numba(coeffs: np.ndarray) -> np.ndarray:
+    """
+    Normalize wavelet coefficients to z-scores using Welford's online algorithm.
+
+    O(n) single-pass algorithm instead of O(n²) expanding window approach.
+    Uses Welford's numerically stable online variance computation.
+    """
+    n = len(coeffs)
+    result = np.full(n, np.nan)
+
+    # Welford's online algorithm state
+    count = 0
+    mean = 0.0
+    M2 = 0.0  # Sum of squared deviations
+
+    for i in range(n):
+        val = coeffs[i]
+        if np.isnan(val):
+            continue
+
+        # Update Welford's accumulators
+        count += 1
+        delta = val - mean
+        mean += delta / count
+        delta2 = val - mean
+        M2 += delta * delta2
+
+        # Only output after minimum warmup period
+        if count >= 20:
+            # Compute std from M2 (population std)
+            variance = M2 / count
+            std = np.sqrt(variance) if variance > 0 else 0.0
+
+            if std > 1e-10:
+                result[i] = (val - mean) / std
+            else:
+                result[i] = 0.0
+
+    return result
+
+
 def _normalize_coefficients(coeffs: np.ndarray) -> np.ndarray:
     """Normalize wavelet coefficients to z-scores using expanding window."""
-    result = np.full_like(coeffs, np.nan)
-    for i in range(1, len(coeffs)):
-        valid_data = coeffs[: i + 1]
-        valid_data = valid_data[~np.isnan(valid_data)]
-        if len(valid_data) < 20:
-            continue
-        mean, std = np.mean(valid_data), np.std(valid_data)
-        result[i] = (coeffs[i] - mean) / std if std > 1e-10 else 0.0
-    return result
+    return _normalize_coefficients_numba(coeffs.astype(np.float64))
 
 
 def _get_freq_label(lev: int) -> str:
