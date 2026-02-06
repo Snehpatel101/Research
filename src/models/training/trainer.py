@@ -950,6 +950,18 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         training_metrics = self.model.fit(**fit_kwargs)
 
+        # Free training data from memory after training completes
+        # Critical for sequence models where X_train can be 10GB+
+        import gc
+        import torch
+
+        del X_train, w_train
+        del fit_kwargs
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.debug("Freed training data from memory after model.fit()")
+
         # Evaluate
         logger.info("Evaluating on validation set...")
         val_predictions = self.model.predict(X_val)

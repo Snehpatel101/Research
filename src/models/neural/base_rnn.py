@@ -309,8 +309,10 @@ class BaseRNNModel(BaseModel):
             "warmup_epochs": 5,
             "device": "auto",  # Auto-detect GPU/CPU
             "mixed_precision": True,  # Use GPU-appropriate precision
-            "num_workers": 4,
-            "pin_memory": True,
+            # Memory optimization: num_workers=0 prevents 4x memory duplication
+            # pin_memory=False reduces memory for large sequence tensors
+            "num_workers": 0,
+            "pin_memory": False,
         }
 
     def fit(
@@ -683,12 +685,15 @@ class BaseRNNModel(BaseModel):
         else:
             dataset = TensorDataset(X_tensor, y_tensor)
 
+        # Note: num_workers=0 to avoid memory multiplication with sequence data.
+        # Each worker duplicates the dataset, causing 4x memory usage with num_workers=4.
+        # For sequence models with large tensors, single-threaded loading is safer.
         return DataLoader(
             dataset,
             batch_size=config.get("batch_size", 256),
             shuffle=shuffle,
-            num_workers=config.get("num_workers", 4),
-            pin_memory=config.get("pin_memory", True) and self._device.type == "cuda",
+            num_workers=config.get("num_workers", 0),
+            pin_memory=config.get("pin_memory", False),
             drop_last=False,
         )
 

@@ -123,26 +123,70 @@ def dataset_to_arrays(
     """
     Convert PyTorch dataset to numpy arrays.
 
+    Memory-efficient implementation that pre-allocates arrays to avoid
+    accumulating tensors in lists (which can cause 200GB+ memory usage).
+
     Args:
         dataset: SequenceDataset from container
 
     Returns:
         Tuple of (X, y, weights) numpy arrays
     """
-    # Get all data from dataset
-    X_list = []
-    y_list = []
-    w_list = []
+    import gc
+    import torch
 
-    for i in range(len(dataset)):
+    n_samples = len(dataset)
+    if n_samples == 0:
+        return np.array([]), np.array([]), np.array([])
+
+    # Get first sample to determine shapes
+    X_0, y_0, w_0 = dataset[0]
+
+    # Convert to numpy immediately to avoid holding tensors
+    if isinstance(X_0, torch.Tensor):
+        X_0_np = X_0.detach().cpu().numpy()
+    else:
+        X_0_np = np.asarray(X_0)
+
+    # Pre-allocate arrays (avoids list accumulation memory leak)
+    X = np.empty((n_samples, *X_0_np.shape), dtype=np.float32)
+    y = np.empty(n_samples, dtype=np.float32)
+    w = np.empty(n_samples, dtype=np.float32)
+
+    # Fill first element
+    X[0] = X_0_np
+    y[0] = float(y_0.item() if isinstance(y_0, torch.Tensor) else y_0)
+    w[0] = float(w_0.item() if isinstance(w_0, torch.Tensor) else w_0)
+
+    # Clean up first sample references
+    del X_0, y_0, w_0, X_0_np
+
+    # Fill remaining elements in-place
+    for i in range(1, n_samples):
         X_i, y_i, w_i = dataset[i]
-        X_list.append(X_i)
-        y_list.append(y_i)
-        w_list.append(w_i)
 
-    X = np.stack(X_list)
-    y = np.array(y_list)
-    w = np.array(w_list)
+        # Convert tensor to numpy immediately and store in pre-allocated array
+        if isinstance(X_i, torch.Tensor):
+            X[i] = X_i.detach().cpu().numpy()
+        else:
+            X[i] = np.asarray(X_i)
+
+        y[i] = float(y_i.item() if isinstance(y_i, torch.Tensor) else y_i)
+        w[i] = float(w_i.item() if isinstance(w_i, torch.Tensor) else w_i)
+
+        # Explicitly delete tensor references to allow garbage collection
+        del X_i, y_i, w_i
+
+        # Periodic garbage collection for very large datasets
+        if i % 10000 == 0:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    # Final cleanup
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     return X, y, w
 

@@ -89,16 +89,10 @@ def evaluate_model(
     """
     if model.requires_sequences:
         dataset = container.get_pytorch_sequences(split, seq_len=60, symbol_isolated=True)
-        # Convert to arrays (simplified - in practice use DataLoader)
-        X_list: list[Any] = []
-        y_list: list[Any] = []
-        dataset_len = len(dataset)  # type: ignore[arg-type]
-        for i in range(dataset_len):
-            X_i, y_i, _ = dataset[i]
-            X_list.append(X_i)
-            y_list.append(y_i)
-        X = np.stack(X_list)
-        y = np.array(y_list)
+        # Use memory-efficient conversion (pre-allocate instead of list accumulation)
+        from src.models.data_preparation import dataset_to_arrays
+
+        X, y, _ = dataset_to_arrays(dataset)  # type: ignore[arg-type]
     else:
         X, y, _ = container.get_sklearn_arrays(split)
 
