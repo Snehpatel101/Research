@@ -149,6 +149,15 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     stage_timeout_seconds: int = 3600  # 1 hour default
     enable_stage_timeouts: bool = False  # Disabled by default for backward compatibility
 
+    # Stage 3 partial failure handling (Phase 43)
+    # Controls behavior when some symbol/timeframe tasks fail in feature engineering
+    stage3_fail_on_partial: bool = True  # If True, fail stage when tasks fail
+    stage3_min_success_rate: float = 0.95  # Minimum success rate required (0.0 to 1.0)
+
+    # Stage transition validation (Phase 43)
+    # When True, validates data between stages using validate_stage_transition()
+    enable_transition_validation: bool = True
+
     # Labeling parameters - Dynamic Horizon Configuration
     horizon_config: HorizonConfig | None = None
     label_horizons: list[int] = field(default_factory=lambda: list(ACTIVE_HORIZONS))

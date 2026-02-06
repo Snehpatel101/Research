@@ -444,6 +444,28 @@ def run_feature_engineering(
             for (symbol, tf), _ in failed_tasks:
                 logger.error(f"  - FAILED: {symbol}@{tf}")
 
+            # Phase 43: Fail-fast on partial failures if configured
+            total_tasks = len(tasks)
+            success_count = total_tasks - len(failed_tasks)
+            success_rate = success_count / total_tasks if total_tasks > 0 else 0.0
+
+            fail_on_partial = getattr(config, "stage3_fail_on_partial", True)
+            min_success_rate = getattr(config, "stage3_min_success_rate", 0.95)
+
+            if fail_on_partial and success_rate < min_success_rate:
+                error_msg = (
+                    f"Feature engineering failed: only {success_rate:.1%} tasks succeeded "
+                    f"(minimum required: {min_success_rate:.0%}). "
+                    f"Failed: {len(failed_tasks)}/{total_tasks} tasks. "
+                    f"Set stage3_fail_on_partial=False to allow partial failures."
+                )
+                logger.error(error_msg)
+                return create_failed_result(
+                    stage_name="feature_engineering",
+                    start_time=start_time,
+                    error=error_msg,
+                )
+
         for result in results:
             if result is None:
                 continue

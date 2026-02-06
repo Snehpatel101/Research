@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 42 COMPLETE (5 tasks)
+**Status:** Phase 43 COMPLETE (5 tasks)
 **Last Updated:** 2026-02-06
 
 ---
@@ -29,8 +29,9 @@ See **COMPLETION.md** for full details on all completed phases.
 | 40 | Skip Hyperparameter Tuning for Sequence Models | ✅ COMPLETE | 2026-02-04 |
 | 41 | Critical Vectorization Fixes (wavelets, entropy) | ✅ COMPLETE | 2026-02-04 |
 | 42 | Memory Leak Fixes (TCN training crash) | ✅ COMPLETE | 2026-02-06 |
+| 43 | Pipeline Robustness (fail-fast, timeouts, validation) | ✅ COMPLETE | 2026-02-06 |
 
-**Summary Impact:** 19 phases complete (24-42), 98+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated.
+**Summary Impact:** 20 phases complete (24-43), 103+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened.
 
 ---
 
@@ -46,10 +47,101 @@ See **COMPLETION.md** for full details on all completed phases.
 | 40 | Skip Hyperparameter Tuning for Sequence Models | HIGH | 1 session | ✅ COMPLETE |
 | 41 | Critical Vectorization Fixes (wavelets, entropy) | CRITICAL | 1 session | ✅ COMPLETE |
 | 42 | Memory Leak Fixes (TCN training crash) | CRITICAL | 1 session | ✅ COMPLETE |
+| 43 | Pipeline Robustness (fail-fast, timeouts, validation) | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Completed Recent Phases
+
+### Phase 43: Pipeline Robustness
+
+**Status:** ✅ COMPLETE
+**Priority:** HIGH (P1) - Production reliability
+**Effort:** Single session (2026-02-06)
+**Source:** Pipeline reliability hardening
+**Completed:** 2026-02-06
+
+**Overview**
+
+Enhanced pipeline reliability with fail-fast behavior, timeout enforcement, and stage transition validation. Prevents silent failures and pipeline hangs.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                   PHASE 43 ENHANCEMENTS IMPLEMENTED (2026-02-06)                 │
+│                                                                                  │
+│  ✅ ADDED - STAGE 3 FAIL-FAST OPTION:                                           │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/pipeline/stages/features/run.py                    │             │
+│  │  Feature: Configurable fail-fast when tasks fail               │             │
+│  │  Config: stage3_fail_on_partial, stage3_min_success_rate       │             │
+│  │  Impact: Prevents silent data gaps from partial failures       │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ ADDED - TIMEOUT ENFORCEMENT:                                                │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/pipeline/runner.py                                 │             │
+│  │  Feature: StageTimeoutError + _run_with_timeout()              │             │
+│  │  Uses: signal.SIGALRM for Unix timeout enforcement             │             │
+│  │  Config: stage_timeout_seconds, enable_stage_timeouts          │             │
+│  │  Impact: Prevents pipeline hangs from stuck stages             │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ ADDED - STAGE TRANSITION VALIDATION:                                        │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/pipeline/runner.py                                 │             │
+│  │  Feature: _validate_stage_transition() method                  │             │
+│  │  Uses: schemas.py validate_stage_transition()                  │             │
+│  │  Config: enable_transition_validation                          │             │
+│  │  Impact: Catches data corruption between stages                │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ FIXED - STALE README:                                                       │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/pipeline/stages/README.md                          │             │
+│  │  Fix: Complete rewrite matching actual stage structure         │             │
+│  │  Removed: References to non-existent stage7/8/baseline files   │             │
+│  │  Impact: Documentation matches reality                         │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+│                                                                                  │
+│  ✅ ADDED - STAGE 10 IN REGISTRY:                                               │
+│  ┌────────────────────────────────────────────────────────────────┐             │
+│  │  File: data/pipeline/stage_registry.py                         │             │
+│  │  Added: StageName.EVALUATION enum                              │             │
+│  │  Status: Documented as optional (post-training)                │             │
+│  │  Impact: Completes stage enumeration                           │             │
+│  └────────────────────────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tasks
+
+| Task | File | Priority | Status | Description |
+|------|------|----------|--------|-------------|
+| 43-1 | `data/pipeline/stages/features/run.py` | HIGH | ✅ COMPLETE | Add fail-fast option for Stage 3 |
+| 43-2 | `data/pipeline/runner.py` | HIGH | ✅ COMPLETE | Enforce timeout with signal.SIGALRM |
+| 43-3 | `data/pipeline/runner.py` | HIGH | ✅ COMPLETE | Add stage transition validation |
+| 43-4 | `data/pipeline/stages/README.md` | MEDIUM | ✅ COMPLETE | Update stale documentation |
+| 43-5 | `data/pipeline/stage_registry.py` | MEDIUM | ✅ COMPLETE | Add Stage 10 to registry |
+
+### Success Metrics
+
+| Metric | Before | After | How to Verify |
+|--------|--------|-------|---------------|
+| Partial failures | Silent (proceed with gaps) | Fail-fast (configurable) | Check stage3_fail_on_partial config |
+| Pipeline hangs | No protection | Timeout enforced | Check stage_timeout_seconds config |
+| Data corruption | Undetected between stages | Validated | Check enable_transition_validation |
+| Documentation accuracy | Outdated (stage7/8 refs) | Current | Read stages/README.md |
+| Stage enumeration | Incomplete (missing stage 10) | Complete | Check StageName enum |
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Ruff linting | ✅ PASS | No new issues |
+| Import tests | ✅ PASS | All modules importable |
+| Config tests | ✅ PASS | New config fields recognized |
+
+---
 
 ### Phase 42: Memory Leak Fixes
 

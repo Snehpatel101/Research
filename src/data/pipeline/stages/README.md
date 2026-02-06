@@ -1,98 +1,114 @@
-# Phase 1 Pipeline Stages
+# Pipeline Stages
 
-Production-ready splitting, validation, backtesting, and reporting modules for the ensemble trading system.
+Production-ready data preparation pipeline for the ML Factory ensemble trading system.
 
-## Modules
+## Stage Architecture
 
-### Stage 7: Time-Based Splitting (`stage7_splits.py`)
+The pipeline is organized into subdirectories, each containing a `run.py` entry point:
 
-Creates chronological train/val/test splits with purging and embargo to prevent label leakage.
+```
+stages/
+├── ingest/          Stage 1: Data Ingestion (run_data_generation)
+├── clean/           Stage 2: Data Cleaning (run_data_cleaning)
+├── features/        Stage 3: Feature Engineering (run_feature_engineering)
+├── labeling/        Stage 4: Initial Labeling (run_initial_labeling)
+├── ga_optimize/     Stage 5: GA Optimization (run_ga_optimization)
+├── final_labels/    Stage 6: Final Labels (run_final_labels)
+├── splits/          Stage 7: Create Splits (run_create_splits)
+├── scaling/         Stage 7.5: Feature Scaling (run_feature_scaling)
+├── datasets/        Stage 7.6: Build Datasets (run_build_datasets)
+├── scaled_validation/ Stage 7.7: Post-Scale Validation (run_scaled_validation)
+├── validation/      Stage 8: Comprehensive Validation (run_validation)
+├── reporting/       Stage 9: Generate Report (run_generate_report)
+└── evaluation/      Stage 10: Post-Training Evaluation (run_evaluation)
+```
+
+## Stage Details
+
+### Stage 1: Data Ingestion (`ingest/run.py`)
+Generates or validates raw OHLCV data files.
+
+### Stage 2: Data Cleaning (`clean/run.py`)
+Cleans and resamples OHLCV data, handling gaps and anomalies.
+
+### Stage 3: Feature Engineering (`features/run.py`)
+Generates ~180 technical indicators and derived features.
+
+**Features:**
+- Momentum indicators (RSI, MACD, etc.)
+- Volatility features (ATR, Bollinger Bands)
+- Volume features (OBV, VWAP)
+- Multi-timeframe (MTF) features
+- Wavelet and entropy features
+
+### Stage 4: Initial Labeling (`labeling/run.py`)
+Applies triple-barrier labeling for multi-class targets.
+
+### Stage 5: GA Optimization (`ga_optimize/run.py`)
+Optimizes barrier parameters using genetic algorithms.
+
+### Stage 6: Final Labels (`final_labels/run.py`)
+Applies optimized labels with quality scores.
+
+### Stage 7: Create Splits (`splits/run.py`)
+Creates chronological train/val/test splits with purging and embargo.
 
 **Features:**
 - Chronological splitting (default 70/15/15)
 - Purging: removes N bars at split boundaries
 - Embargo: adds N bars buffer between splits
 - Validates no overlap between splits
-- Saves indices as .npy files
-- Generates split metadata with date ranges
 
-**Usage:**
-```python
-from stages.stage7_splits import create_splits
+### Stage 7.5: Feature Scaling (`scaling/run.py`)
+Train-only feature scaling to prevent leakage.
 
-metadata = create_splits(
-    data_path=Path("data/final/combined_final_labeled.parquet"),
-    output_dir=Path("data/splits"),
-    run_id="20240101_120000",  # Optional, auto-generated if None
-    train_ratio=0.70,
-    val_ratio=0.15,
-    test_ratio=0.15,
-    purge_bars=60,  # = max_bars for H20 (prevents label leakage)
-    embargo_bars=1440  # 5 days for 5-min data (288 bars/day * 5)
-)
-```
+### Stage 7.6: Build Datasets (`datasets/run.py`)
+Builds dataset splits and manifests.
 
-**Outputs:**
-- `splits/{run_id}/train_indices.npy` - Training set indices
-- `splits/{run_id}/val_indices.npy` - Validation set indices
-- `splits/{run_id}/test_indices.npy` - Test set indices
-- `splits/{run_id}/split_config.json` - Metadata
+### Stage 7.7: Post-Scale Validation (`scaled_validation/run.py`)
+Validates scaled data for drift and distribution issues.
 
----
+### Stage 8: Comprehensive Validation (`validation/run.py`)
+Final data integrity, label sanity, and feature quality checks.
 
-### Stage 8: Comprehensive Validation (`stage8_validate.py`)
-
-**Checks:** Data integrity, label sanity, feature quality
-
-**Usage:**
-```python
-from stages.stage8_validate import validate_data
-
-summary = validate_data(
-    data_path=Path("data/final/combined_final_labeled.parquet"),
-    output_path=Path("results/validation_report.json"),
-    horizons=[1, 5, 20]
-)
-```
-
----
-
-### Baseline Backtest (`baseline_backtest.py`)
-
-Simple label-following strategy to verify labels have predictive signal.
-
-**Usage:**
-```python
-from stages.baseline_backtest import run_baseline_backtest
-
-results = run_baseline_backtest(
-    data_path=Path("data/final/combined_final_labeled.parquet"),
-    split_indices_path=Path("data/splits/test.npy"),
-    output_dir=Path("results/baseline_backtest"),
-    horizon=5
-)
-```
-
----
-
-### Report Generation (`generate_report.py`)
-
+### Stage 9: Generate Report (`reporting/run.py`)
 Generates comprehensive Phase 1 summary with charts.
 
-**Usage:**
+### Stage 10: Post-Training Evaluation (`evaluation/run.py`)
+Post-training model evaluation (optional, runs after model training).
+
+## Usage
+
+The pipeline is orchestrated by `PipelineRunner`:
+
 ```python
-from stages.generate_report import generate_phase1_report
+from src.data.pipeline.runner import PipelineRunner
+from src.data.pipeline.data_config import DataConfig
 
-output_files = generate_phase1_report(
-    data_path=Path("data/final/combined_final_labeled.parquet"),
-    output_dir=Path("reports")
+config = DataConfig(
+    symbols=["MES"],
+    target_timeframe="5min",
+    project_root=Path("/path/to/project"),
 )
+
+runner = PipelineRunner(config)
+success = runner.run()
 ```
 
----
+## Stage Registration
 
-## Complete Pipeline
+Stages are registered in `stage_registry.py`. Each stage definition includes:
+- Name (from `StageName` enum)
+- Dependencies
+- Description
+- Required flag
+- Stage number (for ordering)
 
-```bash
-python src/run_phase1_complete.py
-```
+## Configuration
+
+Stage behavior is controlled via `DataConfig`:
+- `stage_timeout_seconds`: Maximum execution time per stage
+- `enable_stage_timeouts`: Enable/disable timeout enforcement
+- `stage3_fail_on_partial`: Fail Stage 3 if tasks fail
+- `stage3_min_success_rate`: Minimum success rate for Stage 3
+- `enable_transition_validation`: Validate data between stages

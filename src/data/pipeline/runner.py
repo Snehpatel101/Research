@@ -7,14 +7,16 @@ the data preparation pipeline.
 
 import json
 import logging
+import signal
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .schemas import StageValidationError
+from .schemas import StageValidationError, validate_stage_transition
 from .stage_registry import PipelineStage, get_stage_definitions
 from .stages import (
     run_build_datasets,
@@ -31,6 +33,65 @@ from .stages import (
     run_validation,
 )
 from .utils import StageResult, StageStatus
+
+# Note: run_evaluation is exported from stages but not used in default pipeline
+# Stage 10 is optional and runs post-training
+
+
+class StageTimeoutError(Exception):
+    """Raised when a pipeline stage exceeds its timeout."""
+
+    def __init__(self, stage_name: str, timeout_seconds: int):
+        self.stage_name = stage_name
+        self.timeout_seconds = timeout_seconds
+        super().__init__(f"Stage '{stage_name}' timed out after {timeout_seconds} seconds")
+
+
+def _run_with_timeout(
+    func: Callable[[], Any],
+    timeout_seconds: int,
+    stage_name: str,
+) -> Any:
+    """Execute a function with a timeout using signal.SIGALRM.
+
+    Note: Only works on Unix-like systems. On Windows, timeout is disabled.
+
+    Args:
+        func: Function to execute
+        timeout_seconds: Maximum execution time in seconds (0 = no timeout)
+        stage_name: Name of the stage (for error messages)
+
+    Returns:
+        Result of the function call
+
+    Raises:
+        StageTimeoutError: If the function exceeds the timeout
+    """
+    if timeout_seconds <= 0:
+        return func()
+
+    # Check if we're on a system that supports SIGALRM
+    if not hasattr(signal, "SIGALRM"):
+        # Windows doesn't support SIGALRM, run without timeout
+        logging.getLogger(__name__).warning(
+            f"Timeout not supported on this platform, running {stage_name} without timeout"
+        )
+        return func()
+
+    def timeout_handler(signum: int, frame: Any) -> None:
+        raise StageTimeoutError(stage_name, timeout_seconds)
+
+    # Set up the timeout
+    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout_seconds)
+
+    try:
+        result = func()
+        return result
+    finally:
+        # Cancel the alarm and restore the old handler
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 if TYPE_CHECKING:
     from src.data.pipeline.data_config import DataConfig
@@ -191,9 +252,30 @@ class PipelineRunner:
                 all_success = False
                 break
 
-            # Execute stage
+            # Execute stage (with optional timeout - Phase 43)
             self.logger.info(f"\nExecuting stage: {stage.name}")
-            result = stage.function()
+            try:
+                if self.config.enable_stage_timeouts and self.config.stage_timeout_seconds > 0:
+                    self.logger.debug(
+                        f"Stage timeout enabled: {self.config.stage_timeout_seconds}s"
+                    )
+                    result = _run_with_timeout(
+                        stage.function,
+                        self.config.stage_timeout_seconds,
+                        stage.name,
+                    )
+                else:
+                    result = stage.function()
+            except StageTimeoutError as e:
+                self.logger.error(f"[FAIL] Stage timed out: {stage.name}")
+                self.logger.error(f"Timeout: {e.timeout_seconds} seconds exceeded")
+                from .utils import create_failed_result
+
+                result = create_failed_result(
+                    stage_name=stage.name,
+                    start_time=datetime.now(),
+                    error=str(e),
+                )
 
             # Store result
             self.stage_results[stage.name] = result
@@ -215,6 +297,21 @@ class PipelineRunner:
                             "Required stage schema validation failed. Stopping pipeline."
                         )
                         break
+
+                # Phase 43: Validate stage transition to next stage
+                if getattr(self.config, "enable_transition_validation", True):
+                    try:
+                        self._validate_stage_transition(stage, result, stages_to_run)
+                    except StageValidationError as e:
+                        self.logger.error(
+                            f"[FAIL] Stage transition validation failed after {stage.name}: {e}"
+                        )
+                        all_success = False
+                        if stage.required:
+                            self.logger.error(
+                                "Required stage transition validation failed. Stopping pipeline."
+                            )
+                            break
             else:
                 self.logger.error(f"[FAIL] Stage failed: {stage.name}")
                 if result.error:
@@ -377,6 +474,83 @@ class PipelineRunner:
             except Exception as e:
                 self.logger.error(f"Schema validation error for {artifact_path}: {e}")
                 raise
+
+    def _validate_stage_transition(
+        self,
+        current_stage: PipelineStage,
+        result: StageResult,
+        stages_to_run: list[PipelineStage],
+    ) -> None:
+        """
+        Validate data when transitioning between pipeline stages (Phase 43).
+
+        Reads the current stage's output artifacts and validates them against
+        the requirements for the next stage in the pipeline.
+
+        Args:
+            current_stage: The stage that just completed
+            result: StageResult containing artifact paths
+            stages_to_run: List of stages being run in this execution
+
+        Raises:
+            StageValidationError: If transition validation fails
+        """
+        import pandas as pd
+
+        # Find the next stage
+        current_idx = None
+        for idx, stage in enumerate(stages_to_run):
+            if stage.name == current_stage.name:
+                current_idx = idx
+                break
+
+        if current_idx is None or current_idx >= len(stages_to_run) - 1:
+            # No next stage, skip transition validation
+            return
+
+        next_stage = stages_to_run[current_idx + 1]
+
+        # Validate each parquet artifact for the transition
+        validated_any = False
+        for artifact_path in result.artifacts:
+            if not artifact_path.exists():
+                continue
+
+            if artifact_path.suffix != ".parquet":
+                continue  # Only validate parquet files
+
+            try:
+                df = pd.read_parquet(artifact_path)
+                warnings = validate_stage_transition(
+                    output_df=df,
+                    from_stage=current_stage.name,
+                    to_stage=next_stage.name,
+                    strict=True,
+                )
+                validated_any = True
+
+                if warnings:
+                    for warning in warnings:
+                        self.logger.warning(f"  Transition warning: {warning}")
+                else:
+                    self.logger.debug(
+                        f"  Transition validation passed: "
+                        f"{current_stage.name} -> {next_stage.name} "
+                        f"({artifact_path.name})"
+                    )
+            except StageValidationError:
+                # Re-raise validation errors
+                raise
+            except Exception as e:
+                self.logger.warning(
+                    f"Could not validate transition for {artifact_path.name}: {e}"
+                )
+
+        if not validated_any:
+            self.logger.debug(
+                f"No parquet artifacts to validate for transition "
+                f"{current_stage.name} -> {next_stage.name}"
+            )
 
     def _save_lineage(self) -> None:
         """Save pipeline lineage metadata for dataset validation."""
