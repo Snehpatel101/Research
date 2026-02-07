@@ -31,12 +31,99 @@ from src.core.constants import (
     MODEL_ADAPTER_MAP,
     MODEL_DATA_RANKS,
 )
+from src.core.contracts import get_model_contract
 
 from .multi_stream import MultiStreamAdapter
 from .registry import get_adapter
 from .scaling import AdapterScaler, ScalerConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _detect_timeframe(df: pd.DataFrame) -> str | None:
+    """
+    Detect the timeframe of a DataFrame from its datetime index or column.
+
+    Returns the timeframe as a string (e.g., "1min", "5min") or None if
+    detection fails.
+    """
+    try:
+        # Get datetime column
+        if "datetime" in df.columns:
+            dt = pd.to_datetime(df["datetime"])
+        elif isinstance(df.index, pd.DatetimeIndex):
+            dt = df.index
+        else:
+            return None
+
+        if len(dt) < 2:
+            return None
+
+        # Calculate median time difference (robust to gaps)
+        diffs = dt.diff().dropna()
+        if len(diffs) == 0:
+            return None
+
+        median_diff = diffs.median()
+        minutes = median_diff.total_seconds() / 60
+
+        # Map to standard timeframes
+        tf_map = {
+            1: "1min",
+            5: "5min",
+            10: "10min",
+            15: "15min",
+            30: "30min",
+            60: "60min",
+        }
+
+        # Find closest match
+        closest = min(tf_map.keys(), key=lambda x: abs(x - minutes))
+        if abs(closest - minutes) < 0.5:  # Within 30 seconds
+            return tf_map[closest]
+
+        return None
+    except Exception:
+        return None
+
+
+def _resample_for_model(
+    df: pd.DataFrame, source_tf: str, target_tf: str
+) -> pd.DataFrame:
+    """
+    Resample DataFrame from source timeframe to target timeframe.
+
+    Only resamples if target is coarser than source (e.g., 1min -> 5min).
+    """
+    from src.data.pipeline.config import parse_timeframe_to_minutes
+
+    source_mins = parse_timeframe_to_minutes(source_tf)
+    target_mins = parse_timeframe_to_minutes(target_tf)
+
+    if target_mins <= source_mins:
+        # Target is same or finer resolution, no resampling needed
+        return df
+
+    logger.info(f"Resampling data from {source_tf} to {target_tf} for model requirements")
+
+    # Import resample function
+    from src.data.pipeline.stages.clean.utils import resample_ohlcv
+
+    # Check if we have OHLCV columns for proper resampling
+    ohlcv_cols = {"open", "high", "low", "close", "volume"}
+    has_ohlcv = ohlcv_cols.issubset(set(df.columns))
+
+    if has_ohlcv:
+        # Use proper OHLCV resampling
+        return resample_ohlcv(df, target_tf, include_metadata=False)
+    else:
+        # Feature-only data: use simple downsampling (take every Nth row)
+        ratio = target_mins // source_mins
+        logger.warning(
+            f"No OHLCV columns found, using simple downsampling (1:{ratio}). "
+            "This may lose information."
+        )
+        return df.iloc[::ratio].reset_index(drop=True)
 
 
 @dataclass
@@ -370,6 +457,22 @@ class UnifiedDataPreparation:
             )
 
         data_rank = MODEL_DATA_RANKS.get(model_key, 2)
+
+        # 1b. Check model contract for primary_timeframe and resample if needed
+        try:
+            contract = get_model_contract(model_key)
+            target_tf = contract.primary_timeframe
+            source_tf = _detect_timeframe(df)
+
+            if source_tf and target_tf and source_tf != target_tf:
+                logger.info(
+                    f"Model {model_name} requires {target_tf} data, "
+                    f"input appears to be {source_tf}"
+                )
+                df = _resample_for_model(df, source_tf, target_tf)
+                logger.info(f"After resampling: {len(df):,} rows")
+        except Exception as e:
+            logger.warning(f"Could not check/apply timeframe resampling: {e}")
 
         logger.info(
             f"Preparing data for {model_name}: " f"adapter={adapter_type}, rank={data_rank}D"
