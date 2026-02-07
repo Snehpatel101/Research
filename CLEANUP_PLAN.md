@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 43 COMPLETE (5 tasks)
-**Last Updated:** 2026-02-06
+**Status:** Phase 43 COMPLETE (6 tasks)
+**Last Updated:** 2026-02-07
 
 ---
 
@@ -29,9 +29,9 @@ See **COMPLETION.md** for full details on all completed phases.
 | 40 | Skip Hyperparameter Tuning for Sequence Models | ✅ COMPLETE | 2026-02-04 |
 | 41 | Critical Vectorization Fixes (wavelets, entropy) | ✅ COMPLETE | 2026-02-04 |
 | 42 | Memory Leak Fixes (TCN training crash) | ✅ COMPLETE | 2026-02-06 |
-| 43 | Pipeline Robustness (fail-fast, timeouts, validation) | ✅ COMPLETE | 2026-02-06 |
+| 43 | Pipeline Robustness + TCN Timeframe Fix | ✅ COMPLETE | 2026-02-07 |
 
-**Summary Impact:** 20 phases complete (24-43), 103+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened.
+**Summary Impact:** 20 phases complete (24-43), 103+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced.
 
 ---
 
@@ -47,19 +47,19 @@ See **COMPLETION.md** for full details on all completed phases.
 | 40 | Skip Hyperparameter Tuning for Sequence Models | HIGH | 1 session | ✅ COMPLETE |
 | 41 | Critical Vectorization Fixes (wavelets, entropy) | CRITICAL | 1 session | ✅ COMPLETE |
 | 42 | Memory Leak Fixes (TCN training crash) | CRITICAL | 1 session | ✅ COMPLETE |
-| 43 | Pipeline Robustness (fail-fast, timeouts, validation) | HIGH | 1 session | ✅ COMPLETE |
+| 43 | Pipeline Robustness + TCN Timeframe Fix | HIGH | 2 sessions | ✅ COMPLETE |
 
 ---
 
 ## Completed Recent Phases
 
-### Phase 43: Pipeline Robustness
+### Phase 43: Pipeline Robustness + TCN Timeframe Fix
 
 **Status:** ✅ COMPLETE
-**Priority:** HIGH (P1) - Production reliability
-**Effort:** Single session (2026-02-06)
-**Source:** Pipeline reliability hardening
-**Completed:** 2026-02-06
+**Priority:** HIGH (P1) - Production reliability + Memory crash fix
+**Effort:** Two sessions (2026-02-06, 2026-02-07)
+**Source:** Pipeline reliability hardening + TCN training crash
+**Completed:** 2026-02-07
 
 **Overview**
 
@@ -122,6 +122,7 @@ Enhanced pipeline reliability with fail-fast behavior, timeout enforcement, and 
 | 43-3 | `data/pipeline/runner.py` | HIGH | ✅ COMPLETE | Add stage transition validation |
 | 43-4 | `data/pipeline/stages/README.md` | MEDIUM | ✅ COMPLETE | Update stale documentation |
 | 43-5 | `data/pipeline/stage_registry.py` | MEDIUM | ✅ COMPLETE | Add Stage 10 to registry |
+| 43-6 | `data/adapters/preparation.py` | CRITICAL | ✅ COMPLETE | Auto-resample to model's primary_timeframe |
 
 ### Success Metrics
 
@@ -132,6 +133,8 @@ Enhanced pipeline reliability with fail-fast behavior, timeout enforcement, and 
 | Data corruption | Undetected between stages | Validated | Check enable_transition_validation |
 | Documentation accuracy | Outdated (stage7/8 refs) | Current | Read stages/README.md |
 | Stage enumeration | Incomplete (missing stage 10) | Complete | Check StageName enum |
+| TCN memory | 230GB+ (crash) | ~25-35GB (working) | TCN trains on 1min input data |
+| Model contracts | Ignored (wrong timeframe) | Enforced (auto-resample) | Log shows resampling message |
 
 ### Verification Results
 

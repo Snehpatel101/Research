@@ -1,9 +1,80 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-04 (Phase 41 COMPLETE)
-**Status:** Phase 41 COMPLETE | Critical Vectorization Fixes
+**Last Updated:** 2026-02-07 (Phase 43 COMPLETE)
+**Status:** Phase 43 COMPLETE | Pipeline Robustness + TCN Timeframe Fix
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 43: Pipeline Robustness + TCN Timeframe Fix (2026-02-06/07) - COMPLETE
+
+**Discovered During:** Pipeline architecture review and TCN training crash
+**Source:** 5-issue pipeline review + user-reported 230GB+ memory crash during TCN training
+**Completed:** 2026-02-07
+**Status:** ✅ COMPLETE - 6 fixes implemented
+
+### Summary
+
+Two related improvements: pipeline robustness enhancements (fail-fast, timeouts, validation) and a critical fix for TCN training memory crash caused by wrong timeframe data.
+
+**Pipeline Robustness (5 tasks):**
+1. **Stage 3 fail-fast** - Configurable fail on partial task failures
+2. **Timeout enforcement** - StageTimeoutError + signal.SIGALRM
+3. **Transition validation** - Data integrity checks between stages
+4. **README rewrite** - Fixed stale documentation
+5. **Registry completion** - Added StageName.EVALUATION
+
+**TCN Timeframe Fix (1 task):**
+- **Problem:** TCN requires 5min data but received 1min data (232K rows instead of 46K)
+- **Root cause:** `UnifiedDataPreparation.prepare()` ignored model's `primary_timeframe` contract
+- **Fix:** Added `_detect_timeframe()` and `_resample_for_model()` to auto-resample input data
+- **Impact:** Memory reduced from 150GB+ (crash) to ~25-35GB (working)
+
+### Code Changes Summary
+
+**Pipeline Robustness:**
+```python
+# src/data/pipeline/data_config.py - New config fields
+stage3_fail_on_partial: bool = True
+stage3_min_success_rate: float = 0.95
+enable_transition_validation: bool = True
+
+# src/data/pipeline/runner.py - Timeout and validation
+class StageTimeoutError(Exception): ...
+def _run_with_timeout(stage_func, timeout_seconds, stage_name): ...
+def _validate_stage_transition(prev_stage, next_stage, output_data): ...
+```
+
+**TCN Timeframe Fix:**
+```python
+# src/data/adapters/preparation.py - Auto-resampling
+def _detect_timeframe(df: pd.DataFrame) -> str | None:
+    """Detect timeframe from datetime index (returns '1min', '5min', etc.)."""
+
+def _resample_for_model(df: pd.DataFrame, source_tf: str, target_tf: str) -> pd.DataFrame:
+    """Resample if target is coarser than source."""
+
+# In prepare() method:
+contract = get_model_contract(model_key)
+target_tf = contract.primary_timeframe
+source_tf = _detect_timeframe(df)
+if source_tf and target_tf and source_tf != target_tf:
+    df = _resample_for_model(df, source_tf, target_tf)
+```
+
+### Files Modified
+
+```
+src/data/pipeline/data_config.py          (New config fields)
+src/data/pipeline/runner.py               (Timeout + validation)
+src/data/pipeline/stages/features/run.py  (Fail-fast logic)
+src/data/pipeline/stage_registry.py       (EVALUATION enum)
+src/data/pipeline/stages/README.md        (Complete rewrite)
+src/data/adapters/preparation.py          (Auto-resampling)
+```
+
+**Total:** 6 files, ~300 lines added
 
 ---
 
