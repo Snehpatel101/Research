@@ -53,6 +53,7 @@ from src.core import (
     DEFAULT_OPTUNA_RANDOM_STATE,
     MODEL_DATA_RANKS,
 )
+from src.optimization.scoring import purged_train_val_split
 
 logger = logging.getLogger(__name__)
 
@@ -611,14 +612,10 @@ class HyperparameterOptimizer:
 
         # Split data if no validation set provided
         if X_val is None or y_val is None:
-            # Time-based split to prevent data leakage in time series
-            if len(X) < 2:
-                raise ValueError(f"Cannot split dataset with {len(X)} samples (minimum 2 required)")
-            split_idx = int(len(X) * 0.8)
-            split_idx = max(1, split_idx)  # Ensure at least 1 training sample
-            X_train, X_val = X[:split_idx], X[split_idx:]
-            y_train, y_val = y[:split_idx], y[split_idx:]
-            sw_train = sample_weights[:split_idx] if sample_weights is not None else None
+            train_end, val_start = purged_train_val_split(len(X))
+            X_train, X_val = X[:train_end], X[val_start:]
+            y_train, y_val = y[:train_end], y[val_start:]
+            sw_train = sample_weights[:train_end] if sample_weights is not None else None
         else:
             X_train, y_train = X, y
             sw_train = sample_weights

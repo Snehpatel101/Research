@@ -39,22 +39,27 @@ class FeatureMode(str, Enum):
     OOF_PROBS = "oof_probs"  # OOF predictions for meta-learners
 
 
-class MTFMode(str, Enum):
+class ModelMTFMode(str, Enum):
     """
-    Multi-timeframe mode for MODEL CONTRACTS.
+    Multi-timeframe mode for MODEL CONTRACTS (model input expectations).
 
     This describes what MTF mode a model expects as input, not what the
-    pipeline generates. For pipeline generation modes, see src.config.data.MTFMode.
+    pipeline generates. For pipeline generation modes, see src.config.data.MTFMode
+    which has 5 modes (NONE, BARS, INDICATORS, BOTH, MULTI_STREAM).
 
-    Values:
-        NONE: Model uses single timeframe only (no MTF features)
-        INDICATORS: Model expects MTF indicator features flattened into primary TF
-        MULTI_STREAM: Model expects 4D multi-timeframe tensor input
+    This is intentionally a SUBSET - models only care about 3 input shapes:
+        NONE: Model uses single timeframe only (2D input)
+        INDICATORS: Model expects MTF indicator features flattened into primary TF (2D)
+        MULTI_STREAM: Model expects 4D multi-timeframe tensor input (4D)
     """
 
     NONE = "none"  # Single timeframe, no MTF
     INDICATORS = "indicators"  # MTF indicator features added to primary TF
     MULTI_STREAM = "multi_stream"  # Multiple TF streams (4D input)
+
+
+# Backward compatibility alias
+MTFMode = ModelMTFMode
 
 
 @dataclass(frozen=True)
@@ -452,7 +457,8 @@ class DataContract:
 __all__ = [
     "DataRank",
     "FeatureMode",
-    "MTFMode",
+    "ModelMTFMode",
+    "MTFMode",  # Backward compat alias for ModelMTFMode
     "DataContractSchema",
     "DATA_SCHEMA",
     "DataContract",

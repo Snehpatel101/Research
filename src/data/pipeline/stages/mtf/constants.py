@@ -9,6 +9,8 @@ Do not redefine timeframe constants here - use the common module instead.
 """
 
 # Import canonical timeframe definitions from the single source of truth
+# MTFMode imported from canonical location (src/config/data)
+from src.config.data import MTFMode
 from src.core.common.timeframes import (
     CANONICAL_TIMEFRAMES,
     normalize_timeframe_list,
@@ -19,11 +21,6 @@ from src.core.common.timeframes import (
 from src.core.common.timeframes import (
     TIMEFRAME_TO_MINUTES as _COMMON_TIMEFRAME_TO_MINUTES,
 )
-
-
-# MTFMode imported from canonical location (src/config/data)
-from src.config.data import MTFMode
-
 
 # Supported MTF timeframes with their minute equivalents
 # Imported from common module - includes all canonical forms and aliases

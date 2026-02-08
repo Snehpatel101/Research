@@ -52,8 +52,8 @@ class WalkForwardConfig:
     window_type: str = "expanding"  # "expanding" or "rolling"
     min_train_pct: float = 0.4  # First window uses at least 40% for training
     test_pct: float = 0.1  # Each test window is ~10% of data
-    embargo_bars: int = 0  # Post-test embargo (for serial correlation)
-    gap_bars: int = 0  # Gap between train and test (for label leakage)
+    embargo_bars: int = 60  # Post-test embargo (for serial correlation)
+    gap_bars: int = 60  # Gap between train and test (for label leakage)
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -446,8 +446,8 @@ def create_walk_forward_evaluator(
     window_type: str = "expanding",
     min_train_pct: float = 0.4,
     test_pct: float = 0.1,
-    embargo_bars: int = 0,
-    gap_bars: int = 0,
+    embargo_bars: int = 60,
+    gap_bars: int = 60,
 ) -> WalkForwardEvaluator:
     """
     Factory function to create a WalkForwardEvaluator.

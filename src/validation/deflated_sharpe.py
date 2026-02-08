@@ -55,9 +55,15 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DSRConfig:
+class DSRComputeConfig:
     """
-    Configuration for DSR computation.
+    Configuration for DSR computation thresholds and numerical controls.
+
+    For statistical inputs (n_trials, variance, skewness, kurtosis),
+    see src.config.cv.DSRConfig which is the CANONICAL DSRConfig.
+
+    This class controls HOW the DSR is computed (thresholds, clipping),
+    not WHAT statistical inputs are used.
 
     Attributes:
         significance_threshold: DSR threshold for statistical significance (default 0.0)
@@ -92,6 +98,10 @@ class DSRConfig:
                 f"min_trials_for_kurtosis must be >= 4 for valid kurtosis, "
                 f"got {self.min_trials_for_kurtosis}"
             )
+
+
+# Backward compatibility alias - use DSRComputeConfig for new code
+DSRConfig = DSRComputeConfig
 
 
 # =============================================================================
@@ -681,7 +691,8 @@ def analyze_selection_bias(
 
 
 __all__ = [
-    "DSRConfig",
+    "DSRComputeConfig",
+    "DSRConfig",  # Backward compat alias for DSRComputeConfig
     "DSRResult",
     "compute_deflated_sharpe",
     "compute_dsr_from_optuna_study",

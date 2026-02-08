@@ -34,33 +34,42 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
+# =============================================================================
+# SUPPORTED AND ACTIVE HORIZONS
+# =============================================================================
+# Static defaults — no dependency on global_config at import time.
+# Use get_config_horizons() for dynamic lookups that respect global_config.
+SUPPORTED_HORIZONS: list[int] = [1, 5, 10, 15, 20, 30, 60, 120]
+HORIZONS: list[int] = [5, 10, 15, 20]
+
+# Legacy aliases for backward compatibility
+LOOKBACK_HORIZONS: list[int] = [1, 5, 20]
+ACTIVE_HORIZONS: list[int] = [5, 10, 15, 20]
+LABEL_HORIZONS: list[int] = ACTIVE_HORIZONS
+
+
+def get_config_horizons() -> dict[str, list[int]]:
+    """
+    Dynamically fetch horizon lists from global_config at call time.
+
+    Returns a dict with 'supported' and 'active' keys. Falls back to the
+    static module-level defaults when global_config is unavailable.
+    """
     try:
         from src.config.global_config import get_global_config
 
         config = get_global_config()
-        parts = attr_path.split(".")
-        value: Any = config
-        for part in parts:
-            value = getattr(value, part)
-        return value if value is not None else fallback
-    except Exception as e:
-        logger.warning(f"Failed to get config attribute '{attr_path}': {e}. Using fallback: {fallback}")
-        return fallback
-
-
-# =============================================================================
-# SUPPORTED AND ACTIVE HORIZONS
-# =============================================================================
-SUPPORTED_HORIZONS: list[int] = list(
-    _get_global_or_default("horizons.supported", [1, 5, 10, 15, 20, 30, 60, 120])
-)
-HORIZONS: list[int] = list(_get_global_or_default("horizons.active", [5, 10, 15, 20]))
-
-# Legacy aliases for backward compatibility
-LOOKBACK_HORIZONS: list[int] = [1, 5, 20]
-ACTIVE_HORIZONS: list[int] = list(_get_global_or_default("horizons.active", [5, 10, 15, 20]))
-LABEL_HORIZONS: list[int] = ACTIVE_HORIZONS
+        supported = getattr(getattr(config, "horizons", None), "supported", None)
+        active = getattr(getattr(config, "horizons", None), "active", None)
+        return {
+            "supported": list(supported) if supported is not None else list(SUPPORTED_HORIZONS),
+            "active": list(active) if active is not None else list(HORIZONS),
+        }
+    except Exception:
+        return {
+            "supported": list(SUPPORTED_HORIZONS),
+            "active": list(HORIZONS),
+        }
 
 
 # =============================================================================

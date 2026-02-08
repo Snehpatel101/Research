@@ -114,7 +114,6 @@ class ScalerConfig:
 # FeatureCategory imported from canonical location (src/config/data)
 from src.config.data import FeatureCategory
 
-
 # Feature categorization rules
 FEATURE_PATTERNS: dict[FeatureCategory, list[str]] = {
     FeatureCategory.RETURNS: [

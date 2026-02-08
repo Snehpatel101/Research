@@ -318,8 +318,8 @@ class WalkForwardConfig(BaseConfig):
     window_type: str = "expanding"
     min_train_pct: float = 0.4
     test_pct: float = 0.1
-    embargo_bars: int = 0
-    gap_bars: int = 0
+    embargo_bars: int = 60
+    gap_bars: int = 60
 
     # Training-specific settings
     retrain_on_each_window: bool = True

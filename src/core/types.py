@@ -168,12 +168,14 @@ class CVMethod(str, Enum):
     - CPCV: Combinatorial Purged Cross-Validation
     - WALK_FORWARD: Expanding/sliding window
     - PBO: Probability of Backtest Overfitting
+    - STANDARD: Standard k-fold (no purge/embargo)
     """
 
     PURGED_KFOLD = "purged_kfold"
     CPCV = "cpcv"
     WALK_FORWARD = "walk_forward"
     PBO = "pbo"
+    STANDARD = "standard"
 
 
 # =============================================================================

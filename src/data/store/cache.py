@@ -608,9 +608,10 @@ def compute_file_checksum(file_path: Path | str) -> str:
 
 def compute_dataframe_checksum(df: pd.DataFrame) -> str:
     """
-    Compute checksum of a DataFrame's content.
+    Compute checksum of a DataFrame's full content.
 
-    Uses a hash of the serialized DataFrame for content addressing.
+    Hashes every value in the DataFrame using pandas hash_pandas_object
+    for reliable content-addressable caching.
 
     Parameters
     ----------
@@ -622,26 +623,16 @@ def compute_dataframe_checksum(df: pd.DataFrame) -> str:
     str
         SHA256 hex digest (first 32 chars)
     """
-    # Hash based on shape and column hash
-    # For performance, we sample instead of hashing entire content
     sha256 = hashlib.sha256()
 
-    # Include shape
+    # Include shape and schema
     sha256.update(f"shape:{df.shape}".encode())
-
-    # Include column names and dtypes
     for col in df.columns:
         sha256.update(f"col:{col}:{df[col].dtype}".encode())
 
-    # Include first/last rows and sample for content fingerprint
+    # Hash ALL row content using pandas' vectorized hashing
     if len(df) > 0:
-        sha256.update(df.iloc[0].to_json().encode())
-        sha256.update(df.iloc[-1].to_json().encode())
-
-        # Sample middle rows if dataset is large
-        if len(df) > 1000:
-            sample_indices = [len(df) // 4, len(df) // 2, 3 * len(df) // 4]
-            for idx in sample_indices:
-                sha256.update(df.iloc[idx].to_json().encode())
+        row_hashes = pd.util.hash_pandas_object(df, index=False)
+        sha256.update(row_hashes.values.tobytes())
 
     return sha256.hexdigest()[:32]

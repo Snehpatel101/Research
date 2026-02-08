@@ -39,6 +39,12 @@ EXCLUDED_PREFIXES: tuple[str, ...] = (
     "fwd_return_",
     "fwd_return_log_",
     "time_to_hit_",
+    "meta_label_",
+    "meta_proba_",
+    "bet_size_",
+    "primary_pred_",
+    "correctness_margin_",
+    "label_end_time_",
 )
 
 

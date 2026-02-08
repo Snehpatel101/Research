@@ -953,6 +953,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Free training data from memory after training completes
         # Critical for sequence models where X_train can be 10GB+
         import gc
+
         import torch
 
         del X_train, w_train

@@ -352,32 +352,25 @@ class StackingEnsemble(BaseModel):
         embargo_bars = train_config.get("embargo_bars", 1440)
 
         # ==================================================================
-        # LEAKAGE PREVENTION: Use default configs for OOF generation
+        # LEAKAGE PREVENTION: Always use default configs for OOF generation
         # ==================================================================
-        # When use_default_configs_for_oof=True (default), OOF predictions
-        # are generated with default model configurations, NOT tuned configs.
-        # This prevents the meta-learner from training on optimistically
-        # biased OOF predictions from tuned base models.
-        #
-        # The tuned configs (base_model_configs) are only used for:
-        # 1. Final base models stored for inference
-        # 2. NOT for OOF generation that trains the meta-learner
+        # OOF predictions MUST use default model configurations, NOT tuned
+        # configs. Tuned configs incorporate validation-set information,
+        # which would bias OOF predictions and inflate meta-learner accuracy.
         # ==================================================================
-        use_default_for_oof = train_config.get("use_default_configs_for_oof", True)
-
-        if use_default_for_oof:
-            # Use empty configs (defaults) for OOF to prevent leakage
-            oof_base_configs: dict[str, dict[str, Any]] = {}
-        else:
-            # Legacy behavior: use provided configs (NOT RECOMMENDED)
-            oof_base_configs = base_model_configs
+        if train_config.get("use_default_configs_for_oof") is False:
+            logger.warning(
+                "IGNORED: use_default_configs_for_oof=False would cause data leakage. "
+                "OOF predictions always use default configs to prevent meta-learner bias."
+            )
+        oof_base_configs: dict[str, dict[str, Any]] = {}
 
         # Log ensemble configuration (extracted to reduce fit() complexity - Phase 10A)
         self._log_ensemble_config(
             base_model_names=self._base_model_names,
             meta_learner_name=self._meta_learner_name,
             n_folds=self._n_folds,
-            use_default_for_oof=use_default_for_oof,
+            use_default_for_oof=True,
         )
 
         # Step 1: Generate OOF predictions with PurgedKFold (prevents label leakage)

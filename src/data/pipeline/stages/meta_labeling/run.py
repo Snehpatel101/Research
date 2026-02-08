@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.pipeline.utils import create_failed_result, create_stage_result
+from src.validation.cv.purged_kfold import PurgedKFold, PurgedKFoldConfig
 
 from .bet_sizer import BetSizer
 from .meta_labeler import MetaLabelGenerator
@@ -228,6 +229,104 @@ def _generate_meta_labels(
     return result.meta_labels, y_primary, result.quality_metrics
 
 
+def _purged_oof_predictions(
+    X: np.ndarray,
+    y: np.ndarray,
+    sample_weights: np.ndarray | None,
+    config: dict[str, Any],
+    n_splits: int = 5,
+    purge_bars: int = 60,
+    embargo_bars: int = 200,
+) -> tuple[PrimaryClassifier, np.ndarray, np.ndarray]:
+    """
+    Generate out-of-fold predictions using purged cross-validation.
+
+    Each sample gets predicted only by a model that never saw it during
+    training, with purge/embargo gaps to prevent label leakage.
+
+    After OOF predictions, a final model is trained on ALL data for
+    downstream use (threshold is set from OOF metrics).
+
+    Args:
+        X: Feature matrix (n_samples, n_features)
+        y: Labels
+        sample_weights: Optional sample weights
+        config: Config dict with recall_target, base_model
+        n_splits: Number of CV folds
+        purge_bars: Bars to purge before test fold
+        embargo_bars: Bars to embargo after test fold
+
+    Returns:
+        Tuple of (final_trained_model, oof_probabilities, oof_predictions)
+        Every sample gets a prediction from a model that never trained on it.
+        Purge/embargo only reduces training sets, not test coverage.
+    """
+    recall_target = config.get("recall_target", DEFAULT_RECALL_TARGET)
+    base_model = config.get("base_model", "logistic")
+
+    n_samples = len(y)
+    oof_proba = np.full(n_samples, np.nan)
+    oof_preds = np.full(n_samples, -1, dtype=int)
+
+    cv_config = PurgedKFoldConfig(
+        n_splits=n_splits,
+        purge_bars=purge_bars,
+        embargo_bars=embargo_bars,
+    )
+    cv = PurgedKFold(cv_config)
+
+    # PurgedKFold.split() expects a DataFrame (checks .index for DatetimeIndex)
+    X_df = pd.DataFrame(X)
+
+    fold_metrics = []
+    for fold_idx, (train_idx, test_idx) in enumerate(cv.split(X_df)):
+        X_fold_train, y_fold_train = X[train_idx], y[train_idx]
+        X_fold_test = X[test_idx]
+
+        fold_weights = sample_weights[train_idx] if sample_weights is not None else None
+
+        fold_model = PrimaryClassifier(
+            recall_target=recall_target,
+            base_model=base_model,
+            calibrate=True,
+            cv_folds=min(3, n_splits - 1),
+            random_state=42,
+            class_weight="balanced",
+        )
+        fold_model.fit(X_fold_train, y_fold_train, sample_weight=fold_weights)
+
+        fold_proba = fold_model.predict_proba(X_fold_test)[:, 1]
+        fold_preds = fold_model.predict(X_fold_test)
+
+        oof_proba[test_idx] = fold_proba
+        oof_preds[test_idx] = fold_preds
+
+        fold_metrics.append(fold_model.get_recall_metrics())
+        logger.debug(
+            f"    Fold {fold_idx}: recall={fold_metrics[-1]['achieved_recall']:.2%}, "
+            f"train={len(train_idx)}, test={len(test_idx)}"
+        )
+
+    # Train final model on all data (for threshold + downstream predict_side)
+    final_model = PrimaryClassifier(
+        recall_target=recall_target,
+        base_model=base_model,
+        calibrate=True,
+        cv_folds=min(5, n_splits),
+        random_state=42,
+        class_weight="balanced",
+    )
+    final_model.fit(X, y, sample_weight=sample_weights)
+
+    n_predicted = np.sum(~np.isnan(oof_proba))
+    logger.info(
+        f"    Purged OOF: {n_predicted}/{n_samples} samples predicted "
+        f"({n_predicted / n_samples:.1%} coverage)"
+    )
+
+    return final_model, oof_proba, oof_preds
+
+
 def _compute_bet_sizes(
     meta_probs: np.ndarray,
     directions: np.ndarray,
@@ -370,7 +469,7 @@ def run_meta_labeling(
                     return_col = f"fwd_return_h{horizon}"
                     weight_col = f"sample_weight_h{horizon}"
 
-                    # Prepare training data (exclude invalid labels)
+                    # Prepare data (exclude invalid labels)
                     valid_mask = df[label_col] != -99
                     df_valid = df[valid_mask].copy()
 
@@ -380,66 +479,78 @@ def run_meta_labeling(
                         )
                         continue
 
-                    X = df_valid[feature_cols].values
-                    y = df_valid[label_col].values
+                    X_valid = df_valid[feature_cols].values
+                    y_valid = df_valid[label_col].values
 
                     # Get sample weights if available
                     weights = None
                     if weight_col in df_valid.columns:
                         weights = df_valid[weight_col].values
 
-                    # Step 1: Train primary model
-                    primary, primary_metrics = _train_primary_model(
-                        X_train=X,
-                        y_train=y,
+                    # Step 1: Purged OOF predictions (prevents data leakage)
+                    # Each sample is only predicted by a model that never saw it,
+                    # with purge/embargo gaps around each fold boundary.
+                    primary, oof_proba, oof_preds = _purged_oof_predictions(
+                        X=X_valid,
+                        y=y_valid,
                         sample_weights=weights,
                         config={
                             "recall_target": recall_target,
                             "base_model": base_model,
                         },
+                        n_splits=5,
+                        purge_bars=max(horizon * 3, 60),
+                        embargo_bars=min(200, len(df_valid) // 20),
                     )
 
+                    primary_metrics = primary.get_recall_metrics()
                     logger.info(
                         f"    Primary model: recall={primary_metrics['achieved_recall']:.2%}, "
                         f"precision={primary_metrics['achieved_precision']:.2%}"
                     )
 
-                    # Step 2: Generate meta-labels for ALL samples
-                    X_all = df[feature_cols].values
-                    y_all = df[label_col].values
-                    returns_all = df[return_col].values if return_col in df.columns else None
+                    # Step 2: Generate meta-labels using OOF predictions
+                    # Use the final model for predict_side (direction), but
+                    # probabilities come from OOF to avoid leakage.
+                    y_primary = primary.predict_side(X_valid, y_direction=y_valid)
 
-                    meta_labels, y_primary, meta_metrics = _generate_meta_labels(
-                        primary=primary,
-                        X=X_all,
-                        y_true=y_all,
-                        returns=returns_all,
-                        horizon=horizon,
+                    returns_valid = (
+                        df_valid[return_col].values if return_col in df.columns else None
                     )
+
+                    generator = MetaLabelGenerator(horizon=horizon)
+                    meta_result = generator.generate(
+                        y_true=y_valid,
+                        y_primary=y_primary,
+                        returns=returns_valid,
+                    )
+                    meta_labels_valid = meta_result.meta_labels
+                    meta_metrics = meta_result.quality_metrics
 
                     logger.info(
                         f"    Meta-labels: accuracy={meta_metrics['primary_accuracy']:.2%}, "
                         f"valid={meta_metrics['n_valid']:.0f}/{meta_metrics['n_total']:.0f}"
                     )
 
-                    # Step 3: Get meta-model probabilities
-                    # For now, use primary model's predict_proba as proxy
-                    # (In production, a separate meta-model would be trained)
-                    meta_proba = primary.predict_proba(X_all)[:, 1]
+                    # Step 3: Use OOF probabilities as meta-proba (leak-free)
+                    # Samples in purge/embargo gaps get NaN; fill with 0.5 (neutral)
+                    meta_proba_valid = np.where(np.isnan(oof_proba), 0.5, oof_proba)
 
                     # Step 4: Compute bet sizes
                     volatility = None
-                    if "atr_14" in df.columns:
-                        volatility = df["atr_14"].values
+                    if "atr_14" in df_valid.columns:
+                        volatility = df_valid["atr_14"].values
 
-                    bet_sizes, sizing_meta = _compute_bet_sizes(
-                        meta_probs=meta_proba,
+                    bet_sizes_valid, sizing_meta = _compute_bet_sizes(
+                        meta_probs=meta_proba_valid,
                         directions=y_primary,
                         volatility=volatility,
                         config={
                             "min_confidence": min_confidence,
                             "sizing_method": meta_config.get("sizing_method", "linear"),
-                            "max_position": meta_config.get("max_position", DEFAULT_MAX_POSITION),
+                            "max_position": meta_config.get(
+                                "max_position", DEFAULT_MAX_POSITION
+                            ),
                         },
                     )
 
@@ -447,11 +558,23 @@ def run_meta_labeling(
                         f"    Bet sizes: {sizing_meta['n_active_positions']} active positions"
                     )
 
-                    # Add columns to DataFrame
-                    df[f"meta_label_h{horizon}"] = meta_labels
-                    df[f"primary_pred_h{horizon}"] = y_primary
-                    df[f"meta_proba_h{horizon}"] = meta_proba
-                    df[f"bet_size_h{horizon}"] = bet_sizes
+                    # Map valid-only results back to full DataFrame
+                    # Invalid samples (-99 labels) get neutral defaults
+                    n_full = len(df)
+                    full_meta_labels = np.full(n_full, 0, dtype=int)
+                    full_primary_pred = np.full(n_full, 0, dtype=int)
+                    full_meta_proba = np.full(n_full, 0.5)
+                    full_bet_sizes = np.zeros(n_full)
+
+                    full_meta_labels[valid_mask] = meta_labels_valid
+                    full_primary_pred[valid_mask] = y_primary
+                    full_meta_proba[valid_mask] = meta_proba_valid
+                    full_bet_sizes[valid_mask] = bet_sizes_valid
+
+                    df[f"meta_label_h{horizon}"] = full_meta_labels
+                    df[f"primary_pred_h{horizon}"] = full_primary_pred
+                    df[f"meta_proba_h{horizon}"] = full_meta_proba
+                    df[f"bet_size_h{horizon}"] = full_bet_sizes
 
                     # Store metrics
                     tf_metrics["horizons"][horizon] = {
@@ -462,6 +585,9 @@ def run_meta_labeling(
                         "meta_n_valid": meta_metrics["n_valid"],
                         "meta_n_correct": meta_metrics["n_correct"],
                         "active_positions": sizing_meta["n_active_positions"],
+                        "oof_coverage": float(
+                            np.sum(~np.isnan(oof_proba)) / len(oof_proba)
+                        ),
                     }
 
                 # Save updated DataFrame with meta-labels
@@ -550,7 +676,8 @@ def add_meta_labels_standalone(
     """
     Standalone function to add meta-labels to a DataFrame.
 
-    Useful for testing or when not running the full pipeline.
+    Uses purged cross-validation to prevent data leakage: the primary model
+    never sees the samples it generates predictions for.
 
     Args:
         df: DataFrame with labels and features
@@ -573,47 +700,52 @@ def add_meta_labels_standalone(
     valid_mask = df[label_col] != -99
     df_valid = df[valid_mask].copy()
 
-    X_train = df_valid[feature_cols].values
-    y_train = df_valid[label_col].values
+    X_valid = df_valid[feature_cols].values
+    y_valid = df_valid[label_col].values
     weights = df_valid[weight_col].values if weight_col in df_valid.columns else None
 
-    # Train primary model
-    primary, _ = _train_primary_model(
-        X_train=X_train,
-        y_train=y_train,
+    # Purged OOF predictions (leak-free)
+    primary, oof_proba, _ = _purged_oof_predictions(
+        X=X_valid,
+        y=y_valid,
         sample_weights=weights,
         config={"recall_target": recall_target},
+        purge_bars=max(horizon * 3, 60),
+        embargo_bars=min(200, len(df_valid) // 20),
     )
 
     # Generate meta-labels
-    X_all = df[feature_cols].values
-    y_all = df[label_col].values
-    returns_all = df[return_col].values if return_col in df.columns else None
+    y_primary = primary.predict_side(X_valid, y_direction=y_valid)
+    returns_valid = df_valid[return_col].values if return_col in df.columns else None
 
-    meta_labels, y_primary, _ = _generate_meta_labels(
-        primary=primary,
-        X=X_all,
-        y_true=y_all,
-        returns=returns_all,
-        horizon=horizon,
+    generator = MetaLabelGenerator(horizon=horizon)
+    meta_result = generator.generate(
+        y_true=y_valid,
+        y_primary=y_primary,
+        returns=returns_valid,
     )
 
-    # Get probabilities and bet sizes
-    meta_proba = primary.predict_proba(X_all)[:, 1]
+    # Use OOF probabilities (NaN for purged samples -> fill with 0.5)
+    meta_proba_valid = np.where(np.isnan(oof_proba), 0.5, oof_proba)
 
-    volatility = df["atr_14"].values if "atr_14" in df.columns else None
-    bet_sizes, _ = _compute_bet_sizes(
-        meta_probs=meta_proba,
+    volatility = df_valid["atr_14"].values if "atr_14" in df_valid.columns else None
+    bet_sizes_valid, _ = _compute_bet_sizes(
+        meta_probs=meta_proba_valid,
         directions=y_primary,
         volatility=volatility,
         config={"min_confidence": min_confidence},
     )
 
-    # Add columns
+    # Map back to full DataFrame
     df_out = df.copy()
-    df_out[f"meta_label_h{horizon}"] = meta_labels
-    df_out[f"primary_pred_h{horizon}"] = y_primary
-    df_out[f"meta_proba_h{horizon}"] = meta_proba
-    df_out[f"bet_size_h{horizon}"] = bet_sizes
+    df_out[f"meta_label_h{horizon}"] = 0
+    df_out[f"primary_pred_h{horizon}"] = 0
+    df_out[f"meta_proba_h{horizon}"] = 0.5
+    df_out[f"bet_size_h{horizon}"] = 0.0
+
+    df_out.loc[valid_mask, f"meta_label_h{horizon}"] = meta_result.meta_labels
+    df_out.loc[valid_mask, f"primary_pred_h{horizon}"] = y_primary
+    df_out.loc[valid_mask, f"meta_proba_h{horizon}"] = meta_proba_valid
+    df_out.loc[valid_mask, f"bet_size_h{horizon}"] = bet_sizes_valid
 
     return df_out

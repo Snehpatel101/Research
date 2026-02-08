@@ -258,59 +258,46 @@ class ModelTrainer:
 
         trainer = Trainer(trainer_config)
 
-        # Build container from prepared data
-        from src.core.container import TimeSeriesDataContainer
+        # Route based on data rank:
+        # - 3D/4D sequence models: use run_prepared() to preserve shaped arrays
+        # - 2D tabular models: use run() with container pathway
+        if data_rank >= 3:
+            # Sequence/multi-stream models: use pre-shaped data directly
+            training_results = trainer.run_prepared(prepared)
+        else:
+            # Tabular models: build container for traditional pathway
+            from src.core.container import TimeSeriesDataContainer
 
-        # Handle different data ranks for container
-        # The container expects 2D data; model will reshape internally if needed
-        if data_rank == 2:
             X_train_2d = prepared.X_train
             X_val_2d = prepared.X_val
             X_test_2d = prepared.X_test if prepared.X_test is not None else None
-        else:
-            # Flatten 3D/4D data for container (model will reshape internally)
-            X_train_2d = prepared.X_train.reshape(prepared.X_train.shape[0], -1)
-            X_val_2d = prepared.X_val.reshape(prepared.X_val.shape[0], -1)
-            X_test_2d = (
-                prepared.X_test.reshape(prepared.X_test.shape[0], -1)
-                if prepared.X_test is not None
-                else None
+
+            feature_names = prepared.feature_names or [f"f{i}" for i in range(X_train_2d.shape[1])]
+
+            train_feature_names = feature_names[: X_train_2d.shape[1]]
+            train_df = pd.DataFrame(X_train_2d, columns=train_feature_names)
+            train_df[f"label_h{horizon}"] = prepared.y_train
+            train_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_train))
+
+            val_df = pd.DataFrame(X_val_2d, columns=train_feature_names)
+            val_df[f"label_h{horizon}"] = prepared.y_val
+            val_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_val))
+
+            test_df: pd.DataFrame | None = None
+            if X_test_2d is not None and prepared.y_test is not None:
+                test_df = pd.DataFrame(X_test_2d, columns=train_feature_names)
+                test_df[f"label_h{horizon}"] = prepared.y_test
+                test_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_test))
+
+            container = TimeSeriesDataContainer.from_dataframes(
+                train_df=train_df,
+                val_df=val_df,
+                test_df=test_df,
+                horizon=horizon,
+                feature_columns=train_feature_names,
             )
 
-        # Generate feature names for flattened data
-        feature_names = prepared.feature_names or [f"f{i}" for i in range(X_train_2d.shape[1])]
-
-        # Ensure we have enough feature names for flattened data
-        if len(feature_names) < X_train_2d.shape[1]:
-            feature_names = [f"f{i}" for i in range(X_train_2d.shape[1])]
-
-        # Create container using from_dataframes
-        # Build DataFrames with labels and weights included
-        train_feature_names = feature_names[: X_train_2d.shape[1]]
-        train_df = pd.DataFrame(X_train_2d, columns=train_feature_names)
-        train_df[f"label_h{horizon}"] = prepared.y_train
-        train_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_train))
-
-        val_df = pd.DataFrame(X_val_2d, columns=train_feature_names)
-        val_df[f"label_h{horizon}"] = prepared.y_val
-        val_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_val))
-
-        test_df: pd.DataFrame | None = None
-        if X_test_2d is not None and prepared.y_test is not None:
-            test_df = pd.DataFrame(X_test_2d, columns=train_feature_names)
-            test_df[f"label_h{horizon}"] = prepared.y_test
-            test_df[f"sample_weight_h{horizon}"] = np.ones(len(prepared.y_test))
-
-        container = TimeSeriesDataContainer.from_dataframes(
-            train_df=train_df,
-            val_df=val_df,
-            test_df=test_df,
-            horizon=horizon,
-            feature_columns=train_feature_names,
-        )
-
-        # Run training
-        training_results = trainer.run(container)
+            training_results = trainer.run(container)
 
         training_time = time.time() - start_time
 
@@ -427,8 +414,12 @@ class ModelTrainer:
 
         logger.info("  Running hyperparameter optimization...")
 
-        # Create purged CV splitter
-        cv_config = PurgedKFoldConfig(n_splits=self.config.n_splits, purge_bars=60, embargo_bars=10)
+        # Create purged CV splitter (use config values, not hardcoded)
+        cv_config = PurgedKFoldConfig(
+            n_splits=self.config.n_splits,
+            purge_bars=self.config.purge_bars,
+            embargo_bars=self.config.embargo_bars,
+        )
         cv = PurgedKFold(cv_config)
 
         tuner = TimeSeriesOptunaTuner(

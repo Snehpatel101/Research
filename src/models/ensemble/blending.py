@@ -198,9 +198,10 @@ class BlendingEnsemble(BaseModel):
         y_holdout = y_train[n_blend_train:]
 
         w_blend_train = None
+        w_holdout = None
         if sample_weights is not None:
             w_blend_train = sample_weights[:n_blend_train]
-            sample_weights[n_blend_train:]
+            w_holdout = sample_weights[n_blend_train:]
 
         # Step 2: Train base models on blend_train
         base_models_initial = []
@@ -246,6 +247,7 @@ class BlendingEnsemble(BaseModel):
             y_train=y_holdout,
             X_val=meta_features_val,
             y_val=y_val,
+            sample_weights=w_holdout,
         )
 
         # Step 5: Retrain base models on full data (optional)

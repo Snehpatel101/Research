@@ -113,13 +113,21 @@ class WalkForwardFeatureSelector:
         n_folds = len(cv_splits)
         logger.info(f"Running walk-forward feature selection across {n_folds} folds")
 
-        for fold_idx, (train_idx, _) in enumerate(cv_splits):
+        for fold_idx, (train_idx, test_idx) in enumerate(cv_splits):
             X_train = X.iloc[train_idx]
             y_train = y.iloc[train_idx]
             w_train = sample_weights.iloc[train_idx] if sample_weights is not None else None
 
-            # Compute feature importance
-            importance = self._compute_importance(X_train, y_train, w_train)
+            # Use holdout set for MDA scoring to avoid overfitting bias
+            X_test = X.iloc[test_idx]
+            y_test = y.iloc[test_idx]
+            w_test = sample_weights.iloc[test_idx] if sample_weights is not None else None
+
+            # Compute feature importance (MDA uses holdout for unbiased scoring)
+            importance = self._compute_importance(
+                X_train, y_train, w_train,
+                X_test=X_test, y_test=y_test, w_test=w_test,
+            )
 
             # Select top features
             top_features = importance.nlargest(self.config.n_features_to_select).index.tolist()
@@ -166,18 +174,36 @@ class WalkForwardFeatureSelector:
         X: pd.DataFrame,
         y: pd.Series,
         sample_weights: pd.Series | None = None,
+        X_test: pd.DataFrame | None = None,
+        y_test: pd.Series | None = None,
+        w_test: pd.Series | None = None,
     ) -> pd.Series:
-        """Compute feature importance using configured method."""
+        """Compute feature importance using configured method.
+
+        Args:
+            X: Training features (used for fitting).
+            y: Training labels.
+            sample_weights: Training sample weights.
+            X_test: Holdout features for MDA scoring (avoids overfitting bias).
+            y_test: Holdout labels for MDA scoring.
+            w_test: Holdout sample weights for MDA scoring.
+        """
         if self.config.use_clustered_importance:
             return self._clustered_mda_importance(X, y, sample_weights)
 
         if self.config.selection_method == "mdi":
             return self._mdi_importance(X, y, sample_weights)
         elif self.config.selection_method == "mda":
-            return self._mda_importance(X, y, sample_weights)
+            return self._mda_importance(
+                X, y, sample_weights,
+                X_test=X_test, y_test=y_test, w_test=w_test,
+            )
         else:  # hybrid
             mdi = self._mdi_importance(X, y, sample_weights)
-            mda = self._mda_importance(X, y, sample_weights)
+            mda = self._mda_importance(
+                X, y, sample_weights,
+                X_test=X_test, y_test=y_test, w_test=w_test,
+            )
             # Combine by averaging ranks (robust to different scales)
             return (mdi.rank() + mda.rank()) / 2
 
@@ -206,12 +232,18 @@ class WalkForwardFeatureSelector:
         X: pd.DataFrame,
         y: pd.Series,
         sample_weights: pd.Series | None = None,
+        X_test: pd.DataFrame | None = None,
+        y_test: pd.Series | None = None,
+        w_test: pd.Series | None = None,
     ) -> pd.Series:
         """
         Mean Decrease in Accuracy (permutation importance).
 
-        More reliable than MDI for correlated features.
-        Reference: Lopez de Prado (2018)
+        Fits the RF on training data but scores permutation importance on
+        the holdout set (X_test, y_test) to avoid overfitting bias. Falls
+        back to OOB scoring if no holdout is provided.
+
+        Reference: Lopez de Prado (2018), Chapter 8
         """
         rf = RandomForestClassifier(
             n_estimators=self.config.n_estimators,
@@ -222,15 +254,26 @@ class WalkForwardFeatureSelector:
         )
         rf.fit(X, y, sample_weight=sample_weights)
 
-        # Use permutation importance
+        # Score on holdout data to avoid overfitting bias (Critical Fix #6).
+        # Training-set permutation importance inflates scores for overfit features.
+        if X_test is not None and y_test is not None:
+            score_X, score_y, score_w = X_test, y_test, w_test
+        else:
+            # Fallback: use training data (legacy behavior for direct callers)
+            logger.warning(
+                "MDA importance: no holdout set provided, falling back to "
+                "training data. Results may have overfitting bias."
+            )
+            score_X, score_y, score_w = X, y, sample_weights
+
         result = permutation_importance(
             rf,
-            X,
-            y,
+            score_X,
+            score_y,
             n_repeats=10,
             random_state=self.random_state,
             n_jobs=-1,
-            sample_weight=sample_weights,
+            sample_weight=score_w,
         )
 
         return pd.Series(result.importances_mean, index=X.columns)

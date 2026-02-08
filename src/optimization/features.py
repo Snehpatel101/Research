@@ -63,6 +63,7 @@ from src.core import (
     DEFAULT_MIN_FEATURES,
     DEFAULT_OPTUNA_RANDOM_STATE,
 )
+from src.optimization.scoring import purged_train_val_split
 
 logger = logging.getLogger(__name__)
 
@@ -315,13 +316,9 @@ class FeatureOptimizer:
 
         # Split data if no validation set provided
         if X_val is None or y_val is None:
-            # Time-based split to prevent data leakage in time series
-            if len(X_train) < 2:
-                raise ValueError(f"Cannot split dataset with {len(X_train)} samples (minimum 2 required)")
-            split_idx = int(len(X_train) * 0.8)
-            split_idx = max(1, split_idx)  # Ensure at least 1 training sample
-            X_train, X_val = X_train[:split_idx], X_train[split_idx:]
-            y_train, y_val = y_train[:split_idx], y_train[split_idx:]
+            train_end, val_start = purged_train_val_split(len(X_train))
+            X_train, X_val = X_train[:train_end], X_train[val_start:]
+            y_train, y_val = y_train[:train_end], y_train[val_start:]
 
         score_fn = self._get_score_fn()
 
@@ -477,13 +474,9 @@ class FeatureOptimizer:
 
         # Split data if no validation set provided
         if X_val is None or y_val is None:
-            # Time-based split to prevent data leakage in time series
-            if len(X_train) < 2:
-                raise ValueError(f"Cannot split dataset with {len(X_train)} samples (minimum 2 required)")
-            split_idx = int(len(X_train) * 0.8)
-            split_idx = max(1, split_idx)  # Ensure at least 1 training sample
-            X_train, X_val = X_train[:split_idx], X_train[split_idx:]
-            y_train, y_val = y_train[:split_idx], y_train[split_idx:]
+            train_end, val_start = purged_train_val_split(len(X_train))
+            X_train, X_val = X_train[:train_end], X_train[val_start:]
+            y_train, y_val = y_train[:train_end], y_train[val_start:]
 
         score_fn = self._get_score_fn()
 
@@ -606,13 +599,10 @@ class FeatureOptimizer:
         Returns:
             Dict mapping feature name to importance score
         """
-        # Time-based split for importance calculation (no data leakage)
-        if len(X_train) < 2:
-            raise ValueError(f"Cannot split dataset with {len(X_train)} samples (minimum 2 required)")
-        split_idx = int(len(X_train) * 0.8)
-        split_idx = max(1, split_idx)  # Ensure at least 1 training sample
-        X_tr, X_val = X_train[:split_idx], X_train[split_idx:]
-        y_tr, y_val = y_train[:split_idx], y_train[split_idx:]
+        # Purged split for importance calculation (no data leakage)
+        train_end, val_start = purged_train_val_split(len(X_train))
+        X_tr, X_val = X_train[:train_end], X_train[val_start:]
+        y_tr, y_val = y_train[:train_end], y_train[val_start:]
 
         # Train model
         try:

@@ -162,7 +162,7 @@ from src.optimization.pipeline import (
     FullOptimizationResult,
     OptimizationPipeline,
 )
-from src.optimization.scoring import get_score_fn
+from src.optimization.scoring import get_score_fn, purged_train_val_split
 
 # =============================================================================
 # EXPORTS
@@ -239,6 +239,7 @@ __all__ = [
     "DEFAULT_SHARPE_WEIGHT",
     "DEFAULT_DIVERSITY_WEIGHT",
     "DEFAULT_MAX_OVERLAP",
-    # Scoring (Phase 22)
+    # Scoring & splitting (Phase 22)
     "get_score_fn",
+    "purged_train_val_split",
 ]

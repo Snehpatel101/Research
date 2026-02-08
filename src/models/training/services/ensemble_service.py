@@ -92,20 +92,39 @@ class EnsembleService:
         config = request.config
 
         if not oof_predictions:
-            logger.warning("No OOF predictions available for ensemble")
+            logger.error("No OOF predictions available for ensemble")
             return EnsembleServiceResult(
                 aligned_oof=None,
                 stacking_dataset=None,
-                ensemble_metrics={},
+                ensemble_metrics={"error": "no_oof_predictions"},
             )
 
         if len(oof_predictions) < 2:
-            logger.warning("Need at least 2 models for ensemble")
+            logger.error(
+                f"Need at least 2 models for ensemble, got {len(oof_predictions)}: "
+                f"{list(oof_predictions.keys())}"
+            )
             return EnsembleServiceResult(
                 aligned_oof=None,
                 stacking_dataset=None,
-                ensemble_metrics={},
+                ensemble_metrics={"error": "insufficient_models", "n_models": len(oof_predictions)},
             )
+
+        # Validate OOF prediction quality
+        for model_name, oof_pred in oof_predictions.items():
+            probs = oof_pred.get_probabilities()
+            if np.all(probs == 0):
+                logger.error(f"OOF predictions for {model_name} are all zeros")
+                return EnsembleServiceResult(
+                    aligned_oof=None,
+                    stacking_dataset=None,
+                    ensemble_metrics={"error": f"all_zero_predictions:{model_name}"},
+                )
+            if np.any(np.isnan(probs)):
+                nan_count = int(np.isnan(probs).sum())
+                logger.warning(
+                    f"OOF predictions for {model_name} contain {nan_count} NaN values"
+                )
 
         logger.info(f"Building ensemble from {len(oof_predictions)} models...")
 
@@ -193,7 +212,14 @@ class EnsembleService:
             preds = oof_pred.get_class_predictions()
 
             n_samples = len(probs)
-            indices = np.arange(n_samples)
+
+            # Use original_indices for proper alignment (critical for
+            # sequence models that produce fewer samples than tabular)
+            if oof_pred.original_indices is not None:
+                indices = oof_pred.original_indices
+            else:
+                indices = np.arange(n_samples)
+
             fold_ids = np.zeros(n_samples, dtype=int)
 
             oof_result = OOFResult(
@@ -228,64 +254,83 @@ class EnsembleService:
         stacking_dataset: StackingDataset,
         config: PipelineConfig,
     ) -> tuple[Any, dict[str, Any]]:
-        """Train meta-learner on stacking dataset."""
+        """Train meta-learner directly on stacking features.
 
+        Uses the meta-learner's fit() method directly rather than routing
+        through Trainer/TimeSeriesDataContainer, which is designed for
+        OHLCV time-series data and incompatible with OOF stacking features.
+        """
         try:
-            from src.models import Trainer, TrainerConfig
+            from sklearn.metrics import accuracy_score, f1_score
+
+            from src.models.ensemble import (
+                CalibratedMetaLearner,
+                MLPMetaLearner,
+                RidgeMetaLearner,
+                XGBoostMeta,
+            )
 
             start = time.time()
 
             X_stack = stacking_dataset.get_features()
             y_stack = stacking_dataset.get_labels()
 
-            # Split into train/val
+            # Time-based split into train/val (preserves temporal ordering)
             n_samples = len(X_stack)
             n_train = int(n_samples * 0.8)
 
-            X_train = X_stack.iloc[:n_train]
-            X_val = X_stack.iloc[n_train:]
-            y_train = y_stack.iloc[:n_train]
-            y_val = y_stack.iloc[n_train:]
+            X_train = X_stack.iloc[:n_train].values
+            X_val = X_stack.iloc[n_train:].values
+            y_train = y_stack.iloc[:n_train].values
+            y_val = y_stack.iloc[n_train:].values
 
-            meta_config = TrainerConfig(
-                model_name=config.meta_learner,
-                horizon=stacking_dataset.horizon,
+            # Create meta-learner directly
+            meta_learner_map: dict[str, type] = {
+                "ridge_meta": RidgeMetaLearner,
+                "mlp_meta": MLPMetaLearner,
+                "xgboost_meta": XGBoostMeta,
+                "calibrated_meta": CalibratedMetaLearner,
+            }
+
+            meta_learner_name = config.meta_learner
+            if meta_learner_name not in meta_learner_map:
+                raise ValueError(
+                    f"Unknown meta_learner: {meta_learner_name}. "
+                    f"Available: {list(meta_learner_map.keys())}"
+                )
+
+            meta_learner = meta_learner_map[meta_learner_name]()
+
+            # Train meta-learner directly
+            training_metrics = meta_learner.fit(
+                X_train=X_train,
+                y_train=y_train,
+                X_val=X_val,
+                y_val=y_val,
             )
 
-            from src.core.container import TimeSeriesDataContainer
-
-            # Build train and val DataFrames for container
-            train_df = X_train.copy()
-            train_df[f"label_h{stacking_dataset.horizon}"] = y_train.values
-            train_df[f"sample_weight_h{stacking_dataset.horizon}"] = np.ones(len(y_train))
-
-            val_df = X_val.copy()
-            val_df[f"label_h{stacking_dataset.horizon}"] = y_val.values
-
-            container = TimeSeriesDataContainer.from_dataframes(
-                train_df=train_df,
-                val_df=val_df,
-                test_df=None,
-                horizon=stacking_dataset.horizon,
-                feature_columns=list(X_train.columns),
+            # Evaluate on validation set
+            output = meta_learner.predict(X_val)
+            val_accuracy = float(accuracy_score(y_val, output.class_predictions))
+            val_f1 = float(
+                f1_score(y_val, output.class_predictions, average="macro", zero_division=0)
             )
-
-            trainer = Trainer(meta_config)
-            results = trainer.run(container)
 
             training_time = time.time() - start
 
             metrics = {
-                "val_f1": results["evaluation_metrics"].get("val_f1", 0),
-                "val_accuracy": results["evaluation_metrics"].get("val_accuracy", 0),
+                "val_f1": val_f1,
+                "val_accuracy": val_accuracy,
+                "train_loss": training_metrics.train_loss,
+                "val_loss": training_metrics.val_loss,
                 "training_time": training_time,
             }
 
             logger.info(
-                f"Meta-learner ({config.meta_learner}) trained: " f"val_f1={metrics['val_f1']:.4f}"
+                f"Meta-learner ({meta_learner_name}) trained: val_f1={val_f1:.4f}"
             )
 
-            return trainer, metrics
+            return meta_learner, metrics
 
         except Exception as e:
             logger.error(f"Failed to train meta-learner: {e}")

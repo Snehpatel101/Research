@@ -445,8 +445,9 @@ class MultiStreamAdapter(BaseAdapter):
         Build 4D multi-stream array from timeframe DataFrames.
 
         The anchor timeframe (first in list, smallest granularity) determines
-        the number of samples. Higher timeframes are aligned by mapping
-        anchor indices to their corresponding indices using the timeframe ratio.
+        the number of samples. Higher timeframes are aligned using timestamp-based
+        mapping (merge_asof) that correctly handles irregular gaps (overnight,
+        weekends, holidays).
 
         Args:
             tf_dfs: Dictionary of timeframe -> DataFrame.
@@ -463,7 +464,6 @@ class MultiStreamAdapter(BaseAdapter):
         """
         anchor_tf = timeframes[0]
         anchor_df = tf_dfs[anchor_tf]
-        anchor_minutes = get_timeframe_minutes(anchor_tf)
 
         n_samples = len(anchor_df)
         n_tfs = len(timeframes)
@@ -485,26 +485,15 @@ class MultiStreamAdapter(BaseAdapter):
         # Extract weights if available
         weights = self._get_weights(anchor_df)
 
+        # Pre-compute timestamp-based index mappings for higher timeframes
+        # (Critical Fix #7: replaces ratio-based mapping that ignores gaps)
+        tf_index_maps = self._build_timestamp_index_maps(
+            anchor_df, tf_dfs, timeframes, feature_cols
+        )
+
         # Build sequences for each timeframe
         for tf_idx, tf in enumerate(timeframes):
-            tf_df = tf_dfs[tf]
-            tf_minutes = get_timeframe_minutes(tf)
-            remainder = tf_minutes % anchor_minutes
-            if remainder != 0:
-                # Phase 31: Proper handling for non-integer ratios
-                # Use ceiling to ensure we don't miss data from higher timeframes
-                ratio = (tf_minutes + anchor_minutes - 1) // anchor_minutes  # ceiling division
-                logger.warning(
-                    f"Timeframe {tf} ({tf_minutes}min) is not an exact multiple of "
-                    f"anchor ({anchor_minutes}min). Using ceiling ratio={ratio} "
-                    f"(remainder={remainder}min). Consider using compatible timeframes."
-                )
-            else:
-                ratio = tf_minutes // anchor_minutes
-
-            # Extract feature values as numpy array for efficiency
-            tf_values = tf_df[feature_cols].values.astype(np.float32)
-            tf_n_samples = len(tf_values)
+            tf_values = tf_index_maps[tf]["values"]
 
             for seq_idx in range(n_sequences):
                 # Anchor indices for this sequence
@@ -519,13 +508,13 @@ class MultiStreamAdapter(BaseAdapter):
                     y[seq_idx] = anchor_df[self.label_column].iloc[anchor_end - 1]
                     original_indices[seq_idx] = anchor_end - 1
                 else:
-                    # Higher timeframe - map indices
-                    X[seq_idx, tf_idx, :, :] = self._extract_higher_tf_sequence(
+                    # Higher timeframe - use pre-computed timestamp alignment
+                    idx_map = tf_index_maps[tf]["anchor_to_tf"]
+                    X[seq_idx, tf_idx, :, :] = self._extract_aligned_sequence(
                         tf_values=tf_values,
-                        tf_n_samples=tf_n_samples,
+                        idx_map=idx_map,
                         anchor_start=anchor_start,
                         anchor_end=anchor_end,
-                        ratio=ratio,
                         seq_len=seq_len,
                     )
 
@@ -540,111 +529,170 @@ class MultiStreamAdapter(BaseAdapter):
 
         return X, y, seq_weights, original_indices
 
-    def _extract_higher_tf_sequence(
+    def _build_timestamp_index_maps(
+        self,
+        anchor_df: pd.DataFrame,
+        tf_dfs: dict[str, pd.DataFrame],
+        timeframes: list[str],
+        feature_cols: list[str],
+    ) -> dict[str, dict]:
+        """
+        Build timestamp-based index mappings from anchor to each timeframe.
+
+        For each higher timeframe, uses merge_asof to map each anchor
+        timestamp to the most recent higher-TF bar at or before that time.
+        This correctly handles irregular gaps (overnight, weekends, holidays).
+
+        Args:
+            anchor_df: Anchor timeframe DataFrame (must have DatetimeIndex).
+            tf_dfs: All timeframe DataFrames.
+            timeframes: Ordered list of timeframes.
+            feature_cols: Feature columns to extract.
+
+        Returns:
+            Dict mapping timeframe -> {"values": ndarray, "anchor_to_tf": ndarray}
+            where anchor_to_tf[i] gives the higher-TF index for anchor row i.
+        """
+        result = {}
+
+        for tf in timeframes:
+            tf_df = tf_dfs[tf]
+            tf_values = tf_df[feature_cols].values.astype(np.float32)
+
+            if tf == timeframes[0]:
+                # Anchor timeframe: identity mapping
+                result[tf] = {
+                    "values": tf_values,
+                    "anchor_to_tf": np.arange(len(tf_values)),
+                }
+                continue
+
+            # Higher timeframe: timestamp-based alignment
+            anchor_has_dt_index = isinstance(anchor_df.index, pd.DatetimeIndex)
+            tf_has_dt_index = isinstance(tf_df.index, pd.DatetimeIndex)
+
+            if anchor_has_dt_index and tf_has_dt_index:
+                # Proper timestamp alignment using merge_asof
+                anchor_to_tf = self._timestamp_align(anchor_df, tf_df)
+            else:
+                # Fallback: ratio-based mapping when no timestamps available
+                anchor_minutes = get_timeframe_minutes(timeframes[0])
+                tf_minutes = get_timeframe_minutes(tf)
+                ratio = max(1, tf_minutes // anchor_minutes)
+                anchor_to_tf = np.minimum(
+                    np.arange(len(anchor_df)) // ratio,
+                    len(tf_df) - 1,
+                )
+                logger.warning(
+                    f"No DatetimeIndex on anchor or {tf} DataFrame — "
+                    f"falling back to ratio-based alignment (ratio={ratio}). "
+                    f"Timestamp-based alignment is recommended for market data."
+                )
+
+            result[tf] = {
+                "values": tf_values,
+                "anchor_to_tf": anchor_to_tf,
+            }
+
+        return result
+
+    def _timestamp_align(
+        self,
+        anchor_df: pd.DataFrame,
+        higher_tf_df: pd.DataFrame,
+    ) -> np.ndarray:
+        """
+        Map each anchor row to the most recent higher-TF bar via merge_asof.
+
+        For each anchor timestamp, finds the higher-TF bar whose timestamp
+        is <= the anchor timestamp (backward lookup). This handles gaps
+        correctly: if a higher-TF bar is missing due to a gap, the previous
+        bar is used rather than producing a misalignment.
+
+        Args:
+            anchor_df: Anchor DataFrame with DatetimeIndex.
+            higher_tf_df: Higher-TF DataFrame with DatetimeIndex.
+
+        Returns:
+            Array of shape (len(anchor_df),) with the higher-TF index
+            for each anchor row.
+        """
+        # Build lookup frames with positional indices
+        anchor_ts = anchor_df.index.to_series().reset_index(drop=True)
+        anchor_lookup = pd.DataFrame({
+            "anchor_ts": anchor_ts,
+            "anchor_pos": np.arange(len(anchor_df)),
+        })
+
+        higher_ts = higher_tf_df.index.to_series().reset_index(drop=True)
+        higher_lookup = pd.DataFrame({
+            "higher_ts": higher_ts,
+            "higher_pos": np.arange(len(higher_tf_df)),
+        })
+
+        # merge_asof: for each anchor timestamp, find the most recent
+        # higher-TF bar at or before that time
+        merged = pd.merge_asof(
+            anchor_lookup.rename(columns={"anchor_ts": "ts"}),
+            higher_lookup.rename(columns={"higher_ts": "ts"}),
+            on="ts",
+            direction="backward",
+        )
+
+        # Fill any NaN at the start (anchor bars before first higher-TF bar)
+        idx_map = merged["higher_pos"].fillna(0).astype(np.int64).values
+        return idx_map
+
+    def _extract_aligned_sequence(
         self,
         tf_values: np.ndarray,
-        tf_n_samples: int,
+        idx_map: np.ndarray,
         anchor_start: int,
         anchor_end: int,
-        ratio: int,
         seq_len: int,
     ) -> np.ndarray:
         """
-        Extract a sequence from a higher timeframe aligned to anchor indices.
+        Extract a higher-TF sequence using pre-computed timestamp alignment.
 
-        Maps anchor timeframe indices to higher timeframe indices using the
-        ratio between timeframes. Handles boundary cases with padding.
+        For each anchor position in [anchor_start, anchor_end), looks up the
+        corresponding higher-TF index via idx_map. Deduplicates consecutive
+        identical indices to get unique higher-TF bars, then pads/truncates
+        to seq_len using forward-fill (last known bar value).
 
         Args:
-            tf_values: Feature values for the higher timeframe.
-            tf_n_samples: Number of samples in higher timeframe.
-            anchor_start: Start index in anchor timeframe.
-            anchor_end: End index in anchor timeframe.
-            ratio: Ratio of higher TF minutes to anchor minutes.
-            seq_len: Desired sequence length.
+            tf_values: Higher-TF feature array (n_higher_samples, n_features).
+            idx_map: Mapping from anchor index -> higher-TF index.
+            anchor_start: Start of anchor sequence window.
+            anchor_end: End of anchor sequence window.
+            seq_len: Desired output sequence length.
 
         Returns:
-            Sequence array of shape (seq_len, n_features).
+            Array of shape (seq_len, n_features).
         """
-        n_features = tf_values.shape[1]
+        # Get the higher-TF indices for this anchor window
+        mapped_indices = idx_map[anchor_start:anchor_end]
 
-        # Map anchor indices to higher timeframe
-        tf_start = anchor_start // ratio
-        tf_end = anchor_end // ratio
+        # Get unique higher-TF bars in order (deduplicate consecutive same-bar refs)
+        unique_mask = np.concatenate([[True], np.diff(mapped_indices) != 0])
+        unique_indices = mapped_indices[unique_mask]
 
-        # Calculate how many higher-TF bars cover the anchor sequence
-        tf_seq_len = tf_end - tf_start
-        if tf_seq_len <= 0:
-            tf_seq_len = 1
+        # Clamp to valid range
+        unique_indices = np.clip(unique_indices, 0, len(tf_values) - 1)
 
-        # Extract available data
-        actual_start = max(0, tf_start)
-        actual_end = min(tf_n_samples, tf_start + seq_len)
+        # Extract the unique bars
+        unique_bars = tf_values[unique_indices]
+        n_unique = len(unique_bars)
 
-        if actual_start >= tf_n_samples:
-            # All padding needed - beyond available data
-            logger.warning(
-                f"Higher TF sequence fully out of bounds: "
-                f"tf_start={tf_start}, tf_n_samples={tf_n_samples}"
-            )
-            return np.zeros((seq_len, n_features), dtype=np.float32)
+        if n_unique >= seq_len:
+            # Take the most recent seq_len bars (aligned with anchor end)
+            return unique_bars[-seq_len:].astype(np.float32)
 
-        # Extract what we can
-        available = tf_values[actual_start:actual_end]
-        available_len = len(available)
-
-        # Handle case where higher TF has fewer bars than seq_len
-        if available_len < seq_len:
-            # Resample/repeat to fill sequence length
-            result = self._resample_to_length(available, seq_len)
-        elif available_len > seq_len:
-            # Take last seq_len bars (most recent aligned with anchor end)
-            result = available[-seq_len:]
-        else:
-            result = available
-
+        # Fewer unique bars than seq_len: pad at the front with the earliest bar
+        # (forward-fill from the oldest available bar)
+        pad_len = seq_len - n_unique
+        pad = np.repeat(unique_bars[:1], pad_len, axis=0)
+        result = np.concatenate([pad, unique_bars], axis=0)
         return result.astype(np.float32)
-
-    def _resample_to_length(self, arr: np.ndarray, target_len: int) -> np.ndarray:
-        """
-        Resample array to target length using repetition.
-
-        For multi-stream, we typically repeat/pad rather than interpolate
-        since we want to preserve the discrete bar values.
-
-        Args:
-            arr: Input array of shape (n, n_features).
-            target_len: Desired length.
-
-        Returns:
-            Resampled array of shape (target_len, n_features).
-        """
-        current_len = len(arr)
-        if current_len == 0:
-            return np.zeros((target_len, arr.shape[1] if arr.ndim > 1 else 1), dtype=np.float32)
-
-        if current_len >= target_len:
-            return arr[:target_len]
-
-        # Calculate repetition factor for each bar
-        # E.g., if we have 5 bars and need 15, each bar repeats 3 times
-        repeat_factor = target_len // current_len
-        remainder = target_len % current_len
-
-        # Repeat each bar
-        result = np.repeat(arr, repeat_factor, axis=0)
-
-        # Add remainder from the end (most recent bars)
-        if remainder > 0:
-            result = np.concatenate(
-                [
-                    arr[-remainder:],  # Pad at start with repeated end values
-                    result,
-                ],
-                axis=0,
-            )
-
-        return result[:target_len]
 
     # NOTE: _get_metadata_value and _parse_horizon_from_label_column
     # are now inherited from BaseAdapter (Phase 31 consolidation)

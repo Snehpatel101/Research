@@ -440,9 +440,12 @@ def run_feature_engineering(
             logger.error(
                 f"Feature engineering failed for {len(failed_tasks)} tasks: {failed_symbols}"
             )
-            # Log each failure for debugging
             for (symbol, tf), _ in failed_tasks:
                 logger.error(f"  - FAILED: {symbol}@{tf}")
+            raise RuntimeError(
+                f"Feature engineering failed for {len(failed_tasks)}/{len(tasks)} tasks: "
+                f"{failed_symbols}. Pipeline cannot continue with incomplete features."
+            )
 
             # Phase 43: Fail-fast on partial failures if configured
             total_tasks = len(tasks)

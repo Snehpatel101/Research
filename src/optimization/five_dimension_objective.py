@@ -711,6 +711,7 @@ def create_5d_objective(
                 train_valid_mask=train_valid_mask,
                 val_valid_mask=val_valid_mask,
                 metric_fn=metric_fn,
+                model_family=model_family,
             )
 
             # Store optimization time
@@ -753,16 +754,19 @@ def _compute_validation_metric(
     train_valid_mask: np.ndarray,
     val_valid_mask: np.ndarray,
     metric_fn: Callable[[np.ndarray, np.ndarray], float],
+    model_family: ModelFamily = ModelFamily.BOOSTING,
 ) -> float:
     """
-    Compute validation metric using a simple baseline model.
+    Compute validation metric using a model matched to the target family.
 
-    This trains a quick model to evaluate the quality of the sampled
-    configuration. In production, this would be replaced with proper
-    model training using the hyperparameters from the FeatureSpec.
+    For BOOSTING targets, uses XGBoost with the trial's actual hyperparameters
+    so the optimization signal matches the model being tuned.
+    For NEURAL/TRANSFORMER targets, uses LightGBM as a fast proxy since
+    training a neural network per trial is prohibitively slow.
+    For CLASSICAL targets, uses LogisticRegression.
 
     Args:
-        spec: FeatureSpec with configuration
+        spec: FeatureSpec with configuration (including hyperparameters)
         train_data: Training data (DataFrame or array)
         val_data: Validation data (DataFrame or array)
         train_labels: Training labels (may contain -99 invalid markers)
@@ -770,6 +774,7 @@ def _compute_validation_metric(
         train_valid_mask: Boolean mask for valid training samples
         val_valid_mask: Boolean mask for valid validation samples
         metric_fn: Metric function (y_true, y_pred) -> float
+        model_family: Target model family for proxy selection
 
     Returns:
         Validation metric value
@@ -795,20 +800,55 @@ def _compute_validation_metric(
         X_val_valid = X_val[val_valid_mask]
         y_val_valid = val_labels[val_valid_mask]
 
-        # Simple baseline: use a fast classifier
-        from sklearn.ensemble import RandomForestClassifier
-
         # Limit features for speed during optimization
         n_features = min(spec.n_features, X_train_valid.shape[1], 50)
         X_train_sub = X_train_valid[:, :n_features]
         X_val_sub = X_val_valid[:, :n_features]
 
-        clf = RandomForestClassifier(
-            n_estimators=50,
-            max_depth=5,
-            random_state=42,
-            n_jobs=-1,
-        )
+        # Use a model from the same family as the optimization target.
+        # For boosting, use XGBoost with the trial's actual hyperparameters.
+        # For neural/transformer, use LightGBM as a fast proxy (training a
+        # neural net per trial is too slow; the optimization signal for
+        # feature/label quality transfers well from boosting proxies).
+        if model_family == ModelFamily.BOOSTING:
+            import xgboost as xgb
+
+            hp = spec.hyperparameters
+            clf = xgb.XGBClassifier(
+                n_estimators=hp.get("n_estimators", 100),
+                max_depth=hp.get("max_depth", 5),
+                learning_rate=hp.get("learning_rate", 0.1),
+                min_child_weight=hp.get("min_child_weight", 1),
+                subsample=hp.get("subsample", 0.8),
+                colsample_bytree=hp.get("colsample_bytree", 0.8),
+                reg_alpha=hp.get("reg_alpha", 0.0),
+                reg_lambda=hp.get("reg_lambda", 1.0),
+                random_state=42,
+                n_jobs=-1,
+                verbosity=0,
+            )
+        elif model_family in (ModelFamily.NEURAL, ModelFamily.TRANSFORMER):
+            import lightgbm as lgb
+
+            clf = lgb.LGBMClassifier(
+                n_estimators=100,
+                max_depth=5,
+                learning_rate=0.1,
+                num_leaves=31,
+                random_state=42,
+                n_jobs=-1,
+                verbose=-1,
+            )
+        else:
+            # CLASSICAL, META_LEARNER, ENSEMBLE - use logistic regression
+            from sklearn.linear_model import LogisticRegression
+
+            clf = LogisticRegression(
+                max_iter=500,
+                random_state=42,
+                n_jobs=-1,
+            )
+
         clf.fit(X_train_sub, y_train_valid)
         predictions = clf.predict(X_val_sub)
 

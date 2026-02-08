@@ -45,6 +45,7 @@ from src.core import (
     DEFAULT_LABEL_OPTIMIZATION_TRIALS,
     DEFAULT_OPTUNA_RANDOM_STATE,
 )
+from src.optimization.scoring import purged_train_val_split
 
 logger = logging.getLogger(__name__)
 
@@ -443,10 +444,10 @@ class LabelOptimizer:
                 X = feature_df.values[valid_mask]
                 y = labels[valid_mask]
 
-                # Simple train/val split
-                split_idx = int(len(X) * 0.8)
-                X_train, X_val = X[:split_idx], X[split_idx:]
-                y_train, y_val = y[:split_idx], y[split_idx:]
+                # Purged train/val split to prevent leakage
+                train_end, val_start = purged_train_val_split(len(X))
+                X_train, X_val = X[:train_end], X[val_start:]
+                y_train, y_val = y[:train_end], y[val_start:]
 
                 try:
                     model = model_factory({})
@@ -469,9 +470,9 @@ class LabelOptimizer:
                     X = feature_df.values[valid_mask]
                     y = labels[valid_mask]
 
-                    split_idx = int(len(X) * 0.8)
-                    X_train, X_val = X[:split_idx], X[split_idx:]
-                    y_train, y_val = y[:split_idx], y[split_idx:]
+                    train_end, val_start = purged_train_val_split(len(X))
+                    X_train, X_val = X[:train_end], X[val_start:]
+                    y_train, y_val = y[:train_end], y[val_start:]
 
                     try:
                         model = model_factory({})

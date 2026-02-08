@@ -1,12 +1,11 @@
 """
-Shared scoring functions for optimization metrics.
+Shared scoring and splitting utilities for optimization.
 
-Provides a unified `get_score_fn()` dispatcher used by HyperparameterOptimizer
-and FeatureOptimizer to evaluate model quality during Optuna optimization.
+Provides:
+- `get_score_fn()` dispatcher for classification/trading metrics
+- `purged_train_val_split()` for leakage-free train/val splitting
 
-Supports both classification metrics (sklearn) and trading proxy metrics
-(sharpe_ratio, sortino_ratio, profit_factor) that simulate PnL from
-classification predictions.
+Used by HyperparameterOptimizer, FeatureOptimizer, and OptimizationPipeline.
 """
 
 from __future__ import annotations
@@ -121,3 +120,69 @@ def _proxy_profit_factor(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     if losses < 1e-8:
         return float(wins) if wins > 0 else 0.0
     return float(wins / losses)
+
+
+# =============================================================================
+# Purged train/val split
+# =============================================================================
+
+# Default purge/embargo values from horizon_config (static to avoid circular imports)
+_DEFAULT_PURGE_BARS = 60  # 3 * max(default horizons=[5,10,15,20])
+_DEFAULT_EMBARGO_BARS = 1440  # 5 days at 5-min bars
+
+
+def purged_train_val_split(
+    n_samples: int,
+    train_ratio: float = 0.8,
+    purge_bars: int | None = None,
+    embargo_bars: int | None = None,
+) -> tuple[int, int]:
+    """
+    Compute train/val boundary indices with a purge+embargo gap.
+
+    Returns (train_end, val_start) where:
+    - Train uses indices [0 : train_end]
+    - Val uses indices   [val_start : n_samples]
+    - The gap [train_end : val_start] is the purge+embargo buffer
+
+    If the gap would leave fewer than 10% of samples for validation,
+    the gap is clamped so val still gets at least 10%.
+
+    Args:
+        n_samples: Total number of samples.
+        train_ratio: Fraction of data allocated to training (before gap).
+        purge_bars: Bars to purge between train and val (default: 60).
+        embargo_bars: Embargo bars after purge (default: 1440).
+
+    Returns:
+        (train_end, val_start) index pair.
+
+    Raises:
+        ValueError: If n_samples is too small for any meaningful split.
+    """
+    if purge_bars is None:
+        purge_bars = _DEFAULT_PURGE_BARS
+    if embargo_bars is None:
+        embargo_bars = _DEFAULT_EMBARGO_BARS
+
+    if n_samples < 20:
+        raise ValueError(
+            f"Cannot create purged split with {n_samples} samples (minimum 20)"
+        )
+
+    split_idx = int(n_samples * train_ratio)
+    gap = purge_bars + embargo_bars
+
+    # Ensure val gets at least 10% of samples
+    min_val = max(1, n_samples // 10)
+    max_gap = n_samples - split_idx - min_val
+    gap = max(0, min(gap, max_gap))
+
+    train_end = split_idx
+    val_start = split_idx + gap
+
+    # Safety: ensure at least 1 training sample and 1 val sample
+    train_end = max(1, train_end)
+    val_start = min(n_samples - 1, val_start)
+
+    return train_end, val_start

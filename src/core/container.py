@@ -99,14 +99,48 @@ def _is_label_column(name: str) -> bool:
 
 
 def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any]:
-    """Validate DataFrame columns against metadata schema."""
+    """
+    Validate DataFrame columns against metadata schema.
+
+    Detects label/target columns that should NOT be used as features,
+    and reports metadata columns found in the data.
+    """
     columns_set = set(df_columns)
     metadata_found = columns_set & METADATA_COLUMNS
+
+    # Detect label columns that could leak target information if used as features
+    label_columns_found = [col for col in columns_set if _is_label_column(col)]
+
+    # Feature columns = everything except metadata and labels
+    feature_columns = columns_set - METADATA_COLUMNS - set(label_columns_found)
+
+    # Check for label columns masquerading as features (columns with label
+    # prefixes that aren't explicitly in our label prefix list)
+    suspicious_prefixes = ("target_", "pred_", "prediction_", "meta_label_", "meta_proba_", "bet_size_")
+    suspicious_columns = [
+        col for col in feature_columns if any(col.startswith(p) for p in suspicious_prefixes)
+    ]
+
+    is_valid = len(suspicious_columns) == 0
+
+    if label_columns_found:
+        logger.debug(
+            f"Metadata validation: found {len(label_columns_found)} label columns, "
+            f"{len(feature_columns)} feature columns"
+        )
+    if suspicious_columns:
+        logger.warning(
+            f"Metadata validation FAILED: suspicious columns in feature set "
+            f"that may leak target info: {suspicious_columns}"
+        )
+
     return {
         "version": METADATA_COLUMNS_VERSION,
         "metadata_columns_found": list(metadata_found),
-        "is_valid": True,  # Simplified validation
-        "unexpected_columns": [],  # No unexpected columns in simplified validation
+        "label_columns_found": label_columns_found,
+        "suspicious_columns": suspicious_columns,
+        "is_valid": is_valid,
+        "unexpected_columns": suspicious_columns,
     }
 
 

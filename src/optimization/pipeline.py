@@ -81,6 +81,7 @@ from src.optimization.labels import (
     LabelOptimizer,
     TripleBarrierConfig,
 )
+from src.optimization.scoring import purged_train_val_split
 
 if TYPE_CHECKING:
     pass
@@ -395,14 +396,70 @@ class OptimizationPipeline:
             print(f"\n  Valid samples: {len(y_all)}/{len(labels)}")
             print(f"  Features: {len(feature_names)}")
 
-        # Split data for optimization (use first model for feature/label optimization)
-        # Time-based split to prevent data leakage in time series
-        if len(X_all) < 2:
-            raise ValueError(f"Cannot split dataset with {len(X_all)} samples (minimum 2 required)")
-        split_idx = int(len(X_all) * 0.8)
-        split_idx = max(1, split_idx)  # Ensure at least 1 training sample
-        X_train, X_val = X_all[:split_idx], X_all[split_idx:]
-        y_train, y_val = y_all[:split_idx], y_all[split_idx:]
+        # Walk-forward expanding window splits for each optimization stage.
+        # Each stage gets a different temporal validation window to prevent
+        # multi-stage overfitting (all ~350 trials evaluated against one slice).
+        #
+        # Data is divided into 4 equal segments (quarters). Each stage's
+        # training data expands by one quarter, and its validation window
+        # is the next quarter (with a purge/embargo gap in between).
+        #
+        # Layout: |--Q1 (train)--|gap|--Q2 (val_s2)--|gap|--Q3 (val_s3)--|gap|--Q4 (val_s4)--|
+        #         |----train_s3 (Q1+Q2)----|          |                   |
+        #         |--------train_s4 (Q1+Q2+Q3)-------|                   |
+        n_total = len(X_all)
+        if n_total < 200:
+            # Too few samples for walk-forward; fall back to single split
+            logger.warning(
+                f"Dataset too small ({n_total} samples) for walk-forward validation. "
+                "Using single purged split for all stages."
+            )
+            train_end, val_start = purged_train_val_split(n_total)
+            wf_splits = {
+                "feature_selection": (train_end, val_start, n_total),
+                "feature_pruning": (train_end, val_start, n_total),
+                "hyperparameters": (train_end, val_start, n_total),
+            }
+        else:
+            # Compute gap size, clamped so each quarter retains enough val data
+            from src.optimization.scoring import (
+                _DEFAULT_EMBARGO_BARS,
+                _DEFAULT_PURGE_BARS,
+            )
+
+            segment = n_total // 4
+            gap = min(
+                _DEFAULT_PURGE_BARS + _DEFAULT_EMBARGO_BARS,
+                segment // 2,  # Gap can't exceed half a segment
+            )
+
+            # Stage 2: train on Q1, validate on Q2 (after gap)
+            s2_train_end = segment
+            s2_val_start = min(s2_train_end + gap, 2 * segment)
+            s2_val_end = 2 * segment
+
+            # Stage 3: train on Q1+Q2, validate on Q3 (after gap)
+            s3_train_end = 2 * segment
+            s3_val_start = min(s3_train_end + gap, 3 * segment)
+            s3_val_end = 3 * segment
+
+            # Stage 4: train on Q1+Q2+Q3, validate on Q4 (after gap)
+            s4_train_end = 3 * segment
+            s4_val_start = min(s4_train_end + gap, n_total)
+            s4_val_end = n_total
+
+            wf_splits = {
+                "feature_selection": (s2_train_end, s2_val_start, s2_val_end),
+                "feature_pruning": (s3_train_end, s3_val_start, s3_val_end),
+                "hyperparameters": (s4_train_end, s4_val_start, s4_val_end),
+            }
+
+        if self.verbose >= 1:
+            for stage_name, (te, vs, ve) in wf_splits.items():
+                print(
+                    f"    {stage_name}: train=[0:{te}], "
+                    f"gap=[{te}:{vs}], val=[{vs}:{ve}]"
+                )
 
         # Get a representative model factory for feature optimization
         representative_model = models[0] if models else "xgboost"
@@ -429,13 +486,20 @@ class OptimizationPipeline:
                 verbose=self.verbose,
             )
 
+            # Walk-forward: stage 2 uses its own temporal split
+            s2_te, s2_vs, s2_ve = wf_splits["feature_selection"]
+            X_train_s2 = X_all[:s2_te]
+            y_train_s2 = y_all[:s2_te]
+            X_val_s2 = X_all[s2_vs:s2_ve]
+            y_val_s2 = y_all[s2_vs:s2_ve]
+
             selection_result = self._feature_optimizer.optimize_selection(
-                X_train=X_train,
-                y_train=y_train,
+                X_train=X_train_s2,
+                y_train=y_train_s2,
                 feature_names=feature_names,
                 model_factory=representative_factory,
-                X_val=X_val,
-                y_val=y_val,
+                X_val=X_val_s2,
+                y_val=y_val_s2,
             )
 
             result.selection_result = selection_result
@@ -456,18 +520,25 @@ class OptimizationPipeline:
             stage_num += 1
             self._print_stage_header("Feature Pruning", stage_num, total_stages)
 
+            # Walk-forward: stage 3 uses its own temporal split (expanded training)
+            s3_te, s3_vs, s3_ve = wf_splits["feature_pruning"]
+            X_train_s3 = X_all[:s3_te]
+            y_train_s3 = y_all[:s3_te]
+            X_val_s3 = X_all[s3_vs:s3_ve]
+            y_val_s3 = y_all[s3_vs:s3_ve]
+
             # Get indices of selected features
             selected_indices = np.where(feature_mask)[0]
-            X_train_selected = X_train[:, selected_indices]
-            X_val_selected = X_val[:, selected_indices]
+            X_train_selected = X_train_s3[:, selected_indices]
+            X_val_selected = X_val_s3[:, selected_indices]
 
             pruning_result = self._feature_optimizer.optimize_pruning(
                 X_train=X_train_selected,
-                y_train=y_train,
+                y_train=y_train_s3,
                 feature_names=selected_features,
                 model_factory=representative_factory,
                 X_val=X_val_selected,
-                y_val=y_val,
+                y_val=y_val_s3,
             )
 
             result.pruning_result = pruning_result
@@ -499,12 +570,19 @@ class OptimizationPipeline:
                 verbose=self.verbose,
             )
 
+            # Walk-forward: stage 4 uses its own temporal split (further expanded)
+            s4_te, s4_vs, s4_ve = wf_splits["hyperparameters"]
+            X_train_s4 = X_all[:s4_te]
+            y_train_s4 = y_all[:s4_te]
+            X_val_s4 = X_all[s4_vs:s4_ve]
+            y_val_s4 = y_all[s4_vs:s4_ve]
+
             # Get final feature indices
             final_feature_indices = [
                 feature_names.index(f) for f in selected_features if f in feature_names
             ]
-            X_train_final = X_train[:, final_feature_indices]
-            X_val_final = X_val[:, final_feature_indices]
+            X_train_final = X_train_s4[:, final_feature_indices]
+            X_val_final = X_val_s4[:, final_feature_indices]
 
             hyperparam_results = {}
             final_hyperparams = {}
@@ -520,10 +598,10 @@ class OptimizationPipeline:
                 hp_result = self._hyperparam_optimizer.optimize(
                     model_name=model_name,
                     X=X_train_final,
-                    y=y_train,
+                    y=y_train_s4,
                     model_factory=model_factories[model_name],
                     X_val=X_val_final,
-                    y_val=y_val,
+                    y_val=y_val_s4,
                 )
 
                 hyperparam_results[model_name] = hp_result

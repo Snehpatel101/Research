@@ -17,7 +17,6 @@ import pandas as pd
 
 from src.data.pipeline.utils import StageResult, create_failed_result, create_stage_result
 
-from .optimization import run_ga_optimization as _run_ga_optimization_core
 from .optimization import run_ga_optimization_safe
 from .plotting import plot_convergence
 
@@ -145,48 +144,30 @@ def run_ga_optimization(
                             # Remove invalid cached file
                             results_path.unlink()
 
-                    # Run Optuna TPE optimization
-                    # Check if safe mode is enabled (prevents test data leakage)
-                    safe_mode = getattr(config, "ga_safe_mode", True)  # Default to safe
+                    # Run Optuna TPE optimization (ALWAYS safe mode to prevent test data leakage)
+                    if hasattr(config, "ga_safe_mode") and not config.ga_safe_mode:
+                        logger.warning(
+                            "    ga_safe_mode=False is IGNORED - always using safe mode "
+                            "to prevent test data leakage in barrier optimization."
+                        )
 
-                    if safe_mode:
-                        logger.info(
-                            f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization..."
-                        )
-                        logger.info(
-                            "    (Safe mode: using only training portion to prevent test data leakage)"
-                        )
-                        results, logbook = run_ga_optimization_safe(
-                            df,
-                            horizon,
-                            symbol=symbol,
-                            train_ratio=config.train_ratio,  # Use config's train ratio
-                            population_size=population_size,
-                            generations=min(generations, 30),  # Cap at 30 for performance
-                            subset_fraction=0.3,
-                            atr_column="atr_14",
-                            seed=config.random_seed,
-                        )
-                    else:
-                        logger.warning(
-                            f"\n  Horizon {horizon}: Running UNSAFE Optuna TPE optimization..."
-                        )
-                        logger.warning(
-                            "    WARNING: Safe mode disabled - test data may influence optimization!"
-                        )
-                        logger.warning(
-                            "    Only use this for research when you understand the implications."
-                        )
-                        results, logbook = _run_ga_optimization_core(
-                            df,
-                            horizon,
-                            symbol=symbol,
-                            population_size=population_size,
-                            generations=min(generations, 30),  # Cap at 30 for performance
-                            subset_fraction=0.3,
-                            atr_column="atr_14",
-                            seed=config.random_seed,
-                        )
+                    logger.info(
+                        f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization..."
+                    )
+                    logger.info(
+                        "    (Safe mode: using only training portion to prevent test data leakage)"
+                    )
+                    results, logbook = run_ga_optimization_safe(
+                        df,
+                        horizon,
+                        symbol=symbol,
+                        train_ratio=config.train_ratio,  # Use config's train ratio
+                        population_size=population_size,
+                        generations=min(generations, 30),  # Cap at 30 for performance
+                        subset_fraction=0.3,
+                        atr_column="atr_14",
+                        seed=config.random_seed,
+                    )
 
                     # CRITICAL: Validate new results before saving
                     new_fitness = results.get("best_fitness", float("-inf"))

@@ -283,7 +283,7 @@ class PreparedData:
 
         return len(issues) == 0, issues
 
-    def filter_invalid_labels(self, invalid_label: int = -99) -> "PreparedData":
+    def filter_invalid_labels(self, invalid_label: int = -99) -> PreparedData:
         """
         Filter out samples with invalid labels.
 

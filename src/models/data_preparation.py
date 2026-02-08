@@ -133,6 +133,7 @@ def dataset_to_arrays(
         Tuple of (X, y, weights) numpy arrays
     """
     import gc
+
     import torch
 
     n_samples = len(dataset)
