@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from src.inference.bundle import ModelBundle
-from src.models.base import PredictionOutput
+from src.models.base import PredictionResult
 from src.models.ensemble.stacking import StackingEnsemble
 from src.models.training_utils import evaluate_model
 
@@ -75,12 +75,12 @@ class _Dummy4DModel:
     def _get_model_type(self) -> str:
         return "patchtst"
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         n = len(X)
         probs = np.full((n, 3), 1.0 / 3.0, dtype=np.float32)
         preds = np.zeros(n, dtype=np.int64)
         conf = np.full(n, 1.0 / 3.0, dtype=np.float32)
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=preds,
             class_probabilities=probs,
             confidence=conf,

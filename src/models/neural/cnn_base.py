@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..base import PredictionOutput
+from ..base import PredictionResult
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -29,7 +29,7 @@ __all__ = [
     "nn",
     "F",
     "Any",
-    "PredictionOutput",
+    "PredictionResult",
     "register",
     "BaseRNNModel",
 ]

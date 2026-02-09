@@ -22,7 +22,7 @@ import pandas as pd
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
-from src.models.base import PredictionOutput
+from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 from src.validation.cv.walk_forward import (
@@ -364,7 +364,7 @@ class WalkForwardTrainer:
             )
 
             # Generate predictions
-            prediction_output: PredictionOutput = model.predict(X_test_scaled)
+            prediction_output: PredictionResult = model.predict(X_test_scaled)
 
             # Store predictions
             all_preds[test_idx] = prediction_output.class_predictions

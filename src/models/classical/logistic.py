@@ -23,7 +23,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
@@ -188,7 +188,7 @@ class LogisticModel(BaseModel):
             },
         )
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -201,7 +201,7 @@ class LogisticModel(BaseModel):
         class_predictions = self._convert_labels_from_sklearn(class_predictions_sk)
         confidence = np.max(probabilities, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,

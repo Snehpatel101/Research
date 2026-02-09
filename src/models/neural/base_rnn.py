@@ -27,7 +27,7 @@ from torch.utils.data import TensorDataset
 
 from src.core.reproducibility import set_all_seeds
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..device import get_amp_dtype, get_best_gpu, get_mixed_precision_config
 from .checkpointing import CheckpointConfig, CheckpointManager
@@ -587,7 +587,7 @@ class BaseRNNModel(BaseModel):
             metadata=metadata,
         )
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -619,7 +619,7 @@ class BaseRNNModel(BaseModel):
         class_predictions = self._convert_labels_from_class(class_predictions_int)
         confidence = np.max(probabilities, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,

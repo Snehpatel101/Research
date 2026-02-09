@@ -16,7 +16,7 @@ import joblib
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..registry import ModelRegistry, register
 from .validator import validate_base_model_compatibility
 
@@ -369,7 +369,7 @@ class BlendingEnsemble(BaseModel):
 
         return predictions
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate blending ensemble predictions."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -390,7 +390,7 @@ class BlendingEnsemble(BaseModel):
             raise RuntimeError("Meta-learner is not fitted")
         output = self._meta_learner.predict(meta_features)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=output.class_predictions,
             class_probabilities=output.class_probabilities,
             confidence=output.confidence,

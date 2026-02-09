@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
 
@@ -211,7 +211,7 @@ class XGBoostMeta(BaseModel):
             },
         )
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate predictions with class probabilities."""
         import xgboost as xgb
 
@@ -224,7 +224,7 @@ class XGBoostMeta(BaseModel):
         class_predictions = map_classes_to_labels(class_predictions_xgb)
         confidence = np.max(probabilities, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,

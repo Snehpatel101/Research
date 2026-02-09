@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
-from src.models.base import PredictionOutput
+from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 
 from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
@@ -177,7 +177,7 @@ class SequenceOOFGenerator:
             )
 
             # Generate predictions for validation sequences
-            prediction_output: PredictionOutput = model.predict(X_val_scaled)
+            prediction_output: PredictionResult = model.predict(X_val_scaled)
 
             # Map predictions back to original indices
             for seq_idx, original_idx in enumerate(val_result.target_indices):

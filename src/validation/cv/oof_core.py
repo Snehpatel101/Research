@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
-from src.models.base import PredictionOutput
+from src.models.base import PredictionResult
 from src.models.calibration import CalibrationConfig, ProbabilityCalibrator
 from src.models.registry import ModelRegistry
 
@@ -225,7 +225,7 @@ class CoreOOFGenerator:
             )
 
             # Generate predictions for validation fold (using scaled data)
-            prediction_output: PredictionOutput = model.predict(X_val_scaled)
+            prediction_output: PredictionResult = model.predict(X_val_scaled)
 
             # Store OOF predictions
             oof_probs[val_idx] = prediction_output.class_probabilities

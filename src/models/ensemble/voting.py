@@ -25,7 +25,7 @@ import joblib
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels
 from ..registry import ModelRegistry, register
 from .validator import validate_base_model_compatibility
@@ -421,7 +421,7 @@ class VotingEnsemble(BaseModel):
             },
         )
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """Generate ensemble predictions."""
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -433,7 +433,7 @@ class VotingEnsemble(BaseModel):
         else:
             return self._hard_vote(X)
 
-    def _collect_predictions_parallel(self, X: np.ndarray) -> tuple[list[PredictionOutput], float]:
+    def _collect_predictions_parallel(self, X: np.ndarray) -> tuple[list[PredictionResult], float]:
         """
         Collect predictions from all base models in parallel.
 
@@ -441,15 +441,15 @@ class VotingEnsemble(BaseModel):
         during prediction, making ThreadPoolExecutor effective.
 
         Returns:
-            Tuple of (list of PredictionOutput, inference_time_ms)
+            Tuple of (list of PredictionResult, inference_time_ms)
         """
         n_workers = self._config.get("n_workers", _DEFAULT_PARALLEL_WORKERS)
         n_workers = min(n_workers, len(self._base_models))
 
         start = time.perf_counter()
-        outputs: list[PredictionOutput | None] = [None] * len(self._base_models)
+        outputs: list[PredictionResult | None] = [None] * len(self._base_models)
 
-        def predict_model(idx: int) -> tuple[int, PredictionOutput]:
+        def predict_model(idx: int) -> tuple[int, PredictionResult]:
             return idx, self._base_models[idx].predict(X)
 
         with ThreadPoolExecutor(max_workers=n_workers) as executor:
@@ -460,11 +460,11 @@ class VotingEnsemble(BaseModel):
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         # Filter out None values (all should be populated)
-        return cast(list[PredictionOutput], outputs), elapsed_ms
+        return cast(list[PredictionResult], outputs), elapsed_ms
 
     def _collect_predictions_sequential(
         self, X: np.ndarray
-    ) -> tuple[list[PredictionOutput], float]:
+    ) -> tuple[list[PredictionResult], float]:
         """Collect predictions from all base models sequentially."""
         start = time.perf_counter()
         outputs = []
@@ -473,7 +473,7 @@ class VotingEnsemble(BaseModel):
         elapsed_ms = (time.perf_counter() - start) * 1000
         return outputs, elapsed_ms
 
-    def _soft_vote(self, X: np.ndarray) -> PredictionOutput:
+    def _soft_vote(self, X: np.ndarray) -> PredictionResult:
         """Soft voting: average class probabilities."""
         # Collect probabilities from all models
         use_parallel = self._config.get("parallel", True)
@@ -499,7 +499,7 @@ class VotingEnsemble(BaseModel):
 
         confidence = np.max(avg_probs, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=avg_probs,
             confidence=confidence,
@@ -512,7 +512,7 @@ class VotingEnsemble(BaseModel):
             },
         )
 
-    def _hard_vote(self, X: np.ndarray) -> PredictionOutput:
+    def _hard_vote(self, X: np.ndarray) -> PredictionResult:
         """Hard voting: majority vote of class predictions."""
         n_samples = X.shape[0]
 
@@ -542,7 +542,7 @@ class VotingEnsemble(BaseModel):
         # Average probabilities for output (even though we use hard voting)
         avg_probs = all_probs.mean(axis=0)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=avg_probs,
             confidence=confidence,

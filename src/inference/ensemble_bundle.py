@@ -607,7 +607,7 @@ class EnsembleBundle:
             calibrate: Whether to apply calibration (reserved for future use)
 
         Returns:
-            PredictionOutput with class predictions and probabilities
+            PredictionResult with class predictions and probabilities
 
         Raises:
             ValueError: If meta-learner not loaded or predictions invalid
@@ -676,7 +676,7 @@ class EnsembleBundle:
             calibrate: Whether to apply calibration
 
         Returns:
-            PredictionOutput with class predictions and probabilities
+            PredictionResult with class predictions and probabilities
 
         Raises:
             ValueError: If base bundles not available

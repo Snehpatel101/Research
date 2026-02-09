@@ -41,7 +41,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
-from src.models.base import BaseModel, PredictionOutput
+from src.models.base import BaseModel, PredictionResult
 from src.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
@@ -702,7 +702,7 @@ class ModelBundle:
         self,
         X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
-    ) -> PredictionOutput:
+    ) -> PredictionResult:
         """
         Make predictions using the bundled model.
 
@@ -711,7 +711,7 @@ class ModelBundle:
             calibrate: Whether to apply calibration (if calibrator exists)
 
         Returns:
-            PredictionOutput with predictions and probabilities
+            PredictionResult with predictions and probabilities
         """
         # Convert to array and validate features
         X_array = self._prepare_input(X)
@@ -816,13 +816,13 @@ class ModelBundle:
 
         return X
 
-    def _apply_calibration(self, output: PredictionOutput) -> PredictionOutput:
+    def _apply_calibration(self, output: PredictionResult) -> PredictionResult:
         """Apply probability calibration to predictions."""
         if self.calibrator is None:
             return output
         calibrated_probs = self.calibrator.calibrate(output.class_probabilities)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=output.class_predictions,
             class_probabilities=calibrated_probs,
             confidence=np.max(calibrated_probs, axis=1),
@@ -1054,7 +1054,7 @@ class ModelBundle:
         raw_df: pd.DataFrame,
         calibrate: bool = True,
         skip_cleaning: bool = False,
-    ) -> PredictionOutput:
+    ) -> PredictionResult:
         """
         End-to-end prediction from raw OHLCV data.
 
@@ -1067,7 +1067,7 @@ class ModelBundle:
             skip_cleaning: If True, skip resampling step
 
         Returns:
-            PredictionOutput with predictions and probabilities
+            PredictionResult with predictions and probabilities
         """
         features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
         return self.predict(features, calibrate=calibrate)

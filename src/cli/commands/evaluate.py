@@ -267,7 +267,7 @@ def _run_walk_forward_for_model(
     label_end_times=None,
 ):
     """Run walk-forward evaluation for a single model."""
-    from src.models.base import PredictionOutput
+    from src.models.base import PredictionResult
     from src.models.registry import ModelRegistry
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
     from src.validation.cv.walk_forward import (
@@ -334,7 +334,7 @@ def _run_walk_forward_for_model(
         )
 
         # Generate predictions
-        prediction_output: PredictionOutput = model.predict(X_test_scaled)
+        prediction_output: PredictionResult = model.predict(X_test_scaled)
 
         # Store predictions
         all_preds[test_idx] = prediction_output.class_predictions
@@ -583,7 +583,7 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
     """Run CPCV evaluation for a single model."""
     from sklearn.metrics import accuracy_score, f1_score
 
-    from src.models.base import PredictionOutput
+    from src.models.base import PredictionResult
     from src.models.registry import ModelRegistry
     from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVPathResult, CPCVResult
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
@@ -626,7 +626,7 @@ def _run_cpcv_for_model(container, model_name: str, cpcv_config, label_end_times
         )
 
         # Generate predictions
-        prediction_output: PredictionOutput = model.predict(scaling_result.X_val_scaled)
+        prediction_output: PredictionResult = model.predict(scaling_result.X_val_scaled)
 
         # Compute metrics
         accuracy = float(accuracy_score(y_test.values, prediction_output.class_predictions))

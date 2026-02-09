@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from ..base import PredictionOutput
+from ..base import PredictionResult
 from ..data_preparation import prepare_test_data
 from ..metrics import compute_classification_metrics, compute_trading_metrics
 from ..registry import ModelRegistry
@@ -110,7 +110,7 @@ class TrainerEvaluationMixin:
     def _evaluate_test_set(
         self,
         container: TimeSeriesDataContainer,
-    ) -> tuple[dict[str, Any] | None, PredictionOutput | None]:
+    ) -> tuple[dict[str, Any] | None, PredictionResult | None]:
         """
         Evaluate model on test set with warnings about one-shot evaluation.
 

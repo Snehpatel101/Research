@@ -19,7 +19,7 @@ from sklearn.metrics import accuracy_score, f1_score
 
 from src.core.utils.memory import estimate_array_size
 
-from ..base import BaseModel, PredictionOutput, TrainingMetrics
+from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..registry import ModelRegistry, register
 from .diversity import DiversityAnalyzer, DiversityMetrics
 from .validator import (
@@ -985,7 +985,7 @@ class StackingEnsemble(BaseModel):
         X: np.ndarray,
         X_seq: np.ndarray | None = None,
         use_cache: bool = True,
-    ) -> PredictionOutput:
+    ) -> PredictionResult:
         """
         Generate stacking ensemble predictions.
 
@@ -998,7 +998,7 @@ class StackingEnsemble(BaseModel):
                 ensembles with sequence models, otherwise an error is raised. (MOD-007)
 
         Returns:
-            PredictionOutput with class predictions, probabilities, and confidence
+            PredictionResult with class predictions, probabilities, and confidence
         """
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -1050,7 +1050,7 @@ class StackingEnsemble(BaseModel):
             raise ValueError("Cannot predict: meta-learner not fitted")
         output = self._meta_learner.predict(meta_features)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=output.class_predictions,
             class_probabilities=output.class_probabilities,
             confidence=output.confidence,

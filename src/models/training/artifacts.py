@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
-from ..base import PredictionOutput, TrainingMetrics
+from ..base import PredictionResult, TrainingMetrics
 from ..config import detect_environment, get_applied_overrides, save_config_json
 from .checksums import ArtifactIntegrityManager
 
@@ -213,9 +213,9 @@ class TrainerArtifactsMixin:
         self,
         training_metrics: TrainingMetrics,
         eval_metrics: dict[str, Any],
-        predictions: PredictionOutput,
+        predictions: PredictionResult,
         test_metrics: dict[str, Any] | None = None,
-        test_predictions: PredictionOutput | None = None,
+        test_predictions: PredictionResult | None = None,
         lineage_validated: bool = False,
         lineage_issues: list[str] | None = None,
     ) -> None:

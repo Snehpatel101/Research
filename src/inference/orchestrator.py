@@ -510,7 +510,7 @@ class InferenceOrchestrator:
             calibrate: Whether to apply calibration
 
         Returns:
-            PredictionOutput from ensemble
+            PredictionResult from ensemble
         """
         # If we have a dedicated ensemble bundle, use it directly
         if self._ensemble_bundle is not None and hasattr(self._ensemble_bundle, "predict"):
@@ -527,9 +527,9 @@ class InferenceOrchestrator:
         class_predictions = np.argmax(avg_probs, axis=1) - 1  # Map to -1, 0, 1
         confidence = np.max(avg_probs, axis=1)
 
-        from src.models.base import PredictionOutput
+        from src.models.base import PredictionResult
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=avg_probs,
             confidence=confidence,

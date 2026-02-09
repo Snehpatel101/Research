@@ -55,7 +55,7 @@ from . import (
 # Core classes
 from .base import (
     BaseModel,
-    PredictionOutput,  # Deprecated alias, use PredictionResult
+    PredictionResult,  # Deprecated alias, use PredictionResult
     PredictionResult,
     TrainingMetrics,
 )
@@ -147,7 +147,7 @@ __all__ = [
     # Base classes
     "BaseModel",
     "PredictionResult",
-    "PredictionOutput",  # Deprecated alias, use PredictionResult
+    "PredictionResult",  # Deprecated alias, use PredictionResult
     "TrainingMetrics",
     # Registry
     "ModelRegistry",

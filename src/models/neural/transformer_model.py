@@ -21,7 +21,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from ..base import PredictionOutput
+from ..base import PredictionResult
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -400,7 +400,7 @@ class TransformerModel(BaseRNNModel):
         """Return model type string."""
         return "transformer"
 
-    def predict(self, X: np.ndarray) -> PredictionOutput:
+    def predict(self, X: np.ndarray) -> PredictionResult:
         """
         Generate predictions with class probabilities.
 
@@ -410,7 +410,7 @@ class TransformerModel(BaseRNNModel):
             X: Input sequences, shape (n_samples, seq_len, n_features)
 
         Returns:
-            PredictionOutput with predictions, probabilities, and attention weights
+            PredictionResult with predictions, probabilities, and attention weights
         """
         self._validate_fitted()
         self._validate_input_shape(X, "X")
@@ -441,7 +441,7 @@ class TransformerModel(BaseRNNModel):
         class_predictions = self._convert_labels_from_class(class_predictions_int)
         confidence = np.max(probabilities, axis=1)
 
-        return PredictionOutput(
+        return PredictionResult(
             class_predictions=class_predictions,
             class_probabilities=probabilities,
             confidence=confidence,
