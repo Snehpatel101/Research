@@ -97,86 +97,112 @@ def validate_ensemble_config(
         except Exception as e:
             return False, f"Failed to get info for model '{model_name}': {e}"
 
-    # Check sequence requirements compatibility
-    requires_sequences = [info["requires_sequences"] for _, info in model_infos]
+    def _input_rank(info: dict[str, object]) -> int:
+        """
+        Compute required input rank from ModelRegistry info.
 
-    # Check if this is a heterogeneous configuration (mixed tabular + sequence)
-    is_heterogeneous = not all(requires_sequences) and any(requires_sequences)
+        Rank mapping:
+        - 2: Tabular (n_samples, n_features)
+        - 3: Sequence (n_samples, seq_len, n_features)
+        - 4: Multi-timeframe sequence (n_samples, n_timeframes, seq_len, n_features)
+        """
+        if bool(info.get("requires_4d", False)):
+            return 4
+        if bool(info.get("requires_sequences", False)):
+            return 3
+        return 2
 
-    if is_heterogeneous:
-        tabular_models = [name for name, info in model_infos if not info["requires_sequences"]]
-        sequence_models = [name for name, info in model_infos if info["requires_sequences"]]
+    # Group models by required input rank (2D/3D/4D)
+    rank_to_models: dict[int, list[str]] = {2: [], 3: [], 4: []}
+    ranks: list[int] = []
+    for name, info in model_infos:
+        rank = _input_rank(info)
+        ranks.append(rank)
+        rank_to_models[rank].append(name)
 
-        # Stacking allows heterogeneous models
-        if ensemble_type in HETEROGENEOUS_ENSEMBLE_TYPES:
+    unique_ranks = set(ranks)
+
+    # Homogeneous (all same rank) is always valid
+    if len(unique_ranks) == 1:
+        return True, ""
+
+    # Heterogeneous: multiple ranks present
+    if ensemble_type in HETEROGENEOUS_ENSEMBLE_TYPES:
+        # Stacking supports mixed 2D + 3D only (meta-learner receives 2D OOF)
+        if unique_ranks == {2, 3}:
             logger.info(
-                f"Heterogeneous stacking ensemble validated: "
-                f"tabular={tabular_models}, sequence={sequence_models}. "
-                f"Meta-learner will receive 2D OOF predictions from all models."
+                "Heterogeneous stacking ensemble validated: "
+                "tabular=%s, sequence_3d=%s. Meta-learner will receive 2D OOF predictions.",
+                rank_to_models[2],
+                rank_to_models[3],
             )
             return True, ""
 
-        # Voting/Blending do not allow heterogeneous models
-        error_msg = _build_compatibility_error_message(
-            tabular_models, sequence_models, ensemble_type
-        )
-        return False, error_msg
+        # Any involvement of 4D requires explicit 4D support in the stacking implementation
+        return False, _build_rank_compatibility_error_message(rank_to_models, ensemble_type)
 
-    # All compatible (homogeneous)
-    return True, ""
+    # Voting/Blending (and strict validation) require identical input rank
+    return False, _build_rank_compatibility_error_message(rank_to_models, ensemble_type)
 
 
-def _build_compatibility_error_message(
-    tabular_models: list[str],
-    sequence_models: list[str],
+def _build_rank_compatibility_error_message(
+    rank_to_models: dict[int, list[str]],
     ensemble_type: str | None = None,
 ) -> str:
     """
     Build a detailed error message for incompatible ensemble configurations.
 
     Args:
-        tabular_models: List of tabular model names (2D input)
-        sequence_models: List of sequence model names (3D input)
+        rank_to_models: Dict mapping input rank -> list of model names
         ensemble_type: The ensemble type being validated (for context)
 
     Returns:
         Detailed error message with suggestions
     """
-    ensemble_name = ensemble_type or "voting/blending"
+    ensemble_name = ensemble_type or "voting/blending/strict"
+
+    tabular_models = rank_to_models.get(2, [])
+    sequence_3d_models = rank_to_models.get(3, [])
+    sequence_4d_models = rank_to_models.get(4, [])
 
     msg = [
-        f"Ensemble Compatibility Error: Cannot mix tabular and sequence models "
+        f"Ensemble Compatibility Error: Cannot mix models with different input ranks "
         f"in {ensemble_name} ensemble.",
         "",
         "REASON:",
         "  - Tabular models expect 2D input: (n_samples, n_features)",
         "  - Sequence models expect 3D input: (n_samples, seq_len, n_features)",
+        "  - Multi-timeframe sequence models expect 4D input: (n_samples, n_timeframes, seq_len, n_features)",
         f"  - {ensemble_name.title()} ensembles pass the same input X to all base models,",
-        "    causing shape mismatches during training/prediction",
+        "    causing shape mismatches during training/prediction when ranks differ",
         "",
         "YOUR CONFIGURATION:",
         f"  Tabular models (2D): {tabular_models}",
-        f"  Sequence models (3D): {sequence_models}",
+        f"  Sequence models (3D): {sequence_3d_models}",
+        f"  Multi-timeframe models (4D): {sequence_4d_models}",
         "",
         "SUPPORTED ENSEMBLE CONFIGURATIONS:",
         "",
-        "Option 1: Use STACKING for heterogeneous ensembles (RECOMMENDED)",
-        "  - Stacking ensembles support mixed tabular + sequence models",
-        "  - The meta-learner receives 2D OOF predictions from all models",
-        "  - Example:",
-        "    ModelRegistry.create('stacking', config={",
-        f"        'base_model_names': {tabular_models + sequence_models},",
-        "        'meta_learner_name': 'logistic',",
-        "    })",
+        "Option 1: Homogeneous ranks (RECOMMENDED):",
+        "  - All base models are 2D, OR all are 3D, OR all are 4D.",
         "",
-        "Option 2: All Tabular Models:",
+        "Option 2: Heterogeneous stacking (2D + 3D only):",
+        "  - Stacking supports mixed tabular + 3D sequence models",
+        "  - The meta-learner receives 2D OOF predictions from all models",
+        "  - NOTE: 4D base models are not supported in heterogeneous stacking (yet).",
+        "",
+        "Option 3: All Tabular Models (2D):",
         "  - Boosting: xgboost, lightgbm, catboost",
         "  - Classical: random_forest, logistic, svm",
         "  - Example: base_model_names=['xgboost', 'lightgbm', 'random_forest']",
         "",
-        "Option 3: All Sequence Models:",
-        "  - Neural: lstm, gru, tcn, transformer",
+        "Option 4: All Sequence Models (3D):",
+        "  - lstm, gru, tcn, transformer",
         "  - Example: base_model_names=['lstm', 'gru', 'tcn']",
+        "",
+        "Option 5: All Multi-Timeframe Models (4D):",
+        "  - patchtst, itransformer",
+        "  - Example: base_model_names=['patchtst', 'itransformer']",
         "",
         "RECOMMENDATIONS:",
     ]
@@ -184,9 +210,14 @@ def _build_compatibility_error_message(
     # Provide specific recommendations based on the models
     if len(tabular_models) >= 2:
         msg.append(f"  - For {ensemble_name}: Use only tabular models: {tabular_models}")
-    if len(sequence_models) >= 2:
-        msg.append(f"  - For {ensemble_name}: Use only sequence models: {sequence_models}")
-    msg.append("  - For mixed models: Use stacking ensemble instead")
+    if len(sequence_3d_models) >= 2:
+        msg.append(f"  - For {ensemble_name}: Use only 3D sequence models: {sequence_3d_models}")
+    if len(sequence_4d_models) >= 2:
+        msg.append(f"  - For {ensemble_name}: Use only 4D models: {sequence_4d_models}")
+    if tabular_models and sequence_3d_models and not sequence_4d_models:
+        msg.append("  - For mixed 2D+3D: Use stacking ensemble")
+    if sequence_4d_models and (tabular_models or sequence_3d_models):
+        msg.append("  - Do not mix 4D models with 2D/3D models in an ensemble")
 
     msg.extend(["", "For more information, see docs/implementation/PHASE_5_ADAPTERS.md"])
 
@@ -253,13 +284,21 @@ def get_compatible_models(reference_model: str) -> list[str]:
         )
 
     ref_info = ModelRegistry.get_model_info(reference_model)
-    ref_requires_sequences = ref_info["requires_sequences"]
+
+    def _input_rank(info: dict[str, object]) -> int:
+        if bool(info.get("requires_4d", False)):
+            return 4
+        if bool(info.get("requires_sequences", False)):
+            return 3
+        return 2
+
+    ref_rank = _input_rank(ref_info)
 
     # Get all models with same sequence requirement
     compatible = []
     for model_name in ModelRegistry.list_all():
         info = ModelRegistry.get_model_info(model_name)
-        if info["requires_sequences"] == ref_requires_sequences:
+        if _input_rank(info) == ref_rank:
             compatible.append(model_name)
 
     return sorted(compatible)

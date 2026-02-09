@@ -91,6 +91,38 @@ class BlendingEnsemble(BaseModel):
             return self._check_configured_models_require_sequences(base_model_names)
         return False
 
+    @property
+    def requires_4d(self) -> bool:
+        """
+        Whether this blending ensemble requires 4D input.
+
+        This is True only when ALL base models require 4D input. Blending passes the
+        same X to every base model, so mixing 3D and 4D models is invalid.
+        """
+
+        def _rank_from_info(info: dict[str, object]) -> int:
+            if bool(info.get("requires_4d", False)):
+                return 4
+            if bool(info.get("requires_sequences", False)):
+                return 3
+            return 2
+
+        if self._base_models:
+            ranks = {4 if m.requires_4d else 3 if m.requires_sequences else 2 for m in self._base_models}
+            return ranks == {4}
+
+        base_model_names = self._config.get("base_model_names", [])
+        if not base_model_names:
+            return False
+
+        ranks = set()
+        for name in base_model_names:
+            if ModelRegistry.is_registered(name):
+                info = ModelRegistry.get_model_info(name)
+                ranks.add(_rank_from_info(info))
+
+        return ranks == {4}
+
     def _check_configured_models_require_sequences(self, model_names: list[str]) -> bool:
         """
         Check if any configured base model requires sequences.
@@ -171,6 +203,12 @@ class BlendingEnsemble(BaseModel):
         use_probabilities = train_config.get("use_probabilities", True)
         passthrough = train_config.get("passthrough", False)
         retrain_on_full = train_config.get("retrain_on_full", True)
+
+        if passthrough and X_train.ndim != 2:
+            raise ValueError(
+                "BlendingEnsemble passthrough=True is only supported for 2D tabular inputs. "
+                f"Got X_train shape {X_train.shape}. Disable passthrough for 3D/4D models."
+            )
 
         n_samples = X_train.shape[0]
         n_holdout = int(n_samples * holdout_fraction)

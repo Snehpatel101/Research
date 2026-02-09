@@ -294,6 +294,7 @@ def _show_model_info(model_name: str) -> None:
     console.print(f"Description: {info.get('description', 'N/A')}")
     console.print(f"Requires Scaling: {info['requires_scaling']}")
     console.print(f"Requires Sequences: {info['requires_sequences']}")
+    console.print(f"Requires 4D: {info.get('requires_4d', False)}")
     console.print("\n[bold]Default Configuration:[/bold]")
     for key, value in sorted(info["default_config"].items()):
         console.print(f"  {key}: {value}")

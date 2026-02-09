@@ -263,13 +263,13 @@ def test_neural_model(container: "TimeSeriesDataContainer", model_name: str, seq
 
         # Create model with fast config
         fast_config = {
-            "hidden_size": 64,
+            "hidden_size": 32,
             "num_layers": 1,
             "dropout": 0.1,
             "learning_rate": 0.001,
-            "batch_size": 128,
-            "max_epochs": 5,  # Just 5 epochs for testing
-            "early_stopping_patience": 3,
+            "batch_size": 256,
+            "max_epochs": 3,  # Just 3 epochs for testing
+            "early_stopping_patience": 2,
             "n_classes": 3,
             "input_size": n_features,
             "seq_len": seq_len,
@@ -298,6 +298,201 @@ def test_neural_model(container: "TimeSeriesDataContainer", model_name: str, seq
 
     except Exception as e:
         log_result(model_name, False, error=f"{type(e).__name__}: {e}", duration=time.time() - t0)
+        traceback.print_exc()
+
+
+def test_4d_model(container: "TimeSeriesDataContainer", model_name: str, seq_len: int = 20, n_timeframes: int = 3) -> None:
+    """Test a 4D transformer model (batch, n_timeframes, seq_len, features)."""
+    from src.models import ModelRegistry
+    from sklearn.metrics import accuracy_score, f1_score
+
+    t0 = time.time()
+    try:
+        # Get 2D data first
+        X_train_2d, y_train, w_train = container.get_sklearn_arrays("train")
+        X_val_2d, y_val, w_val = container.get_sklearn_arrays("val")
+
+        n_features = X_train_2d.shape[1]
+        # Split features into n_timeframes groups to simulate multi-TF
+        features_per_tf = n_features // n_timeframes
+
+        # Create 4D sequences: (n_samples, n_timeframes, seq_len, features_per_tf)
+        def make_4d_sequences(X_2d, y, seq_len, n_tf, feat_per_tf):
+            n = len(X_2d) - seq_len + 1
+            if n <= 0:
+                raise ValueError(f"Not enough data for seq_len={seq_len}")
+            # Create 3D first
+            X_3d = np.stack([X_2d[i:i+seq_len, :feat_per_tf * n_tf] for i in range(n)])
+            # Reshape to 4D: (n_samples, n_tf, seq_len, feat_per_tf)
+            X_4d = X_3d.reshape(n, seq_len, n_tf, feat_per_tf).transpose(0, 2, 1, 3)
+            y_seq = y[seq_len-1:][:n]
+            return X_4d, y_seq
+
+        X_train, y_train_seq = make_4d_sequences(X_train_2d, y_train, seq_len, n_timeframes, features_per_tf)
+        X_val, y_val_seq = make_4d_sequences(X_val_2d, y_val, seq_len, n_timeframes, features_per_tf)
+
+        log(f"  Training {model_name} on {X_train.shape} (4D)...")
+
+        fast_config = {
+            "hidden_size": 32,
+            "num_layers": 1,
+            "dropout": 0.1,
+            "learning_rate": 0.001,
+            "batch_size": 256,
+            "max_epochs": 3,
+            "early_stopping_patience": 2,
+            "n_classes": 3,
+            "input_size": features_per_tf,
+            "seq_len": seq_len,
+            "n_timeframes": n_timeframes,
+            "patch_len": 8,   # PatchTST: must be <= seq_len
+            "stride": 4,
+        }
+
+        model = ModelRegistry.create(model_name, config=fast_config)
+        train_metrics = model.fit(X_train, y_train_seq, X_val, y_val_seq)
+
+        pred_result = model.predict(X_val)
+        y_pred = pred_result.class_predictions
+
+        acc = accuracy_score(y_val_seq, y_pred)
+        f1 = f1_score(y_val_seq, y_pred, average="weighted", zero_division=0)
+
+        metrics = {
+            "accuracy": acc,
+            "f1_weighted": f1,
+            "train_shape": list(X_train.shape),
+            "val_shape": list(X_val.shape),
+        }
+
+        log_result(model_name, True, metrics, duration=time.time() - t0)
+
+    except Exception as e:
+        log_result(model_name, False, error=f"{type(e).__name__}: {e}", duration=time.time() - t0)
+        traceback.print_exc()
+
+
+# =============================================================================
+# PHASE 6: ENSEMBLE TESTS
+# =============================================================================
+
+def test_ensembles(container: "TimeSeriesDataContainer") -> None:
+    """Test ensemble models: voting, stacking, blending."""
+    from src.models import ModelRegistry
+    from sklearn.metrics import accuracy_score, f1_score
+
+    X_train, y_train, w_train = container.get_sklearn_arrays("train")
+    X_val, y_val, w_val = container.get_sklearn_arrays("val")
+
+    # --- Voting Ensemble (soft, boosting models) ---
+    log("\nTesting voting_ensemble (soft, xgboost+lightgbm+catboost)...")
+    t0 = time.time()
+    try:
+        voting = ModelRegistry.create("voting", config={
+            "voting": "soft",
+            "base_model_names": ["xgboost", "lightgbm", "catboost"],
+            "base_model_configs": {
+                "xgboost": {"n_estimators": 50, "max_depth": 4},
+                "lightgbm": {"n_estimators": 50, "max_depth": 4, "verbose": -1},
+                "catboost": {"iterations": 50, "depth": 4, "verbose": 0},
+            },
+        })
+        metrics = voting.fit(X_train, y_train, X_val, y_val)
+        preds = voting.predict(X_val)
+        acc = accuracy_score(y_val, preds.class_predictions)
+        f1 = f1_score(y_val, preds.class_predictions, average="weighted", zero_division=0)
+        log_result("voting_ensemble", True, {"accuracy": acc, "f1_weighted": f1}, duration=time.time() - t0)
+    except Exception as e:
+        log_result("voting_ensemble", False, error=f"{type(e).__name__}: {e}", duration=time.time() - t0)
+        traceback.print_exc()
+
+    # --- Blending Ensemble ---
+    log("\nTesting blending_ensemble (xgboost+lightgbm, ridge_meta)...")
+    t0 = time.time()
+    try:
+        blending = ModelRegistry.create("blending", config={
+            "base_model_names": ["xgboost", "lightgbm"],
+            "meta_learner_name": "ridge_meta",
+            "holdout_fraction": 0.2,
+            "use_probabilities": True,
+            "base_model_configs": {
+                "xgboost": {"n_estimators": 50, "max_depth": 4},
+                "lightgbm": {"n_estimators": 50, "max_depth": 4, "verbose": -1},
+            },
+        })
+        metrics = blending.fit(X_train, y_train, X_val, y_val)
+        preds = blending.predict(X_val)
+        acc = accuracy_score(y_val, preds.class_predictions)
+        f1 = f1_score(y_val, preds.class_predictions, average="weighted", zero_division=0)
+        log_result("blending_ensemble", True, {"accuracy": acc, "f1_weighted": f1}, duration=time.time() - t0)
+    except Exception as e:
+        log_result("blending_ensemble", False, error=f"{type(e).__name__}: {e}", duration=time.time() - t0)
+        traceback.print_exc()
+
+    # --- Stacking Ensemble (homogeneous, boosting only) ---
+    log("\nTesting stacking_ensemble (xgboost+lightgbm+catboost, xgboost_meta, 3-fold)...")
+    t0 = time.time()
+    try:
+        stacking = ModelRegistry.create("stacking", config={
+            "base_model_names": ["xgboost", "lightgbm", "catboost"],
+            "meta_learner_name": "xgboost_meta",
+            "n_folds": 3,
+            "use_probabilities": True,
+            "base_model_configs": {
+                "xgboost": {"n_estimators": 50, "max_depth": 4},
+                "lightgbm": {"n_estimators": 50, "max_depth": 4, "verbose": -1},
+                "catboost": {"iterations": 50, "depth": 4, "verbose": 0},
+            },
+        })
+        metrics = stacking.fit(X_train, y_train, X_val, y_val)
+        preds = stacking.predict(X_val)
+        acc = accuracy_score(y_val, preds.class_predictions)
+        f1 = f1_score(y_val, preds.class_predictions, average="weighted", zero_division=0)
+        log_result("stacking_ensemble", True, {"accuracy": acc, "f1_weighted": f1}, duration=time.time() - t0)
+    except Exception as e:
+        log_result("stacking_ensemble", False, error=f"{type(e).__name__}: {e}", duration=time.time() - t0)
+        traceback.print_exc()
+
+    # --- Heterogeneous Stacking (boosting + neural) ---
+    log("\nTesting hetero_stacking (xgboost+lstm, ridge_meta, 3-fold)...")
+    t0 = time.time()
+    try:
+        # Need 3D sequences for LSTM
+        seq_len = 20
+        def make_sequences(X_2d, seq_len):
+            n = len(X_2d) - seq_len + 1
+            return np.stack([X_2d[i:i+seq_len] for i in range(n)])
+
+        X_train_3d = make_sequences(X_train, seq_len)
+        X_val_3d = make_sequences(X_val, seq_len)
+        # Align labels with sequences
+        y_train_seq = y_train[seq_len - 1:]
+        y_val_seq = y_val[seq_len - 1:]
+        # Trim 2D to match
+        X_train_trim = X_train[seq_len - 1:]
+        X_val_trim = X_val[seq_len - 1:]
+
+        stacking_hetero = ModelRegistry.create("stacking", config={
+            "base_model_names": ["xgboost", "lstm"],
+            "meta_learner_name": "ridge_meta",
+            "n_folds": 3,
+            "use_probabilities": True,
+            "base_model_configs": {
+                "xgboost": {"n_estimators": 50, "max_depth": 4},
+                "lstm": {"hidden_size": 32, "num_layers": 1, "max_epochs": 3, "batch_size": 256, "n_classes": 3},
+            },
+        })
+        metrics = stacking_hetero.fit(
+            X_train_trim, y_train_seq, X_val_trim, y_val_seq,
+            X_train_seq=X_train_3d, X_val_seq=X_val_3d,
+        )
+        preds = stacking_hetero.predict(X_val_trim, X_seq=X_val_3d)
+        acc = accuracy_score(y_val_seq, preds.class_predictions)
+        f1 = f1_score(y_val_seq, preds.class_predictions, average="weighted", zero_division=0)
+        log_result("hetero_stacking", True, {"accuracy": acc, "f1_weighted": f1}, duration=time.time() - t0)
+        stacking_hetero.clear_cache()
+    except Exception as e:
+        log_result("hetero_stacking", False, error=f"{type(e).__name__}: {e}", duration=time.time() - t0)
         traceback.print_exc()
 
 
@@ -331,7 +526,7 @@ def main():
 
     for model_name in ["lstm", "gru"]:
         log(f"\nTesting {model_name}...")
-        test_neural_model(container, model_name, seq_len=30)
+        test_neural_model(container, model_name, seq_len=20)
 
     # Phase 3: CNN models (3D)
     log("")
@@ -341,17 +536,22 @@ def main():
 
     for model_name in ["tcn", "inceptiontime", "resnet1d"]:
         log(f"\nTesting {model_name}...")
-        test_neural_model(container, model_name, seq_len=30)
+        test_neural_model(container, model_name, seq_len=20)
 
     # Phase 4: Transformer models (3D/4D)
     log("")
     log("=" * 70)
-    log("PHASE 4: TRANSFORMER MODELS (3D)")
+    log("PHASE 4: TRANSFORMER MODELS (3D/4D)")
     log("=" * 70)
 
-    for model_name in ["patchtst", "itransformer", "tft"]:
-        log(f"\nTesting {model_name}...")
-        test_neural_model(container, model_name, seq_len=30)
+    # PatchTST and iTransformer need 4D input
+    for model_name in ["patchtst", "itransformer"]:
+        log(f"\nTesting {model_name} (4D)...")
+        test_4d_model(container, model_name, seq_len=30, n_timeframes=3)
+
+    # TFT works with 3D
+    log(f"\nTesting tft (3D)...")
+    test_neural_model(container, "tft", seq_len=20)
 
     # Phase 5: MLP models (3D for N-BEATS)
     log("")
@@ -361,6 +561,14 @@ def main():
 
     log(f"\nTesting nbeats...")
     test_neural_model(container, "nbeats", seq_len=30)
+
+    # Phase 6: Ensemble models
+    log("")
+    log("=" * 70)
+    log("PHASE 6: ENSEMBLE MODELS")
+    log("=" * 70)
+
+    test_ensembles(container)
 
     # Summary
     log("")

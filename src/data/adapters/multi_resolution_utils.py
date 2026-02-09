@@ -155,16 +155,23 @@ def build_timeframe_feature_map(
     # For base timeframe, optionally include non-suffixed features
     if include_base_features and timeframes:
         base_tf = timeframes[0]
-        all_suffixes = [get_timeframe_suffix(tf) for tf in TIMEFRAME_TO_MINUTES]
         base_cols = []
-        for col in df.columns:
-            if col in ["datetime", "symbol", "date", "time"]:
-                continue
-            if col.startswith("label_") or col.startswith("sample_weight_"):
-                continue
-            has_suffix = any(col.endswith(suffix) for suffix in all_suffixes)
-            if not has_suffix and col not in feature_map.get(base_tf, []):
-                base_cols.append(col)
+        if feature_bases is None:
+            all_suffixes = [get_timeframe_suffix(tf) for tf in TIMEFRAME_TO_MINUTES]
+            for col in df.columns:
+                if col in ["datetime", "symbol", "date", "time"]:
+                    continue
+                if col.startswith("label_") or col.startswith("sample_weight_"):
+                    continue
+                has_suffix = any(col.endswith(suffix) for suffix in all_suffixes)
+                if not has_suffix and col not in feature_map.get(base_tf, []):
+                    base_cols.append(col)
+        else:
+            # If feature_bases were specified, only include those base features (unsuffixed)
+            # for the base timeframe to avoid pulling in the entire engineered feature set.
+            for base in feature_bases:
+                if base in df.columns and base not in feature_map.get(base_tf, []):
+                    base_cols.append(base)
 
         if base_cols and base_tf in feature_map:
             feature_map[base_tf] = sorted(base_cols) + feature_map[base_tf]

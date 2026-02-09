@@ -198,6 +198,7 @@ class TrainerArtifactsMixin:
         requirements_info["runtime_properties"] = {
             "model_family": self.model.model_family,
             "requires_sequences": self.model.requires_sequences,
+            "requires_4d": getattr(self.model, "requires_4d", False),
             "requires_scaling": self.model.requires_scaling,
         }
 

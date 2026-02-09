@@ -198,10 +198,17 @@ class iTransformerNetwork(nn.Module):
 
         Args:
             x: Input tensor, shape (batch, seq_len, features)
+               or 4D shape (batch, n_timeframes, seq_len, features)
 
         Returns:
             Output logits, shape (batch, n_classes)
         """
+        # Handle 4D multi-resolution input: flatten timeframes into features
+        if x.ndim == 4:
+            batch, n_tf, seq, feat = x.shape
+            # (batch, n_tf, seq, feat) -> (batch, seq, n_tf * feat)
+            x = x.permute(0, 2, 1, 3).reshape(batch, seq, n_tf * feat)
+
         # Temporal embedding: (batch, seq_len, features) -> (batch, features, d_model)
         x = self.temporal_embed(x)
 
@@ -299,6 +306,11 @@ class iTransformerModel(BaseRNNModel):
 
     _seq_len_set: bool = False
 
+    @property
+    def requires_4d(self) -> bool:
+        """iTransformer supports 4D multi-resolution input."""
+        return True
+
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
         self._seq_len: int | None = None
@@ -395,7 +407,8 @@ class iTransformerModel(BaseRNNModel):
             TrainingMetrics with training results
         """
         # Store sequence length from training data
-        self._seq_len = X_train.shape[1]
+        # For 4D input (batch, n_timeframes, seq_len, features), seq_len is dim 2
+        self._seq_len = X_train.shape[2] if X_train.ndim == 4 else X_train.shape[1]
 
         return super().fit(X_train, y_train, X_val, y_val, sample_weights, config)
 
@@ -443,9 +456,11 @@ class iTransformerModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         # Validate sequence length matches training
-        if self._seq_len is not None and X.shape[1] != self._seq_len:
+        # For 4D input (batch, n_timeframes, seq_len, features), seq_len is dim 2
+        input_seq_len = X.shape[2] if X.ndim == 4 else X.shape[1]
+        if self._seq_len is not None and input_seq_len != self._seq_len:
             raise ValueError(
-                f"Input sequence length ({X.shape[1]}) does not match "
+                f"Input sequence length ({input_seq_len}) does not match "
                 f"training sequence length ({self._seq_len}). "
                 f"iTransformer requires fixed sequence length."
             )

@@ -79,7 +79,9 @@ class BundleMetadata:
     n_features: int
     feature_hash: str
     requires_sequences: bool = False
+    requires_4d: bool = False
     sequence_length: int = 0
+    n_timeframes: int = 0
     has_calibrator: bool = False
     has_preprocessing_graph: bool = False
     preprocessing_graph_hash: str = ""
@@ -99,7 +101,9 @@ class BundleMetadata:
             "n_features": self.n_features,
             "feature_hash": self.feature_hash,
             "requires_sequences": self.requires_sequences,
+            "requires_4d": self.requires_4d,
             "sequence_length": self.sequence_length,
+            "n_timeframes": self.n_timeframes,
             "has_calibrator": self.has_calibrator,
             "has_preprocessing_graph": self.has_preprocessing_graph,
             "preprocessing_graph_hash": self.preprocessing_graph_hash,
@@ -121,7 +125,9 @@ class BundleMetadata:
             n_features=data["n_features"],
             feature_hash=data["feature_hash"],
             requires_sequences=data.get("requires_sequences", False),
+            requires_4d=data.get("requires_4d", False),
             sequence_length=data.get("sequence_length", 0),
+            n_timeframes=data.get("n_timeframes", 0),
             has_calibrator=data.get("has_calibrator", False),
             has_preprocessing_graph=data.get("has_preprocessing_graph", False),
             preprocessing_graph_hash=data.get("preprocessing_graph_hash", ""),
@@ -279,9 +285,30 @@ class ModelBundle:
         model_name = getattr(model, "_get_model_type", lambda: "unknown")()
         model_family = getattr(model, "model_family", "unknown")
         requires_sequences = getattr(model, "requires_sequences", False)
+        requires_4d = getattr(model, "requires_4d", False)
         sequence_length = 0
-        if requires_sequences:
+        if requires_sequences or requires_4d:
             sequence_length = getattr(model, "_config", {}).get("sequence_length", 60)
+
+        # 4D models need extra shape metadata for validation
+        n_timeframes = 0
+        n_features = len(feature_columns)
+        if requires_4d:
+            try:
+                from src.core.contracts import FeatureMode, get_model_contract
+
+                contract = get_model_contract(model_name)
+                if contract.input_rank.value == 4:
+                    n_timeframes = 1 + len(contract.mtf_timeframes)
+                    if contract.feature_mode == FeatureMode.RAW:
+                        # RAW multi-stream models use OHLCV per timeframe
+                        n_features = 5
+                else:
+                    # Dynamic 4D (e.g. ensembles) - skip strict feature validation
+                    n_features = 0
+            except Exception:
+                # Conservative fallback - skip strict feature validation
+                n_features = 0
 
         # Compute feature hash for validation
         feature_hash = hashlib.md5(",".join(feature_columns).encode()).hexdigest()[:12]
@@ -306,10 +333,12 @@ class ModelBundle:
             model_name=model_name,
             model_family=model_family,
             horizon=horizon,
-            n_features=len(feature_columns),
+            n_features=n_features,
             feature_hash=feature_hash,
             requires_sequences=requires_sequences,
+            requires_4d=requires_4d,
             sequence_length=sequence_length,
+            n_timeframes=n_timeframes,
             has_calibrator=calibrator is not None,
             has_preprocessing_graph=preprocessing_graph is not None,
             preprocessing_graph_hash=preprocessing_graph_hash,
@@ -689,13 +718,37 @@ class ModelBundle:
 
         # Apply scaling
         if self.scaler is not None:
-            if self.metadata.requires_sequences:
+            if self.metadata.requires_4d:
+                # For 4D sequences, reshape, scale, reshape back
+                orig_shape = X_array.shape
+                X_flat = X_array.reshape(-1, orig_shape[-1])
+                scaler_features = getattr(self.scaler, "n_features_in_", None)
+                if scaler_features and scaler_features != orig_shape[-1]:
+                    raise ValueError(
+                        f"Scaler expects {scaler_features} features but 4D input has "
+                        f"{orig_shape[-1]} features per timeframe."
+                    )
+                X_scaled = self.scaler.transform(X_flat)
+                X_array = X_scaled.reshape(orig_shape)
+            elif self.metadata.requires_sequences:
                 # For 3D sequences, reshape, scale, reshape back
                 orig_shape = X_array.shape
                 X_flat = X_array.reshape(-1, orig_shape[-1])
+                scaler_features = getattr(self.scaler, "n_features_in_", None)
+                if scaler_features and scaler_features != orig_shape[-1]:
+                    raise ValueError(
+                        f"Scaler expects {scaler_features} features but sequence input has "
+                        f"{orig_shape[-1]} features."
+                    )
                 X_scaled = self.scaler.transform(X_flat)
                 X_array = X_scaled.reshape(orig_shape)
             else:
+                scaler_features = getattr(self.scaler, "n_features_in_", None)
+                if scaler_features and scaler_features != X_array.shape[1]:
+                    raise ValueError(
+                        f"Scaler expects {scaler_features} features but tabular input has "
+                        f"{X_array.shape[1]} features."
+                    )
                 X_array = self.scaler.transform(X_array)
 
         # Make predictions
@@ -713,6 +766,14 @@ class ModelBundle:
     ) -> np.ndarray:
         """Prepare and validate input data."""
         if isinstance(X, pd.DataFrame):
+            if self.metadata.requires_4d:
+                raise ValueError(
+                    "4D models require ndarray input of shape "
+                    "(n_samples, n_timeframes, seq_len, n_features). "
+                    "Pass a 4D tensor produced by container.get_multi_resolution_4d() "
+                    "or container.get_multi_stream_4d()."
+                )
+
             # Validate and reorder columns
             missing = set(self.feature_columns) - set(X.columns)
             if missing:
@@ -723,7 +784,22 @@ class ModelBundle:
         X = np.asarray(X, dtype=np.float32)
 
         # Validate shape
-        if self.metadata.requires_sequences:
+        if self.metadata.requires_4d:
+            if X.ndim != 4:
+                raise ValueError(f"Model requires 4D input, got shape {X.shape}")
+            if self.metadata.n_timeframes and X.shape[1] != self.metadata.n_timeframes:
+                raise ValueError(
+                    f"Expected {self.metadata.n_timeframes} timeframes, got {X.shape[1]}"
+                )
+            if self.metadata.sequence_length and X.shape[2] != self.metadata.sequence_length:
+                raise ValueError(
+                    f"Expected sequence_length={self.metadata.sequence_length}, got {X.shape[2]}"
+                )
+            if self.metadata.n_features and X.shape[3] != self.metadata.n_features:
+                raise ValueError(
+                    f"Expected {self.metadata.n_features} features per timeframe, got {X.shape[3]}"
+                )
+        elif self.metadata.requires_sequences:
             if X.ndim != 3:
                 raise ValueError(f"Model requires 3D sequences, got shape {X.shape}")
             if X.shape[2] != self.metadata.n_features:
@@ -858,7 +934,7 @@ class ModelBundle:
         # Check scaler consistency
         if self.scaler is not None:
             scaler_features = getattr(self.scaler, "n_features_in_", None)
-            if scaler_features and scaler_features != self.metadata.n_features:
+            if self.metadata.n_features and scaler_features and scaler_features != self.metadata.n_features:
                 issues.append(
                     f"Scaler features ({scaler_features}) != "
                     f"metadata features ({self.metadata.n_features})"

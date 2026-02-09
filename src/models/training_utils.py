@@ -85,7 +85,31 @@ def evaluate_model(
         >>> model.load("experiments/runs/xgboost_h20_xxx/checkpoints/best_model")
         >>> metrics = evaluate_model(model, container, split="test")
     """
-    if model.requires_sequences:
+    if getattr(model, "requires_4d", False):
+        from src.core.contracts import FeatureMode, get_model_contract
+        from src.models.data_preparation import dataset_to_arrays
+
+        model_name = getattr(model, "_get_model_type", lambda: "unknown")()
+        contract = get_model_contract(model_name)
+
+        timeframes = [contract.primary_timeframe, *list(contract.mtf_timeframes)]
+        features_per_timeframe = None
+        if contract.feature_mode == FeatureMode.RAW:
+            features_per_timeframe = ["open", "high", "low", "close", "volume"]
+
+        model_config = getattr(model, "_config", {})
+        seq_len = int(model_config.get("sequence_length", 60)) if isinstance(model_config, dict) else 60
+        dataset = container.get_multi_resolution_4d(
+            split,
+            seq_len=seq_len,
+            timeframes=timeframes,
+            features_per_timeframe=features_per_timeframe,
+            include_base_features=True,
+            symbol_isolated=True,
+        )
+        X, y, _ = dataset_to_arrays(dataset)  # type: ignore[arg-type]
+
+    elif model.requires_sequences:
         dataset = container.get_pytorch_sequences(split, seq_len=60, symbol_isolated=True)
         # Use memory-efficient conversion (pre-allocate instead of list accumulation)
         from src.models.data_preparation import dataset_to_arrays

@@ -137,6 +137,47 @@ class StackingEnsemble(BaseModel):
             return self._check_configured_models_require_sequences(base_model_names)
         return False
 
+    @property
+    def requires_4d(self) -> bool:
+        """
+        Whether this stacking ensemble expects 4D input.
+
+        This is True only for homogeneous 4D stacking (all base models require 4D).
+        For heterogeneous stacking, the main X is always 2D and sequence data is
+        passed separately via X_train_seq/X_val_seq.
+        """
+
+        def _rank_from_info(info: dict[str, object]) -> int:
+            if bool(info.get("requires_4d", False)):
+                return 4
+            if bool(info.get("requires_sequences", False)):
+                return 3
+            return 2
+
+        # Heterogeneous stacking always uses 2D X (sequence data passed separately)
+        if getattr(self, "_is_heterogeneous", False):
+            return False
+
+        if self._base_models:
+            ranks = {
+                4 if m.requires_4d else 3 if m.requires_sequences else 2
+                for fold_models in self._base_models
+                for m in fold_models
+            }
+            return ranks == {4}
+
+        base_model_names = self._config.get("base_model_names", [])
+        if not base_model_names:
+            return False
+
+        ranks = set()
+        for name in base_model_names:
+            if ModelRegistry.is_registered(name):
+                info = ModelRegistry.get_model_info(name)
+                ranks.add(_rank_from_info(info))
+
+        return ranks == {4}
+
     def _check_configured_models_require_sequences(self, model_names: list[str]) -> bool:
         """
         Check if any configured base model requires sequences.
@@ -174,6 +215,13 @@ class StackingEnsemble(BaseModel):
                 raise ValueError(
                     f"{context} must be 2D (n_samples, n_features) for heterogeneous "
                     f"stacking ensemble (sequence data passed separately), got shape {X.shape}"
+                )
+        elif self.requires_4d:
+            # Homogeneous 4D ensemble
+            if X.ndim != 4:
+                raise ValueError(
+                    f"{context} must be 4D (n_samples, n_timeframes, seq_len, n_features) "
+                    f"for 4D models, got shape {X.shape}"
                 )
         elif self.requires_sequences:
             # Homogeneous sequence ensemble
@@ -351,6 +399,12 @@ class StackingEnsemble(BaseModel):
         purge_bars = train_config.get("purge_bars", 60)
         embargo_bars = train_config.get("embargo_bars", 1440)
 
+        if passthrough and X_train.ndim != 2:
+            raise ValueError(
+                "StackingEnsemble passthrough=True is only supported for 2D tabular inputs. "
+                f"Got X_train shape {X_train.shape}. Disable passthrough for 3D/4D base models."
+            )
+
         # ==================================================================
         # LEAKAGE PREVENTION: Always use default configs for OOF generation
         # ==================================================================
@@ -527,8 +581,8 @@ class StackingEnsemble(BaseModel):
                 "meta_features_dim": meta_features_train.shape[1],
                 "use_probabilities": use_probabilities,
                 "passthrough": passthrough,
-                "use_default_configs_for_oof": use_default_for_oof,
-                "leakage_prevention": "enabled" if use_default_for_oof else "disabled",
+                "use_default_configs_for_oof": True,
+                "leakage_prevention": "enabled",
                 "is_heterogeneous": self._is_heterogeneous,
                 "tabular_models": list(self._tabular_models) if self._is_heterogeneous else [],
                 "sequence_models": list(self._sequence_models) if self._is_heterogeneous else [],
@@ -612,8 +666,24 @@ class StackingEnsemble(BaseModel):
         )
         kfold = PurgedKFold(purged_kfold_config)
 
-        # Convert to DataFrame for PurgedKFold (requires index for label_end_times)
-        X_df = pd.DataFrame(X_train)
+        # PurgedKFold uses only X.index/len(X) (values are irrelevant).
+        # Avoid pd.DataFrame(X_train) which breaks for 3D/4D inputs.
+        #
+        # If label_end_times comes from the underlying bar-level DataFrame, it may be
+        # longer than pre-windowed sequence inputs (3D/4D). In that case, align by
+        # taking the last n_samples (equivalent to dropping the initial lookback).
+        cv_index = None
+        if label_end_times is not None:
+            if len(label_end_times) < n_samples:
+                raise ValueError(
+                    f"label_end_times length ({len(label_end_times)}) is smaller than "
+                    f"X_train samples ({n_samples}). Cannot align for purged CV."
+                )
+            if len(label_end_times) > n_samples:
+                label_end_times = label_end_times.iloc[-n_samples:]
+            cv_index = label_end_times.index
+
+        X_df = pd.DataFrame(index=cv_index if cv_index is not None else pd.RangeIndex(n_samples))
 
         # Pre-slice sequence data for heterogeneous ensembles
         X_seq_fold_train_cache: np.ndarray | None = None

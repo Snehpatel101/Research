@@ -32,6 +32,10 @@ def prepare_training_data(
     requires_sequences: bool,
     sequence_length: int = 60,
     feature_columns: list[str] | None = None,
+    requires_4d: bool = False,
+    timeframes: list[str] | None = None,
+    features_per_timeframe: list[str] | None = None,
+    include_base_features: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare data for training based on model requirements.
@@ -43,11 +47,49 @@ def prepare_training_data(
         feature_columns: Optional list of feature columns to use for sequences.
             If None, uses all available features. Use this to filter to
             model-specific optimal feature sets (e.g., tcn_optimal, neural_optimal).
+        requires_4d: Whether model needs 4D multi-resolution data
+            (batch, n_timeframes, seq_len, features). When True, uses
+            MultiResolution4DAdapter via container.get_multi_resolution_4d().
+        timeframes: Optional list of timeframes for 4D data (base first).
+            Only used when requires_4d=True.
+        features_per_timeframe: Optional list of base feature names (without suffix)
+            to extract per timeframe for 4D data (e.g., ["open", "high", "low", "close", "volume"]).
+            Only used when requires_4d=True.
+        include_base_features: Include non-suffixed base features for the base timeframe.
+            Only used when requires_4d=True.
 
     Returns:
         Tuple of (X_train, y_train, w_train, X_val, y_val)
     """
-    if requires_sequences:
+    if requires_4d and requires_sequences:
+        raise ValueError("requires_4d and requires_sequences cannot both be True")
+
+    if requires_4d:
+        # Get 4D multi-resolution data for transformer models
+        train_dataset = container.get_multi_resolution_4d(
+            "train",
+            seq_len=sequence_length,
+            timeframes=timeframes,
+            features_per_timeframe=features_per_timeframe,
+            include_base_features=include_base_features,
+        )
+        val_dataset = container.get_multi_resolution_4d(
+            "val",
+            seq_len=sequence_length,
+            timeframes=timeframes,
+            features_per_timeframe=features_per_timeframe,
+            include_base_features=include_base_features,
+        )
+
+        logger.info(
+            f"4D multi-resolution data prepared: "
+            f"train={len(train_dataset)} sequences, val={len(val_dataset)} sequences"
+        )
+
+        X_train, y_train, w_train = dataset_to_arrays(cast(SizedDataset, train_dataset))
+        X_val, y_val, _ = dataset_to_arrays(cast(SizedDataset, val_dataset))
+
+    elif requires_sequences:
         # Get sequence data for sequential models
         train_dataset = container.get_pytorch_sequences(
             "train",
@@ -86,6 +128,10 @@ def prepare_test_data(
     requires_sequences: bool,
     sequence_length: int = 60,
     feature_columns: list[str] | None = None,
+    requires_4d: bool = False,
+    timeframes: list[str] | None = None,
+    features_per_timeframe: list[str] | None = None,
+    include_base_features: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare test data for final evaluation.
@@ -96,11 +142,31 @@ def prepare_test_data(
         sequence_length: Sequence length for sequential models
         feature_columns: Optional list of feature columns to use for sequences.
             If None, uses all available features.
+        requires_4d: Whether model needs 4D multi-resolution data.
+        timeframes: Optional list of timeframes for 4D data (base first).
+            Only used when requires_4d=True.
+        features_per_timeframe: Optional list of base feature names (without suffix)
+            to extract per timeframe for 4D data.
+            Only used when requires_4d=True.
+        include_base_features: Include non-suffixed base features for the base timeframe.
+            Only used when requires_4d=True.
 
     Returns:
         Tuple of (X_test, y_test, w_test)
     """
-    if requires_sequences:
+    if requires_4d and requires_sequences:
+        raise ValueError("requires_4d and requires_sequences cannot both be True")
+
+    if requires_4d:
+        test_dataset = container.get_multi_resolution_4d(
+            "test",
+            seq_len=sequence_length,
+            timeframes=timeframes,
+            features_per_timeframe=features_per_timeframe,
+            include_base_features=include_base_features,
+        )
+        X_test, y_test, w_test = dataset_to_arrays(cast(SizedDataset, test_dataset))
+    elif requires_sequences:
         # Get sequence data for sequential models
         test_dataset = container.get_pytorch_sequences(
             "test",

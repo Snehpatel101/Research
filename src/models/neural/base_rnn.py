@@ -343,8 +343,13 @@ class BaseRNNModel(BaseModel):
         deterministic = train_config.get("deterministic_mode", False)
         set_all_seeds(random_seed, deterministic=deterministic)
 
-        # Extract dimensions
-        n_samples, seq_len, n_features = X_train.shape
+        # Extract dimensions (handle both 3D and 4D inputs)
+        if X_train.ndim == 4:
+            n_samples, n_timeframes, seq_len, n_features_per_tf = X_train.shape
+            # Forward methods flatten 4D to 3D: (batch, seq, n_tf * feat)
+            n_features = n_timeframes * n_features_per_tf
+        else:
+            n_samples, seq_len, n_features = X_train.shape
         self._n_features = n_features
 
         # Create network

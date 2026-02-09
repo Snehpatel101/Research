@@ -209,10 +209,17 @@ class PatchTSTNetwork(nn.Module):
 
         Args:
             x: Input tensor, shape (batch, seq_len, features)
+               or 4D shape (batch, n_timeframes, seq_len, features)
 
         Returns:
             Output logits, shape (batch, n_classes)
         """
+        # Handle 4D multi-resolution input: flatten timeframes into features
+        if x.ndim == 4:
+            batch, n_tf, seq, feat = x.shape
+            # (batch, n_tf, seq, feat) -> (batch, seq, n_tf * feat)
+            x = x.permute(0, 2, 1, 3).reshape(batch, seq, n_tf * feat)
+
         # Create patch embeddings: (batch, n_patches, d_model)
         x = self.patch_embed(x)
 
@@ -280,6 +287,11 @@ class PatchTSTModel(BaseRNNModel):
     """
 
     _noncausal_warning_logged: bool = False
+
+    @property
+    def requires_4d(self) -> bool:
+        """PatchTST supports 4D multi-resolution input."""
+        return True
 
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)

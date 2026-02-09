@@ -373,9 +373,9 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
     "patchtst": ModelContract(
         model_name="patchtst",
         model_family="transformer",
-        input_rank=DataRank.SEQUENCE_3D,  # 3D: model forward() expects (N, seq_len, features)
+        input_rank=DataRank.MULTI_TF_4D,  # 4D: (N, n_timeframes, seq_len, features)
         feature_mode=FeatureMode.RAW,  # PatchTST learns from raw data
-        mtf_mode=MTFMode.INDICATORS,
+        mtf_mode=MTFMode.MULTI_STREAM,
         primary_timeframe="1min",
         mtf_timeframes=("5min", "15min"),
         sequence_length=60,
@@ -387,14 +387,14 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         description="PatchTST Transformer with patching",
     ),
     # =========================================================================
-    # TRANSFORMER MODELS (5 models) - 3D sequence
+    # TRANSFORMER MODELS - Mixed 3D/4D
     # =========================================================================
     "itransformer": ModelContract(
         model_name="itransformer",
         model_family="transformer",
-        input_rank=DataRank.SEQUENCE_3D,  # 3D: model forward() expects (N, seq_len, features)
+        input_rank=DataRank.MULTI_TF_4D,  # 4D: (N, n_timeframes, seq_len, features)
         feature_mode=FeatureMode.RAW,
-        mtf_mode=MTFMode.INDICATORS,
+        mtf_mode=MTFMode.MULTI_STREAM,
         primary_timeframe="1min",
         mtf_timeframes=("5min", "15min"),
         sequence_length=60,

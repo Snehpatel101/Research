@@ -418,6 +418,7 @@ class InferencePipeline:
                 "features": b.metadata.n_features,
                 "has_calibrator": b.metadata.has_calibrator,
                 "requires_sequences": b.metadata.requires_sequences,
+                "requires_4d": getattr(b.metadata, "requires_4d", False),
             }
             for b in self.bundles
         ]

@@ -211,6 +211,19 @@ class BaseModel(ABC):
         """
         pass
 
+    @property
+    def requires_4d(self) -> bool:
+        """
+        Whether this model requires 4D multi-resolution input.
+
+        When True, data preparation routes through MultiResolution4DAdapter
+        producing tensors of shape (batch, n_timeframes, seq_len, features).
+
+        Returns:
+            False by default. Override in transformer models that need 4D input.
+        """
+        return False
+
     # =========================================================================
     # ABSTRACT METHODS (must implement)
     # =========================================================================
@@ -352,9 +365,15 @@ class BaseModel(ABC):
             ValueError: If shape is invalid for this model type
         """
         if X.ndim == 1:
-            raise ValueError(f"{context} must be 2D or 3D, got 1D array with shape {X.shape}")
+            raise ValueError(f"{context} must be 2D or higher, got 1D array with shape {X.shape}")
 
-        if self.requires_sequences:
+        if self.requires_4d:
+            if X.ndim != 4:
+                raise ValueError(
+                    f"{context} must be 4D (batch, n_timeframes, seq_len, features) "
+                    f"for 4D models, got shape {X.shape}"
+                )
+        elif self.requires_sequences:
             if X.ndim != 3:
                 raise ValueError(
                     f"{context} must be 3D (n_samples, seq_len, n_features) "

@@ -327,6 +327,7 @@ class ModelRegistry:
                 "description": metadata.get("description", ""),
                 "requires_scaling": instance.requires_scaling,
                 "requires_sequences": instance.requires_sequences,
+                "requires_4d": instance.requires_4d,
                 "default_config": instance.get_default_config(),
             }
         except ImportError as e:
@@ -338,6 +339,7 @@ class ModelRegistry:
                 "description": metadata.get("description", ""),
                 "requires_scaling": True,  # Safe default
                 "requires_sequences": False,  # Safe default
+                "requires_4d": False,  # Safe default
                 "default_config": {},
                 "available": False,
                 "error": str(e),
@@ -351,6 +353,7 @@ class ModelRegistry:
                 "description": metadata.get("description", ""),
                 "requires_scaling": True,  # Safe default
                 "requires_sequences": False,  # Safe default
+                "requires_4d": False,  # Safe default
                 "default_config": {},
                 "available": False,
                 "error": str(e),

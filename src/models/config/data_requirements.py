@@ -292,7 +292,7 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_missing=False,
         description="PatchTST Transformer. Patches input sequences for efficiency.",
         # Phase 1 SNwH fields
-        input_rank=3,
+        input_rank=4,  # 4D multi-resolution: (batch, n_timeframes, seq_len, features)
         feature_mode="raw",
         mtf_mode="multi_stream",
         primary_timeframe="1min",
@@ -315,7 +315,7 @@ MODEL_DATA_REQUIREMENTS: dict[str, ModelDataRequirements] = {
         supports_missing=False,
         description="iTransformer. Channel-wise attention for multivariate time series.",
         # Phase 1 SNwH fields
-        input_rank=3,
+        input_rank=4,  # 4D multi-resolution: (batch, n_timeframes, seq_len, features)
         feature_mode="raw",
         mtf_mode="multi_stream",
         primary_timeframe="1min",

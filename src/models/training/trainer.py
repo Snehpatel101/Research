@@ -336,9 +336,12 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         if self.model.ensemble_type != "stacking":
             return False
         # Check if base models have mixed input requirements
-        from ..ensemble.validator import is_heterogeneous_ensemble
+        from ..ensemble.validator import is_heterogeneous_ensemble, validate_ensemble_config
 
         base_models = self.config.model_config.get("base_model_names", [])
+        is_valid, error = validate_ensemble_config(base_models, ensemble_type="stacking")
+        if not is_valid:
+            raise ValueError(error)
         return is_heterogeneous_ensemble(base_models)
 
     def _get_coordinator(self) -> TimeframeCoordinator:
@@ -682,6 +685,26 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                     f"Ensure both tabular and sequence data come from the same TimeSeriesDataContainer."
                 )
 
+        elif self.model.requires_4d:
+            # Pure 4D model - load multi-resolution 4D tensors from container
+            from src.core.contracts import FeatureMode, get_model_contract
+
+            contract = get_model_contract(self.config.model_name)
+            timeframes = [contract.primary_timeframe, *list(contract.mtf_timeframes)]
+
+            features_per_timeframe = None
+            if contract.feature_mode == FeatureMode.RAW:
+                features_per_timeframe = ["open", "high", "low", "close", "volume"]
+
+            X_train, y_train, w_train, X_val, y_val = prepare_training_data(
+                container,
+                requires_sequences=False,
+                requires_4d=True,
+                sequence_length=self.config.sequence_length,
+                timeframes=timeframes,
+                features_per_timeframe=features_per_timeframe,
+                include_base_features=True,
+            )
         elif self.model.requires_sequences:
             # Pure sequence model - get model-specific feature columns
             seq_feature_columns = self._get_sequence_model_feature_columns(

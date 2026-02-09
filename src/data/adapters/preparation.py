@@ -459,20 +459,25 @@ class UnifiedDataPreparation:
         data_rank = MODEL_DATA_RANKS.get(model_key, 2)
 
         # 1b. Check model contract for primary_timeframe and resample if needed
-        try:
-            contract = get_model_contract(model_key)
-            target_tf = contract.primary_timeframe
-            source_tf = _detect_timeframe(df)
+        # Skip resampling if data already has computed features (label columns present)
+        has_labels = any(c.startswith("label") for c in df.columns)
+        if not has_labels:
+            try:
+                contract = get_model_contract(model_key)
+                target_tf = contract.primary_timeframe
+                source_tf = _detect_timeframe(df)
 
-            if source_tf and target_tf and source_tf != target_tf:
-                logger.info(
-                    f"Model {model_name} requires {target_tf} data, "
-                    f"input appears to be {source_tf}"
-                )
-                df = _resample_for_model(df, source_tf, target_tf)
-                logger.info(f"After resampling: {len(df):,} rows")
-        except Exception as e:
-            logger.warning(f"Could not check/apply timeframe resampling: {e}")
+                if source_tf and target_tf and source_tf != target_tf:
+                    logger.info(
+                        f"Model {model_name} requires {target_tf} data, "
+                        f"input appears to be {source_tf}"
+                    )
+                    df = _resample_for_model(df, source_tf, target_tf)
+                    logger.info(f"After resampling: {len(df):,} rows")
+            except Exception as e:
+                logger.warning(f"Could not check/apply timeframe resampling: {e}")
+        else:
+            logger.debug("Skipping resampling: data already has computed features/labels")
 
         logger.info(
             f"Preparing data for {model_name}: " f"adapter={adapter_type}, rank={data_rank}D"

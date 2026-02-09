@@ -219,6 +219,26 @@ class TrainerEvaluationMixin:
                 f"tabular={X_test.shape}, sequence={X_test_seq.shape}"
             )
 
+        elif self.model.requires_4d:
+            # 4D models: load multi-resolution 4D tensors from container
+            from src.core.contracts import FeatureMode, get_model_contract
+
+            contract = get_model_contract(self.config.model_name)
+            timeframes = [contract.primary_timeframe, *list(contract.mtf_timeframes)]
+
+            features_per_timeframe = None
+            if contract.feature_mode == FeatureMode.RAW:
+                features_per_timeframe = ["open", "high", "low", "close", "volume"]
+
+            X_test, y_test, _ = prepare_test_data(
+                container,
+                requires_sequences=False,
+                requires_4d=True,
+                sequence_length=self.config.sequence_length,
+                timeframes=timeframes,
+                features_per_timeframe=features_per_timeframe,
+                include_base_features=True,
+            )
         elif self.model.requires_sequences:
             # Sequence models: load sequences directly with model-specific features
             seq_feature_columns = self._get_sequence_model_feature_columns(

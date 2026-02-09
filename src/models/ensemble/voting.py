@@ -103,6 +103,35 @@ class VotingEnsemble(BaseModel):
             return self._check_configured_models_require_sequences(base_model_names)
         return False
 
+    @property
+    def requires_4d(self) -> bool:
+        """
+        Whether this voting ensemble requires 4D input.
+
+        Voting passes the same X to every base model, so this is True only when
+        ALL base models require 4D input.
+        """
+        if self._base_models:
+            ranks = {4 if m.requires_4d else 3 if m.requires_sequences else 2 for m in self._base_models}
+            return ranks == {4}
+
+        base_model_names = self._config.get("base_model_names", [])
+        if not base_model_names:
+            return False
+
+        ranks = set()
+        for name in base_model_names:
+            if ModelRegistry.is_registered(name):
+                info = ModelRegistry.get_model_info(name)
+                if info.get("requires_4d", False):
+                    ranks.add(4)
+                elif info.get("requires_sequences", False):
+                    ranks.add(3)
+                else:
+                    ranks.add(2)
+
+        return ranks == {4}
+
     def _check_configured_models_require_sequences(self, model_names: list[str]) -> bool:
         """
         Check if any configured base model requires sequences.
@@ -125,7 +154,8 @@ class VotingEnsemble(BaseModel):
         be correctly determined before base models are instantiated.
 
         VotingEnsemble only supports homogeneous base models (all tabular or
-        all sequence), so we check based on configured base_model_names.
+        all 3D sequence, or all 4D multi-timeframe), so we check based on
+        configured base_model_names.
 
         Args:
             X: Input array to validate
@@ -135,17 +165,19 @@ class VotingEnsemble(BaseModel):
             ValueError: If shape is invalid
         """
         if X.ndim == 1:
-            raise ValueError(f"{context} must be 2D or 3D, got 1D array with shape {X.shape}")
+            raise ValueError(
+                f"{context} must be 2D, 3D, or 4D, got 1D array with shape {X.shape}"
+            )
 
-        # Check configured models to determine expected shape
-        base_model_names = self._config.get("base_model_names", [])
-        expects_sequences = self._check_configured_models_require_sequences(base_model_names)
+        expected_rank = self._get_expected_input_rank()
 
-        # Also check instantiated base models if available
-        if self._base_models:
-            expects_sequences = any(m.requires_sequences for m in self._base_models)
-
-        if expects_sequences:
+        if expected_rank == 4:
+            if X.ndim != 4:
+                raise ValueError(
+                    f"{context} must be 4D (n_samples, n_timeframes, seq_len, n_features) "
+                    f"for multi-timeframe models, got shape {X.shape}"
+                )
+        elif expected_rank == 3:
             if X.ndim != 3:
                 raise ValueError(
                     f"{context} must be 3D (n_samples, seq_len, n_features) "
@@ -157,6 +189,54 @@ class VotingEnsemble(BaseModel):
                     f"{context} must be 2D (n_samples, n_features) "
                     f"for tabular models, got shape {X.shape}"
                 )
+
+    def _get_expected_input_rank(self) -> int:
+        """
+        Determine the expected input rank for configured/instantiated base models.
+
+        Returns:
+            2, 3, or 4
+        """
+
+        def _rank_from_model(model: BaseModel) -> int:
+            if model.requires_4d:
+                return 4
+            if model.requires_sequences:
+                return 3
+            return 2
+
+        # Prefer instantiated base models if available
+        if self._base_models:
+            ranks = {_rank_from_model(m) for m in self._base_models}
+            if len(ranks) != 1:
+                raise ValueError(f"Inconsistent base model input ranks: {sorted(ranks)}")
+            return next(iter(ranks))
+
+        # Fall back to configured base_model_names
+        base_model_names = self._config.get("base_model_names", [])
+        if not base_model_names:
+            # Default to 2D when nothing is configured
+            return 2
+
+        ranks = set()
+        for name in base_model_names:
+            if ModelRegistry.is_registered(name):
+                info = ModelRegistry.get_model_info(name)
+                if info.get("requires_4d", False):
+                    ranks.add(4)
+                elif info.get("requires_sequences", False):
+                    ranks.add(3)
+                else:
+                    ranks.add(2)
+
+        if not ranks:
+            return 2
+        if len(ranks) != 1:
+            raise ValueError(
+                f"Cannot mix base models with different input ranks in VotingEnsemble: "
+                f"{base_model_names} (ranks={sorted(ranks)})"
+            )
+        return next(iter(ranks))
 
     def get_default_config(self) -> dict[str, Any]:
         return {
@@ -190,16 +270,25 @@ class VotingEnsemble(BaseModel):
             if not model.is_fitted:
                 raise RuntimeError(f"Model {i} is not fitted")
 
-        # Validate base model compatibility (check sequence requirements)
-        sequence_requirements = [m.requires_sequences for m in models]
-        if not all(sequence_requirements) and any(sequence_requirements):
-            tabular_models = [type(m).__name__ for m in models if not m.requires_sequences]
-            sequence_models = [type(m).__name__ for m in models if m.requires_sequences]
+        # Validate base model compatibility (all must share the same input rank)
+        def _rank(m: BaseModel) -> int:
+            if m.requires_4d:
+                return 4
+            if m.requires_sequences:
+                return 3
+            return 2
+
+        ranks = [_rank(m) for m in models]
+        if len(set(ranks)) != 1:
+            tabular_models = [type(m).__name__ for m in models if _rank(m) == 2]
+            sequence_models = [type(m).__name__ for m in models if _rank(m) == 3]
+            mtf_models = [type(m).__name__ for m in models if _rank(m) == 4]
             raise ValueError(
-                f"Cannot mix tabular and sequence models in ensemble.\n"
+                "Cannot mix base models with different input ranks in VotingEnsemble.\n"
                 f"Tabular models (2D input): {tabular_models}\n"
                 f"Sequence models (3D input): {sequence_models}\n"
-                f"All models must have the same input shape requirements."
+                f"Multi-timeframe models (4D input): {mtf_models}\n"
+                "All models must have the same input shape requirements."
             )
 
         self._base_models = list(models)
