@@ -25,6 +25,9 @@ from src.core.common.timeframes import (
 from src.core.common.timeframes import (
     timeframe_to_minutes as parse_timeframe_to_minutes,
 )
+
+# Model config - canonical location: src.models.config.data_requirements
+from src.core.types import ModelFamily
 from src.data.pipeline.config.barriers_config import (
     BARRIER_PARAMS,
     BARRIER_PARAMS_DEFAULT,
@@ -114,14 +117,11 @@ from src.data.pipeline.config.runtime import (
     set_global_seeds,
     validate_config,
 )
-
-# Model config - canonical location: src.models.config.data_requirements
 from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     EnsembleConfig,
     ModelDataRequirements,
-    ModelFamily,
     ScalerType,
     get_all_ensemble_names,
     get_all_model_names,

@@ -5,14 +5,6 @@ This package provides helper functions for notebooks, visualization,
 configuration validation, memory management, caching, and common operations.
 """
 
-from .cache import (
-    CacheMetadata,
-    DataCache,
-    DataCacheConfig,
-    cached_result,
-    get_global_data_cache,
-)
-from .checkpoint_manager import CheckpointManager
 from .colab_setup import (
     ensure_data_in_workspace,
     get_colab_dataloader_kwargs,
@@ -85,8 +77,6 @@ __all__ = [
     "train_ensemble_colab",
     "get_colab_dataloader_kwargs",
     "ensure_data_in_workspace",
-    # Checkpoint management
-    "CheckpointManager",
     # Memory management (MOD-007)
     "MemoryInfo",
     "CacheEntry",
@@ -102,12 +92,6 @@ __all__ = [
     "memory_logged",
     "get_global_cache",
     "PSUTIL_AVAILABLE",
-    # Data caching (MOD-007)
-    "CacheMetadata",
-    "DataCacheConfig",
-    "DataCache",
-    "cached_result",
-    "get_global_data_cache",
     # Notebook utilities
     "setup_notebook",
     "install_dependencies",

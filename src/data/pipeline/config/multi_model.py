@@ -15,11 +15,11 @@ Key Principles:
 import logging
 from dataclasses import dataclass, field
 
-# Import from canonical location in src/models/config/
+# Import from canonical locations
+from src.core.types import ModelFamily
 from src.models.config.data_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
-    ModelFamily,
     ScalerType,
 )
 
@@ -85,9 +85,8 @@ class MultiModelPipelineConfig:
     def requires_mtf(self) -> bool:
         """Check if any feature set requires MTF features."""
         for fs_name in self.feature_sets:
-            if fs_name in FEATURE_SET_DEFINITIONS:
-                if FEATURE_SET_DEFINITIONS[fs_name].include_mtf:
-                    return True
+            if fs_name in FEATURE_SET_DEFINITIONS and FEATURE_SET_DEFINITIONS[fs_name].include_mtf:
+                return True
         return False
 
 

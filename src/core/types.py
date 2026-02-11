@@ -206,6 +206,29 @@ class AdapterType(str, Enum):
 
 
 # =============================================================================
+# MTF MODE - Multi-timeframe aggregation mode
+# =============================================================================
+
+
+class MTFMode(str, Enum):
+    """
+    Multi-timeframe aggregation mode.
+
+    - NONE: Single timeframe, no MTF
+    - BARS: Resampled OHLCV bars only
+    - INDICATORS: MTF indicator features added to primary TF
+    - BOTH: Both bars and indicators
+    - MULTI_STREAM: Multiple TF streams (4D input)
+    """
+
+    NONE = "none"
+    BARS = "bars"
+    INDICATORS = "indicators"
+    BOTH = "both"
+    MULTI_STREAM = "multi_stream"
+
+
+# =============================================================================
 # LABELING METHOD - How labels are generated
 # =============================================================================
 

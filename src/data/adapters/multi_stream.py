@@ -38,7 +38,8 @@ import pandas as pd
 
 from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
 from src.core.constants import DEFAULT_MTF_TIMEFRAMES
-from src.core.contracts import DataContract, DataRank
+from src.core.contracts import DataContract
+from src.core.types import DataRank
 from src.data.store import TIMEFRAMES as STORE_TIMEFRAMES
 from src.data.store import load_all_timeframes, load_raw_mtf
 

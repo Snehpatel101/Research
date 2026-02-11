@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from src.config.base import BaseConfig
+from src.core.types import LabelingMethod, MTFMode
 
 # =============================================================================
 # ENUMS
@@ -49,23 +50,7 @@ class FeatureCategory(str, Enum):
     UNKNOWN = "unknown"
 
 
-class LabelingMethod(str, Enum):
-    """Supported labeling methods."""
-
-    TRIPLE_BARRIER = "triple_barrier"
-    DIRECTIONAL = "directional"
-    THRESHOLD = "threshold"
-    REGRESSION = "regression"
-
-
-class MTFMode(str, Enum):
-    """Multi-timeframe aggregation modes."""
-
-    NONE = "none"
-    BARS = "bars"
-    INDICATORS = "indicators"
-    BOTH = "both"
-    MULTI_STREAM = "multi_stream"
+# LabelingMethod and MTFMode imported from canonical location (src.core.types)
 
 
 # =============================================================================

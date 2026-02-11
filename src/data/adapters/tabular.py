@@ -18,7 +18,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from src.core.contracts import DataContract, DataRank
+from src.core.contracts import DataContract
+from src.core.types import DataRank
 
 from .base import AdapterResult, BaseAdapter
 from .registry import AdapterRegistry

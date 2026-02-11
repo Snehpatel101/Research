@@ -16,13 +16,13 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
+from src.core.contracts.data_contract import DataContractViolation
+from src.core.types import DataRank
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from src.core.contracts import DataContract, ModelContract
-
-from src.core.contracts import DataRank
-from src.core.contracts.data_contract import DataContractViolation
 
 
 def validate_label_alignment(features: pd.DataFrame, labels: pd.Series) -> None:

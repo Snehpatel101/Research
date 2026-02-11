@@ -25,6 +25,7 @@ from src.core.common.timeframes import (
 from src.core.common.timeframes import (
     validate_timeframe as validate_phase1_timeframe,
 )
+from src.core.types import ModelFamily
 
 # =============================================================================
 # BARRIERS CONFIG
@@ -154,7 +155,6 @@ from src.models.config.data_requirements import (
     MODEL_DATA_REQUIREMENTS,
     EnsembleConfig,
     ModelDataRequirements,
-    ModelFamily,
     ScalerType,
     get_all_ensemble_names,
     get_all_model_names,

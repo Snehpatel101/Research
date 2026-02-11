@@ -231,7 +231,6 @@ from src.config.model_configs import (
     LSTMConfig,
     # Base
     ModelConfig,
-    ModelFamily,
     # Transformer
     PatchTSTConfig,
     # Per-model
@@ -363,6 +362,7 @@ from src.config.validators import (
     validate_config,
     validate_config_file,
 )
+from src.core.types import ModelFamily
 
 
 # =============================================================================

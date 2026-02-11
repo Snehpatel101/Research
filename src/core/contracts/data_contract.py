@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.exceptions import DataContractViolation
-from src.core.types import DataRank
+from src.core.types import DataRank, MTFMode
 
 
 class FeatureMode(str, Enum):
@@ -39,27 +39,11 @@ class FeatureMode(str, Enum):
     OOF_PROBS = "oof_probs"  # OOF predictions for meta-learners
 
 
-class ModelMTFMode(str, Enum):
-    """
-    Multi-timeframe mode for MODEL CONTRACTS (model input expectations).
-
-    This describes what MTF mode a model expects as input, not what the
-    pipeline generates. For pipeline generation modes, see src.config.data.MTFMode
-    which has 5 modes (NONE, BARS, INDICATORS, BOTH, MULTI_STREAM).
-
-    This is intentionally a SUBSET - models only care about 3 input shapes:
-        NONE: Model uses single timeframe only (2D input)
-        INDICATORS: Model expects MTF indicator features flattened into primary TF (2D)
-        MULTI_STREAM: Model expects 4D multi-timeframe tensor input (4D)
-    """
-
-    NONE = "none"  # Single timeframe, no MTF
-    INDICATORS = "indicators"  # MTF indicator features added to primary TF
-    MULTI_STREAM = "multi_stream"  # Multiple TF streams (4D input)
-
+# MTFMode imported from canonical location (src.core.types)
+from src.core.types import MTFMode  # noqa: E402
 
 # Backward compatibility alias
-MTFMode = ModelMTFMode
+ModelMTFMode = MTFMode
 
 
 @dataclass(frozen=True)

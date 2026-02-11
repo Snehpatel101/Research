@@ -343,22 +343,24 @@ class CombinatorialPurgedCV:
                 train_mask[test_end:embargo_end] = False
 
             # Apply label-aware purging if label_end_times provided
+            # Check ALL training samples (both sides of test) for label overlap
             if label_end_times is not None and has_datetime_index:
                 for g in test_groups:
-                    test_start, _ = self._group_boundaries[g]
+                    test_start, test_end = self._group_boundaries[g]
                     test_start_time = X.index[test_start]
+                    test_end_time = X.index[test_end - 1]
 
-                    # Remove training samples whose labels extend into test
+                    # Remove training samples whose labels overlap with test period
                     for i in np.where(train_mask)[0]:
-                        if i < test_start:
-                            # Validate and convert label_end_time
-                            label_end = label_end_times.iloc[i]
-                            if pd.isna(label_end):
-                                continue
-                            # Ensure timestamp comparison
-                            label_end = pd.Timestamp(label_end)
-                            if label_end >= test_start_time:
-                                train_mask[i] = False
+                        label_end = label_end_times.iloc[i]
+                        if pd.isna(label_end):
+                            continue
+                        label_end = pd.Timestamp(label_end)
+                        # Bidirectional check:
+                        # 1. Sample's label extends into/past test start
+                        # 2. Sample itself starts before/during test period
+                        if label_end >= test_start_time and X.index[i] <= test_end_time:
+                            train_mask[i] = False
 
             train_indices = indices[train_mask]
             test_indices = indices[test_mask]

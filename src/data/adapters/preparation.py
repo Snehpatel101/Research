@@ -87,9 +87,7 @@ def _detect_timeframe(df: pd.DataFrame) -> str | None:
         return None
 
 
-def _resample_for_model(
-    df: pd.DataFrame, source_tf: str, target_tf: str
-) -> pd.DataFrame:
+def _resample_for_model(df: pd.DataFrame, source_tf: str, target_tf: str) -> pd.DataFrame:
     """
     Resample DataFrame from source timeframe to target timeframe.
 
@@ -114,8 +112,39 @@ def _resample_for_model(
     has_ohlcv = ohlcv_cols.issubset(set(df.columns))
 
     if has_ohlcv:
-        # Use proper OHLCV resampling
-        return resample_ohlcv(df, target_tf, include_metadata=False)
+        # Use proper OHLCV resampling, but preserve label columns
+        # Phase 43 bug fix: resample_ohlcv drops all non-OHLCV columns including labels
+        label_cols = [c for c in df.columns if c.startswith("label")]
+
+        if label_cols:
+            # Save label columns before resampling
+            labels_df = df[label_cols].copy()
+
+            # Resample OHLCV
+            resampled = resample_ohlcv(df, target_tf, include_metadata=False)
+
+            # Downsample labels to match (take last label in each resample window)
+            ratio = target_mins // source_mins
+            labels_downsampled = labels_df.iloc[ratio - 1 :: ratio].reset_index(drop=True)
+
+            # Align lengths (resampled may have fewer rows due to incomplete final window)
+            min_len = min(len(resampled), len(labels_downsampled))
+            if min_len < len(resampled) or min_len < len(labels_downsampled):
+                logger.warning(
+                    f"Length alignment during resampling: truncating from "
+                    f"resampled={len(resampled)}, labels={len(labels_downsampled)} to {min_len} rows"
+                )
+            resampled = resampled.iloc[:min_len].reset_index(drop=True)
+            labels_downsampled = labels_downsampled.iloc[:min_len].reset_index(drop=True)
+
+            # Restore label columns
+            for col in label_cols:
+                resampled[col] = labels_downsampled[col].values
+
+            logger.info(f"Preserved {len(label_cols)} label columns during resampling")
+            return resampled
+        else:
+            return resample_ohlcv(df, target_tf, include_metadata=False)
     else:
         # Feature-only data: use simple downsampling (take every Nth row)
         ratio = target_mins // source_mins
@@ -326,18 +355,38 @@ class PreparedData:
             y_train=self.y_train[train_valid],
             X_val=self.X_val[val_valid],
             y_val=self.y_val[val_valid],
-            X_test=self.X_test[test_valid] if self.X_test is not None and test_valid is not None else None,
-            y_test=self.y_test[test_valid] if self.y_test is not None and test_valid is not None else None,
-            train_weights=self.train_weights[train_valid] if self.train_weights is not None else None,
+            X_test=(
+                self.X_test[test_valid]
+                if self.X_test is not None and test_valid is not None
+                else None
+            ),
+            y_test=(
+                self.y_test[test_valid]
+                if self.y_test is not None and test_valid is not None
+                else None
+            ),
+            train_weights=(
+                self.train_weights[train_valid] if self.train_weights is not None else None
+            ),
             val_weights=self.val_weights[val_valid] if self.val_weights is not None else None,
-            test_weights=self.test_weights[test_valid] if self.test_weights is not None and test_valid is not None else None,
+            test_weights=(
+                self.test_weights[test_valid]
+                if self.test_weights is not None and test_valid is not None
+                else None
+            ),
             model_name=self.model_name,
             adapter_type=self.adapter_type,
             data_rank=self.data_rank,
             feature_names=self.feature_names,
-            train_indices=self.train_indices[train_valid] if self.train_indices is not None else None,
+            train_indices=(
+                self.train_indices[train_valid] if self.train_indices is not None else None
+            ),
             val_indices=self.val_indices[val_valid] if self.val_indices is not None else None,
-            test_indices=self.test_indices[test_valid] if self.test_indices is not None and test_valid is not None else None,
+            test_indices=(
+                self.test_indices[test_valid]
+                if self.test_indices is not None and test_valid is not None
+                else None
+            ),
             scaler=self.scaler,
             sequence_length=self.sequence_length,
             n_timeframes=self.n_timeframes,
@@ -408,8 +457,8 @@ class UnifiedDataPreparation:
         df: pd.DataFrame,
         model_name: str,
         feature_columns: list[str] | None = None,
-        label_column: str = "label",
-        weight_column: str | None = None,
+        label_column: str = "label_h20",
+        weight_column: str | None = "sample_weight_h20",
         additional_dfs: dict[str, pd.DataFrame] | None = None,
         apply_scaling: bool = True,
         symbol: str | None = None,
@@ -624,8 +673,8 @@ class UnifiedDataPreparation:
         df: pd.DataFrame,
         models: list[str],
         feature_columns: list[str] | None = None,
-        label_column: str = "label",
-        weight_column: str | None = None,
+        label_column: str = "label_h20",
+        weight_column: str | None = "sample_weight_h20",
         additional_dfs: dict[str, pd.DataFrame] | None = None,
         apply_scaling: bool = True,
     ) -> dict[str, PreparedData]:
@@ -837,7 +886,7 @@ def prepare_for_model(
     model_name: str,
     config: PipelineConfig,
     feature_columns: list[str] | None = None,
-    label_column: str = "label",
+    label_column: str = "label_h20",
     **kwargs: Any,
 ) -> PreparedData:
     """
