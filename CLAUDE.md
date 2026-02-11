@@ -264,6 +264,82 @@ Quick reference:
 
 ---
 
+## Agent Teams Configuration
+
+Agent Teams enable multiple Claude instances to work together with shared task lists and direct messaging.
+
+### Enabling Agent Teams
+
+Agent teams are enabled via `.claude/settings.local.json`:
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+Run with split-panes: `claude --teammate-mode split-panes` (requires tmux)
+
+### Available Agents
+
+#### Project Agents (in .claude/agents/)
+
+| Agent | Purpose |
+|-------|---------|
+| `code-reviewer` | Reviews against CLAUDE.md standards |
+| `codebase-analyzer` | Finds dead code, violations |
+| `contract-verifier` | Validates type/schema contracts |
+| `doc-updater` | Maintains root documentation |
+| `integration-checker` | Checks imports, dependencies |
+| `ml-pipeline-specialist` | 12-stage pipeline expert |
+| `model-architecture-expert` | 12 model implementations |
+| `trading-strategy-expert` | Backtesting, financial metrics |
+| `jupyter-analysis-expert` | Notebook workflows |
+| `validation-expert` | Leakage/lookahead detection |
+| `adapter-specialist` | 4D data transformations |
+
+#### Plugin Agents (via claude-code-workflows)
+
+| Category | Agents |
+|----------|--------|
+| ML/Data | `ml-engineer`, `mlops-engineer`, `data-scientist`, `data-engineer` |
+| Quant | `quant-analyst`, `risk-manager` |
+| Architecture | `backend-architect` |
+| Testing | `tdd-orchestrator`, `test-automator` |
+| Debug | `debugger`, `dx-optimizer` |
+| Performance | `performance-engineer` |
+| Context | `context-manager` |
+
+### Common Team Compositions
+
+| Task | Recommended Team |
+|------|-----------------|
+| Pipeline Review | ml-pipeline-specialist + validation-expert + adapter-specialist |
+| Model Development | model-architecture-expert + adapter-specialist + tdd-orchestrator |
+| Strategy Research | quant-analyst + trading-strategy-expert + jupyter-analysis-expert |
+| Code Quality | code-reviewer + codebase-analyzer + integration-checker |
+| Documentation | doc-updater + contract-verifier |
+
+### Context Commands
+
+```bash
+/context-management:context-save      # Save session state
+/context-management:context-restore   # Restore previous context
+/agent-orchestration:multi-agent-optimize  # Optimize agent performance
+```
+
+### Example Team Spawn
+
+```
+Create agent team for pipeline review:
+- Spawn ml-pipeline-specialist to review all 12 stages
+- Spawn validation-expert to audit for leakage
+- Spawn adapter-specialist to verify data shapes
+```
+
+---
+
 ## Templates
 
 Templates for DIRECTION, CLEANUP_PLAN, CLEANUP_TASKS, and COMPLETION are in:
@@ -273,6 +349,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-01-25*
+*Last updated: 2026-02-11*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

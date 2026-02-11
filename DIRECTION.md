@@ -1,9 +1,52 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-07 (Phase 43 COMPLETE)
-**Status:** Phase 43 COMPLETE | Pipeline Robustness + TCN Timeframe Fix
+**Last Updated:** 2026-02-07 (All phases through 44 COMPLETE)
+**Status:** All phases through 44 COMPLETE - See COMPLETION.md for details
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 44: Resampling Label Preservation Fix (2026-02-07) - COMPLETE
+
+**Discovered During:** User-reported "Missing label column: label" error during TCN training
+**Source:** Phase 43's `_resample_for_model()` dropped label columns during resampling
+**Completed:** 2026-02-07
+**Status:** ✅ COMPLETE - 1 fix implemented
+
+### Summary
+
+Fixed critical bug where label columns were dropped during timeframe resampling introduced in Phase 43.
+
+**Problem:**
+- `_resample_for_model()` called `resample_ohlcv()` which only preserves OHLCV columns
+- All label columns (`label`, `label_h20`) were dropped
+- Caused "Missing label column: label" error when training sequence models
+
+**Fix:**
+- Modified `_resample_for_model()` to save and restore label columns
+- Labels are downsampled to match resampled OHLCV (take last label in each window)
+
+### Code Changes Summary
+
+```python
+# src/data/adapters/preparation.py - Label preservation
+label_cols = [c for c in df.columns if c.startswith("label")]
+if label_cols:
+    labels_df = df[label_cols].copy()
+    resampled = resample_ohlcv(df, target_tf)
+    # Downsample labels and restore after resampling
+    for col in label_cols:
+        resampled[col] = labels_downsampled[col].values
+```
+
+### Files Modified
+
+```
+src/data/adapters/preparation.py  (Label preservation in _resample_for_model)
+```
+
+**Total:** 1 file, ~25 lines added
 
 ---
 
@@ -2429,7 +2472,7 @@ All verified action items from batch verification have been fixed in Phase 19:
 ---
 
 *Document maintained as single source of truth for ML Factory architecture.*
-*Last updated: 2026-01-31 (Phase 31 Complete, Phase 32 Ready to Start)*
+*Last updated: 2026-02-07 (All phases through 44 COMPLETE - See COMPLETION.md)*
 
 ---
 

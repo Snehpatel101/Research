@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 43 COMPLETE (6 tasks)
-**Last Updated:** 2026-02-07
+**Status:** All phases through 45 complete - See COMPLETION.md
+**Last Updated:** 2026-02-11
 
 ---
 
@@ -30,12 +30,32 @@ See **COMPLETION.md** for full task details and implementation information.
 | 41 | 3/3 tasks (all complete) | Critical vectorization fixes (wavelets O(n), entropy Numba) | 2026-02-04 |
 | 42 | 5/5 tasks (all complete) | Memory leak fixes (dataset arrays, DataLoader workers, cleanup) | 2026-02-06 |
 | 43 | 6/6 tasks (all complete) | Pipeline robustness + TCN timeframe auto-resampling | 2026-02-07 |
+| 44 | 1/1 tasks (complete) | Label column preservation during resampling | 2026-02-07 |
+| 45 | 6/6 tasks (all complete) | Cohesion overhaul: circular import, CPCV fix, enum consolidation, dead code removal, default alignment | 2026-02-11 |
 
-**Summary Impact:** 108 tasks across 20 phases, 103+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, model timeframe contracts enforced.
+**Summary Impact:** 116 tasks across 22 phases, 130+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, model timeframe contracts enforced, label columns preserved during resampling.
 
 ---
 
 ## Active Phases
+
+**No active phases.** All phases through 45 are complete. See COMPLETION.md for full details.
+
+---
+
+## Completed Recent Phases (Archive)
+
+### Phase 44: Label Column Preservation During Resampling
+
+**Status:** ✅ COMPLETE
+**Priority:** CRITICAL (P0)
+**Tasks:** 1/1 complete
+**Source:** User-reported "Missing label column: label" error during TCN training
+**Completed:** 2026-02-07
+
+See **COMPLETION.md** for full implementation details.
+
+---
 
 ### Phase 43: Pipeline Robustness + TCN Timeframe Fix
 

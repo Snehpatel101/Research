@@ -4,6 +4,147 @@
 
 ---
 
+## Phase 45 (2026-02-11) | Codebase Cohesion Overhaul
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-11)
+**Impact:** 32 files changed, +181 / -3,285 lines (net -3,104 lines removed)
+**Tests:** All import checks pass, single-definition guarantees verified, zero circular import warnings
+
+### Summary
+
+Full codebase cohesion analysis and fix executed by agent team (5 analysis agents + 5 execution agents + 1 verifier). Addressed 17 findings across 4 priority tiers.
+
+### P0: Circular Import Fix
+- **Problem:** `horizon_config` ↔ `global_config` circular import caused `ACTIVE_HORIZONS` to silently fall back to hardcoded defaults on every import
+- **Fix:** Replaced `_get_global_or_default()` to read `config/global.yaml` directly via PyYAML instead of importing through `src.config` package
+- **Files:** `src/core/common/horizon_config.py`
+
+### P1a: CPCV Leakage Fix
+- **Problem:** CPCV label-aware purging only checked training samples BEFORE test groups, not after — leakage vector for long-horizon labels
+- **Fix:** Bidirectional purging matching PurgedKFold implementation
+- **Files:** `src/validation/cv/cpcv.py`
+
+### P1b: Enum Consolidation + Import Fixes
+- **Problem:** 3 duplicate enums (CVMethod, LabelingMethod, MTFMode) across core/types.py and config/; 11 non-canonical imports
+- **Fix:** Consolidated all enums to single definitions in `src/core/types.py`; fixed all imports to canonical locations
+- **Files:** `src/core/types.py`, `src/config/cv.py`, `src/config/data.py`, `src/core/contracts/data_contract.py`, 4 adapter files, 4 config files
+
+### P1c: Dead Code Removal (3,160 lines)
+- **Deleted 14 files** with zero import sites:
+  - CLI: 6 old CLI files (1,461 lines) replaced by unified_cli.py
+  - Models: 5 orphaned files (cnn.py, cnn_base.py, meta_learner.py, model_factory.py, feature_selector.py)
+  - Pipeline: adaptive_costs.py (342 lines)
+  - Core: cache.py, checkpoint_manager.py (840 lines)
+- Cleaned __init__.py re-exports for deleted modules
+
+### P2: Default Alignment
+- **Label column:** Aligned all 3 entry points to `"label_h20"` (was mismatched `"label"` in preparation.py)
+- **Walk-forward CV:** Set embargo_bars and gap_bars defaults to 60 (was 0 — no protection unless configured)
+- **Files:** `src/data/adapters/preparation.py`, `src/validation/cv/walk_forward.py`
+
+### Verification
+- All import checks pass
+- All 5 core enums have exactly 1 definition
+- Zero references to deleted modules
+- Zero circular import warnings
+- No new linting errors introduced
+
+---
+
+## Phase 44 (2026-02-07) | Label Column Preservation During Resampling
+
+**Status:** ✅ COMPLETE
+**Duration:** Single session (2026-02-07)
+**Impact:** 1 file modified, ~20 lines added
+**Tests:** Syntax verified, imports OK
+**Lines Changed:** ~20 lines added
+
+### Summary
+
+Fixed critical bug where label columns were dropped during timeframe resampling in `_resample_for_model()`. The Phase 43 auto-resampling feature called `resample_ohlcv()` which only preserves OHLCV columns, dropping all label columns. This caused "Missing label column: label" error when training sequence models (TCN, LSTM, etc.) on data requiring resampling.
+
+**Problem:**
+- Phase 43 added `_resample_for_model()` to enforce model `primary_timeframe` contracts
+- Function called `resample_ohlcv()` which only preserves OHLCV columns (open, high, low, close, volume)
+- All label columns (`label`, `label_h20`, etc.) were dropped during resampling
+- Sequence adapter validation failed: "Missing label column: label"
+
+**Fix:**
+- Save label columns before resampling OHLCV
+- Downsample labels using `iloc[ratio-1::ratio]` to take last label in each window
+- Align lengths with proper `reset_index(drop=True)` on both DataFrames
+- Add warning log when truncation occurs
+- Restore label columns to resampled DataFrame
+
+### Completed Tasks
+
+**Task 44-1: Preserve Label Columns During Resampling**
+- **File:** `src/data/adapters/preparation.py:116-146`
+- **Problem:** `resample_ohlcv()` drops all non-OHLCV columns including labels
+- **Fix:** Save label columns before resampling, downsample to match, restore after
+- **Impact:** TCN and other sequence models can now train with resampled data
+- **Lines modified:** ~20 lines
+
+### Root Cause Chain
+
+```
+factory._run_data_pipeline()
+    → df with "label" and "label_h20" columns
+    → UnifiedDataPreparation.prepare()
+    → _resample_for_model(df, "1min", "5min")
+    → resample_ohlcv() [DROPS all non-OHLCV columns]
+    → adapter.transform() fails: "Missing label column: label"
+```
+
+### Code Changes Summary
+
+```python
+# src/data/adapters/preparation.py - Label preservation in _resample_for_model()
+# Lines 116-146 modified
+
+# Save label columns before resampling
+label_cols = [c for c in df.columns if c.startswith("label")]
+if label_cols:
+    labels_df = df[label_cols].copy()
+
+# Resample OHLCV only
+resampled = resample_ohlcv(df, target_tf, include_metadata=False)
+
+# Downsample labels to match resampled OHLCV
+if label_cols:
+    ratio = target_mins // source_mins
+    labels_downsampled = labels_df.iloc[ratio - 1 :: ratio].reset_index(drop=True)
+
+    # Align lengths (truncate if needed)
+    min_len = min(len(resampled), len(labels_downsampled))
+    if len(resampled) != len(labels_downsampled):
+        logger.warning(
+            f"Length mismatch after resampling: OHLCV={len(resampled)}, "
+            f"labels={len(labels_downsampled)}. Truncating to {min_len}."
+        )
+        resampled = resampled.iloc[:min_len].reset_index(drop=True)
+        labels_downsampled = labels_downsampled.iloc[:min_len].reset_index(drop=True)
+
+    # Restore label columns
+    for col in label_cols:
+        resampled[col] = labels_downsampled[col].values
+```
+
+### Files Modified
+
+```
+src/data/adapters/preparation.py  (Lines 116-146: Label preservation during resampling)
+```
+
+### Lessons Learned
+
+1. **OHLCV-specific functions should not be used on DataFrames with additional columns without preserving them** - Always check what columns are present before calling specialized functions
+2. **Always verify column preservation through the full data flow when adding resampling/transformation steps** - End-to-end testing is critical for catching these issues
+3. **Test with realistic data** - Phase 43 testing used raw OHLCV without labels, missing this edge case
+
+---
+
 ## Phase 43 (2026-02-06/07) | Pipeline Robustness + TCN Timeframe Fix
 
 **Status:** ✅ COMPLETE
