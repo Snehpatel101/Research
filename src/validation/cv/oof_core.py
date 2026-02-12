@@ -207,7 +207,7 @@ class CoreOOFGenerator:
             X_val_scaled = scaling_result.X_val_scaled
 
             # Handle sample weights
-            if sample_weights is not None:
+            if sample_weights is not None:  # noqa: SIM108
                 w_train = sample_weights.iloc[train_idx].values
             else:
                 w_train = None

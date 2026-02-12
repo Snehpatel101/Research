@@ -370,13 +370,12 @@ def validate_numeric_bounds(
         # Handle list fields (check each element)
         if isinstance(value, list):
             for i, item in enumerate(value):
-                if isinstance(item, (int, float)):
-                    if item < min_val or item > max_val:
-                        result.add_warning(
-                            field=f"{path}[{i}]",
-                            message=f"Value {item} outside typical range [{min_val}, {max_val}]",
-                            value=item,
-                        )
+                if isinstance(item, (int, float)) and (item < min_val or item > max_val):
+                    result.add_warning(
+                        field=f"{path}[{i}]",
+                        message=f"Value {item} outside typical range [{min_val}, {max_val}]",
+                        value=item,
+                    )
         elif isinstance(value, (int, float)) and (value < min_val or value > max_val):
             result.add_warning(
                 field=path,

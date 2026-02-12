@@ -56,7 +56,7 @@ def save_config_to_file(config: Any, path: Path) -> Path:
     return path
 
 
-def load_config_from_file(cls: type[T], path: Path) -> T:
+def load_config_from_file(cls: type[T], path: Path) -> T:  # noqa: UP047
     """
     Load configuration from JSON file.
 
@@ -86,7 +86,9 @@ def load_config_from_file(cls: type[T], path: Path) -> T:
     return cls(**config_dict)
 
 
-def load_config_from_run_id(cls: type[T], run_id: str, project_root: Path | None = None) -> T:
+def load_config_from_run_id(  # noqa: UP047
+    cls: type[T], run_id: str, project_root: Path | None = None
+) -> T:
     """
     Load configuration from a run ID.
 

@@ -361,12 +361,15 @@ def validate_barrier_params() -> list[str]:
                 )
 
         # High volatility slippage should be >= low volatility slippage
-        if "low_vol" in regimes and "high_vol" in regimes:
-            if regimes["high_vol"] < regimes["low_vol"]:
-                errors.append(
-                    f"SLIPPAGE_TICKS['{symbol}']['high_vol'] ({regimes['high_vol']}) should be >= "
-                    f"'low_vol' ({regimes['low_vol']})"
-                )
+        if (
+            "low_vol" in regimes
+            and "high_vol" in regimes
+            and regimes["high_vol"] < regimes["low_vol"]
+        ):
+            errors.append(
+                f"SLIPPAGE_TICKS['{symbol}']['high_vol'] ({regimes['high_vol']}) should be >= "
+                f"'low_vol' ({regimes['low_vol']})"
+            )
 
     # Validate tick values
     for symbol, value in TICK_VALUES.items():

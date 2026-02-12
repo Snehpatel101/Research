@@ -101,29 +101,26 @@ class MetaLearnerConfig:
         """
         name = meta_learner_name or self.name
 
-        if name == "ridge_meta":
-            return {"alphas": self.alphas}
-        elif name == "mlp_meta":
-            return {
+        params_map = {
+            "ridge_meta": {"alphas": self.alphas},
+            "mlp_meta": {
                 "hidden_layer_sizes": self.hidden_layers,
                 "alpha": self.dropout,  # Used as L2 regularization
                 "learning_rate_init": self.learning_rate,
                 "max_iter": self.max_iter,
                 "early_stopping": True,
-            }
-        elif name == "xgboost_meta":
-            return {
+            },
+            "xgboost_meta": {
                 "n_estimators": self.n_estimators,
                 "max_depth": self.max_depth,
                 "learning_rate": self.xgb_learning_rate,
-            }
-        elif name == "calibrated_meta":
-            return {
+            },
+            "calibrated_meta": {
                 "method": self.method,
                 "cv": self.cv,
-            }
-        else:
-            return {}
+            },
+        }
+        return params_map.get(name, {})
 
 
 # Meta-learner registry (populated on first access)
@@ -345,15 +342,14 @@ class MetaLearnerFactory:
         Returns:
             Dictionary of default parameters
         """
-        if name == "ridge_meta":
-            return {
+        defaults = {
+            "ridge_meta": {
                 "alpha": 1.0,
                 "fit_intercept": True,
                 "class_weight": "balanced",
                 "scale_features": True,
-            }
-        elif name == "mlp_meta":
-            return {
+            },
+            "mlp_meta": {
                 "hidden_layer_sizes": (64, 32),
                 "alpha": 0.01,  # L2 regularization
                 "learning_rate_init": 0.001,
@@ -364,9 +360,8 @@ class MetaLearnerFactory:
                 "activation": "relu",
                 "solver": "adam",
                 "scale_features": True,
-            }
-        elif name == "xgboost_meta":
-            return {
+            },
+            "xgboost_meta": {
                 "n_estimators": 100,
                 "max_depth": 3,
                 "learning_rate": 0.1,
@@ -377,17 +372,16 @@ class MetaLearnerFactory:
                 "reg_alpha": 0.1,
                 "reg_lambda": 1.0,
                 "early_stopping_rounds": 20,
-            }
-        elif name == "calibrated_meta":
-            return {
+            },
+            "calibrated_meta": {
                 "base_estimator": "logistic",
                 "method": "isotonic",
                 "cv": 5,
                 "ensemble": True,
                 "scale_features": True,
-            }
-        else:
-            return {}
+            },
+        }
+        return defaults.get(name, {})
 
     @staticmethod
     def list_available() -> list[str]:

@@ -234,11 +234,15 @@ class PreparedData:
             )
         if self.X_val.shape[0] != self.y_val.shape[0]:
             issues.append(f"Val X/y length mismatch: X={self.X_val.shape[0]}, y={len(self.y_val)}")
-        if self.has_test and self.X_test is not None and self.y_test is not None:
-            if self.X_test.shape[0] != self.y_test.shape[0]:
-                issues.append(
-                    f"Test X/y length mismatch: X={self.X_test.shape[0]}, y={len(self.y_test)}"
-                )
+        if (
+            self.has_test
+            and self.X_test is not None
+            and self.y_test is not None
+            and self.X_test.shape[0] != self.y_test.shape[0]
+        ):
+            issues.append(
+                f"Test X/y length mismatch: X={self.X_test.shape[0]}, y={len(self.y_test)}"
+            )
 
         # Check weights length if present
         if self.train_weights is not None and len(self.train_weights) != self.n_train:

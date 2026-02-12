@@ -110,10 +110,7 @@ class FoldAwareScaler:
             )
 
         # Create fresh scaler for this fold
-        if self.method == "robust":
-            scaler = RobustScaler()
-        else:  # standard
-            scaler = StandardScaler()
+        scaler = RobustScaler() if self.method == "robust" else StandardScaler()
 
         # Fit ONLY on training data
         X_train_scaled = scaler.fit_transform(X_train)

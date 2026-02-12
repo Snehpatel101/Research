@@ -456,10 +456,7 @@ class OptimizationPipeline:
 
         if self.verbose >= 1:
             for stage_name, (te, vs, ve) in wf_splits.items():
-                print(
-                    f"    {stage_name}: train=[0:{te}], "
-                    f"gap=[{te}:{vs}], val=[{vs}:{ve}]"
-                )
+                print(f"    {stage_name}: train=[0:{te}], " f"gap=[{te}:{vs}], val=[{vs}:{ve}]")
 
         # Get a representative model factory for feature optimization
         representative_model = models[0] if models else "xgboost"

@@ -275,11 +275,11 @@ class ModelServer:
         """
         try:
             from fastapi import FastAPI, HTTPException  # type: ignore[import-not-found]
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "FastAPI is required for model serving. "
                 "Install with: pip install fastapi uvicorn"
-            )
+            ) from e
 
         app = FastAPI(
             title="ML Model Server",
@@ -474,10 +474,10 @@ class ModelServer:
         """
         try:
             import uvicorn  # type: ignore[import-not-found]
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "uvicorn is required to run the server. " "Install with: pip install uvicorn"
-            )
+            ) from e
 
         if self._app is None:
             self.create_app()

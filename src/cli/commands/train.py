@@ -583,7 +583,9 @@ def _train_on_stacking_data(
 
     # Time-based split into train/val (80/20) to prevent data leakage
     if len(X_stacking) < 2:
-        raise ValueError(f"Cannot split stacking data with {len(X_stacking)} samples (minimum 2 required)")
+        raise ValueError(
+            f"Cannot split stacking data with {len(X_stacking)} samples (minimum 2 required)"
+        )
     split_idx = int(len(X_stacking) * 0.8)
     split_idx = max(1, split_idx)  # Ensure at least 1 training sample
     X_train, X_val = X_stacking[:split_idx], X_stacking[split_idx:]

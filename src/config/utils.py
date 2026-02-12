@@ -195,7 +195,7 @@ def clear_config_cache() -> None:
         _global_config_cache = None
 
 
-def get_config_value(attr_path: str, fallback: T, log_access: bool = True) -> T:
+def get_config_value(attr_path: str, fallback: T, log_access: bool = True) -> T:  # noqa: UP047
     """
     Get a configuration value from the global config with proper error handling.
 
@@ -430,7 +430,7 @@ def _collect_paths(obj: Any, prefix: str, paths: list[str]) -> None:
 
 
 # Backward compatibility aliases
-def _get_global_or_default(attr_path: str, fallback: T) -> T:
+def _get_global_or_default(attr_path: str, fallback: T) -> T:  # noqa: UP047
     """
     DEPRECATED: Use get_config_value() instead.
 

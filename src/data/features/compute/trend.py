@@ -29,6 +29,7 @@ def clear_trend_cache() -> None:
     _di_adx_cache.clear()
     _supertrend_cache.clear()
 
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -105,7 +106,9 @@ def _compute_di_adx(df: pd.DataFrame, period: int = 14) -> tuple[pd.Series, pd.S
     return plus_di, minus_di, adx
 
 
-def _get_di_adx_cached(df: pd.DataFrame, period: int = 14) -> tuple[pd.Series, pd.Series, pd.Series]:
+def _get_di_adx_cached(
+    df: pd.DataFrame, period: int = 14
+) -> tuple[pd.Series, pd.Series, pd.Series]:
     """
     Get cached ADX/DI computation or compute if not cached.
 

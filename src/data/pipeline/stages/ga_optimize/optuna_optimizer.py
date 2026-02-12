@@ -195,7 +195,7 @@ def create_objective(
 
         if symbol == "MGC":
             # MGC: Strict symmetry - penalize asymmetry > 10%
-            if abs(k_up - k_down) > avg_k * 0.10:
+            if abs(k_up - k_down) > avg_k * 0.10:  # noqa: SIM108
                 asymmetry_bonus = -abs(k_up - k_down) * 5.0
             else:
                 asymmetry_bonus = 0.5  # Small reward for good symmetry

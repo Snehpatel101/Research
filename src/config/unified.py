@@ -69,7 +69,7 @@ def _generate_run_id() -> str:
 # =============================================================================
 
 # Import canonical constants
-from src.core.constants import (
+from src.core.constants import (  # noqa: E402
     CANONICAL_TIMEFRAMES,
     DEFAULT_EMBARGO_BARS,
     DEFAULT_HORIZONS,

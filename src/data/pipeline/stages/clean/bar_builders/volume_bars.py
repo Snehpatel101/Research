@@ -99,10 +99,12 @@ class VolumeBarBuilder(BaseBarBuilder):
 
             # Check if threshold crossed (and minimum bars met)
             bars_in_current = i - bar_boundaries[-1] + 1
-            if cumulative_volume >= self.volume_threshold:
-                if bars_in_current >= self.min_bars_per_output:
-                    bar_boundaries.append(i + 1)
-                    cumulative_volume = 0.0
+            if (
+                cumulative_volume >= self.volume_threshold
+                and bars_in_current >= self.min_bars_per_output
+            ):
+                bar_boundaries.append(i + 1)
+                cumulative_volume = 0.0
 
         # Handle last incomplete bar
         if bar_boundaries[-1] < n_rows:

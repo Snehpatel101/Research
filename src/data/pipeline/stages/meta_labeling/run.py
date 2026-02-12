@@ -548,9 +548,7 @@ def run_meta_labeling(
                         config={
                             "min_confidence": min_confidence,
                             "sizing_method": meta_config.get("sizing_method", "linear"),
-                            "max_position": meta_config.get(
-                                "max_position", DEFAULT_MAX_POSITION
-                            ),
+                            "max_position": meta_config.get("max_position", DEFAULT_MAX_POSITION),
                         },
                     )
 
@@ -585,9 +583,7 @@ def run_meta_labeling(
                         "meta_n_valid": meta_metrics["n_valid"],
                         "meta_n_correct": meta_metrics["n_correct"],
                         "active_positions": sizing_meta["n_active_positions"],
-                        "oof_coverage": float(
-                            np.sum(~np.isnan(oof_proba)) / len(oof_proba)
-                        ),
+                        "oof_coverage": float(np.sum(~np.isnan(oof_proba)) / len(oof_proba)),
                     }
 
                 # Save updated DataFrame with meta-labels

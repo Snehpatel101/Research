@@ -290,11 +290,10 @@ class DataCache:
                 return None
 
             # Check freshness
-            if validate_freshness and self._config.check_source_mtimes:
-                if metadata.is_stale():
-                    logger.info(f"Cache entry '{key}' is stale, invalidating")
-                    self.invalidate(category, identifier)
-                    return None
+            if validate_freshness and self._config.check_source_mtimes and metadata.is_stale():
+                logger.info(f"Cache entry '{key}' is stale, invalidating")
+                self.invalidate(category, identifier)
+                return None
 
             # Try memory cache first
             data = self._memory_cache.get(key)

@@ -356,11 +356,13 @@ def ensure_data_in_workspace(config, target_dir: str = "data/raw") -> None:
     target_filename = f"{config.symbol}_1m{config.raw_data_file.suffix}"
     target_path = project_raw_dir / target_filename
 
-    if not str(config.raw_data_file).startswith(str(config.project_root)):
-        if not target_path.exists():
-            print("\n  Copying data to project directory...")
-            shutil.copy2(config.raw_data_file, target_path)
-            print(f"  Done: {target_path.name}")
+    if (
+        not str(config.raw_data_file).startswith(str(config.project_root))
+        and not target_path.exists()
+    ):
+        print("\n  Copying data to project directory...")
+        shutil.copy2(config.raw_data_file, target_path)
+        print(f"  Done: {target_path.name}")
 
 
 __all__ = [

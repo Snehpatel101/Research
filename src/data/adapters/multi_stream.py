@@ -619,16 +619,20 @@ class MultiStreamAdapter(BaseAdapter):
         """
         # Build lookup frames with positional indices
         anchor_ts = anchor_df.index.to_series().reset_index(drop=True)
-        anchor_lookup = pd.DataFrame({
-            "anchor_ts": anchor_ts,
-            "anchor_pos": np.arange(len(anchor_df)),
-        })
+        anchor_lookup = pd.DataFrame(
+            {
+                "anchor_ts": anchor_ts,
+                "anchor_pos": np.arange(len(anchor_df)),
+            }
+        )
 
         higher_ts = higher_tf_df.index.to_series().reset_index(drop=True)
-        higher_lookup = pd.DataFrame({
-            "higher_ts": higher_ts,
-            "higher_pos": np.arange(len(higher_tf_df)),
-        })
+        higher_lookup = pd.DataFrame(
+            {
+                "higher_ts": higher_ts,
+                "higher_pos": np.arange(len(higher_tf_df)),
+            }
+        )
 
         # merge_asof: for each anchor timestamp, find the most recent
         # higher-TF bar at or before that time

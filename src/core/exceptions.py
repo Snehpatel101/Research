@@ -156,7 +156,7 @@ class DataContractViolation(ContractViolation):
 
 # NOTE: ModelContractViolation moved to contracts/model_contract.py (Phase 27)
 # Re-import for backward compatibility
-from src.core.contracts.model_contract import ModelContractViolation
+from src.core.contracts.model_contract import ModelContractViolation  # noqa: E402
 
 
 class DataError(MLFactoryError):

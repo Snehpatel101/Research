@@ -261,7 +261,9 @@ try:
         return slope
 
     @hurst_jit(nopython=True)
-    def _rolling_hurst_numba(arr: np.ndarray, window: int, min_periods: int, max_lag: int) -> np.ndarray:
+    def _rolling_hurst_numba(
+        arr: np.ndarray, window: int, min_periods: int, max_lag: int
+    ) -> np.ndarray:
         """
         Numba-accelerated rolling Hurst calculation.
 

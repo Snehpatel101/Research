@@ -255,10 +255,7 @@ class CombinatorialPurgedCV:
 
         for i in range(self.config.n_groups):
             start = i * group_size
-            if i == self.config.n_groups - 1:
-                end = n_samples  # Last group gets remaining samples
-            else:
-                end = (i + 1) * group_size
+            end = n_samples if i == self.config.n_groups - 1 else (i + 1) * group_size
             boundaries.append((start, end))
 
         return boundaries

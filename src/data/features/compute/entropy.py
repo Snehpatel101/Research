@@ -87,6 +87,7 @@ def _count_matches_per_pattern_numba(patterns: np.ndarray, r: float) -> np.ndarr
 
     return counts
 
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================

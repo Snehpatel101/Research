@@ -399,7 +399,7 @@ class OOFPredictionProtocol(Protocol):
 # Model implementations inherit from BaseModel in src/models/base.py instead.
 #
 # Re-export ModelContract and DataContract from contracts for backward compatibility
-from src.core.contracts import DataContract, ModelContract
+from src.core.contracts import DataContract, ModelContract  # noqa: E402
 
 
 class AdapterContract(ABC):

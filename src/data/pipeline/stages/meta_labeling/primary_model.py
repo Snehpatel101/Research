@@ -236,17 +236,16 @@ class RecallOptimizer:
                 best_recall = recall
 
         # Validate we found a valid threshold
-        if best_recall < self.recall_target:
-            # Fall back to threshold that maximizes recall
-            if self._threshold_results:
-                max_recall_result = max(self._threshold_results, key=lambda x: x["recall"])
-                best_threshold = max_recall_result["threshold"]
-                best_recall = max_recall_result["recall"]
-                best_precision = max_recall_result["precision"]
-                logger.warning(
-                    f"Could not achieve target recall {self.recall_target:.2%}. "
-                    f"Using threshold {best_threshold:.3f} with recall {best_recall:.2%}"
-                )
+        # Fall back to threshold that maximizes recall
+        if best_recall < self.recall_target and self._threshold_results:
+            max_recall_result = max(self._threshold_results, key=lambda x: x["recall"])
+            best_threshold = max_recall_result["threshold"]
+            best_recall = max_recall_result["recall"]
+            best_precision = max_recall_result["precision"]
+            logger.warning(
+                f"Could not achieve target recall {self.recall_target:.2%}. "
+                f"Using threshold {best_threshold:.3f} with recall {best_recall:.2%}"
+            )
 
         self.optimal_threshold = best_threshold
         self.achieved_recall = best_recall

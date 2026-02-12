@@ -252,11 +252,10 @@ def _create_config_from_args(
         config_kwargs["mtf_mode"] = mtf_mode
     if mtf_timeframes is not None:
         config_kwargs["mtf_timeframes"] = [tf.strip() for tf in mtf_timeframes.split(",")]
-    if mtf_enable is not None:
-        # If explicitly disabled, clear mtf_timeframes
-        if not mtf_enable:
-            config_kwargs["mtf_timeframes"] = []
-            config_kwargs["mtf_mode"] = "bars"  # Minimal mode when disabled
+    # If explicitly disabled, clear mtf_timeframes
+    if mtf_enable is not None and not mtf_enable:
+        config_kwargs["mtf_timeframes"] = []
+        config_kwargs["mtf_mode"] = "bars"  # Minimal mode when disabled
 
     # Output timeframes (multi-TF support for Stage 2 cleaning)
     if output_timeframes is not None:

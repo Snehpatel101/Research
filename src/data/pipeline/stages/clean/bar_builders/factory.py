@@ -66,21 +66,19 @@ class BarConfig:
         """Get keyword arguments for the builder."""
         bar_type = self.bar_type.lower()
 
-        if bar_type == "time":
-            return {"target_timeframe": self.target_timeframe}
-        elif bar_type == "volume":
-            return {
+        lookup = {
+            "time": {"target_timeframe": self.target_timeframe},
+            "volume": {
                 "volume_threshold": self.volume_threshold,
                 "min_bars_per_output": self.min_bars_per_output,
-            }
-        elif bar_type == "dollar":
-            return {
+            },
+            "dollar": {
                 "dollar_threshold": self.dollar_threshold,
                 "min_bars_per_output": self.min_bars_per_output,
                 "use_vwap": self.use_vwap,
-            }
-        else:
-            return self.extra_params
+            },
+        }
+        return lookup.get(bar_type, self.extra_params)
 
 
 # =============================================================================

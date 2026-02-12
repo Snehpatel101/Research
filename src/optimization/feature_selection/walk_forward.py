@@ -125,8 +125,12 @@ class WalkForwardFeatureSelector:
 
             # Compute feature importance (MDA uses holdout for unbiased scoring)
             importance = self._compute_importance(
-                X_train, y_train, w_train,
-                X_test=X_test, y_test=y_test, w_test=w_test,
+                X_train,
+                y_train,
+                w_train,
+                X_test=X_test,
+                y_test=y_test,
+                w_test=w_test,
             )
 
             # Select top features
@@ -195,14 +199,22 @@ class WalkForwardFeatureSelector:
             return self._mdi_importance(X, y, sample_weights)
         elif self.config.selection_method == "mda":
             return self._mda_importance(
-                X, y, sample_weights,
-                X_test=X_test, y_test=y_test, w_test=w_test,
+                X,
+                y,
+                sample_weights,
+                X_test=X_test,
+                y_test=y_test,
+                w_test=w_test,
             )
         else:  # hybrid
             mdi = self._mdi_importance(X, y, sample_weights)
             mda = self._mda_importance(
-                X, y, sample_weights,
-                X_test=X_test, y_test=y_test, w_test=w_test,
+                X,
+                y,
+                sample_weights,
+                X_test=X_test,
+                y_test=y_test,
+                w_test=w_test,
             )
             # Combine by averaging ranks (robust to different scales)
             return (mdi.rank() + mda.rank()) / 2

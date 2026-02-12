@@ -151,9 +151,7 @@ def run_ga_optimization(
                             "to prevent test data leakage in barrier optimization."
                         )
 
-                    logger.info(
-                        f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization..."
-                    )
+                    logger.info(f"\n  Horizon {horizon}: Running SAFE Optuna TPE optimization...")
                     logger.info(
                         "    (Safe mode: using only training portion to prevent test data leakage)"
                     )

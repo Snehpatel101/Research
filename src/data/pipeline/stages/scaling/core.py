@@ -67,7 +67,7 @@ logger.addHandler(logging.NullHandler())
 
 
 # ScalerType imported from canonical location (src/config/data)
-from src.config.data import ScalerType
+from src.config.data import ScalerType  # noqa: E402
 
 
 @dataclass
@@ -112,7 +112,7 @@ class ScalerConfig:
 
 
 # FeatureCategory imported from canonical location (src/config/data)
-from src.config.data import FeatureCategory
+from src.config.data import FeatureCategory  # noqa: E402
 
 # Feature categorization rules
 FEATURE_PATTERNS: dict[FeatureCategory, list[str]] = {

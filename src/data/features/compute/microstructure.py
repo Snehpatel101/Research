@@ -34,6 +34,7 @@ def clear_microstructure_cache() -> None:
     _rel_spread_cache.clear()
     _volume_imbalance_cache.clear()
 
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================

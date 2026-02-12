@@ -565,9 +565,10 @@ class FeatureCache:
         removed = 0
 
         for entry in self.list_entries(feature_set):
-            if entry.created_at.timestamp() < cutoff:
-                if self.invalidate(entry.feature_set, entry.cache_key):
-                    removed += 1
+            if entry.created_at.timestamp() < cutoff and self.invalidate(
+                entry.feature_set, entry.cache_key
+            ):
+                removed += 1
 
         if removed > 0:
             logger.info(f"Cleaned up {removed} cache entries older than {max_age_days} days")

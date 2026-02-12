@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from src.core.contracts import DataContract, ModelContract
 
-from src.core.contracts import DataRank
-from src.core.contracts.data_contract import DataContractViolation
+from src.core.contracts import DataRank  # noqa: E402
+from src.core.contracts.data_contract import DataContractViolation  # noqa: E402
 
 
 def validate_label_alignment(features: pd.DataFrame, labels: pd.Series) -> None:

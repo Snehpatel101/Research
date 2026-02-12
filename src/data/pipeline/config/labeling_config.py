@@ -200,10 +200,12 @@ def validate_labeling_config() -> list[str]:
         if not strategies:
             errors.append("MULTI_LABEL_CONFIG has no strategies defined")
         for strategy in strategies:
-            if isinstance(strategy, LabelingStrategyType):
-                if strategy not in LABELING_STRATEGY_CONFIGS:
-                    errors.append(
-                        f"MULTI_LABEL_CONFIG strategy {strategy} not in LABELING_STRATEGY_CONFIGS"
-                    )
+            if (
+                isinstance(strategy, LabelingStrategyType)
+                and strategy not in LABELING_STRATEGY_CONFIGS
+            ):
+                errors.append(
+                    f"MULTI_LABEL_CONFIG strategy {strategy} not in LABELING_STRATEGY_CONFIGS"
+                )
 
     return errors

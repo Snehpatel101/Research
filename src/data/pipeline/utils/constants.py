@@ -106,9 +106,10 @@ def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any
     for col in df_columns_set:
         col_lower = col.lower()
         # Check if column looks like metadata but isn't in our schema
-        if col not in METADATA_COLUMNS:
-            if any(col_lower.startswith(prefix) for prefix in potential_metadata_prefixes):
-                unexpected.append(col)
+        if col not in METADATA_COLUMNS and any(
+            col_lower.startswith(prefix) for prefix in potential_metadata_prefixes
+        ):
+            unexpected.append(col)
 
     # Find expected metadata that's missing (for informational purposes)
     missing = [col for col in METADATA_COLUMNS if col not in df_columns_set]

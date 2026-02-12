@@ -97,7 +97,7 @@ class DollarBarBuilder(BaseBarBuilder):
         n_rows = len(df)
 
         # Compute dollar value per bar
-        if self.use_vwap:
+        if self.use_vwap:  # noqa: SIM108
             # Approximate VWAP as (high + low + close) / 3
             typical_price = (df["high"] + df["low"] + df["close"]) / 3
         else:
@@ -113,14 +113,16 @@ class DollarBarBuilder(BaseBarBuilder):
             cumulative_dollars += dollar_values.iloc[i]
 
             bars_in_current = i - bar_boundaries[-1] + 1
-            if cumulative_dollars >= self.dollar_threshold:
-                if bars_in_current >= self.min_bars_per_output:
-                    bar_boundaries.append(i + 1)
-                    cumulative_dollars = 0.0
-                # NOTE: If min_bars not met, cumulative_dollars continues to grow.
-                # This ensures the bar closes only after both conditions are met:
-                # (1) dollar threshold reached AND (2) minimum bars included.
-                # This may result in bars with > dollar_threshold value.
+            if (
+                cumulative_dollars >= self.dollar_threshold
+                and bars_in_current >= self.min_bars_per_output
+            ):
+                bar_boundaries.append(i + 1)
+                cumulative_dollars = 0.0
+            # NOTE: If min_bars not met, cumulative_dollars continues to grow.
+            # This ensures the bar closes only after both conditions are met:
+            # (1) dollar threshold reached AND (2) minimum bars included.
+            # This may result in bars with > dollar_threshold value.
 
         # Handle last incomplete bar
         if bar_boundaries[-1] < n_rows:

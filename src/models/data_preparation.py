@@ -210,7 +210,7 @@ def dataset_to_arrays(
     X_0, y_0, w_0 = dataset[0]
 
     # Convert to numpy immediately to avoid holding tensors
-    if isinstance(X_0, torch.Tensor):
+    if isinstance(X_0, torch.Tensor):  # noqa: SIM108
         X_0_np = X_0.detach().cpu().numpy()
     else:
         X_0_np = np.asarray(X_0)

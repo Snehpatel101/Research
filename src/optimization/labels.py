@@ -480,7 +480,9 @@ class LabelOptimizer:
                         preds = model.predict(X_val)
                         f1 = f1_score(y_val, preds, average="weighted")
                     except Exception as e:
-                        logger.warning(f"Model training/scoring failed in label optimization: {e}. Using default F1 0.5.")
+                        logger.warning(
+                            f"Model training/scoring failed in label optimization: {e}. Using default F1 0.5."
+                        )
                         f1 = 0.5
 
                     score = 0.5 * balance_score + 0.5 * f1

@@ -205,9 +205,12 @@ def filter_ohlcv_features(
     filtered = []
     for name in feature_names:
         category = categorize_feature(name)
-        if include_categories is not None and category not in include_categories:
-            if category != "other" or "other" not in include_categories:
-                continue
+        if (
+            include_categories is not None
+            and category not in include_categories
+            and (category != "other" or "other" not in include_categories)
+        ):
+            continue
         if exclude_categories is not None and category in exclude_categories:
             continue
         filtered.append(name)
@@ -569,11 +572,7 @@ class OHLCVFeatureSelector:
                 if not np.isnan(corr):
                     pairwise_corrs.append(corr)
 
-            if pairwise_corrs:
-                # Average correlation, normalized to [0, 1]
-                stability = (np.mean(pairwise_corrs) + 1) / 2
-            else:
-                stability = 0.5
+            stability = (np.mean(pairwise_corrs) + 1) / 2 if pairwise_corrs else 0.5
 
             # Also consider variance in ranking position
             rank_std = np.std(ranks)

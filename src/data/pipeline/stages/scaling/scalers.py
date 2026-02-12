@@ -66,11 +66,10 @@ def should_log_transform(feature_name: str, category: FeatureCategory) -> bool:
     if "obv" in feature_name.lower():
         return False
 
-    if category in [FeatureCategory.PRICE_LEVEL, FeatureCategory.VOLUME]:
-        # Check if it's a raw price/volume feature (not a ratio)
-        if not any(x in feature_name.lower() for x in ["ratio", "pct", "zscore", "to_"]):
-            return True
-    return False
+    # Check if it's a raw price/volume feature (not a ratio)
+    return category in [FeatureCategory.PRICE_LEVEL, FeatureCategory.VOLUME] and not any(
+        x in feature_name.lower() for x in ["ratio", "pct", "zscore", "to_"]
+    )
 
 
 def create_scaler(

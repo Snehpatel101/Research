@@ -318,10 +318,11 @@ class AlertHandler:
         """
         count = 0
         for record in self._history:
-            if not record.acknowledged:
-                if feature_name is None or record.result.feature_name == feature_name:
-                    record.acknowledged = True
-                    count += 1
+            if not record.acknowledged and (
+                feature_name is None or record.result.feature_name == feature_name
+            ):
+                record.acknowledged = True
+                count += 1
         return count
 
 

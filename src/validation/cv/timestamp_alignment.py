@@ -55,28 +55,31 @@ def validate_datetime_alignment(
             issues.append(issue)
             logger.warning(issue)
 
-        if isinstance(base_datetime, pd.Series) and isinstance(current_datetime, pd.Series):
-            if not base_datetime.equals(current_datetime):
-                base_set = set(base_datetime)
-                current_set = set(current_datetime)
-                overlap = base_set & current_set
-                n_misaligned = len(base_set) + len(current_set) - 2 * len(overlap)
+        if (
+            isinstance(base_datetime, pd.Series)
+            and isinstance(current_datetime, pd.Series)
+            and not base_datetime.equals(current_datetime)
+        ):
+            base_set = set(base_datetime)
+            current_set = set(current_datetime)
+            overlap = base_set & current_set
+            n_misaligned = len(base_set) + len(current_set) - 2 * len(overlap)
 
+            issue = (
+                f"Datetime mismatch between {base_model} and {model_name}: "
+                f"{n_misaligned} non-overlapping timestamps"
+            )
+            issues.append(issue)
+            logger.warning(issue)
+
+            overlap_pct = len(overlap) / max(len(base_datetime), len(current_datetime))
+            if overlap_pct < 0.95 and strict:
                 issue = (
-                    f"Datetime mismatch between {base_model} and {model_name}: "
-                    f"{n_misaligned} non-overlapping timestamps"
+                    f"Insufficient overlap between {base_model} and {model_name}: "
+                    f"{overlap_pct:.1%} (threshold: 95%)"
                 )
                 issues.append(issue)
-                logger.warning(issue)
-
-                overlap_pct = len(overlap) / max(len(base_datetime), len(current_datetime))
-                if overlap_pct < 0.95 and strict:
-                    issue = (
-                        f"Insufficient overlap between {base_model} and {model_name}: "
-                        f"{overlap_pct:.1%} (threshold: 95%)"
-                    )
-                    issues.append(issue)
-                    logger.error(issue)
+                logger.error(issue)
 
     is_valid = len(issues) == 0 if strict else all("Insufficient overlap" not in i for i in issues)
 

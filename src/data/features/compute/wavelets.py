@@ -70,6 +70,7 @@ def _create_rolling_windows(arr: np.ndarray, window: int) -> np.ndarray:
     Returns shape (n_windows, window) where n_windows = len(arr) - window + 1.
     """
     from numpy.lib.stride_tricks import sliding_window_view
+
     return sliding_window_view(arr, window)
 
 

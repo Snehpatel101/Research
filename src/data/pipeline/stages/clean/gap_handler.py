@@ -60,12 +60,7 @@ def is_cme_market_closed(
     """
     # Handle timezone conversion explicitly
     if dt.tzinfo is None:
-        if assume_utc:
-            # Naive timestamp assumed to be UTC - localize then convert
-            dt = dt.tz_localize("UTC").tz_convert(tz)
-        else:
-            # Naive timestamp assumed to be in target timezone already
-            dt = dt.tz_localize(tz)
+        dt = dt.tz_localize("UTC").tz_convert(tz) if assume_utc else dt.tz_localize(tz)
     elif str(dt.tzinfo) != tz:
         # Already has timezone but not the target - convert
         dt = dt.tz_convert(tz)
@@ -140,16 +135,19 @@ def is_expected_gap(
     end_weekday = gap_end.weekday()
 
     # Friday to Sunday/Monday gap
-    if start_weekday == CME_WEEKEND_CLOSE_DAY and gap_start.hour >= CME_MAINTENANCE_START_HOUR:
-        if end_weekday in (CME_WEEKEND_OPEN_DAY, 0):  # Sunday or Monday
-            return True
+    if (
+        start_weekday == CME_WEEKEND_CLOSE_DAY
+        and gap_start.hour >= CME_MAINTENANCE_START_HOUR
+        and end_weekday in (CME_WEEKEND_OPEN_DAY, 0)  # Sunday or Monday
+    ):
+        return True
 
     # Check if gap spans daily maintenance (4-5pm CT)
-    if gap_start.hour <= CME_MAINTENANCE_START_HOUR and gap_end.hour >= CME_MAINTENANCE_END_HOUR:
-        if gap_start.date() == gap_end.date():
-            return True
-
-    return False
+    return (
+        gap_start.hour <= CME_MAINTENANCE_START_HOUR
+        and gap_end.hour >= CME_MAINTENANCE_END_HOUR
+        and gap_start.date() == gap_end.date()
+    )
 
 
 class GapHandler:

@@ -232,7 +232,7 @@ def calculate_fitness(
         avg_profit_per_trade = avg_profit_per_trade_atr * atr_mean
         cost_ratio = cost_in_price_units / (avg_profit_per_trade + 1e-6)
 
-        if cost_ratio > 0.20:
+        if cost_ratio > 0.20:  # noqa: SIM108
             # Cap penalty at -10.0 to prevent extreme values from low profit trades
             transaction_penalty = max(-10.0, -(cost_ratio - 0.20) * 10.0)
         else:
@@ -245,7 +245,7 @@ def calculate_fitness(
     # Additional safety to prevent any single class from being minimized
     # ==========================================================================
     min_class_pct = min(long_pct, short_pct, neutral_pct)
-    if min_class_pct < 0.15:
+    if min_class_pct < 0.15:  # noqa: SIM108
         # Graduated penalty as any class approaches minimum
         # At 12%: penalty = (0.15 - 0.12) * 30 = 0.9
         # At 10%: penalty = (0.15 - 0.10) * 30 = 1.5

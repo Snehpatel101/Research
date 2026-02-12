@@ -828,7 +828,9 @@ def compute_mcc_diversity_matrix(predictions: list[np.ndarray]) -> np.ndarray:
                 mcc = matthews_corrcoef(predictions[i], predictions[j])
                 diversity = 1.0 - abs(mcc)
             except Exception as e:
-                logger.warning(f"MCC diversity calculation failed for models {i},{j}: {e}. Using default 0.5.")
+                logger.warning(
+                    f"MCC diversity calculation failed for models {i},{j}: {e}. Using default 0.5."
+                )
                 diversity = 0.5  # Default if calculation fails
 
             diversity_matrix[i, j] = diversity

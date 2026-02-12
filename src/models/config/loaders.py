@@ -266,13 +266,12 @@ def validate_ensemble_base_models(
         ensemble_type=ensemble_type,  # type: ignore[arg-type]
     )
 
-    if is_valid:
-        # Log info about heterogeneous configuration
-        if is_heterogeneous_ensemble(base_models):
-            logger.info(
-                f"Heterogeneous stacking ensemble detected: "
-                f"base_models={base_models}. Meta-learner will receive 2D OOF predictions."
-            )
+    # Log info about heterogeneous configuration
+    if is_valid and is_heterogeneous_ensemble(base_models):
+        logger.info(
+            f"Heterogeneous stacking ensemble detected: "
+            f"base_models={base_models}. Meta-learner will receive 2D OOF predictions."
+        )
 
     return is_valid, error_msg if not is_valid else None
 

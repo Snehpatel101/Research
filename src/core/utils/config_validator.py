@@ -169,10 +169,14 @@ def validate_pipeline_config(config: Any) -> ValidationResult:
     if embargo_bars is not None and embargo_bars < 0:
         result.add_error(f"Invalid embargo_bars: {embargo_bars}. Must be >= 0")
 
-    if purge_bars is not None and embargo_bars is not None:
-        if purge_bars == 0 and embargo_bars == 0:
-            result.add_warning("Both purge and embargo are 0. High risk of data leakage!")
-            result.add_suggestion("Use auto-scaling: purge = max_horizon * 3, embargo = 1440")
+    if (
+        purge_bars is not None
+        and embargo_bars is not None
+        and purge_bars == 0
+        and embargo_bars == 0
+    ):
+        result.add_warning("Both purge and embargo are 0. High risk of data leakage!")
+        result.add_suggestion("Use auto-scaling: purge = max_horizon * 3, embargo = 1440")
 
     # Check paths
     data_dir = config_dict.get("data_dir")

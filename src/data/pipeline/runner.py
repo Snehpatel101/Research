@@ -93,6 +93,7 @@ def _run_with_timeout(
         signal.alarm(0)
         signal.signal(signal.SIGALRM, old_handler)
 
+
 if TYPE_CHECKING:
     from src.data.pipeline.data_config import DataConfig
 
@@ -542,9 +543,7 @@ class PipelineRunner:
                 # Re-raise validation errors
                 raise
             except Exception as e:
-                self.logger.warning(
-                    f"Could not validate transition for {artifact_path.name}: {e}"
-                )
+                self.logger.warning(f"Could not validate transition for {artifact_path.name}: {e}")
 
         if not validated_any:
             self.logger.debug(

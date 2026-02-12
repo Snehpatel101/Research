@@ -175,7 +175,9 @@ def timeout(
     return decorator
 
 
-def _timeout_with_signal(func: Callable[..., T], seconds: float, *args: Any, **kwargs: Any) -> T:
+def _timeout_with_signal(  # noqa: UP047
+    func: Callable[..., T], seconds: float, *args: Any, **kwargs: Any
+) -> T:
     """
     Signal-based timeout implementation.
 
@@ -213,7 +215,9 @@ def _timeout_with_signal(func: Callable[..., T], seconds: float, *args: Any, **k
         signal.signal(signal.SIGALRM, old_handler)
 
 
-def _timeout_with_thread(func: Callable[..., T], seconds: float, *args: Any, **kwargs: Any) -> T:
+def _timeout_with_thread(  # noqa: UP047
+    func: Callable[..., T], seconds: float, *args: Any, **kwargs: Any
+) -> T:
     """
     Thread-based timeout implementation.
 
@@ -243,7 +247,7 @@ def _timeout_with_thread(func: Callable[..., T], seconds: float, *args: Any, **k
             ) from e
 
 
-def run_with_timeout(
+def run_with_timeout(  # noqa: UP047
     func: Callable[..., T],
     timeout_seconds: float,
     *args: Any,

@@ -457,13 +457,15 @@ class StackingEnsemble(BaseModel):
             )
 
             # Reject ensemble if diversity is too low and rejection is enabled
-            if reject_low_diversity:
-                if self._diversity_metrics.diversity_score < min_diversity_threshold:
-                    raise ValueError(
-                        f"Ensemble diversity too low: {self._diversity_metrics.diversity_score:.3f} "
-                        f"< {min_diversity_threshold}. Recommendations: "
-                        f"{self._diversity_metrics.recommendations}"
-                    )
+            if (
+                reject_low_diversity
+                and self._diversity_metrics.diversity_score < min_diversity_threshold
+            ):
+                raise ValueError(
+                    f"Ensemble diversity too low: {self._diversity_metrics.diversity_score:.3f} "
+                    f"< {min_diversity_threshold}. Recommendations: "
+                    f"{self._diversity_metrics.recommendations}"
+                )
 
         # Step 2: Train meta-learner on OOF predictions
         # MOD-001 FIX: When passthrough=True, X_train must be trimmed to match
