@@ -534,10 +534,9 @@ class PreprocessingGraph:
     def _apply_cleaning(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply data cleaning and resampling."""
         try:
-            from src.data.pipeline.stages.clean.cleaner import DataCleaner
+            from src.data.pipeline.stages.clean import cleaner as _cleaner_module  # noqa: F401
 
-            # Create a temporary cleaner for resampling
-            # Note: In production, this would use the saved cleaner config
+            # Resampling logic (DataCleaner module availability check)
             cfg = self.config.cleaning
 
             # For inference, we typically receive already-cleaned data

@@ -392,7 +392,6 @@ class StackingEnsemble(BaseModel):
 
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         self._n_folds = train_config.get("n_folds", 5)
-        base_model_configs = train_config.get("base_model_configs", {})
         meta_learner_config = train_config.get("meta_learner_config", {})
         use_probabilities = train_config.get("use_probabilities", True)
         passthrough = train_config.get("passthrough", False)

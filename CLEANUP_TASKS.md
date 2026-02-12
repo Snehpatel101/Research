@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** Phase 43 COMPLETE (6 tasks)
-**Last Updated:** 2026-02-07
+**Status:** All phases through 46 complete - See COMPLETION.md
+**Last Updated:** 2026-02-11
 
 ---
 
@@ -30,13 +30,89 @@ See **COMPLETION.md** for full task details and implementation information.
 | 41 | 3/3 tasks (all complete) | Critical vectorization fixes (wavelets O(n), entropy Numba) | 2026-02-04 |
 | 42 | 5/5 tasks (all complete) | Memory leak fixes (dataset arrays, DataLoader workers, cleanup) | 2026-02-06 |
 | 43 | 6/6 tasks (all complete) | Pipeline robustness + TCN timeframe auto-resampling | 2026-02-07 |
+| 44 | 1/1 tasks (complete) | Label column preservation during resampling | 2026-02-07 |
+| 45 | 6/6 tasks (all complete) | Cohesion overhaul: circular import, CPCV fix, enum consolidation, dead code removal, default alignment | 2026-02-11 |
+| 46 | 6/6 tasks (all complete) | Full pipeline cleanup, test consolidation, lint fixes, broken import fix | 2026-02-11 |
 
-**Summary Impact:** 108 tasks across 20 phases, 103+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, model timeframe contracts enforced.
+**Summary Impact:** 122 tasks across 23 phases, 130+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated into single file.
 
 ---
 
 ## Active Phases
 
+**No active phases.** All phases through 46 are complete. See COMPLETION.md for full details.
+
+---
+
+### Phase 46: Full Pipeline Cleanup & Test Consolidation
+
+**Status:** ✅ COMPLETE
+**Priority:** HIGH (P1)
+**Tasks:** 6/6 complete
+**Source:** Full codebase audit with 4-agent team
+**Completed:** 2026-02-11
+
+---
+
+#### Task 46-1: Fix Critical Lint Issues (F401/F811/F821/F841) ✅ COMPLETE
+
+**Files Modified:**
+- `src/core/contracts/data_contract.py` - Removed duplicate MTFMode import (F811)
+- `src/models/ensemble/stacking.py` - Fixed undefined `use_default_for_oof` (F821), removed unused `base_model_configs` (F841)
+- `src/inference/server.py` - Removed unused JSONResponse import (F401)
+- `src/models/tracking/__init__.py` - Added noqa for intentional MLflowTracker re-export (F401)
+- `src/models/training/artifacts.py` - Removed unused ModelDataRequirements import (F401)
+- `src/inference/preprocessing_graph.py` - Fixed unused DataCleaner import (F401)
+
+#### Task 46-2: Fix Broken Import ✅ COMPLETE
+
+**File:** `src/config/constants/__init__.py`
+- Removed stale `get_config_horizons` import (function was renamed/removed but import persisted)
+- This was causing `ImportError` when importing `src.data.adapters`
+
+#### Task 46-3: Test File Consolidation ✅ COMPLETE
+
+**Deleted 11 scattered test files:**
+- Root: `test_all_models.py`, `test_full_pipeline.py`, `test_memory_fixes.py`, `test_pipeline_validation.py`
+- Scripts: `scripts/test_all_models.py`, `scripts/test_feature_set_meta_learner.py`
+- Tests: `tests/test_backtest.py`, `tests/test_circuit_breakers.py`, `tests/test_costs.py`, `tests/test_critical_fixes_6_7.py`, `tests/test_r_multiple.py`
+
+**Created:** `tests/test_all.py` - consolidated all valid tests (backtester, circuit breakers, costs, MDA/timestamp alignment, R-multiples)
+
+#### Task 46-4: Pipeline Inconsistency Audit ✅ COMPLETE
+
+4-agent team scanned all 444 Python files and 17 pipeline stages for inconsistencies.
+
+#### Task 46-5: Import Consistency Verification ✅ COMPLETE
+
+Verified:
+- All canonical imports work (types, contracts, adapters)
+- Single-definition rules pass (DataRank=1, ModelFamily=1)
+- Dead import paths return 0 hits
+- All 13 major module imports succeed
+
+#### Task 46-6: Code Formatting ✅ COMPLETE
+
+- `ruff check src/` - 0 critical issues (F401/F811/F821/F841)
+- `black src/` - all files formatted
+
+---
+
+## Completed Recent Phases (Archive)
+
+### Phase 44: Label Column Preservation During Resampling
+
+**Status:** ✅ COMPLETE
+**Priority:** CRITICAL (P0)
+**Tasks:** 1/1 complete
+**Source:** User-reported "Missing label column: label" error during TCN training
+**Completed:** 2026-02-07
+
+See **COMPLETION.md** for full implementation details.
+
+---
+
+>>>>>>> 483066e (fix: Phase 46 — full pipeline cleanup, test consolidation, lint fixes)
 ### Phase 43: Pipeline Robustness + TCN Timeframe Fix
 
 **Status:** ✅ COMPLETE

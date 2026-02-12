@@ -30,7 +30,6 @@ from .checksums import ArtifactIntegrityManager
 # Canonical location: src.models.config.data_requirements
 try:
     from src.models.config import MODEL_DATA_REQUIREMENTS
-    from src.models.config.data_requirements import ModelDataRequirements
 except ImportError:
     MODEL_DATA_REQUIREMENTS: dict[str, Any] | None = None  # type: ignore[no-redef]
 

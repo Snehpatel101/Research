@@ -18,7 +18,7 @@ __all__ = [
 
 # Optional MLflow import
 try:
-    from .mlflow_tracker import MLflowTracker
+    from .mlflow_tracker import MLflowTracker  # noqa: F401
 
     __all__.append("MLflowTracker")
 except ImportError:

@@ -100,7 +100,6 @@ from src.core.common.horizon_config import (
     # Functions
     auto_scale_purge_embargo,
     compute_embargo_bars,
-    get_config_horizons,
     get_default_barrier_params_for_horizon,
     get_scaled_horizons,
     validate_horizons,
@@ -183,7 +182,6 @@ __all__ = [
     "get_scaled_horizons",
     "auto_scale_purge_embargo",
     "compute_embargo_bars",
-    "get_config_horizons",
     "get_default_barrier_params_for_horizon",
     # ==========================================================================
     # DEFAULT PERIODS (technical indicators)

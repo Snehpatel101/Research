@@ -275,7 +275,6 @@ class ModelServer:
         """
         try:
             from fastapi import FastAPI, HTTPException  # type: ignore[import-not-found]
-            from fastapi.responses import JSONResponse  # type: ignore[import-not-found]
         except ImportError:
             raise ImportError(
                 "FastAPI is required for model serving. "
