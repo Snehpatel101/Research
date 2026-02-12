@@ -345,8 +345,8 @@ class FeatureOptimizer:
             if len(selected_indices) < self.min_features:
                 # Add random features to meet minimum
                 remaining = [i for i in range(n_features) if i not in selected_indices]
-                np.random.seed(self.random_state + trial.number)
-                np.random.shuffle(remaining)
+                rng = np.random.RandomState(self.random_state + trial.number)
+                rng.shuffle(remaining)
                 needed = self.min_features - len(selected_indices)
                 selected_indices.extend(remaining[:needed])
 

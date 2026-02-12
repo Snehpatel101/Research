@@ -99,9 +99,9 @@ DEFAULT_TIMEFRAMES = ["5min", "15min", "30min", "60min"]
 # Label cache for trials with same barrier params (optimization)
 # Phase 29: Bounded LRU cache to prevent OOM in long optimization runs
 LABEL_CACHE_MAXSIZE = 128  # Maximum cached label configurations
-_label_cache: OrderedDict[
-    tuple[float, float, int, str], tuple[np.ndarray, np.ndarray]
-] = OrderedDict()
+_label_cache: OrderedDict[tuple[float, float, int, str], tuple[np.ndarray, np.ndarray]] = (
+    OrderedDict()
+)
 
 
 # =============================================================================
@@ -570,8 +570,8 @@ def create_5d_objective(
                 # Add features to meet minimum (deterministically based on trial)
                 # Use set difference for O(1) lookup instead of O(n) list comprehension
                 remaining = list(set(searchable_features) - set(selected_features))
-                np.random.seed(trial.number)
-                np.random.shuffle(remaining)
+                rng = np.random.RandomState(trial.number)
+                rng.shuffle(remaining)
                 needed = min_features - len(selected_features)
                 selected_features.extend(remaining[:needed])
 

@@ -442,12 +442,8 @@ def run_feature_engineering(
             )
             for (symbol, tf), _ in failed_tasks:
                 logger.error(f"  - FAILED: {symbol}@{tf}")
-            raise RuntimeError(
-                f"Feature engineering failed for {len(failed_tasks)}/{len(tasks)} tasks: "
-                f"{failed_symbols}. Pipeline cannot continue with incomplete features."
-            )
 
-            # Phase 43: Fail-fast on partial failures if configured
+            # Phase 43: Configurable fail-fast on partial failures
             total_tasks = len(tasks)
             success_count = total_tasks - len(failed_tasks)
             success_rate = success_count / total_tasks if total_tasks > 0 else 0.0
@@ -467,6 +463,11 @@ def run_feature_engineering(
                     stage_name="feature_engineering",
                     start_time=start_time,
                     error=error_msg,
+                )
+            else:
+                logger.warning(
+                    f"Partial failure allowed: {success_rate:.1%} succeeded "
+                    f"({success_count}/{total_tasks}). Continuing with available results."
                 )
 
         for result in results:

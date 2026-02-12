@@ -123,9 +123,7 @@ def compute_roll_spread(df, window=20):
     # Rolling covariance with lag-1 (vectorized)
     # Use pandas rolling with pairwise covariance
     price_changes_lag1 = price_changes.shift(1)
-    cov_lag1 = price_changes.rolling(window=window, min_periods=window).cov(
-        price_changes_lag1
-    )
+    cov_lag1 = price_changes.rolling(window=window, min_periods=window).cov(price_changes_lag1)
 
     # Spread = 2 * sqrt(-cov) if cov < 0, else 0
     # Use np.maximum to prevent sqrt of negative from numerical precision issues
@@ -502,8 +500,8 @@ def compute_all_microstructure_features(df):
     bar_feats = compute_bar_structure(df)
     features = features.join(bar_feats)
 
-    # Handle NaN values (from rolling windows at start)
-    features = features.bfill().fillna(0)
+    # Handle NaN values (from rolling windows at start) — ffill for anti-lookahead safety
+    features = features.ffill().fillna(0)
 
     logger.info(f"Microstructure features computed: {features.shape[1]} features")
 
