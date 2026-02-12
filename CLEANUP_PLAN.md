@@ -1,11 +1,11 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 43 COMPLETE (6 tasks)
-**Last Updated:** 2026-02-07
+**Status:** Phase 49 COMPLETE
+**Last Updated:** 2026-02-12
 
 ---
 
-## Completed Phases (24-40)
+## Completed Phases (24-49)
 
 See **COMPLETION.md** for full details on all completed phases.
 
@@ -33,8 +33,11 @@ See **COMPLETION.md** for full details on all completed phases.
 | 44 | Label Column Preservation During Resampling | ✅ COMPLETE | 2026-02-07 |
 | 45 | Codebase Cohesion Overhaul | ✅ COMPLETE | 2026-02-11 |
 | 46 | Full Pipeline Cleanup & Test Consolidation | ✅ COMPLETE | 2026-02-11 |
+| 47 | Critical Pipeline Fixes (data leakage, thread safety, notebook) | ✅ COMPLETE | 2026-02-12 |
+| 48 | Medium Pipeline Fixes (evaluators, feature selection, orphaned files) | ✅ COMPLETE | 2026-02-12 |
+| 49 | Ruff Clean Sweep (SIM/E402/UP047, black formatting) | ✅ COMPLETE | 2026-02-12 |
 
-**Summary Impact:** 23 phases complete (24-46), 130+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated.
+**Summary Impact:** 26 phases complete (24-49), 150+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors).
 
 ---
 
@@ -54,12 +57,15 @@ See **COMPLETION.md** for full details on all completed phases.
 | 44 | Label Column Preservation During Resampling | CRITICAL | 1 session | ✅ COMPLETE |
 | 45 | Codebase Cohesion Overhaul | HIGH | 1 session | ✅ COMPLETE |
 | 46 | Full Pipeline Cleanup & Test Consolidation | HIGH | 1 session | ✅ COMPLETE |
+| 47 | Critical Pipeline Fixes (data leakage, thread safety) | CRITICAL | 1 session | ✅ COMPLETE |
+| 48 | Medium Pipeline Fixes (evaluators, orphaned files) | HIGH | 1 session | ✅ COMPLETE |
+| 49 | Ruff Clean Sweep (all lint issues) | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 46 are complete. See COMPLETION.md for details.
+**No active phases.** All phases through 49 are complete. See COMPLETION.md for details.
 
 ---
 

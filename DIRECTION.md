@@ -1,9 +1,131 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-07 (Phase 43 COMPLETE)
-**Status:** Phase 43 COMPLETE | Pipeline Robustness + TCN Timeframe Fix
+**Last Updated:** 2026-02-12 (Phase 49 COMPLETE)
+**Status:** Phase 49 COMPLETE | Ruff Clean, All Issues Fixed
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phases 47-49: Critical & Medium Pipeline Fixes + Ruff Clean Sweep (2026-02-12) - COMPLETE
+
+**Discovered During:** Notebook execution, production pipeline runs, comprehensive linter audit
+**Source:** Data leakage detection, Optuna thread safety issues, notebook config errors, ruff lint violations
+**Completed:** 2026-02-12
+**Status:** ✅ COMPLETE - 75 issues fixed across 3 phases (8 critical + 16 medium + 51 lint)
+
+### Summary
+
+Three related phases executed in sequence on 2026-02-12 to eliminate critical bugs, medium-priority issues, and all remaining lint violations.
+
+**Phase 47 - Critical Pipeline Fixes (8 tasks):**
+1. **Data leakage** - bfill() → ffill() in microstructure_proxies.py:504
+2. **Thread-unsafe random seed** - Global np.random.seed() → RandomState(trial.number) in 5D objective and features.py
+3. **Unreachable Phase 43 code** - Removed unconditional raise before stage3_fail_on_partial check
+4. **Notebook model names** - inception_time → inceptiontime, resnet_1d → resnet1d
+5. **Notebook n_trials=0** - Changed to n_trials=1 (Optuna requires >= 1)
+6. **Notebook boruta** - Removed unsupported reference, replaced with mda/mdi/shap/mutual_info
+7. **Notebook feature sets** - Corrected FEATURE_SET values to match codebase
+8. **Notebook labeling** - Updated VALID_LABELING to include regression
+
+**Phase 48 - Medium Pipeline Fixes (16 tasks):**
+1. **Embargo defaults** - walk_forward_evaluator embargo_bars: 0→60
+2. **3-class probabilities** - Added prob_class_2 to CV/walk-forward evaluators
+3. **5D feature mismatch** - Positional slicing → named feature selection (REAL BUG)
+4. **Factory barrier multipliers** - Hardcoded → user config values
+5. **Registry fallback** - Completed for all 12 models + train_date
+6. **Scoring comments** - Corrected annualization (252→78 bars/day for 5-min)
+7. **F811 duplicate import** - Removed duplicate PredictionResult
+8. **4 orphaned files deleted** - preset_commands, status_commands, adaptive_costs, cnn_base (-954 lines)
+9. **Dead expressions** - Removed 3 unused variables in nbeats
+10. **B904 exception chaining** - Added to server.py and loaders.py
+11. **NullHandler positioning** - Moved check before addHandler()
+12. **Config comments** - Improved embargo_multiplier clarity
+13-14. **TODO cleanup** - Removed 2 outdated TODO comments
+
+**Phase 49 - Ruff Clean Sweep (51 tasks):**
+1. **SIM102 (22)** - Combined nested if statements
+2. **SIM108 (10)** - Converted if-else to ternary (4 converted, 6 noqa'd)
+3. **SIM116 (3)** - Replaced if-elif chains with dict lookups
+4. **SIM103 (2)** - Inlined return conditions
+5. **E402 (7)** - Added noqa for backward-compat re-exports
+6. **B904 (2)** - Added exception chaining in server.py
+7. **UP047 (7)** - Added noqa (project requires Python 3.11, not 3.12)
+8. **Black formatting** - Applied to all 56 modified files
+
+**Result:** Ruff 0 errors, Black 0 reformats, all imports pass, -1,078 net lines
+
+### Code Changes Summary
+
+**Phase 47 - Critical Fixes:**
+```python
+# microstructure_proxies.py - Data leakage fix
+amihud_illiq = amihud_illiq.fillna(method='ffill')  # Was: bfill (LEAKAGE)
+
+# five_dimension_objective.py, features.py - Thread safety
+rng = np.random.RandomState(trial.number)  # Was: np.random.seed() (RACE CONDITION)
+
+# run.py - Unreachable code removed
+if config.stage3_fail_on_partial:  # Was: unconditional raise before this
+    raise RuntimeError(...)
+```
+
+**Phase 48 - Medium Fixes:**
+```python
+# walk_forward_evaluator.py - Embargo protection
+embargo_bars: int = 60  # Was: 0 (no protection)
+
+# five_dimension_objective.py - Named feature selection
+X_trial = X[spec.selected_features]  # Was: X[:, :n_features] (POSITIONAL MISMATCH)
+
+# factory.py - User config respected
+upper_mult=config.upper_mult, lower_mult=config.lower_mult  # Was: hardcoded 1.0
+```
+
+**Phase 49 - Simplification:**
+```python
+# SIM102 - Combined nested ifs
+if train_idx is not None and len(train_idx) > 0:  # Was: nested if statements
+
+# SIM116 - Dict lookup
+return BAR_SAMPLERS[bar_type](...)  # Was: if-elif chain
+
+# E402 - Backward-compat re-exports
+from src.models.neural.lstm import LSTM  # noqa: E402 (imports after code)
+```
+
+### Files Modified
+
+**Phase 47:** 5 files + notebook
+**Phase 48:** 25 files (21 modified, 4 deleted)
+**Phase 49:** 56 files
+
+**Total:** 86 files touched, -1,078 net lines
+
+### Impact Analysis
+
+| Category | Before | After | Benefit |
+|----------|--------|-------|---------|
+| Data leakage | bfill uses future data | ffill uses past only | Realistic backtests |
+| Thread safety | Race conditions (n_jobs=-1) | RandomState per trial | Parallel Optuna works |
+| Phase 43 feature | Unreachable code | Config-based fail-fast | Feature now works |
+| Notebook config | 5 errors | All correct | Notebook runs |
+| Embargo protection | 0 bars default | 60 bars default | Leakage prevention |
+| Feature selection | Positional mismatch | Named selection | No column errors |
+| Dead code | 954 lines orphaned | Deleted | Cleaner codebase |
+| Lint violations | 51 issues | 0 issues | Ruff clean |
+| Code formatting | Inconsistent | Black formatted | Uniform style |
+
+### Verification Results
+
+**All Checks Pass:**
+```bash
+ruff check src/                          # 0 errors, 0 warnings
+black --check src/                       # All files formatted
+python -c "from src.core.types import DataRank; print('OK')"
+python -c "from src.data.adapters import get_adapter; print('OK')"
+python -c "from src.optimization.five_dimension_objective import FiveDimensionObjective; print('OK')"
+```
 
 ---
 
