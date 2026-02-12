@@ -58,7 +58,6 @@ class ModelMTFMode(str, Enum):
     MULTI_STREAM = "multi_stream"  # Multiple TF streams (4D input)
 
 
-
 # Backward compatibility alias
 MTFMode = ModelMTFMode
 

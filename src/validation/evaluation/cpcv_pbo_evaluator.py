@@ -108,7 +108,9 @@ class CPCVPBOEvaluator:
         )
 
         logger.info("Initialized CPCVPBOEvaluator")
-        logger.info(f"CPCV config: {self.config.n_groups} groups, {self.config.n_test_groups} test groups")
+        logger.info(
+            f"CPCV config: {self.config.n_groups} groups, {self.config.n_test_groups} test groups"
+        )
         logger.info(f"Output directory: {self.output_dir}")
 
     def run(
@@ -152,6 +154,7 @@ class CPCVPBOEvaluator:
 
         # Default metric function
         if metric_fn is None:
+
             def metric_fn(y_true, y_pred):
                 return float(np.mean(y_true == y_pred))
 
@@ -191,7 +194,8 @@ class CPCVPBOEvaluator:
 
                 path_result = CPCVPathResult(
                     path_id=path_id,
-                    test_groups=(),  # Will be populated by CPCV internals
+                    # TODO: Pass actual group indices from CPCV splitter
+                    test_groups=(),
                     train_groups=(),
                     train_size=len(train_idx),
                     test_size=len(test_idx),

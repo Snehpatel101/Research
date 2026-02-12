@@ -427,7 +427,6 @@ class NBEATSNetwork(nn.Module):
                 forecast_size=input_dim,
             )
         elif stack_type == "seasonality":
-            2 * n_harmonics
             return SeasonalityBasis(
                 n_harmonics=n_harmonics,
                 backcast_size=input_dim,
@@ -454,8 +453,6 @@ class NBEATSNetwork(nn.Module):
             Output logits, shape (batch, n_classes)
             Optionally: list of stack forecasts for interpretability
         """
-        x.size(0)
-
         # Pool features: (batch, seq_len, features) -> (batch, seq_len)
         x_pooled = self.feature_pool(x).squeeze(-1)
 
@@ -748,7 +745,6 @@ class NBEATSModel(BaseRNNModel):
                 return None
 
         stack_types = self._config.get("stack_types", ["generic", "trend", "seasonality"])
-        self._config.get("n_stacks", 3)
 
         result: dict[str, np.ndarray] = {}
         for i, forecast in enumerate(stack_forecasts):

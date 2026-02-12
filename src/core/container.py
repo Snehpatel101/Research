@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from torch.utils.data import Dataset
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 # =============================================================================
 # METADATA CONSTANTS (inlined from phase1 to avoid circular dependency)
@@ -116,7 +117,14 @@ def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any
 
     # Check for label columns masquerading as features (columns with label
     # prefixes that aren't explicitly in our label prefix list)
-    suspicious_prefixes = ("target_", "pred_", "prediction_", "meta_label_", "meta_proba_", "bet_size_")
+    suspicious_prefixes = (
+        "target_",
+        "pred_",
+        "prediction_",
+        "meta_label_",
+        "meta_proba_",
+        "bet_size_",
+    )
     suspicious_columns = [
         col for col in feature_columns if any(col.startswith(p) for p in suspicious_prefixes)
     ]
@@ -142,9 +150,6 @@ def validate_metadata_columns(df_columns: list[str] | set[str]) -> dict[str, Any
         "is_valid": is_valid,
         "unexpected_columns": suspicious_columns,
     }
-
-
-logger.addHandler(logging.NullHandler())
 
 
 # =============================================================================

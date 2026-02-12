@@ -362,7 +362,7 @@ class ModelServer:
                 if PROMETHEUS_AVAILABLE:
                     request_count.labels(model_name=model_name, status="error").inc()
                 logger.error(f"Prediction error: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=str(e)) from e
 
         @app.post("/predict_ensemble", tags=["Prediction"])
         async def predict_ensemble(request: EnsemblePredictionRequest):
@@ -401,7 +401,7 @@ class ModelServer:
                 raise
             except Exception as e:
                 logger.error(f"Ensemble prediction error: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=str(e)) from e
 
         @app.get("/metrics", response_model=MetricsResponse, tags=["Metrics"])
         async def metrics():

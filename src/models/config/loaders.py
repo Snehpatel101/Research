@@ -98,13 +98,13 @@ def load_model_config(
 
     try:
         raw_config = load_yaml_config(config_path, explicit=explicit)
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         if explicit:
             raise ConfigError(
                 f"Model configuration not found for '{model_name}'\n"
                 f"Expected location: {config_path.absolute()}\n"
                 f"Suggestion: Check that the model name is correct and the config file exists."
-            )
+            ) from e
         raise
     except Exception as e:
         if explicit:

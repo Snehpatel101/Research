@@ -784,7 +784,11 @@ def _compute_validation_metric(
         ohlcv_cols = {"open", "high", "low", "close", "volume"}
 
         if isinstance(train_data, pd.DataFrame):
-            feature_cols = [c for c in train_data.columns if c.lower() not in ohlcv_cols]
+            # Use the trial's selected features if available, falling back to all non-OHLCV
+            if spec.selected_features:
+                feature_cols = [f for f in spec.selected_features if f in train_data.columns]
+            if not spec.selected_features or not feature_cols:
+                feature_cols = [c for c in train_data.columns if c.lower() not in ohlcv_cols]
             if not feature_cols:
                 # If no feature columns, use all numeric columns
                 feature_cols = train_data.select_dtypes(include=[np.number]).columns.tolist()
@@ -801,7 +805,7 @@ def _compute_validation_metric(
         y_val_valid = val_labels[val_valid_mask]
 
         # Limit features for speed during optimization
-        n_features = min(spec.n_features, X_train_valid.shape[1], 50)
+        n_features = min(X_train_valid.shape[1], 50)
         X_train_sub = X_train_valid[:, :n_features]
         X_val_sub = X_val_valid[:, :n_features]
 

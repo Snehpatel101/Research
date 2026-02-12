@@ -934,7 +934,11 @@ class ModelBundle:
         # Check scaler consistency
         if self.scaler is not None:
             scaler_features = getattr(self.scaler, "n_features_in_", None)
-            if self.metadata.n_features and scaler_features and scaler_features != self.metadata.n_features:
+            if (
+                self.metadata.n_features
+                and scaler_features
+                and scaler_features != self.metadata.n_features
+            ):
                 issues.append(
                     f"Scaler features ({scaler_features}) != "
                     f"metadata features ({self.metadata.n_features})"

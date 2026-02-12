@@ -111,7 +111,9 @@ class CVEvaluator:
         self.cv = PurgedKFold(kfold_config)
 
         logger.info("Initialized CVEvaluator")
-        logger.info(f"CV config: {self.config.n_splits} folds, purge={self.config.purge_bars}, embargo={self.config.embargo_bars}")
+        logger.info(
+            f"CV config: {self.config.n_splits} folds, purge={self.config.purge_bars}, embargo={self.config.embargo_bars}"
+        )
         logger.info(f"Output directory: {self.output_dir}")
 
     def run(
@@ -155,7 +157,7 @@ class CVEvaluator:
         # Initialize OOF arrays
         n_samples = len(X)
         oof_predictions = np.full(n_samples, np.nan)
-        oof_probabilities = np.full((n_samples, 2), np.nan)  # Assuming binary classification
+        oof_probabilities = np.full((n_samples, 3), np.nan)  # 3-class: buy/hold/sell
 
         # Collect fold results
         fold_results = []
@@ -164,7 +166,9 @@ class CVEvaluator:
             self.cv.split(X, y, label_end_times=label_end_times)
         ):
             fold_start = time.time()
-            logger.info(f"Evaluating fold {fold_idx + 1}/{self.config.n_splits}: train={len(train_idx)}, test={len(test_idx)}")
+            logger.info(
+                f"Evaluating fold {fold_idx + 1}/{self.config.n_splits}: train={len(train_idx)}, test={len(test_idx)}"
+            )
 
             # Split data
             X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
@@ -192,7 +196,7 @@ class CVEvaluator:
                     proba = model.predict_proba(X_test)
                     # Store OOF probabilities
                     if proba.shape[1] <= oof_probabilities.shape[1]:
-                        oof_probabilities[test_idx, :proba.shape[1]] = proba
+                        oof_probabilities[test_idx, : proba.shape[1]] = proba
                 else:
                     proba = None
 
@@ -211,7 +215,11 @@ class CVEvaluator:
 
                     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
                     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-                    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+                    f1 = (
+                        2 * precision * recall / (precision + recall)
+                        if (precision + recall) > 0
+                        else 0.0
+                    )
                 else:
                     precision, recall, f1 = 0.0, 0.0, 0.0
 
@@ -231,7 +239,9 @@ class CVEvaluator:
                 )
                 fold_results.append(fold_result)
 
-                logger.info(f"Fold {fold_idx + 1}: accuracy={accuracy:.4f}, f1={f1:.4f}, time={training_time:.2f}s")
+                logger.info(
+                    f"Fold {fold_idx + 1}: accuracy={accuracy:.4f}, f1={f1:.4f}, time={training_time:.2f}s"
+                )
 
             except Exception as e:
                 logger.warning(f"Fold {fold_idx} failed: {e}")
@@ -257,12 +267,20 @@ class CVEvaluator:
             aggregate_metrics["oof_accuracy"] = oof_accuracy
 
         # Create OOF DataFrame
-        oof_df = pd.DataFrame({
-            "prediction": oof_predictions,
-            "actual": y.values,
-            "prob_class_0": oof_probabilities[:, 0],
-            "prob_class_1": oof_probabilities[:, 1] if oof_probabilities.shape[1] > 1 else np.nan,
-        }, index=X.index)
+        oof_df = pd.DataFrame(
+            {
+                "prediction": oof_predictions,
+                "actual": y.values,
+                "prob_class_0": oof_probabilities[:, 0],
+                "prob_class_1": (
+                    oof_probabilities[:, 1] if oof_probabilities.shape[1] > 1 else np.nan
+                ),
+                "prob_class_2": (
+                    oof_probabilities[:, 2] if oof_probabilities.shape[1] > 2 else np.nan
+                ),
+            },
+            index=X.index,
+        )
 
         # Save OOF if configured
         if self.config.save_oof:
@@ -272,7 +290,9 @@ class CVEvaluator:
 
         total_time = time.time() - start_time
         logger.info(f"CV evaluation completed in {total_time:.2f}s")
-        logger.info(f"Mean accuracy: {aggregate_metrics['accuracy']:.4f} ± {aggregate_metrics['accuracy_std']:.4f}")
+        logger.info(
+            f"Mean accuracy: {aggregate_metrics['accuracy']:.4f} ± {aggregate_metrics['accuracy_std']:.4f}"
+        )
 
         return {
             "fold_metrics": [

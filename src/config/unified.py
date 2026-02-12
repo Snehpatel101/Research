@@ -267,17 +267,14 @@ class MTFSection:
 
     enabled: bool = True
     default_mode: str = "indicators"  # indicators, bars, both
-    default_timeframes: list[str] = field(
-        default_factory=lambda: list(DEFAULT_MTF_TIMEFRAMES)
-    )
+    default_timeframes: list[str] = field(default_factory=lambda: list(DEFAULT_MTF_TIMEFRAMES))
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> MTFSection:
         return cls(
             enabled=data.get("enabled", True),
             default_mode=data.get("default_mode", "indicators"),
-            default_timeframes=data.get("default_timeframes")
-            or list(DEFAULT_MTF_TIMEFRAMES),
+            default_timeframes=data.get("default_timeframes") or list(DEFAULT_MTF_TIMEFRAMES),
         )
 
 
@@ -1100,7 +1097,8 @@ class UnifiedConfig:
             source_timeframe=self.timeframes.default_primary,
             auto_scale_purge_embargo=True,
             purge_multiplier=self.purge_embargo.purge_multiplier,
-            embargo_multiplier=72.0,  # Legacy
+            # Legacy: 72.0 multiplier for embargo period calculation (horizon * 72 = embargo bars)
+            embargo_multiplier=72.0,
         )
 
 

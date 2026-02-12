@@ -88,7 +88,7 @@ def get_score_fn(metric_name: str) -> Callable[[np.ndarray, np.ndarray], float]:
 # Matches the logic in five_dimension_objective.py:441-487.
 # =============================================================================
 
-_ANNUALIZATION_FACTOR = np.sqrt(252 * 78)  # 1-min bars, 78 per session
+_ANNUALIZATION_FACTOR = np.sqrt(252 * 78)  # 5-min bars, 78 per 6.5h session (252 trading days)
 
 
 def _proxy_sharpe(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -128,7 +128,7 @@ def _proxy_profit_factor(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 # Default purge/embargo values from horizon_config (static to avoid circular imports)
 _DEFAULT_PURGE_BARS = 60  # 3 * max(default horizons=[5,10,15,20])
-_DEFAULT_EMBARGO_BARS = 1440  # 5 days at 5-min bars
+_DEFAULT_EMBARGO_BARS = 1440  # ~18.5 trading days at 5-min bars (conservative default)
 
 
 def purged_train_val_split(
@@ -166,9 +166,7 @@ def purged_train_val_split(
         embargo_bars = _DEFAULT_EMBARGO_BARS
 
     if n_samples < 20:
-        raise ValueError(
-            f"Cannot create purged split with {n_samples} samples (minimum 20)"
-        )
+        raise ValueError(f"Cannot create purged split with {n_samples} samples (minimum 20)")
 
     split_idx = int(n_samples * train_ratio)
     gap = purge_bars + embargo_bars

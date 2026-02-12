@@ -571,7 +571,7 @@ class iTransformerModel(BaseRNNModel):
 
         # L2 norm across d_model dimension gives temporal importance
         # Then average across features (each feature uses same projection)
-        np.linalg.norm(weights, axis=0)
+        _temporal_importance = np.linalg.norm(weights, axis=0)
 
         # For feature importance, we use the feature position embeddings
         # Get position embeddings: (1, max_features, d_model)

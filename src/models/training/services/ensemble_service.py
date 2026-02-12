@@ -122,9 +122,7 @@ class EnsembleService:
                 )
             if np.any(np.isnan(probs)):
                 nan_count = int(np.isnan(probs).sum())
-                logger.warning(
-                    f"OOF predictions for {model_name} contain {nan_count} NaN values"
-                )
+                logger.warning(f"OOF predictions for {model_name} contain {nan_count} NaN values")
 
         logger.info(f"Building ensemble from {len(oof_predictions)} models...")
 
@@ -220,6 +218,7 @@ class EnsembleService:
             else:
                 indices = np.arange(n_samples)
 
+            # TODO: Fold provenance not tracked in OOFPrediction — all assigned fold 0
             fold_ids = np.zeros(n_samples, dtype=int)
 
             oof_result = OOFResult(
@@ -326,9 +325,7 @@ class EnsembleService:
                 "training_time": training_time,
             }
 
-            logger.info(
-                f"Meta-learner ({meta_learner_name}) trained: val_f1={val_f1:.4f}"
-            )
+            logger.info(f"Meta-learner ({meta_learner_name}) trained: val_f1={val_f1:.4f}")
 
             return meta_learner, metrics
 

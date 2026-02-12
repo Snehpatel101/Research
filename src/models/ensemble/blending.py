@@ -108,7 +108,9 @@ class BlendingEnsemble(BaseModel):
             return 2
 
         if self._base_models:
-            ranks = {4 if m.requires_4d else 3 if m.requires_sequences else 2 for m in self._base_models}
+            ranks = {
+                4 if m.requires_4d else 3 if m.requires_sequences else 2 for m in self._base_models
+            }
             return ranks == {4}
 
         base_model_names = self._config.get("base_model_names", [])

@@ -87,9 +87,7 @@ def _detect_timeframe(df: pd.DataFrame) -> str | None:
         return None
 
 
-def _resample_for_model(
-    df: pd.DataFrame, source_tf: str, target_tf: str
-) -> pd.DataFrame:
+def _resample_for_model(df: pd.DataFrame, source_tf: str, target_tf: str) -> pd.DataFrame:
     """
     Resample DataFrame from source timeframe to target timeframe.
 
@@ -326,18 +324,38 @@ class PreparedData:
             y_train=self.y_train[train_valid],
             X_val=self.X_val[val_valid],
             y_val=self.y_val[val_valid],
-            X_test=self.X_test[test_valid] if self.X_test is not None and test_valid is not None else None,
-            y_test=self.y_test[test_valid] if self.y_test is not None and test_valid is not None else None,
-            train_weights=self.train_weights[train_valid] if self.train_weights is not None else None,
+            X_test=(
+                self.X_test[test_valid]
+                if self.X_test is not None and test_valid is not None
+                else None
+            ),
+            y_test=(
+                self.y_test[test_valid]
+                if self.y_test is not None and test_valid is not None
+                else None
+            ),
+            train_weights=(
+                self.train_weights[train_valid] if self.train_weights is not None else None
+            ),
             val_weights=self.val_weights[val_valid] if self.val_weights is not None else None,
-            test_weights=self.test_weights[test_valid] if self.test_weights is not None and test_valid is not None else None,
+            test_weights=(
+                self.test_weights[test_valid]
+                if self.test_weights is not None and test_valid is not None
+                else None
+            ),
             model_name=self.model_name,
             adapter_type=self.adapter_type,
             data_rank=self.data_rank,
             feature_names=self.feature_names,
-            train_indices=self.train_indices[train_valid] if self.train_indices is not None else None,
+            train_indices=(
+                self.train_indices[train_valid] if self.train_indices is not None else None
+            ),
             val_indices=self.val_indices[val_valid] if self.val_indices is not None else None,
-            test_indices=self.test_indices[test_valid] if self.test_indices is not None and test_valid is not None else None,
+            test_indices=(
+                self.test_indices[test_valid]
+                if self.test_indices is not None and test_valid is not None
+                else None
+            ),
             scaler=self.scaler,
             sequence_length=self.sequence_length,
             n_timeframes=self.n_timeframes,

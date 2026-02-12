@@ -112,7 +112,9 @@ class VotingEnsemble(BaseModel):
         ALL base models require 4D input.
         """
         if self._base_models:
-            ranks = {4 if m.requires_4d else 3 if m.requires_sequences else 2 for m in self._base_models}
+            ranks = {
+                4 if m.requires_4d else 3 if m.requires_sequences else 2 for m in self._base_models
+            }
             return ranks == {4}
 
         base_model_names = self._config.get("base_model_names", [])
@@ -165,9 +167,7 @@ class VotingEnsemble(BaseModel):
             ValueError: If shape is invalid
         """
         if X.ndim == 1:
-            raise ValueError(
-                f"{context} must be 2D, 3D, or 4D, got 1D array with shape {X.shape}"
-            )
+            raise ValueError(f"{context} must be 2D, 3D, or 4D, got 1D array with shape {X.shape}")
 
         expected_rank = self._get_expected_input_rank()
 

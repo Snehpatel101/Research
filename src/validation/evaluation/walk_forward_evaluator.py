@@ -47,8 +47,8 @@ class WalkForwardEvaluatorConfig:
     window_type: str = "expanding"
     min_train_pct: float = 0.4
     test_pct: float = 0.1
-    embargo_bars: int = 0
-    gap_bars: int = 0
+    embargo_bars: int = 60
+    gap_bars: int = 60
     output_dir: str = "experiments/evaluation/walk_forward"
     save_predictions: bool = True
 
@@ -88,8 +88,8 @@ class WalkForwardEvaluator:
                 window_type=config.get("window_type", "expanding"),
                 min_train_pct=config.get("min_train_pct", 0.4),
                 test_pct=config.get("test_pct", 0.1),
-                embargo_bars=config.get("embargo_bars", 0),
-                gap_bars=config.get("gap_bars", 0),
+                embargo_bars=config.get("embargo_bars", 60),
+                gap_bars=config.get("gap_bars", 60),
                 output_dir=config.get("output_dir", "experiments/evaluation/walk_forward"),
                 save_predictions=config.get("save_predictions", True),
             )
@@ -153,7 +153,7 @@ class WalkForwardEvaluator:
         # Initialize predictions array
         n_samples = len(X)
         predictions = np.full(n_samples, np.nan)
-        probabilities = np.full((n_samples, 2), np.nan)
+        probabilities = np.full((n_samples, 3), np.nan)
 
         # Collect window results
         window_results = []
@@ -191,7 +191,7 @@ class WalkForwardEvaluator:
                 if hasattr(model, "predict_proba"):
                     proba = model.predict_proba(X_test)
                     if proba.shape[1] <= probabilities.shape[1]:
-                        probabilities[test_idx, :proba.shape[1]] = proba
+                        probabilities[test_idx, : proba.shape[1]] = proba
                 else:
                     proba = None
 
@@ -210,7 +210,11 @@ class WalkForwardEvaluator:
 
                     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
                     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-                    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+                    f1 = (
+                        2 * precision * recall / (precision + recall)
+                        if (precision + recall) > 0
+                        else 0.0
+                    )
                 else:
                     precision, recall, f1 = 0.0, 0.0, 0.0
 
@@ -265,8 +269,8 @@ class WalkForwardEvaluator:
 
         # Compute performance degradation (if enough windows)
         if len(window_results) >= 3:
-            first_half = window_results[:len(window_results)//2]
-            second_half = window_results[len(window_results)//2:]
+            first_half = window_results[: len(window_results) // 2]
+            second_half = window_results[len(window_results) // 2 :]
 
             first_avg = np.mean([w.accuracy for w in first_half])
             second_avg = np.mean([w.accuracy for w in second_half])
@@ -276,12 +280,16 @@ class WalkForwardEvaluator:
                 aggregate_metrics["performance_degradation"] = float(degradation)
 
         # Create predictions DataFrame
-        pred_df = pd.DataFrame({
-            "prediction": predictions,
-            "actual": y.values,
-            "prob_class_0": probabilities[:, 0],
-            "prob_class_1": probabilities[:, 1] if probabilities.shape[1] > 1 else np.nan,
-        }, index=X.index)
+        pred_df = pd.DataFrame(
+            {
+                "prediction": predictions,
+                "actual": y.values,
+                "prob_class_0": probabilities[:, 0],
+                "prob_class_1": probabilities[:, 1] if probabilities.shape[1] > 1 else np.nan,
+                "prob_class_2": probabilities[:, 2] if probabilities.shape[1] > 2 else np.nan,
+            },
+            index=X.index,
+        )
 
         # Save predictions if configured
         if self.config.save_predictions:

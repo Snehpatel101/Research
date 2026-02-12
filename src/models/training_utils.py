@@ -98,7 +98,9 @@ def evaluate_model(
             features_per_timeframe = ["open", "high", "low", "close", "volume"]
 
         model_config = getattr(model, "_config", {})
-        seq_len = int(model_config.get("sequence_length", 60)) if isinstance(model_config, dict) else 60
+        seq_len = (
+            int(model_config.get("sequence_length", 60)) if isinstance(model_config, dict) else 60
+        )
         dataset = container.get_multi_resolution_4d(
             split,
             seq_len=seq_len,

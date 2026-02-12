@@ -139,7 +139,9 @@ class TrainedModelRegistry:
         """Get number of registered models."""
         return len(self._entries)
 
-    def register(self, run_dir: Path | str) -> TrainedModelEntry:
+    def register(
+        self, run_dir: Path | str, train_date: datetime | None = None
+    ) -> TrainedModelEntry:
         """
         Register a trained model from its run directory.
 
@@ -148,6 +150,7 @@ class TrainedModelRegistry:
 
         Args:
             run_dir: Path to the model's run directory
+            train_date: Optional training timestamp. If None, uses current time.
 
         Returns:
             The created TrainedModelEntry
@@ -199,7 +202,7 @@ class TrainedModelRegistry:
             model_family=model_family,
             horizon=config.get("horizon", 20),
             run_dir=run_dir,
-            train_date=datetime.now(),  # Could be read from file timestamp
+            train_date=train_date or datetime.now(),
             feature_set=config.get("feature_set", "full"),
             metrics=metrics,
             config=config,
@@ -456,7 +459,9 @@ class TrainedModelRegistry:
             if info:
                 return str(info.get("family", "unknown"))
         except Exception as e:
-            logger.warning(f"Failed to get model family from registry for {model_name}: {e}. Using fallback.")
+            logger.warning(
+                f"Failed to get model family from registry for {model_name}: {e}. Using fallback."
+            )
             pass
 
         # Fallback based on name
@@ -464,8 +469,10 @@ class TrainedModelRegistry:
             return "boosting"
         if model_name in ("random_forest", "logistic", "svm"):
             return "classical"
-        if model_name in ("lstm", "gru", "tcn", "transformer", "patchtst"):
+        if model_name in ("lstm", "gru", "tcn", "tft", "nbeats", "inceptiontime", "resnet1d"):
             return "neural"
+        if model_name in ("transformer", "patchtst", "itransformer"):
+            return "transformer"
         if model_name in ("voting", "stacking", "blending"):
             return "ensemble"
         return "unknown"

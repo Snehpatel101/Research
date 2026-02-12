@@ -544,12 +544,13 @@ class MLFactory:
         self._log("  Generating labels...")
         from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 
-        # Create labels for each horizon
+        # Create labels for each horizon using user's labeling config
+        labeling = self.config.data.labeling
         for horizon in self.config.training.horizons:
             label_config = TripleBarrierConfig(
                 horizon=horizon,
-                upper_mult=2.0,
-                lower_mult=2.0,
+                upper_mult=labeling.upper_mult,
+                lower_mult=labeling.lower_mult,
             )
             labeler = TripleBarrierLabeler(label_config)
             labels = labeler.create_labels(df_features)
@@ -567,7 +568,9 @@ class MLFactory:
         if dropped > 0:
             self._log(f"  Dropped {dropped} rows with NaN labels")
 
-        self._log(f"  Pipeline complete: {len(df_features)} rows, {len(df_features.columns)} columns")
+        self._log(
+            f"  Pipeline complete: {len(df_features)} rows, {len(df_features.columns)} columns"
+        )
         self._log(f"  Label distribution: {df_features['label'].value_counts().to_dict()}")
 
         return df_features
