@@ -1,6 +1,0 @@
-{
-  "model_name": "lstm",
-  "horizon": "20",
-  "model_family": "neural",
-  "feature_set": "boosting_optimal"
-}

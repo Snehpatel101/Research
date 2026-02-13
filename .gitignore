@@ -114,8 +114,8 @@ reports/**/*.json
 results/**/*
 !results/README.md
 
-# Experiment runs (model training outputs)
-experiments/runs/
+# Experiment outputs (model training runs, test results, configs)
+experiments/
 
 # CatBoost cache
 catboost_info/

@@ -1,8 +1,0 @@
-{
-  "environment": "local_cpu",
-  "timestamp": "2026-02-12T12:17:54.219264",
-  "run_id": "gru_h20_20260212_121754_183084_6cae",
-  "model_name": "gru",
-  "device_resolved": "cpu",
-  "applied_overrides": {}
-}

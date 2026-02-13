@@ -1,8 +1,0 @@
-{
-  "environment": "local_cpu",
-  "timestamp": "2026-02-12T12:10:19.375460",
-  "run_id": "xgboost_h20_20260212_121019_373876_b66f",
-  "model_name": "xgboost",
-  "device_resolved": "cpu",
-  "applied_overrides": {}
-}

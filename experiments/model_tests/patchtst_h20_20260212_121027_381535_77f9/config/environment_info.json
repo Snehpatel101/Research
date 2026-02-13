@@ -1,8 +1,0 @@
-{
-  "environment": "local_cpu",
-  "timestamp": "2026-02-12T12:10:27.388735",
-  "run_id": "patchtst_h20_20260212_121027_381535_77f9",
-  "model_name": "patchtst",
-  "device_resolved": "cpu",
-  "applied_overrides": {}
-}

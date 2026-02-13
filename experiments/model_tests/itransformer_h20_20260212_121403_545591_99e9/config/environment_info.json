@@ -1,8 +1,0 @@
-{
-  "environment": "local_cpu",
-  "timestamp": "2026-02-12T12:14:03.547073",
-  "run_id": "itransformer_h20_20260212_121403_545591_99e9",
-  "model_name": "itransformer",
-  "device_resolved": "cpu",
-  "applied_overrides": {}
-}
