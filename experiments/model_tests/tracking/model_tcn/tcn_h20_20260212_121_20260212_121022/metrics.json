@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": "2026-02-12T12:18:20.449381",
+    "step": null,
+    "metrics": {
+      "val_accuracy": 0.46715841236389183,
+      "val_macro_f1": 0.30649586849830013,
+      "val_precision": 0.3251750193896642,
+      "val_recall": 0.3375063961957611,
+      "val_win_rate": 0.0,
+      "val_profit_factor": 0.0,
+      "test_accuracy": 0.46109256982258917,
+      "test_macro_f1": 0.31257197525269503
+    }
+  },
+  {
+    "timestamp": "2026-02-12T12:18:20.482107",
+    "step": null,
+    "metrics": {
+      "total_time_seconds": 477.6302421092987
+    }
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T13:03:23.955963",
+  "run_id": "resnet1d_h20_20260212_130323_920655_4e1e",
+  "model_name": "resnet1d",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}

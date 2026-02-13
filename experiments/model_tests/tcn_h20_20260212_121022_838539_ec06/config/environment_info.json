@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T12:10:22.840974",
+  "run_id": "tcn_h20_20260212_121022_838539_ec06",
+  "model_name": "tcn",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}

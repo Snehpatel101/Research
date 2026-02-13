@@ -1,0 +1,6 @@
+{
+  "model_name": "tft",
+  "horizon": "20",
+  "model_family": "neural",
+  "feature_set": "boosting_optimal"
+}

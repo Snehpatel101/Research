@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T19:34:27.229645",
+  "run_id": "catboost_h20_20260212_193427_212272_5f7a",
+  "model_name": "catboost",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}

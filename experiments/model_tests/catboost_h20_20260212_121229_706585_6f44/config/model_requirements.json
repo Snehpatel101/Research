@@ -1,0 +1,35 @@
+{
+  "model_name": "catboost",
+  "timestamp": "2026-02-12T12:12:29.709467",
+  "run_id": "catboost_h20_20260212_121229_706585_6f44",
+  "model_data_requirements": {
+    "family": "boosting",
+    "feature_set_recommended": "boosting_optimal",
+    "requires_scaling": false,
+    "scaler_type": "none",
+    "requires_sequences": false,
+    "sequence_length_default": 60,
+    "max_features": 100,
+    "supports_categorical": true,
+    "supports_missing": true,
+    "description": "CatBoost gradient boosting. Excellent categorical feature handling."
+  },
+  "configuration_comparison": {
+    "feature_set": {
+      "recommended": "boosting_optimal",
+      "configured": "boosting_optimal",
+      "match": true
+    },
+    "sequence_length": {
+      "default": 60,
+      "configured": 60,
+      "match": true
+    }
+  },
+  "runtime_properties": {
+    "model_family": "boosting",
+    "requires_sequences": false,
+    "requires_4d": false,
+    "requires_scaling": false
+  }
+}

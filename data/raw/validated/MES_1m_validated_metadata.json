@@ -1,0 +1,30 @@
+{
+  "symbol": "MES",
+  "source_file": "/Users/sneh/research/data/raw/MES_1m.parquet",
+  "ingestion_timestamp": "2026-02-12T12:01:29.595384",
+  "source_timezone": "UTC",
+  "raw_rows": 350464,
+  "rows_after_type_validation": 350464,
+  "validation": {
+    "total_rows": 350464,
+    "violations": {},
+    "fixes_applied": {},
+    "mode": "auto_fix",
+    "rows_after_validation": 350464,
+    "total_fixes_applied": 0
+  },
+  "final_rows": 350464,
+  "date_range": {
+    "start": "2020-01-01T17:00:00",
+    "end": "2020-12-31T15:59:00"
+  },
+  "columns": [
+    "datetime",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "symbol"
+  ]
+}

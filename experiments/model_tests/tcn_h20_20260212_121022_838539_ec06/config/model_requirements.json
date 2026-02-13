@@ -1,0 +1,35 @@
+{
+  "model_name": "tcn",
+  "timestamp": "2026-02-12T12:10:22.841125",
+  "run_id": "tcn_h20_20260212_121022_838539_ec06",
+  "model_data_requirements": {
+    "family": "neural",
+    "feature_set_recommended": "tcn_optimal",
+    "requires_scaling": true,
+    "scaler_type": "robust",
+    "requires_sequences": true,
+    "sequence_length_default": 120,
+    "max_features": 80,
+    "supports_categorical": false,
+    "supports_missing": false,
+    "description": "Temporal Convolutional Network. Dilated convolutions for long-range dependencies."
+  },
+  "configuration_comparison": {
+    "feature_set": {
+      "recommended": "tcn_optimal",
+      "configured": "boosting_optimal",
+      "match": false
+    },
+    "sequence_length": {
+      "default": 120,
+      "configured": 60,
+      "match": false
+    }
+  },
+  "runtime_properties": {
+    "model_family": "neural",
+    "requires_sequences": true,
+    "requires_4d": false,
+    "requires_scaling": true
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "max_epochs": 3,
+  "early_stopping_patience": 2,
+  "batch_size": 128,
+  "device": "cpu",
+  "mixed_precision": false
+}

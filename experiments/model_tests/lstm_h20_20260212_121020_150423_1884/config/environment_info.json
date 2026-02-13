@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T12:10:20.152035",
+  "run_id": "lstm_h20_20260212_121020_150423_1884",
+  "model_name": "lstm",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}

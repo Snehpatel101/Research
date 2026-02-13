@@ -1,0 +1,35 @@
+{
+  "model_name": "lightgbm",
+  "timestamp": "2026-02-12T12:11:27.342871",
+  "run_id": "lightgbm_h20_20260212_121127_323262_bd97",
+  "model_data_requirements": {
+    "family": "boosting",
+    "feature_set_recommended": "boosting_optimal",
+    "requires_scaling": false,
+    "scaler_type": "none",
+    "requires_sequences": false,
+    "sequence_length_default": 60,
+    "max_features": 100,
+    "supports_categorical": true,
+    "supports_missing": true,
+    "description": "LightGBM gradient boosting. Fast training with leaf-wise growth."
+  },
+  "configuration_comparison": {
+    "feature_set": {
+      "recommended": "boosting_optimal",
+      "configured": "boosting_optimal",
+      "match": true
+    },
+    "sequence_length": {
+      "default": 60,
+      "configured": 60,
+      "match": true
+    }
+  },
+  "runtime_properties": {
+    "model_family": "boosting",
+    "requires_sequences": false,
+    "requires_4d": false,
+    "requires_scaling": false
+  }
+}

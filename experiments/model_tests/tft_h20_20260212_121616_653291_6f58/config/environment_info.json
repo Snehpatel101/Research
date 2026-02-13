@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T12:16:16.655147",
+  "run_id": "tft_h20_20260212_121616_653291_6f58",
+  "model_name": "tft",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}

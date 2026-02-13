@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T12:18:24.007964",
+  "run_id": "inceptiontime_h20_20260212_121823_878722_63cf",
+  "model_name": "inceptiontime",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}

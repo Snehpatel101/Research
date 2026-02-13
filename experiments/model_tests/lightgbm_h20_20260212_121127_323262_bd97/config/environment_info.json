@@ -1,0 +1,8 @@
+{
+  "environment": "local_cpu",
+  "timestamp": "2026-02-12T12:11:27.341341",
+  "run_id": "lightgbm_h20_20260212_121127_323262_bd97",
+  "model_name": "lightgbm",
+  "device_resolved": "cpu",
+  "applied_overrides": {}
+}
