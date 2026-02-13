@@ -205,6 +205,73 @@
 
 ---
 
+## Financial Metrics (Backtest — Validation Set)
+
+Backtested 6 fast models using realistic MES futures simulation:
+- **Initial equity:** $100,000
+- **Commission:** $2.50/contract round-trip
+- **Slippage:** 1 tick ($1.25)
+- **Position sizing:** 1 contract fixed
+- **Max holding period:** 20 bars
+- **Circuit breaker:** 5 consecutive losses halts trading
+
+### Backtest Summary Table
+
+| Model | Sharpe | Sortino | Max DD% | Win Rate | Profit Factor | Total PnL | Trades | Expectancy | Calmar |
+|-------|--------|---------|---------|----------|---------------|-----------|--------|------------|--------|
+| CatBoost | **1.35** | **1.43** | **-0.15%** | **56.0%** | **2.49** | **+$340.68** | 25 | **$13.56** | **2.54** |
+| PatchTST | -1.00 | -1.05 | -0.14% | 39.5% | 0.79 | -$113.80 | 38 | -$3.04 | -2.88 |
+| LightGBM | -0.73 | -0.65 | -0.40% | 48.7% | 0.70 | -$237.66 | 39 | -$6.14 | -0.59 |
+| N-BEATS | -1.25 | -1.17 | -0.31% | 0.0% | 0.00 | -$180.03 | 6 | -$30.30 | -1.44 |
+| XGBoost | -1.16 | -0.99 | -0.43% | 37.8% | 0.56 | -$402.97 | 45 | -$8.99 | -0.91 |
+| iTransformer | -1.17 | -1.06 | -0.62% | 44.4% | 0.45 | -$507.19 | 36 | -$14.14 | -0.65 |
+
+### By Sharpe Ratio
+| Rank | Model | Sharpe | Sortino |
+|------|-------|--------|---------|
+| 1 | CatBoost | 1.35 | 1.43 |
+| 2 | LightGBM | -0.73 | -0.65 |
+| 3 | PatchTST | -1.00 | -1.05 |
+| 4 | XGBoost | -1.16 | -0.99 |
+| 5 | iTransformer | -1.17 | -1.06 |
+| 6 | N-BEATS | -1.25 | -1.17 |
+
+### By Profitability
+| Rank | Model | PnL | Return% | Final Equity |
+|------|-------|-----|---------|--------------|
+| 1 | CatBoost | +$340.68 | +0.34% | $100,340.68 |
+| 2 | PatchTST | -$113.80 | -0.11% | $99,886.20 |
+| 3 | N-BEATS | -$180.03 | -0.18% | $99,819.97 |
+| 4 | LightGBM | -$237.66 | -0.24% | $99,762.34 |
+| 5 | XGBoost | -$402.97 | -0.40% | $99,597.03 |
+| 6 | iTransformer | -$507.19 | -0.51% | $99,492.81 |
+
+### Risk Metrics
+| Model | Max DD% | DD Duration | VaR 95% | CVaR 95% | Payoff Ratio |
+|-------|---------|-------------|---------|----------|--------------|
+| CatBoost | -0.15% | 40 bars | 0.027% | 0.038% | 1.96 |
+| PatchTST | -0.14% | 56 bars | 0.038% | 0.057% | 1.20 |
+| N-BEATS | -0.31% | 50 bars | 0.033% | 0.052% | 0.00 |
+| LightGBM | -0.40% | 95 bars | 0.035% | 0.056% | 0.74 |
+| XGBoost | -0.43% | 224 bars | 0.032% | 0.056% | 0.92 |
+| iTransformer | -0.62% | 273 bars | 0.032% | 0.059% | 0.56 |
+
+### Backtest Observations
+
+1. **CatBoost is the only profitable model.** Sharpe 1.35, Sortino 1.43, profit factor 2.49, and 56% win rate. Despite having the lowest classification accuracy, its ordered boosting + high recall (catches more signals) translates to actual trading profit.
+
+2. **Classification accuracy does NOT equal trading profitability.** N-BEATS/TFT had the highest accuracy (0.526) but N-BEATS lost money when traded. CatBoost had the lowest accuracy (0.44) but was the only profitable model. F1 and recall matter more for trading.
+
+3. **Circuit breaker activated on all models** after 5 consecutive losses, limiting total trades to 6-45. In production, this is protective but means only a small fraction of the validation period was actually traded.
+
+4. **Drawdowns are small** (0.14-0.62%) because the circuit breaker halts trading early. In a full run without circuit breakers, drawdowns would be significantly larger.
+
+5. **LightGBM has the best classification metrics** (highest val F1 at 0.41) but only 48.7% win rate when traded. The gap between classification and trading performance is a common issue in financial ML.
+
+6. **Models not backtested (LSTM, GRU, TCN, InceptionTime, ResNet1D, TFT):** These required longer training times. Their financial metrics would need a separate run with more time budget.
+
+---
+
 ## Key Observations
 
 1. **Accuracy vs F1 tradeoff:** TFT/N-BEATS have highest accuracy (0.526) but lowest F1 (0.230). They're likely predicting the majority class. LightGBM has highest F1 (0.417) with lower accuracy (0.482) — it's actually differentiating the 3 classes better.
@@ -243,5 +310,23 @@ data_path: runs/20260212_120129_588531_22ff/data/splits/scaled/
 
 ---
 
+### Backtest Configuration
+
+```yaml
+initial_equity: 100000
+commission_per_contract: 2.50
+slippage_ticks: 1
+tick_value: 1.25
+point_value: 5.0
+position_sizing: fixed (1 contract)
+max_holding_period: 20 bars
+circuit_breaker: 5 consecutive losses
+backtest_set: validation (5,753 samples)
+models_backtested: 6/12 (fast models only)
+```
+
+---
+
 *Generated: 2026-02-12*
 *All 12/12 models confirmed working*
+*6/12 models backtested with financial metrics*
