@@ -333,8 +333,8 @@ class CatBoostModel(BaseModel):
         else:
             params["task_type"] = "CPU"
             thread_count = config.get("thread_count", -1)
-            if thread_count == -1:
-                thread_count = 0  # CatBoost uses 0 for all cores
+            # CatBoost accepts -1 for "use all cores". Do NOT convert to 0,
+            # as thread_count=0 crashes CatBoost 1.2.x with an unsigned int cast error.
             params["thread_count"] = thread_count
 
         return CatBoostClassifier(**params)
