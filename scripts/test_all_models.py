@@ -97,7 +97,7 @@ def run_data_pipeline():
     return scaled_dir, config.run_id
 
 
-def test_model(model_name, scaled_dir, horizon=20, max_epochs=3):
+def test_model(model_name, scaled_dir, horizon=20, max_epochs=3, device="auto"):
     """Test a single model. Returns (success, duration, error_msg)."""
     start = time.time()
     try:
@@ -120,8 +120,8 @@ def test_model(model_name, scaled_dir, horizon=20, max_epochs=3):
                 "max_epochs": max_epochs,
                 "early_stopping_patience": 2,
                 "batch_size": 128,
-                "device": "cpu",
-                "mixed_precision": False,
+                "device": device,
+                "mixed_precision": device != "cpu",
             },
             output_dir=PROJECT_ROOT / "experiments" / "model_tests",
         )
@@ -146,7 +146,7 @@ def test_model(model_name, scaled_dir, horizon=20, max_epochs=3):
         return False, duration, error_msg, tb
 
 
-def test_model_group(group_name, models, scaled_dir):
+def test_model_group(group_name, models, scaled_dir, max_epochs=3, device="auto"):
     """Test a group of models and print results."""
     print(f"\n{'=' * 70}")
     print(f"Testing {group_name.upper()} models: {models}")
@@ -155,7 +155,9 @@ def test_model_group(group_name, models, scaled_dir):
     results = {}
     for model_name in models:
         print(f"  [{model_name}] Training...", end=" ", flush=True)
-        success, duration, error, extra = test_model(model_name, scaled_dir)
+        success, duration, error, extra = test_model(
+            model_name, scaled_dir, max_epochs=max_epochs, device=device,
+        )
 
         if success:
             metrics = extra
@@ -228,6 +230,10 @@ def main():
         "--max-epochs", type=int, default=3,
         help="Max epochs per model (default: 3 for quick test)",
     )
+    parser.add_argument(
+        "--device", type=str, default="auto",
+        help="Device: auto, cpu, cuda (default: auto)",
+    )
     args = parser.parse_args()
 
     # Step 1: Get or create data
@@ -248,7 +254,10 @@ def main():
 
     all_results = {}
     for group_name, models in groups_to_test.items():
-        group_results = test_model_group(group_name, models, scaled_dir)
+        group_results = test_model_group(
+            group_name, models, scaled_dir,
+            max_epochs=args.max_epochs, device=args.device,
+        )
         all_results.update(group_results)
 
     # Step 3: Summary
