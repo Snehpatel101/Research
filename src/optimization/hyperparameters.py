@@ -643,6 +643,8 @@ class HyperparameterOptimizer:
         trial_history: list[tuple[dict[str, Any], float]] = []
 
         # Define objective
+        is_neural = self._is_neural_model(model_name)
+
         def objective(trial: optuna.Trial) -> float:
             params = suggest_hyperparameters(trial, model_name, space)
 
@@ -668,6 +670,22 @@ class HyperparameterOptimizer:
             except Exception as e:
                 logger.warning(f"Trial {trial.number} failed: {e}")
                 return 0.0
+
+            finally:
+                # Free GPU memory between trials to prevent fragmentation
+                if is_neural:
+                    import gc
+
+                    if "model" in locals():
+                        del model
+                    gc.collect()
+                    try:
+                        import torch
+
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                    except ImportError:
+                        pass
 
         # Create study
         sampler = TPESampler(seed=self.random_state)
