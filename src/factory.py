@@ -637,9 +637,23 @@ class MLFactory:
             canonical_sizing = self.config.evaluation.position_sizing
             local_sizing = position_sizing_map.get(canonical_sizing, canonical_sizing)
 
-            backtest_config = BacktestConfig(
-                position_sizing=local_sizing,
-            )
+            # Select contract specs based on symbol
+            symbol = self.config.data.symbol.upper()
+            if symbol == "MGC":
+                backtest_config = BacktestConfig.for_mgc(
+                    position_sizing=local_sizing,
+                    contract_symbol="MGC",
+                )
+            elif symbol == "MES":
+                backtest_config = BacktestConfig.for_mes(
+                    position_sizing=local_sizing,
+                    contract_symbol="MES",
+                )
+            else:
+                backtest_config = BacktestConfig(
+                    position_sizing=local_sizing,
+                    contract_symbol=symbol,
+                )
             backtester = Backtester(predictions=predictions_df, prices=df, config=backtest_config)
 
             # Run backtest
