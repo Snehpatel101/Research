@@ -4,6 +4,9 @@
 # Colab pre-installs: numpy, pandas, scipy, scikit-learn, torch, tqdm,
 # pyarrow, PyYAML, matplotlib, joblib. We only install what's missing.
 
+# Pin Colab pre-installed packages to prevent upgrades that break google-colab
+pandas==2.2.2
+
 # Boosting models
 xgboost>=2.0.0
 lightgbm>=4.0.0
@@ -20,5 +23,7 @@ PyWavelets>=1.5.0
 typer>=0.9.0
 rich>=13.0.0
 
-# Online drift detection (optional, imported conditionally)
-river>=0.21.0
+# Online drift detection (river) is NOT included here because
+# river>=0.21.0 requires pandas>=2.2.3, which conflicts with
+# Colab's pinned pandas==2.2.2. Install separately if needed:
+#   pip install river --no-deps
