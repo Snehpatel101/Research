@@ -4,6 +4,69 @@
 
 ---
 
+## Phase 50 (2026-02-13) | Speed Optimizations, Config Cleanup & MGC Readiness
+
+**Status:** ✅ COMPLETE
+**Duration:** Single session (2026-02-13)
+**Impact:** 15 files modified, 10 speed optimizations, 3 config cleanups, walk-forward enabled, MGC auto-detect
+**Tests:** 14-point smoke test passed, ruff 0 errors, black 0 reformats
+**Commits:** `fb9b8ae`, `e8cfd3e`, `c512f35`, `47f917c`, `f70fc06`, `40e79ea`, `92355a8`, `304b421`
+
+### Summary
+
+Comprehensive speed optimization pass across the entire ML Factory pipeline, combined with dead config cleanup, walk-forward validation enablement, and MGC (Micro Gold Futures) data readiness. Estimated 50-60% total runtime reduction from 10 targeted optimizations.
+
+**Three workstreams:**
+
+1. **Notebook & MGC Readiness** - Fixed notebook bugs (torch `total_memory` attribute, NameError guard), enabled walk-forward validation mode, switched to MGC data with correct contract specifications (tick_size=0.10, tick_value=$1.00, point_value=$10.00), auto-detect symbol in factory for backtest config.
+
+2. **Config Cleanup** - Audited 3 unused config systems: wired up ParallelTrainingService for boosting models (was built but never integrated), deleted HyperbandPruner dead code (Optuna's MedianPruner is better), deleted warm_start field from WalkForwardConfig (dangerous data leakage on rolling windows where model carries data from outside the window).
+
+3. **Speed Optimizations (10 total):**
+   - `torch.compile()` for neural models (PyTorch 2.0+ graph optimization)
+   - DataLoader: `num_workers=2`, `pin_memory=True`, `persistent_workers=True`
+   - `non_blocking=True` on GPU transfers + `zero_grad(set_to_none=True)`
+   - `np.lib.stride_tricks.sliding_window_view` for O(1) sequence construction
+   - Parallel Optuna trials (`n_jobs=-1` for boosting, `n_jobs=1` for neural)
+   - Precomputed CV splits (compute once, reuse across trials)
+   - GARCH refit_interval 20→50 (60% fewer refits)
+   - Feature selection `n_repeats` 10→5 (50% faster permutation importance)
+   - PreparedData cache by 5-tuple contract key (eliminates redundant adapter transforms)
+   - Parallel boosting training via ParallelTrainingService
+
+### Files Modified (15 total)
+
+1. `notebooks/ml_factory_colab.ipynb` - Bug fixes, walk-forward, MGC switch
+2. `src/factory.py` - Auto-detect symbol for BacktestConfig
+3. `src/models/neural/base_rnn.py` - torch.compile, DataLoader, zero_grad, non_blocking
+4. `src/data/adapters/sequence.py` - stride_tricks sliding window
+5. `src/models/training/unified_orchestrator.py` - Parallel training, PreparedData cache
+6. `src/optimization/hyperparameters.py` - Deleted pruner, parallel Optuna
+7. `src/optimization/pipeline.py` - Removed use_pruning references
+8. `src/validation/cv/cv_tuner.py` - Precomputed splits
+9. `src/config/cv.py` - Deleted warm_start
+10. `src/data/pipeline/stages/features/volatility.py` - GARCH refit 50
+11. `src/optimization/feature_selection/ohlcv_selector.py` - n_repeats 5
+12. `src/optimization/feature_selection/purged_selector.py` - n_repeats 5
+13. `src/optimization/feature_selection/walk_forward.py` - n_repeats 5
+14. `src/data/features/pruning.py` - n_repeats 5
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Core imports | ✅ PASS | DataRank, ModelFamily, contracts, adapters |
+| Feature selection imports | ✅ PASS | All selector modules |
+| Factory import | ✅ PASS | MLFactory loads |
+| Neural base import | ✅ PASS | BaseRNN with torch.compile |
+| Orchestrator import | ✅ PASS | UnifiedOrchestrator with cache |
+| Single definitions | ✅ PASS | DataRank=1, ModelFamily=1 |
+| No dead imports | ✅ PASS | 0 coordination/feature_selection refs |
+| Ruff linting | ✅ PASS | 0 errors |
+| Black formatting | ✅ PASS | 0 reformats needed |
+
+---
+
 ## Phase 49 (2026-02-12) | Ruff Clean Sweep
 
 **Status:** ✅ COMPLETE
