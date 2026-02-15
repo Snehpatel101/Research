@@ -282,7 +282,7 @@ class WalkForwardFeatureSelector:
             rf,
             score_X,
             score_y,
-            n_repeats=10,
+            n_repeats=5,
             random_state=self.random_state,
             n_jobs=-1,
             sample_weight=score_w,

@@ -36,6 +36,7 @@ Reference: Bergstra et al. (2011) "Algorithms for Hyper-Parameter Optimization"
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -634,8 +635,9 @@ class HyperparameterOptimizer:
         except Exception as e:
             logger.warning(f"Failed to compute default score: {e}")
 
-        # Trial history
+        # Trial history (protected by lock for thread-safe parallel trials)
         trial_history: list[tuple[dict[str, Any], float]] = []
+        history_lock = threading.Lock()
 
         # Define objective
         is_neural = self._is_neural_model(model_name)
@@ -659,7 +661,8 @@ class HyperparameterOptimizer:
                 preds = model.predict(X_val)
                 score = score_fn(y_val, preds)
 
-                trial_history.append((params.copy(), score))
+                with history_lock:
+                    trial_history.append((params.copy(), score))
                 return score
 
             except Exception as e:
@@ -701,10 +704,14 @@ class HyperparameterOptimizer:
         )
 
         # Run optimization
+        # Boosting/classical models: parallel trials across CPU cores
+        # Neural models: sequential to avoid GPU memory contention
+        n_jobs = 1 if is_neural else -1
         study.optimize(
             objective,
             n_trials=self.n_trials,
             timeout=self.timeout,
+            n_jobs=n_jobs,
             show_progress_bar=(self.verbose >= 1),
         )
 

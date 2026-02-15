@@ -409,7 +409,7 @@ class FeaturePruner:
                     model,
                     X,
                     y,
-                    n_repeats=10,
+                    n_repeats=5,
                     random_state=self.random_state,
                     scoring=scoring,
                     n_jobs=self.n_jobs,

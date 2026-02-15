@@ -230,6 +230,11 @@ class UnifiedTrainingOrchestrator:
         self._oof_predictions: dict[str, OOFPrediction] = {}
         self._trained_models: dict[str, Any] = {}
 
+        # PreparedData cache: keyed by contract properties (rank, seq_len, feature_mode,
+        # mtf_mode, scaler) so models with identical data requirements share preparation.
+        # Biggest win: 3 boosting models (all rank 2) prepare once, reuse 3x.
+        self._prepared_cache: dict[tuple, PreparedData] = {}
+
         logger.info("Initialized UnifiedTrainingOrchestrator")
         logger.info(f"  Run ID: {self.run_id}")
         logger.info(f"  Mode: {config.training_mode}")
@@ -275,6 +280,69 @@ class UnifiedTrainingOrchestrator:
         else:
             logger.warning(f"Unknown CV method: {cv_method}, using PurgedKFold")
             return PurgedKFold(cv_config)
+
+    def _prepare_with_cache(
+        self,
+        df: pd.DataFrame,
+        model_name: str,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> PreparedData:
+        """
+        Prepare data with caching by model contract properties.
+
+        Models sharing the same data rank, sequence length, feature mode,
+        MTF mode, and scaler type produce identical PreparedData, so we
+        prepare once and reuse. This mainly benefits boosting models
+        (all rank 2, identical contracts) — prepare once, reuse 3x.
+
+        Neural models with different sequence lengths or feature modes
+        get separate cache entries automatically.
+
+        Args:
+            df: Input DataFrame
+            model_name: Model name (determines contract/adapter)
+            additional_dfs: Optional additional timeframe DataFrames
+
+        Returns:
+            PreparedData (from cache if available)
+        """
+        from src.core.contracts import get_model_contract
+
+        contract = get_model_contract(model_name)
+        cache_key = (
+            contract.input_rank.value,
+            contract.sequence_length,
+            contract.feature_mode.value,
+            contract.mtf_mode.value,
+            contract.scaler_type,
+        )
+
+        if cache_key in self._prepared_cache:
+            logger.debug(
+                f"Cache hit for {model_name} (rank={contract.input_rank.value}, "
+                f"seq={contract.sequence_length})"
+            )
+            return self._prepared_cache[cache_key]
+
+        prepared = self._data_preparer.prepare(
+            df=df,
+            model_name=model_name,
+            additional_dfs=additional_dfs,
+        )
+        self._prepared_cache[cache_key] = prepared
+        logger.debug(
+            f"Cached PreparedData for {model_name} (rank={contract.input_rank.value}, "
+            f"seq={contract.sequence_length})"
+        )
+        return prepared
+
+    def _clear_prepared_cache(self) -> None:
+        """Clear PreparedData cache to free memory after a horizon completes."""
+        if self._prepared_cache:
+            n_entries = len(self._prepared_cache)
+            self._prepared_cache.clear()
+            gc.collect()
+            logger.debug(f"Cleared {n_entries} PreparedData cache entries")
 
     def _pre_training_validation(
         self,
@@ -663,6 +731,9 @@ class UnifiedTrainingOrchestrator:
                     additional_dfs=additional_dfs,
                 )
 
+            # Clear PreparedData cache after each horizon to free memory
+            self._clear_prepared_cache()
+
     def _train_boosting_parallel(
         self,
         df: pd.DataFrame,
@@ -683,11 +754,13 @@ class UnifiedTrainingOrchestrator:
             additional_dfs: Optional additional timeframe DataFrames
         """
         # Prepare data and build training requests for each boosting model
+        # All boosting models share the same adapter ("tabular", rank 2),
+        # so data is prepared once via cache and reused
         prepared_map: dict[str, PreparedData] = {}
         training_requests: list[ModelTrainingRequest] = []
 
         for model_name in boosting_models:
-            prepared = self._data_preparer.prepare(
+            prepared = self._prepare_with_cache(
                 df=df,
                 model_name=model_name,
                 additional_dfs=additional_dfs,
@@ -773,8 +846,8 @@ class UnifiedTrainingOrchestrator:
         """
         logger.info(f"\nTraining {model_name}...")
 
-        # Prepare data using PHASE_2 adapters
-        prepared = self._data_preparer.prepare(
+        # Prepare data using PHASE_2 adapters (with caching by adapter type)
+        prepared = self._prepare_with_cache(
             df=df,
             model_name=model_name,
             additional_dfs=additional_dfs,
@@ -805,10 +878,8 @@ class UnifiedTrainingOrchestrator:
             f"time={result.training_time_seconds:.1f}s"
         )
 
-        # Clean up prepared data to prevent memory fragmentation (Phase 37 fix)
-        # Each PreparedData can be 500MB-2GB for neural models with MTF
-        del prepared
-        gc.collect()
+        # Note: PreparedData cleanup is handled by _clear_prepared_cache()
+        # at the end of each horizon, since cached entries may be shared
 
     def _train_single_model(
         self,

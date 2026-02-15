@@ -507,7 +507,7 @@ class OHLCVFeatureSelector:
                 rf,
                 X_test,
                 y_test,
-                n_repeats=10,
+                n_repeats=5,
                 random_state=self.random_state + fold_idx,
                 n_jobs=-1,
             )

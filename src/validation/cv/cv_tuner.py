@@ -91,11 +91,15 @@ class TimeSeriesOptunaTuner:
 
         score_fn = get_score_fn(self.metric)
 
+        # Precompute CV splits once — splits are deterministic so recomputing
+        # them inside every trial is wasted work
+        self._precomputed_splits = list(self.cv.split(X, y))
+
         def objective(trial: optuna.Trial) -> float:
             params = self._sample_params(trial, param_space)
 
             scores = []
-            for train_idx, val_idx in self.cv.split(X, y):
+            for train_idx, val_idx in self._precomputed_splits:
                 X_train = X.iloc[train_idx].values
                 X_val = X.iloc[val_idx].values
                 y_train = y.iloc[train_idx].values

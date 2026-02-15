@@ -218,42 +218,30 @@ class SequenceAdapter(BaseAdapter):
         # Calculate number of sequences based on stride
         n_sequences = (n_rows - seq_len) // self.stride + 1
 
-        # Pre-allocate arrays
-        X = np.empty((n_sequences, seq_len, n_features), dtype=np.float32)
-        y = np.empty((n_sequences,), dtype=np.int64)
-        original_indices = np.empty((n_sequences,), dtype=np.int64)
-
         # Extract data arrays once (more efficient than repeated iloc)
         features = df[feature_cols].values.astype(np.float32)
         labels = df[self.label_column].values
         df_indices = df.index.values
 
-        # Check for weights
+        # Build sequences using vectorized sliding window (no Python loop)
+        # sliding_window_view creates a view: (n_windows, n_features, seq_len)
+        windows = np.lib.stride_tricks.sliding_window_view(features, seq_len, axis=0)
+        # Select at stride intervals, transpose to (n_sequences, seq_len, n_features),
+        # and copy to own the memory (views from stride_tricks can't be reshaped)
+        X = windows[:: self.stride].transpose(0, 2, 1).copy()
+
+        # Vectorized label, index, and weight extraction
+        # Label position is at the LAST timestep of each window
+        label_positions = np.arange(n_sequences) * self.stride + (seq_len - 1)
+        y = labels[label_positions].astype(np.int64)
+        original_indices = df_indices[label_positions].astype(np.int64)
+
+        # Extract weights at label positions (vectorized)
         has_weights = self.weight_column and self.weight_column in df.columns
         if has_weights:
-            weights_arr = df[self.weight_column].values.astype(np.float32)
-            weights = np.empty((n_sequences,), dtype=np.float32)
+            weights = df[self.weight_column].values.astype(np.float32)[label_positions]
         else:
-            weights_arr = None
             weights = None
-
-        # Build sequences
-        for i in range(n_sequences):
-            start = i * self.stride
-            end = start + seq_len
-
-            # Window of features: [start, end)
-            X[i] = features[start:end]
-
-            # Label at LAST timestep of window (end - 1)
-            y[i] = labels[end - 1]
-
-            # Track original index of the label row
-            original_indices[i] = df_indices[end - 1]
-
-            # Weight at label position
-            if has_weights and weights_arr is not None and weights is not None:
-                weights[i] = weights_arr[end - 1]
 
         return X, y, weights, original_indices
 

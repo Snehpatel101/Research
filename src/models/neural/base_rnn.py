@@ -12,6 +12,7 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import time
 from abc import abstractmethod
@@ -309,8 +310,7 @@ class BaseRNNModel(BaseModel):
             "warmup_epochs": 5,
             "device": "auto",  # Auto-detect GPU/CPU
             "mixed_precision": True,  # Use GPU-appropriate precision
-            # Memory optimization: num_workers=0 prevents 4x memory duplication
-            # pin_memory=False reduces memory for large sequence tensors
+            # DataLoader workers/pinning auto-tuned in _create_dataloader for CUDA
             "num_workers": 0,
             "pin_memory": False,
         }
@@ -355,6 +355,11 @@ class BaseRNNModel(BaseModel):
         # Create network
         self._model = self._create_network(n_features)
         self._model = self._model.to(self._device)
+
+        # Attempt torch.compile for potential speedup (PyTorch 2.0+)
+        if hasattr(torch, "compile"):
+            with contextlib.suppress(Exception):
+                self._model = torch.compile(self._model)
 
         # Log bidirectional warning if applicable (only logged once per model)
         self._log_bidirectional_warning()
@@ -690,15 +695,19 @@ class BaseRNNModel(BaseModel):
         else:
             dataset = TensorDataset(X_tensor, y_tensor)
 
-        # Note: num_workers=0 to avoid memory multiplication with sequence data.
-        # Each worker duplicates the dataset, causing 4x memory usage with num_workers=4.
-        # For sequence models with large tensors, single-threaded loading is safer.
+        # CUDA-optimized DataLoader settings
+        use_cuda = self._device.type == "cuda"
+        num_workers = config.get("num_workers", 2 if use_cuda else 0)
+        pin_memory = config.get("pin_memory", use_cuda)
+        persistent_workers = num_workers > 0
+
         return DataLoader(
             dataset,
             batch_size=config.get("batch_size", 256),
             shuffle=shuffle,
-            num_workers=config.get("num_workers", 0),
-            pin_memory=config.get("pin_memory", False),
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers=persistent_workers,
             drop_last=False,
         )
 
@@ -753,19 +762,21 @@ class BaseRNNModel(BaseModel):
         total = 0
         gradient_norms: list[float] = []
 
+        non_blocking = self._device.type == "cuda"
+
         for batch in loader:
             if len(batch) == 3:
                 X_batch, y_batch, weights = batch
-                X_batch = X_batch.to(self._device)
-                y_batch = y_batch.to(self._device)
-                weights = weights.to(self._device)
+                X_batch = X_batch.to(self._device, non_blocking=non_blocking)
+                y_batch = y_batch.to(self._device, non_blocking=non_blocking)
+                weights = weights.to(self._device, non_blocking=non_blocking)
             else:
                 X_batch, y_batch = batch
-                X_batch = X_batch.to(self._device)
-                y_batch = y_batch.to(self._device)
+                X_batch = X_batch.to(self._device, non_blocking=non_blocking)
+                y_batch = y_batch.to(self._device, non_blocking=non_blocking)
                 weights = None
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             # Forward pass with mixed precision
             with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
@@ -833,11 +844,13 @@ class BaseRNNModel(BaseModel):
         correct = 0
         total = 0
 
+        non_blocking = self._device.type == "cuda"
+
         with torch.no_grad():
             for batch in loader:
                 X_batch, y_batch = batch[0], batch[1]
-                X_batch = X_batch.to(self._device)
-                y_batch = y_batch.to(self._device)
+                X_batch = X_batch.to(self._device, non_blocking=non_blocking)
+                y_batch = y_batch.to(self._device, non_blocking=non_blocking)
 
                 with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                     logits = self._model(X_batch)

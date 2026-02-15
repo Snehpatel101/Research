@@ -520,7 +520,7 @@ def _fit_garch_rolling(
     p: int = 1,
     q: int = 1,
     forecast_horizon: int = 1,
-    refit_interval: int = 20,
+    refit_interval: int = 50,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Fit rolling GARCH(p,q) models and generate volatility forecasts.
@@ -540,7 +540,7 @@ def _fit_garch_rolling(
         ARCH lag order for squared residuals
     forecast_horizon : int, default 1
         Number of steps ahead to forecast
-    refit_interval : int, default 20
+    refit_interval : int, default 50
         Fit GARCH model every N bars (Phase 28-3 optimization).
         Set to 1 for original behavior (fit every bar).
         Values 10-50 recommended for balance of speed vs accuracy.
@@ -629,7 +629,7 @@ def add_garch_features(
     forecast_horizon: int = 5,
     window: int = 100,
     timeframe: str = "5min",
-    refit_interval: int = 20,
+    refit_interval: int = 50,
 ) -> pd.DataFrame:
     """
     Add GARCH(p,q) volatility forecast features.
@@ -668,11 +668,11 @@ def add_garch_features(
         Minimum window for GARCH estimation
     timeframe : str, default '5min'
         Bar timeframe for annualization
-    refit_interval : int, default 20
+    refit_interval : int, default 50
         Fit GARCH model every N bars (Phase 28-3 optimization).
         Set to 1 for original behavior (fit every bar).
         Values 10-50 recommended for balance of speed vs accuracy.
-        Default 20 provides ~10-20x speedup with minimal accuracy loss.
+        Default 50 provides ~25-50x speedup with minimal accuracy loss.
 
     Returns
     -------
