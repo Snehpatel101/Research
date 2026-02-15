@@ -323,7 +323,6 @@ class WalkForwardConfig(BaseConfig):
 
     # Training-specific settings
     retrain_on_each_window: bool = True
-    warm_start: bool = False
 
     def validate(self) -> list[str]:
         """Validate walk-forward configuration."""

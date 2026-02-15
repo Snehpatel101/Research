@@ -44,7 +44,6 @@ from typing import Any
 
 import numpy as np
 import optuna
-from optuna.pruners import HyperbandPruner
 from optuna.samplers import TPESampler
 
 from src.core import (
@@ -488,14 +487,12 @@ class HyperparameterOptimizer:
     """
     Optuna-based hyperparameter optimizer for ML Factory models.
 
-    Uses TPESampler for efficient exploration and HyperbandPruner for
-    early stopping of unpromising trials (neural networks).
+    Uses TPESampler for efficient exploration of hyperparameter spaces.
 
     Args:
         n_trials: Number of optimization trials (default: 100)
         cv_folds: Cross-validation folds for evaluation (default: 3)
         scoring: Scoring metric ("f1_weighted", "accuracy") (default: "f1_weighted")
-        use_pruning: Enable Hyperband pruning for neural models (default: True)
         random_state: Random seed for reproducibility (default: 42)
         timeout: Optional timeout in seconds per trial
         verbose: Verbosity level (0=silent, 1=progress, 2=debug)
@@ -516,7 +513,6 @@ class HyperparameterOptimizer:
         n_trials: int = DEFAULT_HYPERPARAM_TRIALS,
         cv_folds: int = 3,
         scoring: str = "f1_weighted",
-        use_pruning: bool = True,
         random_state: int = DEFAULT_OPTUNA_RANDOM_STATE,
         timeout: int | None = None,
         verbose: int = 1,
@@ -524,7 +520,6 @@ class HyperparameterOptimizer:
         self.n_trials = n_trials
         self.cv_folds = cv_folds
         self.scoring = scoring
-        self.use_pruning = use_pruning
         self.random_state = random_state
         self.timeout = timeout
         self.verbose = verbose
@@ -690,16 +685,6 @@ class HyperparameterOptimizer:
         # Create study
         sampler = TPESampler(seed=self.random_state)
 
-        # Use Hyperband pruner for neural models
-        if self.use_pruning and self._is_neural_model(model_name):
-            pruner = HyperbandPruner(
-                min_resource=1,
-                max_resource=self.n_trials,
-                reduction_factor=3,
-            )
-        else:
-            pruner = None
-
         # Configure storage for study persistence
         if storage_path is not None:
             storage_dir = Path(storage_path).parent
@@ -711,7 +696,6 @@ class HyperparameterOptimizer:
         study = optuna.create_study(
             direction="maximize",
             sampler=sampler,
-            pruner=pruner,
             storage=storage,
             load_if_exists=True,
         )

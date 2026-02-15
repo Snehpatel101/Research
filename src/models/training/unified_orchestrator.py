@@ -615,52 +615,200 @@ class UnifiedTrainingOrchestrator:
         3. Optionally optimizes hyperparameters
         4. Trains model and generates OOF predictions
 
+        Boosting models (xgboost, lightgbm, catboost) are CPU-bound and trained
+        in parallel via ParallelTrainingService. Neural/transformer models remain
+        sequential to avoid GPU contention.
+
         Args:
             df: Input DataFrame with features and labels
             additional_dfs: Optional additional timeframe DataFrames
         """
+        from src.core.contracts import get_model_contract
+
         for horizon in self.config.horizons:
             logger.info(f"\n--- Horizon {horizon} ---")
 
+            # Separate boosting (CPU, parallelizable) from neural/transformer (GPU, sequential)
+            boosting_models = []
+            sequential_models = []
             for model_name in self.config.models:
-                logger.info(f"\nTraining {model_name}...")
+                contract = get_model_contract(model_name)
+                if contract.model_family == "boosting":
+                    boosting_models.append(model_name)
+                else:
+                    sequential_models.append(model_name)
 
-                # Prepare data using PHASE_2 adapters
-                prepared = self._data_preparer.prepare(
+            # Train boosting models in parallel (if 2+ models)
+            if len(boosting_models) >= 2:
+                logger.info(
+                    f"\nTraining {len(boosting_models)} boosting models in parallel: "
+                    f"{boosting_models}"
+                )
+                self._train_boosting_parallel(
+                    df=df,
+                    horizon=horizon,
+                    boosting_models=boosting_models,
+                    additional_dfs=additional_dfs,
+                )
+            else:
+                # Single boosting model trains sequentially (no parallelism benefit)
+                sequential_models = boosting_models + sequential_models
+
+            # Train non-boosting models sequentially (GPU contention)
+            for model_name in sequential_models:
+                self._train_model_sequential(
                     df=df,
                     model_name=model_name,
+                    horizon=horizon,
                     additional_dfs=additional_dfs,
                 )
 
-                logger.info(f"  Data prepared: {prepared.summary()}")
+    def _train_boosting_parallel(
+        self,
+        df: pd.DataFrame,
+        horizon: int,
+        boosting_models: list[str],
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> None:
+        """
+        Train boosting models in parallel using ParallelTrainingService.
 
-                # Train model
-                result = self._train_single_model(
-                    model_name=model_name,
-                    prepared=prepared,
-                    horizon=horizon,
-                )
+        Prepares data for each model, submits training requests in parallel,
+        then processes results (calibration, OOF generation, storage).
 
-                key = f"{model_name}_h{horizon}"
-                self._model_results[key] = result
+        Args:
+            df: Input DataFrame with features and labels
+            horizon: Prediction horizon
+            boosting_models: List of boosting model names to train
+            additional_dfs: Optional additional timeframe DataFrames
+        """
+        # Prepare data and build training requests for each boosting model
+        prepared_map: dict[str, PreparedData] = {}
+        training_requests: list[ModelTrainingRequest] = []
 
-                # Generate OOF if enabled
-                if self.config.save_oof:
-                    oof = self._generate_oof(model_name, prepared, horizon)
-                    if oof is not None:
-                        self._oof_predictions[key] = oof
-                        result.oof_prediction = oof
+        for model_name in boosting_models:
+            prepared = self._data_preparer.prepare(
+                df=df,
+                model_name=model_name,
+                additional_dfs=additional_dfs,
+            )
+            prepared_map[model_name] = prepared
+            logger.info(f"  {model_name} data prepared: {prepared.summary()}")
 
-                logger.info(
-                    f"  {model_name} complete: "
-                    f"val_f1={result.metrics.get('val_f1', 0):.4f}, "
-                    f"time={result.training_time_seconds:.1f}s"
-                )
+            request = ModelTrainingRequest(
+                model_name=model_name,
+                horizon=horizon,
+                prepared_data=prepared,
+                sequence_length=self.config.sequence_length,
+                output_dir=self.output_dir / f"h{horizon}",
+                optimize_hyperparams=self.config.optimize_hyperparams,
+                n_splits=self.config.n_splits,
+                hyperparam_trials=self.config.hyperparam_trials,
+                scoring=self.config.optuna_metric,
+            )
+            training_requests.append(request)
 
-                # Clean up prepared data to prevent memory fragmentation (Phase 37 fix)
-                # Each PreparedData can be 500MB-2GB for neural models with MTF
-                del prepared
-                gc.collect()
+        # Train all boosting models in parallel
+        parallel_results = self._parallel_service.train_models_parallel(training_requests)
+
+        # Process parallel results: calibration, OOF, result conversion
+        for model_name, service_result in zip(boosting_models, parallel_results, strict=True):
+            prepared = prepared_map[model_name]
+
+            # Calibrate if enabled
+            if self.config.auto_calibrate:
+                self._calibrate_model(service_result, prepared, model_name)
+
+            # Store trained model for later use
+            self._trained_models[f"{model_name}_h{horizon}"] = service_result.trainer
+
+            # Convert service result to orchestrator result
+            result = ModelTrainingResult(
+                model_name=service_result.model_name,
+                horizon=service_result.horizon,
+                metrics=service_result.metrics,
+                trainer=service_result.trainer,
+                training_time_seconds=service_result.training_time_seconds,
+                n_features=service_result.n_features,
+                data_rank=service_result.data_rank,
+            )
+
+            key = f"{model_name}_h{horizon}"
+            self._model_results[key] = result
+
+            # Generate OOF if enabled
+            if self.config.save_oof:
+                oof = self._generate_oof(model_name, prepared, horizon)
+                if oof is not None:
+                    self._oof_predictions[key] = oof
+                    result.oof_prediction = oof
+
+            logger.info(
+                f"  {model_name} complete: "
+                f"val_f1={result.metrics.get('val_f1', 0):.4f}, "
+                f"time={result.training_time_seconds:.1f}s"
+            )
+
+        # Clean up all prepared data
+        del prepared_map
+        gc.collect()
+
+    def _train_model_sequential(
+        self,
+        df: pd.DataFrame,
+        model_name: str,
+        horizon: int,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> None:
+        """
+        Train a single model sequentially.
+
+        Handles data preparation, training, OOF generation, and cleanup.
+
+        Args:
+            df: Input DataFrame with features and labels
+            model_name: Name of the model to train
+            horizon: Prediction horizon
+            additional_dfs: Optional additional timeframe DataFrames
+        """
+        logger.info(f"\nTraining {model_name}...")
+
+        # Prepare data using PHASE_2 adapters
+        prepared = self._data_preparer.prepare(
+            df=df,
+            model_name=model_name,
+            additional_dfs=additional_dfs,
+        )
+
+        logger.info(f"  Data prepared: {prepared.summary()}")
+
+        # Train model
+        result = self._train_single_model(
+            model_name=model_name,
+            prepared=prepared,
+            horizon=horizon,
+        )
+
+        key = f"{model_name}_h{horizon}"
+        self._model_results[key] = result
+
+        # Generate OOF if enabled
+        if self.config.save_oof:
+            oof = self._generate_oof(model_name, prepared, horizon)
+            if oof is not None:
+                self._oof_predictions[key] = oof
+                result.oof_prediction = oof
+
+        logger.info(
+            f"  {model_name} complete: "
+            f"val_f1={result.metrics.get('val_f1', 0):.4f}, "
+            f"time={result.training_time_seconds:.1f}s"
+        )
+
+        # Clean up prepared data to prevent memory fragmentation (Phase 37 fix)
+        # Each PreparedData can be 500MB-2GB for neural models with MTF
+        del prepared
+        gc.collect()
 
     def _train_single_model(
         self,
