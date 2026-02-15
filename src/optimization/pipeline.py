@@ -562,7 +562,6 @@ class OptimizationPipeline:
                 n_trials=self.hyperparam_trials,
                 cv_folds=3,
                 scoring=self.scoring,
-                use_pruning=True,
                 random_state=self.random_state,
                 verbose=self.verbose,
             )
@@ -727,7 +726,6 @@ class OptimizationPipeline:
             n_trials=self.hyperparam_trials,
             cv_folds=3,
             scoring=self.scoring,
-            use_pruning=True,
             random_state=self.random_state,
             verbose=self.verbose,
         )
