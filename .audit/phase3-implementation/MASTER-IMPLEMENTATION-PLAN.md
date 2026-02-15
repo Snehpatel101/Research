@@ -17,6 +17,17 @@
 
 ---
 
+## Focused Addendum (Deployable Artifact First)
+
+For the narrowed product goal ("notebook finishes -> one deployable artifact that accepts raw bars"), see:
+
+- `.audit/phase3-implementation/PHASE0-DEPLOYABLE-ARTIFACT-PLAN.md`
+- `.audit/phase3-implementation/HIGH-LEVEL-DEPLOYABLE-ARTIFACT-ARCHITECTURE.md`
+
+These documents keep the architecture constraints intact while sequencing work toward deployability-first outcomes.
+
+---
+
 ## Phase 3A: Foundation (~237 lines, 5 files)
 
 **Goal:** Establish TrainerProtocol, extend BundleMetadata, make BundleBuilder protocol-aware, fix calibrator transfer, add FeatureSpec auto-generation.
