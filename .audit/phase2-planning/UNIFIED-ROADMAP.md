@@ -359,7 +359,7 @@ class InferenceBundle(Protocol):
 | **3D-1: Remove _apply_regime() no-op** | `src/inference/preprocessing_graph.py` | LOW | -10 |
 | **3D-2: Consolidate CVMethod enum** | `src/config/cv.py` | LOW | ~5 |
 | **3D-3: Consolidate LabelingMethod enum** | `src/config/data.py` | LOW | ~5 |
-| **3D-4: safe_pickle_load() utility** | NEW: `src/core/utils/safe_pickle.py`, 17 call sites | MEDIUM | ~60 new + 17 modifications |
+| **3D-4: safe_pickle_load() utility** | NEW: `src/core/utils/safe_pickle.py`, 16 call sites | MEDIUM | ~60 new + 16 modifications |
 | **3D-5: Neural arch versioning** | `src/models/neural/base_rnn.py` | LOW | ~20 |
 | **3D-6: Feature names in BundleBuilder** | `src/inference/builder.py` | LOW | ~5 |
 | **3D-7: Deprecate old inference classes** | `src/inference/pipeline.py`, `src/inference/orchestrator.py` | LOW | ~10 |
@@ -458,7 +458,6 @@ Update all 17 `pickle.load()` call sites.
 14. `src/inference/ensemble_bundle.py:561`
 15. `src/inference/ensemble_bundle.py:580`
 16. `src/inference/preprocessing_graph.py:431`
-17. (One additional site may exist — verify with `grep -r "pickle.load" src/`)
 
 ---
 
@@ -468,7 +467,7 @@ Update all 17 `pickle.load()` call sites.
 
 | Risk | Severity | Mitigation | When |
 |------|----------|------------|------|
-| **Pickle security** (17 call sites with no validation) | MEDIUM | Create `safe_pickle_load()` with path validation + type checking | Phase 3D (parallel) |
+| **Pickle security** (16 call sites with no validation) | MEDIUM | Create `safe_pickle_load()` with path validation + type checking | Phase 3D (parallel) |
 | **Double scaling** (pipeline scaler + adapter scaler) | MEDIUM | `ScalingSource` enum in UIP; `skip_scaling=True` in `predict_from_raw()` | Phase 3B-1 |
 | **Feature column drift** (auto-detection differs between training/inference) | LOW-MEDIUM | Always use `bundle.feature_columns`; never auto-detect at inference | Phase 3B-1 |
 | **Label mapping not stored** | LOW | Add `label_mapping` to BundleMetadata | Phase 3A-3 |
@@ -481,7 +480,7 @@ Update all 17 `pickle.load()` call sites.
 |------|------|------------|
 | Plan 1 (UIP) | Calling `bundle.model.predict()` directly bypasses bundle's internal scaling | UIP owns scaling via `_apply_scaling()` with `ScalingSource` — test all 3 modes |
 | Plan 2 (Adapter) | 4D models need MTF data that may not be available | Store `mtf_timeframes` in metadata; generate from 1min data at inference; clear error if insufficient data |
-| Plan 4 (Ensemble) | Absolute paths in `base_bundles.json` break portability | Switch to relative paths with absolute fallback |
+| Plan 4 (Ensemble) | Relative paths in `base_bundles.json` (default) may not resolve if bundle directory is restructured | Validate relative path resolution with absolute fallback |
 | Plan 4 (Special modes) | Walk-forward discards per-window models | MVP: bundle only latest window; future: all windows as mini-ensemble |
 | Plan 5 (Protocol) | Existing trainers may not satisfy protocol initially | Legacy duck-typing fallback with deprecation warning |
 
@@ -666,3 +665,15 @@ grep -r "pickle\.load(" src/ --include="*.py" | grep -v "safe_pickle" | wc -l
 | 3B (Core Inference) | 5 | MEDIUM | 3B-1 first; then 3B-2, 3B-3, 3B-4, 3B-5 parallel |
 | 3C (Integration) | 5 | LOW-MEDIUM | 3C-1 through 3C-5 mostly parallel |
 | 3D (Cleanup) | 7 | LOW-MEDIUM | All fully parallel, no deps on 3A-3C |
+
+---
+
+## VERIFICATION NOTES (Added 2026-02-15)
+
+The following corrections were applied based on codebase verification:
+
+1. **Model count:** 4 tabular models (XGBoost, LightGBM, CatBoost, RandomForest) support `predict_from_raw()` end-to-end, not 3. The remaining 10 models require adapter integration for 3D/4D tensor shaping.
+2. **Ensemble paths:** `base_bundles.json` stores relative paths by default, not absolute paths. The fix focuses on robust relative path resolution on load with absolute fallback.
+3. **Pickle call sites:** 16 confirmed `pickle.load()` call sites, not 17. The previously listed 17th site was unverified.
+4. **Calibrator transfer:** The calibrator is present on the Trainer when `use_calibration=True`. The gap is propagation through the result chain (ModelTrainingResult), not a missing attribute — this is a propagation gap, not a bug.
+5. **Tabular preprocessing:** End-to-end `predict_from_raw()` already works for all tabular models (boosting + classical) via PreprocessingGraph → 2D features → predict.

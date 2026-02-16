@@ -100,9 +100,9 @@ For the deployable-artifact flow, the notebook needs approximately 4 new cells a
 | Enum | Location | Purpose |
 |------|----------|---------|
 | `FeatureMode` | `src/core/contracts/data_contract.py` L33-39 | `ENGINEERED`, `RAW`, `HYBRID`, `OOF_PROBS` |
-| `ModelMTFMode` (aliased as `MTFMode`) | `src/core/contracts/data_contract.py` L42-58 | `NONE`, `INDICATORS`, `MULTI_STREAM` |
+| `ModelMTFMode` | `src/core/contracts/data_contract.py` L42-58 | `NONE`, `INDICATORS`, `MULTI_STREAM` |
 
-**Note:** `FeatureMode` and `MTFMode` are NOT in `types.py`. They live in `data_contract.py` and are imported by `model_contract.py`. Per CLAUDE.md rules, all enums should be in `types.py`, but moving these would be a refactor. They are re-exported from `src.core.contracts.__init__`.
+**Note:** `FeatureMode` and `ModelMTFMode` are NOT in `types.py`. They live in `data_contract.py` and are imported by `model_contract.py`. Per CLAUDE.md rules, all enums should be in `types.py`, but moving these would be a refactor. They are re-exported from `src.core.contracts.__init__`.
 
 ### NEW Enums Needed (from plans)
 
@@ -126,7 +126,7 @@ For the deployable-artifact flow, the notebook needs approximately 4 new cells a
 | `model_family` | `str` | required | Yes -- family grouping |
 | `input_rank` | `DataRank` | `TABULAR_2D` | Yes -- determines adapter path |
 | `feature_mode` | `FeatureMode` | `ENGINEERED` | Yes -- what features to generate |
-| `mtf_mode` | `MTFMode` | `NONE` | Yes -- multi-timeframe strategy |
+| `mtf_mode` | `ModelMTFMode` | `NONE` | Yes -- multi-timeframe strategy |
 | `primary_timeframe` | `str` | `"5min"` | Yes -- base timeframe |
 | `mtf_timeframes` | `tuple[str, ...]` | `()` | Yes -- additional timeframes for 4D |
 | `sequence_length` | `int` | `60` | Yes -- window size for 3D/4D |
@@ -374,7 +374,7 @@ Replicating this inside ModelBundle is non-trivial. The simplest approach for Ph
 
 The notebook's Cell 2 selects exactly the 12 core models. The `HORIZONS = [20]` default means only `label_h20` is generated. Walk-forward with 5 windows is the default training mode. This is consistent with the model contracts which all default to `label_h20` parsing.
 
-### 6.6 FeatureMode and MTFMode Are NOT in types.py
+### 6.6 FeatureMode and ModelMTFMode Are NOT in types.py
 
 These two enums live in `src/core/contracts/data_contract.py`. The CLAUDE.md rule says "all enums/types in src/core/types.py." If moved, all imports from `data_contract.py` would need updating. This is a Phase 3D cleanup task, not blocking for Phase 3A/3B.
 
@@ -443,5 +443,5 @@ This table combines BundleMetadata flags with the contract data to give the comp
 - **BUNDLE_VERSION** is currently `"1.2.0"` (confirmed by Agent 3)
 - **protocols.py** does NOT exist (confirmed)
 - **ScalingSource** does NOT exist anywhere (safe to create)
-- **FeatureMode/MTFMode** are in `data_contract.py`, not `types.py` (known deviation)
+- **FeatureMode/ModelMTFMode** are in `data_contract.py`, not `types.py` (known deviation)
 - **Notebook has 7 cells** (0=markdown, 1-7=code), needs ~4 more for deploy flow

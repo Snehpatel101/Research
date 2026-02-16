@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The deployable-artifact objective requires `predict_from_raw(raw_df) -> PredictionResult` to work for all 12 core model families via a single call. Today, this works for only 3/12 models (boosting). The critical path is: (1) fix the calibrator transfer that is lost during orchestrator result conversion, (2) fix the confirmed double-scaling bug in `predict_from_raw()`, (3) add adapter routing (2D->3D windowing for 7 models, raw multi-TF preprocessing for 2 models), (4) make `EnsembleBundle` satisfy the same `predict_from_raw()` contract, and (5) create the deploy directory structure with per-horizon selection and manifest. No new protocols or types files exist yet (`protocols.py`, `ScalingSource` enum). The BundleBuilder's ensemble output is incompatible with `EnsembleBundle.load()`, and the notebook has zero post-training inference or deploy cells.
+The deployable-artifact objective requires `predict_from_raw(raw_df) -> PredictionResult` to work for all 12 core model families via a single call. Today, this works for only 4/12 models (3 boosting + MLP). The critical path is: (1) fix the calibrator transfer (works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path), (2) fix the confirmed double-scaling bug in `predict_from_raw()`, (3) add adapter routing (2D->3D windowing for 8 models needing 3D, raw multi-TF preprocessing for 2 models needing 4D), (4) make `EnsembleBundle` satisfy the same `predict_from_raw()` contract, and (5) create the deploy directory structure with per-horizon selection and manifest. No new protocols or types files exist yet (`protocols.py`, `ScalingSource` enum). The BundleBuilder's ensemble output is incompatible with `EnsembleBundle.load()`, and the notebook has zero post-training inference or deploy cells.
 
 ---
 
@@ -40,7 +40,7 @@ The deployable-artifact objective requires `predict_from_raw(raw_df) -> Predicti
 ### ModelBundle (`src/inference/bundle.py`)
 
 - **`predict(X)`** at L701-761: Works correctly for pre-shaped 2D, 3D, and 4D inputs (scaling handles all ranks via reshape)
-- **`predict_from_raw(raw_df)`** at L1056-1077: Calls `preprocess()` -> returns 2D DataFrame -> passes to `predict()`. Fails for 9/12 models because `predict()` shape validation rejects 2D input for 3D/4D models (L769-775 for 4D DataFrame, L803-804 for 3D ndim check)
+- **`predict_from_raw(raw_df)`** at L1056-1077: Calls `preprocess()` -> returns 2D DataFrame -> passes to `predict()`. Fails for 10/12 models (8 needing 3D + 2 needing 4D) because `predict()` shape validation rejects 2D input for 3D/4D models (L769-775 for 4D DataFrame, L803-804 for 3D ndim check)
 - **Double-scaling bug:** `preprocess()` at L1038-1042 calls `transform(skip_scaling=False)` (hardcoded), then `predict()` applies bundle scaler again at L720-752
 - **BUNDLE_VERSION:** `"1.2.0"` at L54 (plans say bump to `"1.3.0"`)
 - **BundleMetadata** at L70-92: Has `requires_sequences`, `requires_4d`, `sequence_length`, `n_timeframes` but MISSING `primary_timeframe`, `mtf_timeframes`, `feature_mode`
@@ -48,7 +48,7 @@ The deployable-artifact objective requires `predict_from_raw(raw_df) -> Predicti
 ### EnsembleBundle (`src/inference/ensemble_bundle.py`)
 
 - **No `predict_from_raw()`:** Has `predict()` (requires pre-stacked base predictions, L596-628), `predict_from_base_features()` (passes same X to ALL base models, L664-698) -- neither accepts raw OHLCV
-- **Absolute base paths:** `base_bundle_paths` saved as absolute at L447, breaks on relocation
+- **Base paths stored as raw strings:** `base_bundle_paths` saved as raw strings (relative by default) at L447; absolute paths break on relocation
 - **`predict_from_base_features()`:** Passes identical `X` to all base models (L694) -- fails for heterogeneous ensembles with mixed 2D/3D models
 - **Meta-learner loading:** Fragile fallback at L552-571; silently sets `meta_learner = None` on import failure
 
@@ -69,7 +69,7 @@ The deployable-artifact objective requires `predict_from_raw(raw_df) -> Predicti
 - **`src/core/types.py`** (275 lines): 7 enums defined (`DataRank`, `ModelFamily`, `FeatureFamily`, `TrainingMode`, `CVMethod`, `AdapterType`, `LabelingMethod`)
 - **`ScalingSource` enum:** Does NOT exist anywhere -- safe to create in `types.py`
 - **`src/core/protocols.py`:** Does NOT exist -- must be created
-- **`FeatureMode` and `MTFMode`:** Live in `src/core/contracts/data_contract.py` L33-58, NOT in `types.py` (known deviation from CLAUDE.md rule)
+- **`FeatureMode` and `ModelMTFMode`:** Live in `src/core/contracts/data_contract.py` L33-58, NOT in `types.py` (known deviation from CLAUDE.md rule)
 - **Model contracts:** 23 total in `MODEL_CONTRACTS` (12 core + 11 non-core), all with `input_rank`, `adapter_id`, `sequence_length`, `feature_mode`, `mtf_timeframes` fields
 
 ---
@@ -123,15 +123,15 @@ The deployable-artifact objective requires `predict_from_raw(raw_df) -> Predicti
 
 | # | Component | Current State | Target State | Gap | Severity | Evidence |
 |---|-----------|--------------|-------------|-----|----------|----------|
-| G1 | ModelBundle.predict_from_raw | Works for 3/12 models (boosting only); fails with ValueError for 3D models at L803-804 and 4D models at L769-775 | Works for all 12 core models via adapter routing | Missing adapter routing between preprocess() and predict() | **CRITICAL** | bundle.py L1056-1077, L769-775, L803-804 (Report 03 Sec 5) |
+| G1 | ModelBundle.predict_from_raw | Works for 4/12 models (3 boosting + MLP); fails with ValueError for 3D models at L803-804 and 4D models at L769-775 | Works for all 12 core models via adapter routing | Missing adapter routing between preprocess() and predict() for 10 broken models (8 needing 3D + 2 needing 4D) | **CRITICAL** | bundle.py L1056-1077, L769-775, L803-804 (Report 03 Sec 5) |
 | G2 | ModelBundle.preprocess | Calls transform(skip_scaling=False) at L1041 | Must call transform(skip_scaling=True) | Double-scaling bug: preprocessing graph scales, then bundle scaler scales again | **CRITICAL** | bundle.py L1038-1042, L720-752 (Report 03 Sec 7) |
-| G3 | Calibrator transfer | Calibrator set on service result (orchestrator.py L993), lost during ModelTrainingResult conversion (L912-920); BundleBuilder extraction (builder.py L640-644) always returns None | Calibrator reaches ModelBundle for probability calibration | Calibrator never makes it into bundles | **CRITICAL** | orchestrator.py L912-920, L993; builder.py L640-644 (Report 02 Sec 3.4, 4.3) |
+| G3 | Calibrator transfer | Calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path (L912-920); BundleBuilder extraction (builder.py L640-644) always returns None | Calibrator reaches ModelBundle for probability calibration | Calibrator never makes it into bundles | **CRITICAL** | orchestrator.py L912-920, L993; builder.py L640-644 (Report 02 Sec 3.4, 4.3) |
 | G4 | EnsembleBundle.predict_from_raw | Method does not exist; only predict() (pre-stacked) and predict_from_base_features() (same X to all) | predict_from_raw(raw_df) orchestrates base bundles and meta-learner | No raw-to-prediction path for ensemble artifacts | **CRITICAL** | ensemble_bundle.py (Report 03 Sec 8, Gaps 1-2) |
 | G5 | Deploy directory structure | Factory outputs to flat `bundles/` directory (factory.py L694) | `deploy/h{horizon}/artifact/` + `deploy/manifest.json` per run | No deploy directory, no per-horizon selection, no manifest | **CRITICAL** | factory.py L673-704 (Report 02 Sec 2.6) |
 | G6 | BundleBuilder.build_ensemble_bundle | Saves custom file layout (ensemble_metadata.json, stacking_dataset.parquet) at L370-437; NOT loadable by EnsembleBundle.load() | Uses EnsembleBundle.from_ensemble_result() + .save() | Ensemble directory format incompatible with EnsembleBundle.load() | **HIGH** | builder.py L370-437, L398-433 vs ensemble_bundle.py load() L498-594 (Report 03 Sec 9) |
 | G7 | Factory ensemble bundling | Factory only calls build_from_training_result() (L693), never build_ensemble_bundle() or build_all() | Factory calls build_all() to create both model and ensemble bundles | Ensemble bundles never created during standard flow | **HIGH** | factory.py L693 (Report 02 Sec 4.5) |
 | G8 | Ensemble per-horizon | Ensemble built once across ALL horizons; horizon hardcoded to config.horizons[0] (orchestrator.py L1058) | One ensemble per horizon for per-horizon deploy artifacts | Cannot produce per-horizon ensemble artifacts | **HIGH** | orchestrator.py L633-643, L1058 (Report 02 Sec 3.6) |
-| G9 | EnsembleBundle base paths | Absolute paths saved at L447; break on relocation | Relative paths for portability | Ensemble bundles not portable | **HIGH** | ensemble_bundle.py L447, L543 (Report 03 Sec 8, Gap 3) |
+| G9 | EnsembleBundle base paths | Paths stored as raw strings (relative by default) at L447; absolute paths break on relocation | Relative paths for portability | Ensemble bundles not portable when absolute | **HIGH** | ensemble_bundle.py L447, L543 (Report 03 Sec 8, Gap 3) |
 | G10 | protocols.py | File does not exist | TrainerProtocol + InferenceBundle protocol defined | No protocol-based extraction or inference contract | **HIGH** | Report 04 Sec 5 (confirmed non-existent) |
 | G11 | ScalingSource enum | Does not exist anywhere in codebase | Defined in src/core/types.py with BUNDLE/PREPROCESSING/NONE values | No scaling source control enum | **HIGH** | Report 04 Sec 2 (confirmed non-existent); Report 01 Sec 6.1 |
 | G12 | UniversalInferencePipeline | File does not exist | src/inference/universal_pipeline.py with ScalingSource-controlled scaling | No unified inference pipeline | **HIGH** | Report 01 Sec 4 (files that don't exist) |
@@ -148,10 +148,10 @@ The deployable-artifact objective requires `predict_from_raw(raw_df) -> Predicti
 | G23 | Validation/smoke test reports | No validation report generated during bundling | validation.json per horizon in deploy/ directory | No artifact validation output | **MEDIUM** | Report 02 Sec 2.6 |
 | G24 | EnsembleBundle meta-learner loading | Fragile fallback at L552-571; silently None on import failure | Robust loading with clear error on failure | Meta-learner can silently disappear | **MEDIUM** | ensemble_bundle.py L552-571 (Report 03 Sec 8, Gap 4) |
 | G25 | nbeats feature_mode=RAW | PreprocessingGraph generates engineered features; nbeats contract specifies feature_mode=RAW | Different feature set (raw OHLCV or minimal features) + sliding window | nbeats gets wrong feature set from standard preprocessing | **MEDIUM** | Report 04 Sec 3 (nbeats contract); Report 03 Sec 13 |
-| G26 | FeatureMode/MTFMode location | In data_contract.py L33-58, not in types.py | Per CLAUDE.md, all enums should be in types.py | Known deviation from canonical location rule | **LOW** | Report 04 Sec 2 (data_contract.py L33-58) |
+| G26 | FeatureMode/ModelMTFMode location | In data_contract.py L33-58, not in types.py | Per CLAUDE.md, all enums should be in types.py | Known deviation from canonical location rule | **LOW** | Report 04 Sec 2 (data_contract.py L33-58) |
 | G27 | Dead TYPE_CHECKING import | factory.py L54 references non-existent TrainingResult | Remove or fix to TrainingRunResult | Dead import | **LOW** | factory.py L54 (Report 02 Sec 2.6) |
 | G28 | tar extractall() deprecation | extract_bundle() at bundle.py L585 uses extractall() without filter param | Use filter parameter per Python 3.12+ recommendation | Deprecation warning in Python 3.12+ | **LOW** | bundle.py L579-585 (Report 03 Sec 10) |
-| G29 | Pickle load validation | 17 raw pickle.load() call sites across codebase (per audit) | safe_pickle_load() with validation | No pickle deserialization validation | **LOW** | Report 01 Sec 5.2 (Warning W-3: verify sites still exist) |
+| G29 | Pickle load validation | 16 confirmed raw pickle.load() call sites across codebase (per audit) | safe_pickle_load() with validation | No pickle deserialization validation | **LOW** | Report 01 Sec 5.2 (Warning W-3: verify sites still exist) |
 
 ---
 
@@ -169,7 +169,7 @@ FOUNDATION LAYER (no dependencies, can be parallel):
 ADAPTER ROUTING LAYER (depends on Foundation):
   G16 (3D windowing)          -- depends on G2, G14
                               -- unblocks G4 (EnsembleBundle.predict_from_raw)
-                              -- unblocks G1 for 7/12 models
+                              -- unblocks G1 for 8/12 models (needing 3D)
   G15 (4D preprocessing)      -- depends on G14
                               -- unblocks G1 for 2/12 models (patchtst, itransformer)
   G25 (nbeats RAW features)   -- depends on G16

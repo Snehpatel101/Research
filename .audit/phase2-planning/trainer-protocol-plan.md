@@ -206,7 +206,7 @@ def _extract_calibrator(self, trainer: Any) -> Any | None:
 
 ## 3. Calibrator Transfer Fix
 
-### Tracing the Bug
+### Tracing the Propagation Gap
 
 1. **Calibrator is created** in `Trainer.run()` at line 822-830:
    ```python

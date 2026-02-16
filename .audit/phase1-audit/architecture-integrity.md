@@ -66,7 +66,7 @@ All 6 families match. Total: 23 models across all families.
 |------|---------|--------|
 | `__init__.py` | Re-exports all contract components | ✅ Clean |
 | `model_contract.py` | ModelContract dataclass + MODEL_CONTRACTS registry | ✅ Complete |
-| `data_contract.py` | DataContract + DataContractSchema + FeatureMode/MTFMode enums | ✅ Complete |
+| `data_contract.py` | DataContract + DataContractSchema + FeatureMode/ModelMTFMode enums | ✅ Complete |
 | `feature_spec.py` | FeatureSpec (5-dimension optimization) | ✅ Complete |
 
 ### ModelContract Dataclass Fields

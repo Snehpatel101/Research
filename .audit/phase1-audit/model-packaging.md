@@ -182,7 +182,7 @@ Serialized as JSON with a schema hash for validation.
 | **Label mapping not stored** | The `-1,0,1` to `0,1,2` label mapping is hardcoded via `map_labels_to_classes`/`map_classes_to_labels`. If mapping ever changes, old models break silently. | All 12 |
 | **No architecture version tag** | Neural model checkpoints don't store architecture version. If `_create_network()` changes between code versions, `load_state_dict()` will fail with cryptic shape mismatch errors. | All 9 neural models |
 | **Scaler type not validated on load** | Bundle stores scaler as raw pickle. No check that loaded scaler type matches `model_contract.scaler_type`. | All models needing scaling |
-| **Ensemble base paths are absolute** | `EnsembleBundle` stores base bundle paths as absolute strings. Moving bundles to another machine breaks references. | Ensemble |
+| **Ensemble base paths depend on input** | Ensemble orchestrator uses relative paths by default (./experiments/exp_001). `EnsembleBundle` saves paths as raw `str(p)` at L447 — whether absolute depends on input. Not hardcoded absolute. Moving bundles may still break if absolute paths were used at training time. | Ensemble |
 
 ### 5.2 Security Considerations
 
@@ -200,7 +200,7 @@ Serialized as JSON with a schema hash for validation.
 
 3. **Store label mapping** - Save the label encoding scheme (`{-1: 0, 0: 1, 1: 2}`) in metadata to detect changes.
 
-4. **Relative base bundle paths** - `EnsembleBundle` should store relative paths (relative to ensemble bundle root) instead of absolute paths.
+4. **Enforce relative base bundle paths** - Ensemble orchestrator uses relative paths by default, but `EnsembleBundle` saves paths as raw `str(p)` at L447. Ensure all paths are stored relative to ensemble bundle root to guarantee portability.
 
 5. **Bundle integrity validation** - `ModelBundle.load()` reads manifest checksums but doesn't verify them. Add optional checksum validation on load.
 

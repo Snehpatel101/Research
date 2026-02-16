@@ -105,7 +105,7 @@ else:
 
 ### Key Decisions
 
-- **Tabular models only** for the initial raw-data demo — boosting models (3 of 12) have working `predict_from_raw()`. Neural/transformer models will show a placeholder message until the Phase 2 adapter integration lands.
+- **Tabular models only** for the initial raw-data demo — tabular models (4 of 14, including 3 boosting + random_forest) have working `predict_from_raw()`. Neural/transformer models will show a placeholder message until the Phase 2 adapter integration lands.
 - **Uses `raw_data` from Cell 4** as sample input — avoids requiring the user to provide separate test data.
 - **Graceful degradation** — if no preprocessing graph exists, explains what the user needs to do manually.
 

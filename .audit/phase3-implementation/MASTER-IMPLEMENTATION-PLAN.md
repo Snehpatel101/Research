@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-**What we're building:** A universal inference pipeline that enables all 12 core ML Factory models to go from raw OHLCV data to predictions in a single call. Currently, only 3 of 12 models (the boosting family) support `predict_from_raw()`. The remaining 9 (LSTM, GRU, TCN, InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS) require callers to manually shape tensors to 3D or 4D before prediction.
+**What we're building:** A universal inference pipeline that enables all ML Factory models to go from raw OHLCV data to predictions in a single call. Currently, only 4 tabular models (XGBoost, LightGBM, CatBoost, RandomForest) support `predict_from_raw()`. The remaining 10 models requiring 3D/4D adapters (LSTM, GRU, TCN, InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS, and others) require callers to manually shape tensors to 3D or 4D before prediction.
 
-**Why it matters:** This is the single most impactful gap identified across all 6 Phase 1 audit reports. Without adapter integration in the inference path, bundles produced by training are only partially usable. Colab users download bundles they can't easily run. The system trains 12 model families but can only serve 3 end-to-end.
+**Why it matters:** This is the single most impactful gap identified across all 6 Phase 1 audit reports. Without adapter integration in the inference path, bundles produced by training are only partially usable. Colab users download bundles they can't easily run. The system trains many model families but can only serve 4 (tabular) end-to-end.
 
 **Total scope:** ~1,680 lines of change across 4 phases (3A Foundation, 3B Core Inference, 3C Integration, 3D Cleanup), producing 8 new files and modifying 18 existing files.
 
@@ -125,7 +125,7 @@ ruff check src/core/protocols.py src/inference/bundle.py src/inference/builder.p
 |---------------------|--------------|--------------|--------|
 | `requires_4d=True` | `_build_4d_input()` | `(n, tf, seq, feat)` | PatchTST, iTransformer |
 | `requires_sequences=True` | `_build_3d_input()` | `(n, seq, feat)` | LSTM, GRU, TCN, InceptionTime, ResNet1D, TFT, N-BEATS |
-| Both `False` | Pass through 2D | `(n, feat)` | XGBoost, LightGBM, CatBoost |
+| Both `False` | Pass through 2D | `(n, feat)` | XGBoost, LightGBM, CatBoost, RandomForest |
 
 ### Task 3B-2: UniversalInferencePipeline
 - **Files:** `src/inference/universal_pipeline.py` (NEW, ~520 lines), `src/inference/errors.py` (NEW, ~40 lines)
@@ -142,8 +142,8 @@ ruff check src/core/protocols.py src/inference/bundle.py src/inference/builder.p
 
 ### Task 3B-3: EnsembleBundle Fixes
 - **File:** `src/inference/ensemble_bundle.py` (EDIT, ~70 lines)
-- **Fix `save()`:** Store relative paths (relative to ensemble bundle parent) instead of absolute
-- **Fix `load()`:** Resolve relative paths with absolute fallback for backward compat
+- **Verify `save()`:** Paths are stored relative by default; ensure resolution is robust across environments
+- **Fix `load()`:** Ensure relative path resolution works reliably, with absolute path fallback for backward compat
 - **New method:** `predict_from_raw(raw_df)` - loads base bundles, calls each `predict_from_raw()` (which handles adapter routing), combines via meta-learner
 
 ### Task 3B-4: MTF Inference Data Generation
@@ -551,6 +551,20 @@ For full code diffs, exact line numbers, and complete new file contents, see the
 - **Phase 3D details:** `phase3d-cleanup-impl.md`
 - **Test plan:** `validation-test-plan.md`
 - **Architecture check:** `architecture-constraints-check.md`
+
+---
+
+---
+
+## VERIFICATION NOTES (Added 2026-02-15)
+
+The following corrections were applied based on codebase verification:
+
+1. **Model count:** 4 tabular models (XGBoost, LightGBM, CatBoost, RandomForest) support `predict_from_raw()` end-to-end, not 3. The remaining 10 models require adapter integration for 3D/4D tensor shaping.
+2. **Ensemble paths:** `base_bundles.json` stores relative paths by default, not absolute paths. The `save()` fix is about ensuring robustness, not switching from absolute to relative. The `load()` fix adds reliable resolution with absolute fallback.
+3. **Pickle call sites:** 16 confirmed `pickle.load()` call sites (listed in Phase 3D-4), not 17.
+4. **Calibrator transfer:** The calibrator is present on the Trainer when `use_calibration=True`. The gap is propagation through the result chain (ModelTrainingResult → BundleBuilder), not a missing attribute. This is a propagation gap, not a bug.
+5. **Tabular preprocessing:** End-to-end `predict_from_raw()` already works for all tabular models (boosting + classical families) via PreprocessingGraph → 2D features → predict.
 
 ---
 

@@ -32,18 +32,17 @@ EnsembleBundle.predict_from_raw(raw_ohlcv_df)
 
 ### Fix: Relative vs Absolute Path Issue
 
-**Problem:** `base_bundles.json` stores absolute paths (e.g., `/home/user/experiments/run_001/bundles/xgboost_h20`). Moving the bundle directory breaks all references.
+**Current state:** `base_bundles.json` stores relative paths by default. However, path resolution can fail if the bundle directory is restructured or moved outside the expected parent structure.
 
-**Fix:** Store relative paths from ensemble bundle root.
+**Fix:** Validate relative path resolution on load, with absolute path fallback for backward compatibility.
 
 ```python
 # In EnsembleBundle.save():
-# Instead of: [str(p) for p in self.base_bundle_paths]
-# Use:        [str(p.relative_to(path.parent)) for p in self.base_bundle_paths]
+# Already stores relative paths — verify this works reliably
 
 # In EnsembleBundle.load():
-# Instead of: [Path(p) for p in data["paths"]]
-# Use:        [path.parent / p for p in data["paths"]]
+# Resolve relative paths from bundle parent:
+#   [path.parent / p for p in data["paths"]]
 # With fallback: if not resolved.exists(), try as absolute path
 ```
 

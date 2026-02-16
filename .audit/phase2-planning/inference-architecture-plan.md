@@ -601,7 +601,7 @@ class InferenceShapeMismatchError(ValueError):
 
 ### 7.2 Existing `predict_from_raw()` Continues to Work
 
-`ModelBundle.predict_from_raw(raw_df)` still works for tabular models (boosting). It produces 2D features and predicts — same as today. For neural/transformer models, it will still fail as it does today, but the new `UniversalInferencePipeline.predict_from_raw()` provides the working path.
+`ModelBundle.predict_from_raw(raw_df)` still works for tabular models (boosting and classical families). It produces 2D features and predicts — same as today. For neural/transformer models, it will still fail as it does today, but the new `UniversalInferencePipeline.predict_from_raw()` provides the working path.
 
 ### 7.3 Migration Timeline
 

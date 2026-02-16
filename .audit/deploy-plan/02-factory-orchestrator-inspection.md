@@ -12,7 +12,7 @@
 |------|------|-------|--------|
 | MLFactory | `/home/jake/Desktop/Research/src/factory.py` | 781 | Yes |
 | UnifiedTrainingOrchestrator | `/home/jake/Desktop/Research/src/models/training/unified_orchestrator.py` | 2076 | Yes |
-| Top-level orchestrator | `/home/jake/Desktop/Research/src/orchestrator.py` | N/A | **Does NOT exist** |
+| Top-level orchestrator | `/home/jake/Desktop/Research/src/orchestrator.py` | ~50 | **EXISTS** — contains MLPipeline class (thin wrapper around UnifiedTrainingOrchestrator with bundling support) |
 | BundleBuilder | `/home/jake/Desktop/Research/src/inference/builder.py` | 784 | Yes |
 | ModelTrainingService | `/home/jake/Desktop/Research/src/models/training/services/model_training.py` | ~180 | Yes |
 | EnsembleService | `/home/jake/Desktop/Research/src/models/training/services/ensemble_service.py` | 412 | Yes |
@@ -155,7 +155,7 @@ For each horizon (L696):
 2. Calls `self._model_service.train_model(request)` (L902)
 3. **Calibration** (L905-906): If `config.auto_calibrate`, calls `_calibrate_model(result, prepared, model_name)` -- **CRITICAL: see calibrator gap below**
 4. Stores trainer in `self._trained_models` (L909)
-5. Converts service `ModelTrainingResult` to orchestrator's `ModelTrainingResult` (L912-920) -- **CRITICAL: calibrator is NOT transferred**
+5. Converts service `ModelTrainingResult` to orchestrator's `ModelTrainingResult` (L912-920) -- **CRITICAL: calibrator is NOT transferred** (calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path)
 
 ### 3.3 Artifact Production
 
@@ -185,7 +185,7 @@ The calibration happens in `_calibrate_model()` at L922-999:
 1. Calibrator is fitted on validation probabilities (L981-982)
 2. **Attached to the service result** via `result.calibrator = calibrator` (L993) -- this sets an attribute on `ModelTrainingResult` from `services/model_training.py`
 3. **BUT**: In `_train_single_model()` at L912-920, the orchestrator creates a NEW `ModelTrainingResult` (orchestrator's own dataclass) by copying fields one-by-one: `model_name`, `horizon`, `metrics`, `trainer`, `training_time_seconds`, `n_features`, `data_rank`
-4. **The calibrator is NOT copied** -- the orchestrator's `ModelTrainingResult` (L78-111) has NO `calibrator` field
+4. **The calibrator is NOT copied** -- the orchestrator's `ModelTrainingResult` (L78-111) has NO `calibrator` field (calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path)
 5. The calibrator is only accessible if the **trainer** object has it as an attribute -- but `_calibrate_model()` sets it on the service result, NOT on the trainer
 
 **Result:** Calibrator is lost during the conversion from service result to orchestrator result. This is confirmed by Agent 1's finding: "Calibrator transfer broken -- Calibrator on service result, not transferred to ModelTrainingResult."
@@ -298,7 +298,7 @@ def _extract_calibrator(self, trainer: Any) -> Any | None:
 2. Orchestrator creates NEW `ModelTrainingResult` without calibrator field
 3. Orchestrator stores `result.trainer` (the Trainer object)
 4. BundleBuilder looks for `trainer.calibrator` -- **which was never set**
-5. **Result: calibrator is always None in bundles**
+5. **Result: calibrator is always None in bundles** (calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path)
 
 ### 4.4 Ensemble Bundle Building
 
@@ -587,10 +587,10 @@ This module/class does not exist. The actual type is `TrainingRunResult` from `u
 1. No `deploy/` directory structure
 2. No per-horizon artifact selection
 3. No deploy manifest
-4. No calibrator in bundles (broken transfer)
+4. No calibrator in bundles (calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path)
 5. No EnsembleBundle objects (BundleBuilder makes raw files)
 6. No `predict_from_raw()` for ensembles
-7. No `predict_from_raw()` for neural/transformer models (9/12 models)
+7. No `predict_from_raw()` for neural/transformer models (10/12 models: 8 needing 3D + 2 needing 4D)
 8. No validation/smoke test reports
 
 ### Critical path for implementation:

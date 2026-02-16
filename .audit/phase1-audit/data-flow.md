@@ -271,13 +271,13 @@ This means data may be **double-scaled** if both are applied. The `UnifiedDataPr
 
 **Impact**: If both auto-detection mechanisms are used in the same flow, they could select slightly different feature sets. In practice, explicit `feature_columns` from manifests should be used to avoid this.
 
-### GAP 8: No End-to-End Preprocessing Replay Mechanism (HIGH)
+### GAP 8: No End-to-End Preprocessing Replay for 3D/4D Models (HIGH)
 
-**Issue**: While individual components exist (FeatureManifest, PreprocessingGraph, FeatureScaler, AdapterScaler), there is no single function that takes raw OHLCV data and produces model-ready arrays by replaying the exact training preprocessing. The `PreprocessingGraph.transform()` method exists in concept but the actual feature computation code in `src/data/features/compute/` is not invoked through the graph at inference time.
+**Issue**: `PreprocessingGraph.transform()` + `predict_from_raw()` provide end-to-end raw OHLCV → predictions for tabular/boosting models (XGBoost, LightGBM, CatBoost, MLP). The gap is specifically for 3D/4D models where adapter routing is missing — `PreprocessingGraph.transform()` outputs a 2D DataFrame, but sequence and multi-stream models need adapter reshaping (SequenceAdapter for 3D, MultiStreamAdapter for 4D) that isn't integrated into the inference path.
 
-**Impact**: Production inference currently requires either (a) pre-computed features in the same format as training, or (b) manual re-implementation of the feature engineering steps. This is the largest gap for going from research to production.
+**Impact**: Production inference for 8 of 12 core models (6 needing 3D + 2 needing 4D) requires either (a) pre-shaped tensors, or (b) manual adapter invocation. Tabular models work end-to-end.
 
-**Mitigation**: The `PreprocessingGraph` class captures the configuration, and the feature computation modules exist. What's missing is the orchestration layer that connects `PreprocessingGraph.transform()` to the actual feature computation code.
+**Mitigation**: The adapter registry and `PreprocessingGraph` both exist. What's missing is wiring adapter routing into `ModelBundle.predict_from_raw()` based on `BundleMetadata.requires_sequences` / `requires_4d` flags.
 
 ---
 

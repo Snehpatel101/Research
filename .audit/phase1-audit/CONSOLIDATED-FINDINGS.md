@@ -55,7 +55,7 @@ Colab notebook [notebooks/ml_factory_colab.ipynb]
 | Training → EnsembleBundle | **Working** | BundleBuilder.build_ensemble_bundle() saves meta-learner + alignment |
 | Bundle → Predict (tabular) | **Working** | ModelBundle.predict(X_2d) for boosting models |
 | Bundle → Predict (neural) | **Partial** | Requires caller to pre-shape input to 3D/4D |
-| Bundle → Raw OHLCV → Predict | **Broken for 9/12 models** | PreprocessingGraph outputs 2D only; no adapter integration |
+| Bundle → Raw OHLCV → Predict | **Broken for 8/12 core models** | PreprocessingGraph outputs 2D only; no adapter integration. 4 tabular models (XGBoost, LightGBM, CatBoost, MLP) work end-to-end; 8 others need 3D/4D adapter routing |
 | Notebook → Bundles | **Created but unused** | Bundles exist in zip but no inference demo cell |
 | Notebook → Deployment | **Missing** | No ONNX/TorchScript export; bundles require full src/ package |
 
@@ -67,12 +67,12 @@ Colab notebook [notebooks/ml_factory_colab.ipynb]
 
 | Gap | Severity | Report Source | Details |
 |-----|----------|--------------|---------|
-| **No adapter integration in inference** | CRITICAL | inference-pipeline, data-flow | `PreprocessingGraph.transform()` produces 2D DataFrame; neural/transformer models need 3D/4D tensors via SequenceAdapter/MultiStreamAdapter. The `predict_from_raw()` path is incomplete for 9 of 12 core models. |
+| **No adapter integration in inference** | CRITICAL | inference-pipeline, data-flow | `PreprocessingGraph.transform()` produces 2D DataFrame; neural/transformer models need 3D/4D tensors via SequenceAdapter/MultiStreamAdapter. The `predict_from_raw()` path is incomplete for 8 of 12 core models (6 needing 3D + 2 needing 4D). 4 tabular models (XGBoost, LightGBM, CatBoost, MLP) work end-to-end via PreprocessingGraph.transform() + predict_from_raw(). |
 | **Fragile trainer extraction** | HIGH | training-output-flow | BundleBuilder uses duck-typing fallback chains (`model`, `_model`, `estimator`, `_estimator`, `get_model()`) instead of a defined protocol. Silent failure if naming changes. |
-| **No end-to-end preprocessing replay** | HIGH | data-flow | Individual components exist (FeatureManifest, PreprocessingGraph, FeatureScaler, AdapterScaler) but no single function chains raw OHLCV → model-ready arrays at inference time. |
+| **No end-to-end preprocessing replay for 3D/4D models** | HIGH | data-flow | PreprocessingGraph.transform() + predict_from_raw() provide end-to-end raw OHLCV → predictions for tabular/boosting models. The gap is specifically for 3D/4D models where adapter routing is missing in the inference path. |
 | **Double scaling risk** | MEDIUM | data-flow | Pipeline Stage 7.5 scales features in parquet. UnifiedDataPreparation applies AdapterScaler again by default. If both apply, features are scaled twice. |
 | **FeatureSpec not auto-populated** | MEDIUM | training-output-flow | BundleBuilder accepts FeatureSpec but it must be passed explicitly. No auto-generation from training config. |
-| **Calibrator transfer broken** | MEDIUM | training-output-flow | Calibrator attached to service result, not transferred to ModelTrainingResult. BundleBuilder looks on trainer, misses it. |
+| **Calibrator transfer partially broken** | MEDIUM | training-output-flow | Calibrator IS stored on Trainer.calibrator and BundleBuilder CAN find it via duck-typing. However, the orchestrator also sets calibrator on the service result object (L993) which is LOST during ModelTrainingResult conversion (L912-920) since that dataclass has no calibrator field. Net effect: calibrator transfer works for direct Trainer access but fails in the orchestrator conversion path. |
 | **Preprocessing graph hardcodes assumptions** | MEDIUM | training-output-flow | `BundleBuilder._create_preprocessing_graph()` hardcodes source_timeframe="1min", target_timeframe="5min", scaler_type="robust" instead of pulling from PipelineConfig. |
 | **No auto-bundling in orchestrator** | MEDIUM | training-output-flow | UnifiedTrainingOrchestrator doesn't call BundleBuilder. Only MLFactory Phase 4 does. Direct `train_pipeline()` users get no bundles. |
 
@@ -90,14 +90,13 @@ Colab notebook [notebooks/ml_factory_colab.ipynb]
 
 | Model Family | predict(X_preshaped) | predict_from_raw(df) | Gap |
 |-------------|---------------------|---------------------|-----|
-| Boosting (3) | Works (2D) | Works | None |
+| Tabular (4: XGB, LGB, CB, MLP) | Works (2D) | Works | None — predict_from_raw() works end-to-end |
 | RNN (2) | Works (needs 3D) | **Broken** | No SequenceAdapter in inference path |
 | CNN (3) | Works (needs 3D) | **Broken** | No SequenceAdapter in inference path |
 | Transformer (3) | Works (needs 3D/4D) | **Broken** | No MultiStreamAdapter; needs multi-TF data |
-| MLP/N-BEATS (1) | Works (needs 3D) | **Broken** | No SequenceAdapter in inference path |
 | Ensemble | Works | **Partial** | Base model predictions need adapter routing |
 
-**Key finding:** Only 3 of 12 core models have complete raw-OHLCV-to-prediction inference. The other 9 require manual tensor preparation.
+**Key finding:** 4 of 12 core models (XGBoost, LightGBM, CatBoost, MLP/N-BEATS) have complete raw-OHLCV-to-prediction inference via PreprocessingGraph.transform() + predict_from_raw(). The other 8 (6 needing 3D + 2 needing 4D) require manual tensor preparation.
 
 ---
 
@@ -118,7 +117,7 @@ Colab notebook [notebooks/ml_factory_colab.ipynb]
 |--------|--------------|-----|--------|
 | **Boosting** (3) | Native format (JSON/text/cbm) + pickle metadata | Feature names require manual `set_feature_names()` call; may be None | Feature importance shows f0,f1,... instead of names |
 | **Neural** (9) | PyTorch checkpoint (.pt) | No architecture version tag; code changes → cryptic shape mismatch errors | Model loading fails silently between code versions |
-| **Ensemble** | Meta-learner + absolute base bundle paths | Moving bundles breaks references; type mismatch between EnsembleService result and what BundleBuilder expects | Portability and robustness issues |
+| **Ensemble** | Meta-learner + base bundle paths (relative by default) | Ensemble orchestrator uses relative paths by default (./experiments/exp_001). EnsembleBundle saves paths as raw str(p) at L447 — whether absolute depends on input. Not hardcoded absolute. Type mismatch between EnsembleService result and what BundleBuilder expects. | Robustness issues |
 | **All** | Pickle for scaler/calibrator | Security risk with untrusted files; not validated against contract | Incorrect scaling if wrong scaler loaded |
 
 ### 3.3 Colab-Specific Constraints
@@ -340,3 +339,16 @@ Phase 2c (Cleanup — parallel, any time):
 
 ### Consistent Finding Across All Reports
 All 6 reports independently identified the **adapter integration gap** as the single most impactful missing piece. The system has all the components (PreprocessingGraph, Adapters, ModelBundle) but they aren't wired together in the inference path. This is the #1 priority for Phase 2.
+
+---
+
+## VERIFICATION NOTES
+
+The following corrections were applied based on automated verification on 2026-02-15:
+
+1. **Adapter gap model count**: Corrected from "3 boosting models work / 9 broken" to "4 tabular models (XGBoost, LightGBM, CatBoost, MLP) work end-to-end; 8 of 12 core models broken (6 needing 3D + 2 needing 4D)". N-BEATS/MLP uses TabularAdapter per MODEL_ADAPTER_MAP.
+2. **Calibrator transfer**: Nuanced from "broken" to "partially broken" — Calibrator IS on Trainer.calibrator (BundleBuilder can find it), but LOST during orchestrator's ModelTrainingResult conversion (L912-920).
+3. **Ensemble paths**: Corrected from "absolute (not portable)" to "relative by default". EnsembleBundle saves paths as raw str(p) at L447; whether absolute depends on input.
+4. **End-to-end preprocessing**: Corrected from "no end-to-end replay exists" to "PreprocessingGraph.transform() + predict_from_raw() provide end-to-end for tabular models; gap is specifically for 3D/4D models."
+5. **MTFMode naming**: Clarified that data_contract.py defines `ModelMTFMode` (not `MTFMode`); separate `MTFMode` exists in config/data.py.
+6. **Pickle count**: No "17 call sites" claim found in phase1-audit files; no correction needed here.

@@ -86,7 +86,7 @@
 
 ## 7. Pickle Security
 
-- **Current state:** 17 `pickle.load()` call sites across the codebase:
+- **Current state:** 16 `pickle.load()` call sites across the codebase:
   - `src/factory.py:474` — loads training_result checkpoint
   - `src/models/boosting/xgboost_model.py:295` — loads model metadata
   - `src/models/boosting/catboost_model.py:281` — loads model metadata
@@ -109,7 +109,7 @@
   2. Replace all `pickle.load()` calls with `safe_pickle_load()`
   3. Document that pickle files are trusted internal artifacts only
 - **Risk if not addressed:** MEDIUM — arbitrary code execution if an attacker can place a malicious pickle file in model/bundle directories. The security comments acknowledge this but don't mitigate it.
-- **Effort:** MEDIUM (17 call sites to update, plus new utility)
+- **Effort:** MEDIUM (16 call sites to update, plus new utility)
 - **Dependencies:** None
 
 ---

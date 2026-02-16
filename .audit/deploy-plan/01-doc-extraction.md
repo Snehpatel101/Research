@@ -250,8 +250,8 @@ The codebase has been through 50+ phases of cleanup and improvement. Key complet
 | BundleMetadata shape flags | `src/inference/bundle.py` | `requires_sequences`, `requires_4d`, `sequence_length`, `n_timeframes` already stored |
 | FeatureManifest | `src/data/adapters/` | `BaseAdapter.from_manifest()` exists |
 | ModelBundle.predict(X) | `src/inference/bundle.py` | Works for pre-shaped 2D/3D/4D inputs |
-| ModelBundle.predict_from_raw(df) | `src/inference/bundle.py` | Works for tabular (boosting) ONLY; broken for 9/12 models |
-| EnsembleBundle | `src/inference/ensemble_bundle.py` | Works but uses absolute paths; no `predict_from_raw()` |
+| ModelBundle.predict_from_raw(df) | `src/inference/bundle.py` | Works for tabular (4 tabular: 3 boosting + MLP) ONLY; broken for 10/12 models (8 needing 3D + 2 needing 4D) |
+| EnsembleBundle | `src/inference/ensemble_bundle.py` | Works but paths stored as raw strings (relative by default); no `predict_from_raw()` |
 | BundleBuilder | `src/inference/builder.py` | Works but uses duck-typing, hardcoded assumptions |
 | TCN timeframe auto-resampling | `src/data/adapters/preparation.py` | `_detect_timeframe()` and `_resample_for_model()` added in Phase 43 |
 
@@ -275,13 +275,13 @@ The codebase has been through 50+ phases of cleanup and improvement. Key complet
 
 **THE #1 GAP (identified independently by all 6 audit reports):**
 
-> Only 3 of 12 core models have complete raw-OHLCV-to-prediction inference. The other 9 require manual tensor preparation. PreprocessingGraph outputs 2D only; neural/transformer models need 3D/4D tensors via SequenceAdapter/MultiStreamAdapter.
+> Only 4 of 12 core models (3 boosting + MLP) have complete raw-OHLCV-to-prediction inference. The other 10 require manual tensor preparation (8 needing 3D + 2 needing 4D). PreprocessingGraph outputs 2D only; neural/transformer models need 3D/4D tensors via SequenceAdapter/MultiStreamAdapter.
 
 | Gap | Severity | Location |
 |-----|----------|----------|
-| No adapter integration in inference | CRITICAL | `predict_from_raw()` outputs 2D; 9/12 models need 3D/4D |
+| No adapter integration in inference | CRITICAL | `predict_from_raw()` outputs 2D; 10/12 models need 3D/4D (8 needing 3D + 2 needing 4D) |
 | Fragile trainer extraction (duck-typing) | HIGH | `src/inference/builder.py` uses `model`, `_model`, `estimator`, `_estimator`, `get_model()` fallback chains |
-| No end-to-end preprocessing replay | HIGH | Individual components exist but no single chain from raw OHLCV to model-ready arrays |
+| End-to-end preprocessing exists for tabular only | HIGH | Exists for tabular via PreprocessingGraph.transform() + predict_from_raw(); missing adapter routing for 3D/4D models |
 | Double scaling risk | MEDIUM | Pipeline Stage 7.5 scales parquet; AdapterScaler may scale again |
 | FeatureSpec not auto-populated | MEDIUM | Must be passed explicitly to BundleBuilder |
 | Calibrator transfer broken | MEDIUM | Calibrator on service result, not transferred to ModelTrainingResult |
@@ -294,8 +294,8 @@ The codebase has been through 50+ phases of cleanup and improvement. Key complet
 |--------|-----|
 | Boosting (3) | Feature names may be None; shows f0,f1,... instead of names |
 | Neural (9) | No architecture version tag; code changes cause cryptic shape mismatches |
-| Ensemble | Absolute base bundle paths; type mismatch between EnsembleService result and BundleBuilder |
-| All | Pickle for scaler/calibrator has no validation; 17 raw `pickle.load()` call sites |
+| Ensemble | Paths stored as raw strings (relative by default); type mismatch between EnsembleService result and BundleBuilder |
+| All | Pickle for scaler/calibrator has no validation; 16 confirmed raw `pickle.load()` call sites |
 
 ### 5.3 Critical Path Items
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-15
 **Agent:** 3/10 (Inference-Side Code Paths)
-**Purpose:** Surgical inspection of every inference-side file, documenting exact API surfaces, data flows, and the precise gaps that block `predict_from_raw()` for 9/12 model types.
+**Purpose:** Surgical inspection of every inference-side file, documenting exact API surfaces, data flows, and the precise gaps that block `predict_from_raw()` for 10/12 model types (8 needing 3D + 2 needing 4D).
 
 ---
 
@@ -354,7 +354,7 @@ On `load()` (L543):
 base_bundle_paths = [Path(p) for p in json.load(f).get("paths", [])]  # L543
 ```
 
-These are absolute paths saved during training. If the bundle is moved to a different machine or directory, the paths break. The `validate()` method (L851) correctly checks for missing bundles but cannot fix the paths.
+These are paths stored as raw strings (relative by default). If absolute paths are used and the bundle is moved to a different machine or directory, the paths break. The `validate()` method (L851) correctly checks for missing bundles but cannot fix the paths.
 
 **GAP 4: Meta-learner loading has fragile fallback** (L552-571)
 
@@ -414,7 +414,7 @@ trainer.calibrator -> trainer._calibrator -> trainer.prob_calibrator
    b. Extract model via duck-typing (L298)
    c. Extract scaler via duck-typing (L305)
    d. Extract feature columns via duck-typing (L308)
-   e. Extract calibrator via duck-typing (L313) -- **always None, see above**
+   e. Extract calibrator via duck-typing (L313) -- **always None** (calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path)
    f. Get feature_spec from `feature_specs` dict if provided (L317-318)
    g. Create `ModelBundle.from_training(...)` (L322-337)
    h. Save to `bundles_dir / "{model_name}_h{horizon}"` (L340-341)
@@ -498,14 +498,14 @@ Only in `_create_preprocessing_graph()` (L512-555), which is called from `build_
 ### The Missing Link (Visual)
 
 ```
-Current flow (WORKS for boosting, 3/12 models):
+Current flow (WORKS for tabular, 4/12 models — 3 boosting + MLP):
 
   raw_df -> PreprocessingGraph.transform() -> 2D DataFrame -> predict() -> PredictionResult
                                                     |
                                               [2D validation passes]
 
 
-Current flow (FAILS for neural, 7/12 models):
+Current flow (FAILS for neural, 8/12 models needing 3D):
 
   raw_df -> PreprocessingGraph.transform() -> 2D DataFrame -> predict()
                                                     |
@@ -569,7 +569,7 @@ Options (for implementation agents):
 | Change | Location | What | Why |
 |--------|----------|------|-----|
 | **Add predict_from_raw()** | After L698 | New method that loads base bundles and calls `bundle.predict_from_raw(raw_df)` on each | Required by InferenceBundle protocol |
-| **Fix absolute paths** | L447 | Store relative paths (relative to ensemble bundle dir) | Portability |
+| **Fix path storage** | L447 | Ensure relative paths (relative to ensemble bundle dir); paths stored as raw strings, relative by default | Portability |
 | **Fix predict_from_base_features()** | L694 | Cannot pass same X to heterogeneous models | Different models need different input shapes |
 
 #### builder.py -- BundleBuilder

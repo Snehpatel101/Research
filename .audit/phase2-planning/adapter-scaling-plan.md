@@ -429,7 +429,7 @@ extra["mtf_timeframes"] = ["1min", "5min", "15min"]  # Specific TFs used in trai
 
 After implementation, verify:
 
-1. **Tabular models (3):** `ModelBundle.predict_from_raw(raw_df)` works end-to-end for xgboost, lightgbm, catboost
+1. **Tabular models (4):** `ModelBundle.predict_from_raw(raw_df)` works end-to-end for xgboost, lightgbm, catboost, random_forest
 2. **Sequence models (8):** `ModelBundle.predict_from_raw(raw_df)` produces 3D tensors → correct predictions for lstm, gru, tcn, transformer, tft, nbeats, inceptiontime, resnet1d
 3. **Multi-stream models (2):** `ModelBundle.predict_from_raw(raw_1min_df)` generates MTF data → 4D tensors → correct predictions for patchtst, itransformer
 4. **No double scaling:** With `scaling_source="pipeline"`, data is scaled exactly once (in `ModelBundle.predict()`)

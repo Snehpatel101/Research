@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-ML Factory's training pipeline produces models for 12 core families (3 boosting, 7 neural/CNN, 2 transformer) but only 3/12 can go from raw OHLCV bars to prediction in a single call. This plan closes that gap with 24 tasks across 4 phases (P0-A through P0-D), producing a `deploy/` directory with per-horizon artifacts, a JSON manifest, and validation reports. The critical path runs: foundation types/protocols (P0-A) -> adapter routing for 3D/4D models + double-scaling fix (P0-B) -> deploy packaging with artifact selection (P0-C) -> notebook inference demo (P0-D). Total estimated effort: 1,066-1,425 LOC across 3 new files and 7 modified files. After implementation, `artifact.predict_from_raw(raw_bars_df)` works for all 12 model families, ensembles included, with zero caller-side tensor shaping.
+ML Factory's training pipeline produces models for 12 core families (4 tabular [3 boosting + MLP], 6 neural/CNN, 2 transformer) but only 4/12 can go from raw OHLCV bars to prediction in a single call (10 broken: 8 needing 3D + 2 needing 4D). This plan closes that gap with 24 tasks across 4 phases (P0-A through P0-D), producing a `deploy/` directory with per-horizon artifacts, a JSON manifest, and validation reports. The critical path runs: foundation types/protocols (P0-A) -> adapter routing for 3D/4D models + double-scaling fix (P0-B) -> deploy packaging with artifact selection (P0-C) -> notebook inference demo (P0-D). Total estimated effort: 1,066-1,425 LOC across 3 new files and 7 modified files. After implementation, `artifact.predict_from_raw(raw_bars_df)` works for all 12 model families, ensembles included, with zero caller-side tensor shaping.
 
 ---
 
@@ -101,8 +101,8 @@ ML Factory's training pipeline produces models for 12 core families (3 boosting,
 |---------|------------|------------|--------|----------|------------|
 | R1 | Double-scaling regression: `skip_scaling` reverts to `False` in future edits, causing features to be scaled twice | Medium | High | **HIGH** | Inline comment at fix site; integration test IT-1 checks single scaling; `ScalingSource` enum documents pattern |
 | R2 | 4D model MTF data availability: user provides 5min data instead of 1min at inference time | High | Medium | **HIGH** | `_build_4d_input()` validates DatetimeIndex + OHLCV columns + min row counts; metadata stores `primary_timeframe`; descriptive `ValueError` messages |
-| R3 | EnsembleBundle backward compat: absolute paths in old bundles break on relocation | Medium | High | **HIGH** | `load()` checks `Path.is_absolute()` -- absolute used as-is, relative resolved against parent; `save()` uses `try/except` for cross-root edge cases |
-| R4 | Calibrator None propagation: calibrator lost during orchestrator result conversion | High | Medium | **HIGH** | Add explicit `calibrator` field to orchestrator `ModelTrainingResult`; copy via `getattr(result, "calibrator", None)` in both sequential and parallel training paths |
+| R3 | EnsembleBundle backward compat: paths stored as raw strings (relative by default); absolute paths in old bundles break on relocation | Medium | High | **HIGH** | `load()` checks `Path.is_absolute()` -- absolute used as-is, relative resolved against parent; `save()` uses `try/except` for cross-root edge cases |
+| R4 | Calibrator None propagation: calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path | High | Medium | **HIGH** | Add explicit `calibrator` field to orchestrator `ModelTrainingResult`; copy via `getattr(result, "calibrator", None)` in both sequential and parallel training paths |
 | R6 | Feature column drift between training and inference | Medium | High | **HIGH** | BundleMetadata stores `feature_names` backup; `_apply_adapter()` uses stored column order; `validate()` checks feature count |
 | R5 | Notebook fails in Colab: version mismatch, OOM, dependency conflicts | Medium | Medium | **MEDIUM** | All cells wrapped in try/except; predict demo uses bounded `tail(n_bars)`; zip only `deploy/`; Drive persistence as alternative |
 | R7 | Deploy selector picks wrong artifact due to metric key mismatch | Low | Medium | **MEDIUM** | Same `val_f1` key used consistently; falls back to best single model; manifest records metric snapshot |
@@ -1211,3 +1211,21 @@ BATCH 7 — Notebook Cells (depends on Batch 5-6, all parallel)
 
 *Generated: 2026-02-15 by Agent 10/10 (Final Consolidator)*
 *Source documents: Reports 01-09 in `/home/jake/Desktop/Research/.audit/deploy-plan/`*
+
+---
+
+## VERIFICATION NOTES
+
+The following corrections were applied to this document and all source reports (01-09) after cross-referencing audit claims against the actual codebase:
+
+| # | Correction | Before | After | Files Updated |
+|---|-----------|--------|-------|---------------|
+| V1 | `src/orchestrator.py` existence | "Does NOT exist" | EXISTS — contains MLPipeline class (thin wrapper around UnifiedTrainingOrchestrator with bundling support) | 02 |
+| V2 | Model count | "3 boosting" working, "9 broken" | 4 tabular (3 boosting + MLP) working; 10 broken (8 needing 3D + 2 needing 4D) | 01, 02, 03, 05, FINAL |
+| V3 | Calibrator nuance | "calibrator lost" / "broken transfer" | Calibrator works via Trainer attribute but lost in orchestrator's ModelTrainingResult conversion path | 01, 02, 03, 05, 09, FINAL |
+| V4 | Ensemble paths | "absolute paths" | Paths stored as raw strings; relative by default | 01, 03, 05, 09, FINAL |
+| V5 | End-to-end preprocessing | "No end-to-end preprocessing replay" | Exists for tabular via PreprocessingGraph.transform() + predict_from_raw(); missing adapter routing for 3D/4D models | 01 |
+| V6 | Pickle count | "17 raw pickle.load()" | 16 confirmed raw pickle.load() call sites | 01, 05 |
+| V7 | MTFMode naming | "MTFMode" | "ModelMTFMode" where referencing data_contract.py | 04, 05 |
+
+*Verification applied: 2026-02-15*

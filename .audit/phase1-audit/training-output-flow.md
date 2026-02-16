@@ -284,10 +284,10 @@ _build_ensemble(df)
 - Only `MLFactory` (Phase 4) calls it, and it's optional
 - If using `train_pipeline()` directly, no bundles are created
 
-#### GAP 7: Calibrator Attachment During Training
-- Calibrator is attached as `result.calibrator` on the service result object
-- But when converting to `ModelTrainingResult`, calibrator is not transferred
-- `BundleBuilder._extract_calibrator()` looks on the trainer, not on the result
+#### GAP 7: Calibrator Attachment During Training (Partial)
+- Calibrator IS stored on `Trainer.calibrator` and `BundleBuilder._extract_calibrator()` CAN find it via duck-typing
+- However, the orchestrator also sets calibrator on the service result object (L993) which is LOST during `ModelTrainingResult` conversion (L912-920) since that dataclass has no `calibrator` field
+- Net effect: calibrator transfer works for direct Trainer access but fails in the orchestrator conversion path
 
 ---
 
@@ -309,7 +309,7 @@ _build_ensemble(df)
 
 6. **Walk-Forward Bundle** - Store walk-forward windows config alongside models
 
-7. **Fix Calibrator Transfer** - Ensure calibrator flows from training service result → ModelTrainingResult → trainer → BundleBuilder extraction
+7. **Fix Calibrator Transfer in Orchestrator Path** - Calibrator IS on Trainer.calibrator (BundleBuilder finds it), but is LOST during orchestrator's ModelTrainingResult conversion (L912-920). Add `calibrator` field to `ModelTrainingResult` dataclass or ensure BundleBuilder always accesses Trainer directly.
 
 ### Nice to Have
 
@@ -347,7 +347,7 @@ _build_ensemble(df)
 | Meta-labeling bundle | No primary+meta model pair bundle |
 | Walk-forward bundle | No window-aware inference bundle |
 | FeatureSpec generation | No auto-generation from training config |
-| Calibrator pipeline | Calibrator not reliably transferred to bundle |
+| Calibrator pipeline | Calibrator on Trainer works; lost in orchestrator ModelTrainingResult conversion path |
 
 ---
 
@@ -358,6 +358,6 @@ The training→inference bridge is **architecturally sound** with BundleBuilder,
 1. **Fragile extraction** - Duck-typing instead of explicit interfaces for trainer components
 2. **Manual bundle step** - Must explicitly call BundleBuilder after training (or use MLFactory)
 3. **Special mode gaps** - Regime, meta-labeling, and walk-forward models lack specialized bundles
-4. **Calibrator transfer** - Calibrator doesn't reliably flow from training to bundle
+4. **Calibrator transfer** - Calibrator IS on Trainer.calibrator (works for direct access) but LOST in orchestrator's ModelTrainingResult conversion (L912-920)
 
 The system is ~80% complete for a fully automated train→bundle→infer pipeline. The remaining 20% is mostly about standardizing interfaces and handling special training modes.
