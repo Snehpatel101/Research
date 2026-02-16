@@ -4,6 +4,71 @@
 
 ---
 
+## Phase 53 (2026-02-16) | Security Hardening, SymbolConfig Extraction & Resample Safety
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-16)
+**Impact:** 1 new file, 18 modified files. Completes safe_pickle_load migration (0 joblib.load remaining), adds standalone SymbolConfig, hardens resample calls.
+**Tests:** Full 6-agent pipeline verification (36/36 pass, 1 partial→resolved), 4-agent smoke test (all imports, contracts, adapters), 12-model training smoke test (all pass)
+**Commits:** See git log
+
+### Summary
+
+Completes three security/quality hardening items identified during full pipeline verification:
+
+1. **safe_pickle_load migration complete** — 22 remaining `joblib.load` sites migrated to `safe_pickle_load` across 11 files (ensemble meta-learners, classical models, adapter scaling). 3 `torch.load` sites annotated with `# nosec`. Total: 36 safe_pickle_load call sites across 25 files, 0 joblib.load remaining.
+
+2. **SymbolConfig standalone class** — Extracted symbol-specific parameters (tick_value, tick_size, point_value) from embedded BacktestConfig presets into `src/config/symbol.py`. Presets for MES/MGC/MNQ, `from_symbol()` factory method, backward-compatible `BacktestConfig.from_symbol_config()` bridge. Replaced if/elif chains in factory.py and orchestrator.py.
+
+3. **Explicit resample anti-lookahead params** — Added `closed='left', label='left'` to 2 inference resample calls in bundle.py and preprocessing_graph.py that previously relied on pandas defaults.
+
+4. **Circular import fix** — Resolved circular dependency introduced by SymbolConfig import in backtest.py using TYPE_CHECKING + lazy imports.
+
+### Files Created (1)
+
+1. `src/config/symbol.py` — Standalone SymbolConfig dataclass with presets and factory method
+
+### Files Modified (18)
+
+- `src/data/adapters/scaling.py` — joblib.load → safe_pickle_load
+- `src/models/ensemble/ridge_meta.py` — 3 joblib.load → safe_pickle_load
+- `src/models/ensemble/second_level.py` — joblib.load → safe_pickle_load
+- `src/models/ensemble/calibrated_meta.py` — 3 joblib.load → safe_pickle_load
+- `src/models/ensemble/stacking.py` — joblib.load → safe_pickle_load
+- `src/models/ensemble/mlp_meta.py` — 3 joblib.load → safe_pickle_load
+- `src/models/ensemble/blending.py` — joblib.load → safe_pickle_load
+- `src/models/ensemble/voting.py` — joblib.load → safe_pickle_load
+- `src/models/classical/random_forest.py` — 2 joblib.load → safe_pickle_load
+- `src/models/classical/svm.py` — 2 joblib.load → safe_pickle_load
+- `src/models/classical/logistic.py` — 2 joblib.load → safe_pickle_load
+- `src/models/neural/checkpointing.py` — torch.load annotated # nosec
+- `src/models/neural/itransformer_model.py` — torch.load annotated # nosec
+- `src/models/neural/base_rnn.py` — torch.load annotated # nosec
+- `src/config/__init__.py` — SymbolConfig export added
+- `src/inference/backtesting/backtest.py` — Lazy SymbolConfig import, from_symbol_config() bridge
+- `src/inference/bundle.py` — Explicit resample closed/label params
+- `src/inference/preprocessing_graph.py` — Explicit resample closed/label params
+- `src/factory.py` — Uses SymbolConfig.from_symbol()
+- `src/orchestrator.py` — Uses SymbolConfig.from_symbol()
+
+### Verification Results
+
+- **ruff check src/**: 0 errors
+- **black --check src/**: 464 files unchanged
+- **joblib.load grep**: 0 matches (fully migrated)
+- **safe_pickle_load count**: 36 call sites across 25 files
+- **All canonical imports**: PASS (DataRank, ModelFamily, get_model_contract, get_adapter)
+- **SymbolConfig imports**: PASS (from src.config, from src.config.symbol)
+- **BacktestConfig backward compat**: PASS (for_mes, for_mgc still work)
+- **12-model training smoke test**: ALL PASS (XGBoost, LightGBM, CatBoost, LSTM, GRU, TCN, InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS)
+
+### Lessons Learned
+
+- **Circular imports from config packages**: Adding imports to `src/config/__init__.py` can trigger circular dependencies because it eagerly imports from subpackages that may reference other parts of the codebase. Fix: use `TYPE_CHECKING` + lazy imports at the usage site.
+- **joblib.load is equivalent to pickle.load**: Both deserialize arbitrary Python objects. Migrating to a centralized `safe_pickle_load()` with path validation provides a single security checkpoint.
+
+---
+
 ## Phase 52 (2026-02-15) | Universal Inference Pipeline, Special Mode Bundles & Safe Pickle
 
 **Status:** COMPLETE

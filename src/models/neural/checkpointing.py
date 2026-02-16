@@ -310,7 +310,9 @@ class CheckpointManager:
         if not path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {path}")
 
-        checkpoint = torch.load(path, map_location=device, weights_only=False)
+        checkpoint = torch.load(
+            path, map_location=device, weights_only=False
+        )  # nosec: loads state_dicts + metadata dict from trusted internal checkpoints
 
         # Load model state
         model.load_state_dict(checkpoint["model_state_dict"])

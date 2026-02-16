@@ -50,6 +50,8 @@ import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import f1_score
 
+from src.core.utils.safe_pickle import safe_pickle_load
+
 logger = logging.getLogger(__name__)
 
 
@@ -589,9 +591,7 @@ class SecondLevelStacker:
             raise FileNotFoundError(f"Metadata not found at {path}")
 
         # Load metadata
-        # SECURITY: Only load from trusted internal paths (second-level metadata from this system)
-        # External/untrusted joblib files could execute arbitrary code
-        metadata = joblib.load(path / "second_level_metadata.joblib")
+        metadata = safe_pickle_load(path / "second_level_metadata.joblib")
 
         # Restore config
         config_dict = metadata["config"]

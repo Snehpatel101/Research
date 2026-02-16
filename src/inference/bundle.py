@@ -1125,7 +1125,7 @@ class ModelBundle:
 
         result: dict[str, pd.DataFrame] = {}
         for tf in mtf_timeframes:
-            resampled = df.resample(tf).agg(ohlcv_agg).dropna()
+            resampled = df.resample(tf, closed="left", label="left").agg(ohlcv_agg).dropna()
             result[tf] = resampled
             logger.debug(
                 f"_generate_mtf_dataframes: resampled 1min → {tf} " f"({len(resampled)} bars)"

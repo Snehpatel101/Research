@@ -545,7 +545,7 @@ class PreprocessingGraph:
             if source_freq != target_freq:
                 # Resample to target timeframe
                 target_pandas_freq = self._get_pandas_freq(target_freq)
-                df_resampled = df.resample(target_pandas_freq).agg(
+                df_resampled = df.resample(target_pandas_freq, closed="left", label="left").agg(
                     {
                         "open": "first",
                         "high": "max",

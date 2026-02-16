@@ -25,6 +25,8 @@ import joblib
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
+from src.core.utils.safe_pickle import safe_pickle_load
+
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels
 from ..registry import ModelRegistry, register
@@ -590,9 +592,7 @@ class VotingEnsemble(BaseModel):
         if not metadata_path.exists():
             raise FileNotFoundError(f"Ensemble metadata not found: {metadata_path}")
 
-        # SECURITY: Only load from trusted internal paths (ensemble metadata from this system)
-        # External/untrusted joblib files could execute arbitrary code
-        metadata = joblib.load(metadata_path)
+        metadata = safe_pickle_load(metadata_path)
         self._config = metadata.get("config", self._config)
         self._base_model_names = metadata.get("base_model_names", [])
         weights = metadata.get("weights")

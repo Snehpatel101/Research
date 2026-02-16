@@ -10,10 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from src.config.symbol import SymbolConfig
 
 from .costs import CostCalculator, TransactionCosts
 from .equity_curve import EquityCurve, Trade
@@ -79,26 +82,38 @@ class BacktestConfig:
     contract_symbol: str = "MES"
 
     @classmethod
-    def for_mes(cls, **kwargs: Any) -> BacktestConfig:
-        """Create config for Micro E-mini S&P 500."""
+    def from_symbol_config(cls, sym: SymbolConfig, **kwargs: Any) -> BacktestConfig:
+        """Create BacktestConfig from a SymbolConfig.
+
+        Args:
+            sym: SymbolConfig with contract specifications
+            **kwargs: Additional BacktestConfig overrides
+
+        Returns:
+            BacktestConfig populated with the symbol's tick/point values
+        """
         defaults: dict[str, Any] = {
-            "tick_value": 1.25,
-            "tick_size": 0.25,
-            "point_value": 5.0,
+            "tick_value": sym.tick_value,
+            "tick_size": sym.tick_size,
+            "point_value": sym.point_value,
+            "contract_symbol": sym.symbol,
         }
         defaults.update(kwargs)
         return cls(**defaults)
 
     @classmethod
+    def for_mes(cls, **kwargs: Any) -> BacktestConfig:
+        """Create config for Micro E-mini S&P 500."""
+        from src.config.symbol import SymbolConfig
+
+        return cls.from_symbol_config(SymbolConfig.for_mes(), **kwargs)
+
+    @classmethod
     def for_mgc(cls, **kwargs: Any) -> BacktestConfig:
         """Create config for Micro Gold."""
-        defaults: dict[str, Any] = {
-            "tick_value": 1.00,
-            "tick_size": 0.10,
-            "point_value": 10.0,
-        }
-        defaults.update(kwargs)
-        return cls(**defaults)
+        from src.config.symbol import SymbolConfig
+
+        return cls.from_symbol_config(SymbolConfig.for_mgc(), **kwargs)
 
 
 @dataclass

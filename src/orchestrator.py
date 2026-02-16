@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from src.config.symbol import SymbolConfig
 from src.core.config import PipelineConfig
 
 if TYPE_CHECKING:
@@ -247,12 +248,7 @@ class MLPipeline:
 
             # Symbol-specific config
             symbol = self.config.symbol.upper()
-            if symbol == "MES":
-                bt_config = BacktestConfig.for_mes()
-            elif symbol == "MGC":
-                bt_config = BacktestConfig.for_mgc()
-            else:
-                bt_config = BacktestConfig()
+            bt_config = BacktestConfig.from_symbol_config(SymbolConfig.from_symbol(symbol))
 
             backtester = Backtester(predictions=predictions_df, prices=df, config=bt_config)
             bt_result = backtester.run()

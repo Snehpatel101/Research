@@ -25,6 +25,8 @@ from sklearn.preprocessing import MinMaxScaler as SKMinMaxScaler
 from sklearn.preprocessing import RobustScaler as SKRobustScaler
 from sklearn.preprocessing import StandardScaler as SKStandardScaler
 
+from src.core.utils.safe_pickle import safe_pickle_load
+
 logger = logging.getLogger(__name__)
 
 
@@ -368,9 +370,7 @@ class AdapterScaler:
         # Load sklearn scaler if it exists
         scaler_path = path / "scaler.pkl"
         if scaler_path.exists():
-            # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
-            # External/untrusted joblib files could execute arbitrary code
-            instance._scaler = joblib.load(scaler_path)
+            instance._scaler = safe_pickle_load(scaler_path)
             logger.debug(f"Loaded sklearn scaler from {scaler_path}")
 
         logger.info(f"Loaded AdapterScaler from {path}")

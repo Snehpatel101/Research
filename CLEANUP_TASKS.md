@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 52 complete (Phase 3 Master Plan — 26/26 tasks)
-**Last Updated:** 2026-02-15
+**Status:** All phases through 53 complete
+**Last Updated:** 2026-02-16
 
 ---
 
@@ -39,16 +39,73 @@ See **COMPLETION.md** for full task details and implementation information.
 | 50 | 16/16 tasks (all complete) | Speed optimizations, config cleanup, MGC readiness, walk-forward | 2026-02-13 |
 | 51 | 12/12 tasks (all complete) | Deploy artifact system, protocols, adapter routing, deploy manifest | 2026-02-15 |
 | 52 | 14/14 tasks (all complete) | UIP, special mode bundles, safe pickle migration, neural versioning | 2026-02-15 |
+| 53 | 4/4 tasks (all complete) | safe_pickle_load completion, SymbolConfig, resample safety, circular import fix | 2026-02-16 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 239 tasks across 29 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration (16 sites).
+**Summary Impact:** 243 tasks across 30 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class.
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 52 are complete (Phase 3 Master Plan — 26/26 tasks). See COMPLETION.md for full details.
+**No active phases.** All phases through 53 are complete. See COMPLETION.md for full details.
+
+---
+
+### Phase 53: Security Hardening, SymbolConfig Extraction & Resample Safety
+
+**Status:** COMPLETE
+**Priority:** HIGH
+**Tasks:** 4/4 complete
+**Completed:** 2026-02-16
+
+---
+
+#### Task 53-1: Complete safe_pickle_load Migration (22 remaining sites) COMPLETE
+
+**Files Modified:** 11 files (22 joblib.load sites migrated to safe_pickle_load)
+- `src/data/adapters/scaling.py` — 1 site
+- `src/models/ensemble/ridge_meta.py` — 3 sites (model, scaler, metadata)
+- `src/models/ensemble/second_level.py` — 1 site
+- `src/models/ensemble/calibrated_meta.py` — 3 sites
+- `src/models/ensemble/stacking.py` — 1 site
+- `src/models/ensemble/mlp_meta.py` — 3 sites
+- `src/models/ensemble/blending.py` — 1 site
+- `src/models/ensemble/voting.py` — 1 site
+- `src/models/classical/random_forest.py` — 2 sites
+- `src/models/classical/svm.py` — 2 sites
+- `src/models/classical/logistic.py` — 2 sites
+
+**Also annotated:** 3 `torch.load` sites with `# nosec` (trusted internal checkpoints):
+- `src/models/neural/checkpointing.py:313`
+- `src/models/neural/itransformer_model.py:535`
+- `src/models/neural/base_rnn.py:665`
+
+**Verification:** `grep -r "joblib\.load" src/` returns 0 matches. Total safe_pickle_load call sites: 36 across 25 files.
+
+#### Task 53-2: Extract SymbolConfig to Standalone Class COMPLETE
+
+**Files Created:** `src/config/symbol.py`
+**Files Modified:** `src/config/__init__.py`, `src/inference/backtesting/backtest.py`, `src/factory.py`, `src/orchestrator.py`
+- SymbolConfig dataclass with fields: symbol, tick_value, tick_size, point_value, exchange, contract_size
+- Presets: `for_mes()`, `for_mgc()`, `for_mnq()`
+- Factory method: `from_symbol(symbol)` — case-insensitive, defaults to MES for unknown
+- BacktestConfig.from_symbol_config() bridge for backward compat
+- factory.py and orchestrator.py refactored from if/elif chains to SymbolConfig.from_symbol()
+
+#### Task 53-3: Add Explicit Resample Anti-Lookahead Params COMPLETE
+
+**Files Modified:** `src/inference/bundle.py`, `src/inference/preprocessing_graph.py`
+- Added `closed='left', label='left'` to 2 inference resample calls that relied on pandas defaults
+- Now consistent with all other resample calls across the codebase
+
+#### Task 53-4: Fix Circular Import (SymbolConfig in backtest.py) COMPLETE
+
+**File Modified:** `src/inference/backtesting/backtest.py`
+- Moved top-level `from src.config.symbol import SymbolConfig` to TYPE_CHECKING block
+- Added lazy imports inside `for_mes()` and `for_mgc()` class methods
+- Resolves circular: backtest → config.__init__ → config.pipeline → data.pipeline.config → models → validation → inference.backtesting
 
 ---
 

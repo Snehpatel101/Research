@@ -532,7 +532,9 @@ class iTransformerModel(BaseRNNModel):
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
-        checkpoint = torch.load(model_path, map_location=self._device, weights_only=False)
+        checkpoint = torch.load(
+            model_path, map_location=self._device, weights_only=False
+        )  # nosec: loads state_dict + config metadata from trusted internal checkpoints
 
         self._config = checkpoint["config"]
         self._n_features = checkpoint["n_features"]

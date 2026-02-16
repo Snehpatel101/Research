@@ -16,6 +16,8 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 from sklearn.preprocessing import StandardScaler
 
+from src.core.utils.safe_pickle import safe_pickle_load
+
 from ..base import BaseModel, PredictionResult, TrainingMetrics
 from ..common import map_classes_to_labels, map_labels_to_classes
 from ..registry import register
@@ -257,21 +259,15 @@ class CalibratedMetaLearner(BaseModel):
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
-        # SECURITY: Only load from trusted internal paths (models trained by this system)
-        # External/untrusted joblib files could execute arbitrary code
-        self._model = joblib.load(model_path)
+        self._model = safe_pickle_load(model_path)
 
         scaler_path = path / "scaler.joblib"
         if scaler_path.exists():
-            # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
-            # External/untrusted joblib files could execute arbitrary code
-            self._scaler = joblib.load(scaler_path)
+            self._scaler = safe_pickle_load(scaler_path)
 
         metadata_path = path / "metadata.joblib"
         if metadata_path.exists():
-            # SECURITY: Only load from trusted internal paths (model metadata from this system)
-            # External/untrusted joblib files could execute arbitrary code
-            metadata = joblib.load(metadata_path)
+            metadata = safe_pickle_load(metadata_path)
             self._config = metadata.get("config", self._config)
             self._feature_names = metadata.get("feature_names")
             self._n_classes = metadata.get("n_classes", 3)

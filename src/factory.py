@@ -49,6 +49,7 @@ from typing import TYPE_CHECKING, Any
 import pandas as pd
 
 from src.config.experiment import ExperimentConfig
+from src.config.symbol import SymbolConfig
 
 if TYPE_CHECKING:
     from src.models.training.result import TrainingResult
@@ -644,21 +645,11 @@ class MLFactory:
 
             # Select contract specs based on symbol
             symbol = self.config.data.symbol.upper()
-            if symbol == "MGC":
-                backtest_config = BacktestConfig.for_mgc(
-                    position_sizing=local_sizing,
-                    contract_symbol="MGC",
-                )
-            elif symbol == "MES":
-                backtest_config = BacktestConfig.for_mes(
-                    position_sizing=local_sizing,
-                    contract_symbol="MES",
-                )
-            else:
-                backtest_config = BacktestConfig(
-                    position_sizing=local_sizing,
-                    contract_symbol=symbol,
-                )
+            sym_config = SymbolConfig.from_symbol(symbol)
+            backtest_config = BacktestConfig.from_symbol_config(
+                sym_config,
+                position_sizing=local_sizing,
+            )
             backtester = Backtester(predictions=predictions_df, prices=df, config=backtest_config)
 
             # Run backtest

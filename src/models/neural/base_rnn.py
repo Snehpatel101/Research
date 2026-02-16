@@ -662,7 +662,9 @@ class BaseRNNModel(BaseModel):
         if not model_path.exists():
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
-        checkpoint = torch.load(model_path, map_location=self._device, weights_only=False)
+        checkpoint = torch.load(
+            model_path, map_location=self._device, weights_only=False
+        )  # nosec: loads state_dict + config metadata from trusted internal checkpoints
 
         # Check architecture version (warn on mismatch, don't error)
         saved_version = checkpoint.get("arch_version")
