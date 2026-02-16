@@ -46,6 +46,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import pandas as pd
 
 from src.config.experiment import ExperimentConfig
@@ -696,6 +697,14 @@ class MLFactory:
                 self._log("  No predictions available for backtest")
                 return {}
 
+            # Backtester merges on "timestamp" column — rename "datetime" if needed
+            if "datetime" in predictions_df.columns and "timestamp" not in predictions_df.columns:
+                predictions_df = predictions_df.rename(columns={"datetime": "timestamp"})
+
+            prices_df = df.copy()
+            if "datetime" in prices_df.columns and "timestamp" not in prices_df.columns:
+                prices_df = prices_df.rename(columns={"datetime": "timestamp"})
+
             # Configure backtester using local BacktestConfig
             # Note: canonical BacktestConfig (src/config/inference.py) has different fields
             # than the local one (src/inference/backtesting/backtest.py).
@@ -716,7 +725,9 @@ class MLFactory:
                 sym_config,
                 position_sizing=local_sizing,
             )
-            backtester = Backtester(predictions=predictions_df, prices=df, config=backtest_config)
+            backtester = Backtester(
+                predictions=predictions_df, prices=prices_df, config=backtest_config
+            )
 
             # Run backtest
             bt_result = backtester.run()
@@ -881,24 +892,38 @@ class MLFactory:
         Extract predictions from training result for backtesting.
 
         Args:
-            df: Raw OHLCV data
+            df: Raw OHLCV data (has 'datetime' column)
             training_result: TrainingRunResult
 
         Returns:
-            DataFrame with datetime, prediction, confidence columns
+            DataFrame with datetime, prediction, confidence columns.
+            prediction values are in {-1, 0, 1}.
         """
-        # Try aligned OOF from ensemble
+        # Try aligned OOF from ensemble (majority vote across models)
         if hasattr(training_result, "aligned_oof") and training_result.aligned_oof is not None:
             oof = training_result.aligned_oof
+
+            # Majority vote across models per sample
+            ensemble_preds = np.zeros(oof.n_common, dtype=np.int64)
+            for i in range(oof.n_common):
+                row_preds = oof.predictions[i]
+                valid = row_preds[row_preds != oof.MISSING_PREDICTION]
+                if len(valid) > 0:
+                    unique, counts = np.unique(valid, return_counts=True)
+                    ensemble_preds[i] = unique[counts.argmax()]
+                else:
+                    ensemble_preds[i] = 0  # Neutral if no valid predictions
+
+            # Confidence from averaged probabilities across models
+            probs_3d = oof.probabilities.reshape(oof.n_common, oof.n_models, oof.n_classes)
+            avg_probs = np.nanmean(probs_3d, axis=1)  # (n_common, n_classes)
+            confidence = np.nanmax(avg_probs, axis=1)  # (n_common,)
+
             return pd.DataFrame(
                 {
-                    "datetime": df["datetime"].iloc[oof.common_indices],
-                    "prediction": oof.ensemble_predictions,
-                    "confidence": (
-                        oof.ensemble_probabilities.max(axis=1)
-                        if oof.ensemble_probabilities is not None
-                        else None
-                    ),
+                    "datetime": df["datetime"].iloc[oof.common_indices].values,
+                    "prediction": ensemble_preds,
+                    "confidence": confidence,
                 }
             )
 
@@ -909,15 +934,18 @@ class MLFactory:
             if model_result and hasattr(model_result, "oof_prediction"):
                 oof = model_result.oof_prediction
                 if oof is not None:
+                    preds = oof.get_class_predictions()  # 1D array of {-1, 0, 1}
+                    probs = oof.get_probabilities()  # (n_samples, n_classes)
+                    confidence = probs.max(axis=1)
+                    indices = oof.original_indices
+                    if indices is None:
+                        indices = np.arange(len(preds))
+
                     return pd.DataFrame(
                         {
-                            "datetime": df["datetime"].iloc[oof.indices],
-                            "prediction": oof.predictions,
-                            "confidence": (
-                                oof.probabilities.max(axis=1)
-                                if hasattr(oof, "probabilities") and oof.probabilities is not None
-                                else None
-                            ),
+                            "datetime": df["datetime"].iloc[indices].values,
+                            "prediction": preds,
+                            "confidence": confidence,
                         }
                     )
 
