@@ -219,6 +219,11 @@ class TrainerArtifactsMixin:
         lineage_issues: list[str] | None = None,
     ) -> None:
         """Save training artifacts."""
+        # Ensure output directories exist (defensive - _setup_output_dir should
+        # have created these, but path nesting may vary across entry points)
+        for subdir in ("metrics", "predictions", "config", "checkpoints"):
+            (self.output_path / subdir).mkdir(parents=True, exist_ok=True)
+
         # Training metrics
         metrics_path = self.output_path / "metrics" / "training_metrics.json"
         with open(metrics_path, "w") as f:
@@ -278,6 +283,10 @@ class TrainerArtifactsMixin:
         model_path = self.output_path / "checkpoints" / "best_model"
         self.model.save(model_path)
         logger.info(f"Saved model to {model_path}")
+
+    def save(self, path: Path) -> None:
+        """Save the trained model to the given path (public API for artifact persistence)."""
+        self.model.save(path)
 
     def _save_feature_selection(self) -> None:
         """Save feature selection result with model artifacts."""

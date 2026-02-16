@@ -192,6 +192,15 @@ src/
 - Explicit resample anti-lookahead params on all inference sites
 - 12-model training smoke test: ALL PASS
 
+**Phase 54: COMPLETE — E2E Pipeline Bug Fixes (5 bugs)**
+- Trainer.save() added for model persistence
+- Per-model feature selection (replaces global truncation that caused conflicts)
+- 4D multi-stream data wired through MLFactory for PatchTST/iTransformer
+- Timeframe key normalization (1h → 60min)
+- Empty test split guard + date-range filtering for additional_dfs
+- Optuna flags propagated when n_trials=0
+- Full E2E verified: 10/12 models PASS (2 queued behind CPU time)
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

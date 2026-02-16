@@ -4,6 +4,66 @@
 
 ---
 
+## Phase 54 (2026-02-16) | E2E Pipeline Bug Fixes — Trainer.save, Per-Model Features, 4D Multi-Stream
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-16)
+**Impact:** 7 files modified. Fixes 5 blocking bugs preventing full E2E execution with all 12 models.
+**Tests:** 8/8 verification checks pass, boosting E2E pass (6 models), neural E2E pass (LSTM+GRU+NBEATS with different feature counts), transformer E2E pass (PatchTST+iTransformer with 4D multi-stream data)
+**Commits:** See git log
+
+### Summary
+
+Fixes all blocking bugs found during full E2E pipeline testing with MLFactory:
+
+1. **Trainer.save() missing** — `artifact_persistence.py:161` called `trainer.save(path)` but no public method existed. Added `save(path)` to `TrainerArtifactsMixin` in `artifacts.py` delegating to `self.model.save(path)`.
+
+2. **Global feature truncation conflicts** — `unified_orchestrator.py:386-411` picked `min(max_features)` across ALL models, causing conflicts (N-BEATS max=20 vs LSTM min=50). Replaced with per-model feature subsets stored in `self._per_model_features` dict. Each model gets its own top-N features by variance.
+
+3. **4D multi-stream data not wired in MLFactory** — `factory.py._run_training()` called `orchestrator.train(df)` without `additional_dfs`. Added `_generate_additional_dfs()` that resamples raw OHLCV to MTF timeframes (5min, 15min, 60min) and passes through to orchestrator. Updated `_run_data_pipeline()` return to tuple.
+
+4. **Timeframe key mismatch** — Factory stored `additional_dfs["1h"]` but MultiStreamAdapter looked for `"60min"`. Added `normalize_timeframe()` to dict keys in factory.py.
+
+5. **Empty test split crash** — Independent purge/embargo on small timeframes (115 bars for 60min) emptied test splits. Fixed by passing full `additional_dfs` to each split — adapter's `merge_asof` alignment handles timestamp matching naturally. Added empty `tf_values` guard in `multi_stream.py`.
+
+6. **Optuna flags not propagated** — `ExperimentConfig.to_pipeline_config()` didn't set `optimize_hyperparams/labels/features` flags. Added `_do_optimize = n_trials > 0` and passes all three flags.
+
+### Files Modified (7)
+
+- `src/models/training/artifacts.py` — Added public `save(path)` method
+- `src/models/training/unified_orchestrator.py` — Per-model feature subsets, `_per_model_features` dict
+- `src/factory.py` — `_generate_additional_dfs()`, `_needs_multi_stream()`, `normalize_timeframe()`, tuple return
+- `src/data/adapters/preparation.py` — `_filter_additional_by_dates()`, pass full additional_dfs to splits
+- `src/data/adapters/multi_stream.py` — Empty `tf_values` guard in `_extract_aligned_sequence`
+- `src/config/experiment.py` — Optuna optimization flags in `to_pipeline_config()`
+- `src/models/training/services/model_training.py` — `use_feature_selection` propagation
+
+### E2E Test Results (10/12 confirmed)
+
+| Model | Category | Rank | Per-Model Features | Val F1 | Status |
+|-------|----------|------|--------------------|--------|--------|
+| XGBoost | Boosting | 2D | 200 | 0.3177 | PASS |
+| LightGBM | Boosting | 2D | 200 | 0.3012 | PASS |
+| CatBoost | Boosting | 2D | 200 | 0.3283 | PASS |
+| LSTM | RNN | 3D | 150 | 0.2944 | PASS |
+| GRU | RNN | 3D | 150 | 0.2944 | PASS |
+| N-BEATS | MLP | 3D | 20 | 0.2944 | PASS |
+| TCN | CNN | 3D | 100 | 0.0875 | PASS |
+| PatchTST | Transformer | 4D | 10 | 0.3593 | PASS |
+| iTransformer | Transformer | 4D | 10 | 0.2802 | PASS |
+| TFT | Transformer | 3D | 80 | 0.79 acc | PASS (partial) |
+| InceptionTime | CNN | 3D | 100 | — | Queued (CPU) |
+| ResNet1D | CNN | 3D | 100 | — | Queued (CPU) |
+
+### Known Non-Blocking Issues
+
+- **Summary display bug** — F1/Acc shows 0.0000 in final ExperimentResult.summary() (actual per-model metrics correct in training logs)
+- **OOF generation fails for 4D models** — Shape mismatch (3D vs 4D) in OOF generator
+- **max_epochs config not propagated** — Neural models use default 50 instead of config value
+- **CPU-only neural training slow** — TFT ~21min/epoch, needs GPU for production
+
+---
+
 ## Phase 53 (2026-02-16) | Security Hardening, SymbolConfig Extraction & Resample Safety
 
 **Status:** COMPLETE

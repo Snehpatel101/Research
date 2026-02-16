@@ -33,6 +33,7 @@ class ModelTrainingRequest:
     hyperparam_trials: int = 100
     n_splits: int = 5
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
+    use_feature_selection: bool = True
 
 
 @dataclass
@@ -98,9 +99,10 @@ class ModelTrainingService:
         horizon = request.horizon
 
         # Determine output directory
+        # Note: callers already append h{horizon} to output_dir, so don't duplicate it
         output_dir = request.output_dir
         if output_dir is not None:
-            model_output_dir = output_dir / f"h{horizon}"
+            model_output_dir = output_dir
         else:
             # Default output directory if none provided
             model_output_dir = Path("./output") / model_name / f"h{horizon}"
@@ -111,6 +113,7 @@ class ModelTrainingService:
             horizon=horizon,
             sequence_length=request.sequence_length,
             output_dir=model_output_dir,
+            use_feature_selection=request.use_feature_selection,
         )
 
         # CRITICAL: Filter invalid labels (-99) before any training

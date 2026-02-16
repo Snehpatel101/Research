@@ -680,6 +680,11 @@ class MultiStreamAdapter(BaseAdapter):
         unique_mask = np.concatenate([[True], np.diff(mapped_indices) != 0])
         unique_indices = mapped_indices[unique_mask]
 
+        # Guard against empty tf_values (e.g. small dataset where split has no bars)
+        if len(tf_values) == 0:
+            n_feat = tf_values.shape[1] if tf_values.ndim > 1 else 1
+            return np.zeros((seq_len, n_feat), dtype=np.float32)
+
         # Clamp to valid range
         unique_indices = np.clip(unique_indices, 0, len(tf_values) - 1)
 

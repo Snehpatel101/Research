@@ -279,6 +279,8 @@ class LocalTracker(ExperimentTracker):
     @staticmethod
     def _save_json(path: Path, data: Any) -> None:
         """Save data to JSON file."""
+        path = Path(path).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             json.dump(data, f, indent=2, default=str)
 

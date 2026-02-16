@@ -232,9 +232,16 @@ class UnifiedTrainingOrchestrator:
         self._trained_models: dict[str, Any] = {}
 
         # PreparedData cache: keyed by contract properties (rank, seq_len, feature_mode,
-        # mtf_mode, scaler) so models with identical data requirements share preparation.
-        # Biggest win: 3 boosting models (all rank 2) prepare once, reuse 3x.
+        # mtf_mode, scaler, n_features) so models with identical data requirements
+        # share preparation. Biggest win: 3 boosting models (all rank 2) prepare once,
+        # reuse 3x.
         self._prepared_cache: dict[tuple, PreparedData] = {}
+
+        # Per-model feature subsets: each model gets features appropriate for its
+        # contract (top N by variance where N = min(available, max_features)).
+        # Populated by _pre_training_validation, consumed by _prepare_with_cache.
+        self._per_model_features: dict[str, list[str]] = {}
+        self._all_feature_names: list[str] = []
 
         logger.info("Initialized UnifiedTrainingOrchestrator")
         logger.info(f"  Run ID: {self.run_id}")
@@ -310,12 +317,14 @@ class UnifiedTrainingOrchestrator:
         from src.core.contracts import get_model_contract
 
         contract = get_model_contract(model_name)
+        n_model_features = len(self._per_model_features.get(model_name, []))
         cache_key = (
             contract.input_rank.value,
             contract.sequence_length,
             contract.feature_mode.value,
             contract.mtf_mode.value,
             contract.scaler_type,
+            n_model_features,
         )
 
         if cache_key in self._prepared_cache:
@@ -324,6 +333,15 @@ class UnifiedTrainingOrchestrator:
                 f"seq={contract.sequence_length})"
             )
             return self._prepared_cache[cache_key]
+
+        # Filter DataFrame to per-model feature subset (if computed)
+        if self._per_model_features and model_name in self._per_model_features:
+            model_features = set(self._per_model_features[model_name])
+            all_features = set(self._all_feature_names)
+            drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
+            if drop_cols:
+                df = df.drop(columns=drop_cols)
+                logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
 
         prepared = self._data_preparer.prepare(
             df=df,
@@ -383,89 +401,67 @@ class UnifiedTrainingOrchestrator:
                 if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
             ]
 
-        # Auto-select features if count exceeds minimum model limit (Phase 23B-2)
+        # Per-model feature selection: each model gets top N features by variance
+        # where N = min(available_features, model.max_features).
+        # This replaces the old global truncation that picked one feature count
+        # for ALL models (causing conflicts, e.g. N-BEATS max=20 vs LSTM min=50).
         if feature_names and len(feature_names) > 0:
             from src.core.contracts import get_model_contract
 
-            # Find minimum max_features across all configured models
-            min_max_features = float("inf")
-            limiting_model = None
+            self._all_feature_names = list(feature_names)
+
+            # Compute variance ranking once (reused for all models)
+            X_subset = df[feature_names].dropna()
+            variances = X_subset.var().sort_values(ascending=False) if len(X_subset) > 0 else None
+
             for model_name in self.config.models:
                 model_contract = get_model_contract(model_name)
-                if model_contract.max_features < min_max_features:
-                    min_max_features = model_contract.max_features
-                    limiting_model = model_name
-
-            # If we have too many features, auto-select top N by variance
-            if len(feature_names) > min_max_features:
-                logger.warning(
-                    f"Feature count ({len(feature_names)}) exceeds minimum model limit "
-                    f"({min_max_features} for {limiting_model}). Auto-selecting top {min_max_features} features by variance."
-                )
-
-                # Select features with highest variance (most informative)
-                X_subset = df[feature_names].dropna()
-                if len(X_subset) > 0:
-                    variances = X_subset.var().sort_values(ascending=False)
-                    feature_names = variances.head(int(min_max_features)).index.tolist()
-                    logger.info(f"    Selected {len(feature_names)} features by variance")
+                max_feat = model_contract.max_features
+                if len(feature_names) > max_feat and variances is not None:
+                    model_features = variances.head(int(max_feat)).index.tolist()
+                    logger.info(
+                        f"    {model_name}: selected top {len(model_features)}"
+                        f"/{len(feature_names)} features (max={max_feat})"
+                    )
+                else:
+                    model_features = list(feature_names)
+                self._per_model_features[model_name] = model_features
 
         # 1. Contract validation (if enabled)
         if self.config.strict_validation:
             logger.info("  [1/3] Validating data contracts...")
             try:
-                from src.core.contracts import DataContract, DataContractViolation
-
-                # Find label column for validation
-                label_col = None
-                for h in self.config.horizons:
-                    candidate = f"label_h{h}"
-                    if candidate in df.columns:
-                        label_col = candidate
-                        break
+                from src.core.contracts import DataContractViolation, get_model_contract
 
                 if feature_names and len(feature_names) > 0:
-                    # Create data contract from the DataFrame
-                    X = df[feature_names].values
-                    data_contract = DataContract.from_array(
-                        X,
-                        symbol=self.config.symbol,
-                        timeframe=(
-                            self.config.mtf_timeframes[0] if self.config.mtf_timeframes else "5min"
-                        ),
-                        horizon=self.config.horizons[0],
-                        split="train",
-                    )
-
-                    # Validate against model contracts
-                    # NOTE: Skip rank validation at this stage - we're validating raw 2D DataFrame
-                    # Adapters will transform to appropriate rank (3D/4D) later in prepare()
+                    # Validate each model against its per-model feature subset
+                    # NOTE: Skip rank validation — adapters transform to 3D/4D later
                     for model_name in self.config.models:
-                        from src.core.contracts import get_model_contract
-
                         model_contract = get_model_contract(model_name)
+                        model_feat = self._per_model_features.get(model_name, feature_names)
+                        n_feat = len(model_feat)
 
-                        # Only validate feature count at this stage, not rank
-                        # Rank validation would fail for 3D/4D models since we have raw 2D data
                         issues = []
-                        if data_contract.n_features < model_contract.min_features:
+                        if n_feat < model_contract.min_features:
                             issues.append(
                                 f"Too few features: model needs >= {model_contract.min_features}, "
-                                f"data has {data_contract.n_features}"
+                                f"data has {n_feat}"
                             )
-                        if data_contract.n_features > model_contract.max_features:
+                        if n_feat > model_contract.max_features:
                             issues.append(
                                 f"Too many features: model max is {model_contract.max_features}, "
-                                f"data has {data_contract.n_features}"
+                                f"data has {n_feat}"
                             )
 
                         if issues:
                             errors.append(
                                 f"Contract violation for {model_name}: {'; '.join(issues)}"
                             )
-                        # No warnings to extend since we're only checking feature counts
 
-                    logger.info(f"    Data contract: {data_contract.n_features} features")
+                    logger.info(
+                        f"    Per-model features: {len(feature_names)} total, "
+                        f"{len(self.config.models)} models validated"
+                    )
                 else:
                     warnings.append("No feature columns identified for contract validation")
 
@@ -779,6 +775,7 @@ class UnifiedTrainingOrchestrator:
                 n_splits=self.config.n_splits,
                 hyperparam_trials=self.config.hyperparam_trials,
                 scoring=self.config.optuna_metric,
+                use_feature_selection=self.config.optimize_features,
             )
             training_requests.append(request)
 
@@ -899,6 +896,7 @@ class UnifiedTrainingOrchestrator:
             n_splits=self.config.n_splits,
             hyperparam_trials=self.config.hyperparam_trials,
             scoring=self.config.optuna_metric,
+            use_feature_selection=self.config.optimize_features,
         )
         result = self._model_service.train_model(request)
 

@@ -271,16 +271,17 @@ class MLFactory:
             # Phase 1: Data Pipeline
             if resume_from_stage <= self.STAGE_DATA_PIPELINE:
                 self._log("\n[Phase 1/4] Data Pipeline")
-                df = self._run_data_pipeline()
+                df, additional_dfs = self._run_data_pipeline()
                 self._save_checkpoint_data_pipeline(df)
             else:
                 self._log("\n[Phase 1/4] Data Pipeline (cached)")
                 df = self._load_cached_data()
+                additional_dfs = None
 
             # Phase 2: Training
             if resume_from_stage <= self.STAGE_TRAINING:
                 self._log("\n[Phase 2/4] Model Training")
-                training_result = self._run_training(df)
+                training_result = self._run_training(df, additional_dfs=additional_dfs)
                 self._save_checkpoint_training(training_result)
             else:
                 self._log("\n[Phase 2/4] Model Training (cached)")
@@ -490,12 +491,66 @@ class MLFactory:
                 return json.load(f)
         return {}
 
-    def _run_data_pipeline(self) -> pd.DataFrame:
+    def _needs_multi_stream(self) -> bool:
+        """Check if any configured model requires MULTI_TF_4D input."""
+        from src.core.contracts import get_model_contract
+        from src.core.types import DataRank
+
+        for model_name in self.config.training.models:
+            try:
+                contract = get_model_contract(model_name)
+                if contract.input_rank == DataRank.MULTI_TF_4D:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _generate_additional_dfs(self, raw_df: pd.DataFrame) -> dict[str, pd.DataFrame] | None:
+        """
+        Generate resampled OHLCV DataFrames for multi-stream transformer models.
+
+        Args:
+            raw_df: Raw OHLCV DataFrame with DatetimeIndex
+
+        Returns:
+            Dict mapping timeframe strings to resampled DataFrames, or None
+        """
+        if not self._needs_multi_stream():
+            return None
+
+        timeframes = self.config.data.mtf.timeframes
+        self._log(f"  Generating multi-stream data for timeframes: {timeframes}")
+
+        ohlcv_agg = {
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        }
+
+        from src.core.common.timeframes import normalize_timeframe
+
+        additional_dfs: dict[str, pd.DataFrame] = {}
+        for tf in timeframes:
+            resampled = (
+                raw_df[list(ohlcv_agg.keys())]
+                .resample(tf, closed="left", label="left")
+                .agg(ohlcv_agg)
+                .dropna()
+            )
+            normalized_key = normalize_timeframe(tf)
+            additional_dfs[normalized_key] = resampled
+            self._log(f"    {normalized_key}: {len(resampled)} bars")
+
+        return additional_dfs
+
+    def _run_data_pipeline(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
         """
         Run data pipeline to prepare features and labels.
 
         Returns:
-            DataFrame with features, labels, and metadata
+            Tuple of (DataFrame with features/labels, additional_dfs for multi-stream or None)
         """
         self._log("Running data pipeline...")
 
@@ -522,6 +577,10 @@ class MLFactory:
         missing = [c for c in required if c not in raw_df.columns]
         if missing:
             raise ValueError(f"Missing required OHLCV columns: {missing}")
+
+        # Generate additional_dfs for multi-stream models BEFORE feature engineering
+        # (needs raw OHLCV with DatetimeIndex)
+        additional_dfs = self._generate_additional_dfs(raw_df)
 
         # =====================================================================
         # STEP 1: Feature Engineering
@@ -579,14 +638,19 @@ class MLFactory:
         )
         self._log(f"  Label distribution: {df_features['label'].value_counts().to_dict()}")
 
-        return df_features
+        return df_features, additional_dfs
 
-    def _run_training(self, df: pd.DataFrame) -> Any:
+    def _run_training(
+        self,
+        df: pd.DataFrame,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> Any:
         """
         Train models using UnifiedTrainingOrchestrator.
 
         Args:
             df: Prepared DataFrame with features and labels
+            additional_dfs: Resampled OHLCV DataFrames for multi-stream models
 
         Returns:
             TrainingRunResult from orchestrator
@@ -596,10 +660,12 @@ class MLFactory:
         self._log(f"Training {len(self.config.training.models)} models...")
         self._log(f"  Models: {self.config.training.models}")
         self._log(f"  Mode: {self.config.training.training_mode}")
+        if additional_dfs:
+            self._log(f"  Multi-stream timeframes: {list(additional_dfs.keys())}")
 
         pipeline_config = self.config.to_pipeline_config()
         orchestrator = UnifiedTrainingOrchestrator(pipeline_config)
-        result = orchestrator.train(df)
+        result = orchestrator.train(df, additional_dfs=additional_dfs)
 
         self._log(f"  Trained: {result.n_models} models")
         self._log(f"  Best: {result.best_model}")

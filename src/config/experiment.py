@@ -401,6 +401,9 @@ class ExperimentConfig:
         """
         from src.core import PipelineConfig
 
+        # Derive optimization flags from trial count
+        _do_optimize = self.training.optuna.n_trials > 0
+
         return PipelineConfig(
             symbol=self.data.symbol,
             data_path=str(self.data.data_path) if self.data.data_path else "",
@@ -415,6 +418,10 @@ class ExperimentConfig:
             purge_bars=self.training.purge_bars,
             embargo_bars=self.training.embargo_bars,
             random_state=self.random_seed,
+            # Optimization flags — disabled when n_trials=0
+            optimize_hyperparams=_do_optimize,
+            optimize_labels=_do_optimize,
+            optimize_features=_do_optimize,
             # Optuna trial counts - all driven by OptunaConfig.n_trials
             hyperparam_trials=self.training.optuna.n_trials,
             label_optimization_trials=self.training.optuna.n_trials,

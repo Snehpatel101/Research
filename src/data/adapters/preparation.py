@@ -528,19 +528,13 @@ class UnifiedDataPreparation:
         if adapter_type == "multi_stream":
             if additional_dfs:
                 # Multi-stream with explicit additional DataFrames
-                train_additional = self._split_additional_dfs(additional_dfs, "train")
-                val_additional = self._split_additional_dfs(additional_dfs, "val")
-                test_additional = (
-                    self._split_additional_dfs(additional_dfs, "test")
-                    if test_df is not None
-                    else None
-                )
-
+                # Pass full additional_dfs to each split — the adapter's
+                # merge_asof alignment handles timestamp matching naturally
                 ms_adapter = cast(MultiStreamAdapter, adapter)
-                train_result = ms_adapter.transform(train_df, additional_dfs=train_additional)
-                val_result = ms_adapter.transform(val_df, additional_dfs=val_additional)
+                train_result = ms_adapter.transform(train_df, additional_dfs=additional_dfs)
+                val_result = ms_adapter.transform(val_df, additional_dfs=additional_dfs)
                 test_result = (
-                    ms_adapter.transform(test_df, additional_dfs=test_additional)
+                    ms_adapter.transform(test_df, additional_dfs=additional_dfs)
                     if test_df is not None
                     else None
                 )
@@ -758,6 +752,34 @@ class UnifiedDataPreparation:
         )
 
         return train_df, val_df, test_df
+
+    def _filter_additional_by_dates(
+        self,
+        additional_dfs: dict[str, pd.DataFrame],
+        anchor_df: pd.DataFrame,
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Filter additional DataFrames to match the anchor split's date range.
+
+        Uses the anchor DataFrame's index range to slice each timeframe,
+        avoiding independent purge/embargo that can empty small timeframes.
+
+        Args:
+            additional_dfs: Dictionary of timeframe -> DataFrame (DatetimeIndex).
+            anchor_df: The anchor split DataFrame whose date range to match.
+
+        Returns:
+            Dictionary with each timeframe filtered to the anchor date range.
+        """
+        start_ts = anchor_df.index.min()
+        end_ts = anchor_df.index.max()
+
+        result: dict[str, pd.DataFrame] = {}
+        for tf, tf_df in additional_dfs.items():
+            filtered = tf_df[(tf_df.index >= start_ts) & (tf_df.index <= end_ts)]
+            result[tf] = filtered
+
+        return result
 
     def _split_additional_dfs(
         self,

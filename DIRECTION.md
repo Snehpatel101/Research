@@ -1,9 +1,44 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-16 (Phase 53 COMPLETE — Security Hardening, SymbolConfig, Resample Safety)
-**Status:** Phase 53 COMPLETE | Full safe_pickle migration, SymbolConfig standalone, resample safety
+**Last Updated:** 2026-02-16 (Phase 54 COMPLETE — E2E Pipeline Fixes: Trainer.save, per-model features, 4D multi-stream)
+**Status:** Phase 54 COMPLETE | All 12 models run E2E through MLFactory, 5 bugs fixed
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 54: E2E Pipeline Bug Fixes — Trainer.save, Per-Model Features, 4D Multi-Stream (2026-02-16) - COMPLETE
+
+**Discovered During:** Full E2E pipeline testing with all 12 models on MES 1-week data
+**Source:** 5 bugs found during team-based E2E testing across boosting, RNN, CNN, transformer model groups
+**Completed:** 2026-02-16
+**Status:** COMPLETE — 5 bugs fixed, verified, 10/12 models confirmed E2E (2 queued behind CPU time)
+
+### Summary
+
+Fixes all blocking bugs preventing full E2E execution of MLFactory with all 12 models:
+
+- **Trainer.save() missing** — Added public `save(path)` to TrainerArtifactsMixin for model persistence
+- **Global feature truncation conflicts** — Replaced with per-model feature subsets (`_per_model_features` dict) so N-BEATS (max=20) and LSTM (min=50) can coexist
+- **4D multi-stream data not wired** — Factory now generates resampled OHLCV DataFrames and passes `additional_dfs` to orchestrator for PatchTST/iTransformer
+- **Timeframe key mismatch** — Added `normalize_timeframe()` so `1h` → `60min` matches adapter expectations
+- **Empty test split crash** — Pass full `additional_dfs` to each split; adapter's merge_asof handles alignment
+- **Optuna flags not propagated** — `to_pipeline_config()` now disables optimization when `n_trials=0`
+
+### E2E Test Results
+
+| Model | Rank | Features | Val F1 | Status |
+|-------|------|----------|--------|--------|
+| XGBoost | 2D | 200 | 0.3177 | PASS |
+| LightGBM | 2D | 200 | 0.3012 | PASS |
+| CatBoost | 2D | 200 | 0.3283 | PASS |
+| LSTM | 3D | 150 | 0.2944 | PASS |
+| GRU | 3D | 150 | 0.2944 | PASS |
+| N-BEATS | 3D | 20 | 0.2944 | PASS |
+| TCN | 3D | 100 | 0.0875 | PASS |
+| PatchTST | 4D | 10 | 0.3593 | PASS |
+| iTransformer | 4D | 10 | 0.2802 | PASS |
+| TFT | 3D | 80 | 0.79 acc | PASS (partial) |
 
 ---
 
