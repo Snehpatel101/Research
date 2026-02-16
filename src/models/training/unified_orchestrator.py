@@ -98,6 +98,7 @@ class ModelTrainingResult:
     training_time_seconds: float = 0.0
     n_features: int = 0
     data_rank: int = 2
+    calibrator: Any | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -909,6 +910,7 @@ class UnifiedTrainingOrchestrator:
         self._trained_models[f"{model_name}_h{horizon}"] = result.trainer
 
         # Convert service result to orchestrator result
+        calibrator = getattr(result, "calibrator", None)
         return ModelTrainingResult(
             model_name=result.model_name,
             horizon=result.horizon,
@@ -917,6 +919,7 @@ class UnifiedTrainingOrchestrator:
             training_time_seconds=result.training_time_seconds,
             n_features=result.n_features,
             data_rank=result.data_rank,
+            calibrator=calibrator,
         )
 
     def _calibrate_model(

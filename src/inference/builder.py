@@ -46,6 +46,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _get_trainer_protocol() -> type | None:
+    """Lazy import TrainerProtocol to avoid circular imports."""
+    try:
+        from src.core.protocols import TrainerProtocol
+
+        return TrainerProtocol
+    except ImportError:
+        return None
+
+
 # =============================================================================
 # RESULT DATACLASS
 # =============================================================================
@@ -311,6 +321,9 @@ class BundleBuilder:
             calibrator = None
             if include_calibrator:
                 calibrator = self._extract_calibrator(trainer)
+                # Also check model_result (calibrator propagated from orchestrator)
+                if calibrator is None and getattr(model_result, "calibrator", None) is not None:
+                    calibrator = model_result.calibrator
 
             # Get feature spec if provided
             feature_spec = None
@@ -558,8 +571,8 @@ class BundleBuilder:
         """
         Extract model from trainer instance.
 
-        Tries multiple attribute names for compatibility with different
-        trainer implementations.
+        Uses TrainerProtocol when available, falls back to duck-typing
+        for legacy trainer implementations.
 
         Args:
             trainer: Trainer instance
@@ -567,13 +580,18 @@ class BundleBuilder:
         Returns:
             Model instance or None
         """
-        # Try common attribute names
+        # Protocol-aware extraction (preferred)
+        proto = _get_trainer_protocol()
+        if proto is not None and isinstance(trainer, proto):
+            return trainer.model
+
+        # Legacy duck-typing fallback
+        logger.debug("Trainer does not satisfy TrainerProtocol, using duck-typing fallback")
         for attr in ["model", "_model", "estimator", "_estimator"]:
             model = getattr(trainer, attr, None)
             if model is not None:
                 return model
 
-        # Try callable model property
         if hasattr(trainer, "get_model") and callable(trainer.get_model):
             return trainer.get_model()
 
@@ -583,12 +601,18 @@ class BundleBuilder:
         """
         Extract scaler from trainer instance.
 
+        Uses TrainerProtocol when available, falls back to duck-typing.
+
         Args:
             trainer: Trainer instance
 
         Returns:
             Scaler instance or None
         """
+        proto = _get_trainer_protocol()
+        if proto is not None and isinstance(trainer, proto):
+            return trainer.scaler
+
         for attr in ["scaler", "_scaler", "feature_scaler", "_feature_scaler"]:
             scaler = getattr(trainer, attr, None)
             if scaler is not None:
@@ -603,6 +627,8 @@ class BundleBuilder:
         """
         Extract feature column names from trainer.
 
+        Uses TrainerProtocol when available, falls back to duck-typing.
+
         Args:
             trainer: Trainer instance
             n_features: Number of features (fallback for generic names)
@@ -610,7 +636,13 @@ class BundleBuilder:
         Returns:
             List of feature column names
         """
-        # Try common attribute names
+        proto = _get_trainer_protocol()
+        if proto is not None and isinstance(trainer, proto):
+            cols = trainer.feature_columns
+            if cols is not None and len(cols) > 0:
+                return list(cols)
+
+        # Legacy duck-typing fallback
         for attr in ["feature_columns", "_feature_columns", "feature_names", "_feature_names"]:
             columns = getattr(trainer, attr, None)
             if columns is not None and len(columns) > 0:
@@ -631,12 +663,18 @@ class BundleBuilder:
         """
         Extract probability calibrator from trainer.
 
+        Uses TrainerProtocol when available, falls back to duck-typing.
+
         Args:
             trainer: Trainer instance
 
         Returns:
             Calibrator instance or None
         """
+        proto = _get_trainer_protocol()
+        if proto is not None and isinstance(trainer, proto):
+            return trainer.calibrator
+
         for attr in ["calibrator", "_calibrator", "prob_calibrator"]:
             calibrator = getattr(trainer, attr, None)
             if calibrator is not None:

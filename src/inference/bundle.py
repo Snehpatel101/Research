@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 # VERSION AND CONSTANTS
 # =============================================================================
 
-BUNDLE_VERSION = "1.2.0"  # Updated for FeatureSpec support (5-dimension optimization)
+BUNDLE_VERSION = "1.3.0"  # Updated for ScalingSource + extended metadata fields
 BUNDLE_MANIFEST_FILE = "manifest.json"
 BUNDLE_MODEL_DIR = "model"
 BUNDLE_SCALER_FILE = "scaler.pkl"
@@ -90,6 +90,12 @@ class BundleMetadata:
     symbol: str = ""
     training_metrics: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+    scaling_source: str = "bundle"
+    scaler_type: str = ""
+    feature_names: list[str] = field(default_factory=list)
+    training_run_id: str = ""
+    arch_version: str = ""
+    label_mapping: dict[int, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -112,6 +118,12 @@ class BundleMetadata:
             "symbol": self.symbol,
             "training_metrics": self.training_metrics,
             "extra": self.extra,
+            "scaling_source": self.scaling_source,
+            "scaler_type": self.scaler_type,
+            "feature_names": self.feature_names,
+            "training_run_id": self.training_run_id,
+            "arch_version": self.arch_version,
+            "label_mapping": {str(k): v for k, v in self.label_mapping.items()},
         }
 
     @classmethod
@@ -136,6 +148,14 @@ class BundleMetadata:
             symbol=data.get("symbol", ""),
             training_metrics=data.get("training_metrics", {}),
             extra=data.get("extra", {}),
+            scaling_source=data.get("scaling_source", "bundle"),
+            scaler_type=data.get("scaler_type", ""),
+            feature_names=data.get("feature_names", []),
+            training_run_id=data.get("training_run_id", ""),
+            arch_version=data.get("arch_version", ""),
+            label_mapping={
+                int(k): v for k, v in data.get("label_mapping", {}).items()
+            },
         )
 
 
@@ -1034,11 +1054,12 @@ class ModelBundle:
                 "a preprocessing graph or call set_preprocessing_graph() first."
             )
 
-        # Apply preprocessing
+        # Apply preprocessing (skip_scaling=True because predict() applies
+        # the bundle's own scaler — avoids double-scaling)
         features = self.preprocessing_graph.transform(
             raw_df,
             skip_cleaning=skip_cleaning,
-            skip_scaling=False,
+            skip_scaling=True,
         )
 
         # Ensure feature columns match
@@ -1064,6 +1085,10 @@ class ModelBundle:
 
         Combines preprocessing and prediction into a single call for
         convenience during inference.
+
+        Scaling invariant: preprocess() returns unscaled features
+        (skip_scaling=True), then predict() applies the bundle scaler
+        exactly once. This guarantees single-scaling regardless of path.
 
         Args:
             raw_df: DataFrame with raw OHLCV data

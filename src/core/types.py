@@ -227,6 +227,26 @@ class LabelingMethod(str, Enum):
 
 
 # =============================================================================
+# SCALING SOURCE - Which component handles feature scaling
+# =============================================================================
+
+
+class ScalingSource(str, Enum):
+    """
+    Indicates which component is responsible for feature scaling.
+
+    Enforces exactly-one-scaling invariant in the inference path:
+    - BUNDLE: Bundle's scaler handles scaling (default for predict())
+    - PREPROCESSING: PreprocessingGraph handles scaling (for predict_from_raw)
+    - NONE: No scaling applied (pre-scaled input)
+    """
+
+    BUNDLE = "bundle"
+    PREPROCESSING = "preprocessing"
+    NONE = "none"
+
+
+# =============================================================================
 # TYPE ALIASES - For type hints throughout the codebase
 # =============================================================================
 
@@ -261,6 +281,7 @@ __all__ = [
     "CVMethod",
     "AdapterType",
     "LabelingMethod",
+    "ScalingSource",
     # Type aliases
     "Features",
     "Labels",
