@@ -4,6 +4,39 @@
 
 ---
 
+## Phase 56 (2026-02-16) | Backtest Pipeline Fix — _extract_predictions & Timestamp Alignment
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-16)
+**Impact:** 1 file modified (`src/factory.py`). Fixes backtest crash and timestamp mismatch preventing financial metrics.
+**Tests:** Full E2E verification — standard pipeline (7/7 cells), backtest (5 trades, Sharpe=-6.39), MTF (28 columns), Optuna (3 trials, DSR=0.558)
+
+### Summary
+
+Fixes two bugs in the backtest pipeline that prevented `run_backtest=True` from producing financial metrics:
+
+1. **`_extract_predictions()` referenced non-existent attributes** — The method called `oof.ensemble_predictions` and `oof.ensemble_probabilities` on `AlignedOOFResult`, but these attributes don't exist. Fix: use majority vote across `oof.predictions` (shape n_common x n_models) for ensemble prediction, and compute confidence from `oof.probabilities` by averaging across models then taking max. Also fixed the OOFPrediction fallback path which used `oof.indices` (should be `oof.original_indices`) and `oof.predictions` (DataFrame, not array — use `oof.get_class_predictions()` and `oof.get_probabilities()`).
+
+2. **Timestamp column mismatch** — The Backtester merges predictions and prices on "timestamp" column, but both DataFrames only had "datetime" column. The backtester's `_validate_predictions` fell back to converting RangeIndex to timestamps, resulting in no overlap. Fix: rename "datetime" to "timestamp" on both predictions and prices before passing to Backtester.
+
+### Files Modified (1)
+
+- `src/factory.py` — Fixed `_extract_predictions()` (majority vote + proper OOFPrediction API), added numpy import, added datetime→timestamp rename in `_run_evaluation()`
+
+### Verification (all 4 pass)
+
+- **Standard pipeline:** 7/7 notebook cells pass, 3 models trained, deploy artifact OK
+- **Backtest:** 5 trades, total PnL=-$33, Sharpe=-6.39, all financial metrics computed
+- **MTF:** 28 MTF columns (15min + 60min), indicators + OHLCV bars
+- **Optuna:** 3 trials completed, best params found (n_estimators=383, max_depth=3, lr=0.271), DSR=0.558
+
+### Known Minor Issues (not blocking)
+
+- MTF config wiring gap: custom MTF settings from ExperimentConfig aren't fully passed to FeatureEngineer (defaults work)
+- Feature selection `embargo_bars=1440` hardcoded in `features.py:~537` — too aggressive for small datasets
+
+---
+
 ## Phase 55 (2026-02-16) | Deploy Manifest Fix — model_name & primary_model Selection
 
 **Status:** COMPLETE

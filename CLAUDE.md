@@ -206,6 +206,11 @@ src/
 - Deploy manifest `primary_model` selects best model by macro_f1
 - Verified: all 6 bundles + manifest have correct model names
 
+**Phase 56: COMPLETE — Backtest Pipeline Fix**
+- Fixed `_extract_predictions()` — majority vote from AlignedOOFResult, proper OOFPrediction API
+- Fixed timestamp column mismatch (datetime→timestamp rename for Backtester merge)
+- Full verification: standard pipeline (7/7), backtest (5 trades), MTF (28 columns), Optuna (3 trials)
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
