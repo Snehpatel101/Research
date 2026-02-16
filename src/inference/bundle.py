@@ -153,9 +153,7 @@ class BundleMetadata:
             feature_names=data.get("feature_names", []),
             training_run_id=data.get("training_run_id", ""),
             arch_version=data.get("arch_version", ""),
-            label_mapping={
-                int(k): v for k, v in data.get("label_mapping", {}).items()
-            },
+            label_mapping={int(k): v for k, v in data.get("label_mapping", {}).items()},
         )
 
 
@@ -1079,12 +1077,16 @@ class ModelBundle:
         raw_df: pd.DataFrame,
         calibrate: bool = True,
         skip_cleaning: bool = False,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> PredictionResult:
         """
         End-to-end prediction from raw OHLCV data.
 
-        Combines preprocessing and prediction into a single call for
-        convenience during inference.
+        Routes data through the correct adapter based on the model's
+        input rank:
+        - 2D (tabular): preprocess → predict
+        - 3D (sequence): preprocess → _build_3d_input → predict
+        - 4D (multi-stream): _build_4d_input (raw multi-TF) → predict
 
         Scaling invariant: preprocess() returns unscaled features
         (skip_scaling=True), then predict() applies the bundle scaler
@@ -1094,12 +1096,143 @@ class ModelBundle:
             raw_df: DataFrame with raw OHLCV data
             calibrate: Whether to apply probability calibration
             skip_cleaning: If True, skip resampling step
+            additional_dfs: Extra timeframe DataFrames for 4D models.
+                Maps timeframe string (e.g. "5min") to DataFrame.
 
         Returns:
             PredictionResult with predictions and probabilities
         """
+        if self.metadata.requires_4d:
+            X_4d = self._build_4d_input(raw_df, additional_dfs, skip_cleaning)
+            return self.predict(X_4d, calibrate=calibrate)
+
+        # Preprocess raw → 2D features
         features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
+
+        if self.metadata.requires_sequences:
+            X_3d = self._build_3d_input(features)
+            return self.predict(X_3d, calibrate=calibrate)
+
+        # Tabular 2D — pass directly
         return self.predict(features, calibrate=calibrate)
+
+    # -----------------------------------------------------------------
+    # Adapter routing helpers
+    # -----------------------------------------------------------------
+
+    def _build_3d_input(self, features_2d: pd.DataFrame) -> np.ndarray:
+        """Build 3D sequence input from 2D feature DataFrame.
+
+        Creates sliding windows of shape (n_samples, seq_len, n_features)
+        using the bundle's stored sequence_length.
+
+        Args:
+            features_2d: 2D feature DataFrame from preprocess().
+
+        Returns:
+            3D numpy array ready for predict().
+
+        Raises:
+            ShapeMismatchError: If insufficient rows for sequence_length.
+        """
+        from src.inference.errors import ShapeMismatchError
+
+        seq_len = self.metadata.sequence_length
+        if seq_len <= 0:
+            seq_len = 60  # Sensible default
+
+        values = features_2d.values.astype(np.float32)
+        n_rows, n_features = values.shape
+
+        if n_rows < seq_len:
+            raise ShapeMismatchError(
+                expected_rank=3,
+                actual_shape=values.shape,
+                model_name=self.metadata.model_name,
+                context=(
+                    f"Need at least {seq_len} rows for sequence_length={seq_len}, " f"got {n_rows}."
+                ),
+            )
+
+        # Sliding window via stride_tricks (same logic as SequenceAdapter)
+        windows = np.lib.stride_tricks.sliding_window_view(values, seq_len, axis=0)
+        # windows shape: (n_rows - seq_len + 1, n_features, seq_len)
+        # Transpose to (n_sequences, seq_len, n_features)
+        X_3d = windows.transpose(0, 2, 1).copy()
+
+        logger.debug(
+            f"_build_3d_input: {n_rows} rows → {X_3d.shape[0]} sequences "
+            f"(seq_len={seq_len}, features={n_features})"
+        )
+        return X_3d
+
+    def _build_4d_input(
+        self,
+        raw_df: pd.DataFrame,
+        additional_dfs: dict[str, pd.DataFrame] | None,
+        skip_cleaning: bool,
+    ) -> np.ndarray:
+        """Build 4D multi-stream input for multi-timeframe models.
+
+        Uses the MultiStreamAdapter to convert raw OHLCV DataFrames
+        from multiple timeframes into (N, n_tf, seq_len, n_features).
+
+        Args:
+            raw_df: Anchor timeframe DataFrame (smallest TF).
+            additional_dfs: Other timeframe DataFrames keyed by TF string.
+            skip_cleaning: Whether to skip resampling.
+
+        Returns:
+            4D numpy array ready for predict().
+
+        Raises:
+            AdapterRoutingError: If multi-timeframe data is missing.
+        """
+        from src.inference.errors import AdapterRoutingError
+
+        if additional_dfs is None:
+            raise AdapterRoutingError(
+                model_name=self.metadata.model_name,
+                required_rank=4,
+                reason=(
+                    "4D models require additional_dfs mapping timeframe "
+                    "strings to DataFrames (e.g. {'5min': df_5, '15min': df_15})."
+                ),
+            )
+
+        from src.data.adapters import MultiStreamAdapter
+
+        seq_len = self.metadata.sequence_length or 60
+        n_timeframes = self.metadata.n_timeframes or (1 + len(additional_dfs))
+
+        # Determine timeframes from additional_dfs keys
+        # Anchor is inferred as the smallest timeframe (not in additional_dfs)
+        timeframes = list(additional_dfs.keys())
+        # Prepend an anchor placeholder — the adapter expects the anchor first
+        # We assume anchor = first timeframe the user omitted (i.e. "1min")
+        anchor_tf = "1min"
+        if timeframes and anchor_tf not in timeframes:
+            timeframes = [anchor_tf] + timeframes
+
+        adapter = MultiStreamAdapter(
+            sequence_length=seq_len,
+            timeframes=timeframes,
+            label_column="label_h" + str(self.metadata.horizon),
+        )
+
+        try:
+            result = adapter.transform(raw_df, additional_dfs=additional_dfs)
+        except Exception as e:
+            raise AdapterRoutingError(
+                model_name=self.metadata.model_name,
+                required_rank=4,
+                reason=f"MultiStreamAdapter failed: {e}",
+            ) from e
+
+        logger.debug(
+            f"_build_4d_input: {result.X.shape} " f"({n_timeframes} timeframes, seq_len={seq_len})"
+        )
+        return result.X
 
     @staticmethod
     def _file_checksum(path: Path) -> str:

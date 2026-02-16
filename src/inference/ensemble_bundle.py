@@ -439,12 +439,19 @@ class EnsembleBundle:
             )
         files.append(ENSEMBLE_STACKING_FEATURES_FILE)
 
-        # Save base bundle paths
+        # Save base bundle paths (relative to ensemble bundle dir for portability)
         bundles_path = path / ENSEMBLE_BASE_BUNDLES_FILE
+        relative_paths: list[str] = []
+        for p in self.base_bundle_paths:
+            try:
+                relative_paths.append(str(Path(p).relative_to(path.parent)))
+            except ValueError:
+                # Path not relative to parent — store absolute as fallback
+                relative_paths.append(str(p))
         with open(bundles_path, "w") as f:
             json.dump(
                 {
-                    "paths": [str(p) for p in self.base_bundle_paths],
+                    "paths": relative_paths,
                     "model_names": self.metadata.base_model_names,
                 },
                 f,
@@ -535,12 +542,18 @@ class EnsembleBundle:
             with open(stacking_path) as f:
                 stacking_feature_names = json.load(f).get("feature_names", [])
 
-        # Load base bundle paths
+        # Load base bundle paths (resolve relative paths against parent dir)
         base_bundle_paths: list[Path] = []
         bundles_path = path / ENSEMBLE_BASE_BUNDLES_FILE
         if bundles_path.exists():
             with open(bundles_path) as f:
-                base_bundle_paths = [Path(p) for p in json.load(f).get("paths", [])]
+                raw_paths = json.load(f).get("paths", [])
+            for p_str in raw_paths:
+                p = Path(p_str)
+                if not p.is_absolute():
+                    # Relative path — resolve against ensemble bundle's parent
+                    p = (path.parent / p).resolve()
+                base_bundle_paths.append(p)
 
         # Load alignment config
         alignment_config = AlignmentConfig()
@@ -695,6 +708,57 @@ class EnsembleBundle:
             base_predictions[model_name] = output.class_probabilities
 
         # Combine with meta-learner
+        return self.predict(base_predictions, calibrate=calibrate)
+
+    def predict_from_raw(
+        self,
+        raw_df: pd.DataFrame,
+        calibrate: bool = True,
+        skip_cleaning: bool = False,
+    ) -> Any:
+        """
+        End-to-end prediction from raw OHLCV data.
+
+        Loads each base ModelBundle, calls predict_from_raw on each,
+        then combines via the meta-learner.
+
+        Args:
+            raw_df: DataFrame with raw OHLCV data.
+            calibrate: Whether to apply calibration.
+            skip_cleaning: If True, skip resampling step.
+
+        Returns:
+            PredictionResult with class predictions and probabilities.
+
+        Raises:
+            ValueError: If base bundles not available or not loaded.
+        """
+        self._ensure_base_bundles_loaded()
+
+        if not self._base_bundles:
+            raise ValueError(
+                "No base bundles loaded. Ensure base_bundle_paths are valid "
+                "and each bundle has a preprocessing graph."
+            )
+
+        base_predictions: dict[str, np.ndarray] = {}
+
+        for model_name, bundle in self._base_bundles.items():
+            if bundle.preprocessing_graph is None:
+                logger.warning(
+                    f"Base bundle '{model_name}' has no preprocessing graph, "
+                    f"skipping predict_from_raw."
+                )
+                continue
+            output = bundle.predict_from_raw(raw_df, calibrate=False, skip_cleaning=skip_cleaning)
+            base_predictions[model_name] = output.class_probabilities
+
+        if not base_predictions:
+            raise ValueError(
+                "No base bundles produced predictions. "
+                "Ensure at least one base bundle has a preprocessing graph."
+            )
+
         return self.predict(base_predictions, calibrate=calibrate)
 
     def _stack_predictions(
