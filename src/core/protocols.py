@@ -48,9 +48,7 @@ class InferenceBundle(Protocol):
     predictions from raw OHLCV data.
     """
 
-    def predict(
-        self, X: pd.DataFrame | np.ndarray, calibrate: bool = True
-    ) -> PredictionResult: ...
+    def predict(self, X: pd.DataFrame | np.ndarray, calibrate: bool = True) -> PredictionResult: ...
 
     def predict_from_raw(
         self, raw_df: pd.DataFrame, calibrate: bool = True

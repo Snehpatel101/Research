@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 50 complete
-**Last Updated:** 2026-02-13
+**Status:** All phases through 51 complete
+**Last Updated:** 2026-02-15
 
 ---
 
@@ -37,14 +37,102 @@ See **COMPLETION.md** for full task details and implementation information.
 | 48 | 16/16 tasks (all complete) | Medium fixes: embargo defaults, 3-class probs, feature selection, orphaned files, B904 | 2026-02-12 |
 | 49 | 51/51 tasks (all complete) | Ruff clean: SIM102/108/116/103, E402, B904, UP047, black formatting | 2026-02-12 |
 | 50 | 16/16 tasks (all complete) | Speed optimizations, config cleanup, MGC readiness, walk-forward | 2026-02-13 |
+| 51 | 12/12 tasks (all complete) | Deploy artifact system, protocols, adapter routing, deploy manifest | 2026-02-15 |
 
-**Summary Impact:** 213 tasks across 27 phases, 165+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection.
+**Summary Impact:** 225 tasks across 28 phases, 175+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference.
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 50 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 51 are complete. See COMPLETION.md for full details.
+
+---
+
+### Phase 51: Deploy Artifact — Single-Call Production Inference
+
+**Status:** COMPLETE
+**Priority:** HIGH (P1)
+**Tasks:** 12/12 complete (4 batches with validation gates)
+**Source:** 10-agent inference pipeline audit identified gap between training and production deployment
+**Completed:** 2026-02-15
+
+---
+
+#### Task 51-1: Create TrainerProtocol + InferenceBundle (protocols.py) COMPLETE
+
+**File Created:** `src/core/protocols.py`
+- TrainerProtocol: model, scaler, feature_columns, calibrator, model_name properties
+- InferenceBundle: predict(), predict_from_raw(), load() methods
+- TYPE_CHECKING guard to avoid circular import with PredictionResult
+
+#### Task 51-2: Add ScalingSource Enum COMPLETE
+
+**File Modified:** `src/core/types.py`
+- ScalingSource enum: BUNDLE, PREPROCESSING, NONE
+- Added to __all__ exports
+
+#### Task 51-3: Extend BundleMetadata to v1.3.0 COMPLETE
+
+**File Modified:** `src/inference/bundle.py`
+- BUNDLE_VERSION "1.2.0" → "1.3.0"
+- Added: scaling_source, scaler_type, feature_names, training_run_id, arch_version, label_mapping
+- Backward-compatible from_dict() with defaults
+
+#### Task 51-4: Fix Calibrator Propagation COMPLETE
+
+**File Modified:** `src/models/training/unified_orchestrator.py`
+- ModelTrainingResult: added `calibrator: Any | None = None`
+- _train_model: extracts calibrator with `getattr(result, "calibrator", None)`
+
+#### Task 51-5: Protocol-Aware Builder Extraction COMPLETE
+
+**File Modified:** `src/inference/builder.py`
+- Lazy `_get_trainer_protocol()` helper (avoids circular import)
+- All 4 extraction methods use protocol-aware extraction with legacy fallback
+
+#### Task 51-6: Create Structured Inference Errors COMPLETE
+
+**File Created:** `src/inference/errors.py`
+- InferenceError (base), ShapeMismatchError, AdapterRoutingError, PreprocessingError
+
+#### Task 51-7: Adapter Routing in predict_from_raw (2D/3D/4D) COMPLETE
+
+**File Modified:** `src/inference/bundle.py`
+- predict_from_raw routes: 2D tabular → 3D sequence (sliding window) → 4D multi-stream
+- _build_3d_input: np.lib.stride_tricks.sliding_window_view
+- _build_4d_input: MultiStreamAdapter routing
+- Fixed double-scaling: skip_scaling=True in preprocess()
+
+#### Task 51-8: EnsembleBundle predict_from_raw + Portable Paths COMPLETE
+
+**File Modified:** `src/inference/ensemble_bundle.py`
+- predict_from_raw: loads base bundles, calls predict_from_raw on each, combines via meta-learner
+- save(): stores relative paths; load(): resolves against parent directory
+
+#### Task 51-9: Deploy Manifest System COMPLETE
+
+**File Created:** `src/inference/deploy.py`
+- DeployManifest, HorizonManifest, HorizonArtifactEntry dataclasses
+- select_deploy_artifact(), validate_deploy_artifact(), load_deploy_artifact()
+
+#### Task 51-10: Factory Deploy Integration COMPLETE
+
+**File Modified:** `src/factory.py`
+- ExperimentResult: added deploy_path field
+- _create_deploy(): auto-scans bundles, builds manifest per horizon, prefers ensemble as primary
+
+#### Task 51-11: Config Toggle + Exports COMPLETE
+
+**Files Modified:** `src/config/experiment.py`, `src/inference/__init__.py`
+- BundlingSection: deploy_artifact = True
+- __init__.py: all deploy + errors exports
+
+#### Task 51-12: Notebook Deploy Cell COMPLETE
+
+**File Modified:** `notebooks/ml_factory_colab.ipynb`
+- Cell 7: Deploy Artifact (validate, inspect manifest, load artifact)
+- Cell 8: Renumbered Save & Download
 
 ---
 

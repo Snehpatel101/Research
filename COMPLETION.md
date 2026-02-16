@@ -4,6 +4,62 @@
 
 ---
 
+## Phase 51 (2026-02-15) | Deploy Artifact — Single-Call Production Inference
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-15)
+**Impact:** 12 files modified/created (3 new, 9 modified), 4 batches with validation gates, 22 checks passed
+**Tests:** All 22 gate checks passed, ruff 0 errors, black 0 reformats
+**Commits:** `9e21923`, `62f7451`, `6e0e767`, `9a4b00a`
+
+### Summary
+
+End-to-end deploy artifact system enabling single-call production inference from raw OHLCV bars:
+
+```python
+artifact = load_deploy_artifact("./deploy", horizon=20)
+pred = artifact.predict_from_raw(raw_bars_df)
+```
+
+**Batch P0-A (Foundation):** Created `src/core/protocols.py` with TrainerProtocol and InferenceBundle structural typing protocols (TYPE_CHECKING guard for circular import avoidance). Added ScalingSource enum to `src/core/types.py` for exactly-one-scaling invariant. Extended BundleMetadata to v1.3.0 with scaling_source, scaler_type, feature_names, training_run_id, arch_version, label_mapping. Fixed calibrator propagation bug in unified_orchestrator.py (calibrator lost during ModelTrainingResult conversion). Made builder.py protocol-aware with lazy `_get_trainer_protocol()` helper.
+
+**Batch P0-B (Core Inference):** Created `src/inference/errors.py` with structured error hierarchy (InferenceError, ShapeMismatchError, AdapterRoutingError, PreprocessingError). Implemented full adapter routing in predict_from_raw: 2D tabular models pass through directly, 3D sequence models get sliding window via `np.lib.stride_tricks.sliding_window_view`, 4D transformer models get MultiStreamAdapter routing. Fixed double-scaling bug (PreprocessingGraph AND bundle scaler both scaling) with skip_scaling=True. Added predict_from_raw to EnsembleBundle. Made EnsembleBundle paths portable (relative save, absolute load).
+
+**Batch P0-C (Deploy Packaging):** Created `src/inference/deploy.py` with DeployManifest/HorizonManifest/HorizonArtifactEntry (pure JSON, no pickle). Public API: select_deploy_artifact(), validate_deploy_artifact(), load_deploy_artifact(). Factory integration: added _create_deploy() method that auto-scans bundles directory, builds manifest per horizon, prefers ensemble as primary model. Added deploy_artifact toggle to ExperimentConfig BundlingSection. Updated __init__.py with all deploy + errors exports.
+
+**Batch P0-D (Notebook):** Added deploy artifact cell to Colab notebook (Cell 7) showing validate_deploy_artifact, manifest inspection, and load_deploy_artifact usage. Renumbered Cell 8 (Save & Download).
+
+### Files Modified (12 total)
+
+**New:**
+1. `src/core/protocols.py` — TrainerProtocol, InferenceBundle protocols
+2. `src/inference/errors.py` — Structured inference error hierarchy
+3. `src/inference/deploy.py` — DeployManifest, load/select/validate API
+
+**Modified:**
+4. `src/core/types.py` — ScalingSource enum
+5. `src/inference/bundle.py` — Metadata v1.3.0, adapter routing (2D/3D/4D), double-scaling fix
+6. `src/inference/builder.py` — Protocol-aware extraction with lazy import
+7. `src/models/training/unified_orchestrator.py` — Calibrator propagation in ModelTrainingResult
+8. `src/inference/ensemble_bundle.py` — predict_from_raw, portable relative paths
+9. `src/factory.py` — deploy_path in ExperimentResult, _create_deploy method
+10. `src/config/experiment.py` — deploy_artifact toggle in BundlingSection
+11. `src/inference/__init__.py` — Deploy + errors exports
+12. `notebooks/ml_factory_colab.ipynb` — Deploy artifact cell
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| Gate A (5 checks) | PASS | Protocols, ScalingSource, metadata v1.3.0, calibrator, builder |
+| Gate B (4 checks) | PASS | Errors module, 3D/4D routing, ensemble predict_from_raw, paths |
+| Gate C (4 checks) | PASS | Deploy module, factory integration, config toggle, exports |
+| Gate D (9 checks) | PASS | Comprehensive re-verification of all batches |
+| Ruff linting | PASS | 0 errors |
+| Black formatting | PASS | 0 reformats needed |
+
+---
+
 ## Phase 50 (2026-02-13) | Speed Optimizations, Config Cleanup & MGC Readiness
 
 **Status:** ✅ COMPLETE

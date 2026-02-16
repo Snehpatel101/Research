@@ -1,9 +1,96 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-12 (Phase 49 COMPLETE)
-**Status:** Phase 49 COMPLETE | Ruff Clean, All Issues Fixed
+**Last Updated:** 2026-02-15 (Phase 51 COMPLETE)
+**Status:** Phase 51 COMPLETE | Deploy Artifact System, Single-Call Production Inference
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 51: Deploy Artifact — Single-Call Production Inference (2026-02-15) - COMPLETE
+
+**Discovered During:** Inference pipeline audit (10-agent analysis)
+**Source:** Gap between training outputs and production deployment — no unified loading/prediction path
+**Completed:** 2026-02-15
+**Status:** COMPLETE — 12 files modified/created across 4 batches, 22 verification checks passed
+
+### Summary
+
+End-to-end deploy artifact system enabling single-call production inference:
+
+```python
+artifact = load_deploy_artifact("./deploy", horizon=20)
+pred = artifact.predict_from_raw(raw_bars_df)
+```
+
+**Four batches implemented sequentially with validation gates:**
+
+1. **P0-A Foundation** — TrainerProtocol + InferenceBundle protocols (structural typing), ScalingSource enum (exactly-one-scaling invariant), BundleMetadata v1.3.0 (scaling_source, scaler_type, feature_names, training_run_id, arch_version, label_mapping), calibrator propagation fix, protocol-aware builder extraction
+2. **P0-B Core Inference** — Structured inference errors (ShapeMismatchError, AdapterRoutingError, PreprocessingError), adapter routing in predict_from_raw (2D tabular → 3D sequence via sliding window → 4D multi-stream via MultiStreamAdapter), EnsembleBundle predict_from_raw, portable relative paths for deployment
+3. **P0-C Deploy Packaging** — DeployManifest/HorizonManifest/HorizonArtifactEntry (pure JSON, no pickle), select/validate/load_deploy_artifact public API, factory integration (_create_deploy auto-scans bundles), ExperimentConfig deploy_artifact toggle
+4. **P0-D Notebook** — Deploy artifact cell in Colab notebook (validate, inspect manifest, load artifact)
+
+### Code Changes Summary
+
+```python
+# src/core/protocols.py — Structural typing for trainers and bundles
+@runtime_checkable
+class TrainerProtocol(Protocol):
+    model: Any; scaler: Any | None; feature_columns: list[str]; calibrator: Any | None
+
+@runtime_checkable
+class InferenceBundle(Protocol):
+    def predict(self, X, calibrate=True) -> PredictionResult: ...
+    def predict_from_raw(self, raw_df, calibrate=True) -> PredictionResult: ...
+
+# src/inference/bundle.py — Adapter routing (2D/3D/4D)
+def predict_from_raw(self, raw_df, calibrate=True, skip_cleaning=False, additional_dfs=None):
+    if self.metadata.requires_4d:
+        X_4d = self._build_4d_input(raw_df, additional_dfs, skip_cleaning)
+        return self.predict(X_4d, calibrate=calibrate)
+    features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
+    if self.metadata.requires_sequences:
+        X_3d = self._build_3d_input(features)
+        return self.predict(X_3d, calibrate=calibrate)
+    return self.predict(features, calibrate=calibrate)
+
+# src/inference/deploy.py — Single-call artifact loading
+def load_deploy_artifact(deploy_dir, horizon, model_name=None):
+    bundle_path = select_deploy_artifact(deploy_dir, horizon, model_name)
+    # Auto-detects ModelBundle vs EnsembleBundle from metadata
+    ...
+```
+
+### Files Modified (12 total)
+
+**New files (3):** `src/core/protocols.py`, `src/inference/errors.py`, `src/inference/deploy.py`
+**Modified (9):** `src/core/types.py`, `src/inference/bundle.py`, `src/inference/builder.py`, `src/models/training/unified_orchestrator.py`, `src/inference/ensemble_bundle.py`, `src/factory.py`, `src/config/experiment.py`, `src/inference/__init__.py`, `notebooks/ml_factory_colab.ipynb`
+
+### Impact Analysis
+
+| Category | Before | After | Benefit |
+|----------|--------|-------|---------|
+| Production loading | Manual bundle path construction | `load_deploy_artifact(dir, horizon)` | Single-call inference |
+| Adapter routing | PreprocessingGraph only outputs 2D | Auto 2D→3D→4D routing | All 12 models work end-to-end |
+| Double scaling | Graph scales + bundle scales | ScalingSource enum, skip_scaling=True | Correct preprocessing |
+| Calibrator | Lost during result conversion | Propagated through ModelTrainingResult | Calibrated predictions |
+| Bundle paths | Absolute (non-portable) | Relative save, absolute load | Deployable artifacts |
+| Error handling | Generic exceptions | ShapeMismatchError, AdapterRoutingError | Debuggable failures |
+| Type safety | Duck typing for trainers | TrainerProtocol + InferenceBundle | Contract enforcement |
+
+### Verification Results
+
+**All 22 Checks Pass:**
+```bash
+# Batch A (5): protocols import, ScalingSource, metadata v1.3.0, calibrator field, builder protocol
+# Batch B (4): errors module, predict_from_raw 3D/4D, ensemble predict_from_raw, portable paths
+# Batch C (4): deploy.py module, factory _create_deploy, config toggle, __init__ exports
+# Batch D (9): comprehensive re-verification of all batches
+ruff check src/                          # 0 errors
+black --check src/                       # All files formatted
+python -c "from src.inference.deploy import load_deploy_artifact; print('OK')"
+python -c "from src.core.protocols import TrainerProtocol, InferenceBundle; print('OK')"
+```
 
 ---
 
