@@ -106,6 +106,9 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Calibrator (set during run() if calibration is enabled)
         self.calibrator: ProbabilityCalibrator | None = None
 
+        # Scaler (set externally or during pipeline; exposes for TrainerProtocol)
+        self._scaler: Any | None = None
+
         # Initialize experiment tracker
         self.tracker: ExperimentTracker = self._setup_tracker()
 
@@ -117,6 +120,29 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             f"horizon={config.horizon}, run_id={self.run_id}, "
             f"feature_selection={self._is_feature_selection_enabled()}"
         )
+
+    # -- TrainerProtocol properties ------------------------------------------
+
+    @property
+    def scaler(self) -> Any | None:
+        """Return the scaler, if one has been set."""
+        return self._scaler
+
+    @scaler.setter
+    def scaler(self, value: Any | None) -> None:
+        self._scaler = value
+
+    @property
+    def feature_columns(self) -> list[str]:
+        """Return the feature columns used for training."""
+        return self._feature_set_columns or []
+
+    @property
+    def model_name(self) -> str:
+        """Return the model name from config."""
+        return self.config.model_name
+
+    # -- Internal helpers -----------------------------------------------------
 
     def _generate_run_id(self) -> str:
         """

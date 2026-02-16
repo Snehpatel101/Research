@@ -53,6 +53,7 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from src.core import PipelineConfig
+    from src.core.interfaces import PredictionResult
     from src.models.ensemble.orchestrator import EnsembleResult
 
 logger = logging.getLogger(__name__)
@@ -610,7 +611,7 @@ class EnsembleBundle:
         self,
         base_predictions: dict[str, np.ndarray],
         calibrate: bool = True,
-    ) -> Any:
+    ) -> PredictionResult:
         """
         Make ensemble predictions from base model outputs.
 
@@ -678,7 +679,7 @@ class EnsembleBundle:
         self,
         X: pd.DataFrame | np.ndarray,
         calibrate: bool = True,
-    ) -> Any:
+    ) -> PredictionResult:
         """
         End-to-end prediction from base features.
 
@@ -715,7 +716,7 @@ class EnsembleBundle:
         raw_df: pd.DataFrame,
         calibrate: bool = True,
         skip_cleaning: bool = False,
-    ) -> Any:
+    ) -> PredictionResult:
         """
         End-to-end prediction from raw OHLCV data.
 

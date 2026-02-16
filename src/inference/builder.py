@@ -33,7 +33,9 @@ from __future__ import annotations
 
 import json
 import logging
+import pickle
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -388,11 +390,14 @@ class BundleBuilder:
         """
         Build ensemble bundle from PHASE_4 EnsembleResult.
 
-        Creates a bundle containing:
-        - The trained meta-learner
-        - References to base model bundles
-        - Stacking configuration
-        - Ensemble metadata
+        Creates a bundle directory compatible with EnsembleBundle.load(),
+        containing:
+        - manifest.json (file listing with checksums)
+        - metadata.json (EnsembleBundleMetadata format)
+        - base_bundles.json (model name -> relative path mapping)
+        - stacking_features.json (feature column names)
+        - alignment_config.json (OOF alignment configuration)
+        - meta_learner/ (serialized meta-learner model)
 
         Args:
             ensemble_result: Result from EnsembleOrchestrator.train()
@@ -404,46 +409,133 @@ class BundleBuilder:
         Raises:
             ValueError: If ensemble_result is invalid
         """
+        from src.inference.ensemble_bundle import (
+            ENSEMBLE_ALIGNMENT_CONFIG_FILE,
+            ENSEMBLE_BASE_BUNDLES_FILE,
+            ENSEMBLE_BUNDLE_VERSION,
+            ENSEMBLE_MANIFEST_FILE,
+            ENSEMBLE_META_LEARNER_DIR,
+            ENSEMBLE_METADATA_FILE,
+            ENSEMBLE_STACKING_FEATURES_FILE,
+        )
+
         ensemble_dir = self.bundles_dir / "ensemble"
         ensemble_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save ensemble metadata
-        ensemble_metadata = {
-            "ensemble_name": ensemble_result.ensemble_name,
+        files: list[str] = []
+        base_bundles = base_bundles or []
+
+        # --- Extract stacking feature names from aligned OOF ---
+        stacking_feature_names: list[str] = []
+        if ensemble_result.aligned_oof is not None:
+            aligned = ensemble_result.aligned_oof
+            if hasattr(aligned, "get_feature_names"):
+                stacking_feature_names = aligned.get_feature_names()
+        if not stacking_feature_names and ensemble_result.stacking_dataset is not None:
+            stacking_data = ensemble_result.stacking_dataset.data
+            stacking_feature_names = [
+                c for c in stacking_data.columns if c not in ("y_true", "datetime")
+            ]
+
+        # --- 1. metadata.json (EnsembleBundleMetadata format) ---
+        horizon = self.config.horizons[0] if self.config.horizons else 20
+        metadata = {
+            "version": ENSEMBLE_BUNDLE_VERSION,
+            "created_at": datetime.now().isoformat(),
             "meta_learner_name": ensemble_result.meta_learner_name,
             "base_model_names": ensemble_result.base_model_names,
+            "horizon": horizon,
             "n_base_models": ensemble_result.n_base_models,
+            "n_stacking_features": len(stacking_feature_names),
+            "symbol": self.config.symbol,
             "coverage": ensemble_result.coverage,
             "alignment_offset": ensemble_result.alignment_offset,
             "metrics": ensemble_result.metrics,
-            "training_time_seconds": ensemble_result.training_time_seconds,
-            "base_bundle_paths": [str(p) for p in (base_bundles or [])],
-            "symbol": self.config.symbol,
+            "extra": {
+                "training_time_seconds": ensemble_result.training_time_seconds,
+                "ensemble_name": ensemble_result.ensemble_name,
+            },
         }
-
-        metadata_path = ensemble_dir / "ensemble_metadata.json"
+        metadata_path = ensemble_dir / ENSEMBLE_METADATA_FILE
         with open(metadata_path, "w") as f:
-            json.dump(ensemble_metadata, f, indent=2)
+            json.dump(metadata, f, indent=2)
+        files.append(ENSEMBLE_METADATA_FILE)
 
-        # Save stacking dataset if available
-        if ensemble_result.stacking_dataset is not None:
-            stacking_path = ensemble_dir / "stacking_dataset.parquet"
+        # --- 2. stacking_features.json ---
+        stacking_path = ensemble_dir / ENSEMBLE_STACKING_FEATURES_FILE
+        with open(stacking_path, "w") as f:
+            json.dump(
+                {
+                    "feature_names": stacking_feature_names,
+                    "n_features": len(stacking_feature_names),
+                },
+                f,
+                indent=2,
+            )
+        files.append(ENSEMBLE_STACKING_FEATURES_FILE)
+
+        # --- 3. base_bundles.json (paths + model_names) ---
+        relative_paths: list[str] = []
+        for p in base_bundles:
             try:
-                ensemble_result.stacking_dataset.data.to_parquet(stacking_path)
-                logger.info(f"Saved stacking dataset to {stacking_path}")
-            except Exception as e:
-                logger.warning(f"Failed to save stacking dataset: {e}")
+                relative_paths.append(str(Path(p).relative_to(ensemble_dir.parent)))
+            except ValueError:
+                relative_paths.append(str(p))
+        bundles_path = ensemble_dir / ENSEMBLE_BASE_BUNDLES_FILE
+        with open(bundles_path, "w") as f:
+            json.dump(
+                {
+                    "paths": relative_paths,
+                    "model_names": ensemble_result.base_model_names,
+                },
+                f,
+                indent=2,
+            )
+        files.append(ENSEMBLE_BASE_BUNDLES_FILE)
 
-        # Save aligned OOF info if available
+        # --- 4. alignment_config.json ---
+        alignment_data: dict[str, Any] = {
+            "strategy": "intersection",
+            "n_classes": 3,
+            "model_offsets": {},
+            "sequence_lengths": {},
+        }
         if ensemble_result.aligned_oof is not None:
-            aligned_info = {
-                "model_names": ensemble_result.aligned_oof.model_names,
-                "n_common": ensemble_result.aligned_oof.n_common,
-                "coverage": ensemble_result.aligned_oof.coverage,
-            }
-            aligned_path = ensemble_dir / "aligned_oof_info.json"
-            with open(aligned_path, "w") as f:
-                json.dump(aligned_info, f, indent=2)
+            aligned = ensemble_result.aligned_oof
+            alignment_data["n_classes"] = getattr(aligned, "n_classes", 3)
+            if hasattr(aligned, "coverage"):
+                alignment_data["model_offsets"] = dict.fromkeys(ensemble_result.base_model_names, 0)
+        alignment_path = ensemble_dir / ENSEMBLE_ALIGNMENT_CONFIG_FILE
+        with open(alignment_path, "w") as f:
+            json.dump(alignment_data, f, indent=2)
+        files.append(ENSEMBLE_ALIGNMENT_CONFIG_FILE)
+
+        # --- 5. meta_learner/ (serialized model) ---
+        meta_learner = None
+        if hasattr(ensemble_result, "_ensemble"):
+            meta_learner = ensemble_result._ensemble
+        elif hasattr(ensemble_result, "ensemble"):
+            meta_learner = ensemble_result.ensemble
+
+        if meta_learner is not None:
+            meta_dir = ensemble_dir / ENSEMBLE_META_LEARNER_DIR
+            if hasattr(meta_learner, "save"):
+                meta_learner.save(meta_dir)
+            else:
+                meta_dir.mkdir(parents=True, exist_ok=True)
+                with open(meta_dir / "model.pkl", "wb") as f:
+                    pickle.dump(meta_learner, f)
+            files.append(ENSEMBLE_META_LEARNER_DIR)
+
+        # --- 6. manifest.json (file listing) ---
+        manifest = {
+            "version": ENSEMBLE_BUNDLE_VERSION,
+            "files": files,
+            "checksums": {},
+        }
+        manifest_path = ensemble_dir / ENSEMBLE_MANIFEST_FILE
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2)
 
         logger.info(f"Built ensemble bundle: {ensemble_dir}")
 

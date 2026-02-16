@@ -162,10 +162,10 @@ class ProductionMonitor:
             Tuple of (is_fresh, message)
         """
         # Check if bundle has metadata with creation timestamp
-        if not hasattr(self.bundle, "_metadata"):
+        if not hasattr(self.bundle, "metadata"):
             return True, "No metadata available for freshness check"
 
-        metadata = self.bundle._metadata
+        metadata = self.bundle.metadata
         if not hasattr(metadata, "created_at"):
             return True, "No created_at timestamp in metadata"
 
@@ -292,9 +292,9 @@ class ProductionMonitor:
 
         # Calculate model age
         model_age_days = 0
-        if hasattr(self.bundle, "_metadata") and hasattr(self.bundle._metadata, "created_at"):
+        if hasattr(self.bundle, "metadata") and hasattr(self.bundle.metadata, "created_at"):
             try:
-                created_at = datetime.fromisoformat(self.bundle._metadata.created_at)
+                created_at = datetime.fromisoformat(self.bundle.metadata.created_at)
                 model_age_days = (datetime.now() - created_at).days
             except (ValueError, AttributeError):
                 pass

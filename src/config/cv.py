@@ -19,20 +19,11 @@ from dataclasses import dataclass
 from enum import Enum
 
 from src.config.base import BaseConfig
+from src.core.types import CVMethod
 
 # =============================================================================
 # ENUMS
 # =============================================================================
-
-
-class CVMethod(str, Enum):
-    """Supported cross-validation methods."""
-
-    PURGED_KFOLD = "purged_kfold"
-    CPCV = "cpcv"
-    WALK_FORWARD = "walk_forward"
-    PBO = "pbo"
-    STANDARD = "standard"
 
 
 class WindowType(str, Enum):

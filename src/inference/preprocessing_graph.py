@@ -493,18 +493,14 @@ class PreprocessingGraph:
         if self.config.mtf.enabled:
             df = self._apply_mtf(df)
 
-        # Step 4: Regime detection
-        if self.config.regime.enabled:
-            df = self._apply_regime(df)
-
-        # Step 5: Handle NaN values (drop rows)
+        # Step 4: Handle NaN values (drop rows)
         df = df.dropna()
 
-        # Step 6: Scaling
+        # Step 5: Scaling
         if not skip_scaling and self._scaler is not None:
             df = self._apply_scaling(df)
 
-        # Step 7: Select feature columns if specified
+        # Step 6: Select feature columns if specified
         if self.config.scaling.feature_columns:
             available_cols = [c for c in self.config.scaling.feature_columns if c in df.columns]
             missing_cols = set(self.config.scaling.feature_columns) - set(available_cols)
@@ -698,12 +694,6 @@ class PreprocessingGraph:
         except ImportError as e:
             logger.warning(f"MTF generator not available: {e}")
             return df
-
-    def _apply_regime(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Apply regime detection."""
-        # Regime features are already added in _apply_features via add_regime_features
-        # This method is for any additional regime-specific processing
-        return df
 
     def _apply_scaling(self, df: pd.DataFrame) -> pd.DataFrame:
         """Apply fitted scaler to features."""

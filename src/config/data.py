@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from src.config.base import BaseConfig
+from src.core.types import LabelingMethod
 
 # =============================================================================
 # ENUMS
@@ -47,15 +48,6 @@ class FeatureCategory(str, Enum):
     TEMPORAL = "temporal"
     BINARY = "binary"
     UNKNOWN = "unknown"
-
-
-class LabelingMethod(str, Enum):
-    """Supported labeling methods."""
-
-    TRIPLE_BARRIER = "triple_barrier"
-    DIRECTIONAL = "directional"
-    THRESHOLD = "threshold"
-    REGRESSION = "regression"
 
 
 class MTFMode(str, Enum):

@@ -192,7 +192,7 @@ class BatchPredictor:
         processed = 0
 
         for batch_idx, batch_df in enumerate(self._iter_batches(data, batch_size)):
-            time.time()
+            batch_start = time.time()  # noqa: F841
 
             try:
                 inference_result = self.pipeline.predict(batch_df, calibrate=calibrate)
