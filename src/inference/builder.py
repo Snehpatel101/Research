@@ -360,6 +360,7 @@ class BundleBuilder:
                         "training_time_seconds": model_result.training_time_seconds,
                         "data_rank": model_result.data_rank,
                     },
+                    model_name=model_name,
                 )
 
                 # Save bundle

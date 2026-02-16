@@ -837,9 +837,23 @@ class MLFactory:
 
                 horizons[horizon].entries.append(entry)
 
-                # Set primary: prefer ensemble, else first
-                if is_ensemble or not horizons[horizon].primary_model:
+                # Set primary: prefer ensemble, else best by macro_f1
+                if is_ensemble or not horizons[horizon].primary_model or model_name == "unknown":
                     horizons[horizon].primary_model = model_name
+                else:
+                    # Compare macro_f1 to pick best
+                    current_f1 = entry.metrics.get("macro_f1", 0.0)
+                    best_entry = next(
+                        (
+                            e
+                            for e in horizons[horizon].entries
+                            if e.model_name == horizons[horizon].primary_model
+                        ),
+                        None,
+                    )
+                    best_f1 = best_entry.metrics.get("macro_f1", 0.0) if best_entry else 0.0
+                    if current_f1 > best_f1:
+                        horizons[horizon].primary_model = model_name
 
             if not horizons:
                 self._log("  No bundles found for deploy manifest")

@@ -201,6 +201,11 @@ src/
 - Optuna flags propagated when n_trials=0
 - Full E2E verified: 10/12 models PASS (2 queued behind CPU time)
 
+**Phase 55: COMPLETE — Deploy Manifest Fix**
+- Bundle metadata `model_name` now correctly set (was "unknown" for boosting models)
+- Deploy manifest `primary_model` selects best model by macro_f1
+- Verified: all 6 bundles + manifest have correct model names
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

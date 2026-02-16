@@ -4,6 +4,36 @@
 
 ---
 
+## Phase 55 (2026-02-16) | Deploy Manifest Fix — model_name & primary_model Selection
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-16)
+**Impact:** 3 files modified. Fixes `model_name: "unknown"` bug in bundle metadata and deploy manifest, adds best-by-F1 primary model selection.
+**Tests:** Full E2E smoke test (6 boosting models), all 6 bundles verified with correct model names, deploy manifest validated.
+
+### Summary
+
+Fixes two bugs in the deploy artifact system:
+
+1. **Bundle metadata `model_name: "unknown"`** — `ModelBundle.from_training()` in `bundle.py:303` used `getattr(model, "_get_model_type", lambda: "unknown")()` to detect model names. Boosting models don't have `_get_model_type` (only neural models do), so all boosting bundles got `"unknown"`. Fix: added explicit `model_name` parameter to `from_training()`, passed from `BundleBuilder` which already knows the correct name from `model_result.model_name`.
+
+2. **Deploy manifest `primary_model: "unknown"`** — `factory.py._create_deploy()` set `primary_model` to the first model found. Since model_name was "unknown", primary was also "unknown". Fix: now selects best model by `macro_f1` score. Ensemble models are still preferred if present.
+
+### Files Modified (3)
+
+- `src/inference/bundle.py` — Added `model_name` param to `from_training()`, prefers explicit name over introspection
+- `src/inference/builder.py` — Passes `model_name=model_name` to `ModelBundle.from_training()`
+- `src/factory.py` — `primary_model` selection by best `macro_f1` instead of first-found
+
+### Verification
+
+- 6 bundles: all show correct `model_name` (xgboost, lightgbm, catboost)
+- Deploy manifest: `primary_model: "catboost"` (best macro_f1=0.328)
+- Zero `"unknown"` in any metadata or manifest field
+- E2E smoke test: 6 models trained, bundles + deploy created successfully
+
+---
+
 ## Phase 54 (2026-02-16) | E2E Pipeline Bug Fixes — Trainer.save, Per-Model Features, 4D Multi-Stream
 
 **Status:** COMPLETE

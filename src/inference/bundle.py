@@ -277,6 +277,7 @@ class ModelBundle:
         symbol: str = "",
         training_metrics: dict[str, Any] | None = None,
         extra_metadata: dict[str, Any] | None = None,
+        model_name: str = "",
     ) -> ModelBundle:
         """
         Create a bundle from trained components.
@@ -295,12 +296,14 @@ class ModelBundle:
             symbol: Trading symbol (e.g., "MES", "MGC")
             training_metrics: Optional training metrics to store
             extra_metadata: Additional metadata
+            model_name: Explicit model name (preferred over introspection)
 
         Returns:
             ModelBundle ready for saving
         """
-        # Get model info
-        model_name = getattr(model, "_get_model_type", lambda: "unknown")()
+        # Get model info — prefer explicit name, then introspection, then "unknown"
+        if not model_name:
+            model_name = getattr(model, "_get_model_type", lambda: "unknown")()
         model_family = getattr(model, "model_family", "unknown")
         requires_sequences = getattr(model, "requires_sequences", False)
         requires_4d = getattr(model, "requires_4d", False)
