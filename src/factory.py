@@ -92,6 +92,7 @@ class ExperimentResult:
     ensemble_metrics: dict[str, float] = field(default_factory=dict)
     backtest_metrics: dict[str, float] = field(default_factory=dict)
     bundle_path: Path | None = None
+    deploy_path: Path | None = None
     output_dir: Path | None = None
     error_message: str | None = None
 
@@ -131,6 +132,9 @@ class ExperimentResult:
 
         if self.bundle_path:
             lines.append(f"\nBundle: {self.bundle_path}")
+
+        if self.deploy_path:
+            lines.append(f"Deploy: {self.deploy_path}")
 
         if self.output_dir:
             lines.append(f"Output: {self.output_dir}")
@@ -295,6 +299,9 @@ class MLFactory:
             bundle_path = self._create_bundle(training_result)
             self._save_checkpoint_bundling(bundle_path)
 
+            # Phase 4b: Deploy artifact (optional)
+            deploy_path = self._create_deploy(training_result, bundle_path)
+
             # Build result
             duration = (datetime.now() - start_time).total_seconds()
             result = ExperimentResult(
@@ -308,6 +315,7 @@ class MLFactory:
                 ensemble_metrics=self._extract_ensemble_metrics(training_result),
                 backtest_metrics=backtest_metrics,
                 bundle_path=bundle_path,
+                deploy_path=deploy_path,
                 output_dir=self.output_dir,
             )
 
@@ -701,6 +709,103 @@ class MLFactory:
 
         except Exception as e:
             logger.warning(f"Bundling failed: {e}")
+            return None
+
+    def _create_deploy(self, training_result: Any, bundle_path: Path | None) -> Path | None:
+        """
+        Create deploy artifact directory with manifest.
+
+        Scans the bundles directory for all saved bundles and produces
+        a deploy/manifest.json indexing them by horizon.
+
+        Args:
+            training_result: Result from training phase.
+            bundle_path: Path to bundles directory (from _create_bundle).
+
+        Returns:
+            Path to deploy directory, or None if disabled or no bundles.
+        """
+        if not getattr(self.config.bundling, "deploy_artifact", True):
+            self._log("  Deploy artifact disabled, skipping")
+            return None
+
+        if bundle_path is None or not bundle_path.exists():
+            return None
+
+        try:
+            from datetime import datetime as dt
+
+            from src.inference.deploy import (
+                DEPLOY_MANIFEST_FILE,
+                DeployManifest,
+                HorizonArtifactEntry,
+                HorizonManifest,
+            )
+
+            deploy_dir = self.output_dir / "deploy"
+            deploy_dir.mkdir(parents=True, exist_ok=True)
+
+            # Scan bundles directory for saved model bundles
+            horizons: dict[int, HorizonManifest] = {}
+
+            for item in sorted(bundle_path.iterdir()):
+                if not item.is_dir():
+                    continue
+
+                metadata_path = item / "metadata.json"
+                if not metadata_path.exists():
+                    continue
+
+                import json
+
+                with open(metadata_path) as f:
+                    meta = json.load(f)
+
+                horizon = meta.get("horizon", 0)
+                model_name = meta.get("model_name", meta.get("meta_learner_name", item.name))
+                is_ensemble = "meta_learner_name" in meta
+
+                # Build relative path from deploy dir to bundle
+                try:
+                    rel_path = str(item.relative_to(deploy_dir))
+                except ValueError:
+                    rel_path = str(item.relative_to(self.output_dir))
+
+                entry = HorizonArtifactEntry(
+                    model_name=model_name,
+                    bundle_path=rel_path,
+                    is_ensemble=is_ensemble,
+                    metrics=meta.get("training_metrics", meta.get("metrics", {})),
+                )
+
+                if horizon not in horizons:
+                    horizons[horizon] = HorizonManifest(horizon=horizon)
+
+                horizons[horizon].entries.append(entry)
+
+                # Set primary: prefer ensemble, else first
+                if is_ensemble or not horizons[horizon].primary_model:
+                    horizons[horizon].primary_model = model_name
+
+            if not horizons:
+                self._log("  No bundles found for deploy manifest")
+                return None
+
+            manifest = DeployManifest(
+                created_at=dt.now().isoformat(),
+                symbol=self.config.data.symbol,
+                horizons=horizons,
+            )
+            manifest.save(deploy_dir / DEPLOY_MANIFEST_FILE)
+
+            self._log(
+                f"  Deploy artifact: {len(horizons)} horizons, "
+                f"{sum(len(h.entries) for h in horizons.values())} bundles"
+            )
+            return deploy_dir
+
+        except Exception as e:
+            logger.warning(f"Deploy artifact creation failed: {e}")
             return None
 
     def _extract_predictions(self, df: pd.DataFrame, training_result: Any) -> pd.DataFrame | None:

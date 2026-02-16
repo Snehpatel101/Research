@@ -147,6 +147,7 @@ class BundlingSection:
     bundle_format: str = "directory"  # directory, tar.gz
     include_oof: bool = True
     include_feature_importance: bool = True
+    deploy_artifact: bool = True
 
 
 # =============================================================================

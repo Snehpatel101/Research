@@ -98,6 +98,18 @@ from src.inference.bundle import (
     ModelBundle,
 )
 
+# Deploy artifact packaging
+from src.inference.deploy import (
+    DEPLOY_MANIFEST_FILE,
+    DEPLOY_VERSION,
+    DeployManifest,
+    HorizonArtifactEntry,
+    HorizonManifest,
+    load_deploy_artifact,
+    select_deploy_artifact,
+    validate_deploy_artifact,
+)
+
 # PHASE_5: Ensemble bundle for stacking ensembles
 from src.inference.ensemble_bundle import (
     ENSEMBLE_BUNDLE_VERSION,
@@ -105,6 +117,14 @@ from src.inference.ensemble_bundle import (
     EnsembleBundle,
     EnsembleBundleManifest,
     EnsembleBundleMetadata,
+)
+
+# Inference errors
+from src.inference.errors import (
+    AdapterRoutingError,
+    InferenceError,
+    PreprocessingError,
+    ShapeMismatchError,
 )
 
 # PHASE_5: InferenceOrchestrator - THE single entry point for inference
@@ -191,4 +211,18 @@ __all__ = [
     "load_inference",
     "predict_from_bundle",
     "predict_batch_from_bundle",
+    # Deploy artifact
+    "DeployManifest",
+    "HorizonArtifactEntry",
+    "HorizonManifest",
+    "DEPLOY_MANIFEST_FILE",
+    "DEPLOY_VERSION",
+    "load_deploy_artifact",
+    "select_deploy_artifact",
+    "validate_deploy_artifact",
+    # Inference errors
+    "InferenceError",
+    "ShapeMismatchError",
+    "AdapterRoutingError",
+    "PreprocessingError",
 ]
