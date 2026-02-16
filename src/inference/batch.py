@@ -27,7 +27,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.inference.pipeline import InferencePipeline, InferenceResult
+try:
+    from src.inference.universal_pipeline import (
+        UniversalInferencePipeline as InferencePipeline,  # type: ignore[assignment]
+    )
+except ImportError:
+    from src.inference.pipeline import InferencePipeline  # type: ignore[assignment]
+from src.inference.pipeline import InferenceResult
 
 logger = logging.getLogger(__name__)
 

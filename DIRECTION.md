@@ -1,9 +1,49 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-15 (Phase 51 COMPLETE)
-**Status:** Phase 51 COMPLETE | Deploy Artifact System, Single-Call Production Inference
+**Last Updated:** 2026-02-15 (Phase 52 COMPLETE — Phase 3 Master Plan 26/26)
+**Status:** Phase 52 COMPLETE | UniversalInferencePipeline, Special Mode Bundles, Safe Pickle, Deploy Artifacts
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 52: Universal Inference Pipeline, Special Mode Bundles & Safe Pickle (2026-02-15) - COMPLETE
+
+**Discovered During:** Phase 3 Master Implementation Plan execution
+**Source:** Completing all 26 tasks from master plan (Phases 3A-3D) — UIP, special bundles, safe pickle, neural versioning
+**Completed:** 2026-02-15
+**Status:** COMPLETE — Phase 3 Master Implementation Plan fully delivered (26/26 tasks across Phases 51-52)
+
+### Summary
+
+Completes the Phase 3 Master Implementation Plan with UniversalInferencePipeline, special training mode bundles, safe pickle migration, and cleanup tasks. All 12 ML Factory models now have end-to-end inference from raw OHLCV bars.
+
+**Key deliverables:**
+- **UniversalInferencePipeline** (~480 lines) — THE single entry point for all inference with 6 prediction methods
+- **Special Mode Bundles** — WalkForwardBundle, RegimeBundle, MetaLabelingBundle, RegimeDetector for advanced training modes
+- **safe_pickle_load()** — Centralized pickle loading replacing 16 raw `pickle.load` sites across 13 files
+- **ARCH_VERSION** — Neural architecture versioning on BaseRNNModel with save/load validation
+- **Deprecation Warnings** — Legacy InferencePipeline + InferenceOrchestrator now emit DeprecationWarning
+- **Colab Integration** — Inference demo cells, torch version check, memory warnings, Drive mount, bundling toggles
+
+### Files Created (6)
+
+1. `src/inference/universal_pipeline.py` — UniversalInferencePipeline
+2. `src/inference/walk_forward_bundle.py` — WalkForwardBundle
+3. `src/inference/regime_bundle.py` — RegimeBundle
+4. `src/inference/meta_labeling_bundle.py` — MetaLabelingBundle
+5. `src/inference/regime_detector.py` — RegimeDetector
+6. `src/core/utils/safe_pickle.py` — safe_pickle_load()
+
+### Impact Analysis
+
+| Category | Before | After | Benefit |
+|----------|--------|-------|---------|
+| Model coverage | 4 tabular models end-to-end | All 12 models end-to-end | Universal inference |
+| Pickle security | 16 raw pickle.load sites | safe_pickle_load() everywhere | Path validation + type checking |
+| Neural versioning | No version tracking | ARCH_VERSION on save/load | Architecture mismatch detection |
+| Special modes | No inference support | WalkForward/Regime/MetaLabeling bundles | All training modes deployable |
+| Legacy code | No deprecation signals | DeprecationWarning on old classes | Clean migration path |
 
 ---
 

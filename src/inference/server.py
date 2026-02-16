@@ -33,7 +33,10 @@ from typing import Any
 
 import numpy as np
 
-from src.inference.pipeline import InferencePipeline
+try:
+    from src.inference.universal_pipeline import UniversalInferencePipeline as InferencePipeline
+except ImportError:
+    from src.inference.pipeline import InferencePipeline  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

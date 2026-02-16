@@ -142,6 +142,11 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         """Return the model name from config."""
         return self.config.model_name
 
+    @property
+    def model_key(self) -> str:
+        """Return a unique key like 'xgboost_h20' for bundle identification."""
+        return f"{self.config.model_name}_h{self.config.horizon}"
+
     # -- Internal helpers -----------------------------------------------------
 
     def _generate_run_id(self) -> str:
@@ -970,6 +975,10 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         )
         logger.info(f"Started experiment tracking run: {tracking_run_id}")
         self.tracker.log_params(self.config.to_dict())
+
+        # Capture scaler from PreparedData for TrainerProtocol
+        if hasattr(prepared, "scaler") and prepared.scaler is not None:
+            self._scaler = prepared.scaler
 
         # Extract data directly from PreparedData (no reshaping needed)
         X_train = prepared.X_train

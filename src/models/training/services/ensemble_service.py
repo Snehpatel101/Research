@@ -409,4 +409,61 @@ class EnsembleService:
             return None
 
 
-__all__ = ["EnsembleService", "EnsembleRequest", "EnsembleServiceResult"]
+def to_ensemble_result(
+    service_result: EnsembleServiceResult,
+    config: PipelineConfig,
+) -> Any:
+    """Bridge EnsembleServiceResult to EnsembleResult for EnsembleBundle.
+
+    The EnsembleService produces an ``EnsembleServiceResult`` while
+    ``EnsembleBundle.from_ensemble_result()`` expects the orchestrator's
+    ``EnsembleResult``.  This function converts between the two so that
+    a bundle can be created directly after ensemble training.
+
+    Args:
+        service_result: Result from ``EnsembleService.build_ensemble()``.
+        config: PipelineConfig used for training.
+
+    Returns:
+        An ``EnsembleResult`` suitable for ``EnsembleBundle.from_ensemble_result()``.
+    """
+    from src.models.ensemble.orchestrator import EnsembleResult
+
+    aligned = service_result.aligned_oof
+    model_names: list[str] = []
+    if aligned is not None:
+        model_names = list(aligned.model_names)
+
+    metrics: dict[str, float] = {}
+    for key, value in service_result.ensemble_metrics.items():
+        if isinstance(value, (int, float)):
+            metrics[key] = float(value)
+
+    meta_learner_name = config.meta_learner or "unknown"
+
+    coverage = 1.0
+    alignment_offset = 0
+    if aligned is not None:
+        coverage = getattr(aligned, "coverage", 1.0)
+        alignment_offset = getattr(aligned, "alignment_offset", 0)
+
+    return EnsembleResult(
+        ensemble_name=f"{meta_learner_name}_ensemble",
+        meta_learner_name=meta_learner_name,
+        base_model_names=model_names,
+        metrics=metrics,
+        stacking_dataset=service_result.stacking_dataset,
+        aligned_oof=aligned,
+        training_time_seconds=service_result.training_time_seconds,
+        n_base_models=len(model_names),
+        coverage=coverage,
+        alignment_offset=alignment_offset,
+    )
+
+
+__all__ = [
+    "EnsembleService",
+    "EnsembleRequest",
+    "EnsembleServiceResult",
+    "to_ensemble_result",
+]

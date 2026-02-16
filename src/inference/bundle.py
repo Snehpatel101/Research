@@ -654,21 +654,17 @@ class ModelBundle:
 
         # Load scaler
         scaler = None
+        from src.core.utils.safe_pickle import safe_pickle_load
+
         scaler_path = path / BUNDLE_SCALER_FILE
         if scaler_path.exists():
-            with open(scaler_path, "rb") as f:
-                # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
-                # External/untrusted pickle files could execute arbitrary code
-                scaler = pickle.load(f)
+            scaler = safe_pickle_load(scaler_path)
 
         # Load calibrator
         calibrator = None
         calibrator_path = path / BUNDLE_CALIBRATOR_FILE
         if calibrator_path.exists():
-            with open(calibrator_path, "rb") as f:
-                # SECURITY: Only load from trusted internal paths (calibrators trained by this system)
-                # External/untrusted pickle files could execute arbitrary code
-                calibrator = pickle.load(f)
+            calibrator = safe_pickle_load(calibrator_path)
 
         # Load preprocessing graph
         preprocessing_graph = None
@@ -1014,22 +1010,128 @@ class ModelBundle:
             PredictionResult with predictions and probabilities
         """
         if self.metadata.requires_4d:
-            X_4d = self._build_4d_input(raw_df, additional_dfs, skip_cleaning)
-            return self.predict(X_4d, calibrate=calibrate)
+            # Auto-generate MTF DataFrames when not provided
+            if additional_dfs is None:
+                additional_dfs = self._generate_mtf_dataframes(raw_df)
+            X = self._apply_adapter(
+                features_2d=pd.DataFrame(),
+                raw_df=raw_df,
+                additional_dfs=additional_dfs,
+                skip_cleaning=skip_cleaning,
+            )
+        else:
+            features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
+            X = self._apply_adapter(features_2d=features)
 
-        # Preprocess raw → 2D features
-        features = self.preprocess(raw_df, skip_cleaning=skip_cleaning)
-
-        if self.metadata.requires_sequences:
-            X_3d = self._build_3d_input(features)
-            return self.predict(X_3d, calibrate=calibrate)
-
-        # Tabular 2D — pass directly
-        return self.predict(features, calibrate=calibrate)
+        return self.predict(X, calibrate=calibrate)
 
     # -----------------------------------------------------------------
     # Adapter routing helpers
     # -----------------------------------------------------------------
+
+    def _apply_adapter(
+        self,
+        features_2d: pd.DataFrame,
+        raw_df: pd.DataFrame | None = None,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+        skip_cleaning: bool = False,
+    ) -> np.ndarray | pd.DataFrame:
+        """Route features through the correct adapter based on model input rank.
+
+        Centralises the 2D → 3D → 4D routing that ``predict_from_raw``
+        needs so callers don't have to repeat the branching logic.
+
+        Args:
+            features_2d: 2D feature DataFrame from preprocess().
+                Ignored for 4D models (which build input from raw data).
+            raw_df: Raw OHLCV DataFrame, required for 4D models.
+            additional_dfs: Extra timeframe DataFrames for 4D models.
+            skip_cleaning: Whether to skip resampling in 4D path.
+
+        Returns:
+            Adapted input ready for predict():
+            - np.ndarray of shape (N, TF, T, F) for 4D models
+            - np.ndarray of shape (N, T, F) for 3D sequence models
+            - pd.DataFrame for 2D tabular models
+        """
+        if self.metadata.requires_4d:
+            if raw_df is None:
+                from src.inference.errors import AdapterRoutingError
+
+                raise AdapterRoutingError(
+                    model_name=self.metadata.model_name,
+                    required_rank=4,
+                    reason="raw_df is required for 4D adapter routing.",
+                )
+            return self._build_4d_input(raw_df, additional_dfs, skip_cleaning)
+
+        if self.metadata.requires_sequences:
+            return self._build_3d_input(features_2d)
+
+        # Tabular 2D — pass through unchanged
+        return features_2d
+
+    def _generate_mtf_dataframes(
+        self,
+        raw_1min_df: pd.DataFrame,
+    ) -> dict[str, pd.DataFrame]:
+        """Resample 1-minute OHLCV data to multiple timeframes.
+
+        Generates the ``additional_dfs`` dict that ``_build_4d_input``
+        requires, using standard OHLCV aggregation rules.
+
+        Args:
+            raw_1min_df: Raw 1-minute OHLCV DataFrame.  Must have a
+                DatetimeIndex (or a ``datetime`` column that can be
+                converted) and columns: open, high, low, close, volume.
+
+        Returns:
+            Dict mapping timeframe strings (e.g. ``"5min"``) to
+            resampled DataFrames.
+
+        Raises:
+            ValueError: If ``mtf_timeframes`` is not set in bundle
+                metadata or if required OHLCV columns are missing.
+        """
+        mtf_timeframes: list[str] = self.metadata.extra.get("mtf_timeframes", [])
+        if not mtf_timeframes:
+            raise ValueError(
+                f"Cannot auto-generate MTF DataFrames for model "
+                f"'{self.metadata.model_name}': metadata.extra['mtf_timeframes'] "
+                f"is not set. Either pass additional_dfs explicitly or save "
+                f"mtf_timeframes in the bundle's extra metadata."
+            )
+
+        # Ensure we have a DatetimeIndex for resample()
+        df = raw_1min_df.copy()
+        if not isinstance(df.index, pd.DatetimeIndex):
+            if "datetime" in df.columns:
+                df = df.set_index("datetime")
+            else:
+                raise ValueError("raw_1min_df must have a DatetimeIndex or a 'datetime' column.")
+
+        required_cols = {"open", "high", "low", "close", "volume"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"raw_1min_df is missing OHLCV columns: {sorted(missing)}")
+
+        ohlcv_agg = {
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        }
+
+        result: dict[str, pd.DataFrame] = {}
+        for tf in mtf_timeframes:
+            resampled = df.resample(tf).agg(ohlcv_agg).dropna()
+            result[tf] = resampled
+            logger.debug(
+                f"_generate_mtf_dataframes: resampled 1min → {tf} " f"({len(resampled)} bars)"
+            )
+
+        return result
 
     def _build_3d_input(self, features_2d: pd.DataFrame) -> np.ndarray:
         """Build 3D sequence input from 2D feature DataFrame.

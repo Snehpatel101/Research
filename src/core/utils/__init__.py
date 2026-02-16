@@ -75,6 +75,7 @@ from .notebook import (
     plot_training_history,
     setup_notebook,
 )
+from .safe_pickle import safe_pickle_load
 
 __all__ = [
     # Colab & Environment setup
@@ -137,4 +138,6 @@ __all__ = [
     "check_cuda_available",
     "get_device_string",
     "get_torch_device",
+    # Safe pickle loading
+    "safe_pickle_load",
 ]

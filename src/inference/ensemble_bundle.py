@@ -569,10 +569,9 @@ class EnsembleBundle:
 
         if (meta_dir / "model.pkl").exists():
             # Load from pickle
-            with open(meta_dir / "model.pkl", "rb") as f:
-                # SECURITY: Only load from trusted internal paths (models trained by this system)
-                # External/untrusted pickle files could execute arbitrary code
-                meta_learner = pickle.load(f)
+            from src.core.utils.safe_pickle import safe_pickle_load
+
+            meta_learner = safe_pickle_load(meta_dir / "model.pkl")
         elif meta_dir.exists():
             # Try loading via model interface
             try:
@@ -588,10 +587,9 @@ class EnsembleBundle:
         scaler = None
         scaler_path = path / ENSEMBLE_SCALER_FILE
         if scaler_path.exists():
-            with open(scaler_path, "rb") as f:
-                # SECURITY: Only load from trusted internal paths (scalers fitted by this system)
-                # External/untrusted pickle files could execute arbitrary code
-                scaler = pickle.load(f)
+            from src.core.utils.safe_pickle import safe_pickle_load as _safe_load
+
+            scaler = _safe_load(scaler_path)
 
         logger.info(
             f"Loaded ensemble bundle: {metadata.meta_learner_name} "

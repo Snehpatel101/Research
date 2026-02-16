@@ -202,10 +202,9 @@ class CheckpointManager:
         latest_checkpoint = checkpoints[-1]
         print(f"📂 Loading checkpoint: {latest_checkpoint}")
 
-        with open(latest_checkpoint, "rb") as f:
-            # SECURITY: Only load from trusted internal paths (checkpoints created by this system)
-            # External/untrusted pickle files could execute arbitrary code
-            checkpoint: dict[str, Any] = pickle.load(f)
+        from src.core.utils.safe_pickle import safe_pickle_load
+
+        checkpoint: dict[str, Any] = safe_pickle_load(latest_checkpoint)
 
         return checkpoint
 
@@ -218,11 +217,10 @@ class CheckpointManager:
             artifact_dir = artifact.download()
             checkpoint_files = list(Path(artifact_dir).glob("*.pkl"))
             if checkpoint_files:
-                with open(checkpoint_files[0], "rb") as f:
-                    # SECURITY: Only load from trusted internal paths (W&B artifacts from this system)
-                    # External/untrusted pickle files could execute arbitrary code
-                    result: dict[str, Any] = pickle.load(f)
-                    return result
+                from src.core.utils.safe_pickle import safe_pickle_load
+
+                result: dict[str, Any] = safe_pickle_load(checkpoint_files[0])
+                return result
         except Exception as e:
             print(f"⚠️  Failed to load from W&B: {e}")
         return None

@@ -192,6 +192,8 @@ class BaseRNNModel(BaseModel):
         that may not generalize to real-time inference.
     """
 
+    ARCH_VERSION = "1.0"
+
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
         self._model: nn.Module = None  # type: ignore[assignment]
@@ -645,6 +647,7 @@ class BaseRNNModel(BaseModel):
                 "n_features": self._n_features,
                 "n_classes": self._n_classes,
                 "seq_len": getattr(self, "_seq_len", None),  # N-BEATS needs this
+                "arch_version": self.ARCH_VERSION,
             },
             path / "model.pt",
         )
@@ -660,6 +663,14 @@ class BaseRNNModel(BaseModel):
             raise FileNotFoundError(f"Model file not found: {model_path}")
 
         checkpoint = torch.load(model_path, map_location=self._device, weights_only=False)
+
+        # Check architecture version (warn on mismatch, don't error)
+        saved_version = checkpoint.get("arch_version")
+        if saved_version is not None and saved_version != self.ARCH_VERSION:
+            logger.warning(
+                f"Architecture version mismatch: saved={saved_version}, "
+                f"current={self.ARCH_VERSION}. Model may behave unexpectedly."
+            )
 
         self._config = checkpoint["config"]
         self._n_features = checkpoint["n_features"]

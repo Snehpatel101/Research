@@ -277,6 +277,14 @@ from src.core.paths import (
     RUNS_DIR,
     TRAINING_CONFIG_PATH,
 )
+
+# =============================================================================
+# PROTOCOLS - Structural typing contracts for inference
+# =============================================================================
+from src.core.protocols import (
+    InferenceBundle,
+    TrainerProtocol,
+)
 from src.core.reproducibility import (
     ReproducibilityConfig,
     ReproducibilityInfo,
@@ -636,6 +644,11 @@ __all__ = [
     "InferenceError",
     "LeakageError",
     "LookaheadError",
+    # =========================================================================
+    # PROTOCOLS - Structural typing contracts for inference
+    # =========================================================================
+    "TrainerProtocol",
+    "InferenceBundle",
     # =========================================================================
     # RESILIENCE - Timeout protection, circuit breakers, retry (Phase 17B-E)
     # =========================================================================

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import time
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -155,6 +156,12 @@ class InferencePipeline:
             bundles: List of ModelBundle instances
             default_voting: Default ensemble voting method
         """
+        warnings.warn(
+            "InferencePipeline is deprecated. Use UniversalInferencePipeline.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         if not bundles:
             raise ValueError("At least one bundle is required")
 

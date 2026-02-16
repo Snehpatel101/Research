@@ -184,10 +184,9 @@ class DataCache:
         if not disk_path.exists():
             return None
         try:
-            with open(disk_path, "rb") as f:
-                # SECURITY: Only load from trusted internal paths (cache files created by this system)
-                # External/untrusted pickle files could execute arbitrary code
-                cached = pickle.load(f)
+            from src.core.utils.safe_pickle import safe_pickle_load
+
+            cached = safe_pickle_load(disk_path)
             return cached["data"], cached["metadata"]
         except Exception as e:
             logger.warning(f"Failed to load from disk cache: {e}")

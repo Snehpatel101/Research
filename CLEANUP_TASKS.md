@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 51 complete
+**Status:** All phases through 52 complete (Phase 3 Master Plan — 26/26 tasks)
 **Last Updated:** 2026-02-15
 
 ---
@@ -38,14 +38,111 @@ See **COMPLETION.md** for full task details and implementation information.
 | 49 | 51/51 tasks (all complete) | Ruff clean: SIM102/108/116/103, E402, B904, UP047, black formatting | 2026-02-12 |
 | 50 | 16/16 tasks (all complete) | Speed optimizations, config cleanup, MGC readiness, walk-forward | 2026-02-13 |
 | 51 | 12/12 tasks (all complete) | Deploy artifact system, protocols, adapter routing, deploy manifest | 2026-02-15 |
+| 52 | 14/14 tasks (all complete) | UIP, special mode bundles, safe pickle migration, neural versioning | 2026-02-15 |
 
-**Summary Impact:** 225 tasks across 28 phases, 175+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference.
+**Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
+
+**Summary Impact:** 239 tasks across 29 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration (16 sites).
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 51 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 52 are complete (Phase 3 Master Plan — 26/26 tasks). See COMPLETION.md for full details.
+
+---
+
+### Phase 52: Universal Inference Pipeline, Special Mode Bundles & Safe Pickle
+
+**Status:** COMPLETE
+**Priority:** HIGH (P1)
+**Tasks:** 14/14 complete (completes Phase 3 Master Implementation Plan together with Phase 51)
+**Source:** Phase 3 Master Implementation Plan — sub-phases 3A-3D
+**Completed:** 2026-02-15
+
+---
+
+#### Task 52-1: model_key Property on TrainerProtocol + Trainer COMPLETE
+
+**Files Modified:** `src/core/protocols.py`, `src/models/training/trainer.py`
+- Added `model_key` property to TrainerProtocol
+- Implemented on Trainer returning `f"{model_name}_h{horizon}"`
+
+#### Task 52-2: Scaler Capture in run_prepared() COMPLETE
+
+**File Modified:** `src/models/training/trainer.py`
+- Captures `prepared.scaler` and `prepared.feature_names` during `run_prepared()`
+
+#### Task 52-3: Re-export TrainerProtocol/InferenceBundle from src/core/ COMPLETE
+
+**File Modified:** `src/core/__init__.py`
+- Added TrainerProtocol and InferenceBundle to `src/core/__init__.py` exports
+
+#### Task 52-4: Auto-generate FeatureSpec in BundleBuilder COMPLETE
+
+**File Modified:** `src/inference/builder.py`
+- `_auto_generate_feature_spec()` method for best-effort FeatureSpec creation
+- `set_feature_names()` call after model extraction
+
+#### Task 52-5: _apply_adapter() in ModelBundle COMPLETE
+
+**File Modified:** `src/inference/bundle.py`
+- Extracted `_apply_adapter()` for clean 2D/3D/4D adapter routing
+- Routes based on `metadata.requires_4d` / `metadata.requires_sequences`
+
+#### Task 52-6: UniversalInferencePipeline COMPLETE
+
+**File Created:** `src/inference/universal_pipeline.py` (~480 lines)
+- `predict()`, `predict_from_raw()`, `predict_all()`, `predict_ensemble()`, `predict_batch()`, `predict_with_uncertainty()`
+- ScalingSource enum controls single scaling point
+- Class methods: `from_bundle()`, `from_bundles()`, `from_experiment()`
+
+#### Task 52-7: _generate_mtf_dataframes() COMPLETE
+
+**File Modified:** `src/inference/bundle.py`
+- Resamples raw 1-min OHLCV to requested timeframes using standard OHLCV aggregation
+
+#### Task 52-8: to_ensemble_result() Bridge COMPLETE
+
+**File Modified:** `src/models/training/services/ensemble_service.py`
+- Bridges EnsembleServiceResult to EnsembleResult format for EnsembleBundle
+
+#### Task 52-9: Notebook Inference Demo + Colab Guards COMPLETE
+
+**File Modified:** `notebooks/ml_factory_colab.ipynb`
+- Cell 7: predict_from_raw() on sample data
+- Cell 9: Inference-only export
+- Colab guards: torch version check, memory warnings, Drive mount, bundling toggles
+
+#### Task 52-10: UIP in server.py + batch.py COMPLETE
+
+**Files Modified:** `src/inference/server.py`, `src/inference/batch.py`
+- Conditional import of UniversalInferencePipeline with fallback
+
+#### Task 52-11: safe_pickle_load() Migration COMPLETE
+
+**File Created:** `src/core/utils/safe_pickle.py`
+- Replaces 16 raw `pickle.load` sites across 13 files
+- Path validation + optional type checking
+
+#### Task 52-12: ARCH_VERSION on BaseRNNModel COMPLETE
+
+**File Modified:** `src/models/neural/base_rnn.py`
+- `ARCH_VERSION = "1.0"` constant
+- Save in checkpoint dict, validate on load with warning
+
+#### Task 52-13: Deprecation Warnings COMPLETE
+
+**Files Modified:** `src/inference/pipeline.py`, `src/inference/orchestrator.py`
+- `warnings.warn("... deprecated. Use UniversalInferencePipeline instead.", DeprecationWarning)` in `__init__()`
+
+#### Task 52-14: Special Mode Bundles + __init__.py Exports COMPLETE
+
+**Files Created:** `src/inference/walk_forward_bundle.py`, `src/inference/regime_bundle.py`, `src/inference/meta_labeling_bundle.py`, `src/inference/regime_detector.py`
+**File Modified:** `src/inference/__init__.py`
+- WalkForwardBundle, RegimeBundle, MetaLabelingBundle, RegimeDetector
+- All implement InferenceBundle protocol
+- All new exports added to `src/inference/__init__.py`
 
 ---
 

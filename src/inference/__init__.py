@@ -158,6 +158,61 @@ from src.inference.server import (
     start_server,
 )
 
+# UniversalInferencePipeline - THE single entry point for all inference
+try:
+    from src.inference.universal_pipeline import (
+        UniversalInferencePipeline,
+        UniversalPredictionResult,
+    )
+except ImportError:
+    UniversalInferencePipeline = None  # type: ignore[assignment,misc]
+    UniversalPredictionResult = None  # type: ignore[assignment,misc]
+
+# Special mode bundles
+try:
+    from src.inference.walk_forward_bundle import (
+        WALK_FORWARD_BUNDLE_VERSION,
+        WalkForwardBundle,
+        WalkForwardMetadata,
+    )
+except ImportError:
+    WalkForwardBundle = None  # type: ignore[assignment,misc]
+    WalkForwardMetadata = None  # type: ignore[assignment,misc]
+    WALK_FORWARD_BUNDLE_VERSION = "0.0.0"
+
+try:
+    from src.inference.regime_bundle import (
+        REGIME_BUNDLE_VERSION,
+        RegimeBundle,
+    )
+except ImportError:
+    RegimeBundle = None  # type: ignore[assignment,misc]
+    REGIME_BUNDLE_VERSION = "0.0.0"
+
+try:
+    from src.inference.regime_detector import (
+        REGIME_DETECTOR_VERSION,
+        RegimeDetector,
+        RegimeDetectorConfig,
+    )
+except ImportError:
+    RegimeDetector = None  # type: ignore[assignment,misc]
+    RegimeDetectorConfig = None  # type: ignore[assignment,misc]
+    REGIME_DETECTOR_VERSION = "0.0.0"
+
+try:
+    from src.inference.meta_labeling_bundle import (
+        META_LABELING_BUNDLE_VERSION,
+        MetaLabelingBundle,
+        MetaLabelingBundleMetadata,
+        MetaLabelingPrediction,
+    )
+except ImportError:
+    MetaLabelingBundle = None  # type: ignore[assignment,misc]
+    MetaLabelingPrediction = None  # type: ignore[assignment,misc]
+    MetaLabelingBundleMetadata = None  # type: ignore[assignment,misc]
+    META_LABELING_BUNDLE_VERSION = "0.0.0"
+
 __all__ = [
     # Bundle
     "ModelBundle",
@@ -225,4 +280,20 @@ __all__ = [
     "ShapeMismatchError",
     "AdapterRoutingError",
     "PreprocessingError",
+    # UniversalInferencePipeline
+    "UniversalInferencePipeline",
+    "UniversalPredictionResult",
+    # Special mode bundles
+    "WalkForwardBundle",
+    "WalkForwardMetadata",
+    "WALK_FORWARD_BUNDLE_VERSION",
+    "RegimeBundle",
+    "REGIME_BUNDLE_VERSION",
+    "RegimeDetector",
+    "RegimeDetectorConfig",
+    "REGIME_DETECTOR_VERSION",
+    "MetaLabelingBundle",
+    "MetaLabelingPrediction",
+    "MetaLabelingBundleMetadata",
+    "META_LABELING_BUNDLE_VERSION",
 ]

@@ -476,10 +476,9 @@ class ConformalPredictor:
         """
         path = Path(path)
 
-        with open(path, "rb") as f:
-            # SECURITY: Only load from trusted internal paths (conformal predictors fitted by this system)
-            # External/untrusted pickle files could execute arbitrary code
-            state = pickle.load(f)
+        from src.core.utils.safe_pickle import safe_pickle_load
+
+        state = safe_pickle_load(path)
 
         predictor = cls(config=state["config"])
         predictor._threshold = state["threshold"]

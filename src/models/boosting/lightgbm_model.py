@@ -346,10 +346,9 @@ class LightGBMModel(BaseModel):
 
         metadata_path = path / "metadata.pkl"
         if metadata_path.exists():
-            with open(metadata_path, "rb") as f:
-                # SECURITY: Only load from trusted internal paths (model metadata from this system)
-                # External/untrusted pickle files could execute arbitrary code
-                metadata = pickle.load(f)
+            from src.core.utils.safe_pickle import safe_pickle_load
+
+            metadata = safe_pickle_load(metadata_path)
             self._config = metadata.get("config", self._config)
             self._feature_names = metadata.get("feature_names")
             self._n_classes = metadata.get("n_classes", 3)

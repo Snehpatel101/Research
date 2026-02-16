@@ -39,6 +39,11 @@ class TrainerProtocol(Protocol):
     @property
     def model_name(self) -> str: ...
 
+    @property
+    def model_key(self) -> str:
+        """Return a unique key like 'xgboost_h20' for bundle identification."""
+        ...
+
 
 @runtime_checkable
 class InferenceBundle(Protocol):

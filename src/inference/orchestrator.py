@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +93,12 @@ class InferenceOrchestrator:
         Args:
             config: Optional PipelineConfig from src/core
         """
+        warnings.warn(
+            "InferenceOrchestrator is deprecated. Use UniversalInferencePipeline.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self.config = config
         self._bundles: dict[str, Any] = {}  # model_name -> ModelBundle
         self._ensemble_bundle: Any | None = None  # EnsembleBundle or meta-learner

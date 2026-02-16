@@ -4,6 +4,96 @@
 
 ---
 
+## Phase 52 (2026-02-15) | Universal Inference Pipeline, Special Mode Bundles & Safe Pickle
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-15)
+**Impact:** 26+ files modified/created (6 new, 20+ modified), completes Phase 3 Master Implementation Plan (26/26 tasks)
+**Tests:** All verification checks passed, ruff 0 errors, black 0 reformats
+**Commits:** `ac6ce81`
+
+### Summary
+
+Completes the Phase 3 Master Implementation Plan by delivering the UniversalInferencePipeline, special training mode bundles, safe pickle migration, and neural architecture versioning. Combined with Phase 51 (deploy artifact system), ALL 26 tasks from the master plan are now complete across 4 sub-phases (3A-3D).
+
+**Phase 3A — Foundation (6/6):**
+- `model_key` property on TrainerProtocol + Trainer
+- Scaler capture in `run_prepared()`
+- TrainerProtocol/InferenceBundle re-exported from `src/core/__init__.py`
+- Auto-generate FeatureSpec in BundleBuilder
+
+**Phase 3B — Core Inference (7/7):**
+- `_apply_adapter()` extracted in ModelBundle for clean adapter routing (2D/3D/4D)
+- `UniversalInferencePipeline` (~480 lines) with `predict`/`predict_from_raw`/`predict_all`/`predict_ensemble`/`predict_batch`/`predict_with_uncertainty`
+- `_generate_mtf_dataframes()` for auto MTF resampling from 1-min OHLCV
+- `to_ensemble_result()` bridge in ensemble_service
+
+**Phase 3C — Integration (7/7):**
+- Notebook Cell 7 executes `predict_from_raw()` on sample data
+- Cell 9 inference-only export
+- UIP conditionally imported in `server.py` + `batch.py`
+- Colab guards (torch version check, memory warnings, Drive mount, toggles)
+- All new exports in `src/inference/__init__.py`
+
+**Phase 3D — Cleanup (6/6):**
+- `safe_pickle_load()` utility replacing 16 raw `pickle.load` sites across 13 files
+- `ARCH_VERSION = "1.0"` on BaseRNNModel with save/load validation
+- `set_feature_names()` call in BundleBuilder
+- Deprecation warnings on legacy InferencePipeline + InferenceOrchestrator
+- WalkForwardBundle, RegimeBundle, MetaLabelingBundle, RegimeDetector for special training modes
+
+### Files Created (6)
+
+1. `src/inference/universal_pipeline.py` — UniversalInferencePipeline (~480 lines)
+2. `src/inference/walk_forward_bundle.py` — WalkForwardBundle for walk-forward training mode
+3. `src/inference/regime_bundle.py` — RegimeBundle for per-regime model routing
+4. `src/inference/meta_labeling_bundle.py` — MetaLabelingBundle for primary + meta-model inference
+5. `src/inference/regime_detector.py` — RegimeDetector for serializable market regime detection
+6. `src/core/utils/safe_pickle.py` — safe_pickle_load() with path validation and type checking
+
+### Files Modified (20+)
+
+- `src/core/protocols.py` — model_key property added to TrainerProtocol
+- `src/core/__init__.py` — Re-exports TrainerProtocol, InferenceBundle
+- `src/core/utils/__init__.py` — Re-exports safe_pickle_load
+- `src/core/utils/cache.py` — Migrated to safe_pickle_load
+- `src/core/utils/checkpoint_manager.py` — Migrated to safe_pickle_load (2 sites)
+- `src/models/training/trainer.py` — model_key property, scaler capture in run_prepared()
+- `src/models/training/services/ensemble_service.py` — to_ensemble_result() bridge
+- `src/models/neural/base_rnn.py` — ARCH_VERSION = "1.0", save/load validation
+- `src/models/boosting/xgboost_model.py` — Migrated to safe_pickle_load
+- `src/models/boosting/lightgbm_model.py` — Migrated to safe_pickle_load
+- `src/models/boosting/catboost_model.py` — Migrated to safe_pickle_load
+- `src/models/calibration/calibrator.py` — Migrated to safe_pickle_load
+- `src/models/calibration/conformal.py` — Migrated to safe_pickle_load
+- `src/models/ensemble/xgboost_meta.py` — Migrated to safe_pickle_load
+- `src/data/pipeline/stages/scaling/scaler.py` — Migrated to safe_pickle_load
+- `src/inference/bundle.py` — Migrated to safe_pickle_load
+- `src/inference/ensemble_bundle.py` — Migrated to safe_pickle_load
+- `src/inference/preprocessing_graph.py` — Migrated to safe_pickle_load
+- `src/inference/pipeline.py` — Deprecation warning added
+- `src/inference/orchestrator.py` — Deprecation warning added
+- `src/inference/server.py` — UIP conditional import
+- `src/inference/batch.py` — UIP conditional import
+- `src/inference/builder.py` — set_feature_names(), FeatureSpec auto-generation
+- `src/inference/__init__.py` — All new exports (UIP, special bundles, errors)
+- `src/factory.py` — Migrated to safe_pickle_load
+- `notebooks/ml_factory_colab.ipynb` — Inference demo cells, Colab guards
+
+### Verification Results
+
+| Check | Result | Notes |
+|-------|--------|-------|
+| UIP import | PASS | `from src.inference.universal_pipeline import UniversalInferencePipeline` |
+| Special bundles | PASS | All 4 bundles importable |
+| safe_pickle migration | PASS | 16 sites migrated, 0 raw pickle.load remaining |
+| ARCH_VERSION | PASS | `ARCH_VERSION = "1.0"` in base_rnn.py |
+| Deprecation warnings | PASS | Legacy pipeline + orchestrator emit DeprecationWarning |
+| Ruff linting | PASS | 0 errors |
+| Black formatting | PASS | 0 reformats needed |
+
+---
+
 ## Phase 51 (2026-02-15) | Deploy Artifact — Single-Call Production Inference
 
 **Status:** COMPLETE

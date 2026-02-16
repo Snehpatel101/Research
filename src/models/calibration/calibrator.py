@@ -301,10 +301,9 @@ class ProbabilityCalibrator:
         if not path.exists():
             raise FileNotFoundError(f"Calibrator file not found: {path}")
 
-        with open(path, "rb") as f:
-            # SECURITY: Only load from trusted internal paths (calibrators fitted by this system)
-            # External/untrusted pickle files could execute arbitrary code
-            state = pickle.load(f)
+        from src.core.utils.safe_pickle import safe_pickle_load
+
+        state = safe_pickle_load(path)
 
         calibrator = cls(config=state["config"])
         calibrator._calibrators = state["calibrators"]

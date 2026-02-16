@@ -319,6 +319,10 @@ class BundleBuilder:
             # Extract feature columns
             feature_columns = self._extract_feature_columns(trainer, model_result.n_features)
 
+            # Propagate feature names to the model if it supports it
+            if hasattr(model, "set_feature_names") and callable(model.set_feature_names):
+                model.set_feature_names(feature_columns)
+
             # Extract calibrator if requested
             calibrator = None
             if include_calibrator:
@@ -327,10 +331,17 @@ class BundleBuilder:
                 if calibrator is None and getattr(model_result, "calibrator", None) is not None:
                     calibrator = model_result.calibrator
 
-            # Get feature spec if provided
+            # Get feature spec: explicit dict, or auto-generate as fallback
             feature_spec = None
             if feature_specs is not None:
                 feature_spec = feature_specs.get(key)
+            if feature_spec is None:
+                feature_spec = self._auto_generate_feature_spec(
+                    model_name=model_name,
+                    feature_columns=feature_columns,
+                    horizon=horizon,
+                    model_result=model_result,
+                )
 
             # Create bundle
             try:
@@ -772,6 +783,57 @@ class BundleBuilder:
             if calibrator is not None:
                 return calibrator
         return None
+
+    def _auto_generate_feature_spec(
+        self,
+        model_name: str,
+        feature_columns: list[str],
+        horizon: int,
+        model_result: Any,
+    ) -> Any | None:
+        """
+        Auto-generate a basic FeatureSpec from training result metadata.
+
+        Best-effort: returns None if FeatureSpec cannot be created (e.g.,
+        missing required fields). This ensures bundles still work without
+        explicit FeatureSpec while providing one when possible.
+
+        Args:
+            model_name: Model name (e.g., "xgboost")
+            feature_columns: Feature column names from the trainer
+            horizon: Prediction horizon in bars
+            model_result: The per-model training result
+
+        Returns:
+            FeatureSpec instance or None
+        """
+        try:
+            from src.core.contracts.feature_spec import FeatureSpec
+
+            # Extract hyperparameters from model_result if available
+            hyperparameters: dict[str, Any] = {}
+            if hasattr(model_result, "metrics") and isinstance(model_result.metrics, dict):
+                hyperparameters = model_result.metrics.get("hyperparameters", {})
+
+            spec = FeatureSpec(
+                profit_threshold=(
+                    self.config.profit_threshold
+                    if hasattr(self.config, "profit_threshold")
+                    else 0.015
+                ),
+                loss_threshold=(
+                    self.config.loss_threshold if hasattr(self.config, "loss_threshold") else 0.010
+                ),
+                max_holding_bars=horizon,
+                selected_features=list(feature_columns),
+                model_name=model_name,
+                hyperparameters=hyperparameters,
+            )
+            logger.debug(f"Auto-generated FeatureSpec for {model_name}: {spec.n_features} features")
+            return spec
+        except Exception as e:
+            logger.debug(f"Could not auto-generate FeatureSpec for {model_name}: {e}")
+            return None
 
     def _calculate_total_size(self, paths: list[Path]) -> float:
         """
