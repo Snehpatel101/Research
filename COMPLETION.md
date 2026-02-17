@@ -4,6 +4,38 @@
 
 ---
 
+## Phase 57 (2026-02-16) | 4D OOF Generation — Cross-Family Ensemble Support
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-16)
+**Impact:** 1 file modified (`src/models/training/services/oof_generation.py`). Enables cross-family ensembles with 4D transformer models (PatchTST, iTransformer, TFT).
+**Tests:** Boosting+transformer ensemble (xgboost + patchtst) PASS, boosting-only regression test PASS.
+
+### Summary
+
+Fixes critical bug where 4D transformer models (PatchTST, iTransformer, TFT) failed during OOF generation in cross-family ensembles. The `OOFGenerationService.generate_oof()` flattened all data to 2D via `_flatten_to_2d()`, then `SequenceOOFGenerator` rebuilt it as 3D. Transformer models reject 3D input — they need 4D `(batch, n_timeframes, seq_len, n_features)`.
+
+**Root cause:** No 4D-aware OOF path existed. The service assumed all data could be flattened to 2D.
+
+**Fix:** Added `_generate_4d_oof()` method that:
+- Detects `data_rank == 4` and routes to dedicated 4D path
+- Splits 4D data directly by sample index using PurgedKFold (no re-windowing needed — samples are already windowed multi-timeframe tensors from `MultiStreamAdapter`)
+- Trains/predicts with native 4D data per fold
+- Handles sample weights, fold metrics, coverage validation
+
+Also added `_ensure_cv()` helper to expose PurgedKFold splitter without requiring full OOFGenerator.
+
+### Files Modified (1)
+
+- `src/models/training/services/oof_generation.py` — Added `_generate_4d_oof()`, `_ensure_cv()`, 4D routing in `generate_oof()`, new imports (`Any`, `PredictionResult`, `ModelRegistry`)
+
+### Verification
+
+- **Boosting + Transformer ensemble (xgboost + patchtst):** 2 models trained, ensemble built, backtest ran, 95.1s — PASS
+- **Boosting-only regression (xgboost + lightgbm + catboost):** 6 models, SUCCESS, 64.8s — PASS (no regression)
+
+---
+
 ## Phase 56 (2026-02-16) | Backtest Pipeline Fix — _extract_predictions & Timestamp Alignment
 
 **Status:** COMPLETE

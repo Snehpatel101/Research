@@ -211,6 +211,12 @@ src/
 - Fixed timestamp column mismatch (datetime→timestamp rename for Backtester merge)
 - Full verification: standard pipeline (7/7), backtest (5 trades), MTF (28 columns), Optuna (3 trials)
 
+**Phase 57: COMPLETE — 4D OOF Generation (Cross-Family Ensembles)**
+- Added `_generate_4d_oof()` to OOFGenerationService for transformer models (PatchTST, iTransformer, TFT)
+- 4D data split by sample index using PurgedKFold (no re-windowing — samples already windowed)
+- Enables cross-family ensembles: boosting (2D) + transformer (4D) working together
+- Verified: xgboost+patchtst ensemble PASS, boosting-only regression PASS
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

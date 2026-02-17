@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 54 COMPLETE (E2E Pipeline Fixes: Trainer.save, per-model features, 4D multi-stream)
+**Status:** Phase 57 COMPLETE (4D OOF Generation — Cross-Family Ensemble Support)
 **Last Updated:** 2026-02-16
 
 ---
@@ -44,7 +44,7 @@ See **COMPLETION.md** for full details on all completed phases.
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 30 phases complete (24-53), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract specs auto-detected, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, explicit resample anti-lookahead params.
+**Summary Impact:** 33 phases complete (24-57), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract specs auto-detected, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, explicit resample anti-lookahead params, E2E pipeline fully functional, deploy manifest model names fixed, backtest pipeline working, cross-family ensembles (2D+4D) enabled.
 
 ---
 
@@ -71,12 +71,16 @@ See **COMPLETION.md** for full details on all completed phases.
 | 51 | Deploy Artifact — Single-Call Production Inference | HIGH | 1 session | ✅ COMPLETE |
 | 52 | Universal Inference Pipeline + Special Bundles + Safe Pickle | HIGH | 1 session | ✅ COMPLETE |
 | 53 | Security Hardening, SymbolConfig, Resample Safety | HIGH | 1 session | ✅ COMPLETE |
+| 54 | E2E Pipeline Fixes: Trainer.save, per-model features, 4D multi-stream | CRITICAL | 1 session | ✅ COMPLETE |
+| 55 | Deploy Manifest model_name Fix & primary_model Selection | HIGH | 1 session | ✅ COMPLETE |
+| 56 | Backtest Pipeline Fix: _extract_predictions & Timestamp Alignment | HIGH | 1 session | ✅ COMPLETE |
+| 57 | 4D OOF Generation — Cross-Family Ensemble Support | CRITICAL | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 53 are complete. See COMPLETION.md for details.
+**No active phases.** All phases through 57 are complete. See COMPLETION.md for details.
 
 ---
 
