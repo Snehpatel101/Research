@@ -3,9 +3,10 @@ Configuration for per-model feature selection.
 
 Provides model-family-specific defaults and configuration for feature selection.
 Different model families have different optimal feature selection strategies:
-- Boosting models: Benefit from MDI/MDA-based selection
-- Classical models: May benefit from more aggressive feature reduction
-- Sequence models: Typically use all features (handle selection internally)
+- Boosting models: Benefit from MDI/MDA-based selection (50 features)
+- Classical models: Benefit from more aggressive feature reduction (40 features)
+- Neural/Sequence models: Walk-forward MDA with moderate features (80 features)
+- Transformer models: Walk-forward MDA with curated features (60 features)
 
 This module consolidates configuration from:
 - src/models/feature_selection/config.py
@@ -23,10 +24,11 @@ class ModelFamilyDefaults:
     Default feature selection settings per model family.
 
     Each model family has different optimal feature selection configurations:
-    - Boosting: Benefits from MDA selection, moderate feature count
-    - Classical: Benefits from more aggressive feature reduction
-    - Neural/Sequence: Typically bypass feature selection (handle internally)
-    - Ensemble: Inherits from base model family
+    - Boosting: Benefits from MDA selection, moderate feature count (50)
+    - Classical: Benefits from more aggressive feature reduction (40)
+    - Neural/Sequence: Walk-forward MDA with moderate features (80)
+    - Transformer: Walk-forward MDA with curated features (60)
+    - Ensemble: Inherits from base model family (disabled)
     """
 
     # Boosting models (XGBoost, LightGBM, CatBoost)
@@ -47,11 +49,21 @@ class ModelFamilyDefaults:
         "n_estimators": 100,
     }
 
-    # Neural/sequence models (LSTM, GRU, TCN, Transformer)
-    # These handle feature selection internally via attention/gates
+    # Neural/sequence models (LSTM, GRU, TCN, InceptionTime, ResNet, N-BEATS)
+    # RNN/CNN models benefit from moderate feature reduction via walk-forward MDA
     NEURAL = {
-        "enabled": False,
-        "n_features": 0,  # Use all features
+        "enabled": True,
+        "n_features": 80,
+        "method": "mda",
+        "min_feature_frequency": 0.5,
+        "n_estimators": 50,
+    }
+
+    # Transformer models (PatchTST, iTransformer, TFT)
+    # Transformers benefit from more curated feature sets
+    TRANSFORMER = {
+        "enabled": True,
+        "n_features": 60,
         "method": "mda",
         "min_feature_frequency": 0.5,
         "n_estimators": 50,
@@ -72,7 +84,7 @@ class ModelFamilyDefaults:
         Get default feature selection config for a model family.
 
         Args:
-            model_family: One of 'boosting', 'classical', 'neural', 'ensemble'
+            model_family: One of 'boosting', 'classical', 'neural', 'transformer', 'ensemble'
 
         Returns:
             Dict with default configuration values
@@ -87,7 +99,10 @@ class ModelFamilyDefaults:
             "classical": cls.CLASSICAL,
             "neural": cls.NEURAL,
             "sequence": cls.NEURAL,  # Alias for neural
-            "transformer": cls.NEURAL,  # Alias for neural
+            "transformer": cls.TRANSFORMER,
+            "patchtst": cls.TRANSFORMER,
+            "itransformer": cls.TRANSFORMER,
+            "tft": cls.TRANSFORMER,
             "ensemble": cls.ENSEMBLE,
         }
 

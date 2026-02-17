@@ -38,6 +38,7 @@ from typing import Any
 
 import yaml
 
+from src.config.cv import WalkForwardConfig
 from src.config.data import (
     FeatureConfig,
     LabelingConfig,
@@ -108,6 +109,9 @@ class TrainingSection:
     n_splits: int = 5
     purge_bars: int = 60
     embargo_bars: int = 1440
+
+    # Walk-forward validation settings (used when training_mode="walk_forward")
+    walk_forward: WalkForwardConfig = field(default_factory=WalkForwardConfig)
 
     # Sub-configs
     optuna: OptunaConfig = field(default_factory=OptunaConfig)
@@ -417,6 +421,11 @@ class ExperimentConfig:
             n_splits=self.training.n_splits,
             purge_bars=self.training.purge_bars,
             embargo_bars=self.training.embargo_bars,
+            # Walk-forward validation settings
+            wf_n_windows=self.training.walk_forward.n_windows,
+            wf_window_type=self.training.walk_forward.window_type,
+            wf_min_train_pct=self.training.walk_forward.min_train_pct,
+            wf_test_pct=self.training.walk_forward.test_pct,
             random_state=self.random_seed,
             # Optimization flags — disabled when n_trials=0
             optimize_hyperparams=_do_optimize,

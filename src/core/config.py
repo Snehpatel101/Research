@@ -116,6 +116,12 @@ class PipelineConfig:
     purge_bars: int = DEFAULT_PURGE_BARS  # Gap before test (default: 60)
     embargo_bars: int = DEFAULT_EMBARGO_BARS  # Embargo after test (default: 1440)
 
+    # Walk-forward validation settings
+    wf_n_windows: int = 5  # Number of walk-forward windows
+    wf_window_type: str = "expanding"  # "expanding" or "rolling"
+    wf_min_train_pct: float = 0.4  # Minimum training data percentage
+    wf_test_pct: float = 0.1  # Test data percentage per window
+
     # Split ratios
     train_ratio: float = DEFAULT_SPLIT_RATIOS["train"]  # 0.70
     val_ratio: float = DEFAULT_SPLIT_RATIOS["val"]  # 0.15

@@ -106,7 +106,7 @@ class FeatureConfig(BaseConfig):
 
     # Feature selection
     selection_enabled: bool = True
-    selection_method: str = "mda"  # mda, mdi, shap, mutual_info
+    selection_method: str = "mda"  # mda, mdi, hybrid
     selection_n_features: int = 50
     selection_cv_splits: int = 5
 
@@ -123,6 +123,13 @@ class FeatureConfig(BaseConfig):
 
         if self.bb_std <= 0:
             issues.append(f"bb_std must be positive, got {self.bb_std}")
+
+        valid_selection_methods = ["mda", "mdi", "hybrid"]
+        if self.selection_method not in valid_selection_methods:
+            issues.append(
+                f"selection_method must be one of {valid_selection_methods}, "
+                f"got '{self.selection_method}'"
+            )
 
         return issues
 

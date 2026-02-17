@@ -382,8 +382,8 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         patch_length=16,
         requires_scaling=True,
         scaler_type="standard",
-        min_features=4,  # Raw OHLCV
-        max_features=10,
+        min_features=10,  # Enough features for attention to work
+        max_features=80,
         description="PatchTST Transformer with patching",
     ),
     # =========================================================================
@@ -400,8 +400,8 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         sequence_length=60,
         requires_scaling=True,
         scaler_type="robust",
-        min_features=4,
-        max_features=10,
+        min_features=10,
+        max_features=80,
         description="iTransformer with inverted attention",
     ),
     "tft": ModelContract(
@@ -415,7 +415,7 @@ MODEL_CONTRACTS: dict[str, ModelContract] = {
         requires_scaling=True,
         scaler_type="robust",
         min_features=20,
-        max_features=80,
+        max_features=100,
         description="Temporal Fusion Transformer",
     ),
     "nbeats": ModelContract(

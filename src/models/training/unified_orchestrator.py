@@ -43,6 +43,10 @@ import pandas as pd
 from src.core import CVMethod, PipelineConfig, TrainingMode
 from src.core.exceptions import PreTrainingValidationError
 from src.data.adapters import AlignedOOFResult, PreparedData
+from src.optimization.feature_selection.filtering import (
+    filter_correlated_features,
+    filter_low_variance,
+)
 from src.validation.cv import OOFPrediction, PurgedKFold, PurgedKFoldConfig, StackingDataset
 
 from .services import (
@@ -409,6 +413,43 @@ class UnifiedTrainingOrchestrator:
             from src.core.contracts import get_model_contract
 
             self._all_feature_names = list(feature_names)
+
+            # --- Pre-filter: remove degenerate and redundant features ---
+            original_count = len(feature_names)
+            feature_df = df[feature_names].dropna()
+
+            if len(feature_df) > 0:
+                # Step 1: Remove low-variance (near-constant) features
+                kept_after_var, removed_low_var = filter_low_variance(
+                    feature_df, list(feature_names), variance_threshold=0.01
+                )
+                logger.info(
+                    f"  Pre-filter: low-variance removed {len(removed_low_var)}"
+                    f"/{original_count} features"
+                )
+
+                # Step 2: Remove highly correlated features
+                kept_after_corr, removed_corr, corr_groups = filter_correlated_features(
+                    feature_df, kept_after_var, correlation_threshold=0.85
+                )
+                logger.info(
+                    f"  Pre-filter: correlation removed {len(removed_corr)}"
+                    f"/{len(kept_after_var)} features"
+                    f" ({len(corr_groups)} correlated groups)"
+                )
+
+                # Safety: if filtering removed too many features, skip and warn
+                min_surviving = 10
+                if len(kept_after_corr) >= min_surviving:
+                    feature_names = kept_after_corr
+                    logger.info(
+                        f"  Pre-filter result: {original_count} -> {len(feature_names)} features"
+                    )
+                else:
+                    logger.warning(
+                        f"  Pre-filter would reduce features to {len(kept_after_corr)}"
+                        f" (< {min_surviving}), skipping pre-filter"
+                    )
 
             # Compute variance ranking once (reused for all models)
             X_subset = df[feature_names].dropna()
@@ -804,6 +845,9 @@ class UnifiedTrainingOrchestrator:
                 data_rank=service_result.data_rank,
             )
 
+            # Log post-training feature importance (read-only feedback)
+            self._log_feature_importance(model_name, service_result.trainer)
+
             key = f"{model_name}_h{horizon}"
             self._model_results[key] = result
 
@@ -859,6 +903,9 @@ class UnifiedTrainingOrchestrator:
             prepared=prepared,
             horizon=horizon,
         )
+
+        # Log post-training feature importance (read-only feedback)
+        self._log_feature_importance(model_name, result.trainer)
 
         key = f"{model_name}_h{horizon}"
         self._model_results[key] = result
@@ -919,6 +966,24 @@ class UnifiedTrainingOrchestrator:
             data_rank=result.data_rank,
             calibrator=calibrator,
         )
+
+    def _log_feature_importance(self, model_name: str, trainer: Any) -> None:
+        """Log top 10 feature importances after training (read-only, no behavior change)."""
+        try:
+            model = getattr(trainer, "model", None)
+            if model is None:
+                return
+            importances = model.get_feature_importance()
+            if importances:
+                sorted_imp = sorted(importances.items(), key=lambda x: x[1], reverse=True)[:10]
+                logger.info(f"  Feature importance for {model_name} (top 10):")
+                for feat, score in sorted_imp:
+                    logger.info(f"    {feat}: {score:.4f}")
+            else:
+                family = getattr(model, "model_family", "unknown")
+                logger.info(f"  Feature importance not available for {model_name} ({family} model)")
+        except Exception as e:
+            logger.debug(f"  Could not retrieve feature importance for {model_name}: {e}")
 
     def _calibrate_model(
         self,
@@ -1217,10 +1282,10 @@ class UnifiedTrainingOrchestrator:
         )
 
         wf_config = WalkForwardTrainerConfig(
-            n_windows=self.config.n_splits,
-            window_type="expanding",
-            min_train_pct=self.config.train_ratio,
-            test_pct=self.config.val_ratio,
+            n_windows=getattr(self.config, "wf_n_windows", self.config.n_splits),
+            window_type=getattr(self.config, "wf_window_type", "expanding"),
+            min_train_pct=getattr(self.config, "wf_min_train_pct", self.config.train_ratio),
+            test_pct=getattr(self.config, "wf_test_pct", self.config.val_ratio),
             gap_bars=self.config.purge_bars,
             embargo_bars=self.config.embargo_bars,
         )

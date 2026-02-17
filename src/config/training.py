@@ -63,6 +63,7 @@ class OptunaConfig(BaseConfig):
 
     n_trials: int = 100
     timeout: int = 0
+    n_startup_trials: int = 10  # Random trials before TPE sampler kicks in
     n_jobs: int = 1
     study_name: str | None = None
     storage: str | None = None

@@ -368,6 +368,7 @@ class ModelBundle:
             symbol=symbol,
             training_metrics=training_metrics or {},
             extra=extra_metadata or {},
+            feature_names=list(feature_columns),
         )
 
         return cls(
