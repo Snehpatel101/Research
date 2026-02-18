@@ -7,6 +7,7 @@ with realistic execution, transaction costs, and position sizing.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -23,6 +24,8 @@ from .equity_curve import EquityCurve, Trade
 from .execution import MarketHoursFilter
 from .metrics import PerformanceMetrics
 from .position_sizing import BasePositionSizer, create_position_sizer
+
+logger = logging.getLogger(__name__)
 
 
 class ExecutionModel(Enum):
@@ -366,6 +369,8 @@ class Backtester:
 
     def _align_data(self) -> pd.DataFrame:
         """Align predictions with prices on timestamp."""
+        rows_before = len(self.predictions)
+
         # Merge on timestamp
         merged = pd.merge(
             self.predictions,
@@ -380,6 +385,18 @@ class Backtester:
 
         # Sort by timestamp
         merged = merged.sort_values("timestamp").reset_index(drop=True)
+
+        # Log alignment data loss
+        rows_after = len(merged)
+        rows_dropped = rows_before - rows_after
+        if rows_dropped > 0:
+            drop_pct = rows_dropped / rows_before * 100
+            logger.info(f"Alignment dropped {rows_dropped} rows ({drop_pct:.1f}%)")
+            if drop_pct > 5:
+                logger.warning(
+                    f"Significant data loss during alignment: {rows_dropped}/{rows_before} rows "
+                    f"({drop_pct:.1f}%) dropped. Check timestamp consistency between predictions and market data."
+                )
 
         return merged
 
@@ -823,12 +840,26 @@ def run_walk_forward_backtest(
     n_samples = len(predictions)
     split_size = n_samples // n_splits
 
+    min_samples_per_fold = 2
+    if split_size < min_samples_per_fold:
+        raise ValueError(
+            f"Walk-forward splits too small: {split_size} samples per fold "
+            f"(minimum {min_samples_per_fold}). Have {n_samples} samples with "
+            f"{n_splits} splits. Reduce n_splits or provide more data."
+        )
+
     for i in range(n_splits):
         start_idx = i * split_size
         end_idx = (i + 1) * split_size if i < n_splits - 1 else n_samples
 
         split_predictions = predictions.iloc[start_idx:end_idx].copy()
         split_prices = prices.iloc[start_idx:end_idx].copy()
+
+        if len(split_predictions) < min_samples_per_fold:
+            raise ValueError(
+                f"Walk-forward split {i + 1}/{n_splits} has only {len(split_predictions)} "
+                f"samples (minimum {min_samples_per_fold}). Reduce n_splits or provide more data."
+            )
 
         result = run_backtest(split_predictions, split_prices, config)
         results.append(result)

@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from src.core.common.timeframes import get_timeframe_minutes, normalize_timeframe
+from src.core.common.timeframes import normalize_timeframe
 from src.core.constants import DEFAULT_MTF_TIMEFRAMES
 from src.core.contracts import DataContract, DataRank
 from src.data.store import TIMEFRAMES as STORE_TIMEFRAMES
@@ -575,18 +575,17 @@ class MultiStreamAdapter(BaseAdapter):
                 # Proper timestamp alignment using merge_asof
                 anchor_to_tf = self._timestamp_align(anchor_df, tf_df)
             else:
-                # Fallback: ratio-based mapping when no timestamps available
-                anchor_minutes = get_timeframe_minutes(timeframes[0])
-                tf_minutes = get_timeframe_minutes(tf)
-                ratio = max(1, tf_minutes // anchor_minutes)
-                anchor_to_tf = np.minimum(
-                    np.arange(len(anchor_df)) // ratio,
-                    len(tf_df) - 1,
-                )
-                logger.warning(
-                    f"No DatetimeIndex on anchor or {tf} DataFrame — "
-                    f"falling back to ratio-based alignment (ratio={ratio}). "
-                    f"Timestamp-based alignment is recommended for market data."
+                # Ratio-based fallback silently corrupts alignment across
+                # overnight/weekend gaps — require DatetimeIndex instead.
+                missing_on = []
+                if not anchor_has_dt_index:
+                    missing_on.append(f"anchor ({type(anchor_df.index).__name__})")
+                if not tf_has_dt_index:
+                    missing_on.append(f"{tf} ({type(tf_df.index).__name__})")
+                raise ValueError(
+                    f"MultiStreamAdapter requires DatetimeIndex for accurate "
+                    f"cross-timeframe alignment. Missing on: {', '.join(missing_on)}. "
+                    f"Convert with df.index = pd.to_datetime(df.index)"
                 )
 
             result[tf] = {

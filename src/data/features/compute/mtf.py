@@ -257,6 +257,7 @@ def _reindex_to_base(
     resampled_df: pd.DataFrame,
     base_index: pd.DatetimeIndex,
     ffill_limit: int | None = None,
+    gap_threshold: pd.Timedelta | None = None,
 ) -> pd.DataFrame:
     """
     Reindex resampled data back to base (1-minute) index with forward fill.
@@ -264,19 +265,44 @@ def _reindex_to_base(
     This aligns higher timeframe features with the base 1-minute data,
     forward-filling values until the next higher-timeframe candle completes.
 
+    After forward-filling, detects time gaps exceeding ``gap_threshold``
+    (default 4 hours) and NaN-outs the first bar after each gap so that
+    stale pre-gap values (e.g. Friday EOD) do not bleed into post-gap
+    bars (e.g. Monday open).
+
     Args:
         resampled_df: DataFrame with resampled data
         base_index: Original 1-minute DatetimeIndex
         ffill_limit: Max periods to forward fill (None = no limit)
+        gap_threshold: Maximum allowed time gap before NaN-ing forward-filled
+            values. Defaults to 4 hours (appropriate for intraday data).
 
     Returns:
         DataFrame aligned to base_index with forward-filled values
     """
+    if gap_threshold is None:
+        gap_threshold = pd.Timedelta(hours=4)
+
     # Reindex to base frequency
     aligned = resampled_df.reindex(base_index)
 
+    # Track which values were originally present (not NaN before ffill)
+    was_present = aligned.notna()
+
     # Forward fill to propagate higher TF values
     aligned = aligned.ffill(limit=ffill_limit)
+
+    # Detect gaps in the base index that exceed the threshold
+    # (e.g. overnight, weekend, holiday breaks)
+    time_diffs = base_index.to_series().diff()
+    gap_mask = time_diffs > gap_threshold
+
+    if gap_mask.any():
+        # At each gap boundary, the first bar was forward-filled from before
+        # the break. NaN it out so stale data doesn't leak across market gaps.
+        ffilled_at_gap = gap_mask & ~was_present.any(axis=1)
+        if ffilled_at_gap.any():
+            aligned.loc[ffilled_at_gap] = np.nan
 
     return aligned
 

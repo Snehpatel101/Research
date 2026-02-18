@@ -279,6 +279,9 @@ class MLFactory:
                 df = self._load_cached_data()
                 additional_dfs = None
 
+            # Validate data sufficiency for CV configuration
+            self._validate_data_sufficiency(df)
+
             # Phase 2: Training
             if resume_from_stage <= self.STAGE_TRAINING:
                 self._log("\n[Phase 2/4] Model Training")
@@ -545,6 +548,43 @@ class MLFactory:
             self._log(f"    {normalized_key}: {len(resampled)} bars")
 
         return additional_dfs
+
+    def _validate_data_sufficiency(self, df: pd.DataFrame) -> None:
+        """
+        Validate that the dataset is large enough for the CV configuration.
+
+        Checks that embargo_bars + purge_bars leave enough room for
+        meaningful train/test splits in PurgedKFold. Raises early with a
+        clear message instead of failing partway through expensive training.
+
+        Args:
+            df: Prepared DataFrame (after feature engineering and labeling).
+
+        Raises:
+            ValueError: If data is insufficient for the CV configuration.
+        """
+        cv_cfg = self.config.training.cv
+        n_splits = getattr(cv_cfg, "n_splits", 5)
+        embargo_bars = getattr(cv_cfg, "embargo_bars", 0)
+        purge_bars = getattr(cv_cfg, "purge_bars", 0)
+
+        n_samples = len(df)
+        # Each split needs at least (n_samples // n_splits) for test,
+        # and the rest for train, minus embargo+purge gaps per split.
+        min_fold_size = max(n_samples // n_splits, 1)
+        min_required = embargo_bars + purge_bars + min_fold_size * 2
+
+        if n_samples < min_required:
+            raise ValueError(
+                f"Insufficient data ({n_samples} bars) for CV configuration: "
+                f"embargo={embargo_bars}, purge={purge_bars}, splits={n_splits}. "
+                f"Need at least {min_required} bars."
+            )
+
+        self._log(
+            f"  Data sufficiency check: {n_samples} bars >= {min_required} required "
+            f"(embargo={embargo_bars}, purge={purge_bars}, splits={n_splits}) — OK"
+        )
 
     def _run_data_pipeline(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
         """

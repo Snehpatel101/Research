@@ -535,9 +535,9 @@ def validate_training(data: dict[str, Any]) -> ValidationResult:
     max_epochs = training.get("max_epochs", 100)
     patience = training.get("early_stopping_patience", 15)
 
-    # Warn if patience > max_epochs
+    # Error if patience >= max_epochs (silently disables early stopping)
     if patience >= max_epochs:
-        result.add_warning(
+        result.add_error(
             field="training.early_stopping_patience",
             message=f"Patience ({patience}) >= max_epochs ({max_epochs}), "
             f"early stopping will never trigger",
