@@ -638,6 +638,12 @@ class TripleBarrierLabeler(LabelingStrategy):
         if not isinstance(horizon, int) or horizon <= 0:
             raise ValueError(f"horizon must be a positive integer, got {horizon}")
 
+        if len(df) < horizon:
+            raise ValueError(
+                f"DataFrame has {len(df)} rows but horizon={horizon}. "
+                f"Need at least {horizon} rows for meaningful labeling."
+            )
+
         # Resolve parameters
         k_up = k_up or self.config.upper_mult
         k_down = k_down or self.config.lower_mult
