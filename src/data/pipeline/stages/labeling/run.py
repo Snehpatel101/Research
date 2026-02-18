@@ -241,11 +241,14 @@ def run_initial_labeling(
                 features_path = config.features_dir / f"{symbol}_{tf}_features.parquet"
 
                 # Try in-memory cache first (optimization 5.2), fall back to disk
+                # Use .get() first, only .pop() after successful processing
                 df = None
+                cache_key = None
                 if getattr(config, "enable_in_memory_handoff", False):
                     cache = getattr(config, "_stage_data_cache", None)
                     if cache is not None:
-                        df = cache.pop(str(features_path), None)
+                        cache_key = str(features_path)
+                        df = cache.get(cache_key, None)
                         if df is not None:
                             logger.info(f"\nProcessing {symbol} @ {tf}... (from memory)")
 
@@ -377,6 +380,12 @@ def run_initial_labeling(
                 )
 
                 logger.info(f"  Saved initial labels to {output_path}")
+
+                # Now safe to remove from cache (processing succeeded)
+                if cache_key is not None:
+                    cache = getattr(config, "_stage_data_cache", None)
+                    if cache is not None:
+                        cache.pop(cache_key, None)
 
         # Save labeling provenance metadata (LBL-002)
         provenance_path = labels_dir / "labeling_provenance.json"
