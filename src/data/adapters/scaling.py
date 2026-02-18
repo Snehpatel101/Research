@@ -213,6 +213,18 @@ class AdapterScaler:
 
         X_scaled = self._scaler.transform(X_2d)
 
+        # Replace NaN/Inf from zero-variance features (IQR=0 or std=0)
+        # These arise when a feature is constant — scaling divides by zero.
+        # Replace with 0.0 (centered, no signal) instead of propagating NaN.
+        nan_mask = ~np.isfinite(X_scaled)
+        if nan_mask.any():
+            n_bad = int(nan_mask.sum())
+            logger.warning(
+                f"Scaler produced {n_bad} non-finite values "
+                f"(likely zero-variance features). Replacing with 0.0."
+            )
+            X_scaled[nan_mask] = 0.0
+
         # Clip values if configured
         if self.config.clip_value > 0:
             X_scaled = np.clip(X_scaled, -self.config.clip_value, self.config.clip_value)
