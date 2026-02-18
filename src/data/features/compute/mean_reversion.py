@@ -49,7 +49,7 @@ def compute_mr_zscore_10(df: pd.DataFrame) -> pd.Series:
     rolling_mean = prices.rolling(window=10, min_periods=5).mean()
     rolling_std = prices.rolling(window=10, min_periods=5).std()
 
-    zscore = (prices - rolling_mean) / (rolling_std + 1e-10)
+    zscore = (prices - rolling_mean) / rolling_std.replace(0, np.nan)
 
     return zscore
 
@@ -68,7 +68,7 @@ def compute_mr_zscore_20(df: pd.DataFrame) -> pd.Series:
     rolling_mean = prices.rolling(window=20, min_periods=10).mean()
     rolling_std = prices.rolling(window=20, min_periods=10).std()
 
-    zscore = (prices - rolling_mean) / (rolling_std + 1e-10)
+    zscore = (prices - rolling_mean) / rolling_std.replace(0, np.nan)
 
     return zscore
 
@@ -87,7 +87,7 @@ def compute_mr_zscore_60(df: pd.DataFrame) -> pd.Series:
     rolling_mean = prices.rolling(window=60, min_periods=30).mean()
     rolling_std = prices.rolling(window=60, min_periods=30).std()
 
-    zscore = (prices - rolling_mean) / (rolling_std + 1e-10)
+    zscore = (prices - rolling_mean) / rolling_std.replace(0, np.nan)
 
     return zscore
 
@@ -619,7 +619,7 @@ def compute_mean_reversion_features(
     for w in windows:
         rolling_mean = prices.rolling(window=w, min_periods=w // 2).mean()
         rolling_std = prices.rolling(window=w, min_periods=w // 2).std()
-        features[f"mr_zscore_{w}"] = (prices - rolling_mean) / (rolling_std + 1e-10)
+        features[f"mr_zscore_{w}"] = (prices - rolling_mean) / rolling_std.replace(0, np.nan)
 
     # OU half-life (longer window needed)
     features["ou_halflife"] = compute_ou_halflife(df)

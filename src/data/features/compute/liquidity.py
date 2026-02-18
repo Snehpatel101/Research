@@ -92,7 +92,10 @@ def _percentile_rank(x: pd.Series) -> float:
     """Calculate percentile rank of the last value in the series."""
     if len(x) < 2:
         return 0.5
-    return (x.iloc[-1] - x.min()) / (x.max() - x.min() + 1e-10)
+    denom = x.max() - x.min()
+    if denom == 0:
+        return np.nan
+    return (x.iloc[-1] - x.min()) / denom
 
 
 def compute_liquidity_regime_10(df: pd.DataFrame) -> pd.Series:

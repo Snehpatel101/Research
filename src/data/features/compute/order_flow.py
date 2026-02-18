@@ -190,8 +190,8 @@ def compute_pressure_ratio(df: pd.DataFrame) -> pd.Series:
     buy_vol = df["volume"] * imbalance
     sell_vol = df["volume"] * (1 - imbalance)
 
-    total = buy_vol + sell_vol + 1e-10
-    pressure_ratio = (buy_vol - sell_vol) / total
+    total = buy_vol + sell_vol
+    pressure_ratio = (buy_vol - sell_vol) / total.replace(0, np.nan)
 
     return pressure_ratio
 
