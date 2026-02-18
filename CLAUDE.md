@@ -217,6 +217,18 @@ src/
 - Enables cross-family ensembles: boosting (2D) + transformer (4D) working together
 - Verified: xgboost+patchtst ensemble PASS, boosting-only regression PASS
 
+**Phase 58: COMPLETE — Feature Selection Pipeline Overhaul**
+- Wired low-variance and correlation pre-filters into orchestrator
+- Per-model feature selection (respects model contract max_features)
+- Features saved per-model to bundles
+
+**Phase 59: COMPLETE — MDA Feature Ranking + Test Split Fix**
+- Replaced variance ranking with MDA (permutation importance) in orchestrator
+- MDA is target-aware: ranks features by predictive power, not just spread
+- Fallback to variance if MDA fails (no labels, too few rows, CV error)
+- Fixed test split crash: embargo_bars > remaining data caused KeyError
+- Guard in trainer.py skips test eval gracefully when no test split exists
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
