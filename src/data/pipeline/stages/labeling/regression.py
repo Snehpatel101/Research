@@ -147,17 +147,20 @@ class RegressionLabeler(LabelingStrategy):
         int_labels = np.zeros(n, dtype=np.int8)
         int_labels[-horizon:] = -99  # Mark invalid
 
+        regression_target = labels  # float32 actual regression targets
         result = LabelingResult(
             labels=int_labels,  # For compatibility with base class validation
             horizon=horizon,
             metadata={
-                "regression_target": labels,
+                "regression_target": regression_target,
                 "raw_return": (returns / scale_factor).astype(np.float32),
             },
         )
 
-        # Compute quality metrics
-        result.quality_metrics = self._compute_regression_metrics(labels, horizon)
+        # Compute quality metrics on actual regression targets (not int8 sentinel)
+        result.quality_metrics = self._compute_regression_metrics(
+            result.metadata["regression_target"], horizon
+        )
 
         # Log statistics
         self._log_label_statistics(labels, horizon)
