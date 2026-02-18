@@ -449,7 +449,7 @@ class BaseRNNModel(BaseModel):
         current_batch_size = train_config.get("batch_size", 64)
 
         max_epochs = train_config.get("max_epochs", 100)
-        patience = train_config.get("early_stopping_patience", 15)
+        patience = train_config.get("early_stopping_patience", 7)
         min_delta = train_config.get("min_delta", 0.0001)
         grad_clip = train_config.get("gradient_clip", 1.0)
 

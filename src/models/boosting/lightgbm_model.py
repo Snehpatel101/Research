@@ -219,7 +219,7 @@ class LightGBMModel(BaseModel):
         # Build parameters
         params = self._build_params(train_config)
         n_estimators = train_config.get("n_estimators", 500)
-        early_stopping = train_config.get("early_stopping_rounds", 50)
+        early_stopping = train_config.get("early_stopping_rounds", 20)
 
         logger.info(
             f"Training LightGBM: n_estimators={n_estimators}, "

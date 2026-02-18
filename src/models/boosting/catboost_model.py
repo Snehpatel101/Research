@@ -165,7 +165,7 @@ class CatBoostModel(BaseModel):
         # Build model
         self._model = self._build_model(train_config)
         iterations = train_config.get("iterations", 500)
-        early_stopping = train_config.get("early_stopping_rounds", 50)
+        early_stopping = train_config.get("early_stopping_rounds", 20)
 
         logger.info(
             f"Training CatBoost: iterations={iterations}, "

@@ -174,7 +174,7 @@ class XGBoostModel(BaseModel):
         # Build parameters and train
         params = self._build_params(train_config)
         n_estimators = train_config.get("n_estimators", 500)
-        early_stopping = train_config.get("early_stopping_rounds", 50)
+        early_stopping = train_config.get("early_stopping_rounds", 20)
 
         evals = [(dtrain, "train"), (dval, "val")]
         evals_result: dict[str, dict[str, list[float]]] = {}
