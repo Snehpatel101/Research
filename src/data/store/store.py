@@ -354,6 +354,7 @@ class FeatureStore:
         as_of_date: datetime,
         version: str | None = None,
         columns: list[str] | None = None,
+        bar_duration: pd.Timedelta | None = None,
     ) -> pd.DataFrame:
         """
         Get features with point-in-time filtering.
@@ -361,6 +362,10 @@ class FeatureStore:
         Retrieves features and filters to only include data available
         as of the specified date. This is critical for backtesting to
         avoid look-ahead bias.
+
+        For intraday data, a bar's OHLC values are not finalized until
+        the bar closes (timestamp + bar_duration). The ``bar_duration``
+        embargo ensures we only use bars whose close time < as_of_date.
 
         Parameters
         ----------
@@ -374,6 +379,9 @@ class FeatureStore:
             Feature version
         columns : list[str], optional
             Specific columns to load
+        bar_duration : pd.Timedelta, optional
+            Duration of one bar. Defaults to 1 minute for intraday
+            embargo. Set to pd.Timedelta(0) to disable.
 
         Returns
         -------
@@ -410,8 +418,13 @@ class FeatureStore:
         if not pd.api.types.is_datetime64_any_dtype(df[datetime_col]):
             df[datetime_col] = pd.to_datetime(df[datetime_col])
 
-        # Filter to as_of_date
-        mask = df[datetime_col] < as_of_date
+        # Apply bar-duration embargo for intraday point-in-time correctness.
+        # A bar timestamped at T is not finalized until T + bar_duration,
+        # so we exclude bars whose close time >= as_of_date.
+        if bar_duration is None:
+            bar_duration = pd.Timedelta(minutes=1)
+        embargo_cutoff = as_of_date - bar_duration
+        mask = df[datetime_col] < embargo_cutoff
         filtered_df = df[mask].copy()
 
         logger.info(
