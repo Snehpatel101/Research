@@ -58,7 +58,7 @@ def _get_order_imbalance_cached(df: pd.DataFrame) -> pd.Series:
 
 def _sma(series: pd.Series, window: int) -> pd.Series:
     """Simple moving average."""
-    return series.rolling(window=window, min_periods=1).mean()
+    return series.rolling(window=window, min_periods=window).mean()
 
 
 # =============================================================================
@@ -101,7 +101,7 @@ def compute_net_order_flow_5(df: pd.DataFrame) -> pd.Series:
     # Center around 0 (subtract 0.5)
     centered = imbalance - 0.5
     # Rolling sum normalized by window
-    net_flow = centered.rolling(window=5, min_periods=1).sum() / 5
+    net_flow = centered.rolling(window=5, min_periods=5).sum() / 5
     return net_flow
 
 
@@ -117,7 +117,7 @@ def compute_net_order_flow_10(df: pd.DataFrame) -> pd.Series:
     """
     imbalance = compute_order_imbalance(df)
     centered = imbalance - 0.5
-    net_flow = centered.rolling(window=10, min_periods=1).sum() / 10
+    net_flow = centered.rolling(window=10, min_periods=10).sum() / 10
     return net_flow
 
 
@@ -133,7 +133,7 @@ def compute_net_order_flow_20(df: pd.DataFrame) -> pd.Series:
     """
     imbalance = compute_order_imbalance(df)
     centered = imbalance - 0.5
-    net_flow = centered.rolling(window=20, min_periods=1).sum() / 20
+    net_flow = centered.rolling(window=20, min_periods=20).sum() / 20
     return net_flow
 
 
@@ -219,7 +219,7 @@ def compute_volume_delta_5(df: pd.DataFrame) -> pd.Series:
 
     delta = up_volume - down_volume
 
-    return delta.rolling(window=5, min_periods=1).mean()
+    return delta.rolling(window=5, min_periods=5).mean()
 
 
 def compute_volume_delta_10(df: pd.DataFrame) -> pd.Series:
@@ -239,7 +239,7 @@ def compute_volume_delta_10(df: pd.DataFrame) -> pd.Series:
 
     delta = up_volume - down_volume
 
-    return delta.rolling(window=10, min_periods=1).mean()
+    return delta.rolling(window=10, min_periods=10).mean()
 
 
 def compute_volume_delta_20(df: pd.DataFrame) -> pd.Series:
@@ -259,7 +259,7 @@ def compute_volume_delta_20(df: pd.DataFrame) -> pd.Series:
 
     delta = up_volume - down_volume
 
-    return delta.rolling(window=20, min_periods=1).mean()
+    return delta.rolling(window=20, min_periods=20).mean()
 
 
 # =============================================================================
@@ -336,13 +336,13 @@ def compute_order_flow_features(df: pd.DataFrame, windows: list[int] | None = No
     for w in windows:
         imbalance = compute_order_imbalance(df)
         centered = imbalance - 0.5
-        features[f"net_order_flow_{w}"] = centered.rolling(window=w, min_periods=1).sum() / w
+        features[f"net_order_flow_{w}"] = centered.rolling(window=w, min_periods=w).sum() / w
 
         is_up = df["close"] > df["open"]
         up_volume = df["volume"].where(is_up, 0)
         down_volume = df["volume"].where(~is_up, 0)
         delta = up_volume - down_volume
-        features[f"volume_delta_{w}"] = delta.rolling(window=w, min_periods=1).mean()
+        features[f"volume_delta_{w}"] = delta.rolling(window=w, min_periods=w).mean()
 
     # Pressure components
     features["pressure_ratio"] = compute_pressure_ratio(df)
