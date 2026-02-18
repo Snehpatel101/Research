@@ -849,8 +849,14 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Test set evaluation (one-shot generalization estimate)
         test_metrics = None
         test_predictions = None
-        if self.config.evaluate_test_set:
+        has_test_split = "test" in container.splits
+        if self.config.evaluate_test_set and has_test_split:
             test_metrics, test_predictions = self._evaluate_test_set(container)
+        elif self.config.evaluate_test_set and not has_test_split:
+            logger.warning(
+                "Skipping test evaluation: no test split available "
+                "(embargo may exceed remaining data)"
+            )
 
         # Probability calibration (leakage-safe: fits on held-out val set)
         self.calibrator = None

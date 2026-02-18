@@ -242,7 +242,7 @@ class UnifiedTrainingOrchestrator:
         self._prepared_cache: dict[tuple, PreparedData] = {}
 
         # Per-model feature subsets: each model gets features appropriate for its
-        # contract (top N by variance where N = min(available, max_features)).
+        # contract (top N by MDA importance where N = min(available, max_features)).
         # Populated by _pre_training_validation, consumed by _prepare_with_cache.
         self._per_model_features: dict[str, list[str]] = {}
         self._all_feature_names: list[str] = []
@@ -292,6 +292,115 @@ class UnifiedTrainingOrchestrator:
         else:
             logger.warning(f"Unknown CV method: {cv_method}, using PurgedKFold")
             return PurgedKFold(cv_config)
+
+    def _compute_mda_ranking(
+        self,
+        df: pd.DataFrame,
+        feature_names: list[str],
+    ) -> pd.Series | None:
+        """
+        Compute MDA (permutation importance) ranking for all features.
+
+        Uses a lightweight RandomForest with 3-fold PurgedKFold to rank features
+        by their predictive power on the label. This is target-aware, unlike
+        variance ranking which only measures feature spread.
+
+        Returns a pd.Series of importance scores sorted descending, or None on
+        failure (triggering variance fallback in the caller).
+
+        Args:
+            df: DataFrame containing features and label columns
+            feature_names: List of feature column names to rank
+
+        Returns:
+            pd.Series with feature importance sorted descending, or None
+        """
+        from src.optimization.feature_selection.walk_forward import (
+            WalkForwardFeatureSelector,
+        )
+
+        try:
+            # Find label column (same pattern as leakage detection at line 524)
+            label_col = None
+            for h in self.config.horizons:
+                candidate = f"label_h{h}"
+                if candidate in df.columns:
+                    label_col = candidate
+                    break
+
+            if label_col is None:
+                logger.warning("MDA ranking: no label column found, falling back to variance")
+                return None
+
+            # Extract clean X and y
+            cols_needed = list(feature_names) + [label_col]
+            clean_df = df[cols_needed].dropna()
+
+            if len(clean_df) < 500:
+                logger.warning(
+                    f"MDA ranking: too few clean rows ({len(clean_df)} < 500), "
+                    "falling back to variance"
+                )
+                return None
+
+            X = clean_df[feature_names]
+            y = clean_df[label_col]
+
+            if y.nunique() < 2:
+                logger.warning("MDA ranking: labels have < 2 classes, falling back to variance")
+                return None
+
+            # Create lightweight CV splits for ranking (not final training CV).
+            # Cap embargo to at most 15% of data so MDA works on small datasets.
+            # Full embargo is still used for actual model training CV.
+            n_samples = len(X)
+            max_embargo = int(n_samples * 0.15)
+            mda_embargo = min(self.config.embargo_bars, max_embargo)
+            mda_cv_config = PurgedKFoldConfig(
+                n_splits=3,
+                purge_bars=self.config.purge_bars,
+                embargo_bars=mda_embargo,
+            )
+            mda_cv = PurgedKFold(mda_cv_config)
+            cv_splits = list(mda_cv.split(X, y))
+
+            # Run walk-forward MDA: rank ALL features (don't filter here)
+            selector = WalkForwardFeatureSelector(
+                n_features_to_select=len(feature_names),
+                selection_method="mda",
+                n_estimators=50,
+                min_feature_frequency=0.01,
+                random_state=42,
+            )
+            result = selector.select_features_walkforward(X, y, cv_splits)
+
+            # Aggregate per-fold importance into a single sorted Series
+            all_importances: dict[str, list[float]] = {f: [] for f in feature_names}
+            for fold_info in result.importance_history:
+                fold_imp = fold_info.get("importance", {})
+                for feat in feature_names:
+                    if feat in fold_imp:
+                        all_importances[feat].append(fold_imp[feat])
+
+            mean_importance = pd.Series(
+                {f: np.mean(scores) if scores else 0.0 for f, scores in all_importances.items()}
+            ).sort_values(ascending=False)
+
+            logger.info(
+                f"  MDA ranking complete: {len(mean_importance)} features ranked "
+                f"across {len(cv_splits)} folds"
+            )
+
+            # Log top 5 features by MDA
+            top5 = mean_importance.head(5)
+            for feat, score in top5.items():
+                logger.info(f"    {feat}: {score:.4f}")
+
+            return mean_importance
+
+        except Exception as e:
+            logger.warning(f"MDA ranking failed: {e}, falling back to variance")
+            return None
 
     def _prepare_with_cache(
         self,
@@ -405,10 +514,11 @@ class UnifiedTrainingOrchestrator:
                 if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
             ]
 
-        # Per-model feature selection: each model gets top N features by variance
-        # where N = min(available_features, model.max_features).
-        # This replaces the old global truncation that picked one feature count
-        # for ALL models (causing conflicts, e.g. N-BEATS max=20 vs LSTM min=50).
+        # Per-model feature selection: each model gets top N features by MDA
+        # importance where N = min(available_features, model.max_features).
+        # MDA (permutation importance) is target-aware, selecting features that
+        # actually predict labels rather than just those with high variance.
+        # Falls back to variance ranking if MDA computation fails.
         if feature_names and len(feature_names) > 0:
             from src.core.contracts import get_model_contract
 
@@ -451,18 +561,27 @@ class UnifiedTrainingOrchestrator:
                         f" (< {min_surviving}), skipping pre-filter"
                     )
 
-            # Compute variance ranking once (reused for all models)
-            X_subset = df[feature_names].dropna()
-            variances = X_subset.var().sort_values(ascending=False) if len(X_subset) > 0 else None
+            # MDA importance ranking (target-aware, falls back to variance)
+            mda_importance = self._compute_mda_ranking(df, feature_names)
+            if mda_importance is not None:
+                ranking = mda_importance
+                ranking_method = "MDA"
+            else:
+                X_subset = df[feature_names].dropna()
+                ranking = X_subset.var().sort_values(ascending=False) if len(X_subset) > 0 else None
+                ranking_method = "variance"
+
+            logger.info(f"  Feature ranking method: {ranking_method}")
 
             for model_name in self.config.models:
                 model_contract = get_model_contract(model_name)
                 max_feat = model_contract.max_features
-                if len(feature_names) > max_feat and variances is not None:
-                    model_features = variances.head(int(max_feat)).index.tolist()
+                if len(feature_names) > max_feat and ranking is not None:
+                    model_features = ranking.head(int(max_feat)).index.tolist()
                     logger.info(
                         f"    {model_name}: selected top {len(model_features)}"
-                        f"/{len(feature_names)} features (max={max_feat})"
+                        f"/{len(feature_names)} features by {ranking_method}"
+                        f" (max={max_feat})"
                     )
                 else:
                     model_features = list(feature_names)
