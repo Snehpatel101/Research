@@ -483,20 +483,17 @@ class PurgedKFold:
                 test_start_time = X.index[test_start]
                 test_end_time = X.index[test_end - 1]
 
-                # Check every potential training sample for label overlap
-                for i in range(n_samples):
-                    if train_mask[i]:  # Only check samples still in training set
-                        label_end = label_end_times.iloc[i]
-                        # Skip samples with missing label_end_times (NaT/None)
-                        # These are typically invalid labels that should have been filtered
-                        if pd.isna(label_end):
-                            continue
-                        # Remove if label's outcome period overlaps with test period
-                        # This handles:
-                        # 1. Samples before test whose labels extend into test period
-                        # 2. Samples after embargo whose labels started during test period
-                        if label_end >= test_start_time and X.index[i] <= test_end_time:
-                            train_mask[i] = False
+                # Vectorized label-aware purging: remove training samples whose
+                # labels overlap with the test period. Handles:
+                # 1. Samples before test whose labels extend into test period
+                # 2. Samples after embargo whose labels started during test period
+                label_ends = label_end_times.values
+                index_values = X.index.values
+                not_na = ~pd.isna(label_ends)
+                overlap_mask = (
+                    not_na & (label_ends >= test_start_time) & (index_values <= test_end_time)
+                )
+                train_mask[overlap_mask & train_mask] = False
 
             train_indices = indices[train_mask]
 

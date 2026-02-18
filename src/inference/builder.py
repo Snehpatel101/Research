@@ -536,7 +536,7 @@ class BundleBuilder:
             else:
                 meta_dir.mkdir(parents=True, exist_ok=True)
                 with open(meta_dir / "model.pkl", "wb") as f:
-                    pickle.dump(meta_learner, f)
+                    pickle.dump(meta_learner, f, protocol=pickle.HIGHEST_PROTOCOL)
             files.append(ENSEMBLE_META_LEARNER_DIR)
 
         # --- 6. manifest.json (file listing) ---

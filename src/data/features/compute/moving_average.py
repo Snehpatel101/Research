@@ -33,7 +33,7 @@ except ImportError:
 # =============================================================================
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _sma_numba(values: np.ndarray, window: int) -> np.ndarray:
     """Numba-optimized SMA calculation (3-5x faster)."""
     n = len(values)
@@ -56,7 +56,7 @@ def _sma_numba(values: np.ndarray, window: int) -> np.ndarray:
     return result
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _ema_numba(values: np.ndarray, span: int) -> np.ndarray:
     """Numba-optimized EMA calculation (4-7x faster)."""
     n = len(values)

@@ -476,14 +476,14 @@ class EnsembleBundle:
                 # Fallback to pickle
                 meta_dir.mkdir(parents=True, exist_ok=True)
                 with open(meta_dir / "model.pkl", "wb") as f:
-                    pickle.dump(self.meta_learner, f)
+                    pickle.dump(self.meta_learner, f, protocol=pickle.HIGHEST_PROTOCOL)
             files.append(ENSEMBLE_META_LEARNER_DIR)
 
         # Save scaler if present
         if self.scaler is not None:
             scaler_path = path / ENSEMBLE_SCALER_FILE
             with open(scaler_path, "wb") as f:
-                pickle.dump(self.scaler, f)
+                pickle.dump(self.scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
             files.append(ENSEMBLE_SCALER_FILE)
 
         # Save manifest

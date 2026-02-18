@@ -239,12 +239,25 @@ def run_initial_labeling(
             for tf in output_timeframes:
                 # Load features data for this timeframe
                 features_path = config.features_dir / f"{symbol}_{tf}_features.parquet"
-                if not features_path.exists():
-                    logger.warning(f"Features file not found for {symbol} @ {tf}: {features_path}")
-                    continue
 
-                logger.info(f"\nProcessing {symbol} @ {tf}...")
-                df = pd.read_parquet(features_path)
+                # Try in-memory cache first (optimization 5.2), fall back to disk
+                df = None
+                if getattr(config, "enable_in_memory_handoff", False):
+                    cache = getattr(config, "_stage_data_cache", None)
+                    if cache is not None:
+                        df = cache.pop(str(features_path), None)
+                        if df is not None:
+                            logger.info(f"\nProcessing {symbol} @ {tf}... (from memory)")
+
+                if df is None:
+                    if not features_path.exists():
+                        logger.warning(
+                            f"Features file not found for {symbol} @ {tf}: {features_path}"
+                        )
+                        continue
+                    logger.info(f"\nProcessing {symbol} @ {tf}...")
+                    df = pd.read_parquet(features_path)
+
                 logger.info(f"  Loaded {len(df):,} rows")
 
                 # Validate labeling prerequisites early (LBL-001)

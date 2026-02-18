@@ -197,7 +197,10 @@ class OOFGenerationService:
             if prepared.train_weights is not None:
                 w_train = prepared.train_weights[train_idx]
 
-            # Create and train 4D model
+            # TODO(perf): Cache fold models from training CV and reload here
+            # instead of retraining from scratch. Requires saving each fold's
+            # trained weights during _train_model_sequential and passing them
+            # to this service. Would eliminate 5-6x overhead for 4D OOF generation.
             model = ModelRegistry.create(model_name, config={})
 
             training_metrics = model.fit(

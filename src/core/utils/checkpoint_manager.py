@@ -138,7 +138,7 @@ class CheckpointManager:
 
         # Save to Drive
         with open(checkpoint_path, "wb") as f:
-            pickle.dump(checkpoint, f)
+            pickle.dump(checkpoint, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         print(f"💾 Checkpoint saved: {checkpoint_path}")
 

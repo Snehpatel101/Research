@@ -307,7 +307,7 @@ class BaseRNNModel(BaseModel):
             "learning_rate": 0.001,
             "weight_decay": 0.0001,
             "gradient_clip": 1.0,
-            "early_stopping_patience": 15,
+            "early_stopping_patience": 7,
             "min_delta": 0.0001,
             "warmup_epochs": 5,
             "device": "auto",  # Auto-detect GPU/CPU
@@ -710,7 +710,8 @@ class BaseRNNModel(BaseModel):
 
         # CUDA-optimized DataLoader settings
         use_cuda = self._device.type == "cuda"
-        num_workers = config.get("num_workers", 2 if use_cuda else 0)
+        # 4 workers for CUDA (overlaps data loading with GPU compute), 0 for CPU
+        num_workers = config.get("num_workers", 4 if use_cuda else 0)
         pin_memory = config.get("pin_memory", use_cuda)
         persistent_workers = num_workers > 0
 

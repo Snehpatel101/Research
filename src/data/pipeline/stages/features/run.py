@@ -294,6 +294,12 @@ def _process_symbol_timeframe(
         output_file.parent.mkdir(parents=True, exist_ok=True)
         df_features.to_parquet(output_file, index=False)
 
+        # Store in-memory for downstream stages (optimization 5.2)
+        if getattr(config, "enable_in_memory_handoff", False):
+            cache = getattr(config, "_stage_data_cache", None)
+            if cache is not None:
+                cache[str(output_file)] = df_features
+
         # Build metadata
         feature_cols = [c for c in df_features.columns if c not in ohlcv_cols]
         metadata = {

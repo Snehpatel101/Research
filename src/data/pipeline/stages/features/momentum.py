@@ -21,6 +21,14 @@ from .numba_functions import (
 logger = logging.getLogger(__name__)
 
 
+def _np_shift1(arr: np.ndarray) -> np.ndarray:
+    """Shift array by 1 using numpy (avoids pd.Series overhead)."""
+    result = np.empty_like(arr, dtype=np.float64)
+    result[0] = np.nan
+    result[1:] = arr[:-1]
+    return result
+
+
 def add_rsi(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14) -> pd.DataFrame:
     """
     Add RSI features.
@@ -45,7 +53,7 @@ def add_rsi(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
 
     # ANTI-LOOKAHEAD: shift(1) ensures RSI at bar[t] uses data up to bar[t-1]
     col_name = f"rsi_{period}"
-    rsi_values = pd.Series(calculate_rsi_numba(df["close"].values, period)).shift(1).values
+    rsi_values = _np_shift1(calculate_rsi_numba(df["close"].values, period))
 
     # Batch concat to avoid fragmentation
     new_cols = {
@@ -173,8 +181,8 @@ def add_stochastic(
     )
 
     # ANTI-LOOKAHEAD: shift(1) ensures stochastic at bar[t] uses data up to bar[t-1]
-    stoch_k = pd.Series(k).shift(1).values
-    stoch_d = pd.Series(d).shift(1).values
+    stoch_k = _np_shift1(k)
+    stoch_d = _np_shift1(d)
 
     # Batch concat to avoid fragmentation
     new_cols = {

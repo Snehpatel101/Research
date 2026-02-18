@@ -438,7 +438,7 @@ class FeatureScaler:
         }
 
         with open(path, "wb") as f:
-            pickle.dump(state, f)
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(f"Scaler saved to: {path}")
 

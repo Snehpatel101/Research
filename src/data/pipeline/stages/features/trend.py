@@ -9,10 +9,19 @@ import logging
 
 import numpy as np
 import pandas as pd
+from numba import njit
 
 from .numba_functions import calculate_adx_numba, calculate_atr_numba
 
 logger = logging.getLogger(__name__)
+
+
+def _np_shift1(arr: np.ndarray) -> np.ndarray:
+    """Shift array by 1 using numpy (avoids pd.Series overhead)."""
+    result = np.empty_like(arr, dtype=np.float64)
+    result[0] = np.nan
+    result[1:] = arr[:-1]
+    return result
 
 
 def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14) -> pd.DataFrame:
@@ -46,9 +55,9 @@ def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
     plus_di_col = f"plus_di_{period}"
     minus_di_col = f"minus_di_{period}"
 
-    adx_shifted = pd.Series(adx).shift(1).values
-    plus_di_shifted = pd.Series(plus_di).shift(1).values
-    minus_di_shifted = pd.Series(minus_di).shift(1).values
+    adx_shifted = _np_shift1(adx)
+    plus_di_shifted = _np_shift1(plus_di)
+    minus_di_shifted = _np_shift1(minus_di)
 
     # Batch concat to avoid fragmentation
     new_cols = {
@@ -65,6 +74,56 @@ def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
     feature_metadata["adx_strong_trend"] = "ADX strong trend flag (>25, lagged)"
 
     return df
+
+
+@njit(cache=True)
+def _supertrend_loop(
+    close: np.ndarray,
+    basic_upper: np.ndarray,
+    basic_lower: np.ndarray,
+    period: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Numba-optimized Supertrend band/direction loop."""
+    n = len(close)
+    upper_band = np.zeros(n)
+    lower_band = np.zeros(n)
+    supertrend = np.zeros(n)
+    direction = np.zeros(n)
+
+    upper_band[period] = basic_upper[period]
+    lower_band[period] = basic_lower[period]
+    supertrend[period] = basic_lower[period]
+    direction[period] = 1.0
+
+    for i in range(period + 1, n):
+        if basic_upper[i] < upper_band[i - 1] or close[i - 1] > upper_band[i - 1]:
+            upper_band[i] = basic_upper[i]
+        else:
+            upper_band[i] = upper_band[i - 1]
+
+        if basic_lower[i] > lower_band[i - 1] or close[i - 1] < lower_band[i - 1]:
+            lower_band[i] = basic_lower[i]
+        else:
+            lower_band[i] = lower_band[i - 1]
+
+        if direction[i - 1] == 1.0:
+            if close[i] < lower_band[i]:
+                direction[i] = -1.0
+                supertrend[i] = upper_band[i]
+            else:
+                direction[i] = 1.0
+                supertrend[i] = lower_band[i]
+        else:
+            if close[i] > upper_band[i]:
+                direction[i] = 1.0
+                supertrend[i] = lower_band[i]
+            else:
+                direction[i] = -1.0
+                supertrend[i] = upper_band[i]
+
+    supertrend[:period] = np.nan
+    direction[:period] = np.nan
+    return supertrend, direction
 
 
 def add_supertrend(
@@ -102,7 +161,6 @@ def add_supertrend(
         DataFrame with Supertrend features added
     """
     logger.info(f"Adding Supertrend with period: {period}, multiplier: {multiplier}")
-    n = len(df)
 
     # Extract numpy arrays for performance
     close = df["close"].values
@@ -117,63 +175,14 @@ def add_supertrend(
     basic_upper = hl2 + multiplier * atr
     basic_lower = hl2 - multiplier * atr
 
-    # Initialize output arrays
-    upper_band = np.zeros(n)
-    lower_band = np.zeros(n)
-    supertrend = np.zeros(n)
-    direction = np.zeros(n)  # 1 = uptrend, -1 = downtrend
-
-    # Set initial values at first valid ATR index (period, not period-1)
-    # ATR is first valid at index 'period', so we start there
-    # Start in uptrend by convention
-    upper_band[period] = basic_upper[period]
-    lower_band[period] = basic_lower[period]
-    supertrend[period] = basic_lower[period]
-    direction[period] = 1
-
-    for i in range(period + 1, n):
-        # Update upper band: can only decrease, or reset if price broke above
-        if basic_upper[i] < upper_band[i - 1] or close[i - 1] > upper_band[i - 1]:
-            upper_band[i] = basic_upper[i]
-        else:
-            upper_band[i] = upper_band[i - 1]
-
-        # Update lower band: can only increase, or reset if price broke below
-        if basic_lower[i] > lower_band[i - 1] or close[i - 1] < lower_band[i - 1]:
-            lower_band[i] = basic_lower[i]
-        else:
-            lower_band[i] = lower_band[i - 1]
-
-        # Determine trend direction based on previous direction and current price
-        if direction[i - 1] == 1:  # Was in uptrend
-            if close[i] < lower_band[i]:
-                # Price broke below support -> switch to downtrend
-                direction[i] = -1
-                supertrend[i] = upper_band[i]
-            else:
-                # Stay in uptrend
-                direction[i] = 1
-                supertrend[i] = lower_band[i]
-        else:  # Was in downtrend
-            if close[i] > upper_band[i]:
-                # Price broke above resistance -> switch to uptrend
-                direction[i] = 1
-                supertrend[i] = lower_band[i]
-            else:
-                # Stay in downtrend
-                direction[i] = -1
-                supertrend[i] = upper_band[i]
-
-    # Set NaN for warmup period where ATR is not valid
-    # ATR is first valid at index 'period', so indices 0 to period-1 are NaN
-    supertrend[:period] = np.nan
-    direction[:period] = np.nan
+    # Run Numba-optimized loop
+    supertrend, direction = _supertrend_loop(close, basic_upper, basic_lower, period)
 
     # ANTI-LOOKAHEAD: shift(1) ensures Supertrend at bar[t] uses data up to bar[t-1]
     # Batch concat to avoid fragmentation
     new_cols = {
-        "supertrend": pd.Series(supertrend).shift(1).values,
-        "supertrend_direction": pd.Series(direction).shift(1).values,
+        "supertrend": _np_shift1(supertrend),
+        "supertrend_direction": _np_shift1(direction),
     }
     df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 

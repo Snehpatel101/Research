@@ -125,7 +125,7 @@ def _calculate_shannon_entropy(bin_counts: np.ndarray) -> float:
     return float(entropy)
 
 
-@njit
+@njit(cache=True)
 def _rolling_shannon_entropy_numba(returns: np.ndarray, window: int, n_bins: int) -> np.ndarray:
     """
     Numba-optimized rolling Shannon entropy calculation.
@@ -316,7 +316,7 @@ def add_shannon_entropy(
     return df
 
 
-@njit
+@njit(cache=True)
 def _lempel_ziv_complexity_numba(seq: np.ndarray) -> int:
     """
     Numba-compiled Lempel-Ziv complexity using LZ76 algorithm.
@@ -428,6 +428,45 @@ def _normalized_lz_complexity(complexity: int, n: int) -> float:
     return float(complexity / max_complexity)
 
 
+@njit(cache=True)
+def _rolling_lz_complexity_numba(binary_changes: np.ndarray, window: int) -> np.ndarray:
+    """Numba-optimized rolling Lempel-Ziv complexity loop."""
+    n = len(binary_changes)
+    lz_values = np.full(n, np.nan)
+
+    for i in range(window - 1, n):
+        window_data = binary_changes[i - window + 1 : i + 1]
+
+        # Count valid (non-NaN) values
+        valid_count = 0
+        for j in range(len(window_data)):
+            if not np.isnan(window_data[j]):
+                valid_count += 1
+
+        if valid_count < window // 2:
+            continue
+
+        # Extract valid data
+        valid_data = np.empty(valid_count, dtype=np.int8)
+        idx = 0
+        for j in range(len(window_data)):
+            if not np.isnan(window_data[j]):
+                valid_data[idx] = np.int8(window_data[j])
+                idx += 1
+
+        complexity = _lempel_ziv_complexity_numba(valid_data)
+
+        # Normalize: complexity / (n / log2(n))
+        nn = len(valid_data)
+        if nn < 2:
+            continue
+        max_complexity = nn / (np.log(nn) / np.log(2.0))
+        if max_complexity > 0:
+            lz_values[i] = complexity / max_complexity
+
+    return lz_values
+
+
 def _rolling_lz_complexity(binary_changes: np.ndarray, window: int) -> np.ndarray:
     """
     Calculate rolling Lempel-Ziv complexity.
@@ -444,22 +483,7 @@ def _rolling_lz_complexity(binary_changes: np.ndarray, window: int) -> np.ndarra
     np.ndarray
         Rolling normalized LZ complexity
     """
-    n = len(binary_changes)
-    lz_values = np.full(n, np.nan)
-
-    for i in range(window - 1, n):
-        window_data = binary_changes[i - window + 1 : i + 1]
-
-        # Skip if too many NaNs
-        valid_mask = ~np.isnan(window_data)
-        if valid_mask.sum() < window // 2:
-            continue
-
-        valid_data = window_data[valid_mask]
-        complexity = _lempel_ziv_complexity(valid_data)
-        lz_values[i] = _normalized_lz_complexity(complexity, len(valid_data))
-
-    return lz_values
+    return _rolling_lz_complexity_numba(binary_changes.astype(np.float64), window)
 
 
 def add_lempel_ziv_complexity(
@@ -528,7 +552,7 @@ def add_lempel_ziv_complexity(
     return df
 
 
-@njit
+@njit(cache=True)
 def _phi_correlation_numba(data: np.ndarray, m: int, r: float) -> float:
     """
     Numba-compiled phi(m) calculation for Approximate Entropy.
@@ -649,6 +673,66 @@ def _approximate_entropy(data: np.ndarray, m: int, r_fraction: float) -> float:
     return phi_m - phi_m1
 
 
+@njit(cache=True)
+def _approximate_entropy_numba(data: np.ndarray, m: int, r_fraction: float) -> float:
+    """Numba-optimized ApEn: phi(m) - phi(m+1)."""
+    n = len(data)
+    # Calculate std
+    mean_val = 0.0
+    for i in range(n):
+        mean_val += data[i]
+    mean_val /= n
+    var_sum = 0.0
+    for i in range(n):
+        var_sum += (data[i] - mean_val) ** 2
+    std = np.sqrt(var_sum / n)
+    if std == 0.0:
+        return np.nan
+
+    r = r_fraction * std
+    phi_m = _phi_correlation_numba(data, m, r)
+    phi_m1 = _phi_correlation_numba(data, m + 1, r)
+    if np.isnan(phi_m) or np.isnan(phi_m1):
+        return np.nan
+    return phi_m - phi_m1
+
+
+@njit(cache=True)
+def _rolling_approximate_entropy_numba(
+    returns: np.ndarray, window: int, m: int, r_fraction: float
+) -> np.ndarray:
+    """Numba-optimized rolling Approximate Entropy loop."""
+    n = len(returns)
+    apen = np.full(n, np.nan)
+    min_data = m + 2
+    if min_data < 10:
+        min_data = 10
+
+    for i in range(window - 1, n):
+        window_data = returns[i - window + 1 : i + 1]
+
+        # Count valid (non-NaN) values
+        valid_count = 0
+        for j in range(len(window_data)):
+            if not np.isnan(window_data[j]):
+                valid_count += 1
+
+        if valid_count < min_data:
+            continue
+
+        # Extract valid data
+        valid_data = np.empty(valid_count, dtype=np.float64)
+        idx = 0
+        for j in range(len(window_data)):
+            if not np.isnan(window_data[j]):
+                valid_data[idx] = window_data[j]
+                idx += 1
+
+        apen[i] = _approximate_entropy_numba(valid_data, m, r_fraction)
+
+    return apen
+
+
 def _rolling_approximate_entropy(
     returns: np.ndarray, window: int, m: int, r_fraction: float
 ) -> np.ndarray:
@@ -671,24 +755,7 @@ def _rolling_approximate_entropy(
     np.ndarray
         Rolling ApEn values
     """
-    n = len(returns)
-    apen = np.full(n, np.nan)
-
-    # Minimum data points needed for meaningful ApEn
-    min_data = max(m + 2, 10)
-
-    for i in range(window - 1, n):
-        window_data = returns[i - window + 1 : i + 1]
-
-        # Remove NaNs
-        valid_data = window_data[~np.isnan(window_data)]
-
-        if len(valid_data) < min_data:
-            continue
-
-        apen[i] = _approximate_entropy(valid_data, m, r_fraction)
-
-    return apen
+    return _rolling_approximate_entropy_numba(returns.astype(np.float64), window, m, r_fraction)
 
 
 def add_approximate_entropy(
@@ -1009,7 +1076,7 @@ DEFAULT_SAMPLE_ENTROPY_M = 2
 DEFAULT_SAMPLE_ENTROPY_R = 0.2
 
 
-@njit
+@njit(cache=True)
 def _count_template_matches_numba(data: np.ndarray, dim: int, tolerance: float) -> int:
     """
     Numba-compiled template matching for Sample Entropy.

@@ -48,7 +48,7 @@ def _sma(series: pd.Series, window: int, min_periods: int | None = None) -> pd.S
     return series.rolling(window=window, min_periods=min_periods).mean()
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _rsi_numba(prices: np.ndarray, period: int) -> np.ndarray:
     """Numba-optimized RSI calculation (5-10x faster)."""
     n = len(prices)
@@ -319,7 +319,7 @@ def compute_roc_20(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def _mean_deviation_numba(arr: np.ndarray, period: int) -> np.ndarray:
     """
     Numba-accelerated rolling mean deviation calculation.

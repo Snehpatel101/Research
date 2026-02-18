@@ -5,6 +5,8 @@ Manages stage execution, dependency tracking, and artifact management for
 the data preparation pipeline.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import signal
@@ -95,6 +97,8 @@ def _run_with_timeout(
 
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from src.data.pipeline.data_config import DataConfig
 
 
@@ -116,7 +120,7 @@ class NumpyEncoder(json.JSONEncoder):
 class PipelineRunner:
     """Orchestrates the data pipeline execution."""
 
-    def __init__(self, config: "DataConfig", resume: bool = False):
+    def __init__(self, config: DataConfig, resume: bool = False):
         """
         Initialize pipeline runner.
 
@@ -427,16 +431,23 @@ class PipelineRunner:
         """Get the result of a specific stage."""
         return self.stage_results.get(stage_name)
 
-    def _validate_stage_output(self, stage_name: str, result: StageResult) -> None:
+    def _validate_stage_output(
+        self,
+        stage_name: str,
+        result: StageResult,
+        in_memory_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> None:
         """
         Validate stage output against its schema (Phase 7B).
 
-        Reads output artifacts and validates them against the stage schema.
-        Only validates parquet files; skips other artifact types.
+        Validates artifacts against the stage schema. Uses in-memory DataFrames
+        when available to avoid re-reading parquet files from disk.
 
         Args:
             stage_name: Name of the stage
             result: StageResult containing artifact paths
+            in_memory_dfs: Optional dict mapping artifact path str -> DataFrame
+                to avoid re-reading parquet from disk.
 
         Raises:
             StageValidationError: If validation fails
@@ -450,6 +461,8 @@ class PipelineRunner:
             self.logger.debug(f"No schema for stage '{stage_name}', skipping validation")
             return
 
+        in_memory_dfs = in_memory_dfs or {}
+
         # Validate each parquet artifact
         for artifact_path in result.artifacts:
             if not artifact_path.exists():
@@ -460,7 +473,11 @@ class PipelineRunner:
                 continue  # Only validate parquet files
 
             try:
-                df = pd.read_parquet(artifact_path)
+                # Use in-memory DataFrame if available, otherwise read from disk
+                df = in_memory_dfs.get(str(artifact_path))
+                if df is None:
+                    df = pd.read_parquet(artifact_path)
+
                 is_valid, issues = validate_stage_output(
                     df=df,
                     stage_name=stage_name,
@@ -481,17 +498,21 @@ class PipelineRunner:
         current_stage: PipelineStage,
         result: StageResult,
         stages_to_run: list[PipelineStage],
+        in_memory_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> None:
         """
         Validate data when transitioning between pipeline stages (Phase 43).
 
-        Reads the current stage's output artifacts and validates them against
-        the requirements for the next stage in the pipeline.
+        Validates the current stage's output against the requirements for the
+        next stage. Uses in-memory DataFrames when available to avoid
+        re-reading parquet files from disk.
 
         Args:
             current_stage: The stage that just completed
             result: StageResult containing artifact paths
             stages_to_run: List of stages being run in this execution
+            in_memory_dfs: Optional dict mapping artifact path str -> DataFrame
+                to avoid re-reading parquet from disk.
 
         Raises:
             StageValidationError: If transition validation fails
@@ -510,6 +531,7 @@ class PipelineRunner:
             return
 
         next_stage = stages_to_run[current_idx + 1]
+        in_memory_dfs = in_memory_dfs or {}
 
         # Validate each parquet artifact for the transition
         validated_any = False
@@ -521,7 +543,11 @@ class PipelineRunner:
                 continue  # Only validate parquet files
 
             try:
-                df = pd.read_parquet(artifact_path)
+                # Use in-memory DataFrame if available, otherwise read from disk
+                df = in_memory_dfs.get(str(artifact_path))
+                if df is None:
+                    df = pd.read_parquet(artifact_path)
+
                 warnings = validate_stage_transition(
                     output_df=df,
                     from_stage=current_stage.name,

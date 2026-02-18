@@ -8,9 +8,14 @@
 
 ## Verification Summary
 
-| Total Findings | Verified | Partially Verified | Disproven |
+| Total Findings | Verified | Corrected | Disproven |
 |:-:|:-:|:-:|:-:|
-| 34 | 27 | 1 | 3 |
+| 34 | 28 | 3 | 3 |
+
+**Corrected claims (details fixed, optimizations still valid):**
+- 1.4: Count is 21 instances (not 16), all in `src/data/pipeline/stages/features/`
+- 2.1: `ModelRegistry.create()` per-fold is in 4D path (`_generate_4d_oof`) only, not 2D/3D path
+- 3.1: DWT calls are 3× `pywt.wavedec()` + 1× `pywt.dwt()`, lines corrected to 60,87,279,320
 
 **Disproven claims removed from this plan:**
 - ~~temporal.py has `.apply()` calls~~ — already fully vectorized
@@ -119,11 +124,11 @@ overlap_mask = (label_end_times >= test_start_time) & (X.index <= test_end_time)
 train_mask[overlap_mask & train_mask] = False
 ```
 
-### 1.4 Replace 16 `pd.Series(arr).shift(1).values` patterns
+### 1.4 Replace 21 `pd.Series(arr).shift(1).values` patterns
 **Impact:** Eliminates unnecessary Series creation overhead
 **Risk:** Very low — `np.roll` + NaN fill is functionally identical
 
-**Files:** `momentum.py` (2), `volatility.py` (3), `trend.py` (5), `wavelets.py` (6) — 16 total instances
+**Files (all in `src/data/pipeline/stages/features/`):** `momentum.py` (3), `volatility.py` (3), `trend.py` (5), `wavelets.py` (10) — 21 total instances
 
 **Fix:** Replace each with:
 ```python
@@ -140,8 +145,8 @@ shifted[1:] = arr[:-1]
 **Impact:** Single biggest optimization — eliminates 5-6x overhead
 **Risk:** Medium — requires careful weight caching, but no accuracy impact
 
-**File:** `src/models/training/services/oof_generation.py:96-143,201`
-**Problem:** OOF generation creates brand new models via `ModelRegistry.create()` and trains from scratch for each fold, duplicating the work already done during training.
+**File:** `src/models/training/services/oof_generation.py:201` (4D path via `_generate_4d_oof()`)
+**Problem:** 4D OOF generation creates brand new models via `ModelRegistry.create()` and trains from scratch for each fold, duplicating the work already done during training. (Note: the 2D/3D path at lines 96-143 uses `OOFGenerator` service, not direct `ModelRegistry.create()`.)
 **Fix:** Save trained fold models during training CV, reload for OOF prediction instead of retraining.
 
 ### 2.2 Stop clearing PreparedData cache per-horizon
@@ -199,8 +204,8 @@ hasher.update(phash.hash_pandas_object(df).values.tobytes())
 **Impact:** 4x faster wavelet feature computation
 **Risk:** Low — same DWT coefficients, computed once and reused
 
-**File:** `src/data/pipeline/stages/features/wavelets.py:55,82,274,315`
-**Problem:** `pywt.wavedec()` called 4 separate times in rolling loops across 4 functions, each computing the same decomposition.
+**File:** `src/data/pipeline/stages/features/wavelets.py:60,87,279,320` (loop headers at 55,82,274,315)
+**Problem:** DWT called 4 separate times in rolling loops across 4 functions — 3× `pywt.wavedec()` (lines 60, 87, 320) + 1× `pywt.dwt()` (line 279) — each computing the same decomposition.
 **Fix:** Compute DWT once per window position, pass coefficients to all 4 feature extractors.
 
 ### 3.2 Add @njit to 3 entropy rolling loops

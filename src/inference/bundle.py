@@ -428,7 +428,7 @@ class ModelBundle:
         if self.scaler is not None:
             scaler_path = path / BUNDLE_SCALER_FILE
             with open(scaler_path, "wb") as f:
-                pickle.dump(self.scaler, f)
+                pickle.dump(self.scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
             files.append(BUNDLE_SCALER_FILE)
             checksums[BUNDLE_SCALER_FILE] = self._file_checksum(scaler_path)
 
@@ -436,7 +436,7 @@ class ModelBundle:
         if self.calibrator is not None:
             calibrator_path = path / BUNDLE_CALIBRATOR_FILE
             with open(calibrator_path, "wb") as f:
-                pickle.dump(self.calibrator, f)
+                pickle.dump(self.calibrator, f, protocol=pickle.HIGHEST_PROTOCOL)
             files.append(BUNDLE_CALIBRATOR_FILE)
             checksums[BUNDLE_CALIBRATOR_FILE] = self._file_checksum(calibrator_path)
 

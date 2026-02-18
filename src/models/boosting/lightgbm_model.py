@@ -145,7 +145,7 @@ class LightGBMModel(BaseModel):
             "learning_rate": 0.05,
             "reg_alpha": 0.1,
             "reg_lambda": 1.0,
-            "early_stopping_rounds": 50,
+            "early_stopping_rounds": 20,
             "boosting_type": "gbdt",
             "use_gpu": True,  # Phase 12A-8: Enable GPU by default
             "random_state": 42,
@@ -331,7 +331,7 @@ class LightGBMModel(BaseModel):
             "best_iteration": self._model.best_iteration,
         }
         with open(path / "metadata.pkl", "wb") as f:
-            pickle.dump(metadata, f)
+            pickle.dump(metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(f"Saved LightGBM model to {path}")
 

@@ -160,6 +160,12 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     # When True, validates data between stages using validate_stage_transition()
     enable_transition_validation: bool = True
 
+    # In-memory stage handoff (optimization 5.2)
+    # When True, stages pass DataFrames in-memory via _stage_data_cache instead of
+    # re-reading parquet from disk. Parquet is still written for persistence.
+    enable_in_memory_handoff: bool = True
+    _stage_data_cache: dict = field(default_factory=dict, repr=False)
+
     # Labeling parameters - Dynamic Horizon Configuration
     horizon_config: HorizonConfig | None = None
     label_horizons: list[int] = field(default_factory=lambda: list(ACTIVE_HORIZONS))

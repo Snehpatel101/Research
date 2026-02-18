@@ -171,7 +171,9 @@ class DataCache:
         try:
             disk_path = self._get_disk_path(key)
             with open(disk_path, "wb") as f:
-                pickle.dump({"data": data, "metadata": metadata}, f)
+                pickle.dump(
+                    {"data": data, "metadata": metadata}, f, protocol=pickle.HIGHEST_PROTOCOL
+                )
             logger.debug(f"Saved to disk cache: {disk_path}")
             return True
         except Exception as e:

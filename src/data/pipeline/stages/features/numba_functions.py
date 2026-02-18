@@ -10,10 +10,12 @@ import numpy as np
 from numba import jit
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_sma_numba(arr: np.ndarray, period: int) -> np.ndarray:
     """
     Calculate Simple Moving Average using Numba.
+
+    Uses O(n) running-sum approach instead of O(n*period) per-window mean.
 
     Parameters
     ----------
@@ -30,13 +32,24 @@ def calculate_sma_numba(arr: np.ndarray, period: int) -> np.ndarray:
     n = len(arr)
     result = np.full(n, np.nan)
 
-    for i in range(period - 1, n):
-        result[i] = np.mean(arr[i - period + 1 : i + 1])
+    if n < period:
+        return result
+
+    # Calculate first window sum
+    window_sum = 0.0
+    for i in range(period):
+        window_sum += arr[i]
+    result[period - 1] = window_sum / period
+
+    # Rolling calculation: O(n)
+    for i in range(period, n):
+        window_sum = window_sum - arr[i - period] + arr[i]
+        result[i] = window_sum / period
 
     return result
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_ema_numba(arr: np.ndarray, period: int) -> np.ndarray:
     """
     Calculate Exponential Moving Average using Numba.
@@ -93,7 +106,7 @@ def calculate_ema_numba(arr: np.ndarray, period: int) -> np.ndarray:
     return result
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_rsi_numba(close: np.ndarray, period: int = 14) -> np.ndarray:
     """
     Calculate Relative Strength Index using Numba.
@@ -144,7 +157,7 @@ def calculate_rsi_numba(close: np.ndarray, period: int = 14) -> np.ndarray:
     return rsi
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_atr_numba(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
 ) -> np.ndarray:
@@ -187,7 +200,7 @@ def calculate_atr_numba(
     return atr
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_stochastic_numba(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, k_period: int = 14, d_period: int = 3
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -232,7 +245,7 @@ def calculate_stochastic_numba(
     return k, d
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_rolling_autocorr_numba(returns: np.ndarray, window: int, lag: int) -> np.ndarray:
     """
     Calculate rolling autocorrelation using Numba.
@@ -310,7 +323,7 @@ def calculate_rolling_autocorr_numba(returns: np.ndarray, window: int, lag: int)
     return result
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def calculate_adx_numba(
     high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

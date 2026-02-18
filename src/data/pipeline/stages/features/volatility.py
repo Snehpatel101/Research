@@ -17,6 +17,14 @@ from .numba_functions import calculate_atr_numba, calculate_ema_numba
 logger = logging.getLogger(__name__)
 
 
+def _np_shift1(arr: np.ndarray) -> np.ndarray:
+    """Shift array by 1 using numpy (avoids pd.Series overhead)."""
+    result = np.empty_like(arr, dtype=np.float64)
+    result[0] = np.nan
+    result[1:] = arr[:-1]
+    return result
+
+
 def add_atr(
     df: pd.DataFrame, feature_metadata: dict[str, str], periods: list[int] | None = None
 ) -> pd.DataFrame:
@@ -47,7 +55,7 @@ def add_atr(
     for period in periods:
         atr = calculate_atr_numba(df["high"].values, df["low"].values, df["close"].values, period)
         # ANTI-LOOKAHEAD: shift(1) ensures ATR at bar[t] uses data up to bar[t-1]
-        df[f"atr_{period}"] = pd.Series(atr).shift(1).values
+        df[f"atr_{period}"] = _np_shift1(atr)
 
         # ATR as percentage of close (safe division)
         # Use lagged close to match lagged ATR
@@ -154,8 +162,8 @@ def add_keltner_channels(
     atr_raw = calculate_atr_numba(df["high"].values, df["low"].values, df["close"].values, period)
 
     # ANTI-LOOKAHEAD: shift(1) ensures KC at bar[t] uses data up to bar[t-1]
-    ema = pd.Series(ema_raw).shift(1).values
-    atr = pd.Series(atr_raw).shift(1).values
+    ema = _np_shift1(ema_raw)
+    atr = _np_shift1(atr_raw)
     close_lagged = df["close"].shift(1).values
 
     kc_upper = ema + (atr_mult * atr)

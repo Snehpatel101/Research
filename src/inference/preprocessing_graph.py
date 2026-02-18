@@ -434,7 +434,7 @@ class PreprocessingGraph:
         """Save fitted scaler to disk."""
         if self._scaler is not None:
             with open(path, "wb") as f:
-                pickle.dump(self._scaler, f)
+                pickle.dump(self._scaler, f, protocol=pickle.HIGHEST_PROTOCOL)
             logger.info(f"Saved scaler to {path}")
 
     def set_scaler(self, scaler: Any) -> None:

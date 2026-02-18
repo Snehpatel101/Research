@@ -368,7 +368,7 @@ class UnifiedTrainingOrchestrator:
             selector = WalkForwardFeatureSelector(
                 n_features_to_select=len(feature_names),
                 selection_method="mda",
-                n_estimators=50,
+                n_estimators=20,
                 min_feature_frequency=0.01,
                 random_state=42,
             )
@@ -802,6 +802,13 @@ class UnifiedTrainingOrchestrator:
         # Save results
         self._save_results()
 
+        # Free trained models and prepared data cache after saving
+        model_count = len(self._trained_models)
+        self._trained_models.clear()
+        self._clear_prepared_cache()
+        gc.collect()
+        logger.debug(f"Cleared {model_count} trained models from memory")
+
         total_time = time.time() - start_time
 
         logger.info("\n" + "=" * 60)
@@ -888,8 +895,12 @@ class UnifiedTrainingOrchestrator:
                     additional_dfs=additional_dfs,
                 )
 
-            # Clear PreparedData cache after each horizon to free memory
-            self._clear_prepared_cache()
+            # Keep PreparedData cache alive across horizons — shared data is reused
+            if len(self._prepared_cache) > 20:
+                logger.warning(
+                    f"PreparedData cache has {len(self._prepared_cache)} entries — "
+                    "consider clearing if memory is constrained"
+                )
 
     def _train_boosting_parallel(
         self,
@@ -1825,6 +1836,7 @@ class UnifiedTrainingOrchestrator:
                         "feature_names": feature_names,
                     },
                     f,
+                    protocol=pickle.HIGHEST_PROTOCOL,
                 )
             logger.info(f"    Saved meta-model to: {meta_path}")
 

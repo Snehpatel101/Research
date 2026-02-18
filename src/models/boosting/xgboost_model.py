@@ -111,7 +111,7 @@ class XGBoostModel(BaseModel):
             "gamma": 0.1,
             "reg_alpha": 0.1,
             "reg_lambda": 1.0,
-            "early_stopping_rounds": 50,
+            "early_stopping_rounds": 20,
             "eval_metric": "mlogloss",
             "tree_method": "hist",
             "use_gpu": True,  # Phase 12A-8: Enable GPU by default
@@ -273,7 +273,7 @@ class XGBoostModel(BaseModel):
             "use_gpu": self._use_gpu,
         }
         with open(path / "metadata.pkl", "wb") as f:
-            pickle.dump(metadata, f)
+            pickle.dump(metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(f"Saved XGBoost model to {path}")
 

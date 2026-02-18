@@ -14,6 +14,23 @@ import pandas as pd
 
 from src.data.features.compute._helpers import log_returns as _log_returns
 
+# Import Numba-optimized rolling functions from pipeline stages
+from src.data.pipeline.stages.features.entropy import (
+    _rolling_approximate_entropy as _stages_rolling_apen,
+)
+from src.data.pipeline.stages.features.entropy import (
+    _rolling_hurst as _stages_rolling_hurst,
+)
+from src.data.pipeline.stages.features.entropy import (
+    _rolling_lz_complexity as _stages_rolling_lz,
+)
+from src.data.pipeline.stages.features.entropy import (
+    _rolling_sample_entropy as _stages_rolling_sampen,
+)
+from src.data.pipeline.stages.features.entropy import (
+    _rolling_shannon_entropy_numba as _stages_rolling_shannon,
+)
+
 # =============================================================================
 # NUMBA-ACCELERATED HELPER FUNCTIONS
 # =============================================================================
@@ -340,22 +357,22 @@ def _hurst_exponent(x: np.ndarray) -> float:
 def compute_entropy_shannon_10(df: pd.DataFrame) -> pd.Series:
     """10-period Shannon entropy of returns."""
     returns = _log_returns(df["close"])
-
-    return returns.rolling(window=10, min_periods=10).apply(_shannon_entropy, raw=True)
+    result = _stages_rolling_shannon(returns.values.astype(np.float64), 10, 10)
+    return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_shannon_20(df: pd.DataFrame) -> pd.Series:
     """20-period Shannon entropy of returns."""
     returns = _log_returns(df["close"])
-
-    return returns.rolling(window=20, min_periods=20).apply(_shannon_entropy, raw=True)
+    result = _stages_rolling_shannon(returns.values.astype(np.float64), 20, 10)
+    return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_shannon_50(df: pd.DataFrame) -> pd.Series:
     """50-period Shannon entropy of returns."""
     returns = _log_returns(df["close"])
-
-    return returns.rolling(window=50, min_periods=50).apply(_shannon_entropy, raw=True)
+    result = _stages_rolling_shannon(returns.values.astype(np.float64), 50, 10)
+    return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
@@ -367,11 +384,8 @@ def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
     returns = _log_returns(df["close"])
     n_bins = 10
     max_entropy = np.log2(n_bins)
-
-    def rolling_shannon_norm(x):
-        return _shannon_entropy(x, n_bins) / max_entropy
-
-    return returns.rolling(window=20, min_periods=20).apply(rolling_shannon_norm, raw=True)
+    result = _stages_rolling_shannon(returns.values.astype(np.float64), 20, n_bins)
+    return pd.Series(result / max_entropy, index=returns.index)
 
 
 # =============================================================================
@@ -382,24 +396,20 @@ def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
 def compute_entropy_lz_20(df: pd.DataFrame) -> pd.Series:
     """20-period Lempel-Ziv complexity."""
     returns = _log_returns(df["close"])
-
-    def rolling_lz(x):
-        # Binarize: 1 if return > 0, 0 otherwise
-        binary = (x > 0).astype(int)
-        return _lempel_ziv_complexity(binary)
-
-    return returns.rolling(window=20, min_periods=20).apply(rolling_lz, raw=True)
+    # Binarize: 1 if return > 0, 0 otherwise
+    binary = np.where(returns.values > 0, 1.0, 0.0)
+    binary[np.isnan(returns.values)] = np.nan
+    result = _stages_rolling_lz(binary, 20)
+    return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_lz_50(df: pd.DataFrame) -> pd.Series:
     """50-period Lempel-Ziv complexity."""
     returns = _log_returns(df["close"])
-
-    def rolling_lz(x):
-        binary = (x > 0).astype(int)
-        return _lempel_ziv_complexity(binary)
-
-    return returns.rolling(window=50, min_periods=50).apply(rolling_lz, raw=True)
+    binary = np.where(returns.values > 0, 1.0, 0.0)
+    binary[np.isnan(returns.values)] = np.nan
+    result = _stages_rolling_lz(binary, 50)
+    return pd.Series(result, index=returns.index)
 
 
 # =============================================================================
@@ -410,21 +420,15 @@ def compute_entropy_lz_50(df: pd.DataFrame) -> pd.Series:
 def compute_entropy_apen_20(df: pd.DataFrame) -> pd.Series:
     """20-period Approximate Entropy."""
     returns = _log_returns(df["close"])
-
-    def rolling_apen(x):
-        return _approximate_entropy(x, m=2)
-
-    return returns.rolling(window=20, min_periods=20).apply(rolling_apen, raw=True)
+    result = _stages_rolling_apen(returns.values.astype(np.float64), 20, 2, 0.2)
+    return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_apen_50(df: pd.DataFrame) -> pd.Series:
     """50-period Approximate Entropy."""
     returns = _log_returns(df["close"])
-
-    def rolling_apen(x):
-        return _approximate_entropy(x, m=2)
-
-    return returns.rolling(window=50, min_periods=50).apply(rolling_apen, raw=True)
+    result = _stages_rolling_apen(returns.values.astype(np.float64), 50, 2, 0.2)
+    return pd.Series(result, index=returns.index)
 
 
 # =============================================================================
@@ -435,11 +439,8 @@ def compute_entropy_apen_50(df: pd.DataFrame) -> pd.Series:
 def compute_sample_entropy_20(df: pd.DataFrame) -> pd.Series:
     """20-period Sample Entropy."""
     returns = _log_returns(df["close"])
-
-    def rolling_sampen(x):
-        return _sample_entropy(x, m=2)
-
-    return returns.rolling(window=20, min_periods=20).apply(rolling_sampen, raw=True)
+    result = _stages_rolling_sampen(returns.values.astype(np.float64), 20, 2, 0.2)
+    return pd.Series(result, index=returns.index)
 
 
 # =============================================================================
@@ -449,16 +450,17 @@ def compute_sample_entropy_20(df: pd.DataFrame) -> pd.Series:
 
 def compute_hurst_50(df: pd.DataFrame) -> pd.Series:
     """50-period Hurst exponent."""
-    returns = _log_returns(df["close"])
-
-    return returns.rolling(window=50, min_periods=50).apply(_hurst_exponent, raw=True)
+    # stages _rolling_hurst expects prices, not returns
+    prices = df["close"].values.astype(np.float64)
+    result = _stages_rolling_hurst(prices, 50)
+    return pd.Series(result, index=df.index)
 
 
 def compute_hurst_100(df: pd.DataFrame) -> pd.Series:
     """100-period Hurst exponent."""
-    returns = _log_returns(df["close"])
-
-    return returns.rolling(window=100, min_periods=100).apply(_hurst_exponent, raw=True)
+    prices = df["close"].values.astype(np.float64)
+    result = _stages_rolling_hurst(prices, 100)
+    return pd.Series(result, index=df.index)
 
 
 def compute_hurst_regime(df: pd.DataFrame) -> pd.Series:

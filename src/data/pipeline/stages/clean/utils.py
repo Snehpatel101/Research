@@ -16,7 +16,6 @@ import logging
 
 import numpy as np
 import pandas as pd
-from numba import jit
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -24,44 +23,6 @@ logger.addHandler(logging.NullHandler())
 DEFAULT_ROLL_GAP_THRESHOLD = 0.10
 DEFAULT_ROLL_WINDOW_BARS = 5
 SESSION_ID_OUTSIDE = "outside"
-
-
-@jit(nopython=True)
-def calculate_atr_numba(
-    high: np.ndarray, low: np.ndarray, close: np.ndarray, period: int = 14
-) -> np.ndarray:
-    """
-    Calculate Average True Range using Numba for performance.
-
-    Parameters:
-    -----------
-    high : High prices
-    low : Low prices
-    close : Close prices
-    period : ATR period
-
-    Returns:
-    --------
-    np.ndarray : ATR values
-    """
-    n = len(high)
-    tr = np.zeros(n)
-    atr = np.zeros(n)
-
-    # Calculate True Range
-    for i in range(1, n):
-        hl = high[i] - low[i]
-        hc = abs(high[i] - close[i - 1])
-        lc = abs(low[i] - close[i - 1])
-        tr[i] = max(hl, hc, lc)
-
-    # Calculate ATR
-    atr[period] = np.mean(tr[1 : period + 1])
-
-    for i in range(period + 1, n):
-        atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
-
-    return atr
 
 
 def validate_ohlc(df: pd.DataFrame) -> pd.DataFrame:

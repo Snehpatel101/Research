@@ -253,7 +253,7 @@ class XGBoostMeta(BaseModel):
             "use_gpu": self._use_gpu,
         }
         with open(path / "metadata.pkl", "wb") as f:
-            pickle.dump(metadata, f)
+            pickle.dump(metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(f"Saved XGBoostMeta to {path}")
 

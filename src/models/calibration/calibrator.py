@@ -282,7 +282,7 @@ class ProbabilityCalibrator:
         }
 
         with open(path, "wb") as f:
-            pickle.dump(state, f)
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.debug(f"Saved calibrator to {path}")
 

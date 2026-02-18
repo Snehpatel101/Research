@@ -103,7 +103,7 @@ class CatBoostModel(BaseModel):
             "l2_leaf_reg": 3.0,
             "random_strength": 1.0,
             "bagging_temperature": 1.0,
-            "early_stopping_rounds": 50,
+            "early_stopping_rounds": 20,
             "use_gpu": True,  # Phase 12A-8: Enable GPU by default
             "devices": "0",
             "random_state": 42,
@@ -259,7 +259,7 @@ class CatBoostModel(BaseModel):
             "best_iteration": self._model.get_best_iteration() if self._model is not None else 0,
         }
         with open(path / "metadata.pkl", "wb") as f:
-            pickle.dump(metadata, f)
+            pickle.dump(metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(f"Saved CatBoost model to {path}")
 

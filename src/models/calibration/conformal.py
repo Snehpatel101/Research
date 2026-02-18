@@ -459,7 +459,7 @@ class ConformalPredictor:
         }
 
         with open(path, "wb") as f:
-            pickle.dump(state, f)
+            pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(f"Saved conformal predictor to {path}")
 

@@ -419,7 +419,7 @@ class MLFactory:
         training_cache_path = self.output_dir / "cache" / "training_result.pkl"
         training_cache_path.parent.mkdir(parents=True, exist_ok=True)
         with open(training_cache_path, "wb") as f:
-            pickle.dump(training_result, f)
+            pickle.dump(training_result, f, protocol=pickle.HIGHEST_PROTOCOL)
 
         self._checkpoint_manager.save_checkpoint(
             stage_name="training",

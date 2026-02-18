@@ -491,41 +491,41 @@ class MultiStreamAdapter(BaseAdapter):
             anchor_df, tf_dfs, timeframes, feature_cols
         )
 
+        # Pre-compute all anchor start/end indices (vectorized)
+        anchor_starts = np.arange(n_sequences) * self.stride
+        anchor_ends = anchor_starts + seq_len
+
         # Build sequences for each timeframe
         for tf_idx, tf in enumerate(timeframes):
             tf_values = tf_index_maps[tf]["values"]
 
-            for seq_idx in range(n_sequences):
-                # Anchor indices for this sequence
-                anchor_start = seq_idx * self.stride
-                anchor_end = anchor_start + seq_len
+            if tf_idx == 0:
+                # Anchor timeframe — vectorized extraction using fancy indexing
+                # Build index array: (n_sequences, seq_len) where each row is
+                # [anchor_start, anchor_start+1, ..., anchor_start+seq_len-1]
+                seq_indices = anchor_starts[:, np.newaxis] + np.arange(seq_len)[np.newaxis, :]
+                X[:, tf_idx, :, :] = tf_values[seq_indices]
 
-                if tf_idx == 0:
-                    # Anchor timeframe - direct extraction
-                    X[seq_idx, tf_idx, :, :] = tf_values[anchor_start:anchor_end]
-
-                    # Store label from end of sequence (target is next step)
-                    y[seq_idx] = anchor_df[self.label_column].iloc[anchor_end - 1]
-                    original_indices[seq_idx] = anchor_end - 1
-                else:
-                    # Higher timeframe - use pre-computed timestamp alignment
-                    idx_map = tf_index_maps[tf]["anchor_to_tf"]
+                # Store labels and original indices (vectorized)
+                label_values = anchor_df[self.label_column].values
+                y[:] = label_values[anchor_ends - 1]
+                original_indices[:] = anchor_ends - 1
+            else:
+                # Higher timeframe - use pre-computed timestamp alignment
+                idx_map = tf_index_maps[tf]["anchor_to_tf"]
+                for seq_idx in range(n_sequences):
                     X[seq_idx, tf_idx, :, :] = self._extract_aligned_sequence(
                         tf_values=tf_values,
                         idx_map=idx_map,
-                        anchor_start=anchor_start,
-                        anchor_end=anchor_end,
+                        anchor_start=anchor_starts[seq_idx],
+                        anchor_end=anchor_ends[seq_idx],
                         seq_len=seq_len,
                     )
 
-        # Extract weights for sequences if available
+        # Extract weights for sequences if available (vectorized)
         seq_weights = None
         if weights is not None:
-            seq_weights = np.zeros(n_sequences, dtype=np.float32)
-            for seq_idx in range(n_sequences):
-                # Use weight at sequence end point
-                anchor_end = seq_idx * self.stride + seq_len
-                seq_weights[seq_idx] = weights[anchor_end - 1]
+            seq_weights = weights[anchor_ends - 1].astype(np.float32)
 
         return X, y, seq_weights, original_indices
 

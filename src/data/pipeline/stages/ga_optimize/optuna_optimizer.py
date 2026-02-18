@@ -265,6 +265,7 @@ def run_optuna_optimization(
     n_startup_trials: int = 10,
     regime: str = "low_vol",
     include_slippage: bool = True,
+    n_jobs: int = 1,
 ) -> tuple[dict[str, Any], ConvergenceRecord]:
     """
     Run Optuna TPE optimization to find optimal labeling parameters.
@@ -285,6 +286,7 @@ def run_optuna_optimization(
     n_startup_trials : Random trials before TPE kicks in (default: 10)
     regime : Volatility regime (default: 'low_vol')
     include_slippage : Include slippage in cost calculation (default: True)
+    n_jobs : Number of parallel Optuna jobs (default: 1 for reproducibility)
 
     Returns:
     --------
@@ -351,7 +353,7 @@ def run_optuna_optimization(
         n_trials=n_trials,
         callbacks=[callback],
         show_progress_bar=show_progress,
-        n_jobs=1,  # Single-threaded for reproducibility
+        n_jobs=n_jobs,
     )
 
     # Get best parameters

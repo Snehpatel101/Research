@@ -166,7 +166,7 @@ def compute_dataframe_checksum(df: pd.DataFrame) -> str:
         Truncated (16 char) SHA256 hex digest.
     """
     hasher = hashlib.sha256()
-    hasher.update(df.to_csv(index=False).encode())
+    hasher.update(pd.util.hash_pandas_object(df).values.tobytes())
     return hasher.hexdigest()[:16]
 
 
