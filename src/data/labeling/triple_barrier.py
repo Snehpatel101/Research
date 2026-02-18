@@ -190,8 +190,15 @@ def _triple_barrier_python(
             lower_hit = bar_low <= lower_barrier
 
             if upper_hit and lower_hit:
-                labels[i] = -99
-                touch_type[i] = 0
+                # Resolve by distance to barrier (match adaptive_barriers)
+                dist_to_upper = abs(bar_high - upper_barrier)
+                dist_to_lower = abs(bar_low - lower_barrier)
+                if dist_to_upper <= dist_to_lower:
+                    labels[i] = 1
+                    touch_type[i] = 1
+                else:
+                    labels[i] = -1
+                    touch_type[i] = -1
                 bars_to_hit[i] = j
                 hit = True
                 break
@@ -308,8 +315,14 @@ if NUMBA_AVAILABLE:
                 lower_hit = bar_low <= lower_barrier
 
                 if upper_hit and lower_hit:
-                    labels[i] = -99
-                    touch_type[i] = 0
+                    dist_to_upper = abs(bar_high - upper_barrier)
+                    dist_to_lower = abs(bar_low - lower_barrier)
+                    if dist_to_upper <= dist_to_lower:
+                        labels[i] = 1
+                        touch_type[i] = 1
+                    else:
+                        labels[i] = -1
+                        touch_type[i] = -1
                     bars_to_hit[i] = j
                     hit = True
                     break
@@ -401,8 +414,14 @@ if NUMBA_AVAILABLE:
                 lower_hit = bar_low <= lower_barrier
 
                 if upper_hit and lower_hit:
-                    labels[i] = -99
-                    touch_type[i] = 0
+                    dist_to_upper = abs(bar_high - upper_barrier)
+                    dist_to_lower = abs(bar_low - lower_barrier)
+                    if dist_to_upper <= dist_to_lower:
+                        labels[i] = 1
+                        touch_type[i] = 1
+                    else:
+                        labels[i] = -1
+                        touch_type[i] = -1
                     bars_to_hit[i] = j
                     hit = True
                     break
