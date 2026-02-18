@@ -465,12 +465,12 @@ class BaseAdapter(ABC):
         elif len(unique_values) == 0:
             return default
         else:
-            # Multiple values - log warning and use first
-            logger.warning(
-                f"Multiple values for metadata column '{column}': {unique_values[:5]}. "
-                f"Using first value."
+            # Multiple values - ambiguous, raise error
+            raise ValueError(
+                f"Ambiguous metadata: column '{column}' contains multiple values: "
+                f"{list(unique_values[:5])}. Split multi-symbol DataFrames before "
+                f"adapter processing."
             )
-            return str(unique_values[0])
 
     def _parse_horizon_from_label_column(self, label_column: str) -> int:
         """
