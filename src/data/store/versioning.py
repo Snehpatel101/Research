@@ -420,7 +420,7 @@ def compute_schema_hash(columns: list[str], dtypes: dict[str, str] | None = None
     }
 
     schema_str = json.dumps(schema_data, sort_keys=True)
-    return hashlib.sha256(schema_str.encode()).hexdigest()[:16]
+    return hashlib.sha256(schema_str.encode()).hexdigest()[:32]
 
 
 def compute_config_hash(config: dict[str, Any]) -> str:
