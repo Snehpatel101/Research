@@ -313,7 +313,8 @@ class BaseRNNModel(BaseModel):
             "device": "auto",  # Auto-detect GPU/CPU
             "mixed_precision": True,  # Use GPU-appropriate precision
             # DataLoader workers/pinning auto-tuned in _create_dataloader for CUDA
-            "num_workers": 0,
+            # None = auto-detect (4 for CUDA, 0 for CPU)
+            "num_workers": None,
             "pin_memory": False,
         }
 
@@ -710,8 +711,9 @@ class BaseRNNModel(BaseModel):
 
         # CUDA-optimized DataLoader settings
         use_cuda = self._device.type == "cuda"
-        # 4 workers for CUDA (overlaps data loading with GPU compute), 0 for CPU
-        num_workers = config.get("num_workers", 4 if use_cuda else 0)
+        # Auto-detect: 4 workers for CUDA (overlaps data loading with GPU compute), 0 for CPU
+        num_workers_cfg = config.get("num_workers")
+        num_workers = (4 if use_cuda else 0) if num_workers_cfg is None else num_workers_cfg
         pin_memory = config.get("pin_memory", use_cuda)
         persistent_workers = num_workers > 0
 
