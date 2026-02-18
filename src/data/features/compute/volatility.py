@@ -20,6 +20,7 @@ from src.data.features.compute._helpers import log_returns as _log_returns
 
 # Module-level caches keyed by (DataFrame id, period/window)
 # Stores computed results to avoid redundant calculations
+_MAX_CACHE_SIZE = 10
 _atr_cache: dict[tuple[int, int], pd.Series] = {}
 _sma_cache: dict[tuple[int, int], pd.Series] = {}
 _ema_cache: dict[tuple[int, int], pd.Series] = {}
@@ -28,10 +29,13 @@ _cache_df_id: int | None = None
 
 
 def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
-    """Clear all caches if DataFrame has changed."""
+    """Clear all caches if DataFrame has changed or max size exceeded."""
     global _cache_df_id
     df_id = id(df)
-    if df_id != _cache_df_id:
+    cache_overflow = (
+        max(len(_atr_cache), len(_sma_cache), len(_ema_cache), len(_std_cache)) > _MAX_CACHE_SIZE
+    )
+    if df_id != _cache_df_id or cache_overflow:
         _atr_cache.clear()
         _sma_cache.clear()
         _ema_cache.clear()

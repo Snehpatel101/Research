@@ -20,11 +20,13 @@ from src.data.features.compute._helpers import log_returns as _log_returns
 # MODULE-LEVEL CACHES (Phase 24: Avoid redundant computation)
 # =============================================================================
 
-# Caches keyed by id(df)
+# Caches keyed by id(df) with max size limit
+_MAX_CACHE_SIZE = 10
 _amihud_cache: dict[int, pd.Series] = {}
 _roll_spread_cache: dict[int, pd.Series] = {}
 _rel_spread_cache: dict[int, pd.Series] = {}
 _volume_imbalance_cache: dict[int, pd.Series] = {}
+_cache_df_id: int | None = None
 
 
 def clear_microstructure_cache() -> None:
@@ -33,6 +35,24 @@ def clear_microstructure_cache() -> None:
     _roll_spread_cache.clear()
     _rel_spread_cache.clear()
     _volume_imbalance_cache.clear()
+
+
+def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
+    """Clear all caches if DataFrame has changed or max size exceeded."""
+    global _cache_df_id
+    df_id = id(df)
+    cache_overflow = (
+        max(
+            len(_amihud_cache),
+            len(_roll_spread_cache),
+            len(_rel_spread_cache),
+            len(_volume_imbalance_cache),
+        )
+        > _MAX_CACHE_SIZE
+    )
+    if df_id != _cache_df_id or cache_overflow:
+        clear_microstructure_cache()
+        _cache_df_id = df_id
 
 
 # =============================================================================
@@ -81,6 +101,7 @@ def _compute_micro_amihud_base(df: pd.DataFrame) -> pd.Series:
 
 def _get_amihud_cached(df: pd.DataFrame) -> pd.Series:
     """Get cached Amihud or compute if not cached. Phase 24."""
+    _clear_cache_if_df_changed(df)
     cache_key = id(df)
     if cache_key not in _amihud_cache:
         _amihud_cache[cache_key] = _compute_micro_amihud_base(df)
@@ -133,6 +154,7 @@ def _compute_micro_roll_spread_base(df: pd.DataFrame) -> pd.Series:
 
 def _get_roll_spread_cached(df: pd.DataFrame) -> pd.Series:
     """Get cached Roll spread or compute if not cached. Phase 24."""
+    _clear_cache_if_df_changed(df)
     cache_key = id(df)
     if cache_key not in _roll_spread_cache:
         _roll_spread_cache[cache_key] = _compute_micro_roll_spread_base(df)
@@ -248,6 +270,7 @@ def _compute_micro_rel_spread_base(df: pd.DataFrame) -> pd.Series:
 
 def _get_rel_spread_cached(df: pd.DataFrame) -> pd.Series:
     """Get cached relative spread or compute if not cached. Phase 24."""
+    _clear_cache_if_df_changed(df)
     cache_key = id(df)
     if cache_key not in _rel_spread_cache:
         _rel_spread_cache[cache_key] = _compute_micro_rel_spread_base(df)
@@ -287,6 +310,7 @@ def _compute_micro_volume_imbalance_base(df: pd.DataFrame) -> pd.Series:
 
 def _get_volume_imbalance_cached(df: pd.DataFrame) -> pd.Series:
     """Get cached volume imbalance or compute if not cached. Phase 24."""
+    _clear_cache_if_df_changed(df)
     cache_key = id(df)
     if cache_key not in _volume_imbalance_cache:
         _volume_imbalance_cache[cache_key] = _compute_micro_volume_imbalance_base(df)

@@ -20,16 +20,18 @@ from src.data.features.compute._helpers import log_returns as _log_returns
 # =============================================================================
 
 # Module-level caches for regime calculations
+_MAX_CACHE_SIZE = 10
 _volatility_regime_cache: dict[int, pd.Series] = {}
 _trend_regime_cache: dict[int, pd.Series] = {}
 _cache_df_id: int | None = None
 
 
 def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
-    """Clear cache if DataFrame has changed."""
+    """Clear cache if DataFrame has changed or max size exceeded."""
     global _cache_df_id
     df_id = id(df)
-    if df_id != _cache_df_id:
+    cache_overflow = max(len(_volatility_regime_cache), len(_trend_regime_cache)) > _MAX_CACHE_SIZE
+    if df_id != _cache_df_id or cache_overflow:
         _volatility_regime_cache.clear()
         _trend_regime_cache.clear()
         _cache_df_id = df_id
