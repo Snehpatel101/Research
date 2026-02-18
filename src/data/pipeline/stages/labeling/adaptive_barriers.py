@@ -406,9 +406,25 @@ class AdaptiveTripleBarrierLabeler(TripleBarrierLabeler):
             mae[i] = max_adverse
             mfe[i] = max_favorable
 
-        # Mark last max_bars samples as invalid
-        # Use base_max_bars for consistency (max possible window)
-        invalid_start = max(0, n - base_max_bars)
+        # Mark last N samples as invalid, where N is the maximum of the
+        # actually-computed adaptive windows (not just the base window)
+        actual_max_bars = base_max_bars
+        for regime_key in regime_counts:
+            parts = regime_key.split("_", 2)
+            if len(parts) == 3:
+                try:
+                    adj = self._get_regime_adjusted_params(
+                        symbol=symbol,
+                        horizon=horizon,
+                        volatility_regime=parts[0],
+                        trend_regime=parts[1],
+                        structure_regime=parts[2],
+                    )
+                    if adj["max_bars"] > actual_max_bars:
+                        actual_max_bars = adj["max_bars"]
+                except Exception:
+                    pass
+        invalid_start = max(0, n - actual_max_bars)
         for i in range(invalid_start, n):
             labels[i] = -99
             bars_to_hit[i] = 0
