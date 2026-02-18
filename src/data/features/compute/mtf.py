@@ -298,11 +298,20 @@ def _reindex_to_base(
     gap_mask = time_diffs > gap_threshold
 
     if gap_mask.any():
-        # At each gap boundary, the first bar was forward-filled from before
-        # the break. NaN it out so stale data doesn't leak across market gaps.
-        ffilled_at_gap = gap_mask & ~was_present.any(axis=1)
-        if ffilled_at_gap.any():
-            aligned.loc[ffilled_at_gap] = np.nan
+        # NaN out ALL bars in each gap region until fresh higher-TF data arrives.
+        # Previously only the first bar after a gap was NaN'd, leaving bars 2+
+        # with stale forward-filled values from before the gap.
+        any_present = was_present.any(axis=1)
+        in_gap = False
+        for i in range(len(aligned)):
+            if gap_mask.iloc[i]:
+                in_gap = True
+            if in_gap:
+                if any_present.iloc[i]:
+                    # Fresh higher-TF data arrived — gap region ends
+                    in_gap = False
+                else:
+                    aligned.iloc[i] = np.nan
 
     return aligned
 
