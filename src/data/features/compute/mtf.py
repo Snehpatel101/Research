@@ -474,18 +474,19 @@ class MTFFeatureComputer:
             # 2. Compute features on resampled data
             tf_features = _compute_features_on_resampled(resampled, self.config.features)
 
-            # 3. Reindex back to base frequency with forward fill
+            # 3. Apply shift(1) for anti-lookahead bias BEFORE reindex (MANDATORY)
+            # Higher timeframe candles are not complete until the period ends.
+            # We MUST shift on the higher-TF index first, then forward-fill.
+            # Shifting after reindex+ffill would leak the current bar's value
+            # into the first base-TF bars of the period.
+            tf_features = tf_features.shift(1)
+
+            # 4. Reindex back to base frequency with forward fill
             tf_features_aligned = _reindex_to_base(
                 tf_features,
                 base_index,
                 ffill_limit=self.config.ffill_limit,
             )
-
-            # 4. Apply shift(1) for anti-lookahead bias (MANDATORY)
-            # Higher timeframe candles are not complete until the period ends.
-            # We MUST use the previous period's values to prevent lookahead bias.
-            # This shift is unconditional - it cannot be disabled.
-            tf_features_aligned = tf_features_aligned.shift(1)
 
             # 5. Rename columns with timeframe suffix
             for feature_name in self.config.features:
@@ -533,11 +534,12 @@ class MTFFeatureComputer:
         resampled = resample_ohlcv(df_work, timeframe)
         tf_features = _compute_features_on_resampled(resampled, self.config.features)
 
-        # Reindex and apply mandatory shift(1) for anti-lookahead protection
-        tf_features_aligned = _reindex_to_base(tf_features, base_index, self.config.ffill_limit)
+        # shift(1) BEFORE reindex is MANDATORY - higher TF candles aren't complete
+        # until period ends. Shifting before reindex prevents lookahead leakage.
+        tf_features = tf_features.shift(1)
 
-        # shift(1) is MANDATORY - higher TF candles aren't complete until period ends
-        tf_features_aligned = tf_features_aligned.shift(1)
+        # Reindex to base frequency with forward fill
+        tf_features_aligned = _reindex_to_base(tf_features, base_index, self.config.ffill_limit)
 
         # Rename with timeframe suffix
         tf_features_aligned.columns = [f"{col}_{timeframe}" for col in tf_features_aligned.columns]
