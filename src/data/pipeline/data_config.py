@@ -156,6 +156,11 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     stage3_fail_on_partial: bool = True  # If True, fail stage when tasks fail
     stage3_min_success_rate: float = 0.95  # Minimum success rate required (0.0 to 1.0)
 
+    # Fail-fast on stage validation errors
+    # When True (default), pipeline stops on ANY stage validation failure,
+    # not just required stages. Set to False for lenient mode.
+    fail_on_validation_error: bool = True
+
     # Stage transition validation (Phase 43)
     # When True, validates data between stages using validate_stage_transition()
     enable_transition_validation: bool = True

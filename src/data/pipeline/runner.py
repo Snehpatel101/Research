@@ -292,15 +292,14 @@ class PipelineRunner:
                 )
 
                 # Phase 7B: Validate stage output schema
+                fail_fast = getattr(self.config, "fail_on_validation_error", True)
                 try:
                     self._validate_stage_output(stage.name, result)
                 except StageValidationError as e:
                     self.logger.error(f"[FAIL] Schema validation failed for {stage.name}: {e}")
                     all_success = False
-                    if stage.required:
-                        self.logger.error(
-                            "Required stage schema validation failed. Stopping pipeline."
-                        )
+                    if stage.required or fail_fast:
+                        self.logger.error("Stage schema validation failed. Stopping pipeline.")
                         break
 
                 # Phase 43: Validate stage transition to next stage
@@ -312,9 +311,9 @@ class PipelineRunner:
                             f"[FAIL] Stage transition validation failed after {stage.name}: {e}"
                         )
                         all_success = False
-                        if stage.required:
+                        if stage.required or fail_fast:
                             self.logger.error(
-                                "Required stage transition validation failed. Stopping pipeline."
+                                "Stage transition validation failed. Stopping pipeline."
                             )
                             break
             else:
