@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import ClassVar
 
 from src.config.base import BaseConfig
 
@@ -125,7 +126,7 @@ class SymbolConfig(BaseConfig):
     # -------------------------------------------------------------------------
 
     # Registry of known symbol presets (populated after class definition)
-    _PRESETS: dict[str, Callable[[], SymbolConfig]] = {}  # noqa: RUF012
+    _PRESETS: ClassVar[dict[str, Callable[[], SymbolConfig]]] = {}  # noqa: RUF012
 
     @classmethod
     def supported_symbols(cls) -> list[str]:
