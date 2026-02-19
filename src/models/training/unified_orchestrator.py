@@ -1390,15 +1390,21 @@ class UnifiedTrainingOrchestrator:
         Walk-forward training mode.
 
         Uses expanding or rolling windows for more realistic backtesting.
+        Walk-forward needs ALL data (it does its own temporal splitting),
+        so we reconstruct the full dataset after adapter preparation.
 
         Args:
-            df: Input DataFrame
+            df: Input DataFrame (with features and labels)
             additional_dfs: Optional additional timeframe DataFrames
         """
+        from src.models.registry import ModelRegistry
+
         from .config import ExperimentConfig, ModelConfig
         from .modes import WalkForwardTrainer, WalkForwardTrainerConfig
 
         logger.info("Walk-forward training mode")
+
+        horizon = self.config.horizons[0]
 
         # Create ExperimentConfig from PipelineConfig
         model_configs = [ModelConfig(name=m) for m in self.config.models]
@@ -1425,51 +1431,170 @@ class UnifiedTrainingOrchestrator:
         # Prepare container from df
         from src.core.container import TimeSeriesDataContainer
 
-        # Use first model to prepare data (for basic structure)
+        # Use first model to prepare data (for adapter routing, feature engineering)
         prepared = self._data_preparer.prepare(
             df=df,
             model_name=self.config.models[0],
             additional_dfs=additional_dfs,
         )
 
-        X_train_df = pd.DataFrame(
-            (
-                prepared.X_train.reshape(prepared.X_train.shape[0], -1)
-                if prepared.data_rank > 2
-                else prepared.X_train
-            ),
-            columns=(
-                prepared.feature_names
-                if prepared.data_rank == 2
-                else [f"f{i}" for i in range(np.prod(prepared.X_train.shape[1:]))]
-            ),
-        )
+        # FIX: Reconstruct FULL dataset for walk-forward (it does its own splitting).
+        # The data_preparer splits into train/val/test, but walk-forward needs all data.
+        arrays_X = [prepared.X_train]
+        arrays_y = [prepared.y_train]
+        if prepared.X_val is not None:
+            arrays_X.append(prepared.X_val)
+            arrays_y.append(prepared.y_val)
+        if prepared.X_test is not None:
+            arrays_X.append(prepared.X_test)
+            arrays_y.append(prepared.y_test)
 
-        # Build train DataFrame for container
-        train_df = X_train_df.copy()
-        train_df[f"label_h{self.config.horizons[0]}"] = prepared.y_train
-        train_df[f"sample_weight_h{self.config.horizons[0]}"] = np.ones(len(prepared.y_train))
+        X_all = np.concatenate(arrays_X)
+        y_all = np.concatenate(arrays_y)
+
+        # Build feature columns
+        if prepared.data_rank == 2:
+            feature_cols = prepared.feature_names
+            X_flat = X_all
+        else:
+            n_flat = int(np.prod(X_all.shape[1:]))
+            feature_cols = [f"f{i}" for i in range(n_flat)]
+            X_flat = X_all.reshape(X_all.shape[0], -1)
+
+        # FIX: Preserve DatetimeIndex from the original DataFrame.
+        # The df passed here has a DatetimeIndex (restored in factory.py after labeling).
+        n_all = len(X_flat)
+        if isinstance(df.index, pd.DatetimeIndex) and len(df.index) >= n_all:
+            idx = df.index[:n_all]
+        else:
+            idx = pd.RangeIndex(n_all)
+
+        X_all_df = pd.DataFrame(X_flat, columns=feature_cols, index=idx)
+
+        # Build full DataFrame for container
+        full_df = X_all_df.copy()
+        full_df[f"label_h{horizon}"] = y_all
+        full_df[f"sample_weight_h{horizon}"] = np.ones(n_all)
 
         container = TimeSeriesDataContainer.from_dataframes(
-            train_df=train_df,
+            train_df=full_df,
             val_df=None,
             test_df=None,
-            horizon=self.config.horizons[0],
-            feature_columns=list(X_train_df.columns),
+            horizon=horizon,
+            feature_columns=list(X_all_df.columns),
+        )
+
+        logger.info(
+            f"  Walk-forward data: {n_all} samples "
+            f"(train={len(prepared.X_train)}, val={prepared.n_val}, test={prepared.n_test})"
         )
 
         results = trainer.run(container)
 
-        # Convert walk-forward results to our format
+        # FIX: Convert walk-forward results to standard format with OOF + trainer
+        # so that ensemble building, bundling, and deploy all work.
+        class_names = ["short", "neutral", "long"]  # maps to class indices 0, 1, 2
+
         for model_name, wf_result in results.get("model_results", {}).items():
-            key = f"{model_name}_h{self.config.horizons[0]}"
+            key = f"{model_name}_h{horizon}"
+
+            # --- Extract OOF predictions from walk-forward predictions_df ---
+            pred_df = wf_result.predictions_df
+            pred_col = f"{model_name}_pred"
+            conf_col = f"{model_name}_confidence"
+
+            if pred_col in pred_df.columns:
+                valid_mask = ~np.isnan(pred_df[pred_col].values)
+                valid_indices = np.where(valid_mask)[0]
+
+                if len(valid_indices) > 0:
+                    preds = pred_df[pred_col].values[valid_mask].astype(int)
+                    confidence = pred_df[conf_col].values[valid_mask]
+                    y_true_oof = pred_df["y_true"].values[valid_mask].astype(int)
+
+                    # Collect probability columns and rename to OOF convention
+                    # WF uses prob_class0/1/2, OOF expects prob_short/neutral/long
+                    prob_cols_wf = [
+                        c for c in pred_df.columns if c.startswith(f"{model_name}_prob_class")
+                    ]
+
+                    # Build OOF predictions DataFrame matching OOFPrediction format
+                    oof_data: dict[str, Any] = {
+                        f"{model_name}_pred": preds,
+                        f"{model_name}_confidence": confidence,
+                        "y_true": y_true_oof,
+                    }
+
+                    # Map prob_class{i} → prob_{class_name}
+                    for i, col_wf in enumerate(prob_cols_wf):
+                        if i < len(class_names):
+                            oof_col = f"{model_name}_prob_{class_names[i]}"
+                        else:
+                            oof_col = f"{model_name}_prob_class{i}"
+                        oof_data[oof_col] = pred_df[col_wf].values[valid_mask]
+
+                    oof_predictions_df = pd.DataFrame(oof_data)
+
+                    # Build fold_info from window metrics
+                    fold_info = []
+                    for wr in wf_result.window_results:
+                        for wm in wr.window_metrics:
+                            fold_info.append(
+                                {
+                                    "fold": wm.window,
+                                    "train_size": wm.train_size,
+                                    "test_size": wm.test_size,
+                                    "accuracy": wm.accuracy,
+                                    "f1": wm.f1,
+                                    "training_time": wm.training_time,
+                                }
+                            )
+
+                    oof = OOFPrediction(
+                        model_name=model_name,
+                        predictions=oof_predictions_df,
+                        fold_info=fold_info,
+                        coverage=len(valid_indices) / n_all,
+                        original_indices=valid_indices,
+                        n_total_samples=n_all,
+                    )
+                    self._oof_predictions[key] = oof
+                    logger.info(
+                        f"  {model_name}: OOF coverage={oof.coverage:.1%} "
+                        f"({len(valid_indices)}/{n_all} samples)"
+                    )
+                else:
+                    oof = None
+                    logger.warning(f"  {model_name}: 0 valid predictions in walk-forward results")
+            else:
+                oof = None
+                logger.warning(
+                    f"  {model_name}: prediction column '{pred_col}' not found in WF results"
+                )
+
+            # --- Load last-window trained model for bundling/deploy ---
+            last_model = None
+            if wf_result.model_paths:
+                last_path = wf_result.model_paths[-1]
+                if last_path.exists():
+                    last_model = ModelRegistry.create(model_name)
+                    last_model.load(last_path)
+                    logger.info(f"  {model_name}: loaded last-window model from {last_path}")
+
+            if last_model is not None:
+                self._trained_models[key] = last_model
+            else:
+                logger.warning(f"  {model_name}: no model available for bundling/deploy")
+
             self._model_results[key] = ModelTrainingResult(
                 model_name=model_name,
-                horizon=self.config.horizons[0],
+                horizon=horizon,
                 metrics={
                     "val_f1": wf_result.aggregated_metrics.get("mean_f1", 0),
                     "val_accuracy": wf_result.aggregated_metrics.get("mean_accuracy", 0),
                 },
+                trainer=last_model,
+                oof_prediction=oof,
                 training_time_seconds=wf_result.total_time,
                 n_features=prepared.n_features,
                 data_rank=prepared.data_rank,

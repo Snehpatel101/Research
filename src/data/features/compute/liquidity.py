@@ -88,14 +88,16 @@ def compute_spread_estimate_20(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def _percentile_rank(x: pd.Series) -> float:
-    """Calculate percentile rank of the last value in the series."""
+def _percentile_rank(x: np.ndarray) -> float:
+    """Calculate percentile rank of the last value (raw ndarray version)."""
     if len(x) < 2:
         return 0.5
-    denom = x.max() - x.min()
+    x_min = x.min()
+    x_max = x.max()
+    denom = x_max - x_min
     if denom == 0:
         return np.nan
-    return (x.iloc[-1] - x.min()) / denom
+    return (x[-1] - x_min) / denom
 
 
 def compute_liquidity_regime_10(df: pd.DataFrame) -> pd.Series:
@@ -114,7 +116,7 @@ def compute_liquidity_regime_10(df: pd.DataFrame) -> pd.Series:
     spread = compute_spread_estimate(df)
 
     # Rolling percentile rank
-    pct_rank = spread.rolling(window=10, min_periods=5).apply(_percentile_rank, raw=False)
+    pct_rank = spread.rolling(window=10, min_periods=5).apply(_percentile_rank, raw=True)
 
     # Classify: low spread = high liquidity (1), high spread = low liquidity (-1)
     regime = pd.Series(0, index=df.index)
@@ -136,7 +138,7 @@ def compute_liquidity_regime_20(df: pd.DataFrame) -> pd.Series:
     """
     spread = compute_spread_estimate(df)
 
-    pct_rank = spread.rolling(window=20, min_periods=5).apply(_percentile_rank, raw=False)
+    pct_rank = spread.rolling(window=20, min_periods=5).apply(_percentile_rank, raw=True)
 
     regime = pd.Series(0, index=df.index)
     regime[pct_rank < 0.33] = 1
@@ -157,7 +159,7 @@ def compute_liquidity_regime_60(df: pd.DataFrame) -> pd.Series:
     """
     spread = compute_spread_estimate(df)
 
-    pct_rank = spread.rolling(window=60, min_periods=10).apply(_percentile_rank, raw=False)
+    pct_rank = spread.rolling(window=60, min_periods=10).apply(_percentile_rank, raw=True)
 
     regime = pd.Series(0, index=df.index)
     regime[pct_rank < 0.33] = 1

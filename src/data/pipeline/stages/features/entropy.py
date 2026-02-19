@@ -944,22 +944,8 @@ def _calculate_hurst_rs(prices: np.ndarray) -> float:
         return np.nan
 
 
-def _rolling_hurst(prices: np.ndarray, window: int) -> np.ndarray:
-    """
-    Calculate rolling Hurst exponent.
-
-    Parameters
-    ----------
-    prices : np.ndarray
-        Array of price values
-    window : int
-        Rolling window size
-
-    Returns
-    -------
-    np.ndarray
-        Rolling Hurst exponent values
-    """
+def _rolling_hurst_fallback(prices: np.ndarray, window: int) -> np.ndarray:
+    """Rolling Hurst exponent (pure Python fallback)."""
     n = len(prices)
     hurst = np.full(n, np.nan)
 
@@ -976,6 +962,24 @@ def _rolling_hurst(prices: np.ndarray, window: int) -> np.ndarray:
             hurst[i] = _calculate_hurst_rs(valid_prices)
 
     return hurst
+
+
+try:
+    from src.data.features.compute.mean_reversion import (
+        HURST_NUMBA_AVAILABLE as _HURST_NUMBA_OK,
+    )
+    from src.data.features.compute.mean_reversion import (
+        _rolling_hurst_numba,
+    )
+except ImportError:
+    _HURST_NUMBA_OK = False
+
+
+def _rolling_hurst(prices: np.ndarray, window: int) -> np.ndarray:
+    """Rolling Hurst exponent (Numba-accelerated when available)."""
+    if _HURST_NUMBA_OK:
+        return _rolling_hurst_numba(prices, window, min_periods=20, max_lag=20)
+    return _rolling_hurst_fallback(prices, window)
 
 
 def add_hurst_features(

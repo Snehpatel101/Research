@@ -55,31 +55,20 @@ class HyperparameterTuningService:
             TuningResult with best parameters and score
 
         Note:
-            Hyperparameter tuning is only supported for tabular (2D) models.
-            For sequence models (3D/4D), tuning is skipped and default
-            hyperparameters are used. This is because the Optuna tuner
-            operates on flattened 2D data, which would produce hyperparameters
-            optimized for the wrong data structure.
+            Supports all data ranks (2D, 3D, 4D). For 3D/4D data, native
+            numpy arrays are passed to the tuner which indexes by sample
+            axis (axis 0). MedianPruner is used to early-stop bad trials.
         """
         import pandas as pd
 
         from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 
-        # Check data rank - skip tuning for sequence models (3D/4D)
         data_rank = request.prepared_data.data_rank
-        if data_rank >= 3:
-            logger.warning(
-                f"  Skipping hyperparameter tuning for {data_rank}D data "
-                f"(model: {request.model_name}). "
-                f"Tuner requires 2D tabular data. Using default hyperparameters."
-            )
-            return TuningResult(
-                best_params={},  # Empty = use defaults
-                best_score=float("nan"),
-                n_trials_completed=0,
-            )
 
-        logger.info("  Running hyperparameter optimization...")
+        logger.info(
+            f"  Running hyperparameter optimization "
+            f"({data_rank}D data, model: {request.model_name})..."
+        )
 
         # Create purged K-fold CV
         cv_config = PurgedKFoldConfig(
@@ -95,29 +84,47 @@ class HyperparameterTuningService:
             metric=request.scoring,
         )
 
-        # Data is already 2D at this point (checked above)
         X_train = request.prepared_data.X_train
+        y_train = request.prepared_data.y_train
 
-        # Convert to pandas for tuner API
-        X_df = pd.DataFrame(X_train)
-        y_series = pd.Series(request.prepared_data.y_train)
+        # Prepare data based on rank
+        if data_rank == 2:
+            # 2D: convert to pandas for tuner API
+            X_input = pd.DataFrame(X_train)
+            y_input = pd.Series(y_train)
+        else:
+            # 3D/4D: pass numpy arrays directly (tuner handles rank-aware indexing)
+            X_input = X_train  # np.ndarray shape (n, seq, feat) or (n, tf, seq, feat)
+            y_input = y_train  # np.ndarray shape (n,)
 
         # CRITICAL: Filter invalid labels (-99) before tuning
         # The sentinel value -99 marks invalid/ambiguous samples that should be excluded
         INVALID_LABEL = -99
-        valid_mask = y_series != INVALID_LABEL
-        n_invalid = (~valid_mask).sum()
-        if n_invalid > 0:
-            logger.warning(
-                f"  Filtering {n_invalid} invalid labels (-99) from tuning data "
-                f"({n_invalid / len(y_series) * 100:.2f}% of samples)"
-            )
-            X_df = X_df.loc[valid_mask].reset_index(drop=True)
-            y_series = y_series.loc[valid_mask].reset_index(drop=True)
+        if isinstance(y_input, pd.Series):
+            valid_mask = y_input != INVALID_LABEL
+            n_invalid = (~valid_mask).sum()
+            if n_invalid > 0:
+                logger.warning(
+                    f"  Filtering {n_invalid} invalid labels (-99) from tuning data "
+                    f"({n_invalid / len(y_input) * 100:.2f}% of samples)"
+                )
+                X_input = X_input.loc[valid_mask].reset_index(drop=True)
+                y_input = y_input.loc[valid_mask].reset_index(drop=True)
+        else:
+            valid_mask = y_input != INVALID_LABEL
+            n_invalid = int((~valid_mask).sum())
+            if n_invalid > 0:
+                logger.warning(
+                    f"  Filtering {n_invalid} invalid labels (-99) from tuning data "
+                    f"({n_invalid / len(y_input) * 100:.2f}% of samples)"
+                )
+                X_input = X_input[valid_mask]
+                y_input = y_input[valid_mask]
 
         result = tuner.tune(
-            X=X_df,
-            y=y_series,
+            X=X_input,
+            y=y_input,
+            data_rank=data_rank,
         )
 
         logger.info(f"  Best params: {result.get('best_params', {})}")

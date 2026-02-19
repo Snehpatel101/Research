@@ -39,28 +39,32 @@ class TimeSeriesOptunaTuner:
         n_trials: int = 50,
         direction: str = "maximize",
         metric: str = "f1",
+        pruner: Any | None = None,
     ) -> None:
         self.model_name = model_name
         self.cv = cv
         self.n_trials = n_trials
         self.direction = direction
         self.metric = metric
+        self.pruner = pruner
 
     def tune(
         self,
-        X: pd.DataFrame,
-        y: pd.Series,
+        X: pd.DataFrame | np.ndarray,
+        y: pd.Series | np.ndarray,
         sample_weights: pd.Series | None = None,
         param_space: dict | None = None,
+        data_rank: int = 2,
     ) -> dict[str, Any]:
         """
         Run hyperparameter tuning.
 
         Args:
-            X: Features
-            y: Labels
+            X: Features (DataFrame for 2D, ndarray for 3D/4D)
+            y: Labels (Series for 2D, ndarray for 3D/4D)
             sample_weights: Optional quality weights
             param_space: Search space (uses defaults if None)
+            data_rank: Dimensionality of data (2, 3, or 4)
 
         Returns:
             Dict with best_params and study info
@@ -80,10 +84,16 @@ class TimeSeriesOptunaTuner:
             logger.warning(f"No param space defined for {self.model_name}")
             return {"best_params": {}, "best_value": None, "skipped": True}
 
-        # Create study
+        # Create study with optional pruner for early stopping of bad trials
+        default_pruner = optuna.pruners.MedianPruner(
+            n_startup_trials=5,
+            n_warmup_steps=1,
+            interval_steps=1,
+        )
         study = optuna.create_study(
             direction=self.direction,
             sampler=TPESampler(seed=42),
+            pruner=self.pruner or default_pruner,
         )
 
         # Get the scoring function based on configured metric
@@ -92,22 +102,49 @@ class TimeSeriesOptunaTuner:
         score_fn = get_score_fn(self.metric)
 
         # Precompute CV splits once — splits are deterministic so recomputing
-        # them inside every trial is wasted work
-        self._precomputed_splits = list(self.cv.split(X, y))
+        # them inside every trial is wasted work.
+        # For 3D/4D data, create a lightweight index DataFrame for splitting.
+        if data_rank >= 3 and isinstance(X, np.ndarray):
+            if X.ndim < data_rank:
+                raise ValueError(f"data_rank={data_rank} but X.ndim={X.ndim}")
+            if X.shape[0] == 0:
+                raise ValueError("X has 0 samples")
+            if X.shape[0] != len(y):
+                raise ValueError(f"X.shape[0]={X.shape[0]} != len(y)={len(y)}")
+            n_samples = X.shape[0]
+            X_for_cv = pd.DataFrame(index=range(n_samples))
+            y_for_cv = pd.Series(y) if isinstance(y, np.ndarray) else y
+            self._precomputed_splits = list(self.cv.split(X_for_cv, y_for_cv))
+        else:
+            self._precomputed_splits = list(self.cv.split(X, y))
 
         def objective(trial: optuna.Trial) -> float:
             params = self._sample_params(trial, param_space)
 
             scores = []
-            for train_idx, val_idx in self._precomputed_splits:
-                X_train = X.iloc[train_idx].values
-                X_val = X.iloc[val_idx].values
-                y_train = y.iloc[train_idx].values
-                y_val = y.iloc[val_idx].values
+            for fold_idx, (train_idx, val_idx) in enumerate(self._precomputed_splits):
+                # Rank-aware data indexing
+                if data_rank >= 3 and isinstance(X, np.ndarray):
+                    # 3D/4D: X is ndarray, index by sample axis (axis 0)
+                    X_train = X[train_idx]
+                    X_val = X[val_idx]
+                    y_train = (
+                        y[train_idx] if isinstance(y, np.ndarray) else y.iloc[train_idx].values
+                    )
+                    y_val = y[val_idx] if isinstance(y, np.ndarray) else y.iloc[val_idx].values
+                else:
+                    # 2D: X is DataFrame
+                    X_train = X.iloc[train_idx].values
+                    X_val = X.iloc[val_idx].values
+                    y_train = y.iloc[train_idx].values
+                    y_val = y.iloc[val_idx].values
 
                 w_train = None
                 if sample_weights is not None:
-                    w_train = sample_weights.iloc[train_idx].values
+                    if isinstance(sample_weights, np.ndarray):
+                        w_train = sample_weights[train_idx]
+                    else:
+                        w_train = sample_weights.iloc[train_idx].values
 
                 # Train and evaluate
                 model = ModelRegistry.create(self.model_name, config=params)
@@ -119,6 +156,11 @@ class TimeSeriesOptunaTuner:
                 y_pred = pred_result.class_predictions
                 fold_score = score_fn(y_val, y_pred)
                 scores.append(fold_score)
+
+                # Report intermediate value for pruning (prune bad trials early)
+                trial.report(np.mean(scores), fold_idx)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
 
             # Return mean score with variance penalty
             mean_score = np.mean(scores)

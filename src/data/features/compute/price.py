@@ -25,19 +25,27 @@ def _safe_log_return(series: pd.Series, periods: int = 1) -> pd.Series:
 
 
 def _rolling_autocorr(series: pd.Series, lag: int, window: int = 20) -> pd.Series:
-    """Rolling autocorrelation with specified lag."""
+    """Rolling autocorrelation with specified lag (Numba-accelerated when available)."""
+    try:
+        from src.data.pipeline.stages.features.numba_functions import (
+            calculate_rolling_autocorr_numba,
+        )
 
-    def autocorr_lag(x: np.ndarray) -> float:
-        if len(x) <= lag:
-            return np.nan
-        x_clean = x[~np.isnan(x)]
-        if len(x_clean) <= lag:
-            return np.nan
-        return float(np.corrcoef(x_clean[:-lag], x_clean[lag:])[0, 1])
+        result = calculate_rolling_autocorr_numba(series.values, window, lag)
+        return pd.Series(result, index=series.index)
+    except ImportError:
 
-    return series.rolling(window=window, min_periods=window).apply(
-        lambda x: autocorr_lag(x.values), raw=False
-    )
+        def autocorr_lag(x: np.ndarray) -> float:
+            if len(x) <= lag:
+                return np.nan
+            x_clean = x[~np.isnan(x)]
+            if len(x_clean) <= lag:
+                return np.nan
+            return float(np.corrcoef(x_clean[:-lag], x_clean[lag:])[0, 1])
+
+        return series.rolling(window=window, min_periods=window).apply(
+            lambda x: autocorr_lag(x.values), raw=False
+        )
 
 
 # =============================================================================
