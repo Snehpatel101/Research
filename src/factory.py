@@ -563,16 +563,17 @@ class MLFactory:
         Raises:
             ValueError: If data is insufficient for the CV configuration.
         """
-        cv_cfg = self.config.training.cv
-        n_splits = getattr(cv_cfg, "n_splits", 5)
-        embargo_bars = getattr(cv_cfg, "embargo_bars", 0)
-        purge_bars = getattr(cv_cfg, "purge_bars", 0)
+        training_cfg = self.config.training
+        n_splits = getattr(training_cfg, "n_splits", 5)
+        embargo_bars = getattr(training_cfg, "embargo_bars", 0)
+        purge_bars = getattr(training_cfg, "purge_bars", 0)
 
         n_samples = len(df)
-        # Each split needs at least (n_samples // n_splits) for test,
-        # and the rest for train, minus embargo+purge gaps per split.
-        min_fold_size = max(n_samples // n_splits, 1)
-        min_required = embargo_bars + purge_bars + min_fold_size * 2
+        # Each fold removes (purge + embargo) bars from the usable training set.
+        # We need at least min_samples_per_fold usable samples in each fold.
+        min_samples_per_fold = 100
+        gap_per_fold = purge_bars + embargo_bars
+        min_required = n_splits * min_samples_per_fold + n_splits * gap_per_fold
 
         if n_samples < min_required:
             raise ValueError(
@@ -679,6 +680,13 @@ class MLFactory:
         )
         self._log(f"  Label distribution: {df_features['label'].value_counts().to_dict()}")
 
+        # Restore DatetimeIndex for multi-stream adapter compatibility
+        # (FeatureEngineer needs datetime as column, MultiStreamAdapter needs DatetimeIndex)
+        if "datetime" in df_features.columns and not isinstance(
+            df_features.index, pd.DatetimeIndex
+        ):
+            df_features = df_features.set_index("datetime").sort_index()
+
         return df_features, additional_dfs
 
     def _run_training(
@@ -744,6 +752,8 @@ class MLFactory:
             prices_df = df.copy()
             if "datetime" in prices_df.columns and "timestamp" not in prices_df.columns:
                 prices_df = prices_df.rename(columns={"datetime": "timestamp"})
+            elif isinstance(prices_df.index, pd.DatetimeIndex) and "timestamp" not in prices_df.columns:
+                prices_df["timestamp"] = prices_df.index
 
             # Configure backtester using local BacktestConfig
             # Note: canonical BacktestConfig (src/config/inference.py) has different fields
@@ -961,7 +971,7 @@ class MLFactory:
 
             return pd.DataFrame(
                 {
-                    "datetime": df["datetime"].iloc[oof.common_indices].values,
+                    "datetime": df.index[oof.common_indices].values,
                     "prediction": ensemble_preds,
                     "confidence": confidence,
                 }
@@ -983,7 +993,7 @@ class MLFactory:
 
                     return pd.DataFrame(
                         {
-                            "datetime": df["datetime"].iloc[indices].values,
+                            "datetime": df.index[indices].values,
                             "prediction": preds,
                             "confidence": confidence,
                         }

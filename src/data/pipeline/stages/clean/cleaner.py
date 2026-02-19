@@ -21,8 +21,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from src.data.pipeline.stages.features.numba_functions import calculate_atr_numba
+
 from .gap_handler import GapHandler
-from .utils import calculate_atr_numba, resample_ohlcv, validate_ohlc
+from .utils import resample_ohlcv, validate_ohlc
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())

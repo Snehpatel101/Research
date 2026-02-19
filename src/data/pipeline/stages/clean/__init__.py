@@ -57,14 +57,10 @@ Created: 2025-12-20
 Updated: 2025-12-22 - Added MTF (Multi-Timeframe) support
 """
 
-# Utilities
-# Cleaner class
+from src.data.pipeline.stages.features.numba_functions import calculate_atr_numba
+
 from .cleaner import DataCleaner
-
-# Gap handler
 from .gap_handler import GapHandler, create_gap_handler
-
-# Pipeline functions
 from .pipeline import clean_symbol_data, clean_symbol_data_multi_timeframe
 from .utils import (
     DEFAULT_ROLL_GAP_THRESHOLD,
@@ -72,7 +68,6 @@ from .utils import (
     SESSION_ID_OUTSIDE,
     add_roll_flags,
     add_session_id,
-    calculate_atr_numba,
     detect_gaps_simple,
     fill_gaps_simple,
     get_resampling_info,

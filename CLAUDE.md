@@ -229,6 +229,17 @@ src/
 - Fixed test split crash: embargo_bars > remaining data caused KeyError
 - Guard in trainer.py skips test eval gracefully when no test split exists
 
+**Phase 60: COMPLETE — DatetimeIndex Pipeline Fix & Cross-Family Ensembles**
+- Fixed broken `calculate_atr_numba` import in clean module (moved to canonical location)
+- Fixed `.cv` attribute access error in factory.py (config restructured)
+- Fixed impossible data sufficiency validation formula
+- Fixed DatetimeIndex loss after feature engineering (root cause of 4D failures)
+- Fixed backtest timestamp extraction for DatetimeIndex DataFrames
+- Fixed OOF datetime extraction from index instead of column
+- **Result: All 8 ensemble combinations now PASS (was 4/8)**
+  - 2D+2D+2D, 2D+3D, 2D+4D, 3D+3D, 3D+4D, 4D+4D, 2D+3D+4D all working
+  - Walk-forward mode verified for boosting models
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -320,6 +331,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-19*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

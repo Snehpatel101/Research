@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 59 COMPLETE (MDA Feature Ranking + Test Split Fix)
-**Last Updated:** 2026-02-17
+**Status:** Phase 60 COMPLETE (DatetimeIndex Pipeline Fix & Cross-Family Ensembles)
+**Last Updated:** 2026-02-19
 
 ---
 
@@ -41,10 +41,16 @@ See **COMPLETION.md** for full details on all completed phases.
 | 52 | Universal Inference Pipeline, Special Mode Bundles & Safe Pickle | ✅ COMPLETE | 2026-02-15 |
 | 53 | Security Hardening, SymbolConfig Extraction & Resample Safety | ✅ COMPLETE | 2026-02-16 |
 | 54 | E2E Pipeline Fixes: Trainer.save, per-model features, 4D multi-stream | ✅ COMPLETE | 2026-02-16 |
+| 55 | Deploy Manifest model_name Fix & primary_model Selection | ✅ COMPLETE | 2026-02-16 |
+| 56 | Backtest Pipeline Fix: _extract_predictions & Timestamp Alignment | ✅ COMPLETE | 2026-02-16 |
+| 57 | 4D OOF Generation — Cross-Family Ensemble Support | ✅ COMPLETE | 2026-02-16 |
+| 58 | Feature Selection Pipeline Overhaul (pre-filters, per-model) | ✅ COMPLETE | 2026-02-17 |
+| 59 | MDA Feature Ranking + Test Split Crash Fix | ✅ COMPLETE | 2026-02-17 |
+| 60 | DatetimeIndex Pipeline Fix & Cross-Family Ensembles | ✅ COMPLETE | 2026-02-19 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 35 phases complete (24-59), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract specs auto-detected, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, explicit resample anti-lookahead params, E2E pipeline fully functional, deploy manifest model names fixed, backtest pipeline working, cross-family ensembles (2D+4D) enabled.
+**Summary Impact:** 36 phases complete (24-60), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract specs auto-detected, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, explicit resample anti-lookahead params, E2E pipeline fully functional, deploy manifest model names fixed, backtest pipeline working, cross-family ensembles all 8 combinations verified (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D), DatetimeIndex pipeline fix enabling full transformer integration.
 
 ---
 
@@ -77,12 +83,13 @@ See **COMPLETION.md** for full details on all completed phases.
 | 57 | 4D OOF Generation — Cross-Family Ensemble Support | CRITICAL | 1 session | ✅ COMPLETE |
 | 58 | Feature Selection Pipeline Overhaul (pre-filters, per-model) | HIGH | 1 session | ✅ COMPLETE |
 | 59 | MDA Feature Ranking + Test Split Crash Fix | HIGH | 1 session | ✅ COMPLETE |
+| 60 | DatetimeIndex Pipeline Fix & Cross-Family Ensembles (7 bugs) | CRITICAL | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 59 are complete. See COMPLETION.md for details.
+**No active phases.** All phases through 60 are complete. See COMPLETION.md for details.
 
 ---
 

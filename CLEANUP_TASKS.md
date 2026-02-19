@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 59 complete
-**Last Updated:** 2026-02-17
+**Status:** All phases through 60 complete
+**Last Updated:** 2026-02-19
 
 ---
 
@@ -44,16 +44,19 @@ See **COMPLETION.md** for full task details and implementation information.
 | 55 | 2/2 tasks (all complete) | Deploy manifest model_name fix, primary_model best-by-F1 selection | 2026-02-16 |
 | 56 | 2/2 tasks (all complete) | Backtest _extract_predictions fix, timestamp alignment | 2026-02-16 |
 | 57 | 1/1 tasks (complete) | 4D OOF generation for cross-family ensembles | 2026-02-16 |
+| 58 | 3/3 tasks (all complete) | Low-variance/correlation pre-filters, per-model feature selection | 2026-02-17 |
+| 59 | 2/2 tasks (all complete) | MDA permutation importance, test split embargo guard | 2026-02-17 |
+| 60 | 7/7 tasks (all complete) | DatetimeIndex pipeline fix, 8/8 ensemble combos verified | 2026-02-19 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 248 tasks across 33 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, cross-family ensembles (2D+4D) working.
+**Summary Impact:** 255+ tasks across 36 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D), DatetimeIndex pipeline fix.
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 57 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 60 are complete. See COMPLETION.md for full details.
 
 ---
 
@@ -3357,6 +3360,75 @@ result = compute_all_features(df)
 print('OK - No fragmentation warnings')
 "
 ```
+
+---
+
+
+### Phase 60: DatetimeIndex Pipeline Fix & Cross-Family Ensembles
+
+**Status:** COMPLETE
+**Priority:** CRITICAL
+**Tasks:** 7/7 complete
+**Completed:** 2026-02-19
+
+---
+
+#### Task 60-1: Fix Broken ATR Import COMPLETE
+
+**Files Modified:** 2
+- `src/data/pipeline/stages/clean/cleaner.py` — Changed import from deleted `.utils` to `src.data.pipeline.stages.features.numba_functions`
+- `src/data/pipeline/stages/clean/__init__.py` — Same import fix
+
+#### Task 60-2: Fix CV Config Attribute Access COMPLETE
+
+**File Modified:** `src/factory.py` (line 566)
+- Changed `self.config.training.cv` to `self.config.training` for direct attribute access
+- `n_splits`, `embargo_bars`, `purge_bars` are direct TrainingSection attributes
+
+#### Task 60-3: Fix Data Sufficiency Validation Formula COMPLETE
+
+**File Modified:** `src/factory.py` (line 571)
+- Old formula: `embargo + purge + (n_samples/n_splits)*2` (circular — used n_samples in its own check)
+- New formula: `n_splits * min_samples_per_fold + n_splits * (purge_bars + embargo_bars)`
+- `min_samples_per_fold = 100`
+
+#### Task 60-4: Restore DatetimeIndex After Feature Engineering COMPLETE
+
+**File Modified:** `src/factory.py` (line 683)
+- `raw_df.reset_index()` at line 634 converts DatetimeIndex to column for FeatureEngineer
+- Added restoration: `df_features.set_index("datetime").sort_index()` after features + labeling
+- This unblocks ALL 4D transformer models (PatchTST, iTransformer, TFT)
+
+#### Task 60-5: Fix Backtest Prices Timestamp Column COMPLETE
+
+**File Modified:** `src/factory.py` (line 755)
+- Added elif: if index is DatetimeIndex, create `timestamp` column from index
+- Backtester merges on `timestamp` — needs it as a column
+
+#### Task 60-6: Fix Ensemble OOF Datetime Extraction COMPLETE
+
+**File Modified:** `src/factory.py` (line 972)
+- Changed `df["datetime"].iloc[oof.common_indices].values` to `df.index[oof.common_indices].values`
+
+#### Task 60-7: Fix Single-Model OOF Datetime Extraction COMPLETE
+
+**File Modified:** `src/factory.py` (line 994)
+- Changed `df["datetime"].iloc[indices].values` to `df.index[indices].values`
+
+### Verification
+
+All 8 ensemble combinations tested on 2-week MES data (13,436 rows):
+
+| Combo | Models | Status | Duration |
+|-------|--------|--------|----------|
+| 2D+2D+2D (WF) | XGB+LGBM+CB | PASS | 144s |
+| 2D+2D+2D | XGB+LGBM+CB | PASS | 198s |
+| 2D+3D | XGB+LSTM | PASS | 307s |
+| 2D+4D | XGB+PatchTST | PASS | 125s |
+| 3D+3D | LSTM+TCN | PASS | 419s |
+| 3D+4D | LSTM+PatchTST | PASS | 811s |
+| 4D+4D | PatchTST+iTransformer | PASS | 281s |
+| 2D+3D+4D | XGB+LSTM+PatchTST | PASS | 866s |
 
 ---
 

@@ -1,9 +1,42 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-16 (Phase 54 COMPLETE — E2E Pipeline Fixes: Trainer.save, per-model features, 4D multi-stream)
-**Status:** Phase 54 COMPLETE | All 12 models run E2E through MLFactory, 5 bugs fixed
+**Last Updated:** 2026-02-19 (Phase 60 COMPLETE — DatetimeIndex Pipeline Fix & Cross-Family Ensembles)
+**Status:** Phase 60 COMPLETE | All 8 ensemble combinations working, 7 bugs fixed
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 60: DatetimeIndex Pipeline Fix & Cross-Family Ensembles (2026-02-19) - COMPLETE
+
+**Discovered During:** Full ensemble verification testing across all 8 cross-family combinations
+**Source:** 7 bugs found — 3 from initial E2E testing, 4 from DatetimeIndex restoration cascade
+**Completed:** 2026-02-19
+**Status:** COMPLETE — 7 bugs fixed, 8/8 ensemble combinations verified
+
+### Summary
+
+Fixes all blocking bugs preventing cross-family ensemble pipelines (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D):
+
+- **Broken ATR import** — `calculate_atr_numba` imported from deleted location, fixed to canonical `features.numba_functions`
+- **CV config attribute error** — `self.config.training.cv` doesn't exist, fixed to `self.config.training` (direct attributes)
+- **Impossible validation formula** — Used n_samples in its own minimum check (circular), replaced with `n_splits * 100 + n_splits * (purge + embargo)`
+- **DatetimeIndex lost after features** — `reset_index()` for FeatureEngineer never restored, blocking all 4D MultiStreamAdapter models
+- **Backtest timestamp extraction** — Backtester needs `timestamp` column, but DatetimeIndex restoration removed `datetime` column
+- **OOF datetime extraction** — `df["datetime"]` KeyError after index restoration, fixed to `df.index[indices]`
+
+### Ensemble Test Results (All 8 Combinations — 2-Week MES Data)
+
+| Combo | Models | Status | Duration |
+|-------|--------|--------|----------|
+| 2D+2D+2D (WF) | XGB+LGBM+CB | PASS | 144s |
+| 2D+2D+2D | XGB+LGBM+CB | PASS | 198s |
+| 2D+3D | XGB+LSTM | PASS | 307s |
+| 2D+4D | XGB+PatchTST | PASS | 125s |
+| 3D+3D | LSTM+TCN | PASS | 419s |
+| 3D+4D | LSTM+PatchTST | PASS | 811s |
+| 4D+4D | PatchTST+iTransformer | PASS | 281s |
+| 2D+3D+4D | XGB+LSTM+PatchTST | PASS | 866s |
 
 ---
 

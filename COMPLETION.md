@@ -4,6 +4,68 @@
 
 ---
 
+## Phase 60 (2026-02-19) | DatetimeIndex Pipeline Fix & Cross-Family Ensembles
+
+**Status:** COMPLETE
+**Duration:** Single session (2026-02-19)
+**Impact:** 3 files modified. Fixes 7 bugs blocking cross-family ensemble pipelines. Enables all 8 ensemble combinations (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D).
+**Tests:** All 8 ensemble combinations verified on 2-week MES data (13,436 rows). Full backtest working for 2D+4D.
+
+### Summary
+
+Fixes cascading bugs in the pipeline that prevented 4D transformer models (PatchTST, iTransformer, TFT) from participating in cross-family ensembles. The root cause was DatetimeIndex loss after feature engineering — `reset_index()` converted DatetimeIndex to a column for FeatureEngineer compatibility, but never restored it. MultiStreamAdapter requires DatetimeIndex for `merge_asof` timestamp alignment across timeframes.
+
+**7 bugs fixed:**
+
+1. **Broken ATR import** — `calculate_atr_numba` imported from deleted `.utils` path → fixed to canonical `features.numba_functions`
+2. **CV config attribute error** — `self.config.training.cv` doesn't exist → fixed to `self.config.training` (direct attributes)
+3. **Impossible validation formula** — `embargo + purge + (n_samples/n_splits)*2` is circular → new formula: `n_splits * 100 + n_splits * (purge + embargo)`
+4. **DatetimeIndex lost after features** — `reset_index()` for FeatureEngineer never restored → added `set_index("datetime").sort_index()` after features + labeling
+5. **Backtest timestamp extraction** — Backtester needs `timestamp` column from DatetimeIndex → added elif to create from index
+6. **Ensemble OOF datetime** — `df["datetime"].iloc[indices]` KeyError → `df.index[indices].values`
+7. **Single-model OOF datetime** — Same fix at second call site
+
+### Files Modified (3)
+
+- `src/data/pipeline/stages/clean/cleaner.py` — Fixed `calculate_atr_numba` import path
+- `src/data/pipeline/stages/clean/__init__.py` — Same import fix
+- `src/factory.py` — 5 fixes: CV config access, validation formula, DatetimeIndex restoration, backtest timestamp, OOF datetime extraction (2 sites)
+
+### Ensemble Verification (All 8 Combinations PASS)
+
+| # | Combo | Models | Mode | Status | Duration | Best Model |
+|---|-------|--------|------|--------|----------|------------|
+| 1 | 2D+2D+2D | XGB+LGBM+CB | walk_forward | PASS | 144s | lightgbm_h20 |
+| 2 | 2D+2D+2D | XGB+LGBM+CB | standard | PASS | 198s | xgboost_h20 |
+| 3 | 2D+3D | XGB+LSTM | standard | PASS | 307s | xgboost_h20 |
+| 4 | 2D+4D | XGB+PatchTST | standard | PASS | 125s | xgboost_h20 |
+| 5 | 3D+3D | LSTM+TCN | standard | PASS | 419s | lstm_h20 |
+| 6 | 3D+4D | LSTM+PatchTST | standard | PASS | 811s | lstm_h20 |
+| 7 | 4D+4D | PatchTST+iTransformer | standard | PASS | 281s | itransformer_h20 |
+| 8 | 2D+3D+4D | XGB+LSTM+PatchTST | standard | PASS | 866s | xgboost_h20 |
+
+**Total verification time:** ~35 minutes
+
+### Financial Metrics (Original 3-Model Boosting — 1 Month MES)
+
+| Model | Accuracy | Macro F1 | MCC | Position Win Rate | Sharpe |
+|-------|----------|----------|-----|-------------------|--------|
+| XGBoost (Primary) | 42.18% | 0.3960 | 0.0883 | 38.1% | -0.245 |
+| LightGBM | 39.67% | 0.3850 | 0.0682 | 36.1% | -0.290 |
+| CatBoost | 39.74% | 0.3840 | 0.0685 | 36.0% | -0.292 |
+
+### 2D+4D Backtest (XGBoost + PatchTST)
+
+| Metric | Value |
+|--------|-------|
+| Total Trades | 20 |
+| Win Rate | 35.0% |
+| Profit Factor | 0.934 |
+| Sharpe Ratio | -0.073 |
+| Max Drawdown | -0.079% |
+
+---
+
 ## Phase 57 (2026-02-16) | 4D OOF Generation — Cross-Family Ensemble Support
 
 **Status:** COMPLETE
