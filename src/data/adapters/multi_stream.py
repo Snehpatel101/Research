@@ -511,16 +511,41 @@ class MultiStreamAdapter(BaseAdapter):
                 y[:] = label_values[anchor_ends - 1]
                 original_indices[:] = anchor_ends - 1
             else:
-                # Higher timeframe - use pre-computed timestamp alignment
+                # Higher timeframe - inline vectorized alignment (opt 2.6)
+                # Eliminates per-iteration method dispatch overhead while
+                # preserving the deduplication + forward-fill padding logic
+                # that _extract_aligned_sequence implements.
                 idx_map = tf_index_maps[tf]["anchor_to_tf"]
-                for seq_idx in range(n_sequences):
-                    X[seq_idx, tf_idx, :, :] = self._extract_aligned_sequence(
-                        tf_values=tf_values,
-                        idx_map=idx_map,
-                        anchor_start=anchor_starts[seq_idx],
-                        anchor_end=anchor_ends[seq_idx],
-                        seq_len=seq_len,
-                    )
+
+                if len(tf_values) == 0:
+                    # Guard: no higher-TF bars in this split — fill NaN
+                    n_feat = tf_values.shape[1] if tf_values.ndim > 1 else 1
+                    X[:, tf_idx, :, :] = np.nan
+                else:
+                    for seq_idx in range(n_sequences):
+                        a_start = anchor_starts[seq_idx]
+                        a_end = anchor_ends[seq_idx]
+                        mapped = idx_map[a_start:a_end]
+
+                        # Deduplicate consecutive identical indices (vectorized)
+                        unique_mask = np.empty(len(mapped), dtype=np.bool_)
+                        unique_mask[0] = True
+                        unique_mask[1:] = np.diff(mapped) != 0
+                        unique_idx = np.clip(
+                            mapped[unique_mask], 0, len(tf_values) - 1
+                        )
+
+                        unique_bars = tf_values[unique_idx]
+                        n_unique = len(unique_bars)
+
+                        if n_unique >= seq_len:
+                            X[seq_idx, tf_idx, :, :] = unique_bars[-seq_len:]
+                        elif n_unique > 0:
+                            # Pad front with earliest bar, place actuals at end
+                            X[seq_idx, tf_idx, -n_unique:, :] = unique_bars
+                            X[seq_idx, tf_idx, :seq_len - n_unique, :] = unique_bars[0]
+                        else:
+                            X[seq_idx, tf_idx, :, :] = np.nan
 
         # Extract weights for sequences if available (vectorized)
         seq_weights = None

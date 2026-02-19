@@ -944,42 +944,117 @@ def _calculate_hurst_rs(prices: np.ndarray) -> float:
         return np.nan
 
 
-def _rolling_hurst_fallback(prices: np.ndarray, window: int) -> np.ndarray:
-    """Rolling Hurst exponent (pure Python fallback)."""
-    n = len(prices)
-    hurst = np.full(n, np.nan)
+@njit(cache=True)
+def _hurst_rs_core(arr: np.ndarray, max_lag: int) -> float:
+    """Numba-compiled R/S Hurst exponent calculation."""
+    n = len(arr)
+    if n < max_lag * 2:
+        return np.nan
 
-    for i in range(window - 1, n):
-        window_prices = prices[i - window + 1 : i + 1]
+    log_sizes = np.empty(max_lag - 1)
+    log_rs = np.empty(max_lag - 1)
+    valid_count = 0
 
-        # Skip if too many NaNs
-        if np.isnan(window_prices).sum() > window // 4:
+    for lag in range(2, max_lag + 1):
+        rs_sum = 0.0
+        rs_count = 0
+        chunk_size = n // lag
+
+        if chunk_size < 2:
             continue
 
-        # Use non-NaN prices
-        valid_prices = window_prices[~np.isnan(window_prices)]
-        if len(valid_prices) >= 20:
-            hurst[i] = _calculate_hurst_rs(valid_prices)
+        for chunk_idx in range(lag):
+            start = chunk_idx * chunk_size
+            end = start + chunk_size
+            chunk = arr[start:end]
 
-    return hurst
+            # Mean-center
+            mean_val = 0.0
+            for v in chunk:
+                mean_val += v
+            mean_val /= chunk_size
+
+            # Cumulative deviations and range
+            cum_dev = 0.0
+            min_dev = 0.0
+            max_dev = 0.0
+            sq_sum = 0.0
+
+            for j in range(chunk_size):
+                dev = chunk[j] - mean_val
+                cum_dev += dev
+                sq_sum += dev * dev
+                if cum_dev < min_dev:
+                    min_dev = cum_dev
+                if cum_dev > max_dev:
+                    max_dev = cum_dev
+
+            r = max_dev - min_dev
+            s = np.sqrt(sq_sum / chunk_size)
+
+            if s > 0:
+                rs_sum += r / s
+                rs_count += 1
+
+        if rs_count > 0:
+            log_sizes[valid_count] = np.log(chunk_size)
+            log_rs[valid_count] = np.log(rs_sum / rs_count)
+            valid_count += 1
+
+    if valid_count < 2:
+        return np.nan
+
+    # Linear regression for slope (Hurst exponent)
+    x = log_sizes[:valid_count]
+    y_vals = log_rs[:valid_count]
+    x_mean = 0.0
+    y_mean = 0.0
+    for i in range(valid_count):
+        x_mean += x[i]
+        y_mean += y_vals[i]
+    x_mean /= valid_count
+    y_mean /= valid_count
+
+    numerator = 0.0
+    denominator = 0.0
+    for i in range(valid_count):
+        dx = x[i] - x_mean
+        numerator += dx * (y_vals[i] - y_mean)
+        denominator += dx * dx
+
+    if denominator == 0:
+        return np.nan
+
+    slope = numerator / denominator
+    if slope < 0.0:
+        return 0.0
+    elif slope > 1.0:
+        return 1.0
+    return slope
 
 
-try:
-    from src.data.features.compute.mean_reversion import (
-        HURST_NUMBA_AVAILABLE as _HURST_NUMBA_OK,
-    )
-    from src.data.features.compute.mean_reversion import (
-        _rolling_hurst_numba,
-    )
-except ImportError:
-    _HURST_NUMBA_OK = False
+@njit(cache=True)
+def _rolling_hurst_njit(prices: np.ndarray, window: int) -> np.ndarray:
+    """Numba-compiled rolling Hurst exponent."""
+    n = len(prices)
+    result = np.full(n, np.nan)
+
+    for i in range(window - 1, n):
+        window_data = prices[i - window + 1 : i + 1]
+        # Count valid (non-NaN) values
+        valid = 0
+        for v in window_data:
+            if not np.isnan(v):
+                valid += 1
+        if valid >= 20:
+            result[i] = _hurst_rs_core(window_data, 20)
+
+    return result
 
 
 def _rolling_hurst(prices: np.ndarray, window: int) -> np.ndarray:
-    """Rolling Hurst exponent (Numba-accelerated when available)."""
-    if _HURST_NUMBA_OK:
-        return _rolling_hurst_numba(prices, window, min_periods=20, max_lag=20)
-    return _rolling_hurst_fallback(prices, window)
+    """Rolling Hurst exponent (Numba-accelerated)."""
+    return _rolling_hurst_njit(prices, window)
 
 
 def add_hurst_features(

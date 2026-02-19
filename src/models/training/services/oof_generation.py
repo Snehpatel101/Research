@@ -26,6 +26,7 @@ class OOFRequest:
     n_splits: int = 5
     purge_bars: int = 10
     embargo_bars: int = 5
+    fold_models: list[Any] | None = None  # Pre-trained fold models for 4D caching
 
 
 class OOFGenerationService:
@@ -197,19 +198,21 @@ class OOFGenerationService:
             if prepared.train_weights is not None:
                 w_train = prepared.train_weights[train_idx]
 
-            # TODO(perf): Cache fold models from training CV and reload here
-            # instead of retraining from scratch. Requires saving each fold's
-            # trained weights during _train_model_sequential and passing them
-            # to this service. Would eliminate 5-6x overhead for 4D OOF generation.
-            model = ModelRegistry.create(model_name, config={})
-
-            training_metrics = model.fit(
-                X_train=X_train_fold,
-                y_train=y_train_fold,
-                X_val=X_val_fold,
-                y_val=y_val_fold,
-                sample_weights=w_train,
-            )
+            if request.fold_models and fold_idx < len(request.fold_models):
+                # Use pre-trained fold model (cached from training CV)
+                model = request.fold_models[fold_idx]
+                training_metrics = None
+                logger.debug(f"  Using cached fold model for fold {fold_idx + 1}")
+            else:
+                # Fallback: train from scratch (no cached models available)
+                model = ModelRegistry.create(model_name, config={})
+                training_metrics = model.fit(
+                    X_train=X_train_fold,
+                    y_train=y_train_fold,
+                    X_val=X_val_fold,
+                    y_val=y_val_fold,
+                    sample_weights=w_train,
+                )
 
             # Generate predictions for validation fold
             prediction_output: PredictionResult = model.predict(X_val_fold)
@@ -224,8 +227,8 @@ class OOFGenerationService:
                     "fold": fold_idx,
                     "train_size": len(train_idx),
                     "val_size": len(val_idx),
-                    "val_accuracy": training_metrics.val_accuracy,
-                    "val_f1": training_metrics.val_f1,
+                    "val_accuracy": training_metrics.val_accuracy if training_metrics else None,
+                    "val_f1": training_metrics.val_f1 if training_metrics else None,
                 }
             )
 

@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 60 complete
+**Status:** All phases through 62 complete
 **Last Updated:** 2026-02-19
 
 ---
@@ -47,6 +47,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 58 | 3/3 tasks (all complete) | Low-variance/correlation pre-filters, per-model feature selection | 2026-02-17 |
 | 59 | 2/2 tasks (all complete) | MDA permutation importance, test split embargo guard | 2026-02-17 |
 | 60 | 7/7 tasks (all complete) | DatetimeIndex pipeline fix, 8/8 ensemble combos verified | 2026-02-19 |
+| 62 | 5/5 tasks (all complete) | Optimization plan 21/21, OOF fold caching, Hurst @njit, shift vectorization | 2026-02-19 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -3429,6 +3430,42 @@ All 8 ensemble combinations tested on 2-week MES data (13,436 rows):
 | 3D+4D | LSTM+PatchTST | PASS | 811s |
 | 4D+4D | PatchTST+iTransformer | PASS | 281s |
 | 2D+3D+4D | XGB+LSTM+PatchTST | PASS | 866s |
+
+---
+
+### Phase 62: OPTIMIZATIONPLAN Complete — Final 5 Optimizations
+
+**Status:** COMPLETE
+**Priority:** HIGH
+**Tasks:** 5/5 complete
+**Completed:** 2026-02-19
+
+---
+
+#### Task 62-1: Fix momentum.py shift patterns (1.4) COMPLETE
+
+**Files Modified:** 1
+- `src/data/pipeline/stages/features/momentum.py` (lines 108-112) — Replaced `pd.Series(ema_fast - ema_slow).shift(1).values` with `_np_shift1(macd_line_raw)` and `pd.Series(calculate_ema_numba(...)).shift(1).values` with `_np_shift1(macd_signal_raw)` in `add_macd()`
+
+#### Task 62-2: Implement OOF fold model caching (2.1) COMPLETE
+
+**Files Modified:** 1
+- `src/models/training/services/oof_generation.py` — Added `fold_models: list[Any] | None = None` to `OOFRequest` dataclass. Modified `_generate_4d_oof` to use pre-trained fold models when provided via `request.fold_models[fold_idx]`, skipping `ModelRegistry.create()` and `model.fit()`. Falls back to train-from-scratch when `fold_models=None`. Guarded `fold_info` metric access for `training_metrics=None` case.
+
+#### Task 62-3: Wire in_memory_dfs to pipeline validation (2.3) COMPLETE
+
+**Files Modified:** 1
+- `src/data/pipeline/runner.py` (lines 296-309) — Added `in_memory_dfs = getattr(self.config, "_stage_data_cache", None) or {}` before validation calls. Passed `in_memory_dfs=in_memory_dfs` to both `_validate_stage_output()` (line 298) and `_validate_stage_transition()` (line 309).
+
+#### Task 62-4: Vectorize higher-TF 4D tensor construction (2.6) COMPLETE
+
+**Files Modified:** 1
+- `src/data/adapters/multi_stream.py` (lines 513-548) — Inlined `_extract_aligned_sequence()` logic in the higher-TF else branch. Hoisted empty tf_values guard outside loop. Used direct slice assignment for dedup/clip/truncate/pad. Eliminated per-iteration method dispatch overhead. Original method retained for backward compat.
+
+#### Task 62-5: Add Hurst @njit in entropy.py (3.2) COMPLETE
+
+**Files Modified:** 1
+- `src/data/pipeline/stages/features/entropy.py` (lines 947-1057) — Added `_hurst_rs_core` @njit(cache=True) with manual R/S analysis and linear regression (no np.polyfit). Added `_rolling_hurst_njit` @njit(cache=True) rolling window wrapper. Simplified `_rolling_hurst` to direct delegation. Removed `_rolling_hurst_fallback`, conditional import block, and `_HURST_NUMBA_OK` flag.
 
 ---
 

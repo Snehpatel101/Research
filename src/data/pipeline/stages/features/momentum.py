@@ -105,11 +105,11 @@ def add_macd(
     # ANTI-LOOKAHEAD: All MACD components shifted by 1 bar
     ema_fast = calculate_ema_numba(df["close"].values, fast_period)
     ema_slow = calculate_ema_numba(df["close"].values, slow_period)
-    macd_line_raw = pd.Series(ema_fast - ema_slow)
-    macd_line = macd_line_raw.shift(1).values
+    macd_line_raw = ema_fast - ema_slow
+    macd_line = _np_shift1(macd_line_raw)
 
-    macd_signal_raw = pd.Series(calculate_ema_numba(macd_line_raw.values, signal_period))
-    macd_signal = macd_signal_raw.shift(1).values
+    macd_signal_raw = calculate_ema_numba(macd_line_raw, signal_period)
+    macd_signal = _np_shift1(macd_signal_raw)
 
     macd_hist = macd_line - macd_signal
 

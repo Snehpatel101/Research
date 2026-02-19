@@ -293,8 +293,9 @@ class PipelineRunner:
 
                 # Phase 7B: Validate stage output schema
                 fail_fast = getattr(self.config, "fail_on_validation_error", True)
+                in_memory_dfs = getattr(self.config, "_stage_data_cache", None) or {}
                 try:
-                    self._validate_stage_output(stage.name, result)
+                    self._validate_stage_output(stage.name, result, in_memory_dfs=in_memory_dfs)
                 except StageValidationError as e:
                     self.logger.error(f"[FAIL] Schema validation failed for {stage.name}: {e}")
                     all_success = False
@@ -305,7 +306,7 @@ class PipelineRunner:
                 # Phase 43: Validate stage transition to next stage
                 if getattr(self.config, "enable_transition_validation", True):
                     try:
-                        self._validate_stage_transition(stage, result, stages_to_run)
+                        self._validate_stage_transition(stage, result, stages_to_run, in_memory_dfs=in_memory_dfs)
                     except StageValidationError as e:
                         self.logger.error(
                             f"[FAIL] Stage transition validation failed after {stage.name}: {e}"
