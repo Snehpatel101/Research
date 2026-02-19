@@ -924,9 +924,9 @@ pytest tests/ -v  # Should pass all 42 tests
 
 ---
 
-## Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes
+## Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes + 4 Smoke Test Bug Fixes
 
-Addressed all Critical (C2-C4), High (H3-H5), Medium (M1-M2, M4, M6, M8), and Low (L3) items from CODEBASE_AUDIT.md.
+Addressed all Critical (C2-C4), High (H3-H5), Medium (M1-M2, M4, M6, M8), and Low (L3) items from CODEBASE_AUDIT.md. Additionally fixed 4 bugs discovered during comprehensive E2E smoke testing of all 12 models.
 
 ### Rationale
 - Comprehensive codebase audit identified 12 actionable items across Critical, High, Medium, and Low severity
@@ -943,10 +943,20 @@ Addressed all Critical (C2-C4), High (H3-H5), Medium (M1-M2, M4, M6, M8), and Lo
 - M8: MDA threshold 500 to 200 enables MDA on smaller datasets
 - L3: StrEnum modernization (51 classes across 33 files) improves type safety
 
+### End-to-End Smoke Test — 4 Bugs Fixed
+
+During comprehensive smoke testing (all 12 models, standard + walk-forward, 1 week MES, MTF, Optuna, backtesting):
+
+- Walk-forward ensemble label alignment (`ensemble_service.py`) — fallback label extraction from source DataFrame
+- Walk-forward 3D reshape for sequential models (`walk_forward.py`) — contract-aware reshaping + `_create_sequences`
+- torch.compile state_dict prefix (`base_rnn.py`) — `removeprefix("_orig_mod.")` cleanup
+- ClassVar for _PRESETS (`symbol.py`) — mutable dict default changed to `ClassVar`
+
 ### Success Metrics
 | Metric | Before | After | Result |
 |--------|--------|-------|--------|
 | Audit fixes complete | 0/12 | 12/12 | ✅ |
+| Smoke test bugs fixed | 0/4 | 4/4 | ✅ |
 | Import cleanliness | unverified | 47/47 clean | ✅ |
 | Circular imports | unverified | 0 | ✅ |
 | StrEnum conversions | 0 | 51 classes (33 files) | ✅ |

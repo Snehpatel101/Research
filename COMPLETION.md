@@ -4,9 +4,9 @@
 
 ---
 
-## Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes | 2026-02-19 | COMPLETE
+## Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes + 4 Smoke Test Bug Fixes | 2026-02-19 | COMPLETE
 
-**Impact:** 12/12 audit findings fixed across critical, high, medium, and low severity tiers. 47/47 imports clean, 0 broken, 0 circular imports.
+**Impact:** 12/12 audit findings fixed + 4 E2E smoke test bugs fixed across critical, high, medium, and low severity tiers. 47/47 imports clean, 0 broken, 0 circular imports.
 **Constraint:** All fixes verified against code. Static smoke test confirms zero regressions.
 
 ### Background
@@ -45,10 +45,25 @@ A comprehensive codebase audit identified 12 issues across 4 severity tiers (Cri
 |:-:|-----|---------|
 | L3 | Modernized 51 enum classes across 33 files from `(str, Enum)` or `(Enum)` with string values to `(StrEnum)`. Kept 3 integer-based enums unchanged | 33 files across codebase |
 
+### End-to-End Pipeline Smoke Test — 4 Bugs Fixed
+
+During comprehensive smoke testing of all 12 models (standard + walk-forward modes, 1 week MES data, MTF, Optuna, backtesting), 4 bugs were discovered and fixed:
+
+| # | Bug | File | Fix |
+|:-:|-----|------|-----|
+| 1 | Walk-forward ensemble label alignment | `src/models/training/services/ensemble_service.py` | `_extract_aligned_labels` failed when OOF predictions covered fewer samples than stacking feature union. Added fallback label extraction from source DataFrame |
+| 2 | Walk-forward 3D reshape for sequential models | `src/models/training/modes/walk_forward.py` | LSTM/GRU/TCN require 3D input but walk-forward passed 2D. Added contract-aware reshaping + `_create_sequences` helper |
+| 3 | torch.compile state_dict prefix | `src/models/neural/base_rnn.py` | Compiled models save keys with `_orig_mod.` prefix causing load failures. Added `removeprefix` cleanup |
+| 4 | ClassVar for _PRESETS | `src/config/symbol.py` | Mutable dict default not allowed in dataclass fields. Changed to `ClassVar` annotation |
+
 ### Files Modified
 
 | Tier | File | Change |
 |:----:|------|--------|
+| Smoke | `src/models/training/services/ensemble_service.py` | Fallback label extraction in `_extract_aligned_labels` for walk-forward OOF alignment |
+| Smoke | `src/models/training/modes/walk_forward.py` | Contract-aware 3D reshaping + `_create_sequences` for LSTM/GRU/TCN |
+| Smoke | `src/models/neural/base_rnn.py` | `removeprefix("_orig_mod.")` on torch.compile state_dict keys |
+| Smoke | `src/config/symbol.py` | `_PRESETS` changed from field default to `ClassVar` |
 | C2 | `src/config/validators.py` | `strict=False` → `strict=True` default in validate_config, validate_config_file |
 | C2 | `src/config/unified.py` | `strict=False` → `strict=True` default |
 | C3 | `src/config/symbol.py` | ValueError for unknown symbols, added `from_symbol_or_default()` |

@@ -3434,11 +3434,11 @@ All 8 ensemble combinations tested on 2-week MES data (13,436 rows):
 
 ---
 
-### Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes
+### Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes + 4 Smoke Test Bug Fixes
 
 **Status:** COMPLETE
 **Priority:** HIGH
-**Tasks:** 12/12 complete
+**Tasks:** 16/16 complete
 **Completed:** 2026-02-19
 
 ---
@@ -3509,6 +3509,26 @@ All 8 ensemble combinations tested on 2-week MES data (13,436 rows):
 
 **Files Modified:** 33
 - 51 enum classes across 33 files converted from `str, Enum` to `StrEnum` for improved type safety, serialization behavior, and modern Python idioms
+
+#### Task 63-13: Walk-forward ensemble label alignment (ensemble_service.py) COMPLETE
+
+**Files Modified:** 1
+- `src/models/training/services/ensemble_service.py` — `_extract_aligned_labels` failed when OOF predictions covered fewer samples than stacking feature union. Added fallback label extraction from source DataFrame.
+
+#### Task 63-14: Walk-forward 3D reshape for sequential models (walk_forward.py) COMPLETE
+
+**Files Modified:** 1
+- `src/models/training/modes/walk_forward.py` — LSTM/GRU/TCN require 3D input but walk-forward passed 2D. Added contract-aware reshaping + `_create_sequences` helper.
+
+#### Task 63-15: torch.compile state_dict prefix cleanup (base_rnn.py) COMPLETE
+
+**Files Modified:** 1
+- `src/models/neural/base_rnn.py` — Compiled models save keys with `_orig_mod.` prefix causing load failures. Added `removeprefix` cleanup on state_dict keys.
+
+#### Task 63-16: ClassVar for _PRESETS (symbol.py) COMPLETE
+
+**Files Modified:** 1
+- `src/config/symbol.py` — Mutable dict default not allowed in dataclass fields. Changed `_PRESETS` to `ClassVar` annotation.
 
 ---
 
