@@ -100,6 +100,13 @@ class ResidualBlock1D(nn.Module):
         out = self.conv2(out)
         out = self.bn2(out)
 
+        # Handle sequence length mismatch from even kernel sizes
+        # (padding = kernel_size // 2 doesn't preserve length for even kernels)
+        if out.shape[2] != identity.shape[2]:
+            min_len = min(out.shape[2], identity.shape[2])
+            out = out[:, :, :min_len]
+            identity = identity[:, :, :min_len]
+
         out = out + identity
         result: torch.Tensor = self.relu(out)
 
@@ -177,6 +184,12 @@ class ResidualBlock1DBottleneck(nn.Module):
 
         out = self.conv3(out)
         out = self.bn3(out)
+
+        # Handle sequence length mismatch from even kernel sizes
+        if out.shape[2] != identity.shape[2]:
+            min_len = min(out.shape[2], identity.shape[2])
+            out = out[:, :, :min_len]
+            identity = identity[:, :, :min_len]
 
         out = out + identity
         result: torch.Tensor = self.relu(out)

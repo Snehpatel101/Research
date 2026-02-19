@@ -684,7 +684,10 @@ class BaseRNNModel(BaseModel):
 
         # Recreate and load model
         self._model = self._create_network(self._n_features)
-        self._model.load_state_dict(checkpoint["model_state_dict"])
+        state_dict = checkpoint["model_state_dict"]
+        # Strip _orig_mod. prefix added by torch.compile (if present)
+        cleaned = {k.removeprefix("_orig_mod."): v for k, v in state_dict.items()}
+        self._model.load_state_dict(cleaned)
         self._model = self._model.to(self._device)
         self._model.eval()
 

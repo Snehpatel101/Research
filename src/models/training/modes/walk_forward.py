@@ -22,6 +22,8 @@ import pandas as pd
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
+from src.core.contracts import get_model_contract
+from src.core.types import DataRank
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
@@ -348,6 +350,39 @@ class WalkForwardTrainer:
             X_train_scaled = scaling_result.X_train_scaled
             X_test_scaled = scaling_result.X_val_scaled
 
+            # Reshape/sequence data for sequential models (LSTM, GRU, etc.)
+            # Sequential models need 3D: (n_samples, seq_len, n_features)
+            contract = get_model_contract(model_name)
+            if contract.input_rank == DataRank.SEQUENCE_3D:
+                seq_len = contract.sequence_length
+                n_flat = X_train_scaled.shape[1]
+                if n_flat % seq_len == 0:
+                    # Data was pre-sequenced then flattened — reshape back
+                    n_features = n_flat // seq_len
+                    X_train_scaled = X_train_scaled.reshape(-1, seq_len, n_features)
+                    X_test_scaled = X_test_scaled.reshape(-1, seq_len, n_features)
+                    logger.debug(
+                        f"    Reshaped to 3D: ({X_train_scaled.shape[0]}, {seq_len}, {n_features})"
+                    )
+                else:
+                    # Data is raw 2D features — create sequences via sliding window
+                    n_features = n_flat
+                    X_train_scaled = self._create_sequences(X_train_scaled, seq_len)
+                    X_test_scaled = self._create_sequences(X_test_scaled, seq_len)
+                    # Trim labels/weights to match shortened arrays
+                    n_train_new = X_train_scaled.shape[0]
+                    n_test_new = X_test_scaled.shape[0]
+                    y_train = y_train.iloc[-n_train_new:]
+                    y_test = y_test.iloc[-n_test_new:]
+                    # Also update train/test indices for proper metric alignment
+                    train_idx = train_idx[-n_train_new:]
+                    test_idx = test_idx[-n_test_new:]
+                    if weights is not None:
+                        w_train = None  # Will recompute below
+                    logger.debug(
+                        f"    Created sequences: ({X_train_scaled.shape[0]}, {seq_len}, {n_features})"
+                    )
+
             # Handle sample weights
             w_train = None
             if weights is not None:
@@ -458,6 +493,29 @@ class WalkForwardTrainer:
             model_paths=model_paths,
             total_time=total_time,
         )
+
+    @staticmethod
+    def _create_sequences(X: np.ndarray, seq_len: int) -> np.ndarray:
+        """
+        Create 3D sequences from 2D data using a sliding window.
+
+        Converts (n_rows, n_features) -> (n_rows - seq_len + 1, seq_len, n_features).
+        The label for each sequence corresponds to the LAST row in the window.
+
+        Args:
+            X: 2D array of shape (n_rows, n_features)
+            seq_len: Sequence length (number of time steps per window)
+
+        Returns:
+            3D array of shape (n_sequences, seq_len, n_features)
+        """
+        if len(X) < seq_len:
+            return np.empty((0, seq_len, X.shape[1]), dtype=X.dtype)
+
+        windows = np.lib.stride_tricks.sliding_window_view(X, seq_len, axis=0)
+        # sliding_window_view gives (n_windows, n_features, seq_len)
+        # transpose to (n_windows, seq_len, n_features)
+        return windows.transpose(0, 2, 1).copy()
 
     def _build_summary(self, results: dict[str, WalkForwardTrainingResult]) -> dict[str, Any]:
         """Build summary from all model results."""

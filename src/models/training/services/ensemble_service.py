@@ -144,7 +144,7 @@ class EnsembleService:
         logger.info(f"Valid samples: {aligned.n_common}")
 
         # Extract aligned labels
-        y_aligned = self._extract_aligned_labels(oof_predictions, aligned)
+        y_aligned = self._extract_aligned_labels(oof_predictions, aligned, df=request.df)
 
         # Perform diversity analysis if ensemble building is enabled
         diversity_metrics = None
@@ -170,6 +170,17 @@ class EnsembleService:
             stacking_features,
             columns=aligned.get_feature_names(),
         )
+
+        # Safety check: y_aligned must match stacking feature rows
+        if len(y_aligned) != len(stacking_df):
+            logger.warning(
+                f"Label/feature length mismatch: y_aligned={len(y_aligned)}, "
+                f"stacking_features={len(stacking_df)}. Truncating to minimum."
+            )
+            min_len = min(len(y_aligned), len(stacking_df))
+            stacking_df = stacking_df.iloc[:min_len].copy()
+            y_aligned = y_aligned[:min_len]
+
         stacking_df["y_true"] = y_aligned
 
         stacking_dataset = StackingDataset(
@@ -237,15 +248,49 @@ class EnsembleService:
         self,
         oof_predictions: dict[str, OOFPrediction],
         aligned: AlignedOOFResult,
+        df: pd.DataFrame | None = None,
     ) -> np.ndarray | None:
-        """Extract aligned labels from OOF predictions."""
+        """Extract aligned labels from OOF predictions or source DataFrame.
+
+        First tries OOF predictions y_true column. If the OOF y_true length
+        doesn't cover all common_indices (e.g. walk-forward mode), falls back
+        to extracting labels from the source DataFrame using positional indexing.
+        """
+        common_indices = aligned.common_indices
+        if common_indices is None:
+            return None
+
+        # Strategy 1: Try extracting from OOF predictions
         for _key, oof_pred in oof_predictions.items():
             if "y_true" in oof_pred.predictions.columns:
                 y_full = oof_pred.predictions["y_true"].values
-                # Align to common indices
-                if aligned.common_indices is not None:
-                    valid_indices = aligned.common_indices[aligned.common_indices < len(y_full)]
-                    return np.asarray(y_full[valid_indices])
+                # Only use if y_full covers all common indices
+                if len(y_full) > common_indices.max():
+                    valid_indices = common_indices[common_indices < len(y_full)]
+                    if len(valid_indices) == aligned.n_common:
+                        return np.asarray(y_full[valid_indices])
+
+        # Strategy 2: Fall back to source DataFrame (handles walk-forward mode)
+        if df is not None:
+            # Find label column(s) in source df
+            label_cols = [c for c in df.columns if c.startswith("label_h")]
+            if label_cols:
+                # Use first label column (primary horizon)
+                label_col = label_cols[0]
+                y_source = df[label_col].values
+                valid_mask = common_indices < len(y_source)
+                valid_indices = common_indices[valid_mask]
+                if len(valid_indices) == aligned.n_common:
+                    return np.asarray(y_source[valid_indices])
+                elif len(valid_indices) > 0:
+                    logger.warning(
+                        f"Partial label coverage: {len(valid_indices)}/{aligned.n_common} "
+                        f"samples have labels from df['{label_col}']"
+                    )
+                    # Return labels only for valid indices; caller must handle mismatch
+                    return np.asarray(y_source[valid_indices])
+
+        logger.warning("Could not extract aligned labels for meta-learner")
         return None
 
     def _train_meta_learner(
