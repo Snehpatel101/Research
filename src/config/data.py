@@ -17,7 +17,7 @@ Import from here:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from src.config.base import BaseConfig
 from src.core.types import LabelingMethod
@@ -27,7 +27,7 @@ from src.core.types import LabelingMethod
 # =============================================================================
 
 
-class ScalerType(str, Enum):
+class ScalerType(StrEnum):
     """Supported scaler types for data normalization."""
 
     NONE = "none"
@@ -37,7 +37,7 @@ class ScalerType(str, Enum):
     QUANTILE = "quantile"
 
 
-class FeatureCategory(str, Enum):
+class FeatureCategory(StrEnum):
     """Feature categories for scaling strategy selection."""
 
     RETURNS = "returns"
@@ -50,7 +50,7 @@ class FeatureCategory(str, Enum):
     UNKNOWN = "unknown"
 
 
-class MTFMode(str, Enum):
+class MTFMode(StrEnum):
     """Multi-timeframe aggregation modes."""
 
     NONE = "none"

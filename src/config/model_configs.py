@@ -17,7 +17,7 @@ Import from here:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.config.base import BaseConfig
@@ -28,7 +28,7 @@ from src.core.types import ModelFamily
 # =============================================================================
 
 
-class ActivationType(str, Enum):
+class ActivationType(StrEnum):
     """Neural network activation functions."""
 
     RELU = "relu"

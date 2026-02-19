@@ -382,6 +382,26 @@ class LookaheadAuditor:
 
         return df
 
+    def scan_dependency_propagation(
+        self,
+        feature_dependencies: dict[str, list[str]],
+        tainted_features: list[str] | set[str],
+    ) -> PropagationScanResult:
+        """Scan the feature dependency DAG for lookahead propagation.
+
+        Convenience method that delegates to the module-level
+        :func:`scan_dependency_propagation` function.  See that function
+        for full documentation.
+
+        Args:
+            feature_dependencies: The ``FEATURE_DEPENDENCIES`` dict.
+            tainted_features: Feature families with known direct lookahead.
+
+        Returns:
+            PropagationScanResult with direct, propagated and clean features.
+        """
+        return scan_dependency_propagation(feature_dependencies, tainted_features)
+
 
 # =============================================================================
 # MTF ALIGNMENT AUDIT
@@ -494,6 +514,333 @@ def audit_feature_lookahead(
     return results
 
 
+# =============================================================================
+# H3: CROSS-FEATURE LOOKAHEAD PROPAGATION SCAN
+# =============================================================================
+
+
+@dataclass
+class PropagationScanResult:
+    """Result of a dependency-propagation lookahead scan.
+
+    Attributes:
+        tainted_features: Feature families with *direct* lookahead issues.
+        propagated_features: Feature families tainted through upstream
+            dependencies (not directly, but via the DAG).
+        propagation_paths: Mapping from each propagated feature to the
+            chain of dependencies that connects it to a tainted source.
+        clean_features: Feature families with no direct or propagated
+            lookahead issues.
+    """
+
+    tainted_features: list[str] = field(default_factory=list)
+    propagated_features: list[str] = field(default_factory=list)
+    propagation_paths: dict[str, list[str]] = field(default_factory=dict)
+    clean_features: list[str] = field(default_factory=list)
+
+    @property
+    def all_affected(self) -> list[str]:
+        """All features affected by lookahead (direct + propagated)."""
+        return sorted(set(self.tainted_features) | set(self.propagated_features))
+
+    @property
+    def has_propagation(self) -> bool:
+        """True if any feature is tainted through propagation."""
+        return len(self.propagated_features) > 0
+
+    def to_dict(self) -> dict:
+        """Convert to serializable dict."""
+        return {
+            "tainted_features": self.tainted_features,
+            "propagated_features": self.propagated_features,
+            "propagation_paths": self.propagation_paths,
+            "clean_features": self.clean_features,
+            "all_affected": self.all_affected,
+            "has_propagation": self.has_propagation,
+        }
+
+
+def _topological_sort(dependencies: dict[str, list[str]]) -> list[str]:
+    """Compute a topological ordering of feature families from a dependency dict.
+
+    Uses Kahn's algorithm.  The special wildcard ``"*"`` dependency (used by
+    ``mtf`` to mean "all other families") is expanded before sorting.
+
+    Args:
+        dependencies: Mapping of ``feature_family -> [upstream_families]``.
+
+    Returns:
+        List of feature families in topological (computation) order.
+
+    Raises:
+        ValueError: If there is a cycle in the dependency graph.
+    """
+    all_nodes = set(dependencies.keys())
+
+    # Expand wildcard dependencies: "*" means "depends on all other families"
+    resolved: dict[str, list[str]] = {}
+    for node, deps in dependencies.items():
+        if "*" in deps:
+            resolved[node] = [d for d in all_nodes if d != node]
+        else:
+            # Only include deps that are actually defined nodes
+            resolved[node] = [d for d in deps if d in all_nodes]
+
+    # Build in-degree map
+    in_degree: dict[str, int] = {node: 0 for node in all_nodes}
+    for node, deps in resolved.items():
+        in_degree[node] = len(deps)
+
+    # Seed queue with nodes that have no dependencies
+    queue: list[str] = sorted(
+        [node for node, deg in in_degree.items() if deg == 0]
+    )
+    order: list[str] = []
+
+    while queue:
+        current = queue.pop(0)
+        order.append(current)
+        # For every node that depends on `current`, decrement in-degree
+        for node, deps in resolved.items():
+            if current in deps:
+                in_degree[node] -= 1
+                if in_degree[node] == 0:
+                    queue.append(node)
+                    queue.sort()  # deterministic ordering
+
+    if len(order) != len(all_nodes):
+        missing = all_nodes - set(order)
+        raise ValueError(
+            f"Cycle detected in feature dependency graph. "
+            f"Nodes involved: {sorted(missing)}"
+        )
+
+    return order
+
+
+def scan_dependency_propagation(
+    feature_dependencies: dict[str, list[str]],
+    tainted_features: list[str] | set[str],
+) -> PropagationScanResult:
+    """Scan the feature dependency DAG for lookahead propagation.
+
+    Given a set of feature families known to have *direct* lookahead issues
+    (``tainted_features``), this function traces the dependency graph to
+    find all downstream features that are *indirectly* tainted because they
+    depend on a tainted upstream.
+
+    The scan uses a topological sort so that taint is propagated level by
+    level -- if A is tainted and B depends on A and C depends on B, then
+    both B and C are flagged and the full propagation path is recorded.
+
+    Args:
+        feature_dependencies: The ``FEATURE_DEPENDENCIES`` dict from
+            ``engineer.py``.  Keys are feature family names; values are
+            lists of upstream family names.
+        tainted_features: Feature families known to have direct lookahead
+            issues (e.g. from corruption testing with ``LookaheadAuditor``).
+
+    Returns:
+        PropagationScanResult describing direct, propagated and clean features.
+
+    Example:
+        >>> from src.data.pipeline.stages.features.engineer import (
+        ...     FEATURE_DEPENDENCIES,
+        ... )
+        >>> result = scan_dependency_propagation(
+        ...     FEATURE_DEPENDENCIES,
+        ...     tainted_features=["returns"],
+        ... )
+        >>> # "rsi" depends on "returns", so it should be propagated
+        >>> assert "rsi" in result.propagated_features
+    """
+    tainted_set = set(tainted_features)
+    all_nodes = set(feature_dependencies.keys())
+
+    # Expand wildcard deps
+    resolved: dict[str, list[str]] = {}
+    for node, deps in feature_dependencies.items():
+        if "*" in deps:
+            resolved[node] = [d for d in all_nodes if d != node]
+        else:
+            resolved[node] = [d for d in deps if d in all_nodes]
+
+    # Get topological order
+    topo_order = _topological_sort(feature_dependencies)
+
+    # Track which features are tainted (direct or propagated) and paths
+    effective_taint: set[str] = set(tainted_set)
+    propagated: set[str] = set()
+    propagation_paths: dict[str, list[str]] = {}
+
+    for feature in topo_order:
+        if feature in tainted_set:
+            # Already directly tainted -- skip propagation check
+            continue
+
+        # Check if any upstream is tainted (directly or via propagation)
+        tainted_upstreams = [
+            dep for dep in resolved.get(feature, []) if dep in effective_taint
+        ]
+
+        if tainted_upstreams:
+            effective_taint.add(feature)
+            propagated.add(feature)
+
+            # Build the propagation path: pick the first tainted upstream
+            # and prepend its path (if any)
+            source = tainted_upstreams[0]
+            if source in propagation_paths:
+                propagation_paths[feature] = propagation_paths[source] + [source, feature]
+            else:
+                propagation_paths[feature] = [source, feature]
+
+            logger.warning(
+                f"[PropagationScan] Feature '{feature}' tainted via upstream "
+                f"{tainted_upstreams}: path={propagation_paths[feature]}"
+            )
+
+    clean = sorted(all_nodes - effective_taint)
+
+    return PropagationScanResult(
+        tainted_features=sorted(tainted_set & all_nodes),
+        propagated_features=sorted(propagated),
+        propagation_paths=propagation_paths,
+        clean_features=clean,
+    )
+
+
+# =============================================================================
+# M6: RESAMPLING PARITY VERIFICATION
+# =============================================================================
+
+
+@dataclass
+class ResamplingParityResult:
+    """Result of resampling parity verification.
+
+    Attributes:
+        is_match: True if all resampling parameters match.
+        mismatches: List of human-readable mismatch descriptions.
+        training_params: The training resampling parameters that were checked.
+        inference_params: The inference resampling parameters that were checked.
+    """
+
+    is_match: bool
+    mismatches: list[str] = field(default_factory=list)
+    training_params: dict[str, str] = field(default_factory=dict)
+    inference_params: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        """Convert to serializable dict."""
+        return {
+            "is_match": self.is_match,
+            "mismatches": self.mismatches,
+            "training_params": self.training_params,
+            "inference_params": self.inference_params,
+        }
+
+
+def verify_resampling_parity(
+    training_config: dict[str, str],
+    inference_config: dict[str, str],
+    *,
+    raise_on_mismatch: bool = True,
+) -> ResamplingParityResult:
+    """Verify that resampling parameters match between training and inference.
+
+    Ensures that the exact same resampling convention (``closed``, ``label``,
+    ``origin``, ``offset``, etc.) is used in both the training data pipeline
+    and the inference/bundle pipeline.  A mismatch can cause subtle
+    distribution shift that silently degrades model performance.
+
+    The function compares all keys present in *either* config dict.  If a key
+    is present in one config but absent in the other, that counts as a
+    mismatch.
+
+    Args:
+        training_config: Resampling parameters used during training.
+            Expected keys: ``"closed"``, ``"label"``; optional:
+            ``"origin"``, ``"offset"``, ``"freq"``.
+        inference_config: Resampling parameters used during inference.
+            Same expected keys as ``training_config``.
+        raise_on_mismatch: If True (default), raise ``ValueError`` when a
+            mismatch is detected.
+
+    Returns:
+        ResamplingParityResult with comparison details.
+
+    Raises:
+        ValueError: If ``raise_on_mismatch=True`` and parameters differ.
+
+    Example:
+        >>> train_cfg = {"closed": "left", "label": "left"}
+        >>> infer_cfg = {"closed": "left", "label": "left"}
+        >>> result = verify_resampling_parity(train_cfg, infer_cfg)
+        >>> assert result.is_match
+        >>> # Mismatch example:
+        >>> bad_cfg = {"closed": "right", "label": "left"}
+        >>> verify_resampling_parity(train_cfg, bad_cfg)  # raises ValueError
+    """
+    all_keys = sorted(set(training_config.keys()) | set(inference_config.keys()))
+
+    # Ensure at least the critical keys are checked
+    critical_keys = ["closed", "label"]
+    for key in critical_keys:
+        if key not in all_keys:
+            all_keys.append(key)
+    all_keys = sorted(set(all_keys))
+
+    mismatches: list[str] = []
+
+    for key in all_keys:
+        train_val = training_config.get(key)
+        infer_val = inference_config.get(key)
+
+        if train_val is None and infer_val is None:
+            # Neither config specifies this key -- nothing to compare
+            continue
+
+        if train_val is None:
+            mismatches.append(
+                f"Parameter '{key}' is set in inference ('{infer_val}') "
+                f"but missing from training config."
+            )
+        elif infer_val is None:
+            mismatches.append(
+                f"Parameter '{key}' is set in training ('{train_val}') "
+                f"but missing from inference config."
+            )
+        elif str(train_val) != str(infer_val):
+            mismatches.append(
+                f"Parameter '{key}' mismatch: "
+                f"training='{train_val}' vs inference='{infer_val}'."
+            )
+
+    is_match = len(mismatches) == 0
+
+    result = ResamplingParityResult(
+        is_match=is_match,
+        mismatches=mismatches,
+        training_params=dict(training_config),
+        inference_params=dict(inference_config),
+    )
+
+    if not is_match:
+        mismatch_detail = "; ".join(mismatches)
+        logger.error(f"[ResamplingParity] Mismatch detected: {mismatch_detail}")
+        if raise_on_mismatch:
+            raise ValueError(
+                f"Resampling parity violation: {mismatch_detail}. "
+                f"Training and inference must use identical resampling parameters "
+                f"to avoid distribution shift."
+            )
+    else:
+        logger.info("[ResamplingParity] Training and inference resampling parameters match.")
+
+    return result
+
+
 __all__ = [
     "LookaheadAuditor",
     "LookaheadAuditResult",
@@ -502,4 +849,8 @@ __all__ = [
     "validate_resample_config",
     "audit_feature_lookahead",
     "audit_mtf_alignment",
+    "PropagationScanResult",
+    "scan_dependency_propagation",
+    "ResamplingParityResult",
+    "verify_resampling_parity",
 ]

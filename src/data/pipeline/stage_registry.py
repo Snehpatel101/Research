@@ -6,10 +6,10 @@ Defines the PipelineStage dataclass and provides stage registration utilities.
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class StageName(str, Enum):
+class StageName(StrEnum):
     """
     Canonical stage names for the pipeline.
 

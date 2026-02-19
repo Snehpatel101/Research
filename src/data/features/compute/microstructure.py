@@ -14,7 +14,7 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from src.data.features.compute._helpers import log_returns as _log_returns
+from src.data.features.compute._helpers import log_returns as _log_returns, sma as _sma
 
 # =============================================================================
 # MODULE-LEVEL CACHES (Phase 24: Avoid redundant computation)
@@ -60,9 +60,7 @@ def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
 # =============================================================================
 
 
-def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
-    return series.rolling(window=window, min_periods=window).mean()
+# _sma imported from _helpers.py (Phase H5 consolidation)
 
 
 def _rolling_cov(x: pd.Series, y: pd.Series, window: int) -> pd.Series:

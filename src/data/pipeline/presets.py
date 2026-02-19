@@ -27,13 +27,13 @@ Usage:
 """
 
 import logging
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class TradingPreset(Enum):
+class TradingPreset(StrEnum):
     """
     Enumeration of available trading presets.
 

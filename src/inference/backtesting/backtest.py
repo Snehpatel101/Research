@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -28,7 +28,7 @@ from .position_sizing import BasePositionSizer, create_position_sizer
 logger = logging.getLogger(__name__)
 
 
-class ExecutionModel(Enum):
+class ExecutionModel(StrEnum):
     """Order execution model types."""
 
     MARKET_ON_CLOSE = "market_on_close"

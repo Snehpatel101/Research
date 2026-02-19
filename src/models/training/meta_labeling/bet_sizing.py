@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
-class BetSizingStrategy(Enum):
+class BetSizingStrategy(StrEnum):
     """Bet sizing strategies for meta-labeling."""
 
     BINARY = "binary"  # Current: trade or no-trade

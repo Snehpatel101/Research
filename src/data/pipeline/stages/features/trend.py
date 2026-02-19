@@ -11,17 +11,10 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
+from ._helpers import np_shift1 as _np_shift1
 from .numba_functions import calculate_adx_numba, calculate_atr_numba
 
 logger = logging.getLogger(__name__)
-
-
-def _np_shift1(arr: np.ndarray) -> np.ndarray:
-    """Shift array by 1 using numpy (avoids pd.Series overhead)."""
-    result = np.empty_like(arr, dtype=np.float64)
-    result[0] = np.nan
-    result[1:] = arr[:-1]
-    return result
 
 
 def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14) -> pd.DataFrame:

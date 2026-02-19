@@ -18,13 +18,13 @@ Created: 2025-12-22
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-class SessionName(Enum):
+class SessionName(StrEnum):
     """Trading session names."""
 
     NEW_YORK = "new_york"

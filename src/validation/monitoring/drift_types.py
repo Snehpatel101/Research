@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # =============================================================================
@@ -16,7 +16,7 @@ from typing import Any
 # =============================================================================
 
 
-class DriftType(Enum):
+class DriftType(StrEnum):
     """Types of drift that can be detected."""
 
     CONCEPT = "concept"  # Model performance degradation
@@ -24,7 +24,7 @@ class DriftType(Enum):
     PREDICTION = "prediction"  # Prediction distribution shift
 
 
-class DriftSeverity(Enum):
+class DriftSeverity(StrEnum):
     """Severity levels for drift alerts."""
 
     NONE = "none"

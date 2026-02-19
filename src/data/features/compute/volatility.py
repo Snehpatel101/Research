@@ -12,7 +12,12 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from src.data.features.compute._helpers import log_returns as _log_returns
+from src.data.features.compute._helpers import (
+    ema as _ema,
+    log_returns as _log_returns,
+    rolling_std as _rolling_std,
+    sma as _sma,
+)
 
 # =============================================================================
 # CACHING INFRASTRUCTURE
@@ -107,19 +112,7 @@ def _get_std_cached(df: pd.DataFrame, column: str, window: int) -> pd.Series:
     return result
 
 
-def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average (non-cached, for arbitrary series)."""
-    return series.rolling(window=window, min_periods=window).mean()
-
-
-def _ema(series: pd.Series, span: int) -> pd.Series:
-    """Exponential moving average (non-cached, for arbitrary series)."""
-    return series.ewm(span=span, min_periods=span, adjust=False).mean()
-
-
-def _rolling_std(series: pd.Series, window: int) -> pd.Series:
-    """Rolling standard deviation (non-cached, for arbitrary series)."""
-    return series.rolling(window=window, min_periods=window).std()
+# _sma, _ema, _rolling_std imported from _helpers.py (Phase H5 consolidation)
 
 
 # =============================================================================

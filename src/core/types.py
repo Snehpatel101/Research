@@ -14,7 +14,7 @@ This is the SINGLE SOURCE OF TRUTH for:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
@@ -66,7 +66,7 @@ class DataRank(int, Enum):
 # =============================================================================
 
 
-class ModelFamily(str, Enum):
+class ModelFamily(StrEnum):
     """
     Model family classification.
 
@@ -99,7 +99,7 @@ class ModelFamily(str, Enum):
 # =============================================================================
 
 
-class FeatureFamily(str, Enum):
+class FeatureFamily(StrEnum):
     """
     Feature family classification (12 families, 162 base features).
 
@@ -139,7 +139,7 @@ class FeatureFamily(str, Enum):
 # =============================================================================
 
 
-class TrainingMode(str, Enum):
+class TrainingMode(StrEnum):
     """
     Training mode - determines training procedure.
 
@@ -160,7 +160,7 @@ class TrainingMode(str, Enum):
 # =============================================================================
 
 
-class CVMethod(str, Enum):
+class CVMethod(StrEnum):
     """
     Cross-validation method with proper purge/embargo handling.
 
@@ -183,7 +183,7 @@ class CVMethod(str, Enum):
 # =============================================================================
 
 
-class AdapterType(str, Enum):
+class AdapterType(StrEnum):
     """
     Adapter type for model data preparation.
 
@@ -210,7 +210,7 @@ class AdapterType(str, Enum):
 # =============================================================================
 
 
-class LabelingMethod(str, Enum):
+class LabelingMethod(StrEnum):
     """
     Labeling method for target generation.
 
@@ -231,7 +231,7 @@ class LabelingMethod(str, Enum):
 # =============================================================================
 
 
-class ScalingSource(str, Enum):
+class ScalingSource(StrEnum):
     """
     Indicates which component is responsible for feature scaling.
 

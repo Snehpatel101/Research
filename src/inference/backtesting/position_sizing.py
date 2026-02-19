@@ -12,13 +12,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
 
 
-class PositionSizingMethod(Enum):
+class PositionSizingMethod(StrEnum):
     """Available position sizing methods."""
 
     KELLY = "kelly"

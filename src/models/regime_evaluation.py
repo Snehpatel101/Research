@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-class VolatilityRegime(Enum):
+class VolatilityRegime(StrEnum):
     """Volatility regime classification based on rolling volatility percentiles."""
 
     LOW = "low"  # Bottom 25% of rolling volatility
@@ -46,7 +46,7 @@ class VolatilityRegime(Enum):
     HIGH = "high"  # Top 25% of rolling volatility
 
 
-class TrendRegime(Enum):
+class TrendRegime(StrEnum):
     """Trend regime classification based on ADX and directional indicators."""
 
     TRENDING_UP = "trending_up"  # ADX > 25 and +DI > -DI
@@ -54,7 +54,7 @@ class TrendRegime(Enum):
     MEAN_REVERTING = "mean_reverting"  # ADX < 20 (range-bound)
 
 
-class TimeOfDay(Enum):
+class TimeOfDay(StrEnum):
     """Trading session classification based on Eastern Time."""
 
     ASIA = "asia"  # 18:00-02:00 ET (Sunday-Friday)

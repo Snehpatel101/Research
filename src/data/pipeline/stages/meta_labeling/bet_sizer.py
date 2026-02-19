@@ -19,7 +19,7 @@ Engineering Rules Applied:
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -47,7 +47,7 @@ DEFAULT_VOLATILITY_LOOKBACK = 20  # Bars for volatility estimation
 # =============================================================================
 
 
-class BetSizingMethod(Enum):
+class BetSizingMethod(StrEnum):
     """Available bet sizing methods."""
 
     LINEAR = "linear"  # Simple linear scaling by confidence

@@ -18,7 +18,7 @@ Engineering Rules Applied:
 """
 
 import logging
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-class BetSizeMethod(Enum):
+class BetSizeMethod(StrEnum):
     """Methods for computing bet size in meta-labeling."""
 
     PROBABILITY = "probability"  # Use model probability as bet size

@@ -12,6 +12,7 @@ from src.data.adapters import PreparedData
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
+from src.validation.cv.oof_validation import OOFValidator
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,21 @@ class OOFGenerationService:
                 use_cache=True,
             )
 
+            # Post-training fold leakage verification (C4 audit fix)
+            cv = self._ensure_cv(request)
+            fold_indices = list(cv.split(X_train_df, y_train))
+            leakage_result = OOFValidator.validate_fold_leakage(
+                fold_indices=fold_indices,
+                purge_bars=request.purge_bars,
+                embargo_bars=request.embargo_bars,
+            )
+            if not leakage_result["passed"]:
+                logger.error(
+                    "OOF fold leakage detected for %s: %d violations",
+                    model_name,
+                    leakage_result["n_violations"],
+                )
+
             return oof_predictions.get(model_name)
 
         except Exception as e:
@@ -184,8 +200,12 @@ class OOFGenerationService:
 
         cv = self._ensure_cv(request)
 
+        # Collect fold indices for post-training leakage verification
+        all_fold_indices: list[tuple[np.ndarray, np.ndarray]] = []
+
         for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X_dummy, y_series)):
             logger.debug(f"  Fold {fold_idx + 1}: train={len(train_idx)}, val={len(val_idx)}")
+            all_fold_indices.append((train_idx, val_idx))
 
             # Slice 4D arrays directly by sample index
             X_train_fold = X_4d[train_idx]
@@ -230,6 +250,19 @@ class OOFGenerationService:
                     "val_accuracy": training_metrics.val_accuracy if training_metrics else None,
                     "val_f1": training_metrics.val_f1 if training_metrics else None,
                 }
+            )
+
+        # Post-training fold leakage verification (C4 audit fix)
+        leakage_result = OOFValidator.validate_fold_leakage(
+            fold_indices=all_fold_indices,
+            purge_bars=request.purge_bars,
+            embargo_bars=request.embargo_bars,
+        )
+        if not leakage_result["passed"]:
+            logger.error(
+                "4D OOF fold leakage detected for %s: %d violations",
+                model_name,
+                leakage_result["n_violations"],
             )
 
         # Validate coverage

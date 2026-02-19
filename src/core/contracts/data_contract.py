@@ -20,7 +20,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -30,7 +30,7 @@ from src.core.exceptions import DataContractViolation
 from src.core.types import DataRank
 
 
-class FeatureMode(str, Enum):
+class FeatureMode(StrEnum):
     """Feature generation mode for models."""
 
     ENGINEERED = "engineered"  # Pre-computed indicators (~180 features)
@@ -39,7 +39,7 @@ class FeatureMode(str, Enum):
     OOF_PROBS = "oof_probs"  # OOF predictions for meta-learners
 
 
-class ModelMTFMode(str, Enum):
+class ModelMTFMode(StrEnum):
     """
     Multi-timeframe mode for MODEL CONTRACTS (model input expectations).
 

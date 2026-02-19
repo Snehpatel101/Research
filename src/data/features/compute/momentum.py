@@ -11,6 +11,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import ema as _ema, sma as _sma
+
 # Import Numba for JIT compilation
 try:
     from numba import jit
@@ -34,18 +36,7 @@ except ImportError:
 # =============================================================================
 
 
-def _ema(series: pd.Series, span: int, min_periods: int | None = None) -> pd.Series:
-    """Exponential moving average."""
-    if min_periods is None:
-        min_periods = span
-    return series.ewm(span=span, min_periods=min_periods, adjust=False).mean()
-
-
-def _sma(series: pd.Series, window: int, min_periods: int | None = None) -> pd.Series:
-    """Simple moving average."""
-    if min_periods is None:
-        min_periods = window
-    return series.rolling(window=window, min_periods=min_periods).mean()
+# _sma, _ema imported from _helpers.py (Phase H5 consolidation)
 
 
 @jit(nopython=True, cache=True)

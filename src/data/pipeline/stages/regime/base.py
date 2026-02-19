@@ -7,13 +7,13 @@ and the common enumerations used across the regime detection system.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import pandas as pd
 
 
-class RegimeType(Enum):
+class RegimeType(StrEnum):
     """Types of market regime classification."""
 
     VOLATILITY = "volatility"
@@ -23,7 +23,7 @@ class RegimeType(Enum):
     COMPOSITE = "composite"
 
 
-class VolatilityRegimeLabel(Enum):
+class VolatilityRegimeLabel(StrEnum):
     """Volatility regime classification labels."""
 
     LOW = "low"
@@ -31,7 +31,7 @@ class VolatilityRegimeLabel(Enum):
     HIGH = "high"
 
 
-class TrendRegimeLabel(Enum):
+class TrendRegimeLabel(StrEnum):
     """Trend regime classification labels."""
 
     UPTREND = "uptrend"
@@ -39,7 +39,7 @@ class TrendRegimeLabel(Enum):
     SIDEWAYS = "sideways"
 
 
-class StructureRegimeLabel(Enum):
+class StructureRegimeLabel(StrEnum):
     """Market structure regime labels based on Hurst exponent."""
 
     MEAN_REVERTING = "mean_reverting"

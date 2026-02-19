@@ -614,13 +614,13 @@ class UnifiedConfig:
         # Optionally coerce types
         data, _ = coerce_types(data, warn_on_coercion=True)
 
-        # Optionally validate
+        # Validate configuration (strict=True raises on invalid config to catch typos early)
         if validate:
-            result = validate_config(data, strict=False)
+            result = validate_config(data, strict=True)
             if not result.is_valid:
-                logger.warning(f"Configuration has {len(result.errors)} validation error(s)")
+                logger.error(f"Configuration has {len(result.errors)} validation error(s)")
                 for error in result.errors:
-                    logger.warning(f"  - {error}")
+                    logger.error(f"  - {error}")
 
         return cls(
             run_id=data.get("run_id", _generate_run_id()),

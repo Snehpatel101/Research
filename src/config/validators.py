@@ -23,7 +23,7 @@ import logging
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +32,7 @@ from src.core.exceptions import ConfigError
 logger = logging.getLogger(__name__)
 
 
-class ValidationSeverity(Enum):
+class ValidationSeverity(StrEnum):
     """Severity level for validation issues."""
 
     ERROR = "error"  # Must be fixed, will prevent operation
@@ -603,7 +603,7 @@ def _parse_timeframe_minutes(tf: str) -> int | None:
 
 def validate_config(
     data: dict[str, Any],
-    strict: bool = False,
+    strict: bool = True,
 ) -> ValidationResult:
     """
     Validate a configuration dictionary.
@@ -614,8 +614,9 @@ def validate_config(
     ----------
     data : dict[str, Any]
         Configuration dictionary (typically loaded from YAML)
-    strict : bool, default False
-        If True, raise ConfigValidationError on any errors
+    strict : bool, default True
+        If True, raise ConfigValidationError on any errors.
+        Changed from False to True to catch typos and invalid config keys early.
 
     Returns
     -------
@@ -675,7 +676,7 @@ def validate_config(
 
 def validate_config_file(
     path: str | Path,
-    strict: bool = False,
+    strict: bool = True,
 ) -> ValidationResult:
     """
     Validate a YAML configuration file.
@@ -684,8 +685,9 @@ def validate_config_file(
     ----------
     path : str | Path
         Path to the YAML configuration file
-    strict : bool, default False
-        If True, raise ConfigValidationError on any errors
+    strict : bool, default True
+        If True, raise ConfigValidationError on any errors.
+        Changed from False to True to catch typos and invalid config keys early.
 
     Returns
     -------

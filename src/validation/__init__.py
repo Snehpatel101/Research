@@ -146,10 +146,14 @@ from src.validation.lookahead_audit import (
     LookaheadAuditor,
     LookaheadAuditResult,
     LookaheadBiasError,
+    PropagationScanResult,
     ResampleConfig,
+    ResamplingParityResult,
     audit_feature_lookahead,
     audit_mtf_alignment,
+    scan_dependency_propagation,
     validate_resample_config,
+    verify_resampling_parity,
 )
 from src.validation.statistical_tests import (
     LossFunction,
@@ -169,6 +173,12 @@ __all__ = [
     "validate_resample_config",
     "audit_feature_lookahead",
     "audit_mtf_alignment",
+    # H3: Dependency propagation scan
+    "PropagationScanResult",
+    "scan_dependency_propagation",
+    # M6: Resampling parity verification
+    "ResamplingParityResult",
+    "verify_resampling_parity",
     # Deflated Sharpe Ratio
     "DSRConfig",
     "DSRResult",

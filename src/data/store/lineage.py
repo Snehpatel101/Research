@@ -18,7 +18,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,7 +31,7 @@ ConfigDict = dict[str, Any]
 logger = logging.getLogger(__name__)
 
 
-class TransformationType(str, Enum):
+class TransformationType(StrEnum):
     """Types of transformations tracked in lineage."""
 
     INGESTION = "ingestion"  # Raw data loading

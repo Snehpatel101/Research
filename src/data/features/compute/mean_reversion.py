@@ -9,23 +9,21 @@ useful for identifying trading opportunities and regime changes.
 
 from collections.abc import Callable
 
+import functools
+
 import numpy as np
 import pandas as pd
 from scipy import stats
+
+from src.data.features.compute._helpers import rolling_std, sma
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
-
-def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
-    return series.rolling(window=window, min_periods=1).mean()
-
-
-def _rolling_std(series: pd.Series, window: int) -> pd.Series:
-    """Rolling standard deviation."""
-    return series.rolling(window=window, min_periods=1).std()
+# mean_reversion uses min_periods=1 (different from the default min_periods=window)
+_sma = functools.partial(sma, min_periods=1)
+_rolling_std = functools.partial(rolling_std, min_periods=1)
 
 
 # =============================================================================

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 import numpy as np
@@ -29,7 +29,7 @@ from scipy import stats  # type: ignore[import-untyped]
 logger = logging.getLogger(__name__)
 
 
-class LossFunction(Enum):
+class LossFunction(StrEnum):
     """Loss functions for Diebold-Mariano test."""
 
     MSE = "mse"  # Mean Squared Error

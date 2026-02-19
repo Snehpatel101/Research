@@ -16,7 +16,7 @@ Import from here:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from src.config.base import BaseConfig
 from src.core.types import CVMethod
@@ -26,7 +26,7 @@ from src.core.types import CVMethod
 # =============================================================================
 
 
-class WindowType(str, Enum):
+class WindowType(StrEnum):
     """Walk-forward window types."""
 
     EXPANDING = "expanding"

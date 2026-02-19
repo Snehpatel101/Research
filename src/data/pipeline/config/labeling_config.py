@@ -7,11 +7,11 @@ including triple-barrier, directional, threshold, regression, and meta-labeling.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class LabelingStrategyType(Enum):
+class LabelingStrategyType(StrEnum):
     """Enumeration of available labeling strategies."""
 
     TRIPLE_BARRIER = "triple_barrier"

@@ -16,7 +16,7 @@ Import from here:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,7 @@ from src.config.base import BaseConfig
 # =============================================================================
 
 
-class InferenceMode(str, Enum):
+class InferenceMode(StrEnum):
     """Inference execution modes."""
 
     SINGLE = "single"
@@ -35,7 +35,7 @@ class InferenceMode(str, Enum):
     STREAMING = "streaming"
 
 
-class PositionSizingMethod(str, Enum):
+class PositionSizingMethod(StrEnum):
     """Position sizing methods."""
 
     FIXED = "fixed"

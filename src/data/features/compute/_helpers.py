@@ -7,6 +7,10 @@ Previously had 4 duplicate _log_returns() definitions across:
 - volatility.py
 - regime.py
 - microstructure.py
+
+Phase H5: Consolidated duplicate _sma, _ema, _rolling_std definitions from:
+- momentum.py, moving_average.py, volatility.py, volume.py, regime.py,
+  order_flow.py, mean_reversion.py, liquidity.py, microstructure.py
 """
 
 from __future__ import annotations
@@ -29,3 +33,66 @@ def log_returns(close: pd.Series) -> pd.Series:
         Series of log returns: log(close_t / close_{t-1})
     """
     return np.log(close / close.shift(1))
+
+
+def sma(series: pd.Series, window: int, min_periods: int | None = None) -> pd.Series:
+    """
+    Simple moving average.
+
+    This is the canonical implementation. All feature compute modules should
+    import from here instead of defining their own ``_sma``.
+
+    Args:
+        series: Input time series.
+        window: Rolling window size.
+        min_periods: Minimum number of observations required. Defaults to
+            *window* when ``None``.
+
+    Returns:
+        Simple moving average values.
+    """
+    if min_periods is None:
+        min_periods = window
+    return series.rolling(window=window, min_periods=min_periods).mean()
+
+
+def ema(series: pd.Series, span: int, min_periods: int | None = None) -> pd.Series:
+    """
+    Exponential moving average.
+
+    This is the canonical implementation. All feature compute modules should
+    import from here instead of defining their own ``_ema``.
+
+    Args:
+        series: Input time series.
+        span: EMA span (decay period).
+        min_periods: Minimum number of observations required. Defaults to
+            *span* when ``None``.
+
+    Returns:
+        Exponential moving average values.
+    """
+    if min_periods is None:
+        min_periods = span
+    return series.ewm(span=span, min_periods=min_periods, adjust=False).mean()
+
+
+def rolling_std(series: pd.Series, window: int, min_periods: int | None = None) -> pd.Series:
+    """
+    Rolling standard deviation.
+
+    This is the canonical implementation. All feature compute modules should
+    import from here instead of defining their own ``_rolling_std``.
+
+    Args:
+        series: Input time series.
+        window: Rolling window size.
+        min_periods: Minimum number of observations required. Defaults to
+            *window* when ``None``.
+
+    Returns:
+        Rolling standard deviation values.
+    """
+    if min_periods is None:
+        min_periods = window
+    return series.rolling(window=window, min_periods=min_periods).std()

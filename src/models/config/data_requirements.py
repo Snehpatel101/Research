@@ -14,13 +14,13 @@ This is the CANONICAL location for model data requirements. Import from here:
 """
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from src.core.types import ModelFamily
 
 
-class ScalerType(str, Enum):
+class ScalerType(StrEnum):
     """
     Supported scaler types for data normalization.
 

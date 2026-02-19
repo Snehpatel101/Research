@@ -43,7 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from threading import Lock
 from typing import Any, TypeVar
 
@@ -463,7 +463,7 @@ TRANSIENT_RETRY = RetryConfig(
 # =============================================================================
 
 
-class CircuitState(Enum):
+class CircuitState(StrEnum):
     """Circuit breaker states."""
 
     CLOSED = "closed"  # Normal operation - calls allowed

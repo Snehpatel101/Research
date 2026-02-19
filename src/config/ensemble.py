@@ -16,7 +16,7 @@ Import from here:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from src.config.base import BaseConfig
 
@@ -25,7 +25,7 @@ from src.config.base import BaseConfig
 # =============================================================================
 
 
-class EnsembleMethod(str, Enum):
+class EnsembleMethod(StrEnum):
     """Supported ensemble methods."""
 
     STACKING = "stacking"
@@ -34,14 +34,14 @@ class EnsembleMethod(str, Enum):
     WEIGHTED_AVERAGE = "weighted_average"
 
 
-class VotingType(str, Enum):
+class VotingType(StrEnum):
     """Voting types for voting ensemble."""
 
     HARD = "hard"
     SOFT = "soft"
 
 
-class MetaLearnerType(str, Enum):
+class MetaLearnerType(StrEnum):
     """Supported meta-learner types."""
 
     RIDGE = "ridge"

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
@@ -42,7 +42,7 @@ logger.addHandler(logging.NullHandler())
 # =============================================================================
 
 
-class HMMRegimeLabel(Enum):
+class HMMRegimeLabel(StrEnum):
     """HMM regime classification labels based on volatility ordering."""
 
     LOW_VOLATILITY = "low_vol"

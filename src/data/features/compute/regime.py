@@ -13,7 +13,12 @@ from collections.abc import Callable
 
 import pandas as pd
 
-from src.data.features.compute._helpers import log_returns as _log_returns
+from src.data.features.compute._helpers import (
+    ema as _ema,
+    log_returns as _log_returns,
+    rolling_std as _rolling_std,
+    sma as _sma,
+)
 
 # =============================================================================
 # CACHING INFRASTRUCTURE
@@ -42,22 +47,7 @@ def _clear_cache_if_df_changed(df: pd.DataFrame) -> None:
 # =============================================================================
 
 
-def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
-    return series.rolling(window=window, min_periods=window).mean()
-
-
-def _ema(series: pd.Series, span: int) -> pd.Series:
-    """Exponential moving average."""
-    return series.ewm(span=span, min_periods=span, adjust=False).mean()
-
-
-def _rolling_std(series: pd.Series, window: int) -> pd.Series:
-    """Rolling standard deviation."""
-    return series.rolling(window=window, min_periods=window).std()
-
-
-# _log_returns imported from _helpers.py (Phase 29 consolidation)
+# _sma, _ema, _rolling_std, _log_returns imported from _helpers.py (Phase H5 consolidation)
 
 
 def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:

@@ -12,6 +12,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import rolling_std as _rolling_std, sma as _sma
+
 # =============================================================================
 # CACHING INFRASTRUCTURE
 # =============================================================================
@@ -50,14 +52,7 @@ def _set_cached(df: pd.DataFrame, key: str, value: pd.Series) -> pd.Series:
 # =============================================================================
 
 
-def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
-    return series.rolling(window=window, min_periods=window).mean()
-
-
-def _rolling_std(series: pd.Series, window: int) -> pd.Series:
-    """Rolling standard deviation."""
-    return series.rolling(window=window, min_periods=window).std()
+# _sma, _rolling_std imported from _helpers.py (Phase H5 consolidation)
 
 
 def _get_datetime_index(df: pd.DataFrame) -> pd.DatetimeIndex:

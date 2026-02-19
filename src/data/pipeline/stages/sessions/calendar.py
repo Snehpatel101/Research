@@ -26,7 +26,7 @@ Created: 2025-12-22
 import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from enum import Enum
+from enum import StrEnum
 
 import numpy as np
 import pandas as pd
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
-class TradingDayType(Enum):
+class TradingDayType(StrEnum):
     """Type of trading day."""
 
     REGULAR = "regular"

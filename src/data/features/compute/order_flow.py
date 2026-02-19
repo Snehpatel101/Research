@@ -15,6 +15,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import sma as _sma
+
 # =============================================================================
 # CACHING INFRASTRUCTURE
 # =============================================================================
@@ -56,9 +58,7 @@ def _get_order_imbalance_cached(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
-    return series.rolling(window=window, min_periods=window).mean()
+# _sma imported from _helpers.py (Phase H5 consolidation)
 
 
 # =============================================================================

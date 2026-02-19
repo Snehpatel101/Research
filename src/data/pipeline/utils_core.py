@@ -8,14 +8,14 @@ the pipeline stages.
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class StageStatus(Enum):
+class StageStatus(StrEnum):
     """Status of a pipeline stage execution."""
 
     PENDING = "pending"

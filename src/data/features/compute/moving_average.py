@@ -11,6 +11,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import ema as _ema_base, sma as _sma_base
+
 # Import Numba for JIT compilation
 try:
     from numba import jit
@@ -84,23 +86,23 @@ def _ema_numba(values: np.ndarray, span: int) -> np.ndarray:
 
 
 def _sma(series: pd.Series, window: int) -> pd.Series:
-    """Simple moving average."""
+    """Simple moving average (Numba-accelerated when available)."""
     if NUMBA_AVAILABLE:
         values = series.values.astype(np.float64)
         sma_values = _sma_numba(values, window)
         return pd.Series(sma_values, index=series.index)
     else:
-        return series.rolling(window=window, min_periods=window).mean()
+        return _sma_base(series, window)
 
 
 def _ema(series: pd.Series, span: int) -> pd.Series:
-    """Exponential moving average."""
+    """Exponential moving average (Numba-accelerated when available)."""
     if NUMBA_AVAILABLE:
         values = series.values.astype(np.float64)
         ema_values = _ema_numba(values, span)
         return pd.Series(ema_values, index=series.index)
     else:
-        return series.ewm(span=span, min_periods=span, adjust=False).mean()
+        return _ema_base(series, span)
 
 
 def _crossover(fast: pd.Series, slow: pd.Series) -> pd.Series:

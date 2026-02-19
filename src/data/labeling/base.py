@@ -10,14 +10,14 @@ Consolidated from phase1/stages/labeling/base.py for unified pipeline.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
 
-class LabelingType(Enum):
+class LabelingType(StrEnum):
     """Enumeration of available labeling strategies."""
 
     TRIPLE_BARRIER = "triple_barrier"

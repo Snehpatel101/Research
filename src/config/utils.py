@@ -23,7 +23,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.core.exceptions import ConfigValueError
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class ConfigSource(Enum):
+class ConfigSource(StrEnum):
     """Source of a configuration value."""
 
     YAML_FILE = "yaml_file"

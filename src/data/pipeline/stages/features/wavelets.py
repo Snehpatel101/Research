@@ -16,15 +16,9 @@ import numpy as np
 import pandas as pd
 from numba import njit
 
+from ._helpers import np_shift1 as _np_shift1
+
 logger = logging.getLogger(__name__)
-
-
-def _np_shift1(arr: np.ndarray) -> np.ndarray:
-    """Shift array by 1 using numpy (avoids pd.Series overhead)."""
-    result = np.empty_like(arr, dtype=np.float64)
-    result[0] = np.nan
-    result[1:] = arr[:-1]
-    return result
 
 
 try:
