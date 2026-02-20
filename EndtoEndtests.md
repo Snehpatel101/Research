@@ -82,13 +82,14 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 8 | ResNet1D | CNN | 0.6366 | 0.7137 | 0.3450 | -0.87 | 3 | 472s |
 | 9 | PatchTST | Transformer | 0.6212 | 0.6682 | — | — | — | 88s |
 | 10 | iTransformer | Transformer | 0.1678 | 0.2392 | 0.1182 | -0.59 | 1 | 88s |
-| 11 | TFT | Transformer | *retrying* | — | — | — | — | — |
-| 12 | N-BEATS | MLP | *retrying* | — | — | — | — | — |
+| 11 | TFT | Transformer | OOM | — | — | — | — | — |
+| 12 | N-BEATS | MLP | **0.6517** | 0.7562 | — | — | — | 97s |
 
 **Notes on Walk-Forward Mode:**
 - Walk-forward consistently outperforms standard mode for neural models — the expanding window gives the model more data per training iteration.
-- Top performers: **TCN (0.6499)**, **GRU (0.6366)**, **ResNet1D (0.6366)**, **PatchTST (0.6212)**
+- Top performers: **N-BEATS (0.6517)**, **TCN (0.6499)**, **GRU (0.6366)**, **ResNet1D (0.6366)**, **PatchTST (0.6212)**
 - Boosting models are more consistent across modes (~0.34-0.37 in both).
+- **TFT walk-forward OOM**: TFT uses ~5GB RAM for standard mode; walk-forward multiplies this across windows, exceeding 16GB. Requires GPU or 32GB+ RAM.
 - Negative Sharpe ratios across all backtests — expected with 1 week of data, 1 Optuna trial, and class imbalance. This is a pipeline validation test, not a performance benchmark.
 
 ---
@@ -103,6 +104,8 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 4 | InceptionTime + ResNet1D | 3 | 0% | -0.87 | $99,961.37 | -0.049% | -$38.63 |
 | 5 | PatchTST + iTransformer | 8 (std), 1 (wf) | 50% (std) | -0.25 (std) | $99,957.47 (std) | — | -$42.53 (std) |
 | 6 | TFT + N-BEATS (std) | 0 | 0% | 0.00 | $100,000 | 0.000% | $0.00 |
+
+**Note:** TFT walk-forward OOM on 16GB RAM. N-BEATS walk-forward PASS (F1=0.6517).
 
 **Backtest Notes:**
 - All backtests use $100,000 initial capital with transaction costs and slippage included
@@ -202,10 +205,10 @@ Models trained in batches of 2 to stay within 16GB RAM:
 - **Best for**: Long-range dependencies, multi-timeframe fusion
 
 ### MLP (N-BEATS)
-- Standard F1=0.2851 (all-neutral predictions)
-- Walk-forward results pending
-- **Fastest** neural model to train
-- **Best for**: Univariate time-series decomposition
+- Standard F1=0.2851 (all-neutral predictions in standard OOF mode)
+- Walk-forward F1=**0.6517** — second-best overall after TCN
+- **Fast** training: 97s walk-forward
+- **Best for**: Univariate time-series decomposition, trend/seasonality extraction
 
 ---
 
@@ -226,4 +229,4 @@ Models trained in batches of 2 to stay within 16GB RAM:
 ---
 
 *Last updated: 2026-02-19*
-*Batch 6 standard complete. Walk-forward retrying.*
+*All 12 models tested. 11/12 walk-forward PASS, 1 OOM (TFT — needs 32GB+ RAM or GPU).*

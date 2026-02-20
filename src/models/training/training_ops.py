@@ -326,6 +326,7 @@ class TrainingOpsMixin:
             gap_bars=self.config.purge_bars, embargo_bars=self.config.embargo_bars,
         )
         trainer = WalkForwardTrainer(exp_config, wf_config)
+        trainer._pipeline_config = self.config  # Wire training params (max_epochs, batch_size, etc.)
 
         prepared = self._data_preparer.prepare(
             df=df, model_name=self.config.models[0], additional_dfs=additional_dfs,

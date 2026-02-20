@@ -148,7 +148,7 @@ class TimeSeriesOptunaTuner:
                     else:
                         w_train = sample_weights.iloc[train_idx].values
 
-                # Train and evaluate — inject max_epochs if configured
+                # Train and evaluate - inject max_epochs if configured
                 model_params = dict(params)
                 if self.max_epochs is not None:
                     model_params["max_epochs"] = self.max_epochs

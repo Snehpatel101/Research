@@ -634,6 +634,7 @@ class TestTimestampAlignment:
         assert idx_map.max() < len(higher_df)
 
     def test_ratio_fallback_without_datetime_index(self):
+        """Non-DatetimeIndex DataFrames should raise ValueError (Phase 60 change)."""
         from src.data.adapters.multi_stream import MultiStreamAdapter
 
         rng = np.random.RandomState(42)
@@ -667,12 +668,10 @@ class TestTimestampAlignment:
 
         tf_dfs = {"1min": anchor_df, "5min": higher_df}
         feature_cols = ["open", "high", "low", "close", "volume"]
-        maps = adapter._build_timestamp_index_maps(
-            anchor_df, tf_dfs, ["1min", "5min"], feature_cols
-        )
-        assert "1min" in maps
-        assert "5min" in maps
-        assert len(maps["5min"]["anchor_to_tf"]) == n
+        with pytest.raises(ValueError, match="requires DatetimeIndex"):
+            adapter._build_timestamp_index_maps(
+                anchor_df, tf_dfs, ["1min", "5min"], feature_cols
+            )
 
     def test_full_transform_with_timestamps(self):
         from src.data.adapters.multi_stream import MultiStreamAdapter

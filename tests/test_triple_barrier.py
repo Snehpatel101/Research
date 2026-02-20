@@ -227,6 +227,7 @@ class TestLabelerAPI:
             lower_mult=2.0,
             horizon=20,
             apply_transaction_costs=False,
+            atr_column=None,
         )
         labeler = TripleBarrierLabeler(config)
         labels = labeler.create_labels(df)

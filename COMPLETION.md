@@ -4,12 +4,43 @@
 
 ---
 
-## Phase 64: End-to-End Pipeline Smoke Test — 12 Models x 2 Modes | 2026-02-19 | IN PROGRESS
+## Phase 65: Pipeline Audit & Test Suite Cleanup | 2026-02-19 | COMPLETE
 
-**Impact:** Comprehensive validation of all 12 model families across standard + walk-forward training modes. 5 additional bugs found and fixed. See `EndtoEndtests.md` for full results.
+**Impact:** 3-agent deep audit of all 8 changed files + 13 model classes. 1 critical dead-code bug fixed, 3 pre-existing test failures fixed. Test suite: **212/212 passed (0 failed)**.
+
+### Audit Results (3 parallel agents)
+
+| Agent | Scope | Files Reviewed | Result |
+|-------|-------|----------------|--------|
+| Training pipeline core | training_ops, model_trainer, trainer, model_training, hyperparameter_tuning | 5 changed + 13 models | **ALL PASS** |
+| Walk-forward + CV | walk_forward.py, cv_tuner.py, experiment.py | 3 changed + cross-refs | **2 issues found** |
+| Model .fit() signatures | All 13 model classes | 13 models + BaseModel | **ALL PASS** |
+
+### Bugs Found & Fixed (4)
+
+| # | Severity | Bug | File | Fix |
+|:-:|----------|-----|------|-----|
+| 1 | Critical | `_pipeline_config` never wired to WalkForwardTrainer — max_epochs/batch_size dead code | `training_ops.py` | Added `trainer._pipeline_config = self.config` |
+| 2 | Minor | Corrupted `U+FFFD` character in comment | `cv_tuner.py` | Replaced with `-` |
+| 3 | Low | Sharpe ratio returns 7e16 for constant returns (float precision) | `metrics.py` | Changed `std <= 0` to `std < 1e-12` |
+| 4 | Low | Triple barrier test missing `atr_column=None` | `test_triple_barrier.py` | Set `atr_column=None` for inline ATR computation |
+| 5 | Low | Test expected removed ratio-fallback behavior | `test_all.py` | Updated to expect `ValueError` (Phase 60 change) |
+
+### Test Suite Progress
+
+| Metric | Before Phase 63 | After Phase 64 | After Phase 65 |
+|--------|----------------|----------------|----------------|
+| Passed | 195 | 209 | **212** |
+| Failed | 17 | 2 | **0** |
+
+---
+
+## Phase 64: End-to-End Pipeline Smoke Test — 12 Models x 2 Modes | 2026-02-19 | COMPLETE
+
+**Impact:** Comprehensive validation of all 12 model families across standard + walk-forward training modes. 6 bugs found and fixed. 12/12 standard PASS, 11/12 walk-forward PASS (TFT OOM on 16GB). See `EndtoEndtests.md` for full results.
 **Constraint:** 1 week MES data, 1 Optuna trial, CPU-only (i5-13600, 16GB RAM).
 
-### Training Results (10/12 complete, batch 6 in progress)
+### Training Results (12/12 standard, 11/12 walk-forward)
 
 | Model | Family | Standard F1 | Walk-Forward F1 | Status |
 |-------|--------|------------|-----------------|--------|
@@ -23,10 +54,10 @@
 | ResNet1D | CNN | 0.0000 | 0.6366 | PASS |
 | PatchTST | Transformer | 0.2851 | 0.6212 | PASS |
 | iTransformer | Transformer | 0.3524 | 0.1678 | PASS |
-| TFT | Transformer | — | — | Running |
-| N-BEATS | MLP | — | — | Running |
+| TFT | Transformer | 0.2851 | OOM | PASS (std) |
+| N-BEATS | MLP | 0.2851 | 0.6517 | PASS |
 
-### Bugs Found & Fixed (5)
+### Bugs Found & Fixed (6)
 
 | # | Bug | File | Fix |
 |:-:|-----|------|-----|
@@ -35,6 +66,7 @@
 | 3 | torch.compile state_dict prefix | `base_rnn.py` | `removeprefix("_orig_mod.")` cleanup |
 | 4 | ResNet1D even kernel padding | `resnet1d_model.py` | Sequence length alignment in residual blocks |
 | 5 | Walk-forward 4D reshape missing | `walk_forward.py` + `training_ops.py` | 4D metadata storage + reconstruction |
+| 6 | max_epochs not propagated to neural models | 8 files | Wired through full training pipeline |
 
 ### Pipeline Features Verified
 

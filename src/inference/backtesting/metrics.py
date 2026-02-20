@@ -55,7 +55,7 @@ def calculate_sharpe_ratio(
     mean_excess = np.mean(excess_returns)
     std_returns = np.std(returns, ddof=1)
 
-    if std_returns <= 0 or np.isnan(std_returns):
+    if std_returns < 1e-12 or np.isnan(std_returns):
         return 0.0
 
     # Per-period Sharpe
