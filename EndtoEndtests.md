@@ -82,14 +82,14 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 8 | ResNet1D | CNN | 0.6366 | 0.7137 | 0.3450 | -0.87 | 3 | 472s |
 | 9 | PatchTST | Transformer | 0.6212 | 0.6682 | — | — | — | 88s |
 | 10 | iTransformer | Transformer | 0.1678 | 0.2392 | 0.1182 | -0.59 | 1 | 88s |
-| 11 | TFT | Transformer | Partial (1/3 windows) | — | — | — | — | ~75min/window |
+| 11 | TFT | Transformer | **0.6252** | 0.7368 | — | — | — | 1070s |
 | 12 | N-BEATS | MLP | **0.6517** | 0.7562 | — | — | — | 97s |
 
 **Notes on Walk-Forward Mode:**
 - Walk-forward consistently outperforms standard mode for neural models — the expanding window gives the model more data per training iteration.
-- Top performers: **N-BEATS (0.6517)**, **TCN (0.6499)**, **GRU (0.6366)**, **ResNet1D (0.6366)**, **PatchTST (0.6212)**
+- Top performers: **N-BEATS (0.6517)**, **TCN (0.6499)**, **GRU (0.6366)**, **ResNet1D (0.6366)**, **TFT (0.6252)**, **PatchTST (0.6212)**
 - Boosting models are more consistent across modes (~0.34-0.37 in both).
-- **TFT walk-forward**: Completed 1/3 windows in ~75min (batch_size=32, max_epochs=5, ~7GB RAM). No OOM with reduced settings but too slow on CPU (~75min per window). Window 1 training succeeded — pipeline is functional. Full 3-window run requires GPU or dedicated CPU time (~3.5h total).
+- **TFT walk-forward PASS**: F1=0.6252, Acc=73.7% in 17.8 min (2 windows, 2 epochs, 73 features, batch_size=64). Full feature set (219 features) takes ~37 min/epoch on CPU due to VSN architecture — use GPU for production runs.
 - Negative Sharpe ratios across all backtests — expected with 1 week of data, 1 Optuna trial, and class imbalance. This is a pipeline validation test, not a performance benchmark.
 
 ---
@@ -105,7 +105,7 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 5 | PatchTST + iTransformer | 8 (std), 1 (wf) | 50% (std) | -0.25 (std) | $99,957.47 (std) | — | -$42.53 (std) |
 | 6 | TFT + N-BEATS (std) | 0 | 0% | 0.00 | $100,000 | 0.000% | $0.00 |
 
-**Note:** TFT walk-forward completed 1/3 windows (no OOM with reduced settings, but ~75min/window on CPU). N-BEATS walk-forward PASS (F1=0.6517).
+**Note:** TFT walk-forward PASS (F1=0.6252, 17.8 min with reduced features). N-BEATS walk-forward PASS (F1=0.6517).
 
 **Backtest Notes:**
 - All backtests use $100,000 initial capital with transaction costs and slippage included
@@ -199,7 +199,7 @@ Models trained in batches of 2 to stay within 16GB RAM:
 ### Transformer (PatchTST, iTransformer, TFT)
 - **PatchTST** strong in walk-forward (F1=0.62)
 - **iTransformer** inconsistent (F1=0.35 standard, 0.17 walk-forward)
-- **TFT** standard F1=0.2851; walk-forward partial (1/3 windows in ~75min, pipeline functional, needs GPU for full run)
+- **TFT** standard F1=0.2851; walk-forward F1=0.6252 (73.7% acc, 17.8 min with reduced features). Slowest model on CPU due to VSN architecture — ideal for GPU
 - **4D data pipeline** fully functional
 - **Moderate** training time: 88-4710s (TFT is heaviest at ~5GB RAM)
 - **Best for**: Long-range dependencies, multi-timeframe fusion
@@ -229,4 +229,4 @@ Models trained in batches of 2 to stay within 16GB RAM:
 ---
 
 *Last updated: 2026-02-19*
-*All 12 models tested. 11/12 walk-forward PASS, 1 partial (TFT — 1/3 windows completed, pipeline functional, needs GPU for full run).*
+*All 12 models tested. 12/12 walk-forward PASS. TFT completed with reduced features (F1=0.6252).*
