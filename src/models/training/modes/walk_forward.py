@@ -383,6 +383,33 @@ class WalkForwardTrainer:
                         f"    Created sequences: ({X_train_scaled.shape[0]}, {seq_len}, {n_features})"
                     )
 
+            elif contract.input_rank == DataRank.MULTI_TF_4D:
+                # 4D multi-stream models (PatchTST, iTransformer): reshape from flattened 2D
+                nd_shape = container.metadata.get("original_nd_shape")
+                if nd_shape is not None:
+                    # Reconstruct from stored original shape: (n_timeframes, seq_len, n_features)
+                    X_train_scaled = X_train_scaled.reshape(-1, *nd_shape)
+                    X_test_scaled = X_test_scaled.reshape(-1, *nd_shape)
+                    logger.debug(
+                        f"    Reshaped to 4D: {X_train_scaled.shape}"
+                    )
+                else:
+                    # Fallback: try to infer shape from contract
+                    seq_len = contract.sequence_length
+                    n_tf = container.metadata.get("n_timeframes", len(getattr(contract, "mtf_timeframes", ("5min",))))
+                    n_flat = X_train_scaled.shape[1]
+                    if n_flat % (n_tf * seq_len) == 0:
+                        n_features = n_flat // (n_tf * seq_len)
+                        X_train_scaled = X_train_scaled.reshape(-1, n_tf, seq_len, n_features)
+                        X_test_scaled = X_test_scaled.reshape(-1, n_tf, seq_len, n_features)
+                        logger.debug(
+                            f"    Inferred 4D reshape: {X_train_scaled.shape}"
+                        )
+                    else:
+                        raise ValueError(
+                            f"Cannot reconstruct 4D shape for {model_name}: "
+                            f"n_flat={n_flat}, n_tf={n_tf}, seq_len={seq_len}"
+                        )
             # Handle sample weights
             w_train = None
             if weights is not None:

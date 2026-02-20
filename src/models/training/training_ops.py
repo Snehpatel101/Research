@@ -365,6 +365,14 @@ class TrainingOpsMixin:
             train_df=full_df, val_df=None, test_df=None,
             horizon=horizon, feature_columns=list(X_all_df.columns),
         )
+        # Store original data shape metadata for 4D model reconstruction
+        if prepared.data_rank > 2:
+            original_shape = X_all.shape[1:]  # (n_timeframes, seq_len, n_features) for 4D
+            container.metadata["original_nd_shape"] = original_shape
+            container.metadata["data_rank"] = prepared.data_rank
+            container.metadata["n_timeframes"] = prepared.n_timeframes
+            container.metadata["sequence_length"] = prepared.sequence_length
+            logger.info(f"  Stored original shape metadata: {original_shape} (rank={prepared.data_rank})")
         logger.info(
             f"  Walk-forward data: {n_all} samples "
             f"(train={len(prepared.X_train)}, val={prepared.n_val}, test={prepared.n_test})"
