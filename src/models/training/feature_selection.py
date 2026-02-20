@@ -167,11 +167,9 @@ class FeatureSelectionMixin:
         else:
             logger.info("  [2/3] Leakage detection: SKIPPED (check_leakage=False)")
 
-        # 3. Lookahead audit
-        if self.config.check_lookahead:
-            self._validate_lookahead(errors, warnings)
-        else:
-            logger.info("  [3/3] Lookahead audit: SKIPPED (check_lookahead=False)")
+        # 3. Lookahead audit — mandatory (consistent with data pipeline Phase 14C)
+        logger.info("  [3/3] Lookahead audit: running (mandatory)")
+        self._validate_lookahead(errors, warnings)
 
         if warnings:
             logger.warning("\n  Validation warnings:")
@@ -185,7 +183,7 @@ class FeatureSelectionMixin:
                 f"To bypass validation, set in PipelineConfig:\n"
                 f"  - strict_validation=False (disable contract validation)\n"
                 f"  - check_leakage=False (disable leakage detection)\n"
-                f"  - check_lookahead=False (disable lookahead audit)"
+                f"  Note: lookahead audit is mandatory and cannot be disabled."
             )
 
         logger.info("\n  Pre-training validation: PASSED")
@@ -415,15 +413,19 @@ class FeatureSelectionMixin:
 
             for model_key, oof in self._oof_predictions.items():
                 if oof is not None and hasattr(oof, "predictions"):
-                    aligned_preds = oof.predictions[
-                        np.isin(np.arange(len(oof.predictions)), aligned_oof.common_indices)
-                    ]
+                    # Use original_indices for proper index-based alignment
+                    # instead of positional arange (which breaks for sequence
+                    # models with offsets)
+                    if hasattr(aligned_oof, 'common_indices') and hasattr(oof, 'original_indices') and oof.original_indices is not None:
+                        mask = np.isin(oof.original_indices, aligned_oof.common_indices)
+                    else:
+                        # Fallback to positional for legacy OOF objects
+                        mask = np.isin(np.arange(len(oof.predictions)), aligned_oof.common_indices)
+                    aligned_preds = oof.predictions[mask]
                     if len(aligned_preds) == len(aligned_oof.common_indices):
                         base_predictions[model_key] = aligned_preds
                     if hasattr(oof, "probabilities") and oof.probabilities is not None:
-                        aligned_probs = oof.probabilities[
-                            np.isin(np.arange(len(oof.probabilities)), aligned_oof.common_indices)
-                        ]
+                        aligned_probs = oof.probabilities[mask]
                         if len(aligned_probs) == len(aligned_oof.common_indices):
                             base_probabilities[model_key] = aligned_probs
 

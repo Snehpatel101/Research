@@ -282,43 +282,49 @@ class StackingDatasetBuilder:
         df: pd.DataFrame,
         model_names: list[str],
     ) -> pd.DataFrame:
-        """Add derived features for meta-learner."""
+        """Add derived features for meta-learner.
+
+        Standardized to 3 derived features (consistent with alignment.py,
+        heterogeneous_stacking.py, and ensemble_bundle.py):
+        - mean_confidence: average max probability across models
+        - prediction_agreement: fraction of models agreeing on predicted class
+        - prediction_entropy: entropy of averaged probabilities
+        """
         df = df.copy()
 
-        # Model predictions (argmax)
-        pred_cols = []
-        for model in model_names:
-            prob_cols = [f"{model}_prob_short", f"{model}_prob_neutral", f"{model}_prob_long"]
-            # Prediction already exists, but ensure it's -1, 0, 1 format
-            pred_col = f"{model}_pred"
-            pred_cols.append(pred_col)
-
-        # Agreement features
-        df["models_agree"] = (df[pred_cols].nunique(axis=1) == 1).astype(int)
-        df["agreement_count"] = df[pred_cols].apply(
-            lambda x: x.value_counts().max() if len(x.dropna()) > 0 else 0, axis=1
-        )
-
-        # Average confidence
-        conf_cols = [f"{model}_confidence" for model in model_names]
-        df["avg_confidence"] = df[conf_cols].mean(axis=1)
-        df["min_confidence"] = df[conf_cols].min(axis=1)
-        df["max_confidence"] = df[conf_cols].max(axis=1)
-
-        # Prediction entropy (uncertainty) per model
+        # Collect per-model probability arrays: (n_samples, n_classes) each
+        all_probs = []
         for model in model_names:
             prob_cols = [f"{model}_prob_short", f"{model}_prob_neutral", f"{model}_prob_long"]
             probs = df[prob_cols].values
-            # Entropy: -sum(p * log(p))
-            entropy = -np.sum(probs * np.log(probs + 1e-10), axis=1)
-            df[f"{model}_entropy"] = entropy
+            all_probs.append(probs)
 
-        # Average entropy
-        entropy_cols = [f"{model}_entropy" for model in model_names]
-        df["avg_entropy"] = df[entropy_cols].mean(axis=1)
+        # Stack: (n_models, n_samples, n_classes)
+        stacked = np.stack(all_probs, axis=0)
 
-        # Disagreement measure (std of predictions across models)
-        df["prediction_std"] = df[pred_cols].std(axis=1)
+        # 1. Mean confidence: average max probability across models
+        max_probs = np.nanmax(stacked, axis=2)  # (n_models, n_samples)
+        df["mean_confidence"] = np.nanmean(max_probs, axis=0)  # (n_samples,)
+
+        # 2. Prediction agreement: fraction of models agreeing on predicted class
+        predictions = np.argmax(stacked, axis=2)  # (n_models, n_samples)
+        n_samples = len(df)
+        agreement = np.zeros(n_samples)
+        for i in range(n_samples):
+            votes = predictions[:, i]
+            valid_votes = votes[~np.isnan(stacked[:, i, 0])]
+            if len(valid_votes) > 0:
+                unique, counts = np.unique(valid_votes, return_counts=True)
+                agreement[i] = np.max(counts) / len(valid_votes)
+            else:
+                agreement[i] = np.nan
+        df["prediction_agreement"] = agreement
+
+        # 3. Prediction entropy: entropy of averaged probabilities
+        mean_probs = np.nanmean(stacked, axis=0)  # (n_samples, n_classes)
+        mean_probs = np.clip(mean_probs, 1e-10, 1.0)
+        mean_probs = mean_probs / mean_probs.sum(axis=1, keepdims=True)
+        df["prediction_entropy"] = -np.sum(mean_probs * np.log(mean_probs), axis=1)
 
         return df
 

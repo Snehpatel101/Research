@@ -144,7 +144,10 @@ class EnsembleService:
         logger.info(f"Valid samples: {aligned.n_common}")
 
         # Extract aligned labels
-        y_aligned = self._extract_aligned_labels(oof_predictions, aligned, df=request.df)
+        target_horizon = config.horizons[0] if config.horizons else None
+        y_aligned = self._extract_aligned_labels(
+            oof_predictions, aligned, df=request.df, target_horizon=target_horizon
+        )
 
         # Perform diversity analysis if ensemble building is enabled
         diversity_metrics = None
@@ -249,12 +252,19 @@ class EnsembleService:
         oof_predictions: dict[str, OOFPrediction],
         aligned: AlignedOOFResult,
         df: pd.DataFrame | None = None,
+        target_horizon: int | None = None,
     ) -> np.ndarray | None:
         """Extract aligned labels from OOF predictions or source DataFrame.
 
         First tries OOF predictions y_true column. If the OOF y_true length
         doesn't cover all common_indices (e.g. walk-forward mode), falls back
         to extracting labels from the source DataFrame using positional indexing.
+
+        Args:
+            oof_predictions: OOF predictions from base models
+            aligned: Aligned OOF result with common indices
+            df: Optional source DataFrame for label extraction
+            target_horizon: Target prediction horizon for label column selection
         """
         common_indices = aligned.common_indices
         if common_indices is None:
@@ -275,8 +285,18 @@ class EnsembleService:
             # Find label column(s) in source df
             label_cols = [c for c in df.columns if c.startswith("label_h")]
             if label_cols:
-                # Use first label column (primary horizon)
-                label_col = label_cols[0]
+                # Select the label column matching the target horizon
+                if target_horizon is not None:
+                    target_col = f"label_h{target_horizon}"
+                    if target_col in df.columns:
+                        label_col = target_col
+                    else:
+                        label_col = label_cols[0]
+                        logger.warning(
+                            f"Target label column '{target_col}' not found, using '{label_col}'"
+                        )
+                else:
+                    label_col = label_cols[0]
                 y_source = df[label_col].values
                 valid_mask = common_indices < len(y_source)
                 valid_indices = common_indices[valid_mask]

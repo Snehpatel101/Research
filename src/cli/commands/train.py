@@ -536,6 +536,10 @@ def train_model(
     from src.models.trainer import Trainer
 
     logger.info(f"Starting training: model={model}, horizon={horizon}")
+    logger.info(
+        "Using MODEL_DATA_REQUIREMENTS for validation. "
+        "Note: MLFactory uses MODEL_CONTRACTS (src/core/contracts/) which may have different limits."
+    )
 
     if stacking_data_dict and stacking_data:
         # Phase 3->4 workflow: Train directly on stacking data

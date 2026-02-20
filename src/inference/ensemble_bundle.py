@@ -863,8 +863,14 @@ class EnsembleBundle:
             unique, counts = np.unique(predictions[i], return_counts=True)
             agreement[i] = counts.max() / n_models
 
-        # Combine: probabilities + mean_confidence + agreement
-        return np.hstack([stacked, mean_confidence, agreement])
+        # Prediction entropy of averaged probabilities
+        mean_probs = np.mean(probs_reshaped, axis=1)  # (n_samples, n_classes)
+        mean_probs = np.clip(mean_probs, 1e-10, 1.0)
+        mean_probs = mean_probs / mean_probs.sum(axis=1, keepdims=True)
+        entropy = -np.sum(mean_probs * np.log(mean_probs), axis=1, keepdims=True)
+
+        # Combine: probabilities + mean_confidence + agreement + entropy
+        return np.hstack([stacked, mean_confidence, agreement, entropy])
 
     def _ensure_base_bundles_loaded(self) -> None:
         """Load base bundles if not already loaded."""

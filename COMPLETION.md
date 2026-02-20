@@ -4,6 +4,62 @@
 
 ---
 
+## Phase 67: Consistency Hardening & 3D OOF Scalability — 15 Fixes | 2026-02-20 | COMPLETE
+
+**Impact:** Fixed all 14 inconsistencies identified by codebase audit + implemented chunked 3D OOF processing for 1.7M+ row scalability. 16 files modified. **212/212 tests still passing.**
+
+### Changes (15)
+
+| # | Fix | Severity | File(s) | Description |
+|:-:|-----|:--------:|---------|-------------|
+| 1 | OOF cleared after save | Critical | `unified_orchestrator.py` | Moved `_oof_predictions.clear()` after `_save_results()` — OOF artifacts no longer silently dropped |
+| 2 | Horizon-filtered ensemble | Critical | `unified_orchestrator.py` | OOF predictions filtered by `_h{target_horizon}` suffix before ensemble build — no more mixed-horizon meta-learner |
+| 3 | Non-4D OOF model config | High | `oof_generation.py` | Added `model_config` field to `OOFRequest`, propagated to OOF generator so fold models match base config |
+| 4 | 4D OOF fallback config | High | `oof_generation.py` | Fallback model creation uses `request.model_config` instead of empty `{}` |
+| 5 | Diversity index-based alignment | High | `feature_selection.py` | Uses `oof.original_indices` for alignment instead of positional `np.arange()` |
+| 6 | CLI pipeline deprecation | High | `pipeline.py`, `orchestrator.py` | Deprecation warnings on `MLPipeline` instantiation and `pipeline run` CLI command |
+| 7 | Walk-forward per-model prep | High | `training_ops.py` | Data prep moved inside model loop — each model gets contract-appropriate data |
+| 8 | Per-model features all modes | High | `training_ops.py` | Added `_per_model_features` filtering to regime-aware and meta-labeling code paths |
+| 9 | CV method fallback warning | Medium | `unified_orchestrator.py` | Explicit warning when non-PurgedKFold CV method falls back (was silent) |
+| 10 | Registry alignment | Medium | `data_requirements.py` | `MODEL_DATA_REQUIREMENTS` max_features updated to match `MODEL_CONTRACTS` (13 models aligned) |
+| 11 | Stacking features standardized | Medium | `alignment.py`, `oof_stacking.py`, `ensemble_bundle.py` | All 4 stacking paths now produce same 3 derived features: mean_confidence, prediction_agreement, prediction_entropy |
+| 12 | Label extraction horizon-aware | Medium | `ensemble_service.py` | `_extract_aligned_labels()` accepts `target_horizon`, looks for `label_h{N}` specifically |
+| 13 | Lookahead always mandatory | Medium | `feature_selection.py` | Removed conditional skip — lookahead audit now runs unconditionally (matches data pipeline) |
+| 14 | Dual-registry transparency | Medium | `train.py`, `features.py` | Info logs noting MODEL_DATA_REQUIREMENTS vs MODEL_CONTRACTS paths |
+| OOF | 3D OOF chunked processing | Critical | `sequence_cv.py`, `oof_sequence.py` | Scale-before-window + chunked prediction. Peak memory: ~152 MiB/chunk (was ~800 GiB for 1.7M rows) |
+
+### Files Modified (16)
+
+| File | Change |
+|------|--------|
+| `src/models/training/unified_orchestrator.py` | Fixes #1, #2, #9 |
+| `src/models/training/services/oof_generation.py` | Fixes #3, #4 |
+| `src/models/training/services/ensemble_service.py` | Fix #12 |
+| `src/models/training/training_ops.py` | Fixes #7, #8 |
+| `src/models/training/feature_selection.py` | Fixes #5, #13 |
+| `src/models/training/features.py` | Fix #14 |
+| `src/data/adapters/alignment.py` | Fix #11 |
+| `src/models/ensemble/heterogeneous_stacking.py` | Fix #11 (verified) |
+| `src/validation/cv/oof_stacking.py` | Fix #11 |
+| `src/inference/ensemble_bundle.py` | Fix #11 |
+| `src/cli/commands/pipeline.py` | Fix #6 |
+| `src/orchestrator.py` | Fix #6 |
+| `src/models/config/data_requirements.py` | Fix #10 |
+| `src/cli/commands/train.py` | Fix #14 |
+| `src/validation/cv/sequence_cv.py` | OOF chunking: `with_scaled_data()`, `build_fold_sequences_chunked()` |
+| `src/validation/cv/oof_sequence.py` | OOF chunking: scale-before-window + chunked prediction loop |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| ruff check (16 modified files) | PASS (0 errors) |
+| Module imports (14 modules) | PASS |
+| pytest (212 tests) | **212/212 PASSED** |
+| Ensemble smoke test (2D+2D) | **PASS** — 24.3s, Ensemble F1=0.3258 |
+
+---
+
 ## Phase 66: Financial Rigor Improvements — 4 Enhancements | 2026-02-20 | COMPLETE
 
 **Impact:** 4 improvements to increase prediction accuracy and reduce overfitting risk. All grounded in Lopez de Prado's Advances in Financial Machine Learning. 6 files modified. **212/212 tests still passing.**

@@ -12,6 +12,7 @@ Note: This CLI uses the existing pipeline infrastructure:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import typer
@@ -20,6 +21,8 @@ from src.cli.utils import (
     console,
     show_error,
 )
+
+logger = logging.getLogger(__name__)
 
 pipeline_app = typer.Typer(
     name="pipeline",
@@ -116,6 +119,11 @@ def run_pipeline(
         pipeline run --symbol MES --data-path ./data/mes.parquet --output-dir ./exp
     """
     from src.orchestrator import MLPipeline
+
+    logger.warning(
+        "The 'pipeline run' CLI command uses the deprecated MLPipeline orchestrator. "
+        "Use MLFactory for production workflows."
+    )
 
     # Parse comma-separated arguments
     horizon_list = [int(h.strip()) for h in horizons.split(",") if h.strip()]

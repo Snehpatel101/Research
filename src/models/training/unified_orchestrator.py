@@ -277,20 +277,13 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
 
         # For now, use PurgedKFold for all methods
         # CPCV and WalkForward have specialized implementations
-        if cv_method == CVMethod.PURGED_KFOLD:
-            return PurgedKFold(cv_config)
-        elif cv_method == CVMethod.CPCV:
-            # CPCV wraps PurgedKFold with combinatorial paths
-            return PurgedKFold(cv_config)
-        elif cv_method == CVMethod.WALK_FORWARD:
-            # Walk-forward uses different evaluator
-            return PurgedKFold(cv_config)
-        elif cv_method == CVMethod.PBO:
-            # PBO is post-hoc validation, use purged k-fold for training
-            return PurgedKFold(cv_config)
-        else:
-            logger.warning(f"Unknown CV method: {cv_method}, using PurgedKFold")
-            return PurgedKFold(cv_config)
+        if cv_method != CVMethod.PURGED_KFOLD:
+            logger.warning(
+                f"CV method '{cv_method.value}' requested but not yet implemented in orchestrator. "
+                f"Falling back to PurgedKFold. Use walk-forward training mode for true walk-forward CV."
+            )
+
+        return PurgedKFold(cv_config)
 
     def _prepare_with_cache(
         self,
@@ -425,14 +418,15 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
             logger.info("=" * 60)
             aligned_oof, stacking_dataset, ensemble_result = self._build_ensemble(df)
 
-            # Clear OOF predictions to free memory after ensemble building (Phase 37 fix)
-            # Each OOF dict entry is 50-200MB; clearing saves 750MB-1.5GB for typical runs
+        # Save results (must happen BEFORE clearing OOF predictions, which _save_results uses)
+        self._save_results()
+
+        # Clear OOF predictions to free memory after saving (Phase 37 fix)
+        # Each OOF dict entry is 50-200MB; clearing saves 750MB-1.5GB for typical runs
+        if self._oof_predictions:
             oof_count = len(self._oof_predictions)
             self._oof_predictions.clear()
             logger.debug(f"Cleared {oof_count} OOF predictions from memory")
-
-        # Save results
-        self._save_results()
 
         # Free trained models and prepared data cache after saving
         model_count = len(self._trained_models)
@@ -484,9 +478,32 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
             logger.warning("No OOF predictions available for ensemble")
             return None, None, None
 
+        # Filter OOF predictions to primary horizon only.
+        # Keys are like "xgboost_h5", "xgboost_h20" — mixing horizons in a
+        # single ensemble is invalid because labels differ across horizons.
+        target_horizon = self.config.horizons[0] if self.config.horizons else 5
+        horizon_suffix = f"_h{target_horizon}"
+        filtered_oof = {
+            k: v for k, v in self._oof_predictions.items() if k.endswith(horizon_suffix)
+        }
+
+        if not filtered_oof:
+            logger.warning(
+                f"No OOF predictions found for target horizon {target_horizon} "
+                f"(available keys: {list(self._oof_predictions.keys())}). "
+                f"Using all OOF predictions as fallback."
+            )
+            filtered_oof = self._oof_predictions
+
+        if len(filtered_oof) < len(self._oof_predictions):
+            logger.info(
+                f"Filtered OOF predictions from {len(self._oof_predictions)} to "
+                f"{len(filtered_oof)} for horizon h{target_horizon}"
+            )
+
         # Delegate to EnsembleService
         request = EnsembleRequest(
-            oof_predictions=self._oof_predictions,
+            oof_predictions=filtered_oof,
             config=self.config,
             df=df,
         )

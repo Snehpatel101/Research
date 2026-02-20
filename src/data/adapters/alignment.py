@@ -20,7 +20,7 @@ Example:
 
     # Align for stacking
     aligned = align_oof_predictions([oof_xgb, oof_lstm, oof_patch])
-    X_stack = aligned.stacking_features  # Shape: (9941, 9 + 2)
+    X_stack = aligned.stacking_features  # Shape: (9941, 9 + 3)
 """
 
 from __future__ import annotations
@@ -82,26 +82,35 @@ class AlignedOOFResult:
         Get features for stacking (prob columns + derived features).
 
         Returns:
-            Array of shape (n_common, n_models * n_classes + 2) containing:
+            Array of shape (n_common, n_models * n_classes + 3) containing:
             - All probability columns (n_models * n_classes)
             - Mean confidence per sample (1)
             - Prediction agreement ratio (1)
+            - Prediction entropy (1)
         """
         # Base: all probability columns
         features = [self.probabilities]
 
-        # Derived: mean confidence per sample
-        # Reshape to (n_common, n_models, n_classes) to get max per model
+        # Reshape to (n_common, n_models, n_classes) for derived features
         probs_reshaped = self.probabilities.reshape(self.n_common, self.n_models, self.n_classes)
+
+        # Derived 1: mean confidence per sample
         # Max probability per model (confidence)
         confidences = np.nanmax(probs_reshaped, axis=2)  # (n_common, n_models)
         # Mean confidence across models (ignoring NaN)
         mean_confidence = np.nanmean(confidences, axis=1, keepdims=True)
         features.append(mean_confidence)
 
-        # Derived: prediction agreement (how many models agree on class)
+        # Derived 2: prediction agreement (how many models agree on class)
         agreement = self._compute_agreement()
         features.append(agreement)
+
+        # Derived 3: prediction entropy of averaged probabilities
+        mean_probs = np.nanmean(probs_reshaped, axis=1)  # (n_common, n_classes)
+        mean_probs = np.clip(mean_probs, 1e-10, 1.0)
+        mean_probs = mean_probs / mean_probs.sum(axis=1, keepdims=True)
+        entropy = -np.sum(mean_probs * np.log(mean_probs), axis=1, keepdims=True)
+        features.append(entropy)
 
         return np.hstack(features)
 
@@ -149,6 +158,7 @@ class AlignedOOFResult:
         # Derived features
         names.append("mean_confidence")
         names.append("prediction_agreement")
+        names.append("prediction_entropy")
 
         return names
 
@@ -234,7 +244,7 @@ class AlignedOOFResult:
             f"  Models: {self.n_models}",
             f"  Samples: {self.n_common}",
             f"  Classes: {self.n_classes}",
-            f"  Feature columns: {self.n_models * self.n_classes + 2}",
+            f"  Feature columns: {self.n_models * self.n_classes + 3}",
             "  Coverage:",
         ]
         for name, cov in self.coverage.items():

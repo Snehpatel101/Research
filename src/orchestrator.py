@@ -123,6 +123,12 @@ class MLPipeline:
         df: pd.DataFrame | None = None,
         verbose: int = 1,
     ):
+        warnings.warn(
+            "MLPipeline is deprecated. Use MLFactory with UnifiedTrainingOrchestrator instead. "
+            "See src/factory.py for the current entry point.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.config = config
         self._df = df
         self._verbose = verbose

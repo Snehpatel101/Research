@@ -21,6 +21,9 @@ import pandas as pd
 
 # Import MODEL_DATA_REQUIREMENTS for feature_set validation (MOD-005)
 # Canonical location: src.models.config.data_requirements
+# NOTE: This module validates against MODEL_DATA_REQUIREMENTS. MLFactory uses
+# MODEL_CONTRACTS (src/core/contracts/model_contract.py) which may define different
+# max_features limits. Both registries should be kept in sync.
 _MODEL_DATA_REQUIREMENTS: dict[str, Any] | None
 try:
     from src.models.config import MODEL_DATA_REQUIREMENTS as _MODEL_DATA_REQUIREMENTS

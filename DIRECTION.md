@@ -1,9 +1,15 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-20 (Phase 66 COMPLETE — Financial Rigor: ONC clustering, transaction costs, DSR gate, CPCV)
-**Status:** Phase 66 COMPLETE | ONC clustered feature selection enabled, transaction costs in Optuna, DSR gate enforcement, CPCV in hyperparameter tuning. 212/212 tests passing.
+**Last Updated:** 2026-02-20 (Phase 67 COMPLETE — Consistency Hardening: 14 inconsistencies fixed + 3D OOF chunked processing)
+**Status:** Phase 67 COMPLETE | All 14 audit inconsistencies fixed (2 critical, 6 high, 6 medium) + 3D OOF chunked processing for 1.7M+ row scalability. 212/212 tests passing.
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 67: Consistency Hardening & 3D OOF Scalability (2026-02-20) - COMPLETE
+
+- Phase 67: Fixed all 14 inconsistencies from INCONSISTENCIES.MD audit + implemented chunked 3D OOF processing. Critical fixes: (1) OOF predictions no longer cleared before artifact save, (2) multi-horizon OOFs filtered by target horizon before ensemble build. High fixes: (3) model config propagated to non-4D OOF, (4) model config propagated to 4D OOF fallback, (5) diversity alignment uses index-based mapping, (6) CLI pipeline deprecation warnings, (7) walk-forward per-model data prep, (8) per-model features in all training modes. Medium fixes: (9) CV method fallback warning, (10) MODEL_DATA_REQUIREMENTS aligned with MODEL_CONTRACTS, (11) stacking features standardized to 3 everywhere, (12) ensemble label extraction horizon-aware, (13) lookahead audit always mandatory, (14) dual-registry transparency notes. 3D OOF chunking: scale-before-window approach reduces peak memory from ~800 GiB to ~152 MiB per chunk for 1.7M rows. 16 files modified, 212/212 tests passing.
 
 ---
 

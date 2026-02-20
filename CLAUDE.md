@@ -247,6 +247,14 @@ src/
 - CPCV support in hyperparameter tuning (15 backtest paths via cv_method="cpcv")
 - 6 files modified, 212/212 tests still passing
 
+**Phase 67: COMPLETE — Consistency Hardening & 3D OOF Scalability (15 fixes)**
+- Fixed all 14 inconsistencies from codebase audit (2 critical, 6 high, 6 medium)
+- Critical: OOF artifacts no longer dropped before save, multi-horizon OOFs filtered before ensemble
+- High: model config propagated to OOF, walk-forward per-model data prep, per-model features in all modes
+- 3D OOF chunked processing: scale-before-window reduces peak memory from ~800 GiB to ~152 MiB/chunk
+- Enables 1.7M+ row datasets on Colab (230GB RAM) without OOM
+- 16 files modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

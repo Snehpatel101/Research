@@ -28,6 +28,7 @@ class OOFRequest:
     purge_bars: int = 10
     embargo_bars: int = 5
     fold_models: list[Any] | None = None  # Pre-trained fold models for 4D caching
+    model_config: dict[str, Any] | None = None  # Model config (seq_length, hidden_size, etc.)
 
 
 class OOFGenerationService:
@@ -134,7 +135,7 @@ class OOFGenerationService:
             oof_predictions = oof_generator.generate_oof_predictions(
                 X=X_train_df,
                 y=y_train,
-                model_configs={model_name: {}},
+                model_configs={model_name: request.model_config or {}},
                 use_cache=True,
             )
 
@@ -225,7 +226,7 @@ class OOFGenerationService:
                 logger.debug(f"  Using cached fold model for fold {fold_idx + 1}")
             else:
                 # Fallback: train from scratch (no cached models available)
-                model = ModelRegistry.create(model_name, config={})
+                model = ModelRegistry.create(model_name, config=request.model_config or {})
                 training_metrics = model.fit(
                     X_train=X_train_fold,
                     y_train=y_train_fold,

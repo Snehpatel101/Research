@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 
@@ -360,6 +361,169 @@ class SequenceCVBuilder:
             target_indices=targets,
             n_dropped=n_dropped,
         )
+
+    def with_scaled_data(self, X_scaled: np.ndarray) -> SequenceCVBuilder:
+        """
+        Return a shallow copy of this builder that uses pre-scaled feature data.
+
+        The returned builder shares boundary/symbol metadata and labels with the
+        original, but reads features from *X_scaled* instead of the raw data.
+        This avoids re-computing boundaries and allows scaling once at the fold
+        level before windowing.
+
+        Args:
+            X_scaled: 2D array of shape (n_samples, n_features), already scaled.
+                Must have the same number of rows as the original data.
+
+        Returns:
+            A new SequenceCVBuilder instance that reads from *X_scaled*.
+
+        Raises:
+            ValueError: If shape is incompatible with the original data.
+        """
+        if X_scaled.shape[0] != self.n_samples:
+            raise ValueError(
+                f"X_scaled has {X_scaled.shape[0]} rows, "
+                f"expected {self.n_samples} (same as original data)"
+            )
+        if X_scaled.shape[1] != self.n_features:
+            raise ValueError(
+                f"X_scaled has {X_scaled.shape[1]} features, "
+                f"expected {self.n_features}"
+            )
+
+        # Shallow copy — share metadata, swap feature matrix
+        import copy
+
+        builder = copy.copy(self)
+        builder._X = np.asarray(X_scaled, dtype=np.float32)
+        return builder
+
+    def build_fold_sequences_chunked(
+        self,
+        fold_indices: np.ndarray,
+        chunk_size: int = 5000,
+        allow_lookback_outside: bool = True,
+        stride: int = 1,
+    ) -> Generator[SequenceFoldResult, None, None]:
+        """
+        Yield 3D sequence chunks for a CV fold without materializing all at once.
+
+        Semantically equivalent to ``build_fold_sequences`` but produces the
+        results incrementally in chunks of at most *chunk_size* sequences.
+        This keeps peak memory proportional to *chunk_size* rather than the
+        full fold, which is critical for large datasets.
+
+        Args:
+            fold_indices: Array of sample indices for this fold.
+            chunk_size: Maximum number of sequences per yielded chunk.
+            allow_lookback_outside: If True, allow lookback into samples
+                outside this fold. If False, only use fold samples for lookback.
+            stride: Step size between target indices (default 1).
+
+        Yields:
+            SequenceFoldResult for each chunk. The ``n_dropped`` field is only
+            populated on the *last* yielded chunk (it reflects the total).
+
+        Note:
+            Sequences that would cross symbol boundaries are skipped, same as
+            ``build_fold_sequences``.
+        """
+        if len(fold_indices) == 0:
+            yield SequenceFoldResult(
+                X_sequences=np.array([]).reshape(0, self.seq_len, self.n_features),
+                y=np.array([], dtype=np.float32),
+                weights=np.array([], dtype=np.float32),
+                target_indices=np.array([], dtype=np.int64),
+                n_dropped=0,
+            )
+            return
+
+        sorted_indices = np.sort(fold_indices)
+
+        fold_set: set[Any] | None = (
+            set(sorted_indices.tolist()) if not allow_lookback_outside else None
+        )
+
+        # Accumulators for current chunk
+        sequences: list[np.ndarray] = []
+        labels: list[float] = []
+        weights: list[float] = []
+        target_indices: list[int] = []
+        n_dropped = 0
+        total_yielded = 0
+
+        for target_idx in sorted_indices[::stride]:
+            start_idx = target_idx - self.seq_len + 1
+
+            # Check 1: Sufficient lookback history
+            if start_idx < 0:
+                n_dropped += 1
+                continue
+
+            # Check 2: If not allowing lookback outside, verify all lookback in fold
+            if not allow_lookback_outside and fold_set is not None:
+                lookback_in_fold = all(
+                    idx in fold_set for idx in range(start_idx, target_idx)
+                )
+                if not lookback_in_fold:
+                    n_dropped += 1
+                    continue
+
+            # Check 3: Symbol boundary check
+            if self._sequence_crosses_boundary(start_idx, target_idx):
+                n_dropped += 1
+                continue
+
+            # Build sequence
+            seq = self._X[start_idx : target_idx + 1]
+            sequences.append(seq)
+            labels.append(self._y[target_idx])
+            weights.append(self._weights[target_idx])
+            target_indices.append(target_idx)
+
+            # Flush chunk when full
+            if len(sequences) >= chunk_size:
+                total_yielded += len(sequences)
+                logger.debug(
+                    f"Chunked build: yielding chunk of {len(sequences)} sequences "
+                    f"(total so far: {total_yielded})"
+                )
+                yield SequenceFoldResult(
+                    X_sequences=np.stack(sequences, axis=0),
+                    y=np.array(labels, dtype=np.float32),
+                    weights=np.array(weights, dtype=np.float32),
+                    target_indices=np.array(target_indices, dtype=np.int64),
+                    n_dropped=0,  # reported only in last chunk
+                )
+                sequences = []
+                labels = []
+                weights = []
+                target_indices = []
+
+        # Flush remaining sequences (or emit empty result)
+        if sequences:
+            total_yielded += len(sequences)
+            logger.debug(
+                f"Chunked build: yielding final chunk of {len(sequences)} sequences "
+                f"(total: {total_yielded}, dropped: {n_dropped})"
+            )
+            yield SequenceFoldResult(
+                X_sequences=np.stack(sequences, axis=0),
+                y=np.array(labels, dtype=np.float32),
+                weights=np.array(weights, dtype=np.float32),
+                target_indices=np.array(target_indices, dtype=np.int64),
+                n_dropped=n_dropped,
+            )
+        elif total_yielded == 0:
+            # Nothing at all — yield an empty result
+            yield SequenceFoldResult(
+                X_sequences=np.array([]).reshape(0, self.seq_len, self.n_features),
+                y=np.array([], dtype=np.float32),
+                weights=np.array([], dtype=np.float32),
+                target_indices=np.array([], dtype=np.int64),
+                n_dropped=n_dropped,
+            )
 
     def get_fold_coverage(
         self,

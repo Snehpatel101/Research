@@ -127,63 +127,126 @@ class SequenceOOFGenerator:
             f"boundary_detection={seq_builder._boundary_detection_method})"
         )
 
+        # Chunk size for memory-efficient validation prediction.
+        # Each chunk materialises at most chunk_size * seq_len * n_features floats.
+        val_chunk_size = 5000
+
         # Generate predictions fold by fold
         for fold_idx, (train_idx, val_idx) in enumerate(
             self.cv.split(X, y, label_end_times=label_end_times)
         ):
-            # Build 3D sequences for this fold
-            # allow_lookback_outside=True: sequence lookback can include data outside fold
-            # but TARGET must be in fold
-            train_result = seq_builder.build_fold_sequences(train_idx, allow_lookback_outside=True)
-            val_result = seq_builder.build_fold_sequences(val_idx, allow_lookback_outside=True)
+            # -----------------------------------------------------------------
+            # STEP 1: Scale raw 2D data at fold level (fit on train rows only)
+            # -----------------------------------------------------------------
+            # This avoids building a giant 3D array, flattening, scaling, and
+            # reshaping.  Instead we scale the compact 2D data ONCE, then build
+            # 3D windows from the already-scaled values.
+            raw_X = seq_builder._X  # (n_samples, n_features)
+            X_train_raw = raw_X[train_idx]
 
-            if train_result.n_sequences == 0 or val_result.n_sequences == 0:
+            # For transformation we scale ALL rows so that lookback windows
+            # that reach into data outside the fold are also correctly scaled.
+            scaling_result = fold_scaler.fit_transform_fold(X_train_raw, raw_X)
+
+            # scaled_builder shares boundaries/labels but uses scaled features
+            scaled_builder = seq_builder.with_scaled_data(scaling_result.X_val_scaled)
+
+            # -----------------------------------------------------------------
+            # STEP 2: Build train sequences (all-at-once — needed for model.fit)
+            # -----------------------------------------------------------------
+            train_result = scaled_builder.build_fold_sequences(
+                train_idx, allow_lookback_outside=True
+            )
+
+            if train_result.n_sequences == 0:
                 logger.warning(
-                    f"  Fold {fold_idx + 1}: Skipping - insufficient sequences "
-                    f"(train={train_result.n_sequences}, val={val_result.n_sequences})"
+                    f"  Fold {fold_idx + 1}: Skipping - no train sequences "
+                    f"(from {len(train_idx)} samples)"
+                )
+                continue
+
+            # -----------------------------------------------------------------
+            # STEP 3: Build a small validation sample for model.fit's val_*
+            # arguments (needed for early stopping / metric logging).
+            # We take the first chunk only; this avoids materialising every
+            # validation sequence just to pass to .fit().
+            # -----------------------------------------------------------------
+            first_val_chunk = next(
+                scaled_builder.build_fold_sequences_chunked(
+                    val_idx,
+                    chunk_size=val_chunk_size,
+                    allow_lookback_outside=True,
+                ),
+                None,
+            )
+
+            if first_val_chunk is None or first_val_chunk.n_sequences == 0:
+                logger.warning(
+                    f"  Fold {fold_idx + 1}: Skipping - no val sequences "
+                    f"(from {len(val_idx)} samples)"
                 )
                 continue
 
             logger.debug(
                 f"  Fold {fold_idx + 1}: train_seq={train_result.n_sequences} "
-                f"(from {len(train_idx)}), val_seq={val_result.n_sequences} "
-                f"(from {len(val_idx)})"
+                f"(from {len(train_idx)}), val_idx_count={len(val_idx)}"
             )
 
-            # FOLD-AWARE SCALING on the 3D sequences
-            # Reshape to 2D for scaling, then back to 3D
-            train_shape = train_result.X_sequences.shape  # (n_train, seq_len, features)
-            val_shape = val_result.X_sequences.shape  # (n_val, seq_len, features)
-
-            # Flatten: (n_samples * seq_len, features)
-            X_train_flat = train_result.X_sequences.reshape(-1, train_shape[2])
-            X_val_flat = val_result.X_sequences.reshape(-1, val_shape[2])
-
-            scaling_result = fold_scaler.fit_transform_fold(X_train_flat, X_val_flat)
-
-            # Reshape back to 3D
-            X_train_scaled = scaling_result.X_train_scaled.reshape(train_shape)
-            X_val_scaled = scaling_result.X_val_scaled.reshape(val_shape)
-
-            # Create and train sequence model
+            # -----------------------------------------------------------------
+            # STEP 4: Train the model
+            # -----------------------------------------------------------------
             model = ModelRegistry.create(model_name, config=config)
 
             training_metrics = model.fit(
-                X_train=X_train_scaled,
+                X_train=train_result.X_sequences,
                 y_train=train_result.y,
-                X_val=X_val_scaled,
-                y_val=val_result.y,
+                X_val=first_val_chunk.X_sequences,
+                y_val=first_val_chunk.y,
                 sample_weights=train_result.weights,
             )
 
-            # Generate predictions for validation sequences
-            prediction_output: PredictionResult = model.predict(X_val_scaled)
+            # -----------------------------------------------------------------
+            # STEP 5: Predict on validation sequences IN CHUNKS
+            # -----------------------------------------------------------------
+            val_sequences_total = 0
 
-            # Map predictions back to original indices
-            for seq_idx, original_idx in enumerate(val_result.target_indices):
-                oof_probs[original_idx] = prediction_output.class_probabilities[seq_idx]
-                oof_preds[original_idx] = prediction_output.class_predictions[seq_idx]
-                oof_confidence[original_idx] = prediction_output.confidence[seq_idx]
+            for chunk_idx, val_chunk in enumerate(
+                scaled_builder.build_fold_sequences_chunked(
+                    val_idx,
+                    chunk_size=val_chunk_size,
+                    allow_lookback_outside=True,
+                )
+            ):
+                if val_chunk.n_sequences == 0:
+                    continue
+
+                prediction_output: PredictionResult = model.predict(
+                    val_chunk.X_sequences
+                )
+
+                # Map predictions back to original indices
+                for seq_idx, original_idx in enumerate(val_chunk.target_indices):
+                    oof_probs[original_idx] = prediction_output.class_probabilities[
+                        seq_idx
+                    ]
+                    oof_preds[original_idx] = prediction_output.class_predictions[
+                        seq_idx
+                    ]
+                    oof_confidence[original_idx] = prediction_output.confidence[
+                        seq_idx
+                    ]
+
+                val_sequences_total += val_chunk.n_sequences
+                logger.debug(
+                    f"  Fold {fold_idx + 1}: predicted val chunk {chunk_idx + 1} "
+                    f"({val_chunk.n_sequences} seqs, running total: {val_sequences_total})"
+                )
+
+            logger.info(
+                f"  Fold {fold_idx + 1}: completed — "
+                f"train_seq={train_result.n_sequences}, "
+                f"val_seq={val_sequences_total}"
+            )
 
             # Track fold info
             fold_info.append(
@@ -192,7 +255,7 @@ class SequenceOOFGenerator:
                     "train_size": len(train_idx),
                     "val_size": len(val_idx),
                     "train_sequences": train_result.n_sequences,
-                    "val_sequences": val_result.n_sequences,
+                    "val_sequences": val_sequences_total,
                     "val_accuracy": training_metrics.val_accuracy,
                     "val_f1": training_metrics.val_f1,
                 }
