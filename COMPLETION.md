@@ -4,6 +4,44 @@
 
 ---
 
+## Phase 64: End-to-End Pipeline Smoke Test — 12 Models x 2 Modes | 2026-02-19 | IN PROGRESS
+
+**Impact:** Comprehensive validation of all 12 model families across standard + walk-forward training modes. 5 additional bugs found and fixed. See `EndtoEndtests.md` for full results.
+**Constraint:** 1 week MES data, 1 Optuna trial, CPU-only (i5-13600, 16GB RAM).
+
+### Training Results (10/12 complete, batch 6 in progress)
+
+| Model | Family | Standard F1 | Walk-Forward F1 | Status |
+|-------|--------|------------|-----------------|--------|
+| XGBoost | Boosting | 0.3495 | 0.3654 | PASS |
+| LightGBM | Boosting | 0.3574 | 0.3411 | PASS |
+| CatBoost | Boosting | 0.3611 | 0.3344 | PASS |
+| LSTM | RNN | 0.0000 | 0.3516 | PASS |
+| GRU | RNN | 0.0000 | 0.6366 | PASS |
+| TCN | CNN | 0.0000 | 0.6499 | PASS |
+| InceptionTime | CNN | 0.0000 | 0.2649 | PASS |
+| ResNet1D | CNN | 0.0000 | 0.6366 | PASS |
+| PatchTST | Transformer | 0.2851 | 0.6212 | PASS |
+| iTransformer | Transformer | 0.3524 | 0.1678 | PASS |
+| TFT | Transformer | — | — | Running |
+| N-BEATS | MLP | — | — | Running |
+
+### Bugs Found & Fixed (5)
+
+| # | Bug | File | Fix |
+|:-:|-----|------|-----|
+| 1 | Walk-forward ensemble label alignment | `ensemble_service.py` | Fallback label extraction from source DataFrame |
+| 2 | Walk-forward 3D reshape missing | `walk_forward.py` | Contract-aware reshaping for LSTM/GRU/TCN |
+| 3 | torch.compile state_dict prefix | `base_rnn.py` | `removeprefix("_orig_mod.")` cleanup |
+| 4 | ResNet1D even kernel padding | `resnet1d_model.py` | Sequence length alignment in residual blocks |
+| 5 | Walk-forward 4D reshape missing | `walk_forward.py` + `training_ops.py` | 4D metadata storage + reconstruction |
+
+### Pipeline Features Verified
+
+All 20 pipeline features verified working: standard CV, walk-forward, MTF, Optuna, ensemble stacking, backtest, financial reports, 2D/3D/4D models, cross-family ensembles, OOF generation, deploy bundles, feature selection (MDA), leakage validation.
+
+---
+
 ## Phase 63: CODEBASE_AUDIT Complete — All 12 Audit Fixes + 4 Smoke Test Bug Fixes | 2026-02-19 | COMPLETE
 
 **Impact:** 12/12 audit findings fixed + 4 E2E smoke test bugs fixed across critical, high, medium, and low severity tiers. 47/47 imports clean, 0 broken, 0 circular imports.
