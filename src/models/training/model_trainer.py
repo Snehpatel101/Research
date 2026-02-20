@@ -244,6 +244,12 @@ class ModelTrainer:
             max_epochs=self.config.max_epochs,
             early_stopping_patience=self.config.early_stopping_patience,
             random_seed=self.config.random_state,
+            model_config={
+                "max_epochs": self.config.max_epochs,
+                "batch_size": self.config.batch_size,
+                "early_stopping_patience": self.config.early_stopping_patience,
+                "sequence_length": self.config.sequence_length,
+            },
         )
 
         # Apply hyperparameter overrides if provided

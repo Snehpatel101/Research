@@ -21,6 +21,7 @@ class TuningRequest:
     n_splits: int = 5
     n_trials: int = 100
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
+    max_epochs: int | None = None  # Cap max_epochs for neural models during tuning
 
 
 @dataclass
@@ -82,6 +83,7 @@ class HyperparameterTuningService:
             cv=cv,
             n_trials=request.n_trials,
             metric=request.scoring,
+            max_epochs=request.max_epochs,
         )
 
         X_train = request.prepared_data.X_train

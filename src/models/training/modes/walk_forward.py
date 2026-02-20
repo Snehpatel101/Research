@@ -415,14 +415,20 @@ class WalkForwardTrainer:
             if weights is not None:
                 w_train = weights.iloc[train_idx].values
 
-            # Create and train model
-            model = ModelRegistry.create(model_name)
+            # Create and train model with training config
+            _model_config = {}
+            if hasattr(self, '_pipeline_config') and self._pipeline_config is not None:
+                _model_config['max_epochs'] = getattr(self._pipeline_config, 'max_epochs', 50)
+                _model_config['batch_size'] = getattr(self._pipeline_config, 'batch_size', 128)
+                _model_config['early_stopping_patience'] = getattr(self._pipeline_config, 'early_stopping_patience', 10)
+            model = ModelRegistry.create(model_name, config=_model_config)
             model.fit(
                 X_train=X_train_scaled,
                 y_train=y_train.values,
                 X_val=X_test_scaled,
                 y_val=y_test.values,
                 sample_weights=w_train,
+                config=_model_config,
             )
 
             # Generate predictions

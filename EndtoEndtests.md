@@ -40,7 +40,7 @@ Models trained in batches of 2 to stay within 16GB RAM:
 - Batch 3: GRU + TCN (RNN + CNN)
 - Batch 4: InceptionTime + ResNet1D (CNN)
 - Batch 5: PatchTST + iTransformer (Transformer)
-- Batch 6: TFT + N-BEATS (Transformer + MLP) — *in progress*
+- Batch 6: TFT + N-BEATS (Transformer + MLP)
 
 ---
 
@@ -60,8 +60,8 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 8 | ResNet1D | CNN | 0.0000 | 0.0000 | 0.0000 | 2147s |
 | 9 | PatchTST | Transformer | 0.2851 | 0.2851 | 0.7474 | 487s |
 | 10 | iTransformer | Transformer | 0.3524 | 0.3524 | 0.6125 | 487s |
-| 11 | TFT | Transformer | — | — | — | *pending* |
-| 12 | N-BEATS | MLP | — | — | — | *pending* |
+| 11 | TFT | Transformer | 0.2851 | 0.2851 | 0.7474 | 4710s |
+| 12 | N-BEATS | MLP | 0.2851 | 0.2851 | 0.7474 | 4710s |
 
 **Notes on Standard Mode:**
 - Neural models (LSTM, GRU, TCN, InceptionTime, ResNet1D) show F1=0.000 in standard OOF mode — this is expected with only 1 Optuna trial and extreme class imbalance (class 1: 97/2354 samples = 4.1%). The OOF predictions don't converge meaningfully with minimal hyperparameter tuning.
@@ -82,8 +82,8 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 8 | ResNet1D | CNN | 0.6366 | 0.7137 | 0.3450 | -0.87 | 3 | 472s |
 | 9 | PatchTST | Transformer | 0.6212 | 0.6682 | — | — | — | 88s |
 | 10 | iTransformer | Transformer | 0.1678 | 0.2392 | 0.1182 | -0.59 | 1 | 88s |
-| 11 | TFT | Transformer | — | — | — | — | — | *pending* |
-| 12 | N-BEATS | MLP | — | — | — | — | — | *pending* |
+| 11 | TFT | Transformer | *retrying* | — | — | — | — | — |
+| 12 | N-BEATS | MLP | *retrying* | — | — | — | — | — |
 
 **Notes on Walk-Forward Mode:**
 - Walk-forward consistently outperforms standard mode for neural models — the expanding window gives the model more data per training iteration.
@@ -102,7 +102,7 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 3 | GRU + TCN | 5 | 20% | -0.38 | $99,953.11 | -0.063% | -$46.89 |
 | 4 | InceptionTime + ResNet1D | 3 | 0% | -0.87 | $99,961.37 | -0.049% | -$38.63 |
 | 5 | PatchTST + iTransformer | 8 (std), 1 (wf) | 50% (std) | -0.25 (std) | $99,957.47 (std) | — | -$42.53 (std) |
-| 6 | TFT + N-BEATS | — | — | — | — | — | *pending* |
+| 6 | TFT + N-BEATS (std) | 0 | 0% | 0.00 | $100,000 | 0.000% | $0.00 |
 
 **Backtest Notes:**
 - All backtests use $100,000 initial capital with transaction costs and slippage included
@@ -139,7 +139,9 @@ Models trained in batches of 2 to stay within 16GB RAM:
 | 4 | ResNet1D even kernel padding | `resnet1d_model.py` | Even kernel sizes (4, 6, 8) produce asymmetric padding, creating +2 length mismatch in residual blocks | Added sequence length alignment (trim longer tensor) in both block types |
 | 5 | Walk-forward 4D reshape missing | `walk_forward.py` + `training_ops.py` | PatchTST/iTransformer need 4D input `(n, n_tf, seq_len, features)` but walk-forward only handled 2D→3D | Added 4D metadata storage + reconstruction handler |
 
-**Total: 5 bugs found and fixed** — all discovered through end-to-end pipeline testing that unit tests wouldn't catch.
+| 6 | max_epochs not propagated to neural models | 8 files | Neural models in walk-forward/Optuna didn't receive max_epochs from TrainerConfig, causing extremely long training | Wired max_epochs through TrainerConfig → ModelTrainingService → HyperparameterTuningService → CVTuner → WalkForwardTrainer |
+
+**Total: 6 bugs found and fixed** — all discovered through end-to-end pipeline testing that unit tests wouldn't catch.
 
 ---
 
@@ -191,15 +193,19 @@ Models trained in batches of 2 to stay within 16GB RAM:
 - **Slowest** for standard mode: 491-2147s on CPU
 - **Best for**: Pattern recognition, multi-scale temporal features
 
-### Transformer (PatchTST, iTransformer)
+### Transformer (PatchTST, iTransformer, TFT)
 - **PatchTST** strong in walk-forward (F1=0.62)
 - **iTransformer** inconsistent (F1=0.35 standard, 0.17 walk-forward)
+- **TFT** standard F1=0.2851 (all-neutral predictions, like other neural models with 1 trial)
 - **4D data pipeline** fully functional
-- **Moderate** training time: 88-487s
+- **Moderate** training time: 88-4710s (TFT is heaviest at ~5GB RAM)
 - **Best for**: Long-range dependencies, multi-timeframe fusion
 
 ### MLP (N-BEATS)
-- *Results pending (batch 6)*
+- Standard F1=0.2851 (all-neutral predictions)
+- Walk-forward results pending
+- **Fastest** neural model to train
+- **Best for**: Univariate time-series decomposition
 
 ---
 
@@ -213,11 +219,11 @@ Models trained in batches of 2 to stay within 16GB RAM:
 
 4. **Negative Sharpe ratios are expected** — 1 week of data with 1 Optuna trial is not enough for profitable trading signals. This test validates the pipeline, not trading performance.
 
-5. **5 bugs found through E2E testing** — all were in walk-forward + multi-dimensional model interactions that unit tests wouldn't cover. This validates the importance of full pipeline testing.
+5. **6 bugs found through E2E testing** — all were in walk-forward + multi-dimensional model interactions that unit tests wouldn't cover. This validates the importance of full pipeline testing.
 
 6. **Cross-family ensembles work** — the pipeline correctly handles mixing 2D (boosting), 3D (RNN/CNN), and 4D (transformer) models in a single ensemble.
 
 ---
 
 *Last updated: 2026-02-19*
-*Batch 6 (TFT + N-BEATS) results will be appended when complete.*
+*Batch 6 standard complete. Walk-forward retrying.*

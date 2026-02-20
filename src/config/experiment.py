@@ -287,6 +287,7 @@ class ExperimentConfig:
             early_stopping_patience=training_section_dict.get("early_stopping_patience", 15),
             build_ensemble=training_section_dict.get("build_ensemble", True),
             meta_learner=training_section_dict.get("meta_learner", "ridge_meta"),
+            walk_forward=WalkForwardConfig(**training_section_dict.get("walk_forward", {})),
         )
 
         # Parse evaluation section

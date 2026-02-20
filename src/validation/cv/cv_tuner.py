@@ -40,6 +40,7 @@ class TimeSeriesOptunaTuner:
         direction: str = "maximize",
         metric: str = "f1",
         pruner: Any | None = None,
+        max_epochs: int | None = None,
     ) -> None:
         self.model_name = model_name
         self.cv = cv
@@ -47,6 +48,7 @@ class TimeSeriesOptunaTuner:
         self.direction = direction
         self.metric = metric
         self.pruner = pruner
+        self.max_epochs = max_epochs
 
     def tune(
         self,
@@ -146,9 +148,17 @@ class TimeSeriesOptunaTuner:
                     else:
                         w_train = sample_weights.iloc[train_idx].values
 
-                # Train and evaluate
-                model = ModelRegistry.create(self.model_name, config=params)
-                model.fit(X_train, y_train, X_val, y_val, sample_weights=w_train)
+                # Train and evaluate — inject max_epochs if configured
+                model_params = dict(params)
+                if self.max_epochs is not None:
+                    model_params["max_epochs"] = self.max_epochs
+                    model_params["early_stopping_patience"] = max(1, self.max_epochs // 2)
+                model = ModelRegistry.create(self.model_name, config=model_params)
+                fit_config = {}
+                if self.max_epochs is not None:
+                    fit_config["max_epochs"] = self.max_epochs
+                    fit_config["early_stopping_patience"] = max(1, self.max_epochs // 2)
+                model.fit(X_train, y_train, X_val, y_val, sample_weights=w_train, config=fit_config)
 
                 # Use configured metric instead of hardcoded val_f1
                 # score_fn takes (y_true, y_pred) and returns a score

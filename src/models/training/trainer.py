@@ -93,6 +93,13 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             f"DEBUG_PATH: config.output_dir={config.output_dir}, run_id={self.run_id}, output_path={self.output_path}"
         )
 
+        # Ensure model_config contains key training params from TrainerConfig
+        # This bridges the gap between TrainerConfig fields and neural model configs
+        _training_keys = ["max_epochs", "batch_size", "early_stopping_patience", "sequence_length"]
+        for _key in _training_keys:
+            if _key not in config.model_config and hasattr(config, _key):
+                config.model_config[_key] = getattr(config, _key)
+
         # Create model from registry
         self.model = ModelRegistry.create(
             config.model_name,

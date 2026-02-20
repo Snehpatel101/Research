@@ -102,6 +102,7 @@ class TrainingOpsMixin:
                 hyperparam_trials=self.config.hyperparam_trials,
                 scoring=self.config.optuna_metric,
                 use_feature_selection=self.config.optimize_features,
+                max_epochs=self.config.max_epochs,
             ))
 
         parallel_results = self._parallel_service.train_models_parallel(training_requests)
@@ -178,6 +179,7 @@ class TrainingOpsMixin:
             hyperparam_trials=self.config.hyperparam_trials,
             scoring=self.config.optuna_metric,
             use_feature_selection=self.config.optimize_features,
+            max_epochs=self.config.max_epochs,
         )
 
         training_degraded = False

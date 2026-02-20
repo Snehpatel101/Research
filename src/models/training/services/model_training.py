@@ -34,6 +34,7 @@ class ModelTrainingRequest:
     n_splits: int = 5
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
     use_feature_selection: bool = True
+    max_epochs: int | None = None  # Cap epochs for neural models in Optuna
 
 
 @dataclass
@@ -107,13 +108,20 @@ class ModelTrainingService:
             # Default output directory if none provided
             model_output_dir = Path("./output") / model_name / f"h{horizon}"
 
-        # Create trainer config
+        # Create trainer config with training params in model_config
+        # so neural models receive max_epochs, batch_size etc. via model.fit()
+        _model_config = {}
+        if request.max_epochs is not None:
+            _model_config["max_epochs"] = request.max_epochs
+            _model_config["early_stopping_patience"] = max(1, request.max_epochs // 2)
         trainer_config = TrainerConfig(
             model_name=model_name,
             horizon=horizon,
             sequence_length=request.sequence_length,
             output_dir=model_output_dir,
             use_feature_selection=request.use_feature_selection,
+            max_epochs=request.max_epochs if request.max_epochs is not None else 100,
+            model_config=_model_config,
         )
 
         # CRITICAL: Filter invalid labels (-99) before any training
@@ -302,6 +310,7 @@ class ModelTrainingService:
             n_splits=request.n_splits,
             n_trials=request.hyperparam_trials,
             scoring=request.scoring,
+            max_epochs=request.max_epochs,
         )
 
         result = tuning_service.optimize(tuning_request)
