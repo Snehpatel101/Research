@@ -95,6 +95,8 @@ class FeatureSelectionMixin:
                 n_estimators=20,
                 min_feature_frequency=0.01,
                 random_state=42,
+                use_clustered_importance=True,
+                max_clusters=20,
             )
             result = selector.select_features_walkforward(X, y, cv_splits)
 
@@ -217,9 +219,7 @@ class FeatureSelectionMixin:
         logger.info(f"  Feature ranking method: {ranking_method}")
 
         # Step 2: Correlation dedup on top-N features
-        max_model_features = max(
-            get_model_contract(m).max_features for m in self.config.models
-        )
+        max_model_features = max(get_model_contract(m).max_features for m in self.config.models)
         if ranking is not None and len(ranking) > max_model_features:
             top_n_features = ranking.head(int(max_model_features)).index.tolist()
         else:
@@ -255,9 +255,7 @@ class FeatureSelectionMixin:
         min_surviving = 10
         if len(kept_after_var) >= min_surviving:
             feature_names = kept_after_var
-            logger.info(
-                f"  Filter result: {original_count} -> {len(feature_names)} features"
-            )
+            logger.info(f"  Filter result: {original_count} -> {len(feature_names)} features")
         else:
             logger.warning(
                 f"  Filters would reduce features to {len(kept_after_var)}"
@@ -312,9 +310,7 @@ class FeatureSelectionMixin:
                             f"data has {n_feat}"
                         )
                     if issues:
-                        errors.append(
-                            f"Contract violation for {model_name}: {'; '.join(issues)}"
-                        )
+                        errors.append(f"Contract violation for {model_name}: {'; '.join(issues)}")
                 logger.info(
                     f"    Per-model features: {len(feature_names)} total, "
                     f"{len(self.config.models)} models validated"
@@ -443,7 +439,9 @@ class FeatureSelectionMixin:
                     break
 
             analyzer = DiversityAnalyzer(
-                min_diversity_threshold=0.3, correlation_threshold=0.8, n_classes=3,
+                min_diversity_threshold=0.3,
+                correlation_threshold=0.8,
+                n_classes=3,
             )
             metrics = analyzer.analyze(
                 base_predictions=base_predictions,
@@ -518,7 +516,9 @@ class FeatureSelectionMixin:
             timestamps = pd.to_datetime(df["datetime"])
 
         config = FinancialReportConfig(
-            initial_equity=100000.0, commission_per_trade=2.50, slippage_ticks=1.0,
+            initial_equity=100000.0,
+            commission_per_trade=2.50,
+            slippage_ticks=1.0,
             tick_value=1.25 if self.config.symbol == "MES" else 0.10,
         )
 
@@ -542,11 +542,15 @@ class FeatureSelectionMixin:
             try:
                 model_report_dir = reports_dir / model_key
                 generate_financial_report(
-                    model_name=result.model_name, horizon=result.horizon,
-                    predictions=predictions, y_true=y_true,
+                    model_name=result.model_name,
+                    horizon=result.horizon,
+                    predictions=predictions,
+                    y_true=y_true,
                     prices=prices[: len(predictions)],
                     timestamps=timestamps[: len(predictions)] if timestamps is not None else None,
-                    output_dir=model_report_dir, run_id=self.run_id, config=config,
+                    output_dir=model_report_dir,
+                    run_id=self.run_id,
+                    config=config,
                 )
                 logger.info(f"Generated financial report for {model_key}")
             except Exception as e:

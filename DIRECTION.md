@@ -1,9 +1,15 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-19 (Phase 63 COMPLETE — CODEBASE_AUDIT all 12 audit fixes + 4 E2E smoke test bug fixes)
-**Status:** Phase 63 COMPLETE | 16/16 tasks (12 audit fixes + 4 smoke test bugs), 47 clean imports, 0 circular imports, 51 StrEnum conversions, orchestrator split 2470 to 3 files, 22 duplicates eliminated
+**Last Updated:** 2026-02-20 (Phase 66 COMPLETE — Financial Rigor: ONC clustering, transaction costs, DSR gate, CPCV)
+**Status:** Phase 66 COMPLETE | ONC clustered feature selection enabled, transaction costs in Optuna, DSR gate enforcement, CPCV in hyperparameter tuning. 212/212 tests passing.
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 66: Financial Rigor Improvements (2026-02-20) - COMPLETE
+
+- Phase 66: 4 financial rigor improvements — (1) ONC clustered feature selection enabled (`use_clustered_importance=True`, `max_clusters=20`) to prevent substitution effect in MDA ranking, (2) transaction costs enabled in Optuna (`apply_transaction_costs=True`) so optimization labels include real $3.75 MES round-trip costs, (3) DSR gate enforcement in `run_5d_optimization()` rejects strategies with selection-bias-inflated Sharpe ratios (configurable via `PipelineConfig.enforce_dsr_gate`), (4) CPCV support in hyperparameter tuning via `cv_method="cpcv"` with `_CPCVAdapter` wrapping 3-tuple to 2-tuple interface. 6 files modified, 212/212 tests passing.
 
 ---
 

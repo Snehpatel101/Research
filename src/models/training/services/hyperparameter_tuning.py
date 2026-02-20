@@ -22,6 +22,7 @@ class TuningRequest:
     n_trials: int = 100
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
     max_epochs: int | None = None  # Cap max_epochs for neural models during tuning
+    cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
 
 
 @dataclass
@@ -68,15 +69,19 @@ class HyperparameterTuningService:
 
         logger.info(
             f"  Running hyperparameter optimization "
-            f"({data_rank}D data, model: {request.model_name})..."
+            f"({data_rank}D data, model: {request.model_name}, "
+            f"cv: {request.cv_method})..."
         )
 
-        # Create purged K-fold CV
-        cv_config = PurgedKFoldConfig(
-            n_splits=request.n_splits,
-            embargo_bars=request.horizon * 2,  # Use horizon for embargo
-        )
-        cv = PurgedKFold(cv_config)
+        # Create CV splitter based on method
+        if request.cv_method == "cpcv":
+            cv = self._create_cpcv(request)
+        else:
+            cv_config = PurgedKFoldConfig(
+                n_splits=request.n_splits,
+                embargo_bars=request.horizon * 2,
+            )
+            cv = PurgedKFold(cv_config)
 
         tuner = TimeSeriesOptunaTuner(
             model_name=request.model_name,
@@ -141,3 +146,37 @@ class HyperparameterTuningService:
             best_score=float(best_score) if best_score is not None else float("nan"),
             n_trials_completed=request.n_trials,
         )
+
+    def _create_cpcv(self, request: TuningRequest) -> Any:
+        """Create a CPCV splitter wrapped for 2-tuple compatibility with the tuner.
+
+        CPCV's split() yields (train_idx, test_idx, path_id) but TimeSeriesOptunaTuner
+        expects (train_idx, test_idx). This wrapper adapts the interface.
+        """
+        from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig
+
+        cpcv_config = CPCVConfig(
+            n_groups=max(6, request.n_splits),
+            n_test_groups=2,
+            max_combinations=15,
+            purge_pct=0.01,
+            embargo_pct=0.01,
+        )
+        cpcv = CombinatorialPurgedCV(cpcv_config)
+        return _CPCVAdapter(cpcv)
+
+
+class _CPCVAdapter:
+    """Adapter that wraps CombinatorialPurgedCV to yield 2-tuples for tuner compatibility."""
+
+    def __init__(self, cpcv: Any) -> None:
+        self._cpcv = cpcv
+
+    def split(self, X: Any, y: Any = None, groups: Any = None) -> Any:
+        """Yield (train_idx, test_idx) by dropping the path_id from CPCV's 3-tuple."""
+        for train_idx, test_idx, _path_id in self._cpcv.split(X, y, groups):
+            yield train_idx, test_idx
+
+    def get_n_splits(self, X: Any = None, y: Any = None, groups: Any = None) -> int:
+        """Return number of splits."""
+        return self._cpcv.get_n_splits(X, y, groups)

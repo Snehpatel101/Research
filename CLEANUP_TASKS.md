@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 63 complete
-**Last Updated:** 2026-02-19
+**Status:** All phases through 66 complete
+**Last Updated:** 2026-02-20
 
 ---
 
@@ -49,16 +49,19 @@ See **COMPLETION.md** for full task details and implementation information.
 | 60 | 7/7 tasks (all complete) | DatetimeIndex pipeline fix, 8/8 ensemble combos verified | 2026-02-19 |
 | 62 | 5/5 tasks (all complete) | Optimization plan 21/21, OOF fold caching, Hurst @njit, shift vectorization | 2026-02-19 |
 | 63 | 12/12 tasks (all complete) | Codebase audit: strict validators, symbol error, OOF leakage, lookahead scan, CI/CD, dedup, MDA-first, orchestrator split, OOM flag, resampling parity, MDA threshold, StrEnum | 2026-02-19 |
+| 64 | 6/6 tasks (all complete) | E2E smoke test: 12 models x 2 modes, 6 bugs fixed | 2026-02-19 |
+| 65 | 5/5 tasks (all complete) | Pipeline audit: dead-code bug, test suite 212/212 | 2026-02-19 |
+| 66 | 4/4 tasks (all complete) | Financial rigor: ONC clustering, transaction costs, DSR gate, CPCV | 2026-02-20 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 267+ tasks across 37 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D), DatetimeIndex pipeline fix, codebase audit 12/12 fixes (47 clean imports, 0 circular imports, 51 StrEnum conversions, orchestrator split, 22 duplicates eliminated).
+**Summary Impact:** 275+ tasks across 41 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D), DatetimeIndex pipeline fix, codebase audit 12/12 fixes (47 clean imports, 0 circular imports, 51 StrEnum conversions, orchestrator split, 22 duplicates eliminated), financial rigor improvements (ONC clustered feature selection, transaction costs in Optuna, DSR gate enforcement, CPCV in hyperparameter tuning).
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 63 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 66 are complete. See COMPLETION.md for full details.
 
 ---
 

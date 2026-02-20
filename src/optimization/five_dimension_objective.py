@@ -72,7 +72,7 @@ from src.optimization.hyperparameters import (
     HYPERPARAMETER_SPACES,
     suggest_hyperparameters,
 )
-from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
+from src.validation.deflated_sharpe import compute_dsr_from_optuna_study, dsr_gate
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,7 @@ def generate_labels_for_trial(
         horizon=max_holding_bars,
         atr_period=atr_period,
         atr_column=atr_col,
-        apply_transaction_costs=False,  # Skip costs for speed during optimization
+        apply_transaction_costs=True,  # Include costs for realistic optimization
     )
 
     labeler = TripleBarrierLabeler(config)
@@ -888,6 +888,8 @@ def run_5d_optimization(
     run_id: str | None = None,
     output_dir: str = "experiments",
     save_top_k: int = 5,
+    # DSR gate enforcement
+    enforce_dsr_gate: bool = True,
 ) -> tuple[optuna.Study, FiveDimensionResult]:
     """
     Run complete 5-dimension optimization study.
@@ -1026,11 +1028,21 @@ def run_5d_optimization(
             f"Risk: {dsr_result.get_risk_level()}"
         )
 
-        # Warn if DSR is below deployment threshold
-        if not dsr_result.should_deploy:
+        # Enforce DSR gate: reject strategies that appear good only due to selection bias
+        if enforce_dsr_gate:
+            proceed, reason = dsr_gate(dsr_result)
+            if not proceed:
+                logger.warning(f"DSR gate FAILED: {reason}")
+                raise ValueError(
+                    f"DSR gate rejected optimization result: {reason}\n"
+                    f"The observed Sharpe ratio ({dsr_result.sharpe_ratio:.3f}) is likely "
+                    f"inflated by selection bias across {dsr_result.n_trials} trials.\n"
+                    f"To disable this gate, set enforce_dsr_gate=False in PipelineConfig."
+                )
+        elif not dsr_result.should_deploy:
             logger.warning(
-                f"Deflated Sharpe ({dsr_result.deflated_sharpe:.3f}) below "
-                f"deployment threshold (0.5). Risk: {dsr_result.get_risk_level()}"
+                f"DSR gate advisory: Deflated Sharpe ({dsr_result.deflated_sharpe:.3f}) "
+                f"below deployment threshold (0.5). Risk: {dsr_result.get_risk_level()}"
             )
 
         if verbose >= 1:

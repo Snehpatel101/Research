@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 65 COMPLETE (Pipeline Audit & Test Suite Cleanup — 212/212 tests passing)
-**Last Updated:** 2026-02-19
+**Status:** Phase 66 COMPLETE (Financial Rigor — ONC Clustering, Transaction Costs, DSR Gate, CPCV)
+**Last Updated:** 2026-02-20
 
 ---
 
@@ -51,10 +51,11 @@ See **COMPLETION.md** for full details on all completed phases.
 | 63 | CODEBASE_AUDIT Complete — All 12 Audit Fixes | ✅ COMPLETE | 2026-02-19 |
 | 64 | E2E Pipeline Smoke Test — 12 Models x 2 Modes (6 bugs fixed) | ✅ COMPLETE | 2026-02-19 |
 | 65 | Pipeline Audit & Test Suite Cleanup (212/212 tests) | ✅ COMPLETE | 2026-02-19 |
+| 66 | Financial Rigor — ONC Clustering, Transaction Costs, DSR Gate, CPCV | ✅ COMPLETE | 2026-02-20 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 40 phases complete (24-65), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract specs auto-detected, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, explicit resample anti-lookahead params, E2E pipeline fully functional, deploy manifest model names fixed, backtest pipeline working, cross-family ensembles all 8 combinations verified (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D), DatetimeIndex pipeline fix enabling full transformer integration, optimization plan 21/21 complete (projected 80-85% pipeline runtime reduction), codebase audit 12/12 fixes (47 clean imports, 0 circular imports, 51 StrEnum conversions, orchestrator split 2470 to 3 files, 22 duplicates eliminated).
+**Summary Impact:** 41 phases complete (24-66), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract specs auto-detected, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, explicit resample anti-lookahead params, E2E pipeline fully functional, deploy manifest model names fixed, backtest pipeline working, cross-family ensembles all 8 combinations verified (2D+4D, 3D+4D, 4D+4D, 2D+3D+4D), DatetimeIndex pipeline fix enabling full transformer integration, optimization plan 21/21 complete (projected 80-85% pipeline runtime reduction), codebase audit 12/12 fixes (47 clean imports, 0 circular imports, 51 StrEnum conversions, orchestrator split 2470 to 3 files, 22 duplicates eliminated), financial rigor improvements (ONC clustered feature selection, transaction costs in Optuna, DSR gate enforcement, CPCV in hyperparameter tuning).
 
 ---
 
@@ -92,12 +93,13 @@ See **COMPLETION.md** for full details on all completed phases.
 | 63 | CODEBASE_AUDIT Complete — All 12 Audit Fixes | HIGH | 1 session | ✅ COMPLETE |
 | 64 | E2E Pipeline Smoke Test — 12 Models x 2 Modes | CRITICAL | 1 session | ✅ COMPLETE |
 | 65 | Pipeline Audit & Test Suite Cleanup | HIGH | 1 session | ✅ COMPLETE |
+| 66 | Financial Rigor (ONC, costs, DSR, CPCV) | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 65 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
+**No active phases.** All phases through 66 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
 
 ---
 
@@ -925,6 +927,29 @@ python -c "from src.inference.orchestrator import PredictionResult; print('OK')"
 # Run tests
 pytest tests/ -v  # Should pass all 42 tests
 ```
+
+---
+
+## Phase 66: Financial Rigor — ONC Clustering, Transaction Costs, DSR Gate, CPCV
+
+4 improvements grounded in Lopez de Prado's Advances in Financial Machine Learning to increase prediction accuracy and reduce overfitting risk.
+
+### Rationale
+- ONC Clustered Feature Selection: Prevents substitution effect where correlated features dilute each other's MDA importance scores
+- Transaction Costs in Optuna: Labels generated during optimization now include real trading costs, preventing selection of strategies that only profit on paper
+- DSR Gate Enforcement: Prevents deployment of strategies whose Sharpe ratios are inflated by selection bias across multiple Optuna trials
+- CPCV in Hyperparameter Tuning: More robust cross-validation with 15 backtest paths vs standard K-fold, reducing hyperparameter overfitting
+
+### Success Metrics
+| Metric | Before | After | Result |
+|--------|--------|-------|--------|
+| ONC clustering | Disabled (code existed) | Enabled (use_clustered_importance=True) | Wired |
+| Transaction costs in Optuna | Disabled (apply_transaction_costs=False) | Enabled (True) | Wired |
+| DSR gate | Advisory only (warnings) | Enforcement (ValueError on failure) | Conditional via config |
+| CPCV support in tuning | Not available | Available via cv_method="cpcv" | Wired through pipeline |
+| Tests passing | 212/212 | 212/212 | No regressions |
+
+**Status: COMPLETE (2026-02-20)**
 
 ---
 

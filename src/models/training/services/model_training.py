@@ -35,6 +35,7 @@ class ModelTrainingRequest:
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
     use_feature_selection: bool = True
     max_epochs: int | None = None  # Cap epochs for neural models in Optuna
+    cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
 
 
 @dataclass
@@ -311,6 +312,7 @@ class ModelTrainingService:
             n_trials=request.hyperparam_trials,
             scoring=request.scoring,
             max_epochs=request.max_epochs,
+            cv_method=request.cv_method,
         )
 
         result = tuning_service.optimize(tuning_request)

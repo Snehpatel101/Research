@@ -240,6 +240,13 @@ src/
   - 2D+2D+2D, 2D+3D, 2D+4D, 3D+3D, 3D+4D, 4D+4D, 2D+3D+4D all working
   - Walk-forward mode verified for boosting models
 
+**Phase 66: COMPLETE — Financial Rigor Improvements (4 enhancements)**
+- ONC clustered feature selection enabled (prevents substitution effect in MDA)
+- Transaction costs in Optuna (labels include real $3.75 MES costs)
+- DSR gate enforcement (rejects selection-bias-inflated Sharpe ratios)
+- CPCV support in hyperparameter tuning (15 backtest paths via cv_method="cpcv")
+- 6 files modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -331,6 +338,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-19*
+*Last updated: 2026-02-20*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

@@ -4,6 +4,47 @@
 
 ---
 
+## Phase 66: Financial Rigor Improvements — 4 Enhancements | 2026-02-20 | COMPLETE
+
+**Impact:** 4 improvements to increase prediction accuracy and reduce overfitting risk. All grounded in Lopez de Prado's Advances in Financial Machine Learning. 6 files modified. **212/212 tests still passing.**
+
+### Changes (4)
+
+| # | Enhancement | File(s) | Description |
+|:-:|-------------|---------|-------------|
+| 1 | ONC Clustered Feature Selection | `feature_selection.py` | Enabled `use_clustered_importance=True` + `max_clusters=20` on `WalkForwardFeatureSelector`. Groups correlated features into ONC clusters before MDA importance ranking, preventing the substitution effect where redundant features dilute each other's importance scores. |
+| 2 | Transaction Costs in Optuna | `five_dimension_objective.py:319` | Changed `apply_transaction_costs=False` to `True`. Triple-barrier labels during optimization now include real trading costs ($3.75 MES round-trip), producing strategies optimized for net-of-cost returns rather than gross returns. |
+| 3 | DSR Gate Enforcement | `five_dimension_objective.py:1028-1046`, `config.py` | Conditional enforcement of Deflated Sharpe Ratio (Bailey & Lopez de Prado, 2014). When `enforce_dsr_gate=True` (default), `run_5d_optimization()` raises `ValueError` if the observed Sharpe ratio is likely inflated by selection bias across Optuna trials. Configurable via `PipelineConfig.enforce_dsr_gate` and `dsr_deployment_threshold`. |
+| 4 | CPCV in Hyperparameter Tuning | `hyperparameter_tuning.py`, `model_training.py`, `training_ops.py` | Added `cv_method="cpcv"` support. Combinatorial Purged Cross-Validation generates 15 backtest paths from 6 groups/2 test groups, providing more robust hyperparameter selection than PurgedKFold. `_CPCVAdapter` wraps CPCV's 3-tuple `(train, test, path_id)` into 2-tuples for tuner compatibility. Wired through `ModelTrainingRequest` → `TuningRequest`. |
+
+### Files Modified (6)
+
+| File | Change |
+|------|--------|
+| `src/models/training/feature_selection.py` | Added `use_clustered_importance=True`, `max_clusters=20` to WalkForwardFeatureSelector constructor |
+| `src/optimization/five_dimension_objective.py` | Imported `dsr_gate`, enabled transaction costs, added conditional DSR enforcement with `enforce_dsr_gate` parameter |
+| `src/core/config.py` | Added `enforce_dsr_gate: bool = True` and `dsr_deployment_threshold: float = 0.5` to PipelineConfig |
+| `src/models/training/services/hyperparameter_tuning.py` | Added `cv_method` to TuningRequest, `_create_cpcv()` method, `_CPCVAdapter` class |
+| `src/models/training/services/model_training.py` | Added `cv_method` to ModelTrainingRequest, wired to TuningRequest |
+| `src/models/training/training_ops.py` | Wired `cv_method=self.config.cv_method` at both ModelTrainingRequest creation sites |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| ruff check | PASS (0 errors) |
+| black formatting | PASS |
+| pytest (212 tests) | **212/212 PASSED** |
+| All 12 models | PASS (XGBoost, LightGBM, CatBoost, LSTM, GRU, TCN, InceptionTime, ResNet1D, PatchTST, iTransformer, TFT, N-BEATS) |
+
+### Bug Found & Fixed During Implementation
+
+| Severity | Bug | Fix |
+|----------|-----|-----|
+| Critical | DSR gate enforcement was unconditional — `run_5d_optimization()` had no access to `enforce_dsr_gate` parameter | Added `enforce_dsr_gate: bool = True` parameter to function signature, wrapped enforcement in conditional |
+
+---
+
 ## Phase 65: Pipeline Audit & Test Suite Cleanup | 2026-02-19 | COMPLETE
 
 **Impact:** 3-agent deep audit of all 8 changed files + 13 model classes. 1 critical dead-code bug fixed, 3 pre-existing test failures fixed. Test suite: **212/212 passed (0 failed)**.
