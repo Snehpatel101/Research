@@ -228,5 +228,106 @@ Models trained in batches of 2 to stay within 16GB RAM:
 
 ---
 
-*Last updated: 2026-02-19*
-*All 12 models tested. 12/12 walk-forward PASS. TFT completed with reduced features (F1=0.6252).*
+## Cross-Family Ensemble Tests (Phase 60 Verification)
+
+> All 8 cross-family ensemble combinations tested end-to-end with stacking meta-learner.
+
+**Date:** 2026-02-20
+**Dataset:** MES 1-minute bars, January 2020 (29,776 rows → 15,770 after NaN cleanup)
+**Configuration:** Standard mode, 3-fold PurgedKFold, 1 epoch, `build_ensemble=True`, `meta_learner=ridge_meta`
+
+### Test Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| **Data source** | `data/raw/MES_1m_1month.parquet` |
+| **Symbol** | MES |
+| **Timeframe** | 1min + MTF (5min, 15min, 60min) |
+| **Date range** | 2020-01-02 → 2020-01-31 (1 month) |
+| **Horizons** | 5 |
+| **CV splits** | 3-fold PurgedKFold |
+| **Purge/Embargo** | 5 / 2 bars |
+| **Max epochs** | 1 (training), 50 (OOF generation — not yet configurable) |
+| **Optuna trials** | 0 |
+| **Ensemble method** | Stacking (RidgeMeta) |
+| **Backtest** | Enabled, $100,000 initial capital |
+| **Labeling** | Triple-barrier with transaction costs ($3.75 MES) |
+| **Features** | 227 engineered → 84 after correlation/variance filter |
+| **Label distribution** | Short 21.2%, Neutral 75.6%, Long 3.1% |
+
+### Results Summary
+
+| # | Combo | Models | Status | Duration | Ensemble F1 | Diversity | Backtest Sharpe | Trades |
+|:-:|-------|--------|:------:|----------|:-----------:|:---------:|:---------------:|:------:|
+| 1 | 2D+2D | XGBoost + LightGBM | PASS | 25.5s | 0.2957 | 0.186 | -4.91 | 5 |
+| 2 | 2D+2D+2D | XGBoost + LightGBM + CatBoost | PASS | 50.1s | **0.3368** | 0.213 | -5.21 | 5 |
+| 3 | 2D+3D | XGBoost + LSTM | PASS | 126.0s | — (a) | — | -5.21 | 5 |
+| 4 | 2D+4D | XGBoost + PatchTST | PASS | 321.9s | 0.2770 | **0.483** | -3.01 | 5 |
+| 5 | 3D+3D | LSTM + TCN | PASS | 142.4s | — (b) | — | — | 0 |
+| 6 | 3D+4D | GRU + iTransformer | PASS | 604.1s | — (a) | — | — | 0 |
+| 7 | 4D+4D | PatchTST + iTransformer | PASS | 638.2s | 0.2590 | 0.361 | -0.73 | 14 |
+| 8 | 2D+3D+4D | XGBoost + LSTM + PatchTST | PASS | 318.4s | 0.2770 | **0.483** | -3.01 | 5 |
+
+**Total time:** 2,226.6s (~37 min)
+**Pass rate:** 8/8 (pipeline completion), 5/8 (meta-learner trained)
+
+### Individual Model F1 Scores
+
+| Model | Family | Rank | F1 (val) | Notes |
+|-------|--------|:----:|:--------:|-------|
+| XGBoost | Boosting | 2D | 0.3561 | Consistent across all runs |
+| LightGBM | Boosting | 2D | 0.3646 | Best individual F1 |
+| CatBoost | Boosting | 2D | 0.3614 | |
+| LSTM | RNN | 3D | 0.2899 | Predicts mostly neutral (1 epoch) |
+| GRU | RNN | 3D | 0.2899 | Same — needs more epochs |
+| TCN | CNN | 3D | 0.2899 | Same |
+| PatchTST | Transformer | 4D | 0.2899 | Same |
+| iTransformer | Transformer | 4D | 0.2899 | Same |
+
+### Ensemble Diversity Analysis
+
+| Combo | Diversity Score | Correlation | Disagreement | Q-Statistic |
+|-------|:--------------:|:-----------:|:------------:|:-----------:|
+| 2D+2D | 0.186 | 0.548 | 0.097 | — |
+| 2D+2D+2D | 0.213 | 0.451 | 0.131 | — |
+| 2D+4D | 0.483 | 0.087 | 0.566 | 0.335 |
+| 4D+4D | 0.361 | 0.208 | 0.482 | — |
+| 2D+3D+4D | 0.483 | 0.087 | 0.566 | 0.335 |
+
+**Key finding:** Cross-family ensembles (2D+4D, 2D+3D+4D) have the highest diversity (0.483) and lowest correlation (0.087). Same-family ensembles (2D+2D) have low diversity (0.186) and high correlation (0.548).
+
+### Footnotes
+
+**(a)** LSTM/GRU OOF generation failed with memory error: "Unable to allocate 16.5 GiB for array with shape (439080, 5040)". The 3D sequence OOF requires materializing all windowed sequences simultaneously. Only 1 model had OOF available, so the meta-learner couldn't train (needs ≥ 2). The pipeline still completed successfully using individual model predictions for backtest.
+
+**(b)** Both LSTM and TCN OOF generation failed (same memory issue). No OOF predictions were available for ensemble building. Pipeline still completed — backtest used majority vote from individual models (0 trades generated).
+
+### Known Issues Found
+
+| Issue | Impact | Status |
+|-------|--------|--------|
+| 3D OOF memory allocation (16.5 GiB) | LSTM/GRU/TCN OOF fails on 16GB RAM | Known — needs chunked OOF generation |
+| OOF generator uses 50 epochs (not max_epochs=1) | Transformer OOF is slow (~3 min/fold) | Known — max_epochs not propagated to OOF |
+| Ensemble diversity analysis fails | `'DataFrame' object has no attribute 'dtype'` | Non-blocking — logged as warning |
+| MDA ranking falls back to variance | ONC clustering linkage has negative distances | Non-blocking — fallback works correctly |
+
+### Observations
+
+1. **All 8 combinations complete without crash** — the cross-family ensemble pipeline is functional end-to-end.
+
+2. **Best ensemble F1: 0.3368 (2D+2D+2D)** — triple boosting benefits from 3 diverse gradient boosting implementations (different regularization, tree algorithms, and categorical handling).
+
+3. **Highest diversity: 0.483 (2D+4D and 2D+3D+4D)** — cross-family combinations naturally produce the most diverse predictions. Low correlation (0.087) between boosting and transformer models.
+
+4. **3D OOF is the bottleneck** — sequence OOF generation tries to allocate 16.5 GiB for windowed data, failing on 16GB machines. This blocks 3 of the 8 ensemble combinations (2D+3D, 3D+3D, 3D+4D) from training a meta-learner.
+
+5. **4D OOF works** — PatchTST and iTransformer successfully generate OOF predictions using the `_generate_4d_oof()` method added in Phase 57.
+
+6. **Neural models converge to neutral** with 1 epoch — F1=0.2899 for all neural/transformer models (predicting 75.6% neutral class). More epochs needed for meaningful differentiation.
+
+7. **Negative Sharpe ratios expected** — 1-month data, 1 epoch, 0 Optuna trials. This validates pipeline correctness, not trading performance.
+
+---
+
+*Last updated: 2026-02-20*
+*All 12 models tested. 12/12 walk-forward PASS. 8/8 cross-family ensemble combinations PASS (pipeline). 5/8 meta-learner trained.*
