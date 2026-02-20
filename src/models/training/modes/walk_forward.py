@@ -22,6 +22,7 @@ import pandas as pd
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
 
+from src.core.constants import DEFAULT_BATCH_SIZE, DEFAULT_MAX_EPOCHS
 from src.core.contracts import get_model_contract
 from src.core.types import DataRank
 from src.models.base import PredictionResult
@@ -418,8 +419,8 @@ class WalkForwardTrainer:
             # Create and train model with training config
             _model_config = {}
             if hasattr(self, '_pipeline_config') and self._pipeline_config is not None:
-                _model_config['max_epochs'] = getattr(self._pipeline_config, 'max_epochs', 50)
-                _model_config['batch_size'] = getattr(self._pipeline_config, 'batch_size', 128)
+                _model_config['max_epochs'] = getattr(self._pipeline_config, 'max_epochs', DEFAULT_MAX_EPOCHS)
+                _model_config['batch_size'] = getattr(self._pipeline_config, 'batch_size', DEFAULT_BATCH_SIZE)
                 _model_config['early_stopping_patience'] = getattr(self._pipeline_config, 'early_stopping_patience', 10)
             model = ModelRegistry.create(model_name, config=_model_config)
             model.fit(

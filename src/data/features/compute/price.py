@@ -9,6 +9,13 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+# Numba JIT acceleration for rolling.apply() fallback functions
+try:
+    from numba import njit
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -24,6 +31,54 @@ def _safe_log_return(series: pd.Series, periods: int = 1) -> pd.Series:
     return np.log(series / series.shift(periods))
 
 
+if NUMBA_AVAILABLE:
+    @njit(cache=True)
+    def _autocorr_lag_numba(x: np.ndarray, lag: int) -> float:
+        """Numba-accelerated autocorrelation of array with specified lag."""
+        n = len(x)
+        if n <= lag:
+            return np.nan
+        # Count valid (non-NaN) values
+        valid_count = 0
+        for i in range(n):
+            if not np.isnan(x[i]):
+                valid_count += 1
+        if valid_count <= lag:
+            return np.nan
+        # Build clean arrays (no NaN)
+        clean = np.empty(valid_count)
+        idx = 0
+        for i in range(n):
+            if not np.isnan(x[i]):
+                clean[idx] = x[i]
+                idx += 1
+        m = len(clean)
+        if m <= lag:
+            return np.nan
+        # Pearson correlation between clean[:-lag] and clean[lag:]
+        n_pairs = m - lag
+        sum_x = 0.0
+        sum_y = 0.0
+        for i in range(n_pairs):
+            sum_x += clean[i]
+            sum_y += clean[i + lag]
+        mean_x = sum_x / n_pairs
+        mean_y = sum_y / n_pairs
+        num = 0.0
+        den_x = 0.0
+        den_y = 0.0
+        for i in range(n_pairs):
+            dx = clean[i] - mean_x
+            dy = clean[i + lag] - mean_y
+            num += dx * dy
+            den_x += dx * dx
+            den_y += dy * dy
+        denom = np.sqrt(den_x * den_y)
+        if denom == 0.0:
+            return np.nan
+        return num / denom
+
+
 def _rolling_autocorr(series: pd.Series, lag: int, window: int = 20) -> pd.Series:
     """Rolling autocorrelation with specified lag (Numba-accelerated when available)."""
     try:
@@ -34,18 +89,25 @@ def _rolling_autocorr(series: pd.Series, lag: int, window: int = 20) -> pd.Serie
         result = calculate_rolling_autocorr_numba(series.values, window, lag)
         return pd.Series(result, index=series.index)
     except ImportError:
+        if NUMBA_AVAILABLE:
+            _lag = lag  # capture for lambda
 
-        def autocorr_lag(x: np.ndarray) -> float:
-            if len(x) <= lag:
-                return np.nan
-            x_clean = x[~np.isnan(x)]
-            if len(x_clean) <= lag:
-                return np.nan
-            return float(np.corrcoef(x_clean[:-lag], x_clean[lag:])[0, 1])
+            return series.rolling(window=window, min_periods=window).apply(
+                lambda x: _autocorr_lag_numba(x, _lag), raw=True
+            )
+        else:
 
-        return series.rolling(window=window, min_periods=window).apply(
-            lambda x: autocorr_lag(x.values), raw=False
-        )
+            def autocorr_lag(x: np.ndarray) -> float:
+                if len(x) <= lag:
+                    return np.nan
+                x_clean = x[~np.isnan(x)]
+                if len(x_clean) <= lag:
+                    return np.nan
+                return float(np.corrcoef(x_clean[:-lag], x_clean[lag:])[0, 1])
+
+            return series.rolling(window=window, min_periods=window).apply(
+                lambda x: autocorr_lag(x.values), raw=False
+            )
 
 
 # =============================================================================

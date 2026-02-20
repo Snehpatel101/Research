@@ -79,14 +79,23 @@ class XGBoostModel(BaseModel):
         self._model: xgb.Booster | None = None
         self._feature_names: list[str] | None = None
         self._n_classes: int = 3
-        self._use_gpu: bool = self._config.get("use_gpu", False)
+        self._use_gpu: bool = self._config.get("use_gpu", self._detect_gpu())
 
         if self._use_gpu:
             if _check_cuda_available():
-                logger.info("XGBoost GPU training enabled")
+                logger.info("XGBoost GPU acceleration: ENABLED (auto-detected)")
             else:
                 logger.warning("CUDA not available, falling back to CPU")
                 self._use_gpu = False
+
+    @staticmethod
+    def _detect_gpu() -> bool:
+        """Auto-detect CUDA availability for GPU acceleration."""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
 
     @property
     def model_family(self) -> str:

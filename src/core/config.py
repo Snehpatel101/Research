@@ -311,7 +311,7 @@ class PipelineConfig:
     # =========================================================================
 
     random_state: int = 42  # Global random seed
-    n_jobs: int = 1  # Parallelism (-1 for all cores)
+    n_jobs: int = -1  # Use all available cores (-1 = auto-detect)
     verbose: int = 1  # Logging verbosity (0=silent, 1=progress, 2=debug)
 
     # =========================================================================

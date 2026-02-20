@@ -302,7 +302,7 @@ class BaseRNNModel(BaseModel):
             "dropout": 0.3,
             "bidirectional": False,
             "sequence_length": 60,
-            "batch_size": 256,
+            "batch_size": 512,
             "max_epochs": 100,
             "learning_rate": 0.001,
             "weight_decay": 0.0001,
@@ -359,10 +359,12 @@ class BaseRNNModel(BaseModel):
         self._model = self._create_network(n_features)
         self._model = self._model.to(self._device)
 
-        # Attempt torch.compile for potential speedup (PyTorch 2.0+)
-        if hasattr(torch, "compile"):
+        # Attempt torch.compile for potential speedup (PyTorch 2.0+, CUDA only)
+        # CPU compilation requires a system C++ compiler and provides minimal benefit
+        if hasattr(torch, "compile") and self._device.type == "cuda":
             with contextlib.suppress(Exception):
-                self._model = torch.compile(self._model)
+                self._model = torch.compile(self._model, mode="max-autotune")
+                logger.info("torch.compile(mode='max-autotune') applied")
 
         # Log bidirectional warning if applicable (only logged once per model)
         self._log_bidirectional_warning()
@@ -424,7 +426,7 @@ class BaseRNNModel(BaseModel):
         )
 
         # Checkpoint manager for periodic saving and best model tracking
-        checkpoint_interval = train_config.get("checkpoint_interval", 10)
+        checkpoint_interval = train_config.get("checkpoint_interval", 50)
         checkpoint_dir = train_config.get("checkpoint_dir", None)
         self._checkpoint_manager: CheckpointManager | None = None
         if checkpoint_dir:
@@ -610,7 +612,7 @@ class BaseRNNModel(BaseModel):
         X_tensor = torch.tensor(X, dtype=torch.float32).to(self._device)
 
         all_probs = []
-        batch_size = self._config.get("batch_size", 256)
+        batch_size = self._config.get("batch_size", 512)
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
@@ -722,7 +724,7 @@ class BaseRNNModel(BaseModel):
 
         return DataLoader(
             dataset,
-            batch_size=config.get("batch_size", 256),
+            batch_size=config.get("batch_size", 512),
             shuffle=shuffle,
             num_workers=num_workers,
             pin_memory=pin_memory,

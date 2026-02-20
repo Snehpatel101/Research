@@ -70,6 +70,22 @@ class FeatureSelectionMixin:
                 )
                 return None
 
+            # Subsample for large datasets — MDA ranking is stable at 50K rows
+            mda_max_rows = 50_000
+            if len(clean_df) > mda_max_rows:
+                logger.info(
+                    f"  MDA subsampling: {len(clean_df):,} rows → {mda_max_rows:,} "
+                    f"(stratified by {label_col})"
+                )
+                # Stratified subsample to preserve class balance
+                from sklearn.model_selection import train_test_split
+                clean_df, _ = train_test_split(
+                    clean_df,
+                    train_size=mda_max_rows,
+                    stratify=clean_df[label_col],
+                    random_state=42,
+                )
+
             X = clean_df[feature_names]
             y = clean_df[label_col]
 

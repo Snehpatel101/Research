@@ -75,13 +75,22 @@ class CatBoostModel(BaseModel):
             self._use_gpu = False
             logger.info("CatBoost CPU mode forced via task_type config")
         else:
-            self._use_gpu = self._config.get("use_gpu", False)
+            self._use_gpu = self._config.get("use_gpu", self._detect_gpu())
             if self._use_gpu:
                 if _check_cuda_available():
-                    logger.info("CatBoost GPU training enabled")
+                    logger.info("CatBoost GPU acceleration: ENABLED (auto-detected)")
                 else:
                     logger.warning("CUDA not available for CatBoost, falling back to CPU")
                     self._use_gpu = False
+
+    @staticmethod
+    def _detect_gpu() -> bool:
+        """Auto-detect CUDA availability for GPU acceleration."""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            return False
 
     @property
     def model_family(self) -> str:

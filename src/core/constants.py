@@ -208,7 +208,7 @@ DEFAULT_DROPOUT: float = 0.1
 # TRAINING DEFAULTS
 # =============================================================================
 
-DEFAULT_BATCH_SIZE: int = 256
+DEFAULT_BATCH_SIZE: int = 512  # Optimized for GPU (H100: 80GB VRAM handles 512+ easily)
 DEFAULT_MAX_EPOCHS: int = 100
 DEFAULT_LEARNING_RATE: float = 0.001
 DEFAULT_EARLY_STOPPING_PATIENCE: int = 10

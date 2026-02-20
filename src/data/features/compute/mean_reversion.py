@@ -7,15 +7,21 @@ These features detect mean-reverting behavior in price series,
 useful for identifying trading opportunities and regime changes.
 """
 
-from collections.abc import Callable
-
 import functools
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 
 from src.data.features.compute._helpers import rolling_std, sma
+
+try:
+    from numba import njit  # noqa: F401
+
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -130,6 +136,49 @@ def _calc_halflife(x: np.ndarray) -> float:
     return min(halflife, MAX_HALFLIFE)  # Cap at 2x window
 
 
+if NUMBA_AVAILABLE:
+    from numba import njit as _njit_halflife
+
+    @_njit_halflife(cache=True)
+    def _calc_halflife_numba(x: np.ndarray) -> float:
+        """Numba-accelerated OU half-life calculation."""
+        n = len(x)
+        if n < 10:
+            return np.nan
+        # Log prices
+        log_x = np.empty(n)
+        for i in range(n):
+            if x[i] <= 0:
+                return np.nan
+            log_x[i] = np.log(x[i])
+        # Delta and lagged
+        y = np.empty(n - 1)
+        x_lag = np.empty(n - 1)
+        for i in range(n - 1):
+            y[i] = log_x[i + 1] - log_x[i]
+            x_lag[i] = log_x[i]
+        # Simple OLS: y = a + b * x_lag
+        n_obs = n - 1
+        sum_x = 0.0
+        sum_y = 0.0
+        sum_xx = 0.0
+        sum_xy = 0.0
+        for i in range(n_obs):
+            sum_x += x_lag[i]
+            sum_y += y[i]
+            sum_xx += x_lag[i] * x_lag[i]
+            sum_xy += x_lag[i] * y[i]
+        denom = n_obs * sum_xx - sum_x * sum_x
+        if abs(denom) < 1e-12:
+            return np.nan
+        beta = (n_obs * sum_xy - sum_x * sum_y) / denom
+        if beta >= 0:
+            return np.nan
+        return -np.log(2) / beta
+
+    _calc_halflife = _calc_halflife_numba
+
+
 def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
     """
     Estimate Ornstein-Uhlenbeck mean-reversion half-life.
@@ -137,15 +186,23 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
     Uses AR(1) regression to estimate the speed of mean reversion.
     Smaller values indicate faster mean reversion.
 
+    When Numba is available, uses _calc_halflife_numba which takes raw prices
+    and logs internally. Otherwise falls back to the original _calc_halflife
+    which expects pre-logged prices.
+
     Args:
         df: DataFrame with 'close' column
 
     Returns:
         Series with half-life in bars (capped at MAX_HALFLIFE=120.0 if no mean reversion)
     """
-    log_prices = np.log(df["close"])
-
-    return log_prices.rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
+    if NUMBA_AVAILABLE:
+        # Numba version takes raw prices and logs internally
+        return df["close"].rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
+    else:
+        # Original version expects pre-logged prices
+        log_prices = np.log(df["close"])
+        return log_prices.rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
 
 
 # =============================================================================
@@ -450,9 +507,7 @@ try:
 
         return result
 
-    NUMBA_AVAILABLE = True
 except ImportError:
-    NUMBA_AVAILABLE = False
 
     def _variance_ratio_numba(arr: np.ndarray, window: int, lag: int) -> np.ndarray:
         """Fallback non-numba version."""

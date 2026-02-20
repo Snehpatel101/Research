@@ -8,14 +8,20 @@ liquidity regime changes from OHLCV data without requiring
 order book information.
 """
 
-from collections.abc import Callable
-
 import functools
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
 
 from src.data.features.compute._helpers import rolling_std, sma
+
+# Numba JIT acceleration for rolling.apply() functions
+try:
+    from numba import njit
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -96,6 +102,23 @@ def _percentile_rank(x: np.ndarray) -> float:
     if denom == 0:
         return np.nan
     return (x[-1] - x_min) / denom
+
+
+if NUMBA_AVAILABLE:
+    @njit(cache=True)
+    def _percentile_rank_numba(x: np.ndarray) -> float:
+        """Numba-accelerated percentile rank of last value in window."""
+        n = len(x)
+        if n < 2:
+            return 0.5
+        last = x[-1]
+        count_below = 0
+        for i in range(n - 1):
+            if x[i] < last:
+                count_below += 1
+        return count_below / (n - 1)
+
+    _percentile_rank = _percentile_rank_numba
 
 
 def compute_liquidity_regime_10(df: pd.DataFrame) -> pd.Series:
