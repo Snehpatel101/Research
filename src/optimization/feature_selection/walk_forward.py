@@ -312,6 +312,7 @@ class WalkForwardFeatureSelector:
 
         # Hierarchical clustering on distance = 1 - |correlation|
         dist = 1 - corr.abs()
+        dist = dist.clip(lower=0)  # Prevent floating-point negative distances
         np.fill_diagonal(dist.values, 0)  # Ensure diagonal is 0
 
         # Condense distance matrix and cluster

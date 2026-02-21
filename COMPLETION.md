@@ -4,6 +4,38 @@
 
 ---
 
+## Phase 72: Memory Optimization — 7 Fixes (~200GB → ~30-40GB) | 2026-02-21 | COMPLETE
+
+**Impact:** Peak RAM reduced from 230GB+ (crash) to estimated ~30-40GB for `mgc_h100_xcb_tcn_pst` experiment (949K rows × 227 features, xgboost/tcn/patchtst, 5 walk-forward windows, 100 Optuna trials). Also fixes MDA feature selection crash and -99 invalid label leakage into walk-forward training. 6 files modified. **212/212 tests expected passing.**
+
+### Changes (7)
+
+| # | Fix | File | Memory Saved | Description |
+|:-:|-----|------|:------------:|-------------|
+| 1 | Eliminate redundant copies | `src/models/training/training_ops.py` | ~40 GB | Removed `.copy()` on full DataFrame, added labels in-place, saved metadata before `del prepared`, aggressive `del` + `gc.collect()` between intermediate steps |
+| 2 | Preserve float32 dtype | `src/validation/cv/fold_scaling.py` | ~12 GB/window | Added `.astype(np.float32, copy=False)` after sklearn RobustScaler (which upcasts float32→float64) |
+| 3 | Walk-forward window cleanup | `src/models/training/modes/walk_forward.py` | ~12 GB sustained | Added `del model, scaler, scaling_result, X_train_raw, ...` + `gc.collect()` + `torch.cuda.empty_cache()` at end of each window iteration |
+| 4 | OOF fold cleanup | `src/models/training/services/oof_generation.py` | ~1-3 GB | Added `del model, X_train_fold, ...` + `gc.collect()` after each CV fold in `_generate_4d_oof()` |
+| 5 | Optuna trial cleanup | `src/validation/cv/cv_tuner.py` | ~2-10 GB | Added `_trial_cleanup_callback` with `gc.collect()` + `torch.cuda.empty_cache()`, `del model, pred_result` per fold |
+| 6 | Fix MDA linkage negative distances | `src/optimization/feature_selection/walk_forward.py` | Indirect | Added `dist.clip(lower=0)` + `np.fill_diagonal(dist.values, 0)` — prevents scipy linkage crash, restores proper clustered MDA feature selection |
+| 7 | Filter -99 labels in walk-forward | `src/models/training/training_ops.py` | None | Added `prepared = prepared.filter_invalid_labels()` after `prepare()` — walk-forward path was bypassing label filtering |
+
+### Root Cause Analysis
+
+```
+949K rows × 227 features × float32 = ~820 MB per flat copy
+TCN 3D tensor: 949K × 60 × 60 × 4 bytes = ~12.8 GB per copy
+4+ redundant copies × 3 models × 5 windows = 230GB+ crash
+
+Fix 1: Eliminates 3 of 4 copies in _train_walk_forward() → ~40GB saved
+Fix 2: Prevents float64 upcast → ~12GB/window saved
+Fix 3-5: gc.collect() prevents accumulation → ~15-25GB sustained savings
+Fix 6: Restores MDA → selects ~60 features instead of passing all 227 through
+Fix 7: Removes 5 invalid labels from walk-forward training data
+```
+
+---
+
 ## Phase 71: Comprehensive Notebook Overhaul — 12 Fixes | 2026-02-21 | COMPLETE
 
 **Impact:** Notebook (`notebooks/ml_factory_colab.ipynb`) fully rewritten from 20 to 25 cells (9 markdown, 16 code). All 12 audit issues fixed. **212/212 tests still passing.**

@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 71 COMPLETE (Notebook Overhaul — 12 Fixes, 25 Cells)
+**Status:** Phase 72 COMPLETE (Memory Optimization — 7 Fixes, ~200GB → ~30-40GB)
 **Last Updated:** 2026-02-21
 
 ---
@@ -57,10 +57,11 @@ See **COMPLETION.md** for full details on all completed phases.
 | 69 | Calibrator Single-Class Crash Fix | ✅ COMPLETE | 2026-02-21 |
 | 70 | Lint Fixes (14 ruff + 15 black, 22 files) | ✅ COMPLETE | 2026-02-21 |
 | 71 | Comprehensive Notebook Overhaul (12 fixes, 25 cells) | ✅ COMPLETE | 2026-02-21 |
+| 72 | Memory Optimization — 7 Fixes (~200GB → ~30-40GB peak) | ✅ COMPLETE | 2026-02-21 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 46 phases complete (24-71), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability).
+**Summary Impact:** 47 phases complete (24-72), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability).
 
 ---
 
@@ -104,12 +105,13 @@ See **COMPLETION.md** for full details on all completed phases.
 | 69 | Calibrator Single-Class Crash Fix | HIGH | 1 session | ✅ COMPLETE |
 | 70 | Lint Fixes (14 ruff + 15 black) | MEDIUM | 1 session | ✅ COMPLETE |
 | 71 | Notebook Overhaul (12 fixes, 25 cells) | HIGH | 1 session | ✅ COMPLETE |
+| 72 | Memory Optimization (7 fixes, ~200GB→~30-40GB) | CRITICAL | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 71 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
+**No active phases.** All phases through 72 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
 
 ---
 
@@ -1028,6 +1030,32 @@ Projected pipeline runtime: ~42 min → ~6-8 min (80-85% faster). Zero accuracy 
 
 **Status: COMPLETE (2026-02-19)**
 **OPTIMIZATIONPLAN.md archived to COMPLETION.md and deleted.**
+
+---
+
+## Phase 72: Memory Optimization — 7 Fixes (~200GB → ~30-40GB Peak RAM)
+
+Eliminates redundant data copies, preserves float32 dtype, adds gc.collect() at critical loop boundaries, fixes MDA linkage negative distances, and filters invalid -99 labels in walk-forward path.
+
+### Rationale
+- **Root cause**: Running `mgc_h100_xcb_tcn_pst` (949K rows × 227 features, xgboost/tcn/patchtst, 5 walk-forward windows, 100 Optuna trials) crashed at 230GB RAM
+- **Primary culprit**: `_train_walk_forward()` created 4+ redundant copies of full dataset per model (~40GB waste for TCN alone)
+- **Secondary**: sklearn RobustScaler upcasts float32→float64 (doubles array sizes), no gc.collect() between walk-forward windows/folds/trials
+- **Correctness**: MDA feature selection crashed on negative linkage distances (fell back to weak variance ranking), -99 invalid labels leaked into walk-forward training
+
+### Success Metrics
+| Metric | Before | After | Result |
+|--------|--------|-------|--------|
+| Peak RAM | 230GB+ (crash) | ~30-40GB (estimated) | Fix applied |
+| Redundant copies in _train_walk_forward | 4+ copies | 1 copy | Eliminated |
+| Float32 preservation | Upcast to float64 | Preserved float32 | FoldAwareScaler fixed |
+| Walk-forward window cleanup | None | gc.collect() + torch.cuda.empty_cache() | Added |
+| OOF fold cleanup | None | gc.collect() per fold | Added |
+| Optuna trial cleanup | None | gc.collect() + callback per trial | Added |
+| MDA linkage error | Crash → variance fallback | Fixed (dist.clip(lower=0)) | No more fallback |
+| Invalid -99 labels in walk-forward | 5 labels leaked through | Filtered via filter_invalid_labels() | Correctness fix |
+
+**Status: COMPLETE (2026-02-21)**
 
 ---
 

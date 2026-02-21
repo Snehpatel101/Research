@@ -1,5 +1,6 @@
 """Service for generating out-of-fold predictions."""
 
+import gc
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -252,6 +253,12 @@ class OOFGenerationService:
                     "val_f1": training_metrics.val_f1 if training_metrics else None,
                 }
             )
+
+            # Free fold model and data to prevent memory accumulation
+            if not (request.fold_models and fold_idx < len(request.fold_models)):
+                del model  # Only delete if we created it (not cached fold models)
+            del X_train_fold, X_val_fold, y_train_fold, y_val_fold, prediction_output
+            gc.collect()
 
         # Post-training fold leakage verification (C4 audit fix)
         leakage_result = OOFValidator.validate_fold_leakage(

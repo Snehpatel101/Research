@@ -363,11 +363,20 @@ class TrainingOpsMixin:
                 additional_dfs=additional_dfs,
             )
 
+            # Filter invalid labels (-99) before walk-forward training
+            prepared = prepared.filter_invalid_labels()
+
             # Apply per-model feature filtering (same as _prepare_with_cache)
             if self._per_model_features and model_name in self._per_model_features:
                 selected_features = self._per_model_features[model_name]
                 if hasattr(prepared, "with_features"):
                     prepared = prepared.with_features(selected_features)
+
+            # Save metadata before freeing prepared data
+            _n_features = prepared.n_features
+            _data_rank = prepared.data_rank
+            _n_timeframes = getattr(prepared, "n_timeframes", None)
+            _sequence_length = getattr(prepared, "sequence_length", None)
 
             # Reconstruct FULL dataset (walk-forward does its own splitting)
             arrays_X = [prepared.X_train]
@@ -381,8 +390,9 @@ class TrainingOpsMixin:
 
             X_all = np.concatenate(arrays_X)
             y_all = np.concatenate(arrays_y)
+            del arrays_X, arrays_y  # Free list references
 
-            if prepared.data_rank == 2:
+            if _data_rank == 2:
                 feature_cols = prepared.feature_names
                 X_flat = X_all
             else:
@@ -396,34 +406,46 @@ class TrainingOpsMixin:
             else:
                 idx = pd.RangeIndex(n_all)
 
+            # Store original shape before freeing X_all
+            original_shape = X_all.shape[1:] if _data_rank > 2 else None
+
+            # Build DataFrame for container — add labels directly, no .copy()
             X_all_df = pd.DataFrame(X_flat, columns=feature_cols, index=idx)
-            full_df = X_all_df.copy()
-            full_df[f"label_h{horizon}"] = y_all
-            full_df[f"sample_weight_h{horizon}"] = np.ones(n_all)
+            feature_col_list = list(X_all_df.columns)
+            X_all_df[f"label_h{horizon}"] = y_all
+            X_all_df[f"sample_weight_h{horizon}"] = np.ones(n_all)
+
+            # Log before freeing prepared
+            logger.info(
+                f"  Walk-forward data for {model_name}: {n_all} samples "
+                f"(rank={_data_rank}, features={_n_features})"
+            )
+
+            # Free prepared and intermediate arrays before walk-forward run
+            del prepared, X_all, y_all, X_flat
+            gc.collect()
 
             container = TimeSeriesDataContainer.from_dataframes(
-                train_df=full_df,
+                train_df=X_all_df,
                 val_df=None,
                 test_df=None,
                 horizon=horizon,
-                feature_columns=list(X_all_df.columns),
+                feature_columns=feature_col_list,
             )
+            del X_all_df  # Container owns the data now
+            gc.collect()
+
             # Store original data shape metadata for 4D model reconstruction
-            if prepared.data_rank > 2:
-                original_shape = X_all.shape[1:]  # (n_timeframes, seq_len, n_features) for 4D
+            if _data_rank > 2 and original_shape is not None:
                 container.metadata["original_nd_shape"] = original_shape
-                container.metadata["data_rank"] = prepared.data_rank
-                container.metadata["n_timeframes"] = prepared.n_timeframes
-                container.metadata["sequence_length"] = prepared.sequence_length
+                container.metadata["data_rank"] = _data_rank
+                if _n_timeframes is not None:
+                    container.metadata["n_timeframes"] = _n_timeframes
+                if _sequence_length is not None:
+                    container.metadata["sequence_length"] = _sequence_length
                 logger.info(
-                    f"  Stored original shape metadata: {original_shape} "
-                    f"(rank={prepared.data_rank})"
+                    f"  Stored original shape metadata: {original_shape} " f"(rank={_data_rank})"
                 )
-            logger.info(
-                f"  Walk-forward data for {model_name}: {n_all} samples "
-                f"(train={len(prepared.X_train)}, val={prepared.n_val}, "
-                f"test={prepared.n_test})"
-            )
 
             # Create a single-model config for the walk-forward trainer
             single_model_config = ExperimentConfig(
@@ -437,6 +459,8 @@ class TrainingOpsMixin:
             single_trainer._pipeline_config = self.config
 
             results = single_trainer.run(container)
+            del container, single_trainer  # Free after extracting results
+            gc.collect()
 
             for result_model_name, wf_result in results.get("model_results", {}).items():
                 key = f"{result_model_name}_h{horizon}"
@@ -535,12 +559,9 @@ class TrainingOpsMixin:
                     trainer=last_model,
                     oof_prediction=oof,
                     training_time_seconds=wf_result.total_time,
-                    n_features=prepared.n_features,
-                    data_rank=prepared.data_rank,
+                    n_features=_n_features,
+                    data_rank=_data_rank,
                 )
-
-            del prepared
-            gc.collect()
 
     def _train_regime_aware(
         self,

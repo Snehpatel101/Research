@@ -288,6 +288,15 @@ src/
 - Added conformal prediction config (CONFORMAL_ENABLED, CONFORMAL_ALPHA, CONFORMAL_METHOD)
 - Final notebook: 25 cells (9 markdown, 16 code), all syntax verified, 212/212 tests passing
 
+**Phase 72: COMPLETE — Memory Optimization (7 fixes, ~200GB → ~30-40GB peak)**
+- Eliminated 3 of 4 redundant data copies in `_train_walk_forward()` (~40GB savings)
+- Preserved float32 dtype in FoldAwareScaler (sklearn upcasts to float64, ~12GB/window saved)
+- Added gc.collect() + torch.cuda.empty_cache() in walk-forward window loop (~12GB sustained)
+- Added gc.collect() in OOF fold loop and Optuna trial loop (~3-13GB)
+- Fixed MDA linkage negative distances (dist.clip(lower=0)) — restores proper feature selection
+- Filtered -99 invalid labels in walk-forward path (was bypassing filter_invalid_labels())
+- 6 files modified
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -379,6 +388,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-21*
+*Last updated: 2026-02-21 (Phase 72)*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

@@ -6,6 +6,7 @@ Uses Optuna's TPE sampler with time-series aware objective.
 
 from __future__ import annotations
 
+import gc
 import logging
 from typing import Any
 
@@ -98,6 +99,17 @@ class TimeSeriesOptunaTuner:
             pruner=self.pruner or default_pruner,
         )
 
+        # Callback to free memory between trials (prevents accumulation over 100 trials)
+        def _trial_cleanup_callback(study: Any, trial: Any) -> None:
+            gc.collect()
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
+
         # Get the scoring function based on configured metric
         from src.optimization.scoring import get_score_fn
 
@@ -167,11 +179,15 @@ class TimeSeriesOptunaTuner:
                 fold_score = score_fn(y_val, y_pred)
                 scores.append(fold_score)
 
+                # Free fold model to prevent memory accumulation over 100 trials
+                del model, pred_result
+
                 # Report intermediate value for pruning (prune bad trials early)
                 trial.report(np.mean(scores), fold_idx)
                 if trial.should_prune():
                     raise optuna.TrialPruned()
 
+            gc.collect()
             # Return mean score with variance penalty
             mean_score = np.mean(scores)
             std_score = np.std(scores)
@@ -180,7 +196,12 @@ class TimeSeriesOptunaTuner:
 
         # Run optimization
         optuna.logging.set_verbosity(optuna.logging.WARNING)
-        study.optimize(objective, n_trials=self.n_trials, show_progress_bar=False)
+        study.optimize(
+            objective,
+            n_trials=self.n_trials,
+            show_progress_bar=False,
+            callbacks=[_trial_cleanup_callback],
+        )
 
         # Compute Deflated Sharpe Ratio to correct for selection bias
         dsr_result = None

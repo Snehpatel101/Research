@@ -123,6 +123,12 @@ class FoldAwareScaler:
             X_train_scaled = np.clip(X_train_scaled, -self.clip_std, self.clip_std)
             X_val_scaled = np.clip(X_val_scaled, -self.clip_std, self.clip_std)
 
+        # Preserve original dtype — sklearn scalers upcast float32 to float64,
+        # doubling memory usage for large 3D/4D tensors
+        if X_train.dtype == np.float32:
+            X_train_scaled = X_train_scaled.astype(np.float32, copy=False)
+            X_val_scaled = X_val_scaled.astype(np.float32, copy=False)
+
         self._current_scaler = scaler
 
         return FoldScalingResult(

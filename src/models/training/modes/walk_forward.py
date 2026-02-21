@@ -10,6 +10,7 @@ Reference: Pardo (2008) "The Evaluation and Optimization of Trading Strategies"
 
 from __future__ import annotations
 
+import gc
 import logging
 import time
 from dataclasses import dataclass, field
@@ -485,6 +486,18 @@ class WalkForwardTrainer:
                 f"    Window {window_idx + 1}: acc={metrics['accuracy']:.3f}, "
                 f"f1={metrics['f1']:.3f}, time={window_time:.1f}s"
             )
+
+            # Free window-local objects to prevent memory accumulation across windows
+            del model, scaler, scaling_result, X_train_raw, X_test_raw
+            del X_train_scaled, X_test_scaled, y_train, y_test
+            gc.collect()
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
 
         # Build predictions DataFrame
         predictions_df = pd.DataFrame(
