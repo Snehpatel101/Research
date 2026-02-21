@@ -300,6 +300,12 @@ src/
 - Early deletion of raw arrays after scaling (frees ~47GB before model training)
 - 6 files modified
 
+**Phase 73: COMPLETE — Scaler Serialization Fix + Notebook Warning Suppression**
+- Fixed AdapterScaler save/load format mismatch (joblib.dump vs safe_pickle_load — incompatible formats)
+- Changed save() to pickle.dump() to match, removed unused joblib import
+- Added Jupyter/Colab warning suppression to notebook Cell 1 (frozen modules, websocket ping, schema version, extension deprecations, config deprecations)
+- 2 files modified
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -391,6 +397,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-21 (Phase 72)*
+*Last updated: 2026-02-21 (Phase 73)*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

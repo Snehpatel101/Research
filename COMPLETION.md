@@ -4,6 +4,19 @@
 
 ---
 
+## Phase 73: Scaler Serialization Fix + Notebook Warning Suppression | 2026-02-21 | COMPLETE
+
+**Impact:** Fixed AdapterScaler save/load format mismatch (save used joblib, load used pickle — incompatible). Suppressed 6 categories of Jupyter/Colab warnings in notebook for clean output. 2 files modified. **212/212 tests passing.**
+
+### Changes (2)
+
+| # | Fix | File | Description |
+|:-:|-----|------|-------------|
+| 1 | Scaler save/load format mismatch | `src/data/adapters/scaling.py` | Changed `save()` from `joblib.dump()` to `pickle.dump()` to match `safe_pickle_load()` in `load()`. Removed unused `joblib` import. Verified: no production code calls `AdapterScaler.save()`/`.load()` directly — bundle system uses `pickle.dump()`/`safe_pickle_load()` already. |
+| 2 | Notebook warning suppression | `notebooks/ml_factory_colab.ipynb` | Added `PYDEVD_DISABLE_FILE_VALIDATION=1` env var and `warnings.filterwarnings` for frozen modules, websocket ping, JupyterEvents schema, extension deprecations, ServerApp config deprecations, Tornado/traitlets/notebook deprecations. All set at top of Cell 1 before other imports. |
+
+---
+
 ## Phase 72: Memory Optimization — 9 Fixes (~200GB → ~30-40GB) | 2026-02-21 | COMPLETE
 
 **Impact:** Peak RAM reduced from 230GB+ (crash) to estimated ~30-40GB for `mgc_h100_xcb_tcn_pst` experiment (949K rows × 227 features, xgboost/tcn/patchtst, 5 walk-forward windows, 100 Optuna trials). Also fixes MDA feature selection crash and -99 invalid label leakage into walk-forward training. 6 files modified. **212/212 tests passing.**
