@@ -267,6 +267,12 @@ src/
 - Fixed walk-forward max_epochs bug (was 50 fallback, now uses DEFAULT_MAX_EPOCHS=100)
 - 12 files modified, 212/212 tests still passing
 
+**Phase 69: COMPLETE — Calibrator Single-Class Fix**
+- Fixed crash in `src/models/calibration/calibrator.py` when OOF predictions are all one class
+- sklearn's LogisticRegression requires 2+ classes; now skips with pass-through when only 1 class present
+- Smoke test (MES 1-week, 1 epoch): 11/12 models PASS, 3/3 ensembles PASS, 3/3 walk-forward PASS
+- TFT OOM on 16GB RAM (hardware limit, not code bug)
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

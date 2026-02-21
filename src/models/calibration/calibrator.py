@@ -170,6 +170,19 @@ class ProbabilityCalibrator:
             y_binary = (y_normalized == cls).astype(float)
             probs_cls = probabilities[:, cls]
 
+            # Guard: sklearn needs at least 2 classes in y_binary.
+            # When all OOF predictions map to a single class (common with
+            # small data or 1-epoch neural models), skip calibration for
+            # this class and use a pass-through identity calibrator.
+            n_unique = len(np.unique(y_binary))
+            if n_unique < 2:
+                logger.warning(
+                    f"Calibration: class {cls} has only {n_unique} unique "
+                    f"label(s) in OOF — skipping calibrator (pass-through)."
+                )
+                self._calibrators[cls] = None  # None = pass-through
+                continue
+
             if method == "isotonic":
                 calibrator = IsotonicRegression(out_of_bounds="clip")
                 calibrator.fit(probs_cls, y_binary)
@@ -239,7 +252,10 @@ class ProbabilityCalibrator:
             probs_cls = probabilities[:, cls]
             calibrator = self._calibrators[cls]
 
-            if self._method_used == "isotonic":
+            if calibrator is None:
+                # Pass-through: no calibrator fitted for this class
+                calibrated[:, cls] = probs_cls
+            elif self._method_used == "isotonic":
                 calibrated[:, cls] = calibrator.predict(probs_cls)
             else:
                 # Logistic returns probability of class 1
