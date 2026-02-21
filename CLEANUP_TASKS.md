@@ -57,7 +57,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 69 | 1/1 tasks (complete) | Calibrator single-class crash fix | 2026-02-21 |
 | 70 | 1/1 tasks (complete) | Lint fixes: 14 ruff errors + 15 black formatting issues (22 files) | 2026-02-21 |
 | 71 | 12/12 tasks (all complete) | Notebook overhaul: data instructions, EDA placement, calibration/conformal cells, leakage detection, Sortino/Calmar/expectancy, transaction costs | 2026-02-21 |
-| 72 | 7/7 tasks (all complete) | Memory optimization: redundant copy elimination, float32 preservation, gc.collect() in walk-forward/OOF/Optuna loops, MDA linkage fix, -99 label filtering | 2026-02-21 |
+| 72 | 9/9 tasks (all complete) | Memory optimization: redundant copy elimination, float32 preservation (FoldAwareScaler + AdapterScaler), gc.collect() in walk-forward/OOF/Optuna loops, MDA linkage fix, -99 label filtering, numpy extraction to avoid DataFrame.iloc overhead, early deletion after scaling | 2026-02-21 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
