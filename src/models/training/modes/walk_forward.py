@@ -331,6 +331,11 @@ class WalkForwardTrainer:
 
         logger.info(f"  Running {wf_config.n_windows} windows ({wf_config.window_type})")
 
+        # Pre-extract numpy values to avoid DataFrame.iloc copies (which duplicate
+        # the full DataFrame structure). For TCN with 13,620 flattened columns,
+        # this avoids ~80GB of unnecessary DataFrame overhead per window.
+        X_np = X.values
+
         for window_idx, (train_idx, test_idx) in enumerate(
             evaluator.split(X, y, label_end_times=label_end_times)
         ):
@@ -340,17 +345,21 @@ class WalkForwardTrainer:
                 f"    Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}"
             )
 
-            # Extract window data
-            X_train_raw = X.iloc[train_idx]
-            X_test_raw = X.iloc[test_idx]
+            # Extract window data as numpy arrays (avoids DataFrame copy overhead)
+            X_train_raw = X_np[train_idx]
+            X_test_raw = X_np[test_idx]
             y_train = y.iloc[train_idx]
             y_test = y.iloc[test_idx]
 
             # Fold-aware scaling
             scaler = FoldAwareScaler(method=scaling_method)
-            scaling_result = scaler.fit_transform_fold(X_train_raw.values, X_test_raw.values)
+            scaling_result = scaler.fit_transform_fold(X_train_raw, X_test_raw)
             X_train_scaled = scaling_result.X_train_scaled
             X_test_scaled = scaling_result.X_val_scaled
+
+            # Free raw arrays immediately — they are no longer needed after scaling.
+            # For TCN (13,620 cols), this frees ~47GB before model training starts.
+            del X_train_raw, X_test_raw, scaling_result
 
             # Reshape/sequence data for sequential models (LSTM, GRU, etc.)
             # Sequential models need 3D: (n_samples, seq_len, n_features)
@@ -488,8 +497,8 @@ class WalkForwardTrainer:
             )
 
             # Free window-local objects to prevent memory accumulation across windows
-            del model, scaler, scaling_result, X_train_raw, X_test_raw
-            del X_train_scaled, X_test_scaled, y_train, y_test
+            # (X_train_raw, X_test_raw, scaling_result already freed after scaling above)
+            del model, scaler, X_train_scaled, X_test_scaled, y_train, y_test
             gc.collect()
             try:
                 import torch

@@ -229,6 +229,11 @@ class AdapterScaler:
         if self.config.clip_value > 0:
             X_scaled = np.clip(X_scaled, -self.config.clip_value, self.config.clip_value)
 
+        # Preserve original dtype — sklearn scalers upcast float32 to float64,
+        # doubling memory for large 3D/4D tensors (e.g. TCN 949K×60×227 = 103GB at f64 vs 52GB at f32)
+        if X.dtype == np.float32 and X_scaled.dtype != np.float32:
+            X_scaled = X_scaled.astype(np.float32, copy=False)
+
         return self._from_2d(X_scaled, original_shape)
 
     def fit_transform(self, X: np.ndarray) -> np.ndarray:
