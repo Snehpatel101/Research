@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import json
 import logging
+import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import joblib
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler as SKMinMaxScaler
 from sklearn.preprocessing import RobustScaler as SKRobustScaler
@@ -331,10 +331,11 @@ class AdapterScaler:
         path = Path(path)
         path.mkdir(parents=True, exist_ok=True)
 
-        # Save sklearn scaler if it exists
+        # Save sklearn scaler if it exists (use pickle to match safe_pickle_load)
         if self._scaler is not None:
             scaler_path = path / "scaler.pkl"
-            joblib.dump(self._scaler, scaler_path)
+            with open(scaler_path, "wb") as f:
+                pickle.dump(self._scaler, f)
             logger.debug(f"Saved sklearn scaler to {scaler_path}")
 
         # Save config and metadata
