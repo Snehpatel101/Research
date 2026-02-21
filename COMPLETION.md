@@ -4,6 +4,77 @@
 
 ---
 
+## Phase 71: Comprehensive Notebook Overhaul — 12 Fixes | 2026-02-21 | COMPLETE
+
+**Impact:** Notebook (`notebooks/ml_factory_colab.ipynb`) fully rewritten from 20 to 25 cells (9 markdown, 16 code). All 12 audit issues fixed. **212/212 tests still passing.**
+
+### Changes (12)
+
+| # | Fix | Severity | Description |
+|:-:|-----|:--------:|-------------|
+| 1 | Data format instructions | BLOCKING | Added bring-your-own-data guide with required columns table (timestamp, open, high, low, close, volume) |
+| 2 | EDA cell position | MEDIUM | Moved EDA code from cell 19 to cell 6 (after EDA markdown header) |
+| 3 | Calibration curves | MEDIUM | Added ProbabilityCalibrator display (sigmoid/Platt scaling, Brier/ECE metrics) |
+| 4 | Conformal prediction | MEDIUM | Added ConformalPredictor display (LAC/APS methods, coverage/set_size metrics) |
+| 5 | Leakage detection | MEDIUM | Added comprehensive_leakage_check() cell with fallback to purge/embargo info |
+| 6 | Sortino/expectancy | MEDIUM | Added sortino_ratio, calmar_ratio, expectancy to backtest stats display |
+| 7 | Transaction costs config | MEDIUM | Surfaced COMMISSION_PER_TRADE=2.50, SLIPPAGE_TICKS=1.0, TICK_VALUE=1.25 |
+| 8 | Conformal config | MEDIUM | Added CONFORMAL_ENABLED, CONFORMAL_ALPHA=0.1, CONFORMAL_METHOD="aps" |
+| 9 | Feature selection config | MINOR | Added FEATURE_SELECTION_METHOD, MAX_FEATURES_PER_MODEL to config cell |
+| 10 | Save & Export header | MINOR | Added markdown section header before save cells |
+| 11 | Feature Importance header | MINOR | Re-added markdown section header (accidentally deleted during reorder) |
+| 12 | Cell ordering | MINOR | Fixed cell ordering via direct JSON manipulation after insert operations |
+
+### Final Notebook Structure (25 cells)
+
+```
+[0-4]   Setup: Header, imports, config, validation, data load
+[5-6]   EDA: Markdown + code
+[7-8]   Training: MLFactory.run() + results visualization
+[9-10]  Calibration & Conformal: Markdown + code
+[11-12] Leakage Detection: Markdown + code
+[13]    Deploy Artifact
+[14-17] Analysis: Model comparison + feature importance
+[18-19] Backtesting: Results with Sortino/Calmar/expectancy
+[20-24] Export: Interpreting results, save & export, Google Drive, inference-only, download
+```
+
+---
+
+## Phase 70: Lint Fixes — 14 ruff + 15 black | 2026-02-21 | COMPLETE
+
+**Impact:** 22 files modified. Zero lint errors remaining. **212/212 tests still passing.**
+
+### Changes
+
+| # | Fix | Files | Description |
+|:-:|-----|:-----:|-------------|
+| 1 | ruff check --fix | 7 files | Fixed 14 ruff errors (unused imports, type annotations, simplifications) |
+| 2 | black formatting | 15 files | Fixed formatting in 15 files (line length, whitespace, trailing commas) |
+
+---
+
+## Phase 69: Calibrator Single-Class Crash Fix | 2026-02-21 | COMPLETE
+
+**Impact:** 1 file modified (`src/models/calibration/calibrator.py`). **212/212 tests still passing.**
+
+### Changes
+
+| # | Fix | Description |
+|:-:|-----|-------------|
+| 1 | Single-class guard | sklearn's LogisticRegression requires 2+ classes for calibration. Added guard to skip calibration and pass through raw probabilities when OOF predictions contain only 1 class |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Smoke test (11/12 models) | PASS (TFT OOM on 16GB — hardware limit) |
+| Ensemble test (3/3) | PASS |
+| Walk-forward test (3/3) | PASS |
+| ruff check | PASS |
+
+---
+
 ## Phase 68: Performance Optimizations — 9 Items | 2026-02-20 | COMPLETE
 
 **Impact:** ~4.4x overall speedup on H100 GPU. 12 files modified. **212/212 tests still passing.**

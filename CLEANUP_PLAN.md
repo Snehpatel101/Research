@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 68 COMPLETE (Performance Optimizations — 9 Items, ~4.4x H100 Speedup)
-**Last Updated:** 2026-02-20
+**Status:** Phase 71 COMPLETE (Notebook Overhaul — 12 Fixes, 25 Cells)
+**Last Updated:** 2026-02-21
 
 ---
 
@@ -53,10 +53,14 @@ See **COMPLETION.md** for full details on all completed phases.
 | 65 | Pipeline Audit & Test Suite Cleanup (212/212 tests) | ✅ COMPLETE | 2026-02-19 |
 | 66 | Financial Rigor — ONC Clustering, Transaction Costs, DSR Gate, CPCV | ✅ COMPLETE | 2026-02-20 |
 | 67 | Consistency Hardening — 14 Inconsistencies Fixed + 3D OOF Chunking | ✅ COMPLETE | 2026-02-20 |
+| 68 | Performance Optimizations — 9 Items (~4.4x H100 Speedup) | ✅ COMPLETE | 2026-02-20 |
+| 69 | Calibrator Single-Class Crash Fix | ✅ COMPLETE | 2026-02-21 |
+| 70 | Lint Fixes (14 ruff + 15 black, 22 files) | ✅ COMPLETE | 2026-02-21 |
+| 71 | Comprehensive Notebook Overhaul (12 fixes, 25 cells) | ✅ COMPLETE | 2026-02-21 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 42 phases complete (24-67), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability).
+**Summary Impact:** 46 phases complete (24-71), 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability).
 
 ---
 
@@ -95,12 +99,17 @@ See **COMPLETION.md** for full details on all completed phases.
 | 64 | E2E Pipeline Smoke Test — 12 Models x 2 Modes | CRITICAL | 1 session | ✅ COMPLETE |
 | 65 | Pipeline Audit & Test Suite Cleanup | HIGH | 1 session | ✅ COMPLETE |
 | 66 | Financial Rigor (ONC, costs, DSR, CPCV) | HIGH | 1 session | ✅ COMPLETE |
+| 67 | Consistency Hardening (14 inconsistencies + 3D OOF) | HIGH | 1 session | ✅ COMPLETE |
+| 68 | Performance Optimizations (9 items, ~4.4x H100) | HIGH | 1 session | ✅ COMPLETE |
+| 69 | Calibrator Single-Class Crash Fix | HIGH | 1 session | ✅ COMPLETE |
+| 70 | Lint Fixes (14 ruff + 15 black) | MEDIUM | 1 session | ✅ COMPLETE |
+| 71 | Notebook Overhaul (12 fixes, 25 cells) | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 66 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
+**No active phases.** All phases through 71 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
 
 ---
 

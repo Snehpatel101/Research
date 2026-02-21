@@ -273,6 +273,21 @@ src/
 - Smoke test (MES 1-week, 1 epoch): 11/12 models PASS, 3/3 ensembles PASS, 3/3 walk-forward PASS
 - TFT OOM on 16GB RAM (hardware limit, not code bug)
 
+**Phase 70: COMPLETE — Lint Fixes (14 ruff + 15 black)**
+- Fixed 14 ruff linting errors across src/ (unused imports, type annotations)
+- Fixed 15 black formatting issues (22 files total modified)
+- Zero lint errors remaining: `ruff check src/` clean, `black --check src/` clean
+
+**Phase 71: COMPLETE — Comprehensive Notebook Overhaul (12 fixes, 25 cells)**
+- Added data format instructions and bring-your-own-data guide (was missing — notebook unusable)
+- Moved EDA cell to correct position after EDA markdown header
+- Added calibration & conformal prediction cells (ProbabilityCalibrator, ConformalPredictor)
+- Added leakage detection cell (comprehensive_leakage_check with fallback)
+- Added Sortino ratio, Calmar ratio, expectancy to backtest stats display
+- Surfaced transaction costs config (COMMISSION_PER_TRADE, SLIPPAGE_TICKS, TICK_VALUE)
+- Added conformal prediction config (CONFORMAL_ENABLED, CONFORMAL_ALPHA, CONFORMAL_METHOD)
+- Final notebook: 25 cells (9 markdown, 16 code), all syntax verified, 212/212 tests passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -364,6 +379,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-20*
+*Last updated: 2026-02-21*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*
