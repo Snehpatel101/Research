@@ -11,7 +11,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from src.data.features.compute._helpers import ema as _ema_base, sma as _sma_base
+from src.data.features.compute._helpers import ema as _ema_base
+from src.data.features.compute._helpers import sma as _sma_base
 
 # Import Numba for JIT compilation
 try:

@@ -13,10 +13,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.features.compute._helpers import (
-    ema as _ema,
     log_returns as _log_returns,
-    rolling_std as _rolling_std,
-    sma as _sma,
 )
 
 # =============================================================================

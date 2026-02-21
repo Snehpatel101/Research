@@ -306,7 +306,9 @@ class PipelineRunner:
                 # Phase 43: Validate stage transition to next stage
                 if getattr(self.config, "enable_transition_validation", True):
                     try:
-                        self._validate_stage_transition(stage, result, stages_to_run, in_memory_dfs=in_memory_dfs)
+                        self._validate_stage_transition(
+                            stage, result, stages_to_run, in_memory_dfs=in_memory_dfs
+                        )
                     except StageValidationError as e:
                         self.logger.error(
                             f"[FAIL] Stage transition validation failed after {stage.name}: {e}"

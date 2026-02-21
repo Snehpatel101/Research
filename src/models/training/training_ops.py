@@ -366,7 +366,7 @@ class TrainingOpsMixin:
             # Apply per-model feature filtering (same as _prepare_with_cache)
             if self._per_model_features and model_name in self._per_model_features:
                 selected_features = self._per_model_features[model_name]
-                if hasattr(prepared, 'with_features'):
+                if hasattr(prepared, "with_features"):
                     prepared = prepared.with_features(selected_features)
 
             # Reconstruct FULL dataset (walk-forward does its own splitting)
@@ -517,16 +517,13 @@ class TrainingOpsMixin:
                         last_model = ModelRegistry.create(result_model_name)
                         last_model.load(last_path)
                         logger.info(
-                            f"  {result_model_name}: loaded last-window model "
-                            f"from {last_path}"
+                            f"  {result_model_name}: loaded last-window model " f"from {last_path}"
                         )
 
                 if last_model is not None:
                     self._trained_models[key] = last_model
                 else:
-                    logger.warning(
-                        f"  {result_model_name}: no model available for bundling/deploy"
-                    )
+                    logger.warning(f"  {result_model_name}: no model available for bundling/deploy")
 
                 self._model_results[key] = ModelTrainingResult(
                     model_name=result_model_name,
@@ -574,7 +571,7 @@ class TrainingOpsMixin:
                 # Apply per-model feature filtering (consistent with standard mode)
                 if self._per_model_features and model_name in self._per_model_features:
                     selected_features = self._per_model_features[model_name]
-                    if hasattr(prepared, 'with_features'):
+                    if hasattr(prepared, "with_features"):
                         prepared = prepared.with_features(selected_features)
                 logger.info(f"  Data prepared: {prepared.summary()}")
 
@@ -682,7 +679,7 @@ class TrainingOpsMixin:
         # Apply per-model feature filtering (consistent with standard mode)
         if self._per_model_features and primary_model_name in self._per_model_features:
             selected_features = self._per_model_features[primary_model_name]
-            if hasattr(prepared, 'with_features'):
+            if hasattr(prepared, "with_features"):
                 prepared = prepared.with_features(selected_features)
         logger.info(f"    Data: {prepared.n_train} train, {prepared.n_val} val samples")
 

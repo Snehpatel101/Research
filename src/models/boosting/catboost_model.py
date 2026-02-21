@@ -88,6 +88,7 @@ class CatBoostModel(BaseModel):
         """Auto-detect CUDA availability for GPU acceleration."""
         try:
             import torch
+
             return torch.cuda.is_available()
         except ImportError:
             return False

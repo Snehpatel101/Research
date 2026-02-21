@@ -79,6 +79,7 @@ class FeatureSelectionMixin:
                 )
                 # Stratified subsample to preserve class balance
                 from sklearn.model_selection import train_test_split
+
                 clean_df, _ = train_test_split(
                     clean_df,
                     train_size=mda_max_rows,
@@ -432,7 +433,11 @@ class FeatureSelectionMixin:
                     # Use original_indices for proper index-based alignment
                     # instead of positional arange (which breaks for sequence
                     # models with offsets)
-                    if hasattr(aligned_oof, 'common_indices') and hasattr(oof, 'original_indices') and oof.original_indices is not None:
+                    if (
+                        hasattr(aligned_oof, "common_indices")
+                        and hasattr(oof, "original_indices")
+                        and oof.original_indices is not None
+                    ):
                         mask = np.isin(oof.original_indices, aligned_oof.common_indices)
                     else:
                         # Fallback to positional for legacy OOF objects

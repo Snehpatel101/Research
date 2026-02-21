@@ -587,14 +587,12 @@ def _topological_sort(dependencies: dict[str, list[str]]) -> list[str]:
             resolved[node] = [d for d in deps if d in all_nodes]
 
     # Build in-degree map
-    in_degree: dict[str, int] = {node: 0 for node in all_nodes}
+    in_degree: dict[str, int] = dict.fromkeys(all_nodes, 0)
     for node, deps in resolved.items():
         in_degree[node] = len(deps)
 
     # Seed queue with nodes that have no dependencies
-    queue: list[str] = sorted(
-        [node for node, deg in in_degree.items() if deg == 0]
-    )
+    queue: list[str] = sorted([node for node, deg in in_degree.items() if deg == 0])
     order: list[str] = []
 
     while queue:
@@ -611,8 +609,7 @@ def _topological_sort(dependencies: dict[str, list[str]]) -> list[str]:
     if len(order) != len(all_nodes):
         missing = all_nodes - set(order)
         raise ValueError(
-            f"Cycle detected in feature dependency graph. "
-            f"Nodes involved: {sorted(missing)}"
+            f"Cycle detected in feature dependency graph. " f"Nodes involved: {sorted(missing)}"
         )
 
     return order
@@ -679,9 +676,7 @@ def scan_dependency_propagation(
             continue
 
         # Check if any upstream is tainted (directly or via propagation)
-        tainted_upstreams = [
-            dep for dep in resolved.get(feature, []) if dep in effective_taint
-        ]
+        tainted_upstreams = [dep for dep in resolved.get(feature, []) if dep in effective_taint]
 
         if tainted_upstreams:
             effective_taint.add(feature)

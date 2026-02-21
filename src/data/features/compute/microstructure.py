@@ -14,7 +14,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from src.data.features.compute._helpers import log_returns as _log_returns, sma as _sma
+from src.data.features.compute._helpers import log_returns as _log_returns
+from src.data.features.compute._helpers import sma as _sma
 
 # =============================================================================
 # MODULE-LEVEL CACHES (Phase 24: Avoid redundant computation)

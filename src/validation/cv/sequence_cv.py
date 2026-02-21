@@ -388,8 +388,7 @@ class SequenceCVBuilder:
             )
         if X_scaled.shape[1] != self.n_features:
             raise ValueError(
-                f"X_scaled has {X_scaled.shape[1]} features, "
-                f"expected {self.n_features}"
+                f"X_scaled has {X_scaled.shape[1]} features, " f"expected {self.n_features}"
             )
 
         # Shallow copy — share metadata, swap feature matrix
@@ -463,9 +462,7 @@ class SequenceCVBuilder:
 
             # Check 2: If not allowing lookback outside, verify all lookback in fold
             if not allow_lookback_outside and fold_set is not None:
-                lookback_in_fold = all(
-                    idx in fold_set for idx in range(start_idx, target_idx)
-                )
+                lookback_in_fold = all(idx in fold_set for idx in range(start_idx, target_idx))
                 if not lookback_in_fold:
                     n_dropped += 1
                     continue

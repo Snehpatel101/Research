@@ -752,7 +752,10 @@ class MLFactory:
             prices_df = df.copy()
             if "datetime" in prices_df.columns and "timestamp" not in prices_df.columns:
                 prices_df = prices_df.rename(columns={"datetime": "timestamp"})
-            elif isinstance(prices_df.index, pd.DatetimeIndex) and "timestamp" not in prices_df.columns:
+            elif (
+                isinstance(prices_df.index, pd.DatetimeIndex)
+                and "timestamp" not in prices_df.columns
+            ):
                 prices_df["timestamp"] = prices_df.index
 
             # Configure backtester using local BacktestConfig

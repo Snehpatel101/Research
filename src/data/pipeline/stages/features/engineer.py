@@ -337,27 +337,29 @@ class FeatureEngineer:
 
         # Feature caching: skip recomputation if same input data + config
         import hashlib
+
         cache_dir = self.output_dir / ".feature_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Hash input data + config for cache key
-        data_hash = hashlib.sha256(
-            pd.util.hash_pandas_object(df).values.tobytes()
-        ).hexdigest()[:16]
+        data_hash = hashlib.sha256(pd.util.hash_pandas_object(df).values.tobytes()).hexdigest()[:16]
         config_hash = hashlib.sha256(
-            json.dumps({
-                "timeframe": self.timeframe,
-                "scale_periods": self.scale_periods,
-                "enable_mtf": self.enable_mtf,
-                "mtf_timeframes": self.mtf_timeframes,
-                "enable_wavelets": self.enable_wavelets,
-                "wavelet_type": self.wavelet_type,
-                "wavelet_level": self.wavelet_level,
-                "nan_threshold": self.nan_threshold,
-                "enable_microstructure": self.enable_microstructure,
-                "enable_volume_features": self.enable_volume_features,
-                "enable_volatility_features": self.enable_volatility_features,
-            }, sort_keys=True).encode()
+            json.dumps(
+                {
+                    "timeframe": self.timeframe,
+                    "scale_periods": self.scale_periods,
+                    "enable_mtf": self.enable_mtf,
+                    "mtf_timeframes": self.mtf_timeframes,
+                    "enable_wavelets": self.enable_wavelets,
+                    "wavelet_type": self.wavelet_type,
+                    "wavelet_level": self.wavelet_level,
+                    "nan_threshold": self.nan_threshold,
+                    "enable_microstructure": self.enable_microstructure,
+                    "enable_volume_features": self.enable_volume_features,
+                    "enable_volatility_features": self.enable_volatility_features,
+                },
+                sort_keys=True,
+            ).encode()
         ).hexdigest()[:16]
         cache_key = f"{symbol}_{data_hash}_{config_hash}"
         cache_file = cache_dir / f"{cache_key}.parquet"

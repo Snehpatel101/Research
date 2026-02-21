@@ -12,6 +12,7 @@ import pandas as pd
 # Numba JIT acceleration for rolling.apply() fallback functions
 try:
     from numba import njit
+
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
@@ -32,6 +33,7 @@ def _safe_log_return(series: pd.Series, periods: int = 1) -> pd.Series:
 
 
 if NUMBA_AVAILABLE:
+
     @njit(cache=True)
     def _autocorr_lag_numba(x: np.ndarray, lag: int) -> float:
         """Numba-accelerated autocorrelation of array with specified lag."""

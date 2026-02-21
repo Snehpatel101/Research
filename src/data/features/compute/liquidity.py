@@ -19,6 +19,7 @@ from src.data.features.compute._helpers import rolling_std, sma
 # Numba JIT acceleration for rolling.apply() functions
 try:
     from numba import njit
+
     NUMBA_AVAILABLE = True
 except ImportError:
     NUMBA_AVAILABLE = False
@@ -105,6 +106,7 @@ def _percentile_rank(x: np.ndarray) -> float:
 
 
 if NUMBA_AVAILABLE:
+
     @njit(cache=True)
     def _percentile_rank_numba(x: np.ndarray) -> float:
         """Numba-accelerated percentile rank of last value in window."""

@@ -391,21 +391,19 @@ class WalkForwardTrainer:
                     # Reconstruct from stored original shape: (n_timeframes, seq_len, n_features)
                     X_train_scaled = X_train_scaled.reshape(-1, *nd_shape)
                     X_test_scaled = X_test_scaled.reshape(-1, *nd_shape)
-                    logger.debug(
-                        f"    Reshaped to 4D: {X_train_scaled.shape}"
-                    )
+                    logger.debug(f"    Reshaped to 4D: {X_train_scaled.shape}")
                 else:
                     # Fallback: try to infer shape from contract
                     seq_len = contract.sequence_length
-                    n_tf = container.metadata.get("n_timeframes", len(getattr(contract, "mtf_timeframes", ("5min",))))
+                    n_tf = container.metadata.get(
+                        "n_timeframes", len(getattr(contract, "mtf_timeframes", ("5min",)))
+                    )
                     n_flat = X_train_scaled.shape[1]
                     if n_flat % (n_tf * seq_len) == 0:
                         n_features = n_flat // (n_tf * seq_len)
                         X_train_scaled = X_train_scaled.reshape(-1, n_tf, seq_len, n_features)
                         X_test_scaled = X_test_scaled.reshape(-1, n_tf, seq_len, n_features)
-                        logger.debug(
-                            f"    Inferred 4D reshape: {X_train_scaled.shape}"
-                        )
+                        logger.debug(f"    Inferred 4D reshape: {X_train_scaled.shape}")
                     else:
                         raise ValueError(
                             f"Cannot reconstruct 4D shape for {model_name}: "
@@ -418,10 +416,16 @@ class WalkForwardTrainer:
 
             # Create and train model with training config
             _model_config = {}
-            if hasattr(self, '_pipeline_config') and self._pipeline_config is not None:
-                _model_config['max_epochs'] = getattr(self._pipeline_config, 'max_epochs', DEFAULT_MAX_EPOCHS)
-                _model_config['batch_size'] = getattr(self._pipeline_config, 'batch_size', DEFAULT_BATCH_SIZE)
-                _model_config['early_stopping_patience'] = getattr(self._pipeline_config, 'early_stopping_patience', 10)
+            if hasattr(self, "_pipeline_config") and self._pipeline_config is not None:
+                _model_config["max_epochs"] = getattr(
+                    self._pipeline_config, "max_epochs", DEFAULT_MAX_EPOCHS
+                )
+                _model_config["batch_size"] = getattr(
+                    self._pipeline_config, "batch_size", DEFAULT_BATCH_SIZE
+                )
+                _model_config["early_stopping_patience"] = getattr(
+                    self._pipeline_config, "early_stopping_patience", 10
+                )
             model = ModelRegistry.create(model_name, config=_model_config)
             model.fit(
                 X_train=X_train_scaled,

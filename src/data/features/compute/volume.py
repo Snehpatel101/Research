@@ -12,7 +12,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
-from src.data.features.compute._helpers import rolling_std as _rolling_std, sma as _sma
+from src.data.features.compute._helpers import rolling_std as _rolling_std
+from src.data.features.compute._helpers import sma as _sma
 
 # =============================================================================
 # CACHING INFRASTRUCTURE

@@ -220,21 +220,13 @@ class SequenceOOFGenerator:
                 if val_chunk.n_sequences == 0:
                     continue
 
-                prediction_output: PredictionResult = model.predict(
-                    val_chunk.X_sequences
-                )
+                prediction_output: PredictionResult = model.predict(val_chunk.X_sequences)
 
                 # Map predictions back to original indices
                 for seq_idx, original_idx in enumerate(val_chunk.target_indices):
-                    oof_probs[original_idx] = prediction_output.class_probabilities[
-                        seq_idx
-                    ]
-                    oof_preds[original_idx] = prediction_output.class_predictions[
-                        seq_idx
-                    ]
-                    oof_confidence[original_idx] = prediction_output.confidence[
-                        seq_idx
-                    ]
+                    oof_probs[original_idx] = prediction_output.class_probabilities[seq_idx]
+                    oof_preds[original_idx] = prediction_output.class_predictions[seq_idx]
+                    oof_confidence[original_idx] = prediction_output.confidence[seq_idx]
 
                 val_sequences_total += val_chunk.n_sequences
                 logger.debug(

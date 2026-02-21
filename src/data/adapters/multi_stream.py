@@ -519,7 +519,6 @@ class MultiStreamAdapter(BaseAdapter):
 
                 if len(tf_values) == 0:
                     # Guard: no higher-TF bars in this split — fill NaN
-                    n_feat = tf_values.shape[1] if tf_values.ndim > 1 else 1
                     X[:, tf_idx, :, :] = np.nan
                 else:
                     for seq_idx in range(n_sequences):
@@ -531,9 +530,7 @@ class MultiStreamAdapter(BaseAdapter):
                         unique_mask = np.empty(len(mapped), dtype=np.bool_)
                         unique_mask[0] = True
                         unique_mask[1:] = np.diff(mapped) != 0
-                        unique_idx = np.clip(
-                            mapped[unique_mask], 0, len(tf_values) - 1
-                        )
+                        unique_idx = np.clip(mapped[unique_mask], 0, len(tf_values) - 1)
 
                         unique_bars = tf_values[unique_idx]
                         n_unique = len(unique_bars)
@@ -543,7 +540,7 @@ class MultiStreamAdapter(BaseAdapter):
                         elif n_unique > 0:
                             # Pad front with earliest bar, place actuals at end
                             X[seq_idx, tf_idx, -n_unique:, :] = unique_bars
-                            X[seq_idx, tf_idx, :seq_len - n_unique, :] = unique_bars[0]
+                            X[seq_idx, tf_idx, : seq_len - n_unique, :] = unique_bars[0]
                         else:
                             X[seq_idx, tf_idx, :, :] = np.nan
 
