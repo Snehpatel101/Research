@@ -774,9 +774,22 @@ class MLFactory:
             # Select contract specs based on symbol
             symbol = self.config.data.symbol.upper()
             sym_config = SymbolConfig.from_symbol(symbol)
+
+            # Build kwargs with optional transaction cost overrides from config
+            bt_kwargs: dict[str, Any] = {
+                "position_sizing": local_sizing,
+                "initial_equity": self.config.evaluation.initial_equity,
+            }
+            if self.config.evaluation.commission_per_contract is not None:
+                bt_kwargs["commission_per_contract"] = (
+                    self.config.evaluation.commission_per_contract
+                )
+            if self.config.evaluation.slippage_ticks is not None:
+                bt_kwargs["slippage_ticks"] = self.config.evaluation.slippage_ticks
+
             backtest_config = BacktestConfig.from_symbol_config(
                 sym_config,
-                position_sizing=local_sizing,
+                **bt_kwargs,
             )
             backtester = Backtester(
                 predictions=predictions_df, prices=prices_df, config=backtest_config

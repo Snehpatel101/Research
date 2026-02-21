@@ -140,6 +140,11 @@ class EvaluationSection:
     generate_report: bool = True
     position_sizing: str = "fixed"
 
+    # Transaction cost overrides (passed to BacktestConfig)
+    commission_per_contract: float | None = None
+    slippage_ticks: float | None = None
+    initial_equity: float = 100000.0
+
 
 @dataclass
 class BundlingSection:
@@ -297,6 +302,9 @@ class ExperimentConfig:
             compute_shap=eval_section_dict.get("compute_shap", False),
             generate_report=eval_section_dict.get("generate_report", True),
             position_sizing=eval_section_dict.get("position_sizing", "fixed"),
+            commission_per_contract=eval_section_dict.get("commission_per_contract"),
+            slippage_ticks=eval_section_dict.get("slippage_ticks"),
+            initial_equity=eval_section_dict.get("initial_equity", 100000.0),
         )
 
         # Parse bundling section
@@ -368,6 +376,9 @@ class ExperimentConfig:
                 "compute_shap": self.evaluation.compute_shap,
                 "generate_report": self.evaluation.generate_report,
                 "position_sizing": self.evaluation.position_sizing,
+                "commission_per_contract": self.evaluation.commission_per_contract,
+                "slippage_ticks": self.evaluation.slippage_ticks,
+                "initial_equity": self.evaluation.initial_equity,
             },
             "bundling": {
                 "create_bundle": self.bundling.create_bundle,
@@ -482,15 +493,20 @@ class ExperimentConfig:
 
     def to_backtest_config(self) -> BacktestConfig:
         """
-        Convert to BacktestConfig for backtesting.
+        Convert to canonical BacktestConfig for backtesting.
+
+        Note: The factory uses the operational BacktestConfig from
+        src/inference/backtesting/backtest.py directly, not this method.
+        This is for backward compatibility with code using the canonical config.
 
         Returns:
-            BacktestConfig instance
+            BacktestConfig instance (canonical, from src/config/inference.py)
         """
         return BacktestConfig(
             start_date=self.data.start_date,
             end_date=self.data.end_date,
             position_sizing=self.evaluation.position_sizing,
+            initial_capital=self.evaluation.initial_equity,
         )
 
     def to_bundle_config(self, model_name: str, horizon: int) -> BundleConfig:
