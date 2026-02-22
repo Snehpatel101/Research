@@ -317,8 +317,11 @@ class ModelTrainingService:
 
         result = tuning_service.optimize(tuning_request)
 
-        # Apply best params to trainer config
-        for param, value in result.best_params.items():
-            setattr(trainer_config, param, value)
+        # Apply best params to model_config so they reach ModelRegistry.create().
+        # Previously used setattr() which put params as ad-hoc TrainerConfig attributes,
+        # but Trainer only passes model_config to ModelRegistry — so params were silently lost.
+        if not hasattr(trainer_config, "model_config") or trainer_config.model_config is None:
+            trainer_config.model_config = {}
+        trainer_config.model_config.update(result.best_params)
 
         return trainer_config

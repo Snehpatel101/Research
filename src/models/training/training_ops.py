@@ -396,28 +396,45 @@ class TrainingOpsMixin:
             _data_rank = prepared.data_rank
             _n_timeframes = getattr(prepared, "n_timeframes", None)
             _sequence_length = getattr(prepared, "sequence_length", None)
+            # Capture original ND shape now, before prepared is freed below
+            original_shape = prepared.X_train.shape[1:] if _data_rank > 2 else None
 
-            # Reconstruct FULL dataset (walk-forward does its own splitting)
-            arrays_X = [prepared.X_train]
-            arrays_y = [prepared.y_train]
-            if prepared.X_val is not None:
-                arrays_X.append(prepared.X_val)
-                arrays_y.append(prepared.y_val)
-            if prepared.X_test is not None:
-                arrays_X.append(prepared.X_test)
-                arrays_y.append(prepared.y_test)
+            # Reconstruct FULL dataset as flat float32 (walk-forward does its own splitting).
+            # Flatten each split individually and free 3D arrays eagerly to avoid
+            # holding 3D + 2D + DataFrame copies simultaneously (~240GB peak → ~60GB).
+            flat_parts = []
+            label_parts = []
 
-            X_all = np.concatenate(arrays_X)
-            y_all = np.concatenate(arrays_y)
-            del arrays_X, arrays_y
+            for arr_x, arr_y in [
+                (prepared.X_train, prepared.y_train),
+                (prepared.X_val, prepared.y_val) if prepared.X_val is not None else (None, None),
+                (prepared.X_test, prepared.y_test) if prepared.X_test is not None else (None, None),
+            ]:
+                if arr_x is None:
+                    continue
+                if _data_rank == 2:
+                    flat_parts.append(arr_x.astype(np.float32, copy=False))
+                else:
+                    # Flatten 3D/4D → 2D and convert to float32 in one step
+                    flat_parts.append(
+                        arr_x.reshape(arr_x.shape[0], -1).astype(np.float32, copy=False)
+                    )
+                label_parts.append(arr_y)
 
+            # Resolve feature column names and free prepared BEFORE concatenation
+            # to avoid holding both prepared's arrays and flat_parts simultaneously
             if _data_rank == 2:
                 feature_cols = prepared.feature_names
-                X_flat = X_all
             else:
-                n_flat = int(np.prod(X_all.shape[1:]))
+                n_flat = flat_parts[0].shape[1]
                 feature_cols = [f"f{i}" for i in range(n_flat)]
-                X_flat = X_all.reshape(X_all.shape[0], -1)
+
+            del prepared
+            gc.collect()
+
+            X_flat = np.concatenate(flat_parts)
+            y_all = np.concatenate(label_parts)
+            del flat_parts, label_parts
 
             n_all = len(X_flat)
             if isinstance(df.index, pd.DatetimeIndex) and len(df.index) >= n_all:
@@ -425,23 +442,20 @@ class TrainingOpsMixin:
             else:
                 idx = pd.RangeIndex(n_all)
 
-            # Store original shape before freeing X_all
-            original_shape = X_all.shape[1:] if _data_rank > 2 else None
-
             # Build DataFrame for container — add labels directly, no .copy()
             X_all_df = pd.DataFrame(X_flat, columns=feature_cols, index=idx)
             feature_col_list = list(X_all_df.columns)
             X_all_df[f"label_h{horizon}"] = y_all
             X_all_df[f"sample_weight_h{horizon}"] = np.ones(n_all)
 
-            # Log before freeing prepared
+            # Log after building DataFrame
             logger.info(
                 f"  Walk-forward data for {model_name}: {n_all} samples "
                 f"(rank={_data_rank}, features={_n_features})"
             )
 
-            # Free prepared and intermediate arrays before walk-forward run
-            del prepared, X_all, y_all, X_flat
+            # Free flat arrays before container creation
+            del X_flat, y_all
             gc.collect()
 
             container = TimeSeriesDataContainer.from_dataframes(

@@ -25,6 +25,8 @@ from .purged_kfold import PurgedKFold
 
 logger = logging.getLogger(__name__)
 
+OPTUNA_MAX_SAMPLES = 50_000
+
 
 class TimeSeriesOptunaTuner:
     """
@@ -86,6 +88,53 @@ class TimeSeriesOptunaTuner:
         if not param_space:
             logger.warning(f"No param space defined for {self.model_name}")
             return {"best_params": {}, "best_value": None, "skipped": True}
+
+        # --- Memory guard: subsample large datasets before Optuna ---
+        # For a 1.6M-row TCN dataset (13,620 flattened features), 100 trials x 5
+        # folds each allocating numpy copies via fancy indexing consumes ~120 GB.
+        # Capping at 50k rows keeps peak RSS under ~8 GB for float32 3D data.
+        original_n = X.shape[0] if isinstance(X, np.ndarray) else len(X)
+        if original_n > OPTUNA_MAX_SAMPLES:
+            logger.info(
+                f"  Subsampling {original_n} -> {OPTUNA_MAX_SAMPLES} rows for Optuna (stratified)"
+            )
+            rng = np.random.default_rng(seed=42)
+            y_arr = y if isinstance(y, np.ndarray) else y.to_numpy()
+            classes, class_counts = np.unique(y_arr, return_counts=True)
+            # Stratified: allocate quota per class proportional to its share
+            class_fractions = class_counts / original_n
+            class_quotas = np.floor(class_fractions * OPTUNA_MAX_SAMPLES).astype(int)
+            # Any remainder goes to the largest class
+            remainder = OPTUNA_MAX_SAMPLES - class_quotas.sum()
+            class_quotas[np.argmax(class_counts)] += remainder
+            sub_indices = []
+            for cls, quota in zip(classes, class_quotas, strict=True):
+                cls_idx = np.where(y_arr == cls)[0]
+                chosen = rng.choice(cls_idx, size=min(quota, len(cls_idx)), replace=False)
+                sub_indices.append(chosen)
+            sub_indices = np.sort(np.concatenate(sub_indices))
+            # Apply to X
+            if isinstance(X, np.ndarray):
+                X = X[sub_indices]
+            else:
+                X = X.iloc[sub_indices].reset_index(drop=True)
+            # Apply to y
+            if isinstance(y, np.ndarray):
+                y = y[sub_indices]
+            else:
+                y = y.iloc[sub_indices].reset_index(drop=True)
+            # Apply to sample_weights if present
+            if sample_weights is not None:
+                if isinstance(sample_weights, np.ndarray):
+                    sample_weights = sample_weights[sub_indices]
+                else:
+                    sample_weights = sample_weights.iloc[sub_indices].reset_index(drop=True)
+
+        # --- float32 conversion: halves memory for all 500 fold slices ---
+        if isinstance(X, np.ndarray):
+            X = X.astype(np.float32, copy=False)
+        else:
+            X = X.astype(np.float32, copy=False)
 
         # Create study with optional pruner for early stopping of bad trials
         default_pruner = optuna.pruners.MedianPruner(
@@ -183,7 +232,7 @@ class TimeSeriesOptunaTuner:
                 del model, pred_result
 
                 # Report intermediate value for pruning (prune bad trials early)
-                trial.report(np.mean(scores), fold_idx)
+                trial.report(float(np.mean(scores)), fold_idx)
                 if trial.should_prune():
                     raise optuna.TrialPruned()
 

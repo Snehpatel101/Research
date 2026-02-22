@@ -421,7 +421,12 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         # Save results (must happen BEFORE clearing OOF predictions, which _save_results uses)
         self._save_results()
 
-        # Clear OOF predictions to free memory after saving (Phase 37 fix)
+        # Generate financial report BEFORE clearing OOF predictions.
+        # Reports read self._oof_predictions to build equity curves.
+        if generate_financial_report and self._model_results:
+            self._generate_financial_reports(df)
+
+        # Clear OOF predictions to free memory after saving and reports (Phase 37 fix)
         # Each OOF dict entry is 50-200MB; clearing saves 750MB-1.5GB for typical runs
         if self._oof_predictions:
             oof_count = len(self._oof_predictions)
@@ -443,10 +448,6 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         logger.info(f"Total time: {total_time:.1f}s")
         logger.info(f"Models trained: {len(self._model_results)}")
         logger.info(f"Output: {self.output_dir}")
-
-        # Generate financial report if requested
-        if generate_financial_report and self._model_results:
-            self._generate_financial_reports(df)
 
         return TrainingRunResult(
             run_id=self.run_id,

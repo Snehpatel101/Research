@@ -334,7 +334,7 @@ class WalkForwardTrainer:
         # Pre-extract numpy values to avoid DataFrame.iloc copies (which duplicate
         # the full DataFrame structure). For TCN with 13,620 flattened columns,
         # this avoids ~80GB of unnecessary DataFrame overhead per window.
-        X_np = X.values
+        X_np = X.values.astype(np.float32, copy=False)
 
         for window_idx, (train_idx, test_idx) in enumerate(
             evaluator.split(X, y, label_end_times=label_end_times)
@@ -446,6 +446,10 @@ class WalkForwardTrainer:
                 config=_model_config,
             )
 
+            # Free training arrays immediately — only test data needed for prediction.
+            # For TCN (13,620 flattened cols), X_train_scaled alone is ~47GB.
+            del X_train_scaled, y_train, w_train
+
             # Generate predictions
             prediction_output: PredictionResult = model.predict(X_test_scaled)
 
@@ -497,9 +501,10 @@ class WalkForwardTrainer:
             )
 
             # Free memory between walk-forward windows to prevent OOM
-            # on large datasets (1M+ rows with 3D/4D reshaping)
-            del model, X_train_scaled, X_test_scaled
-            del prediction_output
+            # on large datasets (1M+ rows with 3D/4D reshaping).
+            # X_train_scaled, y_train, w_train already freed above after model.fit().
+            del model, X_test_scaled, y_test
+            del prediction_output, scaler
             gc.collect()
             try:
                 import torch
