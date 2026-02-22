@@ -97,6 +97,9 @@ class ExperimentResult:
     deploy_path: Path | None = None
     output_dir: Path | None = None
     error_message: str | None = None
+    training_result: Any = None
+    equity_curve: Any = None
+    backtest_trades: list = field(default_factory=list)
 
     def summary(self) -> str:
         """Generate human-readable summary."""
@@ -226,6 +229,10 @@ class MLFactory:
         self._cached_df: pd.DataFrame | None = None
         self._cached_training_result: TrainingResult | None = None
 
+        # Backtest artifacts (populated by _run_evaluation)
+        self._last_equity_curve: Any = None
+        self._last_backtest_trades: list = []
+
         # Save config
         config_path = self.output_dir / "experiment_config.yaml"
         config.save_yaml(config_path)
@@ -323,6 +330,9 @@ class MLFactory:
                 bundle_path=bundle_path,
                 deploy_path=deploy_path,
                 output_dir=self.output_dir,
+                training_result=training_result,
+                equity_curve=self._last_equity_curve,
+                backtest_trades=self._last_backtest_trades,
             )
 
             self._log("\n" + result.summary())
@@ -798,6 +808,10 @@ class MLFactory:
             # Run backtest
             bt_result = backtester.run()
             metrics = bt_result.summary()
+
+            # Store equity curve and trades for notebook visualizations
+            self._last_equity_curve = bt_result.equity_curve
+            self._last_backtest_trades = list(bt_result.trades)
 
             self._log(f"  Backtest complete: {metrics.get('total_trades', 0)} trades")
             self._log(f"  Win rate: {metrics.get('win_rate_pct', 0):.1f}%")
