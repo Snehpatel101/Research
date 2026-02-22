@@ -319,6 +319,12 @@ src/
 - Deploy path resolution fallback (deploy.py, 2 sites) — deploy_dir.parent for bundle paths
 - 5 files modified, 212/212 tests still passing
 
+**Phase 76: COMPLETE — Walk-Forward Feature Selection Fix + Float32 Scaler (2 critical bugs)**
+- CRITICAL: Walk-forward feature selection was dead code — `hasattr(prepared, "with_features")` always False (PreparedData has no such method). Fixed 3 sites to filter df columns BEFORE prepare(), matching _prepare_with_cache pattern. Without this fix, walk-forward trained on 227 features instead of 60 (~3.8x more memory for 3D models).
+- CRITICAL: sklearn RobustScaler upcasts float32→float64 internally, doubling memory. Manual numpy-based float32 scaling in fold_scaling.py (median/IQR for robust, mean/std for standard). Still fits sklearn scaler for inference compatibility.
+- Slice indexing optimization correctly skipped — embargo creates non-contiguous train indices
+- 2 files modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

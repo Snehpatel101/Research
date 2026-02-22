@@ -4,6 +4,39 @@
 
 ---
 
+## Phase 76: Walk-Forward Feature Selection Fix + Float32 Scaler | 2026-02-22 | COMPLETE
+
+**Impact:** Fixed 2 critical memory bugs discovered during Phase 75 config audit. Walk-forward feature selection was completely dead code (227 features instead of 60 → 3.8x memory overhead for 3D/4D models). sklearn's RobustScaler silently upcasts float32→float64, doubling array memory. Combined with Phase 75, TCN peak memory drops from ~110 GB to ~32 GB on 1.6M row datasets. **2 files modified. 212/212 tests still passing.**
+
+### Changes (2)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | Walk-forward feature selection | `src/models/training/training_ops.py` | CRITICAL | 3 sites used `hasattr(prepared, "with_features")` which always returns False (PreparedData has no such method). Fixed to filter df columns BEFORE calling prepare(), matching the pattern already used in `_prepare_with_cache`. Reduces 3D arrays by ~3.8x for models with 60/227 feature selection. |
+| 2 | Float32 scaler | `src/validation/cv/fold_scaling.py` | CRITICAL | sklearn RobustScaler/StandardScaler internally copy float32→float64. Added manual numpy-based scaling (median/IQR for robust, mean/std for standard) that stays in float32. Still fits sklearn scaler object for inference compatibility. |
+
+### Investigation: Slice indexing (NOT applied)
+
+Walk-forward train indices are NOT always contiguous — embargo removes indices from the middle of the training window, creating gaps. Converting `iloc[train_idx]` to slice would silently include embargoed data, causing data leakage. Correctly left as-is.
+
+### Memory Impact (1.6M rows, xgboost+tcn+patchtst, 60 features)
+
+| Stage | Phase 75 Only | Phase 75 + 76 |
+|-------|:------------:|:-------------:|
+| TCN walk-forward PreparedData (3D) | ~27 GB (227 features) | ~7.1 GB (60 features, float32) |
+| Scaler intermediate arrays | 2x (float64 copy) | 1x (stays float32) |
+| Peak during TCN training | ~55-65 GB | ~32-40 GB |
+
+### Verification
+
+- 212/212 tests pass
+- float32 dtype preserved through scaling (verified with numpy assertions)
+- Backward compatibility: float64 inputs still use sklearn path
+- Walk-forward feature selection verified: df columns filtered before prepare()
+- Slice indexing correctly rejected (embargo creates index gaps)
+
+---
+
 ## Phase 75: OOM Root Cause Fix + Pipeline Bug Fixes (11 items) | 2026-02-22 | COMPLETE
 
 **Impact:** Fixed the actual OOM root cause: cache eviction was dead code (string match on tuple keys — always False). Combined with float32 downcast, this reduces TCN peak memory from ~110 GB to ~27 GB. Also fixed 8 pipeline bugs across factory, config, and deploy modules. **5 files modified. 212/212 tests still passing.**

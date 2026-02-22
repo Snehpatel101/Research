@@ -392,20 +392,25 @@ class TrainingOpsMixin:
         class_names = ["short", "neutral", "long"]
 
         for model_name in self.config.models:
+            # Filter DataFrame to per-model feature subset before preparation
+            # (matches _prepare_with_cache logic in unified_orchestrator.py)
+            df_model = df
+            if self._per_model_features and model_name in self._per_model_features:
+                model_features = set(self._per_model_features[model_name])
+                all_features = set(self._all_feature_names)
+                drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
+                if drop_cols:
+                    df_model = df.drop(columns=drop_cols)
+                    logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
+
             prepared = self._data_preparer.prepare(
-                df=df,
+                df=df_model,
                 model_name=model_name,
                 additional_dfs=additional_dfs,
             )
 
             # Filter invalid labels (-99) before walk-forward training
             prepared = prepared.filter_invalid_labels()
-
-            # Apply per-model feature filtering (same as _prepare_with_cache)
-            if self._per_model_features and model_name in self._per_model_features:
-                selected_features = self._per_model_features[model_name]
-                if hasattr(prepared, "with_features"):
-                    prepared = prepared.with_features(selected_features)
 
             # Save metadata before freeing prepared data
             _n_features = prepared.n_features
@@ -633,16 +638,22 @@ class TrainingOpsMixin:
             logger.info(f"\n--- Horizon {horizon} ---")
             for model_name in self.config.models:
                 logger.info(f"\nTraining regime-aware: {model_name}...")
+                # Filter DataFrame to per-model feature subset before preparation
+                df_model = df
+                if self._per_model_features and model_name in self._per_model_features:
+                    model_features = set(self._per_model_features[model_name])
+                    all_features = set(self._all_feature_names)
+                    drop_cols = [
+                        c for c in df.columns if c in all_features and c not in model_features
+                    ]
+                    if drop_cols:
+                        df_model = df.drop(columns=drop_cols)
+                        logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
                 prepared = self._data_preparer.prepare(
-                    df=df,
+                    df=df_model,
                     model_name=model_name,
                     additional_dfs=additional_dfs,
                 )
-                # Apply per-model feature filtering (consistent with standard mode)
-                if self._per_model_features and model_name in self._per_model_features:
-                    selected_features = self._per_model_features[model_name]
-                    if hasattr(prepared, "with_features"):
-                        prepared = prepared.with_features(selected_features)
                 logger.info(f"  Data prepared: {prepared.summary()}")
 
                 regime_result = regime_trainer.train(
@@ -741,16 +752,22 @@ class TrainingOpsMixin:
 
         # Stage 1: Prepare data
         logger.info("\n  STAGE 1: Preparing data...")
+        # Filter DataFrame to per-model feature subset before preparation
+        df_model = df
+        if self._per_model_features and primary_model_name in self._per_model_features:
+            model_features = set(self._per_model_features[primary_model_name])
+            all_features = set(self._all_feature_names)
+            drop_cols = [c for c in df.columns if c in all_features and c not in model_features]
+            if drop_cols:
+                df_model = df.drop(columns=drop_cols)
+                logger.debug(
+                    f"Filtered to {len(model_features)} features for " f"{primary_model_name}"
+                )
         prepared = self._data_preparer.prepare(
-            df=df,
+            df=df_model,
             model_name=primary_model_name,
             additional_dfs=additional_dfs,
         )
-        # Apply per-model feature filtering (consistent with standard mode)
-        if self._per_model_features and primary_model_name in self._per_model_features:
-            selected_features = self._per_model_features[primary_model_name]
-            if hasattr(prepared, "with_features"):
-                prepared = prepared.with_features(selected_features)
         logger.info(f"    Data: {prepared.n_train} train, {prepared.n_val} val samples")
 
         X_train = self._flatten_to_2d(prepared.X_train)

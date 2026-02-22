@@ -109,25 +109,38 @@ class FoldAwareScaler:
                 n_features=X_train.shape[1] if X_train.ndim > 1 else 1,
             )
 
-        # Create fresh scaler for this fold
+        # Create scaler instance
         scaler = RobustScaler() if self.method == "robust" else StandardScaler()
 
-        # Fit ONLY on training data
-        X_train_scaled = scaler.fit_transform(X_train)
-
-        # Transform validation using training statistics
-        X_val_scaled = scaler.transform(X_val)
+        if X_train.dtype == np.float32:
+            # Manual float32 scaling — avoids sklearn's float64 upcasting
+            # which doubles memory (e.g., TCN 21.9 GB → 43.8 GB spike)
+            if self.method == "robust":
+                median = np.median(X_train, axis=0).astype(np.float32)
+                q75 = np.percentile(X_train, 75, axis=0).astype(np.float32)
+                q25 = np.percentile(X_train, 25, axis=0).astype(np.float32)
+                iqr = q75 - q25
+                iqr[iqr == 0] = 1.0
+                X_train_scaled = (X_train - median) / iqr
+                X_val_scaled = (X_val - median) / iqr
+            else:
+                mean = np.mean(X_train, axis=0).astype(np.float32)
+                std = np.std(X_train, axis=0).astype(np.float32)
+                std[std == 0] = 1.0
+                X_train_scaled = (X_train - mean) / std
+                X_val_scaled = (X_val - mean) / std
+            # Fit sklearn scaler for inference compatibility (uses float64 internally
+            # but we only need its parameters, not its transform output)
+            scaler.fit(X_train)
+        else:
+            # float64 path — use sklearn directly (no memory concern)
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_val_scaled = scaler.transform(X_val)
 
         # Optional outlier clipping
         if self.clip_outliers:
             X_train_scaled = np.clip(X_train_scaled, -self.clip_std, self.clip_std)
             X_val_scaled = np.clip(X_val_scaled, -self.clip_std, self.clip_std)
-
-        # Preserve original dtype — sklearn scalers upcast float32 to float64,
-        # doubling memory usage for large 3D/4D tensors
-        if X_train.dtype == np.float32:
-            X_train_scaled = X_train_scaled.astype(np.float32, copy=False)
-            X_val_scaled = X_val_scaled.astype(np.float32, copy=False)
 
         self._current_scaler = scaler
 
