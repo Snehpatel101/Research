@@ -7,6 +7,7 @@ for sequence models (LSTM, GRU, TCN, Transformer).
 
 from __future__ import annotations
 
+import gc
 import logging
 from typing import Any
 
@@ -252,6 +253,19 @@ class SequenceOOFGenerator:
                     "val_f1": training_metrics.val_f1,
                 }
             )
+
+            # Free memory between folds to prevent OOM on large datasets
+            # train_result holds 3D sequences (~18 GB per fold for 1.6M rows)
+            del model, train_result, first_val_chunk
+            del scaling_result, scaled_builder, X_train_raw
+            gc.collect()
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
 
         # Validate coverage (expected to be < 100% for sequence models due to lookback)
         coverage = float((~np.isnan(oof_preds)).mean())

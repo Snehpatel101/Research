@@ -7,6 +7,7 @@ for tabular (non-sequence) models.
 
 from __future__ import annotations
 
+import gc
 import logging
 from typing import Any
 
@@ -242,6 +243,11 @@ class CoreOOFGenerator:
                     "val_f1": training_metrics.val_f1,
                 }
             )
+
+            # Free memory between folds
+            del model, X_train_scaled, X_val_scaled, X_train_raw, X_val_raw
+            del scaling_result, prediction_output
+            gc.collect()
 
         # Validate coverage
         coverage = float((~np.isnan(oof_preds)).mean())

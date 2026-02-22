@@ -496,9 +496,10 @@ class WalkForwardTrainer:
                 f"f1={metrics['f1']:.3f}, time={window_time:.1f}s"
             )
 
-            # Free window-local objects to prevent memory accumulation across windows
-            # (X_train_raw, X_test_raw, scaling_result already freed after scaling above)
-            del model, scaler, X_train_scaled, X_test_scaled, y_train, y_test
+            # Free memory between walk-forward windows to prevent OOM
+            # on large datasets (1M+ rows with 3D/4D reshaping)
+            del model, X_train_scaled, X_test_scaled
+            del prediction_output
             gc.collect()
             try:
                 import torch

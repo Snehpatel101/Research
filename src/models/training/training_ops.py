@@ -173,6 +173,25 @@ class TrainingOpsMixin:
             f"time={result.training_time_seconds:.1f}s"
         )
 
+        # Free PreparedData and evict from cache to prevent OOM
+        # when training sequential models (TCN 3D ~60 GB, PatchTST 4D ~8 GB)
+        del prepared
+        cache_key = None
+        for k, _v in list(self._prepared_cache.items()):
+            if model_name in k:
+                cache_key = k
+                break
+        if cache_key is not None:
+            del self._prepared_cache[cache_key]
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
+
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:
         """Train a single model with OOM recovery for neural/transformer models."""
         from src.core.contracts import get_model_contract
@@ -390,7 +409,7 @@ class TrainingOpsMixin:
 
             X_all = np.concatenate(arrays_X)
             y_all = np.concatenate(arrays_y)
-            del arrays_X, arrays_y  # Free list references
+            del arrays_X, arrays_y
 
             if _data_rank == 2:
                 feature_cols = prepared.feature_names
