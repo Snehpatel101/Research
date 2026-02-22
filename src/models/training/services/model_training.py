@@ -36,6 +36,7 @@ class ModelTrainingRequest:
     use_feature_selection: bool = True
     max_epochs: int | None = None  # Cap epochs for neural models in Optuna
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
+    batch_size: int | None = None  # Override batch size (used by OOM retry)
 
 
 @dataclass
@@ -115,6 +116,8 @@ class ModelTrainingService:
         if request.max_epochs is not None:
             _model_config["max_epochs"] = request.max_epochs
             _model_config["early_stopping_patience"] = max(1, request.max_epochs // 2)
+        if request.batch_size is not None:
+            _model_config["batch_size"] = request.batch_size
         trainer_config = TrainerConfig(
             model_name=model_name,
             horizon=horizon,

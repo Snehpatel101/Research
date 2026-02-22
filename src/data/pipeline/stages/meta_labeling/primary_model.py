@@ -381,7 +381,6 @@ class PrimaryClassifier(BaseEstimator, ClassifierMixin):
                 return xgb.XGBClassifier(
                     random_state=self.random_state,
                     n_estimators=100,
-                    use_label_encoder=False,
                     eval_metric="logloss",
                     **self.model_params,
                 )

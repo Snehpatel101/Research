@@ -137,7 +137,6 @@ class XGBoostConfig(BaseConfig):
     # Additional settings
     objective: str = "multi:softprob"
     eval_metric: str = "mlogloss"
-    use_label_encoder: bool = False
     early_stopping_rounds: int | None = 50
     tree_method: str = "auto"  # auto, exact, approx, hist, gpu_hist
 
@@ -177,7 +176,6 @@ class XGBoostConfig(BaseConfig):
             "objective": self.objective,
             "eval_metric": self.eval_metric,
             "tree_method": self.tree_method,
-            "use_label_encoder": self.use_label_encoder,
         }
 
 

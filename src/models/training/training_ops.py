@@ -254,8 +254,21 @@ class TrainingOpsMixin:
                     torch.cuda.empty_cache()
             except ImportError:
                 pass
-            if hasattr(self.config, "batch_size"):
-                self.config.batch_size = reduced_batch
+            request = ModelTrainingRequest(
+                model_name=model_name,
+                horizon=horizon,
+                prepared_data=prepared,
+                sequence_length=self.config.sequence_length,
+                output_dir=self.output_dir / f"h{horizon}",
+                optimize_hyperparams=self.config.optimize_hyperparams,
+                n_splits=self.config.n_splits,
+                hyperparam_trials=self.config.hyperparam_trials,
+                scoring=self.config.optuna_metric,
+                use_feature_selection=self.config.optimize_features,
+                max_epochs=self.config.max_epochs,
+                cv_method=self.config.cv_method,
+                batch_size=reduced_batch,
+            )
             result = self._model_service.train_model(request)
             training_degraded = True
 
@@ -458,10 +471,9 @@ class TrainingOpsMixin:
             del flat_parts, label_parts
 
             n_all = len(X_flat)
-            if isinstance(df.index, pd.DatetimeIndex) and len(df.index) >= n_all:
-                idx = df.index[:n_all]
-            else:
-                idx = pd.RangeIndex(n_all)
+            # Always use RangeIndex — after filter_invalid_labels(), n_all samples
+            # are non-contiguous so df.index[:n_all] would be misaligned
+            idx = pd.RangeIndex(n_all)
 
             # Build DataFrame for container — add labels directly, no .copy()
             X_all_df = pd.DataFrame(X_flat, columns=feature_cols, index=idx)
@@ -779,9 +791,19 @@ class TrainingOpsMixin:
             else [f"f{i}" for i in range(X_train.shape[1])]
         )
 
+        # Save metadata before training (prepared will be freed after)
+        prepared_data_rank = prepared.data_rank
+        prepared_n_features = prepared.n_features
+
         # Stage 2: Train primary model (direction)
         logger.info("\n  STAGE 2: Training primary model (direction)...")
         primary_result = self._train_single_model(primary_model_name, prepared, horizon)
+
+        # Free PreparedData — all needed values already extracted to local vars
+        # (X_train, X_val, y_train, y_val, feature_names, data_rank, n_features)
+        del prepared
+        gc.collect()
+
         primary_trainer = primary_result.trainer
         if primary_trainer is None:
             raise RuntimeError("Primary model training failed")
@@ -888,8 +910,8 @@ class TrainingOpsMixin:
             metrics=metrics,
             trainer=primary_trainer,
             training_time_seconds=time.time() - start_time,
-            n_features=prepared.n_features,
-            data_rank=prepared.data_rank,
+            n_features=prepared_n_features,
+            data_rank=prepared_data_rank,
         )
 
     def _flatten_to_2d(self, X: np.ndarray) -> np.ndarray:
@@ -928,7 +950,6 @@ class TrainingOpsMixin:
                     learning_rate=0.1,
                     random_state=rs,
                     n_jobs=nj,
-                    use_label_encoder=False,
                     eval_metric="logloss",
                 )
             except ImportError:

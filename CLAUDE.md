@@ -325,6 +325,15 @@ src/
 - Slice indexing optimization correctly skipped — embargo creates non-contiguous train indices
 - 2 files modified, 212/212 tests still passing
 
+**Phase 77: COMPLETE — Pipeline Audit Fixes (6 items across 6 files)**
+- AdapterScaler float32 manual scaling (same pattern as Phase 76 FoldAwareScaler fix) — eliminates ~37 GB temporary spike for TCN
+- Meta-labeling `del prepared` after flattening + training — frees ~28 GB of 3D arrays
+- OOF generation `del X_train_2d, prepared` after DataFrame creation — prevents 2x peak memory
+- OOM retry batch_size propagation fixed (was dead code — reduced batch never reached model)
+- XGBoost `use_label_encoder=False` removed from all 3 locations (deprecated in XGBoost 2.0)
+- Walk-forward timestamp misalignment fixed (RangeIndex after filter_invalid_labels)
+- 6 files modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

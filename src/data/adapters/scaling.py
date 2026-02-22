@@ -113,6 +113,13 @@ class AdapterScaler:
         self._n_features: int = 0
         self._original_shape: tuple | None = None
 
+        # Float32 manual scaling stats (avoids sklearn float64 upcasting)
+        self._input_f32: bool = False
+        self._f32_center: np.ndarray | None = None
+        self._f32_scale: np.ndarray | None = None
+        self._f32_data_min: np.ndarray | None = None
+        self._f32_data_range: np.ndarray | None = None
+
         # Validate method
         if self.config.method not in self.VALID_METHODS:
             raise ValueError(
@@ -172,6 +179,31 @@ class AdapterScaler:
         self._scaler.fit(X_2d)
         self._is_fitted = True
 
+        # Compute float32 stats for manual scaling path — avoids sklearn's
+        # float64 upcasting which doubles memory for large 3D/4D tensors
+        # (e.g. TCN 949K×60×227 = 103GB at f64 vs 52GB at f32)
+        self._input_f32 = X.dtype == np.float32
+        if self._input_f32:
+            if self.config.method == "robust":
+                q_lo, q_hi = self.config.quantile_range
+                if self.config.with_centering:
+                    self._f32_center = np.median(X_2d, axis=0).astype(np.float32)
+                if self.config.with_scaling:
+                    scale = np.percentile(X_2d, q_hi, axis=0).astype(np.float32) - np.percentile(
+                        X_2d, q_lo, axis=0
+                    ).astype(np.float32)
+                    scale[scale == 0] = 1.0
+                    self._f32_scale = scale
+            elif self.config.method == "standard":
+                self._f32_center = np.mean(X_2d, axis=0).astype(np.float32)
+                self._f32_scale = np.std(X_2d, axis=0).astype(np.float32)
+                self._f32_scale[self._f32_scale == 0] = 1.0
+            elif self.config.method == "minmax":
+                self._f32_data_min = np.min(X_2d, axis=0).astype(np.float32)
+                data_max = np.max(X_2d, axis=0).astype(np.float32)
+                self._f32_data_range = data_max - self._f32_data_min
+                self._f32_data_range[self._f32_data_range == 0] = 1.0
+
         logger.debug(
             f"AdapterScaler fitted: method={self.config.method}, "
             f"n_features={self._n_features}, shape={X.shape}"
@@ -211,7 +243,12 @@ class AdapterScaler:
                 f"but input has {X_2d.shape[1]} features"
             )
 
-        X_scaled = self._scaler.transform(X_2d)
+        # Manual float32 path — avoids sklearn's float64 upcasting which
+        # doubles peak memory for large 3D/4D tensors
+        if X.dtype == np.float32 and self._input_f32:
+            X_scaled = self._transform_f32(X_2d)
+        else:
+            X_scaled = self._scaler.transform(X_2d)
 
         # Replace NaN/Inf from zero-variance features (IQR=0 or std=0)
         # These arise when a feature is constant — scaling divides by zero.
@@ -228,11 +265,6 @@ class AdapterScaler:
         # Clip values if configured
         if self.config.clip_value > 0:
             X_scaled = np.clip(X_scaled, -self.config.clip_value, self.config.clip_value)
-
-        # Preserve original dtype — sklearn scalers upcast float32 to float64,
-        # doubling memory for large 3D/4D tensors (e.g. TCN 949K×60×227 = 103GB at f64 vs 52GB at f32)
-        if X.dtype == np.float32 and X_scaled.dtype != np.float32:
-            X_scaled = X_scaled.astype(np.float32, copy=False)
 
         return self._from_2d(X_scaled, original_shape)
 
@@ -276,6 +308,36 @@ class AdapterScaler:
         X_unscaled = self._scaler.inverse_transform(X_2d)
 
         return self._from_2d(X_unscaled, original_shape)
+
+    def _transform_f32(self, X_2d: np.ndarray) -> np.ndarray:
+        """
+        Manual float32 scaling — avoids sklearn's float64 upcasting.
+
+        Computes (X - center) / scale in float32 arithmetic, keeping peak
+        memory at half what sklearn would use for the same operation.
+
+        Args:
+            X_2d: 2D float32 array (n_total_samples, n_features)
+
+        Returns:
+            Scaled float32 array with same shape
+        """
+        if self.config.method == "robust":
+            result = X_2d.copy()
+            if self._f32_center is not None:
+                result -= self._f32_center
+            if self._f32_scale is not None:
+                result /= self._f32_scale
+            return result
+        elif self.config.method == "standard":
+            return (X_2d - self._f32_center) / self._f32_scale
+        elif self.config.method == "minmax":
+            lo, hi = self.config.feature_range
+            scaled = (X_2d - self._f32_data_min) / self._f32_data_range
+            return scaled * (hi - lo) + lo
+        else:
+            # Shouldn't reach here, but fall back to sklearn
+            return self._scaler.transform(X_2d)
 
     def _to_2d(self, X: np.ndarray) -> np.ndarray:
         """

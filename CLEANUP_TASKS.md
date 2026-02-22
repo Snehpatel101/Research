@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 76 complete
+**Status:** All phases through 77 complete
 **Last Updated:** 2026-02-22
 
 ---
@@ -62,16 +62,17 @@ See **COMPLETION.md** for full task details and implementation information.
 | 74 | 6/6 tasks (all complete) | Memory optimization (Optuna subsampling, float32, copy chain), Optuna params bug, financial reports bug, 11 notebook visualizations | 2026-02-22 |
 | 75 | 11/11 tasks (all complete) | OOM root cause (cache eviction dead code), float32 downcast, model.cpu()/dynamo reset, CSV support, date column, default training_mode, deploy_artifact, config round-trip, deploy path resolution (2 sites) | 2026-02-22 |
 | 76 | 2/2 tasks (all complete) | Walk-forward feature selection dead code fix (3 sites), float32 scaler (manual numpy scaling to avoid sklearn upcasting) | 2026-02-22 |
+| 77 | 6/6 tasks (all complete) | AdapterScaler float32, meta-labeling memory cleanup, OOF memory cleanup, OOM batch_size propagation, XGBoost deprecated param, walk-forward timestamp fix | 2026-02-22 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 310+ tasks across 47 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), OOM root cause fix (cache eviction + float32 downcast + walk-forward feature selection), float32 scaler.
+**Summary Impact:** 310+ tasks across 48 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), OOM root cause fix (cache eviction + float32 downcast + walk-forward feature selection), float32 scaler, full pipeline audit (AdapterScaler float32, memory cleanup, OOM retry, XGBoost compat).
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 76 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 77 are complete. See COMPLETION.md for full details.
 
 ---
 

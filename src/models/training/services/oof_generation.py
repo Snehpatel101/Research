@@ -130,6 +130,10 @@ class OOFGenerationService:
             )
             y_train = pd.Series(prepared.y_train)
 
+            # Drop intermediate references — X_train_df/y_train hold the data
+            del X_train_2d, prepared
+            gc.collect()
+
             # Ensure generator is initialized
             oof_generator = self._ensure_generator(request)
 

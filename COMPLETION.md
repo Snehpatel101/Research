@@ -4,6 +4,32 @@
 
 ---
 
+## Phase 77: Pipeline Audit Fixes (6 items) | 2026-02-22 | COMPLETE
+
+**Impact:** Full 12-model pipeline audit found 6 remaining issues (3 memory, 3 bugs). AdapterScaler had the same float64 upcasting bug fixed in FoldAwareScaler (Phase 76) — eliminates ~37 GB temporary spike for 3D models. Meta-labeling and OOF generation held duplicate arrays unnecessarily. OOM retry batch_size reduction was dead code. XGBoost deprecated param removed. Walk-forward timestamp metadata corrected. **6 files modified. 212/212 tests still passing.**
+
+### Changes (6)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | AdapterScaler float32 scaling | `src/data/adapters/scaling.py` | HIGH | Manual numpy float32 scaling in `_transform_f32()` — supports robust (median/IQR), standard (mean/std), minmax (min/range). Stats computed during `fit()`, stored as `_f32_center`/`_f32_scale`. Eliminates sklearn's internal float64 copy (~37 GB for TCN). |
+| 2 | Meta-labeling memory cleanup | `src/models/training/training_ops.py` | HIGH | `del prepared` + `gc.collect()` after `_train_single_model()` returns. Saves data_rank/n_features to local vars first. Frees ~28 GB of 3D arrays that were held alongside flattened 2D copies. |
+| 3 | OOF generation memory cleanup | `src/models/training/services/oof_generation.py` | MEDIUM | `del X_train_2d, prepared` + `gc.collect()` after DataFrame creation. Prevents 2x peak memory during 3D OOF generation. |
+| 4 | OOM retry batch_size propagation | `src/models/training/training_ops.py` + `services/model_training.py` | MEDIUM | Added `batch_size` field to `ModelTrainingRequest`. OOM retry rebuilds request with reduced batch_size. Previously batch_size was set on config but never reached the model (dead code). |
+| 5 | XGBoost use_label_encoder removal | `training_ops.py`, `model_configs.py`, `primary_model.py` | LOW | Removed deprecated `use_label_encoder=False` from all 3 locations. Parameter was removed in XGBoost 2.0, could cause TypeError. |
+| 6 | Walk-forward timestamp fix | `src/models/training/training_ops.py` | LOW | Changed to `RangeIndex(n_all)` after `filter_invalid_labels()`. Previous `df.index[:n_all]` took wrong timestamps since removed rows aren't contiguous. |
+
+### Verification
+
+- 212/212 tests pass
+- `ruff check src/` — 0 errors
+- `black --check src/` — all clean
+- AdapterScaler float32 dtype preserved (verified with numpy assertion)
+- `grep -r 'use_label_encoder' src/` — 0 results
+- All module imports verified
+
+---
+
 ## Phase 76: Walk-Forward Feature Selection Fix + Float32 Scaler | 2026-02-22 | COMPLETE
 
 **Impact:** Fixed 2 critical memory bugs discovered during Phase 75 config audit. Walk-forward feature selection was completely dead code (227 features instead of 60 → 3.8x memory overhead for 3D/4D models). sklearn's RobustScaler silently upcasts float32→float64, doubling array memory. Combined with Phase 75, TCN peak memory drops from ~110 GB to ~32 GB on 1.6M row datasets. **2 files modified. 212/212 tests still passing.**
