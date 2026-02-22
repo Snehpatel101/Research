@@ -4,51 +4,30 @@
 
 ---
 
-## Phase 73: Scaler Serialization Fix + Notebook Warning Suppression | 2026-02-21 | COMPLETE
+## Phase 72: Memory Cleanup — OOM Prevention for Large Datasets | 2026-02-22 | COMPLETE
 
-**Impact:** Fixed AdapterScaler save/load format mismatch (save used joblib, load used pickle — incompatible). Suppressed 6 categories of Jupyter/Colab warnings in notebook for clean output. 2 files modified. **212/212 tests passing.**
+**Impact:** Fixed OOM crash on 230GB H100 with 1.6M row MGC dataset during TCN/PatchTST walk-forward training. Peak RAM reduced from 225+ GB (crash) to ~80-100 GB estimated. 4 files modified. **212/212 tests still passing.**
 
-### Changes (2)
+**Root Cause:** 3D/4D arrays (~18-60 GB each) accumulated without cleanup between walk-forward windows, sequential model training, and OOF cross-validation folds.
 
-| # | Fix | File | Description |
-|:-:|-----|------|-------------|
-| 1 | Scaler save/load format mismatch | `src/data/adapters/scaling.py` | Changed `save()` from `joblib.dump()` to `pickle.dump()` to match `safe_pickle_load()` in `load()`. Removed unused `joblib` import. Verified: no production code calls `AdapterScaler.save()`/`.load()` directly — bundle system uses `pickle.dump()`/`safe_pickle_load()` already. |
-| 2 | Notebook warning suppression | `notebooks/ml_factory_colab.ipynb` | Added `PYDEVD_DISABLE_FILE_VALIDATION=1` env var and `warnings.filterwarnings` for frozen modules, websocket ping, JupyterEvents schema, extension deprecations, ServerApp config deprecations, Tornado/traitlets/notebook deprecations. All set at top of Cell 1 before other imports. |
+### Changes (5)
 
----
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | Walk-forward window cleanup | `src/models/training/modes/walk_forward.py` | CRITICAL | Added `del model, X_train_scaled, X_test_scaled` + `gc.collect()` + `torch.cuda.empty_cache()` between windows |
+| 2 | Sequential model cache eviction | `src/models/training/training_ops.py` | CRITICAL | `del prepared` + evict from `_prepared_cache` after each sequential model (TCN 3D ~60 GB freed before PatchTST 4D starts) |
+| 3 | Walk-forward intermediate arrays | `src/models/training/training_ops.py` | HIGH | Free `X_all`, `X_flat`, `X_all_df`, `y_all` immediately after use; save metadata before deletion |
+| 4 | Sequence OOF fold cleanup | `src/validation/cv/oof_sequence.py` | CRITICAL | `del model, train_result, first_val_chunk, scaling_result` + `gc.collect()` + `torch.cuda.empty_cache()` between folds |
+| 5 | Tabular OOF fold cleanup | `src/validation/cv/oof_core.py` | MEDIUM | `del model, X_train_scaled, X_val_scaled` + `gc.collect()` between folds |
 
-## Phase 72: Memory Optimization — 9 Fixes (~200GB → ~30-40GB) | 2026-02-21 | COMPLETE
+### Memory Audit Results
 
-**Impact:** Peak RAM reduced from 230GB+ (crash) to estimated ~30-40GB for `mgc_h100_xcb_tcn_pst` experiment (949K rows × 227 features, xgboost/tcn/patchtst, 5 walk-forward windows, 100 Optuna trials). Also fixes MDA feature selection crash and -99 invalid label leakage into walk-forward training. 6 files modified. **212/212 tests passing.**
-
-### Changes (9)
-
-| # | Fix | File | Memory Saved | Description |
-|:-:|-----|------|:------------:|-------------|
-| 1 | Eliminate redundant copies | `src/models/training/training_ops.py` | ~40 GB | Removed `.copy()` on full DataFrame, added labels in-place, saved metadata before `del prepared`, aggressive `del` + `gc.collect()` between intermediate steps |
-| 2 | Preserve float32 in FoldAwareScaler | `src/validation/cv/fold_scaling.py` | ~12 GB/window | Added `.astype(np.float32, copy=False)` after sklearn RobustScaler (which upcasts float32→float64) |
-| 3 | Walk-forward window cleanup | `src/models/training/modes/walk_forward.py` | ~12 GB sustained | Added `del model, scaler, ...` + `gc.collect()` + `torch.cuda.empty_cache()` at end of each window iteration |
-| 4 | OOF fold cleanup | `src/models/training/services/oof_generation.py` | ~1-3 GB | Added `del model, X_train_fold, ...` + `gc.collect()` after each CV fold in `_generate_4d_oof()` |
-| 5 | Optuna trial cleanup | `src/validation/cv/cv_tuner.py` | ~2-10 GB | Added `_trial_cleanup_callback` with `gc.collect()` + `torch.cuda.empty_cache()`, `del model, pred_result` per fold |
-| 6 | Fix MDA linkage negative distances | `src/optimization/feature_selection/walk_forward.py` | Indirect | Added `dist.clip(lower=0)` + `np.fill_diagonal(dist.values, 0)` — prevents scipy linkage crash, restores proper clustered MDA feature selection |
-| 7 | Filter -99 labels in walk-forward | `src/models/training/training_ops.py` | None | Added `prepared = prepared.filter_invalid_labels()` after `prepare()` — walk-forward path was bypassing label filtering |
-| 8 | Preserve float32 in AdapterScaler | `src/data/adapters/scaling.py` | ~51 GB | Added `.astype(np.float32, copy=False)` after sklearn upcast — halves TCN's flattened 949K×13,620 DataFrame from 103GB to 52GB |
-| 9 | Numpy extraction + early deletion | `src/models/training/modes/walk_forward.py` | ~80 GB | Pre-extract `X.values` before window loop (avoids DataFrame.iloc copy overhead ~80GB), free raw arrays immediately after scaling (~47GB freed before model training) |
-
-### Root Cause Analysis
-
-```
-TCN flattens 3D (949K × 60 × 227) to 2D DataFrame with 13,620 columns.
-At float64: X DataFrame = 103GB, window iloc copy = 83GB, peak ~243GB → OOM.
-
-Fix 1: Eliminates 3 of 4 copies in _train_walk_forward() → ~40GB saved
-Fix 2: Prevents float64 upcast in FoldAwareScaler → ~12GB/window saved
-Fix 3-5: gc.collect() prevents accumulation → ~15-25GB sustained savings
-Fix 6: Restores MDA → selects ~60 features instead of passing all 227 through
-Fix 7: Removes 5 invalid labels from walk-forward training data
-Fix 8: Halves all adapter outputs (float32 preserved) → TCN 103GB → 52GB
-Fix 9: Numpy array slicing (no DataFrame overhead) + early deletion → ~80GB saved
-```
+| Location | Before Fix | After Fix |
+|----------|-----------|-----------|
+| Walk-forward windows (5 expanding) | Arrays accumulate, 225+ GB peak | Each window's arrays freed, ~80 GB peak |
+| Sequential models (xgb → tcn → pst) | `_prepared_cache` holds all, ~110+ GB | Cache evicted per model, ~60 GB peak |
+| OOF sequence folds (5-fold CV) | 2 folds' 3D arrays coexist, ~120 GB | Each fold freed, ~60 GB peak |
+| Walk-forward intermediates | `X_all` + `X_all_df` + `full_df` coexist | Intermediates freed immediately |
 
 ---
 

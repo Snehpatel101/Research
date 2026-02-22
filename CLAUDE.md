@@ -288,23 +288,13 @@ src/
 - Added conformal prediction config (CONFORMAL_ENABLED, CONFORMAL_ALPHA, CONFORMAL_METHOD)
 - Final notebook: 25 cells (9 markdown, 16 code), all syntax verified, 212/212 tests passing
 
-**Phase 72: COMPLETE — Memory Optimization (9 fixes, ~200GB → ~30-40GB peak)**
-- Eliminated 3 of 4 redundant data copies in `_train_walk_forward()` (~40GB savings)
-- Preserved float32 dtype in FoldAwareScaler (sklearn upcasts to float64, ~12GB/window saved)
-- Preserved float32 dtype in AdapterScaler (halves TCN's 949K×13,620 DataFrame from 103GB to 52GB)
-- Added gc.collect() + torch.cuda.empty_cache() in walk-forward window loop (~12GB sustained)
-- Added gc.collect() in OOF fold loop and Optuna trial loop (~3-13GB)
-- Fixed MDA linkage negative distances (dist.clip(lower=0)) — restores proper feature selection
-- Filtered -99 invalid labels in walk-forward path (was bypassing filter_invalid_labels())
-- Pre-extract numpy arrays before walk-forward loop (avoids ~80GB DataFrame.iloc overhead)
-- Early deletion of raw arrays after scaling (frees ~47GB before model training)
-- 6 files modified
-
-**Phase 73: COMPLETE — Scaler Serialization Fix + Notebook Warning Suppression**
-- Fixed AdapterScaler save/load format mismatch (joblib.dump vs safe_pickle_load — incompatible formats)
-- Changed save() to pickle.dump() to match, removed unused joblib import
-- Added Jupyter/Colab warning suppression to notebook Cell 1 (frozen modules, websocket ping, schema version, extension deprecations, config deprecations)
-- 2 files modified
+**Phase 72: COMPLETE — Memory Cleanup (OOM Prevention for Large Datasets)**
+- Fixed OOM crash on 230GB H100 with 1.6M row MGC dataset (peak 225+ GB → ~80-100 GB)
+- Walk-forward: del model + arrays + gc.collect + empty_cache between windows
+- Sequential models: evict PreparedData from _prepared_cache after each model
+- OOF sequence folds: del model + 3D train sequences between folds
+- OOF tabular folds: del model + scaled arrays between folds
+- 4 files modified, 212/212 tests still passing
 
 **See CLEANUP_PLAN.md for full phase details.**
 
@@ -397,6 +387,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-21 (Phase 73)*
+*Last updated: 2026-02-21*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*
