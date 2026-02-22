@@ -610,8 +610,12 @@ class MLFactory:
         if not self.config.data.data_path:
             raise ValueError("data_path must be provided in config")
 
-        raw_df = pd.read_parquet(self.config.data.data_path)
-        self._log(f"  Loaded: {len(raw_df)} rows from {self.config.data.data_path}")
+        data_path = Path(self.config.data.data_path)
+        if data_path.suffix.lower() == ".csv":
+            raw_df = pd.read_csv(data_path)
+        else:
+            raw_df = pd.read_parquet(data_path)
+        self._log(f"  Loaded: {len(raw_df)} rows from {data_path}")
 
         # Normalize column names
         raw_df.columns = [c.lower().strip() for c in raw_df.columns]
@@ -620,6 +624,10 @@ class MLFactory:
         if "datetime" in raw_df.columns:
             raw_df["datetime"] = pd.to_datetime(raw_df["datetime"])
             raw_df = raw_df.set_index("datetime").sort_index()
+        elif "date" in raw_df.columns:
+            raw_df["date"] = pd.to_datetime(raw_df["date"])
+            raw_df = raw_df.set_index("date").sort_index()
+            raw_df.index.name = "datetime"
         elif not isinstance(raw_df.index, pd.DatetimeIndex):
             raw_df.index = pd.to_datetime(raw_df.index)
             raw_df = raw_df.sort_index()

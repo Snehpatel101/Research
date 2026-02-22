@@ -31,7 +31,7 @@ Example:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -278,7 +278,7 @@ class ExperimentConfig:
         config_dict["training"] = TrainingSection(
             models=training_section_dict.get("models", ["xgboost"]),
             horizons=training_section_dict.get("horizons", [5, 10, 15, 20]),
-            training_mode=training_section_dict.get("training_mode", "single_horizon"),
+            training_mode=training_section_dict.get("training_mode", "standard"),
             cv_method=training_section_dict.get("cv_method", "purged_kfold"),
             n_splits=training_section_dict.get("n_splits", 5),
             purge_bars=training_section_dict.get("purge_bars", 60),
@@ -314,6 +314,7 @@ class ExperimentConfig:
             bundle_format=bundle_section_dict.get("bundle_format", "directory"),
             include_oof=bundle_section_dict.get("include_oof", True),
             include_feature_importance=bundle_section_dict.get("include_feature_importance", True),
+            deploy_artifact=bundle_section_dict.get("deploy_artifact", True),
         )
 
         return cls(**config_dict)
@@ -355,6 +356,12 @@ class ExperimentConfig:
                 "data_path": str(self.data.data_path) if self.data.data_path else None,
                 "start_date": self.data.start_date,
                 "end_date": self.data.end_date,
+                "features": asdict(self.data.features),
+                "labeling": asdict(self.data.labeling),
+                "scaler": asdict(self.data.scaler),
+                "sequence": asdict(self.data.sequence),
+                "mtf": asdict(self.data.mtf),
+                "splits": asdict(self.data.splits),
             },
             "training": {
                 "models": self.training.models,
@@ -370,6 +377,10 @@ class ExperimentConfig:
                 "early_stopping_patience": self.training.early_stopping_patience,
                 "build_ensemble": self.training.build_ensemble,
                 "meta_learner": self.training.meta_learner,
+                "optuna": asdict(self.training.optuna),
+                "calibration": asdict(self.training.calibration),
+                "checkpoint": asdict(self.training.checkpoint),
+                "walk_forward": asdict(self.training.walk_forward),
             },
             "evaluation": {
                 "run_backtest": self.evaluation.run_backtest,
@@ -385,6 +396,7 @@ class ExperimentConfig:
                 "bundle_format": self.bundling.bundle_format,
                 "include_oof": self.bundling.include_oof,
                 "include_feature_importance": self.bundling.include_feature_importance,
+                "deploy_artifact": self.bundling.deploy_artifact,
             },
         }
 

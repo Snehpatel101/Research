@@ -176,21 +176,37 @@ class TrainingOpsMixin:
         # Free PreparedData and evict from cache to prevent OOM
         # when training sequential models (TCN 3D ~60 GB, PatchTST 4D ~8 GB)
         del prepared
-        cache_key = None
-        for k, _v in list(self._prepared_cache.items()):
-            if model_name in k:
-                cache_key = k
-                break
-        if cache_key is not None:
+        # Reconstruct cache key from contract properties (same as _prepare_with_cache)
+        from src.core.contracts import get_model_contract
+
+        contract = get_model_contract(model_name)
+        n_model_features = len(self._per_model_features.get(model_name, []))
+        cache_key = (
+            contract.input_rank.value,
+            contract.sequence_length,
+            contract.feature_mode.value,
+            contract.mtf_mode.value,
+            contract.scaler_type,
+            n_model_features,
+        )
+        if cache_key in self._prepared_cache:
             del self._prepared_cache[cache_key]
-        gc.collect()
+        # Move neural model to CPU and reset torch state for next model
         try:
             import torch
 
+            trainer = result.trainer
+            if trainer is not None and hasattr(trainer, "model"):
+                model_obj = trainer.model
+                if hasattr(model_obj, "cpu"):
+                    model_obj.cpu()
+            if hasattr(torch, "_dynamo"):
+                torch._dynamo.reset()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except ImportError:
             pass
+        gc.collect()
 
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:
         """Train a single model with OOM recovery for neural/transformer models."""

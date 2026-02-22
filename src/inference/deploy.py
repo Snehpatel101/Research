@@ -187,6 +187,9 @@ def select_deploy_artifact(
         if entry.model_name == model_name:
             bundle_path = deploy_dir / entry.bundle_path
             if not bundle_path.exists():
+                # Bundle paths may be relative to output_dir (deploy_dir's parent)
+                bundle_path = deploy_dir.parent / entry.bundle_path
+            if not bundle_path.exists():
                 raise FileNotFoundError(
                     f"Bundle directory not found: {bundle_path} "
                     f"(referenced by manifest entry '{model_name}')"
@@ -228,6 +231,9 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
     for horizon, h_manifest in manifest.horizons.items():
         for entry in h_manifest.entries:
             bundle_path = deploy_dir / entry.bundle_path
+            if not bundle_path.exists():
+                # Bundle paths may be relative to output_dir (deploy_dir's parent)
+                bundle_path = deploy_dir.parent / entry.bundle_path
             if not bundle_path.exists():
                 issues.append(
                     f"H{horizon}/{entry.model_name}: bundle not found at {entry.bundle_path}"

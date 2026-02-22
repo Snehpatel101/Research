@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 72 complete
+**Status:** All phases through 75 complete
 **Last Updated:** 2026-02-22
 
 ---
@@ -58,6 +58,9 @@ See **COMPLETION.md** for full task details and implementation information.
 | 70 | 1/1 tasks (complete) | Lint fixes: 14 ruff errors + 15 black formatting issues (22 files) | 2026-02-21 |
 | 71 | 12/12 tasks (all complete) | Notebook overhaul: data instructions, EDA placement, calibration/conformal cells, leakage detection, Sortino/Calmar/expectancy, transaction costs | 2026-02-21 |
 | 72 | 5/5 tasks (all complete) | Memory cleanup: walk-forward window cleanup, sequential model cache eviction, intermediate array freeing, OOF fold cleanup (sequence + tabular) | 2026-02-22 |
+| 73 | 2/2 tasks (all complete) | Scaler serialization fix, notebook warning suppression | 2026-02-22 |
+| 74 | 6/6 tasks (all complete) | Memory optimization (Optuna subsampling, float32, copy chain), Optuna params bug, financial reports bug, 11 notebook visualizations | 2026-02-22 |
+| 75 | 11/11 tasks (all complete) | OOM root cause (cache eviction dead code), float32 downcast, model.cpu()/dynamo reset, CSV support, date column, default training_mode, deploy_artifact, config round-trip, deploy path resolution (2 sites) | 2026-02-22 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -67,7 +70,7 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 72 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 75 are complete. See COMPLETION.md for full details.
 
 ---
 

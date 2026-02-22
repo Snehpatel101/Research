@@ -296,6 +296,29 @@ src/
 - OOF tabular folds: del model + scaled arrays between folds
 - 4 files modified, 212/212 tests still passing
 
+**Phase 73: COMPLETE — Scaler Serialization Fix + Notebook Warnings**
+- Fixed AdapterScaler save/load format mismatch (joblib vs pickle)
+- Suppressed notebook Jupyter warnings
+
+**Phase 74: COMPLETE — Memory Optimization + Training Bug Fixes + Notebook Visualizations**
+- Optuna stratified subsampling (50K cap) for large datasets
+- float32 conversion in Optuna, walk-forward, and training ops
+- Optuna best_params now written to model_config (were silently discarded)
+- Financial reports generated BEFORE oof_predictions.clear() (were always empty)
+- Added 11 notebook visualizations (trading analytics, model diagnostics, multi-model, walk-forward)
+
+**Phase 75: COMPLETE — OOM Root Cause Fix + Pipeline Bug Fixes (11 items)**
+- CRITICAL: Fixed cache eviction bug in training_ops.py — eviction never fired (string match on tuple keys)
+- float32 downcast in PreparedData creation (halves memory: TCN 55→27 GB)
+- model.cpu() + torch._dynamo.reset() between sequential neural models
+- CSV support in factory.py (auto-detect from file extension)
+- "date" column handling in factory.py (normalize to datetime index)
+- Default training_mode fix: "single_horizon" → "standard" (experiment.py)
+- deploy_artifact parsing added to from_dict() (experiment.py)
+- Full config round-trip serialization in to_dict() (nested sub-configs: optuna, calibration, checkpoint, walk_forward, features, labeling, scaler, sequence, mtf, splits)
+- Deploy path resolution fallback (deploy.py, 2 sites) — deploy_dir.parent for bundle paths
+- 5 files modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

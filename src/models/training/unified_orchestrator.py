@@ -339,6 +339,11 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
                 df = df.drop(columns=drop_cols)
                 logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
 
+        # Downcast float64 → float32 to halve memory during preparation
+        float64_cols = df.select_dtypes(include=["float64"]).columns
+        if len(float64_cols) > 0:
+            df = df.astype(dict.fromkeys(float64_cols, np.float32))
+
         prepared = self._data_preparer.prepare(
             df=df,
             model_name=model_name,

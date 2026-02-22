@@ -4,6 +4,76 @@
 
 ---
 
+## Phase 75: OOM Root Cause Fix + Pipeline Bug Fixes (11 items) | 2026-02-22 | COMPLETE
+
+**Impact:** Fixed the actual OOM root cause: cache eviction was dead code (string match on tuple keys — always False). Combined with float32 downcast, this reduces TCN peak memory from ~110 GB to ~27 GB. Also fixed 8 pipeline bugs across factory, config, and deploy modules. **5 files modified. 212/212 tests still passing.**
+
+**Root Cause:** `training_ops.py:181` used `if model_name in k` where `k` is a tuple like `(3, 60, "engineered", "indicators", "robust", 60)`. Python's `in` on tuples checks element equality — `"lstm"` never equals any tuple element. Cache eviction was dead code since Phase 72.
+
+### Changes (11)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | Cache eviction fix | `src/models/training/training_ops.py` | CRITICAL | Reconstruct cache key from contract properties instead of string matching. Frees 10-60+ GB per sequential model. |
+| 2 | float32 downcast | `src/models/training/unified_orchestrator.py` | CRITICAL | Convert float64→float32 in `_prepare_with_cache()` before prepare(). Halves all PreparedData arrays. |
+| 3 | model.cpu() + dynamo reset | `src/models/training/training_ops.py` | HIGH | Move neural model to CPU + `torch._dynamo.reset()` between sequential models. Frees GPU VRAM + compiled graph cache. |
+| 4 | CSV support | `src/factory.py` | HIGH | Auto-detect .csv vs .parquet from file extension (was hardcoded `pd.read_parquet()`). |
+| 5 | "date" column handling | `src/factory.py` | MEDIUM | Handle "date" column name (not just "datetime"). Normalize index name to "datetime". |
+| 6 | Default training_mode | `src/config/experiment.py` | CRITICAL | Changed `"single_horizon"` → `"standard"` (single_horizon is not a valid TrainingMode). |
+| 7 | deploy_artifact parsing | `src/config/experiment.py` | MEDIUM | Added missing `deploy_artifact` field to `from_dict()` BundlingSection. |
+| 8 | Config round-trip | `src/config/experiment.py` | HIGH | Added `asdict()` serialization for all nested sub-configs in `to_dict()`: features, labeling, scaler, sequence, mtf, splits, optuna, calibration, checkpoint, walk_forward, deploy_artifact. |
+| 9 | Deploy path resolution (select) | `src/inference/deploy.py` | HIGH | Added `deploy_dir.parent` fallback for bundle path resolution in `select_deploy_artifact()`. |
+| 10 | Deploy path resolution (validate) | `src/inference/deploy.py` | HIGH | Same fallback in `validate_deploy_artifact()`. |
+
+### Memory Impact (1.6M rows, xgboost+tcn+patchtst, 60 features)
+
+| Stage | Before Fix | After Fix |
+|-------|-----------|-----------|
+| TCN PreparedData (3D, seq=120) | ~55 GB (float64, never evicted) | ~27 GB (float32, evicted after use) |
+| Cache accumulation (3 models) | ~65 GB stuck forever | ~0 GB (each evicted) |
+| Peak during TCN training | ~113 GB → OOM on 85GB Colab | ~55-65 GB → fits |
+
+### Verification
+
+- 212/212 tests pass
+- `ruff check src/` — 0 errors
+- `black --check src/` — all files clean
+- All module imports verified
+- Cache eviction logic proven: old check (`"xgboost" in (2, 60, ...)`) = False; new check (`key in cache`) = True
+- Config round-trip verified: `from_dict(to_dict())` produces identical config
+
+---
+
+## Phase 74: Memory Optimization + Training Bug Fixes + Notebook Visualizations | 2026-02-22 | COMPLETE
+
+**Impact:** Further memory optimization (Optuna subsampling, float32 in Optuna/WF), 2 critical bug fixes (Optuna params silently discarded, financial reports always empty), 11 notebook visualizations added.
+
+### Changes (6)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | Optuna stratified subsampling | `src/validation/cv/cv_tuner.py` | HIGH | Cap at 50K rows for Optuna trials on large datasets |
+| 2 | float32 in Optuna/WF/training | `src/models/training/training_ops.py`, `walk_forward.py`, `cv_tuner.py` | HIGH | float32 conversion to reduce memory |
+| 3 | Walk-forward copy chain elimination | `src/models/training/modes/walk_forward.py` | HIGH | Eliminate 3-4 simultaneous copies in WF data prep |
+| 4 | Optuna best_params write-through | `src/models/training/services/model_training.py` | CRITICAL | best_params now written to model_config (were silently discarded via setattr) |
+| 5 | Financial reports before OOF clear | `src/models/training/unified_orchestrator.py` | CRITICAL | Reports generated BEFORE oof_predictions.clear() (were always empty) |
+| 6 | Notebook visualizations | `notebooks/ml_factory_colab.ipynb` | MEDIUM | 11 visualizations: heatmap, waterfall, streaks, drawdown, confusion, calibration, confidence, fold stability, radar, agreement, walk-forward |
+
+---
+
+## Phase 73: Scaler Serialization Fix + Notebook Warnings | 2026-02-22 | COMPLETE
+
+**Impact:** Fixed AdapterScaler save/load format mismatch. Suppressed Jupyter notebook warnings.
+
+### Changes (2)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | AdapterScaler format fix | `src/data/adapters/scaling.py` | HIGH | Fixed save/load mismatch between joblib and pickle formats |
+| 2 | Notebook warning suppression | `notebooks/ml_factory_colab.ipynb` | LOW | Suppress Jupyter deprecation warnings |
+
+---
+
 ## Phase 72: Memory Cleanup — OOM Prevention for Large Datasets | 2026-02-22 | COMPLETE
 
 **Impact:** Fixed OOM crash on 230GB H100 with 1.6M row MGC dataset during TCN/PatchTST walk-forward training. Peak RAM reduced from 225+ GB (crash) to ~80-100 GB estimated. 4 files modified. **212/212 tests still passing.**
