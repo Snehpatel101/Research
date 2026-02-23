@@ -4,6 +4,30 @@
 
 ---
 
+## Phase 79: In-Place Scaling + Factory Float32 (2 items) | 2026-02-22 | COMPLETE
+
+**Impact:** Root cause of remaining Colab OOM found. During TCN walk-forward window 5 (854K × 7200 float32), FoldAwareScaler was creating DUPLICATE scaled arrays alongside the raw copies — peak 86 GB on 83 GB Colab. In-place scaling eliminates the duplication. Also downcasts factory df to float32 at the source. **Peak drops from ~86 GB to ~59 GB. 2 files modified. 212/212 tests still passing.**
+
+### Changes (2)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | In-place FoldAwareScaler | `src/validation/cv/fold_scaling.py` | CRITICAL | Changed `X_train_scaled = (X_train - median) / iqr` to `X_train -= median; X_train /= iqr` (in-place ops). Also uses `np.clip(..., out=X_train)` for in-place clipping. All callers pass copies (fancy indexing, .values, .iloc), so in-place is safe. sklearn scaler.fit() called BEFORE in-place modification for inference compatibility. Saves ~27 GB at peak. |
+| 2 | Factory float32 downcast | `src/factory.py` | MEDIUM | Downcasts `df_features` float64→float32 at the end of `_run_data_pipeline()` before returning. This DataFrame stays alive for the entire training+evaluation run. Saves ~860 MB (949K × 227: 1.72 GB → 0.86 GB). |
+
+### Memory Impact (949K rows, xgboost+tcn+patchtst, walk-forward window 5)
+
+| Metric | Before | After |
+|--------|--------|-------|
+| Container (all samples) | 27.3 GB | 27.3 GB |
+| X_train_raw (window 5 copy) | 24.6 GB | 24.6 GB |
+| X_train_scaled (NEW array) | **24.6 GB** | **0 GB** (same array) |
+| X_test copies | 5.4 GB | 2.7 GB (no dup) |
+| Factory df | 1.72 GB | 0.86 GB |
+| **Peak** | **~86 GB** | **~59 GB** |
+
+---
+
 ## Phase 78: Deep Memory Fixes (4 items) | 2026-02-23 | COMPLETE
 
 **Impact:** Deep pipeline audit found the hidden OOM root cause: `torch.tensor()` in `_create_dataloader` copies ALL training data unnecessarily (~19 GB waste for TCN). Also found 3 training modes bypassing Phase 75/76/77 memory fixes. Combined with all previous phases, TCN peak memory drops from ~54.6 GB to ~35 GB on 949K rows. **3 files modified. 212/212 tests still passing.**

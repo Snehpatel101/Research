@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 78 complete
+**Status:** All phases through 79 complete
 **Last Updated:** 2026-02-22
 
 ---
@@ -64,6 +64,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 76 | 2/2 tasks (all complete) | Walk-forward feature selection dead code fix (3 sites), float32 scaler (manual numpy scaling to avoid sklearn upcasting) | 2026-02-22 |
 | 77 | 6/6 tasks (all complete) | AdapterScaler float32, meta-labeling memory cleanup, OOF memory cleanup, OOM batch_size propagation, XGBoost deprecated param, walk-forward timestamp fix | 2026-02-22 |
 | 78 | 4/4 tasks (all complete) | torch.from_numpy (halves neural memory), float32 downcast in 3 modes, neural cleanup in 3 modes, boosting cache eviction | 2026-02-23 |
+| 79 | 2/2 tasks (all complete) | In-place FoldAwareScaler (saves ~27 GB peak), factory float32 downcast at source | 2026-02-22 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -73,7 +74,7 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 78 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 79 are complete. See COMPLETION.md for full details.
 
 ---
 
