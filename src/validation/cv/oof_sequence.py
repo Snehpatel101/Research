@@ -147,7 +147,10 @@ class SequenceOOFGenerator:
 
             # For transformation we scale ALL rows so that lookback windows
             # that reach into data outside the fold are also correctly scaled.
-            scaling_result = fold_scaler.fit_transform_fold(X_train_raw, raw_X)
+            # .copy() is required because fit_transform_fold scales in-place —
+            # without it, raw_X (which is seq_builder._X) gets permanently
+            # modified, corrupting data for subsequent folds.
+            scaling_result = fold_scaler.fit_transform_fold(X_train_raw, raw_X.copy())
 
             # scaled_builder shares boundaries/labels but uses scaled features
             scaled_builder = seq_builder.with_scaled_data(scaling_result.X_val_scaled)

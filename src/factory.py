@@ -712,6 +712,14 @@ class MLFactory:
         if len(float64_cols) > 0:
             df_features = df_features.astype(dict.fromkeys(float64_cols, np.float32))
 
+        # Also downcast additional_dfs (multi-stream resampled OHLCV) — they stay
+        # alive until multi-stream adapter casts them, so halve early.
+        if additional_dfs:
+            for tf_key, tf_df in additional_dfs.items():
+                f64 = tf_df.select_dtypes(include=["float64"]).columns
+                if len(f64) > 0:
+                    additional_dfs[tf_key] = tf_df.astype(dict.fromkeys(f64, np.float32))
+
         return df_features, additional_dfs
 
     def _run_training(
