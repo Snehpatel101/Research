@@ -705,6 +705,13 @@ class MLFactory:
         ):
             df_features = df_features.set_index("datetime").sort_index()
 
+        # Downcast float64 → float32 at the source to halve the DataFrame memory
+        # that stays alive for the entire training + evaluation run.
+        # (949K × 227 cols: 1.72 GB float64 → 0.86 GB float32)
+        float64_cols = df_features.select_dtypes(include=["float64"]).columns
+        if len(float64_cols) > 0:
+            df_features = df_features.astype(dict.fromkeys(float64_cols, np.float32))
+
         return df_features, additional_dfs
 
     def _run_training(

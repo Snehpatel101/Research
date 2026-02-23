@@ -115,32 +115,42 @@ class FoldAwareScaler:
         if X_train.dtype == np.float32:
             # Manual float32 scaling — avoids sklearn's float64 upcasting
             # which doubles memory (e.g., TCN 21.9 GB → 43.8 GB spike)
+            #
+            # IN-PLACE scaling: modifies input arrays directly to avoid allocating
+            # duplicate ~24 GB arrays during walk-forward windows. All callers pass
+            # copies (fancy indexing, .values, .iloc), so in-place is safe.
+            # Fit sklearn scaler FIRST (before in-place modification) for inference compat
+            scaler.fit(X_train)
+
             if self.method == "robust":
                 median = np.median(X_train, axis=0).astype(np.float32)
                 q75 = np.percentile(X_train, 75, axis=0).astype(np.float32)
                 q25 = np.percentile(X_train, 25, axis=0).astype(np.float32)
                 iqr = q75 - q25
                 iqr[iqr == 0] = 1.0
-                X_train_scaled = (X_train - median) / iqr
-                X_val_scaled = (X_val - median) / iqr
+                X_train -= median
+                X_train /= iqr
+                X_val -= median
+                X_val /= iqr
             else:
                 mean = np.mean(X_train, axis=0).astype(np.float32)
                 std = np.std(X_train, axis=0).astype(np.float32)
                 std[std == 0] = 1.0
-                X_train_scaled = (X_train - mean) / std
-                X_val_scaled = (X_val - mean) / std
-            # Fit sklearn scaler for inference compatibility (uses float64 internally
-            # but we only need its parameters, not its transform output)
-            scaler.fit(X_train)
+                X_train -= mean
+                X_train /= std
+                X_val -= mean
+                X_val /= std
+            X_train_scaled = X_train
+            X_val_scaled = X_val
         else:
             # float64 path — use sklearn directly (no memory concern)
             X_train_scaled = scaler.fit_transform(X_train)
             X_val_scaled = scaler.transform(X_val)
 
-        # Optional outlier clipping
+        # Optional outlier clipping (in-place when possible)
         if self.clip_outliers:
-            X_train_scaled = np.clip(X_train_scaled, -self.clip_std, self.clip_std)
-            X_val_scaled = np.clip(X_val_scaled, -self.clip_std, self.clip_std)
+            np.clip(X_train_scaled, -self.clip_std, self.clip_std, out=X_train_scaled)
+            np.clip(X_val_scaled, -self.clip_std, self.clip_std, out=X_val_scaled)
 
         self._current_scaler = scaler
 
