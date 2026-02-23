@@ -143,6 +143,21 @@ class TrainingOpsMixin:
             )
 
         del prepared_map
+        # Evict boosting PreparedData from cache (no longer needed after parallel training)
+        from src.core.contracts import get_model_contract
+
+        for model_name in boosting_models:
+            contract = get_model_contract(model_name)
+            n_model_features = len(self._per_model_features.get(model_name, []))
+            cache_key = (
+                contract.input_rank.value,
+                contract.sequence_length,
+                contract.feature_mode.value,
+                contract.mtf_mode.value,
+                contract.scaler_type,
+                n_model_features,
+            )
+            self._prepared_cache.pop(cache_key, None)
         gc.collect()
 
     def _train_model_sequential(
@@ -416,6 +431,11 @@ class TrainingOpsMixin:
                     df_model = df.drop(columns=drop_cols)
                     logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
 
+            # Downcast float64 → float32 to halve memory during preparation
+            float64_cols = df_model.select_dtypes(include=["float64"]).columns
+            if len(float64_cols) > 0:
+                df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
+
             prepared = self._data_preparer.prepare(
                 df=df_model,
                 model_name=model_name,
@@ -661,6 +681,12 @@ class TrainingOpsMixin:
                     if drop_cols:
                         df_model = df.drop(columns=drop_cols)
                         logger.debug(f"Filtered to {len(model_features)} features for {model_name}")
+
+                # Downcast float64 → float32 to halve memory during preparation
+                float64_cols = df_model.select_dtypes(include=["float64"]).columns
+                if len(float64_cols) > 0:
+                    df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
+
                 prepared = self._data_preparer.prepare(
                     df=df_model,
                     model_name=model_name,
@@ -716,6 +742,21 @@ class TrainingOpsMixin:
                     data_rank=prepared.data_rank,
                 )
                 del prepared
+                # Move neural models to CPU and reset torch state
+                try:
+                    import torch
+
+                    for (_rname, _regime), rr in regime_result.regime_results.items():
+                        if rr.trainer is not None and hasattr(rr.trainer, "model"):
+                            model_obj = getattr(rr.trainer, "model", None)
+                            if model_obj is not None and hasattr(model_obj, "cpu"):
+                                model_obj.cpu()
+                    if hasattr(torch, "_dynamo"):
+                        torch._dynamo.reset()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except ImportError:
+                    pass
                 gc.collect()
 
         logger.info("\nRegime-aware training complete")
@@ -775,6 +816,12 @@ class TrainingOpsMixin:
                 logger.debug(
                     f"Filtered to {len(model_features)} features for " f"{primary_model_name}"
                 )
+
+        # Downcast float64 → float32 to halve memory during preparation
+        float64_cols = df_model.select_dtypes(include=["float64"]).columns
+        if len(float64_cols) > 0:
+            df_model = df_model.astype(dict.fromkeys(float64_cols, np.float32))
+
         prepared = self._data_preparer.prepare(
             df=df_model,
             model_name=primary_model_name,
@@ -802,6 +849,20 @@ class TrainingOpsMixin:
         # Free PreparedData — all needed values already extracted to local vars
         # (X_train, X_val, y_train, y_val, feature_names, data_rank, n_features)
         del prepared
+        # Move neural model to CPU and reset torch state
+        try:
+            import torch
+
+            if primary_result.trainer is not None and hasattr(primary_result.trainer, "model"):
+                model_obj = getattr(primary_result.trainer, "model", None)
+                if model_obj is not None and hasattr(model_obj, "cpu"):
+                    model_obj.cpu()
+            if hasattr(torch, "_dynamo"):
+                torch._dynamo.reset()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
         gc.collect()
 
         primary_trainer = primary_result.trainer

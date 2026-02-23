@@ -4,6 +4,39 @@
 
 ---
 
+## Phase 78: Deep Memory Fixes (4 items) | 2026-02-23 | COMPLETE
+
+**Impact:** Deep pipeline audit found the hidden OOM root cause: `torch.tensor()` in `_create_dataloader` copies ALL training data unnecessarily (~19 GB waste for TCN). Also found 3 training modes bypassing Phase 75/76/77 memory fixes. Combined with all previous phases, TCN peak memory drops from ~54.6 GB to ~35 GB on 949K rows. **3 files modified. 212/212 tests still passing.**
+
+### Changes (4)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | `torch.from_numpy()` | `src/models/neural/base_rnn.py` | CRITICAL | Replaced `torch.tensor(X, dtype=torch.float32)` with `torch.from_numpy(np.ascontiguousarray(X))` in `_create_dataloader`. Shares memory instead of copying — saves ~19 GB for TCN, ~5 GB per window in walk-forward. DataLoader creates batch copies via pin_memory anyway, so no data corruption risk. |
+| 2 | Float32 downcast in 3 modes | `src/models/training/training_ops.py` | HIGH | Added `df_model.select_dtypes("float64").astype(float32)` before `prepare()` in walk-forward, regime-aware, and meta-labeling. These modes bypassed `_prepare_with_cache()` where the Phase 75 downcast lives. |
+| 3 | Neural cleanup in 3 modes | `training_ops.py` + `walk_forward.py` | HIGH | Added `model.cpu()` + `torch._dynamo.reset()` + `torch.cuda.empty_cache()` to walk-forward (between windows), regime-aware (after regime models), and meta-labeling (after primary model). Previously only `_train_model_sequential` had these. |
+| 4 | Boosting cache eviction | `src/models/training/training_ops.py` | LOW | Added cache key reconstruction + `_prepared_cache.pop()` at end of `_train_boosting_parallel`. Frees 247 MB that was leaked until end of `train()`. |
+
+### Memory Impact (949K rows, xgboost+tcn+patchtst, walk-forward)
+
+| Peak Point | Before Phase 78 | After Phase 78 |
+|------------|:--------------:|:--------------:|
+| TCN walk-forward window | ~47.6 GB | ~35.6 GB |
+| TCN flatten+concat | ~54.6 GB | ~54.6 GB (unchanged — concat is necessary) |
+| Boosting residual during TCN | 247 MB | 0 MB |
+
+### Verification
+
+- 212/212 tests pass
+- `ruff check src/` — 0 errors
+- `black --check src/` — all clean
+- `torch.tensor` removed from `_create_dataloader` (only remains in `_compute_class_weights` and `predict`)
+- Float32 downcast confirmed in all 3 modes (lines 435, 686, 821)
+- `model.cpu()` confirmed in walk_forward.py:508
+- Cache eviction confirmed in `_train_boosting_parallel` (line 160)
+
+---
+
 ## Phase 77: Pipeline Audit Fixes (6 items) | 2026-02-22 | COMPLETE
 
 **Impact:** Full 12-model pipeline audit found 6 remaining issues (3 memory, 3 bugs). AdapterScaler had the same float64 upcasting bug fixed in FoldAwareScaler (Phase 76) — eliminates ~37 GB temporary spike for 3D models. Meta-labeling and OOF generation held duplicate arrays unnecessarily. OOM retry batch_size reduction was dead code. XGBoost deprecated param removed. Walk-forward timestamp metadata corrected. **6 files modified. 212/212 tests still passing.**

@@ -705,11 +705,13 @@ class BaseRNNModel(BaseModel):
         shuffle: bool,
     ) -> DataLoader:
         """Create a DataLoader from numpy arrays."""
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        y_tensor = torch.tensor(self._convert_labels_to_class(y), dtype=torch.long)
+        X_tensor = torch.from_numpy(np.ascontiguousarray(X))
+        y_tensor = torch.from_numpy(
+            np.ascontiguousarray(self._convert_labels_to_class(y).astype(np.int64))
+        )
 
         if sample_weights is not None:
-            weights_tensor = torch.tensor(sample_weights, dtype=torch.float32)
+            weights_tensor = torch.from_numpy(np.ascontiguousarray(sample_weights))
             dataset = TensorDataset(X_tensor, y_tensor, weights_tensor)
         else:
             dataset = TensorDataset(X_tensor, y_tensor)

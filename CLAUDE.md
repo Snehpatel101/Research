@@ -334,6 +334,13 @@ src/
 - Walk-forward timestamp misalignment fixed (RangeIndex after filter_invalid_labels)
 - 6 files modified, 212/212 tests still passing
 
+**Phase 78: COMPLETE — Deep Memory Fixes (4 items, ~19 GB saved per neural model)**
+- CRITICAL: `torch.tensor()` → `torch.from_numpy()` in _create_dataloader (base_rnn.py) — eliminates full copy of all training data for every neural model (~19 GB for TCN)
+- Float32 downcast added to walk-forward, regime-aware, meta-labeling modes (were bypassing _prepare_with_cache)
+- model.cpu() + torch._dynamo.reset() added to walk-forward, regime, meta-labeling between models
+- Boosting cache eviction after parallel training (247 MB leaked until end of pipeline)
+- 3 files modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

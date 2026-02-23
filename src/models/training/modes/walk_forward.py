@@ -503,12 +503,17 @@ class WalkForwardTrainer:
             # Free memory between walk-forward windows to prevent OOM
             # on large datasets (1M+ rows with 3D/4D reshaping).
             # X_train_scaled, y_train, w_train already freed above after model.fit().
+            # Move neural model to CPU before deletion (frees GPU VRAM)
+            if hasattr(model, "cpu"):
+                model.cpu()
             del model, X_test_scaled, y_test
             del prediction_output, scaler
             gc.collect()
             try:
                 import torch
 
+                if hasattr(torch, "_dynamo"):
+                    torch._dynamo.reset()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except ImportError:
