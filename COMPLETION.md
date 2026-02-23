@@ -4,16 +4,18 @@
 
 ---
 
-## Phase 79: In-Place Scaling + Factory Float32 (2 items) | 2026-02-22 | COMPLETE
+## Phase 79: In-Place Scaling + Factory Float32 (4 items) | 2026-02-22 | COMPLETE
 
-**Impact:** Root cause of remaining Colab OOM found. During TCN walk-forward window 5 (854K × 7200 float32), FoldAwareScaler was creating DUPLICATE scaled arrays alongside the raw copies — peak 86 GB on 83 GB Colab. In-place scaling eliminates the duplication. Also downcasts factory df to float32 at the source. **Peak drops from ~86 GB to ~59 GB. 2 files modified. 212/212 tests still passing.**
+**Impact:** Root cause of remaining Colab OOM found. During TCN walk-forward window 5 (854K × 7200 float32), FoldAwareScaler was creating DUPLICATE scaled arrays alongside the raw copies — peak 86 GB on 83 GB Colab. In-place scaling eliminates the duplication. Team audit also found a critical data corruption bug in oof_sequence.py where in-place scaling destroyed the original feature matrix across CV folds. **Peak drops from ~86 GB to ~59 GB. 4 files modified. 212/212 tests still passing.**
 
-### Changes (2)
+### Changes (4)
 
 | # | Fix | File | Severity | Description |
 |:-:|-----|------|:--------:|-------------|
 | 1 | In-place FoldAwareScaler | `src/validation/cv/fold_scaling.py` | CRITICAL | Changed `X_train_scaled = (X_train - median) / iqr` to `X_train -= median; X_train /= iqr` (in-place ops). Also uses `np.clip(..., out=X_train)` for in-place clipping. All callers pass copies (fancy indexing, .values, .iloc), so in-place is safe. sklearn scaler.fit() called BEFORE in-place modification for inference compatibility. Saves ~27 GB at peak. |
 | 2 | Factory float32 downcast | `src/factory.py` | MEDIUM | Downcasts `df_features` float64→float32 at the end of `_run_data_pipeline()` before returning. This DataFrame stays alive for the entire training+evaluation run. Saves ~860 MB (949K × 227: 1.72 GB → 0.86 GB). |
+| 3 | oof_sequence `.copy()` fix | `src/validation/cv/oof_sequence.py` | CRITICAL | `raw_X` (reference to `seq_builder._X`) was passed directly as `X_val` to in-place `fit_transform_fold`. Permanently mutated the original feature matrix — folds 2-5 operated on progressively double/triple-scaled garbage data. Fixed with `raw_X.copy()`. Affected all sequence model OOF predictions (LSTM, GRU, TCN, InceptionTime, ResNet1D). |
+| 4 | additional_dfs float32 | `src/factory.py` | LOW | Downcasts multi-stream resampled OHLCV DataFrames to float32 in factory alongside main df. Previously stayed float64 until multi-stream adapter cast them. |
 
 ### Memory Impact (949K rows, xgboost+tcn+patchtst, walk-forward window 5)
 

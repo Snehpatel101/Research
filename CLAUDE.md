@@ -341,12 +341,13 @@ src/
 - Boosting cache eviction after parallel training (247 MB leaked until end of pipeline)
 - 3 files modified, 212/212 tests still passing
 
-**Phase 79: COMPLETE — In-Place Scaling + Factory Float32 (saves ~27 GB peak)**
+**Phase 79: COMPLETE — In-Place Scaling + Factory Float32 (4 fixes, saves ~27 GB peak)**
 - Root cause of remaining Colab OOM: FoldAwareScaler created duplicate 24.6 GB arrays during scaling
 - In-place scaling (`X_train -= median; X_train /= iqr`) eliminates the duplication
-- Factory df downcast to float32 at source (saves ~860 MB held for entire run)
+- CRITICAL: oof_sequence.py passed `seq_builder._X` directly as X_val — in-place scaling corrupted data for folds 2-5. Fixed with `.copy()`
+- Factory df + additional_dfs downcast to float32 at source
 - Peak drops from ~86 GB to ~59 GB for TCN walk-forward window 5
-- 2 files modified, 212/212 tests still passing
+- 4 files modified, 212/212 tests still passing
 
 **See CLEANUP_PLAN.md for full phase details.**
 
