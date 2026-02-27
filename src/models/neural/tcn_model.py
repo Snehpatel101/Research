@@ -208,7 +208,7 @@ class TCNModel(BaseRNNModel):
                 "kernel_size": 3,
                 "dropout": 0.2,
                 "dilation_base": 2,
-                "sequence_length": 120,  # Longer than LSTM
+                "sequence_length": 64,  # Matches TCN receptive field (61)
             }
         )
         return defaults

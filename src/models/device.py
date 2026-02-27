@@ -338,7 +338,7 @@ def get_optimal_gpu_settings(model_family: str, gpu_info: GPUInfo | None = None)
     elif family == "tcn":
         return {
             "batch_size": max(16, min(512, int(128 * vram_scale))),
-            "sequence_length": 120,
+            "sequence_length": 64,
             "num_channels": [64, 64, 64, 64] if vram >= 10 else [32, 32, 32, 32],
             "mixed_precision": mp_config["enabled"],
             "amp_dtype": mp_config["dtype"],

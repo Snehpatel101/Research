@@ -366,7 +366,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         ],
         include_mtf=False,
         supported_model_types=["neural"],
-        default_sequence_length=120,  # Longer sequences for TCN
+        default_sequence_length=64,  # Matches TCN receptive field (61)
         recommended_scaler="robust",
     ),
     "patchtst_optimal": FeatureSetDefinition(

@@ -468,14 +468,15 @@ class iTransformerModel(BaseRNNModel):
         self._model.eval()
         amp_dtype = self._amp_dtype
 
-        X_tensor = torch.tensor(X, dtype=torch.float32).to(self._device)
+        # Zero-copy tensor on CPU; each batch moves to GPU individually
+        X_tensor = torch.from_numpy(np.ascontiguousarray(X).astype(np.float32))
 
         all_probs = []
         batch_size = self._config.get("batch_size", 256)
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
-                batch = X_tensor[i : i + batch_size]
+                batch = X_tensor[i : i + batch_size].to(self._device, non_blocking=True)
 
                 with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                     logits = self._model(batch)
@@ -618,9 +619,9 @@ class iTransformerModel(BaseRNNModel):
         if not isinstance(itransformer_network, iTransformerNetwork):
             return None
         itransformer_network.eval()
-        X_tensor = torch.tensor(X[sample_idx : sample_idx + 1], dtype=torch.float32).to(
-            self._device
-        )
+        X_tensor = torch.from_numpy(
+            np.ascontiguousarray(X[sample_idx : sample_idx + 1]).astype(np.float32)
+        ).to(self._device)
 
         with torch.no_grad():
             attention = itransformer_network.get_feature_attention(X_tensor)

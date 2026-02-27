@@ -126,7 +126,7 @@ class XGBoostConfig(BaseConfig):
 
     n_estimators: int = 500
     max_depth: int = 6
-    learning_rate: float = 0.1
+    learning_rate: float = 0.05
     min_child_weight: int = 1
     subsample: float = 0.8
     colsample_bytree: float = 0.8
@@ -137,7 +137,7 @@ class XGBoostConfig(BaseConfig):
     # Additional settings
     objective: str = "multi:softprob"
     eval_metric: str = "mlogloss"
-    early_stopping_rounds: int | None = 50
+    early_stopping_rounds: int | None = 10
     tree_method: str = "auto"  # auto, exact, approx, hist, gpu_hist
 
     def validate(self) -> list[str]:
@@ -414,7 +414,7 @@ class TCNConfig(BaseConfig):
     kernel_size: int = 3
     dropout: float = 0.2
     dilation_base: int = 2
-    sequence_length: int = 120
+    sequence_length: int = 64
 
     def validate(self) -> list[str]:
         """Validate TCN configuration."""

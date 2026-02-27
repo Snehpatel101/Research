@@ -25,8 +25,8 @@ lower barrier easier to hit, targeting ~50/50 long/short distribution.
 
 CRITICAL FIX (2025-12): TRANSACTION COST ADJUSTMENT
 Labels now account for round-trip transaction costs (commission + slippage).
-The upper barrier is adjusted by cost_in_atr units, ensuring a WIN label
-actually represents a profitable trade after costs.
+Both barriers are adjusted by cost_in_atr units symmetrically, ensuring a WIN label
+(long or short) actually represents a profitable trade after costs.
 """
 
 from __future__ import annotations
@@ -370,7 +370,7 @@ if NUMBA_AVAILABLE:
         """
         Numba-optimized triple barrier labeling with transaction cost adjustment.
 
-        Transaction costs are added to the upper barrier requirement.
+        Transaction costs are added to both barrier requirements symmetrically.
         """
         n = len(close)
         labels = np.zeros(n, dtype=np.int8)
@@ -380,6 +380,7 @@ if NUMBA_AVAILABLE:
         touch_type = np.zeros(n, dtype=np.int8)
 
         k_up_effective = k_up + cost_in_atr
+        k_down_effective = k_down + cost_in_atr
 
         for i in range(n - 1):
             entry_price = close[i]
@@ -391,7 +392,7 @@ if NUMBA_AVAILABLE:
                 continue
 
             upper_barrier = entry_price + k_up_effective * entry_atr
-            lower_barrier = entry_price - k_down * entry_atr
+            lower_barrier = entry_price - k_down_effective * entry_atr
 
             max_adverse = 0.0
             max_favorable = 0.0
@@ -470,8 +471,8 @@ else:
         cost_in_atr: float,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Pure Python fallback with transaction costs."""
-        # Adjust k_up to include costs
-        return _triple_barrier_python(close, high, low, atr, k_up + cost_in_atr, k_down, max_bars)
+        # Adjust both barriers to include costs (symmetric)
+        return _triple_barrier_python(close, high, low, atr, k_up + cost_in_atr, k_down + cost_in_atr, max_bars)
 
 
 # =============================================================================

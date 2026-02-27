@@ -121,7 +121,7 @@ class XGBoostModel(BaseModel):
             "gamma": 0.1,
             "reg_alpha": 0.1,
             "reg_lambda": 1.0,
-            "early_stopping_rounds": 20,
+            "early_stopping_rounds": 10,
             "eval_metric": "mlogloss",
             "tree_method": "hist",
             "use_gpu": True,  # Phase 12A-8: Enable GPU by default

@@ -124,7 +124,7 @@ MODEL_DEFAULTS: dict[str, dict[str, Any]] = {
         "family": "neural",
         "timeframe": "5min",
         "features": "sequence",
-        "sequence_length": 120,  # Longer context for dilated convolutions
+        "sequence_length": 64,  # Matches TCN receptive field (61)
         "batch_size": 256,
         "description": "Temporal convolutional network. Fast parallel training.",
     },

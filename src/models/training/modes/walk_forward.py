@@ -436,6 +436,9 @@ class WalkForwardTrainer:
                 _model_config["early_stopping_patience"] = getattr(
                     self._pipeline_config, "early_stopping_patience", 10
                 )
+                _model_config["early_stopping_rounds"] = getattr(
+                    self._pipeline_config, "early_stopping_patience", 10
+                )
             model = ModelRegistry.create(model_name, config=_model_config)
             model.fit(
                 X_train=X_train_scaled,

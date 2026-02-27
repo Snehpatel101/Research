@@ -608,15 +608,15 @@ class BaseRNNModel(BaseModel):
         self._model.eval()
         amp_dtype = self._amp_dtype
 
-        # Convert to tensor
-        X_tensor = torch.tensor(X, dtype=torch.float32).to(self._device)
+        # Zero-copy tensor on CPU; each batch moves to GPU individually
+        X_tensor = torch.from_numpy(np.ascontiguousarray(X).astype(np.float32))
 
         all_probs = []
         batch_size = self._config.get("batch_size", 512)
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
-                batch = X_tensor[i : i + batch_size]
+                batch = X_tensor[i : i + batch_size].to(self._device, non_blocking=True)
 
                 with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
                     logits = self._model(batch)
