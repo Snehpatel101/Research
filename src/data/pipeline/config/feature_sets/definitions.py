@@ -90,7 +90,7 @@ FEATURE_SET_DEFINITIONS: dict[str, FeatureSetDefinition] = {
         include_prefixes=[],
         include_mtf=True,
         supported_model_types=["boosting", "classical", "neural"],
-        default_sequence_length=120,
+        default_sequence_length=64,
         recommended_scaler="robust",
     ),
     # =========================================================================
