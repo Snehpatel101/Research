@@ -17,7 +17,7 @@ from typing import Any, cast
 
 import torch
 import torch.nn as nn
-from torch.nn.utils import weight_norm
+from torch.nn.utils.parametrizations import weight_norm
 
 from ..registry import register
 from .base_rnn import BaseRNNModel
