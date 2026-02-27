@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 82 complete
+**Status:** All phases through 83 complete
 **Last Updated:** 2026-02-26
 
 ---
@@ -68,6 +68,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 80 | 4/4 tasks (all complete) | Label balance (symmetric transaction costs), predict() memory (torch.from_numpy across 10 files), XGBoost early stopping fix, TCN seq_len 120→64 | 2026-02-26 |
 | 81 | 5/5 tasks (all complete) | Fix 5 dead notebook cells (calibration, leakage, feature importance, equity, agreement) | 2026-02-26 |
 | 82 | 1/1 tasks (complete) | Checkpoint resume preserves additional_dfs for 4D models (PatchTST/iTransformer/TFT) | 2026-02-26 |
+| 83 | 4/4 tasks (all complete) | Wire min_frequency end-to-end, XGBoost fallback default fix, mtf_plus seq_len fix, weight_norm deprecation | 2026-02-26 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -77,7 +78,7 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 82 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 83 are complete. See COMPLETION.md for full details.
 
 ---
 

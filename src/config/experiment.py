@@ -501,6 +501,11 @@ class ExperimentConfig:
             random_seed=self.random_seed,
             output_dir=self.output_dir,
             device=self.training.device,
+            use_feature_selection=self.data.features.selection_enabled,
+            feature_selection_n_features=self.data.features.selection_n_features,
+            feature_selection_method=self.data.features.selection_method,
+            feature_selection_cv_splits=self.data.features.selection_cv_splits,
+            feature_selection_min_frequency=self.data.features.selection_min_frequency,
         )
 
     def to_backtest_config(self) -> BacktestConfig:

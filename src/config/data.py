@@ -109,6 +109,7 @@ class FeatureConfig(BaseConfig):
     selection_method: str = "mda"  # mda, mdi, hybrid
     selection_n_features: int = 50
     selection_cv_splits: int = 5
+    selection_min_frequency: float = 0.6  # Min fraction of CV folds a feature must appear in
 
     def validate(self) -> list[str]:
         """Validate feature configuration."""

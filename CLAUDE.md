@@ -366,6 +366,12 @@ src/
 - Backward compat: regenerates from raw source file if no cached MTF exists
 - 1 file modified, 212/212 tests still passing
 
+**Phase 83: COMPLETE — Audit Cleanup (min_frequency wiring + missed fixes)**
+- Wired FEATURE_SELECTION_MIN_FREQUENCY end-to-end: FeatureConfig → TrainerConfig → FeatureSelectionConfig
+- Fixed XGBoost fallback default (20→10), mtf_plus seq_len (120→64), weight_norm deprecation
+- Item #13 (XGBoost in global.yaml) skipped — would be dead config
+- 6 files + notebook modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

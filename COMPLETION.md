@@ -4,6 +4,21 @@
 
 ---
 
+## Phase 83: Audit Cleanup — min_frequency Wiring + Missed Fixes | 2026-02-26 | COMPLETE
+
+**Impact:** Wired `FEATURE_SELECTION_MIN_FREQUENCY` end-to-end from notebook → FeatureConfig → TrainerConfig → FeatureSelectionConfig. Previously the notebook variable was dead — user setting had zero effect. Also fixed 2 missed items from Phase 80 verification: XGBoost fallback default (20→10) and mtf_plus seq_len (120→64). Replaced deprecated `torch.nn.utils.weight_norm` import. Item #13 (XGBoost in global.yaml) skipped — would be dead config since GlobalConfig has no models loader. **6 files + notebook modified. 212/212 tests still passing.**
+
+### Changes (4)
+
+| # | Fix | File(s) | Description |
+|:-:|-----|---------|-------------|
+| 1 | Wire `selection_min_frequency` | `data.py`, `trainer_config.py`, `experiment.py`, `features.py`, notebook | New field flows: FeatureConfig → ExperimentConfig.to_trainer_config() → TrainerConfig → FeatureSelectionConfig override dict |
+| 2 | XGBoost fallback default | `xgboost_model.py:187` | `.get("early_stopping_rounds", 20)` → `10` (matches get_default_config) |
+| 3 | mtf_plus seq_len | `definitions.py:93` | `default_sequence_length=120` → `64` (matches TCN receptive field) |
+| 4 | weight_norm deprecation | `tcn_model.py:20` | `torch.nn.utils.weight_norm` → `torch.nn.utils.parametrizations.weight_norm` |
+
+---
+
 ## Phase 82: Checkpoint Resume — 4D additional_dfs Persistence | 2026-02-26 | COMPLETE
 
 **Impact:** PatchTST/iTransformer/TFT crashed on `resume_from_checkpoint()` because `additional_dfs` (multi-timeframe data for 4D models) was hardcoded to `None` on cache reload. Checkpoints now persist MTF data. **1 file modified. 212/212 tests still passing.**

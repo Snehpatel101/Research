@@ -81,6 +81,7 @@ class TrainerConfig:
     feature_selection_cv_splits: int = field(
         default_factory=lambda: _get_global_or_default("features.selection.cv_splits", 5)
     )
+    feature_selection_min_frequency: float = 0.6
     deterministic_mode: bool = False
     nan_check_raise_error: bool = True
     checkpoint_interval: int = 10

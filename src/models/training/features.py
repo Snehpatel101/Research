@@ -125,13 +125,17 @@ class TrainerFeaturesMixin:
             return
 
         # Create feature selection config based on model family
+        override: dict[str, Any] = {
+            "n_features": self.config.feature_selection_n_features,
+            "method": self.config.feature_selection_method,
+            "random_state": self.config.random_seed,
+        }
+        min_freq = getattr(self.config, "feature_selection_min_frequency", None)
+        if min_freq is not None:
+            override["min_feature_frequency"] = min_freq
         fs_config = FeatureSelectionConfig.from_model_family(
             model_family=self.model.model_family,
-            override={
-                "n_features": self.config.feature_selection_n_features,
-                "method": self.config.feature_selection_method,
-                "random_state": self.config.random_seed,
-            },
+            override=override,
         )
 
         # Override n_features if explicitly set to 0 (use family default)
