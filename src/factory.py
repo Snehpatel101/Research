@@ -280,11 +280,11 @@ class MLFactory:
             if resume_from_stage <= self.STAGE_DATA_PIPELINE:
                 self._log("\n[Phase 1/4] Data Pipeline")
                 df, additional_dfs = self._run_data_pipeline()
-                self._save_checkpoint_data_pipeline(df)
+                self._save_checkpoint_data_pipeline(df, additional_dfs)
             else:
                 self._log("\n[Phase 1/4] Data Pipeline (cached)")
                 df = self._load_cached_data()
-                additional_dfs = None
+                additional_dfs = self._load_cached_additional_dfs()
 
             # Validate data sufficiency for CV configuration
             self._validate_data_sufficiency(df)
@@ -402,7 +402,11 @@ class MLFactory:
             return 0
         return self._checkpoint_manager.get_resume_stage()
 
-    def _save_checkpoint_data_pipeline(self, df: pd.DataFrame) -> None:
+    def _save_checkpoint_data_pipeline(
+        self,
+        df: pd.DataFrame,
+        additional_dfs: dict[str, pd.DataFrame] | None = None,
+    ) -> None:
         """Save checkpoint after data pipeline stage."""
         if not self._checkpoint_manager:
             return
@@ -411,6 +415,12 @@ class MLFactory:
         data_cache_path = self.output_dir / "cache" / "data_pipeline.parquet"
         data_cache_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(data_cache_path)
+
+        # Save additional_dfs (multi-stream data for 4D models like PatchTST)
+        if additional_dfs:
+            for tf_key, tf_df in additional_dfs.items():
+                mtf_path = self.output_dir / "cache" / f"mtf_{tf_key}.parquet"
+                tf_df.to_parquet(mtf_path)
 
         self._checkpoint_manager.save_checkpoint(
             stage_name="data_pipeline",
@@ -485,6 +495,45 @@ class MLFactory:
         if data_cache_path.exists():
             return pd.read_parquet(data_cache_path)
         raise FileNotFoundError(f"Cached data not found at {data_cache_path}")
+
+    def _load_cached_additional_dfs(self) -> dict[str, pd.DataFrame] | None:
+        """Load cached multi-stream DataFrames from checkpoint.
+
+        Falls back to regenerating from raw data if cache files are missing
+        (backward compatibility with checkpoints saved before this fix).
+        """
+        if not self._needs_multi_stream():
+            return None
+
+        cache_dir = self.output_dir / "cache"
+        mtf_files = sorted(cache_dir.glob("mtf_*.parquet"))
+
+        if mtf_files:
+            additional_dfs = {}
+            for mtf_path in mtf_files:
+                # Extract timeframe key from filename: mtf_15min.parquet -> 15min
+                tf_key = mtf_path.stem.removeprefix("mtf_")
+                additional_dfs[tf_key] = pd.read_parquet(mtf_path)
+                self._log(f"  Loaded cached MTF: {tf_key} ({len(additional_dfs[tf_key])} bars)")
+            return additional_dfs
+
+        # Backward compat: regenerate from raw source file
+        # (cached data_pipeline.parquet has features/labels, not raw OHLCV)
+        if self.config.data.data_path:
+            self._log("  No cached MTF data — regenerating from raw OHLCV source")
+            data_path = Path(self.config.data.data_path)
+            if data_path.exists():
+                if data_path.suffix.lower() == ".csv":
+                    raw_df = pd.read_csv(data_path)
+                else:
+                    raw_df = pd.read_parquet(data_path)
+                if "datetime" in raw_df.columns:
+                    raw_df["datetime"] = pd.to_datetime(raw_df["datetime"])
+                    raw_df = raw_df.set_index("datetime")
+                return self._generate_additional_dfs(raw_df)
+
+        self._log("  WARNING: 4D models need MTF data but none available")
+        return None
 
     def _load_cached_training(self) -> Any:
         """Load cached training result from checkpoint."""
