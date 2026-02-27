@@ -1,9 +1,17 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-20 (Phase 67 COMPLETE — Consistency Hardening: 14 inconsistencies fixed + 3D OOF chunked processing)
-**Status:** Phase 67 COMPLETE | All 14 audit inconsistencies fixed (2 critical, 6 high, 6 medium) + 3D OOF chunked processing for 1.7M+ row scalability. 212/212 tests passing.
+**Last Updated:** 2026-02-26 (Phase 82 COMPLETE — Checkpoint resume MTF persistence, audit-driven fixes, notebook fixes)
+**Status:** Phase 82 COMPLETE | 52 phases done (24-82). Audit-driven fixes: label balance, predict() memory, XGBoost early stopping, TCN seq_len, 5 dead notebook cells, checkpoint resume 4D persistence. 212/212 tests passing.
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
+
+---
+
+## Phase 80-82: Audit-Driven Fixes + Checkpoint Resume (2026-02-26) - COMPLETE
+
+- Phase 80: 4 critical audit-driven fixes — (1) symmetric transaction costs in triple_barrier.py (root cause of 2.6% long rate at H5), (2) torch.from_numpy in predict() across 10 neural files (eliminates ~19 GB copy), (3) XGBoost early stopping tightened to 10 rounds + config drift fix + walk_forward.py key mismatch, (4) TCN seq_len 120→64 across 7 files (matches receptive field of 61). 20 files modified.
+- Phase 81: Fixed 5 dead notebook cells — calibration, leakage, feature importance, equity underwater, agreement matrix. All now use correct ExperimentResult API paths.
+- Phase 82: Checkpoint resume now persists additional_dfs (MTF data) for 4D models. PatchTST/iTransformer/TFT previously crashed on resume_from_checkpoint() because additional_dfs was hardcoded to None. Backward compat regenerates from raw source file.
 
 ---
 

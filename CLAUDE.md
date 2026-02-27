@@ -349,6 +349,23 @@ src/
 - Peak drops from ~86 GB to ~59 GB for TCN walk-forward window 5
 - 4 files modified, 212/212 tests still passing
 
+**Phase 80: COMPLETE — Audit-Driven Fixes (4 critical, 20 files)**
+- Label balance: symmetric transaction costs in triple_barrier.py (root cause of 2.6% long rate at H5)
+- predict() memory: torch.from_numpy across 10 neural model files (16 edit sites)
+- XGBoost early stopping: patience 20→10, config drift fix, walk_forward.py key mismatch
+- TCN seq_len: 120→64 across 7 files (matches receptive field of 61)
+- 20 files modified, 212/212 tests still passing
+
+**Phase 81: COMPLETE — Fix 5 Dead Notebook Cells**
+- Calibration, leakage, feature importance, equity underwater, agreement matrix
+- All cells now use correct ExperimentResult API paths
+
+**Phase 82: COMPLETE — Checkpoint Resume 4D Persistence**
+- PatchTST/iTransformer/TFT crashed on resume_from_checkpoint() — additional_dfs was None
+- Checkpoint now saves/loads MTF data as mtf_*.parquet files
+- Backward compat: regenerates from raw source file if no cached MTF exists
+- 1 file modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

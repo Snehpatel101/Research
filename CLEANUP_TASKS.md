@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 79 complete
-**Last Updated:** 2026-02-22
+**Status:** All phases through 82 complete
+**Last Updated:** 2026-02-26
 
 ---
 
@@ -65,16 +65,19 @@ See **COMPLETION.md** for full task details and implementation information.
 | 77 | 6/6 tasks (all complete) | AdapterScaler float32, meta-labeling memory cleanup, OOF memory cleanup, OOM batch_size propagation, XGBoost deprecated param, walk-forward timestamp fix | 2026-02-22 |
 | 78 | 4/4 tasks (all complete) | torch.from_numpy (halves neural memory), float32 downcast in 3 modes, neural cleanup in 3 modes, boosting cache eviction | 2026-02-23 |
 | 79 | 4/4 tasks (all complete) | In-place FoldAwareScaler (saves ~27 GB peak), factory float32 downcast, oof_sequence data corruption fix, additional_dfs float32 | 2026-02-22 |
+| 80 | 4/4 tasks (all complete) | Label balance (symmetric transaction costs), predict() memory (torch.from_numpy across 10 files), XGBoost early stopping fix, TCN seq_len 120→64 | 2026-02-26 |
+| 81 | 5/5 tasks (all complete) | Fix 5 dead notebook cells (calibration, leakage, feature importance, equity, agreement) | 2026-02-26 |
+| 82 | 1/1 tasks (complete) | Checkpoint resume preserves additional_dfs for 4D models (PatchTST/iTransformer/TFT) | 2026-02-26 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 310+ tasks across 49 phases, 200+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), OOM root cause fix (cache eviction + float32 downcast + walk-forward feature selection), float32 scaler, full pipeline audit (AdapterScaler float32, memory cleanup, OOM retry, XGBoost compat), deep memory fixes (torch.from_numpy, float32 in all modes, neural cleanup in all modes, boosting cache eviction).
+**Summary Impact:** 320+ tasks across 52 phases, 220+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), OOM root cause fix (cache eviction + float32 downcast + walk-forward feature selection), float32 scaler, full pipeline audit (AdapterScaler float32, memory cleanup, OOM retry, XGBoost compat), deep memory fixes (torch.from_numpy, float32 in all modes, neural cleanup in all modes, boosting cache eviction), audit-driven label balance fix (symmetric transaction costs), predict() memory fix (10 neural files), XGBoost early stopping + config drift fix, TCN seq_len alignment, 5 dead notebook cells fixed, checkpoint resume MTF persistence for 4D models.
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 79 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 82 are complete. See COMPLETION.md for full details.
 
 ---
 

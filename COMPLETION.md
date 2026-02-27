@@ -4,6 +4,49 @@
 
 ---
 
+## Phase 82: Checkpoint Resume — 4D additional_dfs Persistence | 2026-02-26 | COMPLETE
+
+**Impact:** PatchTST/iTransformer/TFT crashed on `resume_from_checkpoint()` because `additional_dfs` (multi-timeframe data for 4D models) was hardcoded to `None` on cache reload. Checkpoints now persist MTF data. **1 file modified. 212/212 tests still passing.**
+
+### Changes (1)
+
+| # | Fix | File | Severity | Description |
+|:-:|-----|------|:--------:|-------------|
+| 1 | Checkpoint MTF persistence | `src/factory.py` | CRITICAL | `_save_checkpoint_data_pipeline` now saves `additional_dfs` as `mtf_*.parquet` files. New `_load_cached_additional_dfs()` reloads them on resume. Backward compat: regenerates from raw source file if no cached MTF files exist (old checkpoints). |
+
+---
+
+## Phase 81: Fix 5 Dead Notebook Cells | 2026-02-26 | COMPLETE
+
+**Impact:** 5 analysis cells in `ml_factory_colab.ipynb` referenced attributes that don't exist on `ExperimentResult`, causing crashes. All 5 cells now use correct API paths. **1 file modified. 212/212 tests still passing.**
+
+### Changes (5)
+
+| # | Fix | Cell | Description |
+|:-:|-----|------|-------------|
+| 1 | Calibration | Cell 10 | Iterates `tr.model_results[key].oof_prediction.predictions` instead of wrong attributes |
+| 2 | Leakage | Cell 12 | Loads features from `output_dir` files instead of nonexistent result attributes |
+| 3 | Feature importance | Cell 17 | Extracts from `mr.trainer.model.get_feature_importance()` |
+| 4 | Equity underwater | Cell 21 | Handles `ec` as `pd.Series` with `.values`/`.index` |
+| 5 | Agreement matrix | Cell 25 | Aligns by `oof.original_indices` using index intersection |
+
+---
+
+## Phase 80: 4 Critical Fixes (Label Balance, Memory, Early Stopping, TCN) | 2026-02-26 | COMPLETE
+
+**Impact:** Audit-driven fixes for 4 critical issues found in Colab training output. Transaction cost asymmetry was root cause of label imbalance (2.6% long rate at H5). `torch.tensor()` in predict() methods copied full datasets unnecessarily. XGBoost early stopping was ineffective. TCN wasted 59 timesteps and ~9 GB RAM. **20 files modified. 212/212 tests still passing.**
+
+### Changes (4)
+
+| # | Fix | Files | Severity | Description |
+|:-:|-----|-------|:--------:|-------------|
+| 1 | Label balance — symmetric transaction costs | `src/data/labeling/triple_barrier.py` (3 sites) | CRITICAL | `cost_in_atr` only adjusted upper barrier → 2.6% long rate at H5. Now applies to BOTH barriers: `k_down_effective = k_down + cost_in_atr`. |
+| 2 | predict() memory — torch.from_numpy | 10 neural model files (16 edit sites) | HIGH | `torch.tensor(X).to(device)` copies entire dataset (~19 GB). Replaced with `torch.from_numpy(np.ascontiguousarray(X).astype(np.float32))` + batched `.to(device, non_blocking=True)`. |
+| 3 | XGBoost early stopping | `xgboost_model.py`, `walk_forward.py`, `model_configs.py` | HIGH | `early_stopping_rounds=20` too lenient for `lr=0.05` (3/5 windows ran full 500 rounds). Changed to 10. Fixed config drift between files. Fixed key mismatch bug in walk_forward.py (`early_stopping_patience` vs `early_stopping_rounds`). |
+| 4 | TCN seq_len 120→64 | 7 files | MEDIUM | Receptive field = 61 but seq_len = 120 → 59 wasted timesteps, ~9 GB wasted RAM. Aligned seq_len to 64 across all definitions. |
+
+---
+
 ## Phase 79: In-Place Scaling + Factory Float32 (4 items) | 2026-02-22 | COMPLETE
 
 **Impact:** Root cause of remaining Colab OOM found. During TCN walk-forward window 5 (854K × 7200 float32), FoldAwareScaler was creating DUPLICATE scaled arrays alongside the raw copies — peak 86 GB on 83 GB Colab. In-place scaling eliminates the duplication. Team audit also found a critical data corruption bug in oof_sequence.py where in-place scaling destroyed the original feature matrix across CV folds. **Peak drops from ~86 GB to ~59 GB. 4 files modified. 212/212 tests still passing.**
