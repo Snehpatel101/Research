@@ -342,7 +342,7 @@ class PatchTSTModel(BaseRNNModel):
                 "activation": "gelu",
                 "max_patches": 512,
                 # Training
-                "sequence_length": 128,  # Longer sequences benefit from patching
+                "sequence_length": 60,  # Aligned to ModelContract (memory-safe default)
                 "batch_size": 128,
                 "max_epochs": 50,
                 "learning_rate": 0.0001,

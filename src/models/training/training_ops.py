@@ -373,6 +373,9 @@ class TrainingOpsMixin:
         horizon: int,
     ) -> OOFPrediction | None:
         """Generate OOF predictions via OOFGenerationService."""
+        # Filter -99 sentinel labels BEFORE OOF generation to prevent
+        # fold models from training on invalid labels (Phase 85 audit fix)
+        prepared = prepared.filter_invalid_labels()
         request = OOFRequest(
             model_name=model_name,
             horizon=horizon,

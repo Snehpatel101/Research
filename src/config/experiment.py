@@ -120,7 +120,7 @@ class TrainingSection:
 
     # Device settings
     device: str = "auto"  # auto, cpu, cuda, mps
-    batch_size: int = 256
+    batch_size: int = 512
     max_epochs: int = 100
     early_stopping_patience: int = 15
 

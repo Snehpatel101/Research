@@ -38,7 +38,7 @@ class GlobalDefaults:
     # ==========================================================================
     # TRAINING HYPERPARAMETERS
     # ==========================================================================
-    DEFAULT_BATCH_SIZE: int = 256
+    DEFAULT_BATCH_SIZE: int = 512  # Optimized for GPU (Phase 68)
     DEFAULT_MAX_EPOCHS: int = 100
     DEFAULT_LEARNING_RATE: float = 0.001
     DEFAULT_EARLY_STOPPING_PATIENCE: int = 10

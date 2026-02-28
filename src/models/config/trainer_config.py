@@ -42,7 +42,7 @@ class TrainerConfig:
         default_factory=lambda: _get_global_or_default("training.sequence_length", 60)
     )
     batch_size: int = field(
-        default_factory=lambda: _get_global_or_default("training.batch_size", 256)
+        default_factory=lambda: _get_global_or_default("training.batch_size", 512)
     )
     max_epochs: int = field(
         default_factory=lambda: _get_global_or_default("training.max_epochs", 100)

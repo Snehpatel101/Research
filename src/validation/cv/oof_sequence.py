@@ -317,6 +317,7 @@ class SequenceOOFGenerator:
         oof_df = pd.DataFrame(
             {
                 "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+                "y_true": y.values,
                 f"{model_name}_prob_short": oof_probs[:, 0],
                 f"{model_name}_prob_neutral": oof_probs[:, 1],
                 f"{model_name}_prob_long": oof_probs[:, 2],

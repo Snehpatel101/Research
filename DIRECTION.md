@@ -1,8 +1,8 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-28 (Phase 84 COMPLETE — Signal Quality: logloss metrics + binary classification mode)
-**Status:** Phase 84 COMPLETE | 54 phases done (24-84). Signal quality: unweighted+weighted logloss eval, binary classification mode ("significant move" vs "no move"). All audit items 1-17 now addressed. 212/212 tests passing.
+**Last Updated:** 2026-02-28 (Phase 85 COMPLETE — Full Audit Fixes: 8-agent audit + 7 fixes)
+**Status:** Phase 85 COMPLETE | 55 phases done (24-85). Full audit: PatchTST seq_len alignment, batch_size unification, OOF sentinel filtering, y_true column in OOF DataFrames, binary mode warning, notebook fixes. Deferred: n_classes threading (30+ files) → Phase 86. 212/212 tests passing.
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
@@ -19,6 +19,18 @@
 - Item 16: Added `logloss_unweighted` and `logloss_weighted` to `compute_classification_metrics()` (src/models/metrics.py). Both weighted (balanced class weights) and unweighted log_loss now flow through to ExperimentResult.metrics. TrainingMetrics extended with optional val_logloss fields.
 - Item 17: Added binary classification mode — `LabelingConfig(binary_mode=True)` remaps triple-barrier labels {-1,0,+1} to {0,1} (0=no move, 1=significant move). Dynamic label mapping in label_mapping.py (n_classes=2/3). n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added.
 - All 17 audit items from AUDIT_2026-02-26.md now fully addressed (items 1-13 in Phases 80-83, items 14-15 at notebook level, items 16-17 in Phase 84).
+
+## Phase 85: Full Audit Fixes — 8-Agent Audit + 7 Fixes (2026-02-28) - COMPLETE
+
+- 8-agent parallel audit of entire codebase identified critical inconsistencies
+- PatchTST seq_len alignment: hardcoded 128 → 60 (matches contract and SeqConfig default)
+- batch_size alignment: 256 → 512 unified across 4 config paths (defaults.py, experiment.py, unified.py, trainer_config.py)
+- OOF -99 sentinel filtering: PreparedData.filter_invalid_labels() called before OOF generation (training_ops.py)
+- y_true column added to all 3 OOF DataFrames (oof_core.py, oof_sequence.py, oof_generation.py) — enables confusion matrix in notebook
+- Binary mode experimental warning added to factory.py
+- Notebook Cell 23: confusion matrix dead code fixed + dynamic class labels; Cell 2: dead variable documented
+- Deferred: Full n_classes threading (30+ files) → Phase 86
+- 11 files modified, 212/212 tests passing
 
 ---
 

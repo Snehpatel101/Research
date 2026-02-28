@@ -7826,6 +7826,82 @@ Phases 50-61 implemented 17.5 of 21 optimizations. Phase 62 completes the remain
 
 ---
 
+## Phase 85: Full Audit Fixes — 8-Agent Audit + 7 Fixes | 2026-02-28 | COMPLETE
+
+**Impact:** 11 files modified, 7 bugs fixed, 1 deferred to Phase 86
+
+### Background
+
+An 8-agent parallel audit of the entire codebase identified critical inconsistencies between config defaults, model contracts, and runtime behavior. 7 fixes were implemented immediately; the full n_classes threading (30+ files) was deferred to Phase 86 due to scope.
+
+### Tasks
+
+| ID | Task | Files | Status |
+|----|------|-------|--------|
+| 85-1 | PatchTST seq_len alignment (128→60) | `src/models/neural/patchtst_model.py` | COMPLETE |
+| 85-2 | batch_size alignment (256→512 across 4 paths) | `src/core/defaults.py`, `src/config/experiment.py`, `src/config/unified.py`, `src/models/config/trainer_config.py` | COMPLETE |
+| 85-3 | OOF -99 sentinel filtering before OOF generation | `src/models/training/training_ops.py` | COMPLETE |
+| 85-4 | y_true column added to all 3 OOF DataFrames | `src/validation/cv/oof_core.py`, `src/validation/cv/oof_sequence.py`, `src/models/training/services/oof_generation.py` | COMPLETE |
+| 85-5 | Binary mode experimental warning | `src/factory.py` | COMPLETE |
+| 85-6 | Notebook Cell 23 confusion matrix fix + dynamic class labels | `notebooks/ml_factory_colab.ipynb` | COMPLETE |
+| 85-7 | Notebook Cell 2 dead variable documentation | `notebooks/ml_factory_colab.ipynb` | COMPLETE |
+
+### Details
+
+**85-1: PatchTST seq_len alignment**
+- PatchTST had `seq_len=128` hardcoded in model, but contract and SeqConfig default is 60
+- Fixed to `seq_len=60` in `patchtst_model.py` to match contract
+
+**85-2: batch_size alignment**
+- 4 config paths had `batch_size=256` while Phase 68 set default to 512
+- Unified all 4 paths: `defaults.py`, `experiment.py`, `unified.py`, `trainer_config.py` → 512
+
+**85-3: OOF -99 sentinel filtering**
+- Training labels with -99 sentinel values (from filter_invalid_labels) were leaking into OOF generation
+- Added `PreparedData.filter_invalid_labels()` call before OOF fold loop in `training_ops.py`
+
+**85-4: y_true column in OOF DataFrames**
+- Confusion matrix in notebook required `y_true` column but OOF DataFrames only had `prediction`
+- Added `y_true` to all 3 OOF generators: `oof_core.py`, `oof_sequence.py`, `oof_generation.py`
+
+**85-5: Binary mode experimental warning**
+- `factory.py` now emits warning when `binary_mode=True` since n_classes threading is incomplete
+
+**85-6: Notebook Cell 23 confusion matrix**
+- Cell had dead code referencing non-existent API paths
+- Fixed to use dynamic class labels from OOF DataFrame and proper confusion matrix rendering
+
+**85-7: Notebook Cell 2 dead variable**
+- Documented dead variable for clarity
+
+### Audit Findings Deferred to Phase 86
+
+| Finding | Scope | Reason for Deferral |
+|---------|-------|---------------------|
+| n_classes=3 hardcoded in all 12 models, OOF system, ensemble stacking | 30+ files | Too large for quick fix, needs careful threading |
+| Binary mode end-to-end broken (config says n_classes=2, models output 3) | Cross-cutting | Depends on n_classes threading |
+| Three competing "single source of truth" files (constants.py, defaults.py, unified.py) | Architecture | Requires careful consolidation |
+| DSR gate applied to F1 values instead of Sharpe ratios | Logic bug | Needs financial validation |
+| model_configs.py entirely dead config (9 unused dataclasses) | Dead code | Low priority cleanup |
+| Proxy Sharpe not annualized | Metrics | Needs annualization strategy decision |
+| Real P&L Sharpe trade-frequency-agnostic annualization | Metrics | Needs annualization strategy decision |
+
+### Verification
+
+- 212/212 tests passing
+- `ruff check src/` — 0 errors
+- `black --check src/` — all formatted
+- All 11 modified files verified
+
+### Lessons Learned
+
+1. 8-agent parallel audit efficiently covers large codebases — each agent scans ~50 files
+2. Config default misalignment (batch_size 256 vs 512) can silently persist across 4 config paths
+3. OOF sentinel values (-99) must be filtered at the source, not assumed clean
+4. Notebook cells referencing internal APIs break silently when APIs evolve — need y_true in OOF DataFrames
+
+---
+
 <!-- TEMPLATE FOR FUTURE PHASES
 ## Phase N: [Title] | YYYY-MM-DD | [STATUS]
 

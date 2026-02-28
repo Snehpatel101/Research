@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 84 COMPLETE (Signal Quality — logloss metrics + binary classification mode)
+**Status:** Phase 85 COMPLETE (Full Audit Fixes — 8-agent audit + 7 fixes)
 **Last Updated:** 2026-02-28
 
 ---
@@ -70,10 +70,11 @@ See **COMPLETION.md** for full details on all completed phases.
 | 82 | Checkpoint Resume — 4D additional_dfs Persistence | ✅ COMPLETE | 2026-02-26 |
 | 83 | Audit Cleanup — min_frequency wiring + missed fixes + weight_norm | ✅ COMPLETE | 2026-02-26 |
 | 84 | Signal Quality — Logloss Metrics + Binary Classification Mode | ✅ COMPLETE | 2026-02-28 |
+| 85 | Full Audit Fixes — 8-Agent Audit + 7 Fixes (PatchTST seq_len, batch_size, OOF sentinel, y_true) | ✅ COMPLETE | 2026-02-28 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 54 phases complete (24-84), 220+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), audit-driven label balance fix, checkpoint resume MTF persistence for 4D models.
+**Summary Impact:** 55 phases complete (24-85), 220+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), audit-driven label balance fix, checkpoint resume MTF persistence for 4D models.
 
 ---
 
@@ -130,12 +131,13 @@ See **COMPLETION.md** for full details on all completed phases.
 | 82 | Checkpoint Resume — 4D additional_dfs Persistence | CRITICAL | 1 session | ✅ COMPLETE |
 | 83 | Audit Cleanup — min_frequency wiring + weight_norm | HIGH | 1 session | ✅ COMPLETE |
 | 84 | Signal Quality — Logloss Metrics + Binary Classification | HIGH | 1 session | ✅ COMPLETE |
+| 85 | Full Audit Fixes — 8-Agent Audit + 7 Fixes | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 84 are complete. All 17 audit items addressed. Test suite: 212/212 passing. See COMPLETION.md for details.
+**No active phases.** All phases through 85 are complete. All 17 audit items addressed. Test suite: 212/212 passing. See COMPLETION.md for details.
 
 ---
 

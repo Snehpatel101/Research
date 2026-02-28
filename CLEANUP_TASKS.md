@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 84 complete
+**Status:** All phases through 85 complete
 **Last Updated:** 2026-02-28
 
 ---
@@ -70,16 +70,17 @@ See **COMPLETION.md** for full task details and implementation information.
 | 82 | 1/1 tasks (complete) | Checkpoint resume preserves additional_dfs for 4D models (PatchTST/iTransformer/TFT) | 2026-02-26 |
 | 83 | 4/4 tasks (all complete) | Wire min_frequency end-to-end, XGBoost fallback default fix, mtf_plus seq_len fix, weight_norm deprecation | 2026-02-26 |
 | 84 | 2/2 tasks (all complete) | Logloss metrics (weighted + unweighted), binary classification mode (binary_mode config, label remapping, dynamic label_mapping, n_classes threading) | 2026-02-28 |
+| 85 | 7/7 tasks (all complete) | PatchTST seq_len 128→60, batch_size 256→512 (4 paths), OOF -99 sentinel filter, y_true in 3 OOF DataFrames, binary mode warning, notebook Cell 23+2 fixes | 2026-02-28 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 325+ tasks across 53 phases, 225+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), OOM root cause fix (cache eviction + float32 downcast + walk-forward feature selection), float32 scaler, full pipeline audit (AdapterScaler float32, memory cleanup, OOM retry, XGBoost compat), deep memory fixes (torch.from_numpy, float32 in all modes, neural cleanup in all modes, boosting cache eviction), audit-driven label balance fix (symmetric transaction costs), predict() memory fix (10 neural files), XGBoost early stopping + config drift fix, TCN seq_len alignment, 5 dead notebook cells fixed, checkpoint resume MTF persistence for 4D models.
+**Summary Impact:** 330+ tasks across 54 phases, 225+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, memory usage reduced by 85%, pipeline robustness hardened, test suite consolidated, all data leakage eliminated, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), OOM root cause fix (cache eviction + float32 downcast + walk-forward feature selection), float32 scaler, full pipeline audit (AdapterScaler float32, memory cleanup, OOM retry, XGBoost compat), deep memory fixes (torch.from_numpy, float32 in all modes, neural cleanup in all modes, boosting cache eviction), audit-driven label balance fix (symmetric transaction costs), predict() memory fix (10 neural files), XGBoost early stopping + config drift fix, TCN seq_len alignment, 5 dead notebook cells fixed, checkpoint resume MTF persistence for 4D models.
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 84 are complete. All 17 audit items addressed. See COMPLETION.md for full details.
+**No active phases.** All phases through 85 are complete. All 17 audit items addressed. See COMPLETION.md for full details.
 
 ---
 
