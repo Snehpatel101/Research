@@ -52,6 +52,8 @@ class TrainingMetrics:
         best_epoch: Epoch with best validation performance
         history: Per-epoch metric history
         metadata: Model-specific training metadata
+        val_logloss_unweighted: Validation log loss (unweighted)
+        val_logloss_weighted: Validation log loss (balanced class weights)
 
     Example:
         >>> metrics = model.fit(X_train, y_train, X_val, y_val)
@@ -71,6 +73,8 @@ class TrainingMetrics:
     best_epoch: int | None
     history: dict[str, list[float]] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+    val_logloss_unweighted: float | None = None
+    val_logloss_weighted: float | None = None
 
     def __post_init__(self) -> None:
         """Validate metrics are in valid ranges."""
@@ -83,7 +87,7 @@ class TrainingMetrics:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        return {
+        d = {
             "train_loss": self.train_loss,
             "val_loss": self.val_loss,
             "train_accuracy": self.train_accuracy,
@@ -97,6 +101,11 @@ class TrainingMetrics:
             "history": self.history,
             "metadata": self.metadata,
         }
+        if self.val_logloss_unweighted is not None:
+            d["val_logloss_unweighted"] = self.val_logloss_unweighted
+        if self.val_logloss_weighted is not None:
+            d["val_logloss_weighted"] = self.val_logloss_weighted
+        return d
 
 
 # =============================================================================

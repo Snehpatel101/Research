@@ -1,17 +1,24 @@
 # ML Factory: Direction & Architecture
 
 **Generated:** 2026-01-23
-**Last Updated:** 2026-02-26 (Phase 82 COMPLETE — Checkpoint resume MTF persistence, audit-driven fixes, notebook fixes)
-**Status:** Phase 82 COMPLETE | 52 phases done (24-82). Audit-driven fixes: label balance, predict() memory, XGBoost early stopping, TCN seq_len, 5 dead notebook cells, checkpoint resume 4D persistence. 212/212 tests passing.
+**Last Updated:** 2026-02-28 (Phase 84 COMPLETE — Signal Quality: logloss metrics + binary classification mode)
+**Status:** Phase 84 COMPLETE | 54 phases done (24-84). Signal quality: unweighted+weighted logloss eval, binary classification mode ("significant move" vs "no move"). All audit items 1-17 now addressed. 212/212 tests passing.
 **Goal:** Build a bulletproof, config-driven ML Factory for profitable financial time-series trading
 
 ---
 
-## Phase 80-82: Audit-Driven Fixes + Checkpoint Resume (2026-02-26) - COMPLETE
+## Phase 80-83: Audit-Driven Fixes + Checkpoint Resume + Audit Cleanup (2026-02-26) - COMPLETE
 
 - Phase 80: 4 critical audit-driven fixes — (1) symmetric transaction costs in triple_barrier.py (root cause of 2.6% long rate at H5), (2) torch.from_numpy in predict() across 10 neural files (eliminates ~19 GB copy), (3) XGBoost early stopping tightened to 10 rounds + config drift fix + walk_forward.py key mismatch, (4) TCN seq_len 120→64 across 7 files (matches receptive field of 61). 20 files modified.
 - Phase 81: Fixed 5 dead notebook cells — calibration, leakage, feature importance, equity underwater, agreement matrix. All now use correct ExperimentResult API paths.
 - Phase 82: Checkpoint resume now persists additional_dfs (MTF data) for 4D models. PatchTST/iTransformer/TFT previously crashed on resume_from_checkpoint() because additional_dfs was hardcoded to None. Backward compat regenerates from raw source file.
+- Phase 83: Audit cleanup — (1) wired `FEATURE_SELECTION_MIN_FREQUENCY` end-to-end from notebook through FeatureConfig/TrainerConfig/FeatureSelectionConfig (was dead config), (2) XGBoost fallback default 20→10 to match get_default_config, (3) mtf_plus seq_len 120→64 to match TCN receptive field, (4) replaced deprecated `torch.nn.utils.weight_norm` with `parametrizations.weight_norm`. 6 files + notebook modified.
+
+## Phase 84: Signal Quality — Logloss Metrics + Binary Classification (2026-02-28) - COMPLETE
+
+- Item 16: Added `logloss_unweighted` and `logloss_weighted` to `compute_classification_metrics()` (src/models/metrics.py). Both weighted (balanced class weights) and unweighted log_loss now flow through to ExperimentResult.metrics. TrainingMetrics extended with optional val_logloss fields.
+- Item 17: Added binary classification mode — `LabelingConfig(binary_mode=True)` remaps triple-barrier labels {-1,0,+1} to {0,1} (0=no move, 1=significant move). Dynamic label mapping in label_mapping.py (n_classes=2/3). n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added.
+- All 17 audit items from AUDIT_2026-02-26.md now fully addressed (items 1-13 in Phases 80-83, items 14-15 at notebook level, items 16-17 in Phase 84).
 
 ---
 

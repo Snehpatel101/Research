@@ -785,9 +785,7 @@ class TFTModel(BaseRNNModel):
         self._validate_input_shape(X, "X")
 
         self._model.eval()
-        X_tensor = torch.from_numpy(
-            np.ascontiguousarray(X).astype(np.float32)
-        ).to(self._device)
+        X_tensor = torch.from_numpy(np.ascontiguousarray(X).astype(np.float32)).to(self._device)
 
         with torch.no_grad():
             # Forward pass to compute variable weights

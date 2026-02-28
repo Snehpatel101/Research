@@ -176,6 +176,9 @@ class LabelingConfig(BaseConfig):
     barrier_touch_is_exit: bool = True
     vertical_barrier_enabled: bool = True
 
+    # Binary classification mode
+    binary_mode: bool = False  # If True, remap labels to binary: 0=neutral, 1=significant_move
+
     # Optimization
     optimize_barriers: bool = True
     optimization_trials: int = 100

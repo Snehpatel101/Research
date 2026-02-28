@@ -559,9 +559,7 @@ class ResNet1DModel(BaseRNNModel):
             return None
 
         resnet_network.eval()
-        X_tensor = torch.from_numpy(
-            np.ascontiguousarray(X).astype(np.float32)
-        ).to(self._device)
+        X_tensor = torch.from_numpy(np.ascontiguousarray(X).astype(np.float32)).to(self._device)
 
         with torch.no_grad():
             # Transpose

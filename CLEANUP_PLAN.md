@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 83 COMPLETE (Audit Cleanup — min_frequency wiring + missed fixes)
-**Last Updated:** 2026-02-26
+**Status:** Phase 84 COMPLETE (Signal Quality — logloss metrics + binary classification mode)
+**Last Updated:** 2026-02-28
 
 ---
 
@@ -69,10 +69,11 @@ See **COMPLETION.md** for full details on all completed phases.
 | 81 | Fix 5 Dead Notebook Cells (calibration, leakage, features, equity, agreement) | ✅ COMPLETE | 2026-02-26 |
 | 82 | Checkpoint Resume — 4D additional_dfs Persistence | ✅ COMPLETE | 2026-02-26 |
 | 83 | Audit Cleanup — min_frequency wiring + missed fixes + weight_norm | ✅ COMPLETE | 2026-02-26 |
+| 84 | Signal Quality — Logloss Metrics + Binary Classification Mode | ✅ COMPLETE | 2026-02-28 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
-**Summary Impact:** 53 phases complete (24-83), 220+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), audit-driven label balance fix, checkpoint resume MTF persistence for 4D models.
+**Summary Impact:** 54 phases complete (24-84), 220+ files modified, production-ready evaluators, pipeline time reduced from 5+ hours to 15-25 minutes, sequence models fully functional, critical vectorization and memory bottlenecks eliminated, pipeline robustness hardened, model timeframe contracts enforced, test suite consolidated, all data leakage fixed, ruff clean (0 errors), 10 speed optimizations (~50-60% runtime reduction), walk-forward validation enabled, MGC contract auto-detection, single-call deploy artifact inference, UniversalInferencePipeline for all 12 models, special mode bundles (walk-forward, regime, meta-labeling), safe pickle migration complete (all 38 sites), neural architecture versioning, SymbolConfig standalone class, deploy manifest model names fixed, backtest pipeline fully functional, all 8 cross-family ensemble combinations working, DatetimeIndex pipeline fix, codebase audit 12/12 fixes, financial rigor improvements (ONC, transaction costs, DSR gate, CPCV), consistency hardening (14 inconsistencies fixed, 3D OOF chunked processing for 1.7M+ row scalability), audit-driven label balance fix, checkpoint resume MTF persistence for 4D models.
 
 ---
 
@@ -116,12 +117,25 @@ See **COMPLETION.md** for full details on all completed phases.
 | 69 | Calibrator Single-Class Crash Fix | HIGH | 1 session | ✅ COMPLETE |
 | 70 | Lint Fixes (14 ruff + 15 black) | MEDIUM | 1 session | ✅ COMPLETE |
 | 71 | Notebook Overhaul (12 fixes, 25 cells) | HIGH | 1 session | ✅ COMPLETE |
+| 72 | Memory Cleanup — OOM Prevention (5 fixes, 4 files) | HIGH | 1 session | ✅ COMPLETE |
+| 73 | Scaler Serialization Fix + Notebook Warnings | HIGH | 1 session | ✅ COMPLETE |
+| 74 | Memory Optimization + Training Bug Fixes + Notebook Visualizations | HIGH | 1 session | ✅ COMPLETE |
+| 75 | OOM Root Cause Fix + Pipeline Bug Fixes (11 items) | CRITICAL | 1 session | ✅ COMPLETE |
+| 76 | Walk-Forward Feature Selection Fix + Float32 Scaler | CRITICAL | 1 session | ✅ COMPLETE |
+| 77 | Pipeline Audit Fixes (6 items, 6 files) | HIGH | 1 session | ✅ COMPLETE |
+| 78 | Deep Memory Fixes (4 items, ~19 GB saved) | CRITICAL | 1 session | ✅ COMPLETE |
+| 79 | In-Place Scaling + Factory Float32 (4 items, ~27 GB saved) | CRITICAL | 1 session | ✅ COMPLETE |
+| 80 | Audit-Driven Fixes: Label Balance, Memory, Early Stopping, TCN | CRITICAL | 1 session | ✅ COMPLETE |
+| 81 | Fix 5 Dead Notebook Cells | HIGH | 1 session | ✅ COMPLETE |
+| 82 | Checkpoint Resume — 4D additional_dfs Persistence | CRITICAL | 1 session | ✅ COMPLETE |
+| 83 | Audit Cleanup — min_frequency wiring + weight_norm | HIGH | 1 session | ✅ COMPLETE |
+| 84 | Signal Quality — Logloss Metrics + Binary Classification | HIGH | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 71 are complete. Test suite: 212/212 passing. See COMPLETION.md for details.
+**No active phases.** All phases through 84 are complete. All 17 audit items addressed. Test suite: 212/212 passing. See COMPLETION.md for details.
 
 ---
 

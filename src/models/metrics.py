@@ -36,6 +36,7 @@ def compute_classification_metrics(
         accuracy_score,
         confusion_matrix,
         f1_score,
+        log_loss,
         matthews_corrcoef,
         precision_score,
         recall_score,
@@ -60,10 +61,26 @@ def compute_classification_metrics(
     # Confusion matrix
     cm = confusion_matrix(y_true, y_pred, labels=classes)
 
+    # Log loss (unweighted and weighted by balanced class weights)
+    logloss_unweighted = None
+    logloss_weighted = None
+    try:
+        if y_proba is not None and len(y_proba) > 0:
+            logloss_unweighted = float(log_loss(y_true, y_proba, labels=classes))
+            from src.models.common.class_weights import compute_sample_weights
+
+            sample_weights = compute_sample_weights(y_true)
+            logloss_weighted = float(
+                log_loss(y_true, y_proba, sample_weight=sample_weights, labels=classes)
+            )
+    except (ValueError, TypeError):
+        # log_loss can fail if y_proba doesn't contain all classes or has wrong shape
+        pass
+
     # Class names for readability (trading labels: -1=short, 0=neutral, 1=long)
     class_names = {-1: "short", 0: "neutral", 1: "long"}
 
-    return {
+    metrics: dict[str, Any] = {
         "accuracy": float(accuracy),
         "macro_f1": float(macro_f1),
         "weighted_f1": float(weighted_f1),
@@ -77,6 +94,13 @@ def compute_classification_metrics(
         "confusion_matrix": cm.tolist(),
         "n_samples": len(y_true),
     }
+
+    if logloss_unweighted is not None:
+        metrics["logloss_unweighted"] = logloss_unweighted
+    if logloss_weighted is not None:
+        metrics["logloss_weighted"] = logloss_weighted
+
+    return metrics
 
 
 def compute_trading_metrics(

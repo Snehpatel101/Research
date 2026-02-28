@@ -472,7 +472,9 @@ else:
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Pure Python fallback with transaction costs."""
         # Adjust both barriers to include costs (symmetric)
-        return _triple_barrier_python(close, high, low, atr, k_up + cost_in_atr, k_down + cost_in_atr, max_bars)
+        return _triple_barrier_python(
+            close, high, low, atr, k_up + cost_in_atr, k_down + cost_in_atr, max_bars
+        )
 
 
 # =============================================================================

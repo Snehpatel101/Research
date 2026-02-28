@@ -372,6 +372,13 @@ src/
 - Item #13 (XGBoost in global.yaml) skipped — would be dead config
 - 6 files + notebook modified, 212/212 tests still passing
 
+**Phase 84: COMPLETE — Signal Quality (Logloss Metrics + Binary Classification)**
+- Added `logloss_unweighted` and `logloss_weighted` to compute_classification_metrics() (flows to ExperimentResult.metrics)
+- Binary classification mode: `LabelingConfig(binary_mode=True)` remaps {-1,0,+1} → {0,1} (no move vs significant move)
+- Dynamic label mapping (n_classes=2/3), n_classes threaded ExperimentConfig → PipelineConfig
+- All 17 audit items from AUDIT_2026-02-26.md now fully addressed
+- 7 files + notebook modified, 212/212 tests still passing
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -463,6 +470,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-21*
+*Last updated: 2026-02-28*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

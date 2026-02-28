@@ -735,6 +735,15 @@ class MLFactory:
         first_horizon = self.config.training.horizons[0]
         df_features["label"] = df_features[f"label_h{first_horizon}"]
 
+        # Binary mode: remap {-1, 0, 1} -> {0, 1} (significant move vs no move)
+        if self.config.data.labeling.binary_mode:
+            label_remap = {-1: 1, 0: 0, 1: 1, -99: -99}
+            label_cols = [f"label_h{h}" for h in self.config.training.horizons] + ["label"]
+            for col in label_cols:
+                if col in df_features.columns:
+                    df_features[col] = df_features[col].map(label_remap)
+            self._log("  Binary mode: remapped labels {-1,0,1} -> {0,1}")
+
         # Drop rows with NaN labels
         initial_len = len(df_features)
         df_features = df_features.dropna(subset=["label"])

@@ -313,6 +313,7 @@ class PipelineConfig:
     random_state: int = 42  # Global random seed
     n_jobs: int = -1  # Use all available cores (-1 = auto-detect)
     verbose: int = 1  # Logging verbosity (0=silent, 1=progress, 2=debug)
+    n_classes: int = 3  # Number of classes (2 for binary, 3 for standard)
 
     # =========================================================================
     # INTERNAL (set automatically)

@@ -432,6 +432,9 @@ class ExperimentConfig:
         # Derive optimization flags from trial count
         _do_optimize = self.training.optuna.n_trials > 0
 
+        # Binary mode: 2 classes instead of 3
+        _n_classes = 2 if self.data.labeling.binary_mode else 3
+
         return PipelineConfig(
             symbol=self.data.symbol,
             data_path=str(self.data.data_path) if self.data.data_path else "",
@@ -474,6 +477,8 @@ class ExperimentConfig:
             batch_size=self.training.batch_size,
             max_epochs=self.training.max_epochs,
             early_stopping_patience=self.training.early_stopping_patience,
+            # Classification mode
+            n_classes=_n_classes,
         )
 
     def to_trainer_config(self, model_name: str, horizon: int | None = None) -> Any:

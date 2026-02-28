@@ -4,6 +4,32 @@
 
 ---
 
+## Phase 84: Signal Quality — Logloss Metrics + Binary Classification Mode | 2026-02-28 | COMPLETE
+
+**Impact:** Completes all 17 audit items from AUDIT_2026-02-26.md. (1) Added `logloss_unweighted` and `logloss_weighted` metrics to `compute_classification_metrics()` — both now flow through to ExperimentResult.metrics, enabling users to see whether class weights are masking poor signal. (2) Added binary classification mode (`binary_mode=True` in LabelingConfig) that remaps triple-barrier labels {-1,0,+1} to {0,1} (no move vs significant move). Dynamic label mapping supports both n_classes=2 and n_classes=3. n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added. **7 files + notebook modified. 212/212 tests still passing.**
+
+### Changes (2)
+
+| # | Fix | File(s) | Description |
+|:-:|-----|---------|-------------|
+| 1 | Logloss metrics | `src/models/metrics.py`, `src/models/base.py` | Added `log_loss` (weighted + unweighted) to `compute_classification_metrics()`. TrainingMetrics extended with `val_logloss_unweighted` and `val_logloss_weighted` optional fields. Both flow automatically through Trainer._evaluate() → ExperimentResult.metrics. |
+| 2 | Binary classification mode | `src/config/data.py`, `src/models/common/label_mapping.py`, `src/factory.py`, `src/config/experiment.py`, `src/core/config.py`, notebook | LabelingConfig.binary_mode remaps labels post-generation: `{-1→1, 0→0, 1→1, -99→-99}`. Dynamic label mapping (BINARY_LABEL_TO_CLASS/CLASS_TO_LABEL). PipelineConfig.n_classes=2 when binary_mode=True. All backward compatible (defaults preserve 3-class). |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Lint (ruff check, 7 files) | PASS |
+| Format (black --check, 7 files) | PASS |
+| Import verification (5 one-liners) | PASS |
+| Logloss functional test | PASS (unweighted=0.5218, weighted=0.5302) |
+| Binary mode functional test | PASS (PipelineConfig.n_classes=2) |
+| Backward compatibility test | PASS (default n_classes=3) |
+| Full ruff check src/ | PASS (0 errors) |
+| Code review (all 7 files) | PASS |
+
+---
+
 ## Phase 83: Audit Cleanup — min_frequency Wiring + Missed Fixes | 2026-02-26 | COMPLETE
 
 **Impact:** Wired `FEATURE_SELECTION_MIN_FREQUENCY` end-to-end from notebook → FeatureConfig → TrainerConfig → FeatureSelectionConfig. Previously the notebook variable was dead — user setting had zero effect. Also fixed 2 missed items from Phase 80 verification: XGBoost fallback default (20→10) and mtf_plus seq_len (120→64). Replaced deprecated `torch.nn.utils.weight_norm` import. Item #13 (XGBoost in global.yaml) skipped — would be dead config since GlobalConfig has no models loader. **6 files + notebook modified. 212/212 tests still passing.**
