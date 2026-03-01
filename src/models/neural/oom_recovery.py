@@ -242,8 +242,8 @@ class OOMRecoveryManager:
     def _clear_memory(self) -> None:
         """Clear GPU memory and run garbage collection."""
         if self.config.clear_cache_on_oom and torch.cuda.is_available():
-            torch.cuda.empty_cache()
             torch.cuda.synchronize()
+            torch.cuda.empty_cache()
 
         if self.config.force_gc_on_oom:
             gc.collect()

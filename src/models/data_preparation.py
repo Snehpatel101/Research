@@ -248,6 +248,7 @@ def dataset_to_arrays(
         if i % 10000 == 0:
             gc.collect()
             if torch.cuda.is_available():
+                torch.cuda.synchronize()
                 torch.cuda.empty_cache()
 
     # Final cleanup
