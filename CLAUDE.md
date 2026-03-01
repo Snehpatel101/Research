@@ -440,6 +440,15 @@ src/
 - Confirmed: PatchTST + iTransformer already get Better Transformer fast path (nn.TransformerEncoder)
 - 3 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 92: COMPLETE — Optuna Robustness + Hardcoded Values + Sequential Ensemble (6 files)**
+- CRITICAL: Annualization factor derived from data frequency (was hardcoded 252*78 — broke crypto/other timeframes)
+- CRITICAL: Failed Optuna trials return `-inf` (was `0.0`, polluting best_value selection)
+- CRITICAL: Default 12h Optuna timeout (was unlimited — could run forever)
+- Ensemble sequential safety: boosting parallel training now respects `parallel_training` config flag (default False = one model at a time)
+- Optuna config: n_startup_trials 5→10, variance penalty/max_samples/n_startup_trials now in OptunaConfig
+- Hardcoded magic numbers moved to constants.py (trade rate thresholds, max_features_to_search)
+- 6 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
