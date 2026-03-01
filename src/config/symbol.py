@@ -62,6 +62,7 @@ class SymbolConfig(BaseConfig):
     point_value: float = 5.0
     exchange: str = ""
     contract_size: float = 1.0
+    adx_trending_threshold: float = 25.0
 
     def validate(self) -> list[str]:
         """Validate symbol configuration."""
@@ -82,6 +83,11 @@ class SymbolConfig(BaseConfig):
         if self.contract_size <= 0:
             issues.append(f"contract_size must be positive, got {self.contract_size}")
 
+        if self.adx_trending_threshold <= 0:
+            issues.append(
+                f"adx_trending_threshold must be positive, got {self.adx_trending_threshold}"
+            )
+
         return issues
 
     # -------------------------------------------------------------------------
@@ -97,6 +103,7 @@ class SymbolConfig(BaseConfig):
             tick_size=0.25,
             point_value=5.0,
             exchange="CME",
+            adx_trending_threshold=20.0,
         )
 
     @classmethod
@@ -108,6 +115,7 @@ class SymbolConfig(BaseConfig):
             tick_size=0.10,
             point_value=10.0,
             exchange="COMEX",
+            adx_trending_threshold=23.0,
         )
 
     @classmethod
@@ -119,6 +127,7 @@ class SymbolConfig(BaseConfig):
             tick_size=0.25,
             point_value=2.0,
             exchange="CME",
+            adx_trending_threshold=25.0,
         )
 
     # -------------------------------------------------------------------------

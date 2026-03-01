@@ -157,14 +157,14 @@ def compute_minus_di_14(df: pd.DataFrame) -> pd.Series:
     return minus_di
 
 
-def compute_adx_strong_trend(df: pd.DataFrame) -> pd.Series:
+def compute_adx_strong_trend(df: pd.DataFrame, threshold: float = 25.0) -> pd.Series:
     """
     ADX strong trend flag (ADX > 25).
 
     Binary indicator for strong trending conditions.
     """
     _, _, adx = _get_di_adx_cached(df, period=14)
-    return (adx > 25).astype(float)
+    return (adx > threshold).astype(float)
 
 
 # =============================================================================

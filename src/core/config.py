@@ -438,6 +438,13 @@ class PipelineConfig:
                     actual=self.meta_labeling_threshold,
                 )
 
+        # Auto-populate regime_adx_threshold from SymbolConfig if still default
+        if self.regime_adx_threshold == 25.0:
+            from src.config.symbol import SymbolConfig
+
+            sym_cfg = SymbolConfig.from_symbol_or_default(self.symbol)
+            self.regime_adx_threshold = sym_cfg.adx_trending_threshold
+
     def validate_data_path(self) -> None:
         """Validate that data_path exists (call before running pipeline)."""
         validate_path_exists(self.data_path, must_be_file=True, context="data_path")

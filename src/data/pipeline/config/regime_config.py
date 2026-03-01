@@ -115,8 +115,32 @@ def get_regime_adjusted_barriers(
     return adjusted_params
 
 
+def get_regime_config(symbol: str) -> dict[str, dict[str, Any]]:
+    """
+    Get regime config with per-symbol ADX threshold.
+
+    Looks up SymbolConfig for the given symbol and overrides the
+    trend.adx_threshold in REGIME_CONFIG accordingly.
+
+    Args:
+        symbol: Trading symbol (e.g., "MES", "MGC", "MNQ")
+
+    Returns:
+        Copy of REGIME_CONFIG with symbol-specific adx_threshold
+    """
+    import copy
+
+    from src.config.symbol import SymbolConfig
+
+    sym_cfg = SymbolConfig.from_symbol_or_default(symbol)
+    config = copy.deepcopy(REGIME_CONFIG)
+    config["trend"]["adx_threshold"] = sym_cfg.adx_trending_threshold
+    return config
+
+
 __all__ = [
     "REGIME_CONFIG",
     "REGIME_BARRIER_ADJUSTMENTS",
     "get_regime_adjusted_barriers",
+    "get_regime_config",
 ]

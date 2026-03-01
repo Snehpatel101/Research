@@ -94,6 +94,7 @@ from src.data.pipeline.config.regime_config import (
     REGIME_BARRIER_ADJUSTMENTS,
     REGIME_CONFIG,
     get_regime_adjusted_barriers,
+    get_regime_config,
 )
 from src.data.pipeline.config.runtime import (
     CONFIG_DIR,
@@ -158,6 +159,7 @@ __all__ = [
     "REGIME_CONFIG",
     "REGIME_BARRIER_ADJUSTMENTS",
     "get_regime_adjusted_barriers",
+    "get_regime_config",
     # feature_sets
     "FeatureSetDefinition",
     "FEATURE_SET_DEFINITIONS",

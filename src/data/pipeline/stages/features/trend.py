@@ -17,7 +17,12 @@ from .numba_functions import calculate_adx_numba, calculate_atr_numba
 logger = logging.getLogger(__name__)
 
 
-def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14) -> pd.DataFrame:
+def add_adx(
+    df: pd.DataFrame,
+    feature_metadata: dict[str, str],
+    period: int = 14,
+    adx_strong_trend_threshold: float = 25.0,
+) -> pd.DataFrame:
     """
     Add ADX and Directional Indicators.
 
@@ -57,14 +62,16 @@ def add_adx(df: pd.DataFrame, feature_metadata: dict[str, str], period: int = 14
         adx_col: adx_shifted,
         plus_di_col: plus_di_shifted,
         minus_di_col: minus_di_shifted,
-        "adx_strong_trend": (adx_shifted > 25).astype(int),
+        "adx_strong_trend": (adx_shifted > adx_strong_trend_threshold).astype(int),
     }
     df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
 
     feature_metadata[adx_col] = f"Average Directional Index ({period}, lagged)"
     feature_metadata[plus_di_col] = f"+DI ({period}, lagged)"
     feature_metadata[minus_di_col] = f"-DI ({period}, lagged)"
-    feature_metadata["adx_strong_trend"] = "ADX strong trend flag (>25, lagged)"
+    feature_metadata["adx_strong_trend"] = (
+        f"ADX strong trend flag (>{adx_strong_trend_threshold}, lagged)"
+    )
 
     return df
 
