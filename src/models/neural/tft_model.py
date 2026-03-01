@@ -276,6 +276,11 @@ class InterpretableMultiHeadAttention(nn.Module):
         """
         Apply interpretable multi-head attention.
 
+        Uses SDPA (scaled dot-product attention) during training for Flash
+        Attention / fused kernel speedup. Falls back to manual matmul+softmax
+        during inference so attention weights can be extracted for
+        interpretability.
+
         Args:
             query: Query tensor, shape (batch, seq_len_q, d_model)
             key: Key tensor, shape (batch, seq_len_k, d_model)
@@ -298,20 +303,28 @@ class InterpretableMultiHeadAttention(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        # Compute attention scores
-        scores = torch.matmul(q, k.transpose(-2, -1)) / self.scale
+        if self.training:
+            # SDPA path: fused kernel, O(n) memory via Flash Attention
+            context = torch.nn.functional.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=mask,
+                dropout_p=self.dropout.p if self.training else 0.0,
+            )
+            self._attention_weights = None  # Not available from fused kernel
+        else:
+            # Interpretable path: manual attention for weight extraction
+            scores = torch.matmul(q, k.transpose(-2, -1)) / self.scale
 
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, float("-inf"))
+            if mask is not None:
+                scores = scores.masked_fill(mask == 0, float("-inf"))
 
-        # Attention weights (interpretable - averaged across heads)
-        attention = torch.softmax(scores, dim=-1)
-        self._attention_weights = attention.mean(dim=1).detach()  # (batch, seq_q, seq_k)
+            attention = torch.softmax(scores, dim=-1)
+            self._attention_weights = attention.mean(dim=1).detach()  # (batch, seq_q, seq_k)
 
-        attention = self.dropout(attention)
-
-        # Apply attention to values
-        context = torch.matmul(attention, v)
+            attention = self.dropout(attention)
+            context = torch.matmul(attention, v)
 
         # Reshape and project
         context = context.transpose(1, 2).contiguous()
@@ -356,6 +369,7 @@ class TFTNetwork(nn.Module):
         d_ff: int,
         dropout: float,
         n_classes: int = 3,
+        use_gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
         self.input_size = input_size
@@ -363,6 +377,7 @@ class TFTNetwork(nn.Module):
         self.n_heads = n_heads
         self.lstm_layers = lstm_layers
         self.attention_layers = attention_layers
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
         # Initial embedding: project each feature to d_model
         self.input_embedding = nn.Linear(1, d_model)
@@ -458,7 +473,12 @@ class TFTNetwork(nn.Module):
         # Multi-head attention layers
         for attn_layer, grn in zip(self.attention_layers_list, self.attention_grns, strict=False):
             # Self-attention
-            attn_out = attn_layer(x, x, x)
+            if self.use_gradient_checkpointing and self.training:
+                from torch.utils.checkpoint import checkpoint
+
+                attn_out = checkpoint(attn_layer, x, x, x, use_reentrant=False)
+            else:
+                attn_out = attn_layer(x, x, x)
             # Gated residual
             x = grn(attn_out) + x
 
@@ -602,6 +622,7 @@ class TFTModel(BaseRNNModel):
             d_ff=self._config.get("d_ff", 512),
             dropout=self._config.get("dropout", 0.1),
             n_classes=self._n_classes,
+            use_gradient_checkpointing=self._config.get("gradient_checkpointing", False),
         )
 
     def _get_model_type(self) -> str:

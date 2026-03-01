@@ -154,6 +154,7 @@ class PatchTSTNetwork(nn.Module):
         activation: str = "gelu",
         max_patches: int = 512,
         n_classes: int = 3,
+        use_gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
         self.input_size = input_size
@@ -162,6 +163,7 @@ class PatchTSTNetwork(nn.Module):
         self.n_layers = n_layers
         self.patch_len = patch_len
         self.stride = stride
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
         # Patch embedding
         self.patch_embed = PatchEmbedding(
@@ -227,7 +229,12 @@ class PatchTSTNetwork(nn.Module):
         x = self.pos_encoder(x)
 
         # Transformer encoder
-        x = self.transformer_encoder(x)
+        if self.use_gradient_checkpointing and self.training:
+            from torch.utils.checkpoint import checkpoint
+
+            x = checkpoint(self.transformer_encoder, x, use_reentrant=False)
+        else:
+            x = self.transformer_encoder(x)
 
         # Global average pooling over patches
         x = x.mean(dim=1)  # (batch, d_model)
@@ -368,6 +375,7 @@ class PatchTSTModel(BaseRNNModel):
             activation=self._config.get("activation", "gelu"),
             max_patches=self._config.get("max_patches", 512),
             n_classes=self._n_classes,
+            use_gradient_checkpointing=self._config.get("gradient_checkpointing", False),
         )
 
     def _get_model_type(self) -> str:

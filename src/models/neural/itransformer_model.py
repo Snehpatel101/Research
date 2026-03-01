@@ -144,6 +144,7 @@ class iTransformerNetwork(nn.Module):
         dropout: float,
         activation: str = "gelu",
         n_classes: int = 3,
+        use_gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
         self.input_size = input_size
@@ -151,6 +152,7 @@ class iTransformerNetwork(nn.Module):
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
+        self.use_gradient_checkpointing = use_gradient_checkpointing
 
         # Temporal embedding: project each feature's temporal sequence to d_model
         self.temporal_embed = TemporalEmbedding(seq_len, d_model, dropout)
@@ -216,7 +218,12 @@ class iTransformerNetwork(nn.Module):
         x = self.feature_pos(x)
 
         # Transformer encoder with attention over features
-        x = self.transformer_encoder(x)  # (batch, features, d_model)
+        if self.use_gradient_checkpointing and self.training:
+            from torch.utils.checkpoint import checkpoint
+
+            x = checkpoint(self.transformer_encoder, x, use_reentrant=False)
+        else:
+            x = self.transformer_encoder(x)  # (batch, features, d_model)
 
         # Global average pooling over features
         x = x.mean(dim=1)  # (batch, d_model)
@@ -375,6 +382,7 @@ class iTransformerModel(BaseRNNModel):
             dropout=self._config.get("dropout", 0.1),
             activation=self._config.get("activation", "gelu"),
             n_classes=self._n_classes,
+            use_gradient_checkpointing=self._config.get("gradient_checkpointing", False),
         )
 
     def _get_model_type(self) -> str:
