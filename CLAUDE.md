@@ -432,6 +432,14 @@ src/
 - XGBoost `QuantileDMatrix` — ~4x memory reduction for data matrix (pre-bins to quantile buckets)
 - 10 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 91: COMPLETE — Gradient Checkpointing + TFT SDPA (3 files)**
+- Gradient checkpointing for PatchTST, iTransformer, TFT (opt-in: `{"gradient_checkpointing": true}`)
+  Trades ~20-30% speed for 30-50% activation memory savings on transformer encoder/attention
+- TFT InterpretableMultiHeadAttention uses SDPA during training (Flash Attention fused kernel)
+  O(n²)→O(n) attention memory, ~2x faster. Manual attention preserved for inference interpretability
+- Confirmed: PatchTST + iTransformer already get Better Transformer fast path (nn.TransformerEncoder)
+- 3 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
