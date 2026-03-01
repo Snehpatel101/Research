@@ -20,7 +20,20 @@ if TYPE_CHECKING:
     pass
 
 
-# Trading session times in Eastern Time
+# Per-contract liquid session times (Eastern Time)
+# Equity micros: NYSE cash session 9:30-16:00 ET
+# Gold micros: COMEX primary session 8:20-13:30 ET (London/NY overlap)
+CONTRACT_SESSION_TIMES: dict[str, tuple[time, time]] = {
+    "MES": (time(9, 30), time(16, 0)),
+    "ES": (time(9, 30), time(16, 0)),
+    "MNQ": (time(9, 30), time(16, 0)),
+    "NQ": (time(9, 30), time(16, 0)),
+    "MGC": (time(8, 20), time(13, 30)),
+    "GC": (time(8, 20), time(13, 30)),
+}
+DEFAULT_SESSION = (time(9, 30), time(16, 0))
+
+# Legacy aliases for backward compatibility
 NY_SESSION_START = time(9, 30)  # 9:30 AM ET
 NY_SESSION_END = time(16, 0)  # 4:00 PM ET
 
@@ -41,6 +54,10 @@ class MarketHoursFilter:
         contract: str = "MES",
         enable_market_hours_filter: bool = True,
         enable_adverse_selection: bool = True,
+        base_volatility: float = 0.15,
+        adverse_base_ticks: float = 0.5,
+        adverse_vol_scale: float = 0.5,
+        max_participation: float = 0.01,
     ) -> None:
         """
         Initialize execution model.
@@ -49,11 +66,24 @@ class MarketHoursFilter:
             contract: Trading contract (MES, MGC, MNQ)
             enable_market_hours_filter: Filter trades outside NY session
             enable_adverse_selection: Apply adverse selection to fills
+            base_volatility: Baseline annualized volatility for adverse selection scaling
+            adverse_base_ticks: Base adverse selection in ticks
+            adverse_vol_scale: Volatility scaling coefficient for adverse selection
+            max_participation: Max fraction of volume for position sizing (1% default)
         """
         self.contract = contract
         self.enable_market_hours_filter = enable_market_hours_filter
         self.enable_adverse_selection = enable_adverse_selection
+        self.base_volatility = base_volatility
+        self.adverse_base_ticks = adverse_base_ticks
+        self.adverse_vol_scale = adverse_vol_scale
+        self.max_participation = max_participation
         self._calendar: CMECalendar | None = None
+
+        # Resolve per-contract session times
+        session = CONTRACT_SESSION_TIMES.get(contract.upper(), DEFAULT_SESSION)
+        self._session_start = session[0]
+        self._session_end = session[1]
 
     @property
     def calendar(self) -> CMECalendar:
@@ -97,9 +127,9 @@ class MarketHoursFilter:
         if self.calendar.is_holiday(et_time):
             return False
 
-        # Check if within NY session hours
+        # Check if within liquid session hours (per-contract)
         current_time = et_time.time()
-        return NY_SESSION_START <= current_time < NY_SESSION_END
+        return self._session_start <= current_time < self._session_end
 
     def apply_adverse_selection(
         self,
@@ -124,11 +154,10 @@ class MarketHoursFilter:
         if not self.enable_adverse_selection:
             return signal_price
 
-        # Base adverse selection in ticks, scaled by volatility
+        # Adverse selection in ticks, scaled by volatility
         # Higher volatility = more adverse selection
-        base_volatility = 0.15  # ~15% annualized as baseline
-        vol_ratio = realized_volatility / base_volatility if base_volatility > 0 else 1.0
-        adverse_ticks = 0.5 + 0.5 * vol_ratio
+        vol_ratio = realized_volatility / self.base_volatility if self.base_volatility > 0 else 1.0
+        adverse_ticks = self.adverse_base_ticks + self.adverse_vol_scale * vol_ratio
 
         # Get tick value for contract
         tick_value = self._get_tick_value()
@@ -143,7 +172,7 @@ class MarketHoursFilter:
     def calculate_max_position_size(
         self,
         avg_volume: float,
-        max_participation: float = 0.01,
+        max_participation: float | None = None,
     ) -> int:
         """
         Limit position size to fraction of market volume.
@@ -152,12 +181,15 @@ class MarketHoursFilter:
 
         Args:
             avg_volume: Rolling average volume (contracts)
-            max_participation: Max fraction of volume (default 1%)
+            max_participation: Max fraction of volume (overrides constructor default)
 
         Returns:
             Maximum contracts tradeable without excessive market impact
         """
-        max_contracts = int(avg_volume * max_participation)
+        participation = (
+            max_participation if max_participation is not None else self.max_participation
+        )
+        max_contracts = int(avg_volume * participation)
         return max(1, max_contracts)  # At least 1 contract
 
     def _get_tick_value(self) -> float:
@@ -227,6 +259,8 @@ __all__ = [
     "MarketHoursFilter",
     "CMECalendar",
     "create_market_hours_filter",
+    "CONTRACT_SESSION_TIMES",
+    "DEFAULT_SESSION",
     "NY_SESSION_START",
     "NY_SESSION_END",
 ]

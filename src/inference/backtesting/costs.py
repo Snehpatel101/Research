@@ -463,6 +463,32 @@ class CostCalculator:
         }
 
 
+# Per-symbol slippage defaults (based on typical market microstructure)
+# MES: high liquidity equity micro, tight spreads
+# MGC: moderate liquidity gold micro, wider spreads
+# MNQ: high liquidity tech micro, tighter than gold
+SYMBOL_SLIPPAGE_DEFAULTS: dict[str, dict[str, float]] = {
+    "MES": {
+        "base_volatility": 0.15,
+        "volatility_multiplier": 2.0,
+        "impact_coefficient": 0.1,
+        "typical_volume": 1500.0,
+    },
+    "MGC": {
+        "base_volatility": 0.18,
+        "volatility_multiplier": 1.5,
+        "impact_coefficient": 0.15,
+        "typical_volume": 500.0,
+    },
+    "MNQ": {
+        "base_volatility": 0.20,
+        "volatility_multiplier": 2.0,
+        "impact_coefficient": 0.1,
+        "typical_volume": 1000.0,
+    },
+}
+
+
 def create_cost_calculator(
     symbol: str = "MES",
     slippage_model: str = "fixed",
@@ -471,10 +497,13 @@ def create_cost_calculator(
     """
     Factory function to create cost calculator for a symbol.
 
+    Uses per-symbol defaults from SYMBOL_SLIPPAGE_DEFAULTS when explicit
+    kwargs are not provided.
+
     Args:
         symbol: Trading symbol (MES, MGC, MNQ)
         slippage_model: Type of slippage model (fixed, linear, square_root, volatility_scaled)
-        **kwargs: Additional parameters for slippage model
+        **kwargs: Additional parameters for slippage model (override per-symbol defaults)
 
     Returns:
         Configured CostCalculator
@@ -489,6 +518,9 @@ def create_cost_calculator(
         tx_costs = TransactionCosts.for_mnq()
     else:
         tx_costs = TransactionCosts.for_mes()
+
+    # Per-symbol defaults (kwargs override)
+    sym_defaults = SYMBOL_SLIPPAGE_DEFAULTS.get(symbol_upper, SYMBOL_SLIPPAGE_DEFAULTS["MES"])
 
     # Create slippage model
     tick_size = tx_costs.tick_size
@@ -508,15 +540,17 @@ def create_cost_calculator(
         )
     elif slippage_model_lower == "square_root":
         slip_model = SquareRootSlippage(
-            impact_coefficient=kwargs.get("impact_coefficient", 0.1),
-            typical_volume=kwargs.get("typical_volume", 1000.0),
+            impact_coefficient=kwargs.get("impact_coefficient", sym_defaults["impact_coefficient"]),
+            typical_volume=kwargs.get("typical_volume", sym_defaults["typical_volume"]),
             tick_size=tick_size,
         )
     elif slippage_model_lower == "volatility_scaled":
         slip_model = VolatilityScaledSlippage(
             base_ticks=kwargs.get("base_ticks", 1.0),
-            base_volatility=kwargs.get("base_volatility", 0.15),
-            volatility_multiplier=kwargs.get("volatility_multiplier", 2.0),
+            base_volatility=kwargs.get("base_volatility", sym_defaults["base_volatility"]),
+            volatility_multiplier=kwargs.get(
+                "volatility_multiplier", sym_defaults["volatility_multiplier"]
+            ),
             tick_size=tick_size,
         )
     else:
@@ -534,5 +568,6 @@ __all__ = [
     "SquareRootSlippage",
     "VolatilityScaledSlippage",
     "CostCalculator",
+    "SYMBOL_SLIPPAGE_DEFAULTS",
     "create_cost_calculator",
 ]

@@ -752,9 +752,6 @@ class Backtester:
                 )
 
                 if abs(current_drawdown) > self.config.max_drawdown_threshold:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
                     logger.critical(
                         f"CIRCUIT BREAKER TRIGGERED: "
                         f"Drawdown {current_drawdown:.2%} exceeds threshold {self.config.max_drawdown_threshold:.2%}"
@@ -775,9 +772,6 @@ class Backtester:
                         else 0
                     )
                     if daily_return < -self.config.daily_loss_threshold:
-                        import logging
-
-                        logger = logging.getLogger(__name__)
                         logger.critical(f"DAILY LOSS LIMIT: {daily_return:.2%}")
                         self._halt_trading = True
                         if self._current_position is not None:
@@ -787,9 +781,6 @@ class Backtester:
 
             # Circuit Breaker: Check consecutive losses
             if self._consecutive_losses >= self.config.consecutive_loss_limit:
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.critical(
                     f"CONSECUTIVE LOSS LIMIT: {self._consecutive_losses} losses in a row"
                 )
