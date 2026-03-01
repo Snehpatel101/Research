@@ -14,7 +14,7 @@ The backtest executes with hardcoded values that **don't match** — and the ATR
 
 | Parameter | Training (MGC H10) | Training (MES H20) | Backtest (ALL symbols) |
 |-----------|--------------------|--------------------|------------------------|
-| **Stop loss** | 1.60 ATR | 2.10 ATR | **2% of price** (ATR path dead) |
+| **Stop loss** | 1.60 ATR | 2.10 ATR | **2% of price** (ATR path dead code) |
 | **Take profit** | 1.60 ATR | 3.00 ATR | **Never set (None)** |
 | **Time limit** | 25 bars | 50 bars | **0 = unlimited** |
 
@@ -105,6 +105,57 @@ The backtest executes with hardcoded values that **don't match** — and the ATR
 - `barrier_k_up=0.0, barrier_k_down=0.0` → legacy 2% stop (no change)
 - All 212 tests pass unchanged
 - Only factory pipeline activates barriers (when horizons configured)
+
+---
+
+## Verified Tech Stack
+
+### 12 Production Models
+
+| # | Model | Family | Data Rank | Library | Version |
+|---|-------|--------|-----------|---------|---------|
+| 1 | XGBoost | Boosting | 2D | xgboost | 3.1.3 |
+| 2 | LightGBM | Boosting | 2D | lightgbm | 4.6.0 |
+| 3 | CatBoost | Boosting | 2D | catboost | 1.2.8 |
+| 4 | LSTM | Neural RNN | 3D | PyTorch | 2.10.0 |
+| 5 | GRU | Neural RNN | 3D | PyTorch | 2.10.0 |
+| 6 | TCN | Neural CNN | 3D | PyTorch | 2.10.0 |
+| 7 | InceptionTime | Neural CNN | 3D | PyTorch | 2.10.0 |
+| 8 | ResNet1D | Neural CNN | 3D | PyTorch | 2.10.0 |
+| 9 | N-BEATS | Neural MLP | 3D | PyTorch | 2.10.0 |
+| 10 | PatchTST | Transformer | 4D | PyTorch | 2.10.0 |
+| 11 | iTransformer | Transformer | 4D | PyTorch | 2.10.0 |
+| 12 | TFT | Transformer | 4D | PyTorch | 2.10.0 |
+
+Plus 11 support models: 3 classical (RandomForest, Logistic, SVM via sklearn), 3 ensemble (Voting, Stacking, Blending), 4 meta-learners (Ridge, MLP, XGBoost, Calibrated), 1 base transformer. Total: 23 registered.
+
+### Full Library Stack
+
+| Library | Version | Role |
+|---------|---------|------|
+| XGBoost | 3.1.3 | 3 boosting models, GPU-enabled |
+| LightGBM | 4.6.0 | Leaf-wise gradient boosting |
+| CatBoost | 1.2.8 | Ordered boosting with categorical support |
+| PyTorch | 2.10.0 | 9 neural models (LSTM→TFT), torch.compile on GPU |
+| scikit-learn | 1.8.0 | Classical models, meta-learners, calibration, MDA |
+| Optuna | 4.7.0 | Bayesian HPO (TPE sampler), per-model, costs in objective |
+| NumPy | 2.3.5 | Array operations, feature computation |
+| Pandas | 2.3.3 | Data pipeline, resampling, multi-timeframe |
+| SciPy | 1.17.0 | Statistical tests, entropy, Hurst exponent |
+| Numba | 0.63.1 | 15 @njit JIT-compiled feature functions |
+| Joblib | 1.5.3 | Parallel MDA, sklearn parallelism |
+
+### Key Pipeline Components
+
+- **PurgedKFold:** Time-series CV with purge + embargo (no data leakage)
+- **CPCV:** Combinatorial Purged CV (15 backtest paths)
+- **DSR Gate:** Deflated Sharpe Ratio (selection bias correction)
+- **MDA Feature Selection:** Per-model permutation importance via sklearn
+- **Probability Calibration:** Isotonic + sigmoid methods
+- **Triple Barrier Labeling:** ATR-based, k_up/k_down, transaction cost adjusted
+- **OOF Cross-Rank Alignment:** Combines 2D+3D+4D model predictions for ensemble
+- **Walk-Forward Validation:** Expanding/rolling windows for production simulation
+- **212/212 tests passing**
 
 ---
 
