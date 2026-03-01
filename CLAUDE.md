@@ -409,6 +409,14 @@ src/
 - Notebook: barrier alignment documentation cell added before Backtest Results section
 - 7 files modified, 60/60 tests passing, ruff + black clean
 
+**Phase 88: COMPLETE — Safety Guards (5 items, 6 files, 8/8 verification checks)**
+- Thread-safe label cache: `threading.Lock()` around all `_label_cache` access in `five_dimension_objective.py` (fixes race condition in parallel Optuna with n_jobs > 1)
+- Execution model guard: `_get_execution_price()` else clause raises `ValueError` instead of silently defaulting to close
+- DEBUG_PATH removal: removed debug logging line from `trainer.py`
+- n_classes parameterized: `oof_sequence.py`, `oof_core.py`, `oof_generation.py` — `n_classes=3` default for backward compat, enables binary mode pipeline
+- Configurable alignment threshold: `BacktestConfig.alignment_loss_warn_pct` replaces hardcoded 5% magic number
+- 6 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
