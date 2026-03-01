@@ -408,17 +408,23 @@ class Backtester:
 
         return merged
 
-    def _get_execution_price(
+    def _get_execution_price_fast(
         self,
-        bar: pd.Series,
+        open_price: float,
+        high: float,
+        low: float,
+        close: float,
         direction: int,
         is_entry: bool,
     ) -> float:
         """
-        Get execution price based on execution model.
+        Get execution price based on execution model (numpy-fast version).
 
         Args:
-            bar: Price bar (open, high, low, close)
+            open_price: Bar open price
+            high: Bar high price
+            low: Bar low price
+            close: Bar close price
             direction: 1 for buy, -1 for sell
             is_entry: True if this is entry, False if exit
 
@@ -428,14 +434,14 @@ class Backtester:
         model = self.config.execution_model
 
         if model == ExecutionModel.MARKET_ON_CLOSE:
-            return float(bar["close"])
+            return close
         elif model == ExecutionModel.MARKET_ON_OPEN:
-            return float(bar["open"])
+            return open_price
         elif model == ExecutionModel.FILL_AT_SIGNAL:
-            return float(bar["close"])
+            return close
         elif model == ExecutionModel.VWAP:
             # Approximate VWAP as midpoint
-            return float((bar["high"] + bar["low"]) / 2)
+            return (high + low) / 2
         else:
             raise ValueError(f"Unknown execution model: {model}")
 
@@ -601,14 +607,15 @@ class Backtester:
 
         return trade
 
-    def _should_exit(
+    def _should_exit_fast(
         self,
         position: Position,
-        current_bar: pd.Series,
+        high: float,
+        low: float,
         current_bar_idx: int,
         new_signal: int,
     ) -> bool:
-        """Determine if position should be closed."""
+        """Determine if position should be closed (numpy-fast version)."""
         # Check holding period constraints
         bars_held = current_bar_idx - position.entry_bar
 
@@ -630,16 +637,16 @@ class Backtester:
 
         # Stop loss (if set)
         if position.stop_loss is not None:
-            if position.direction == 1 and current_bar["low"] <= position.stop_loss:
+            if position.direction == 1 and low <= position.stop_loss:
                 return True
-            if position.direction == -1 and current_bar["high"] >= position.stop_loss:
+            if position.direction == -1 and high >= position.stop_loss:
                 return True
 
         # Take profit (if set)
         if position.take_profit is not None:
-            if position.direction == 1 and current_bar["high"] >= position.take_profit:
+            if position.direction == 1 and high >= position.take_profit:
                 return True
-            if position.direction == -1 and current_bar["low"] <= position.take_profit:
+            if position.direction == -1 and low <= position.take_profit:
                 return True
 
         return False
@@ -655,84 +662,112 @@ class Backtester:
         data = self._align_data()
 
         # Compute ATR series when barrier params are configured
-        atr_series = None
+        atr_values = None
         if self.config.barrier_k_up > 0 or self.config.barrier_k_down > 0:
-            atr_series = self._compute_atr(data)
+            atr_values = self._compute_atr(data).values.astype(float)
             logger.info(
                 f"Barrier-aligned backtest: k_up={self.config.barrier_k_up:.2f}, "
                 f"k_down={self.config.barrier_k_down:.2f}, "
                 f"max_holding={self.config.max_holding_period}"
             )
 
+        n_bars = len(data)
+
+        # Pre-extract columns as numpy arrays (avoid 1.6M iloc calls)
+        timestamps = data["timestamp"].values  # numpy datetime64 array
+        predictions = data["prediction"].values.astype(int)
+        confidences = data["confidence"].values.astype(float)
+        labels = data["label"].values
+        opens = data["open"].values.astype(float)
+        highs = data["high"].values.astype(float)
+        lows = data["low"].values.astype(float)
+        closes = data["close"].values.astype(float)
+
         # Initialize state
         self._equity = self.config.initial_equity
         self._trades = []
-        self._equity_history = [(data.iloc[0]["timestamp"], self._equity)]
+        ts0 = pd.Timestamp(timestamps[0])
+        self._equity_history = [(ts0, self._equity)]
         self._current_position = None
 
         # Statistics
-        signals_count = {"long": 0, "short": 0, "neutral": 0}
+        signals_long = 0
+        signals_short = 0
+        signals_neutral = 0
+
+        # Track running max for drawdown circuit breaker
+        running_max = self._equity
 
         # Iterate through bars
-        for i in range(len(data)):
-            bar = data.iloc[i]
-            timestamp = bar["timestamp"]
-            prediction = int(bar["prediction"])
-            confidence = bar.get("confidence", 1.0)
-            label = bar.get("label")
+        for i in range(n_bars):
+            ts = pd.Timestamp(timestamps[i])
+            prediction = int(predictions[i])
+            confidence = float(confidences[i])
+            label_val = labels[i]
+            o_i = opens[i]
+            h_i = highs[i]
+            l_i = lows[i]
+            c_i = closes[i]
 
             # Count signals
             if prediction == 1:
-                signals_count["long"] += 1
+                signals_long += 1
             elif prediction == -1:
-                signals_count["short"] += 1
+                signals_short += 1
             else:
-                signals_count["neutral"] += 1
+                signals_neutral += 1
 
-            # Get execution prices
-            close_price = self._get_execution_price(bar, 1, is_entry=False)
+            # Get execution price (close for most models)
+            close_price = self._get_execution_price_fast(o_i, h_i, l_i, c_i, 1, is_entry=False)
 
             # Check if we have a position and should exit
-            if self._current_position is not None and self._should_exit(
-                self._current_position, bar, i, prediction
+            if self._current_position is not None and self._should_exit_fast(
+                self._current_position, h_i, l_i, i, prediction
             ):
-                self._close_position(close_price, timestamp)
+                self._close_position(close_price, ts)
 
             # If no position, check for entry
             if self._current_position is None:
                 # Check if tradeable time (market hours filter)
-                if not self.market_hours_filter.is_tradeable_time(timestamp):
-                    continue
+                if not self.market_hours_filter.is_tradeable_time(ts):
+                    # Still record equity below
+                    pass
+                else:
+                    # Get current ATR value if barrier-aligned
+                    current_atr = float(atr_values[i]) if atr_values is not None else None
 
-                # Get current ATR value if barrier-aligned
-                current_atr = float(atr_series.iloc[i]) if atr_series is not None else None
+                    label_clean = None if pd.isna(label_val) else label_val
 
-                if prediction == 1:
-                    # Long signal
-                    entry_price = self._get_execution_price(bar, 1, is_entry=True)
-                    self._open_position(
-                        direction=1,
-                        price=entry_price,
-                        timestamp=timestamp,
-                        bar_idx=i,
-                        label=label if not pd.isna(label) else None,
-                        prediction=prediction,
-                        confidence=confidence,
-                        atr=current_atr,
-                    )
-                elif prediction == -1 and self.config.allow_short:
-                    # Short signal
-                    entry_price = self._get_execution_price(bar, -1, is_entry=True)
-                    self._open_position(
-                        direction=-1,
-                        price=entry_price,
-                        timestamp=timestamp,
-                        bar_idx=i,
-                        label=int(label) if not pd.isna(label) else None,
-                        prediction=prediction,
-                        confidence=confidence,
-                        atr=current_atr,
-                    )
+                    if prediction == 1:
+                        # Long signal
+                        entry_price = self._get_execution_price_fast(
+                            o_i, h_i, l_i, c_i, 1, is_entry=True
+                        )
+                        self._open_position(
+                            direction=1,
+                            price=entry_price,
+                            timestamp=ts,
+                            bar_idx=i,
+                            label=label_clean,
+                            prediction=prediction,
+                            confidence=confidence,
+                            atr=current_atr,
+                        )
+                    elif prediction == -1 and self.config.allow_short:
+                        # Short signal
+                        entry_price = self._get_execution_price_fast(
+                            o_i, h_i, l_i, c_i, -1, is_entry=True
+                        )
+                        self._open_position(
+                            direction=-1,
+                            price=entry_price,
+                            timestamp=ts,
+                            bar_idx=i,
+                            label=int(label_clean) if label_clean is not None else None,
+                            prediction=prediction,
+                            confidence=confidence,
+                            atr=current_atr,
+                        )
 
             # Record equity
             # Include unrealized P&L from open position
@@ -741,33 +776,32 @@ class Backtester:
                 unrealized = self._calculate_unrealized_pnl(self._current_position, close_price)
                 current_equity += unrealized
 
-            self._equity_history.append((timestamp, current_equity))
+            self._equity_history.append((ts, current_equity))
 
             # Circuit Breaker: Check max drawdown.
             # Note: current_equity includes unrealized P&L (mark-to-market).
             # This is intentional — circuit breakers protect against adverse
             # moves in open positions, not just realized losses.
-            if len(self._equity_history) > 1:
-                equity_values = [e for _, e in self._equity_history]
-                running_max = max(equity_values)
-                current_drawdown = (
-                    (current_equity - running_max) / running_max if running_max > 0 else 0
-                )
+            if current_equity > running_max:
+                running_max = current_equity
+            current_drawdown = (
+                (current_equity - running_max) / running_max if running_max > 0 else 0
+            )
 
-                if abs(current_drawdown) > self.config.max_drawdown_threshold:
-                    logger.critical(
-                        f"CIRCUIT BREAKER TRIGGERED: "
-                        f"Drawdown {current_drawdown:.2%} exceeds threshold {self.config.max_drawdown_threshold:.2%}"
-                    )
-                    self._halt_trading = True
-                    if self._current_position is not None:
-                        self._close_position(close_price, timestamp)
-                    break
+            if abs(current_drawdown) > self.config.max_drawdown_threshold:
+                logger.critical(
+                    f"CIRCUIT BREAKER TRIGGERED: "
+                    f"Drawdown {current_drawdown:.2%} exceeds threshold {self.config.max_drawdown_threshold:.2%}"
+                )
+                self._halt_trading = True
+                if self._current_position is not None:
+                    self._close_position(close_price, ts)
+                break
 
             # Circuit Breaker: Check daily loss limit
             if i > 0:
-                prev_timestamp = data.iloc[i - 1]["timestamp"]
-                if timestamp.date() != prev_timestamp.date():
+                prev_ts = pd.Timestamp(timestamps[i - 1])
+                if ts.date() != prev_ts.date():
                     # New day started
                     daily_return = (
                         (self._equity - self._day_start_equity) / self._day_start_equity
@@ -778,7 +812,7 @@ class Backtester:
                         logger.critical(f"DAILY LOSS LIMIT: {daily_return:.2%}")
                         self._halt_trading = True
                         if self._current_position is not None:
-                            self._close_position(close_price, timestamp)
+                            self._close_position(close_price, ts)
                         break
                     self._day_start_equity = self._equity
 
@@ -789,7 +823,7 @@ class Backtester:
                 )
                 self._halt_trading = True
                 if self._current_position is not None:
-                    self._close_position(close_price, timestamp)
+                    self._close_position(close_price, ts)
                 break
 
             # Skip trading if halted
@@ -798,9 +832,9 @@ class Backtester:
 
         # Close any remaining position at the end
         if self._current_position is not None:
-            final_bar = data.iloc[-1]
-            final_price = final_bar["close"]
-            self._close_position(final_price, final_bar["timestamp"])
+            final_price = closes[-1]
+            final_ts = pd.Timestamp(timestamps[-1])
+            self._close_position(final_price, final_ts)
 
         # Build equity curve
         equity_curve = EquityCurve(
@@ -814,10 +848,11 @@ class Backtester:
         metrics = equity_curve.get_metrics()
 
         # Additional statistics
+        signals_count = {"long": signals_long, "short": signals_short, "neutral": signals_neutral}
         stats = {
-            "total_bars": len(data),
+            "total_bars": n_bars,
             "signals": signals_count,
-            "position_rate": (signals_count["long"] + signals_count["short"]) / len(data),
+            "position_rate": (signals_long + signals_short) / n_bars,
             "long_trades": sum(1 for t in self._trades if t.direction == 1),
             "short_trades": sum(1 for t in self._trades if t.direction == -1),
         }

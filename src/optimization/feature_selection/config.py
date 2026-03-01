@@ -37,7 +37,7 @@ class ModelFamilyDefaults:
         "n_features": 50,
         "method": "mda",
         "min_feature_frequency": 0.6,
-        "n_estimators": 100,
+        "n_estimators": 50,
     }
 
     # Classical models (Random Forest, Logistic, SVM)
@@ -46,7 +46,7 @@ class ModelFamilyDefaults:
         "n_features": 40,
         "method": "mda",
         "min_feature_frequency": 0.7,
-        "n_estimators": 100,
+        "n_estimators": 50,
     }
 
     # Neural/sequence models (LSTM, GRU, TCN, InceptionTime, ResNet, N-BEATS)
@@ -144,7 +144,7 @@ class FeatureSelectionConfig:
     n_features: int = 50
     method: str = "mda"
     min_feature_frequency: float = 0.6
-    n_estimators: int = 100
+    n_estimators: int = 50
     use_clustered_importance: bool = False
     max_clusters: int = 20
     random_state: int = 42
@@ -265,7 +265,7 @@ class FeatureSelectorConfig:
 
     n_features_to_select: int = 50
     selection_method: str = "mda"  # mda, mdi, or hybrid
-    n_estimators: int = 100
+    n_estimators: int = 50
     min_feature_frequency: float = 0.6
     use_clustered_importance: bool = False
     max_clusters: int = 20

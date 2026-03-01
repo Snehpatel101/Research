@@ -122,6 +122,45 @@ if NUMBA_AVAILABLE:
 
     _percentile_rank = _percentile_rank_numba
 
+    @njit(cache=True)
+    def _rolling_percentile_rank_numba(
+        values: np.ndarray, window: int, min_periods: int
+    ) -> np.ndarray:
+        """Fully vectorized rolling percentile rank (replaces pandas rolling.apply)."""
+        n = len(values)
+        result = np.full(n, np.nan)
+        for i in range(min_periods - 1, n):
+            start = max(0, i - window + 1)
+            # Count valid (non-NaN) values in window
+            count = 0
+            last = values[i]
+            if np.isnan(last):
+                continue
+            count_below = 0
+            for j in range(start, i + 1):
+                v = values[j]
+                if not np.isnan(v):
+                    count += 1
+                    if j < i and v < last:
+                        count_below += 1
+            if count >= min_periods and count >= 2:
+                result[i] = count_below / (count - 1)
+        return result
+
+
+def _rolling_percentile_rank_pandas(
+    values: np.ndarray, window: int, min_periods: int
+) -> np.ndarray:
+    """Fallback rolling percentile rank when numba is not available."""
+    s = pd.Series(values)
+    return (
+        s.rolling(window=window, min_periods=min_periods).apply(_percentile_rank, raw=True).values
+    )
+
+
+if not NUMBA_AVAILABLE:
+    _rolling_percentile_rank_numba = _rolling_percentile_rank_pandas  # type: ignore[assignment]
+
 
 def compute_liquidity_regime_10(df: pd.DataFrame) -> pd.Series:
     """
@@ -138,8 +177,8 @@ def compute_liquidity_regime_10(df: pd.DataFrame) -> pd.Series:
     """
     spread = compute_spread_estimate(df)
 
-    # Rolling percentile rank
-    pct_rank = spread.rolling(window=10, min_periods=5).apply(_percentile_rank, raw=True)
+    # Rolling percentile rank (vectorized numba loop)
+    pct_rank = pd.Series(_rolling_percentile_rank_numba(spread.values, 10, 5), index=spread.index)
 
     # Classify: low spread = high liquidity (1), high spread = low liquidity (-1)
     regime = pd.Series(0, index=df.index)
@@ -161,7 +200,7 @@ def compute_liquidity_regime_20(df: pd.DataFrame) -> pd.Series:
     """
     spread = compute_spread_estimate(df)
 
-    pct_rank = spread.rolling(window=20, min_periods=5).apply(_percentile_rank, raw=True)
+    pct_rank = pd.Series(_rolling_percentile_rank_numba(spread.values, 20, 5), index=spread.index)
 
     regime = pd.Series(0, index=df.index)
     regime[pct_rank < 0.33] = 1
@@ -182,7 +221,7 @@ def compute_liquidity_regime_60(df: pd.DataFrame) -> pd.Series:
     """
     spread = compute_spread_estimate(df)
 
-    pct_rank = spread.rolling(window=60, min_periods=10).apply(_percentile_rank, raw=True)
+    pct_rank = pd.Series(_rolling_percentile_rank_numba(spread.values, 60, 10), index=spread.index)
 
     regime = pd.Series(0, index=df.index)
     regime[pct_rank < 0.33] = 1

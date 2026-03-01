@@ -229,7 +229,7 @@ def resample_ohlcv(
             raise ValueError(f"datetime_col '{datetime_col}' not found in DataFrame")
         df_work = df.set_index(datetime_col)
     else:
-        df_work = df.copy()
+        df_work = df
 
     # Ensure index is DatetimeIndex
     if not isinstance(df_work.index, pd.DatetimeIndex):
@@ -459,7 +459,7 @@ class MTFFeatureComputer:
                 raise ValueError(f"datetime_col '{datetime_col}' not in DataFrame")
             df_work = df.set_index(datetime_col)
         else:
-            df_work = df.copy()
+            df_work = df
 
         # Validate datetime index
         if not isinstance(df_work.index, pd.DatetimeIndex):
@@ -530,7 +530,7 @@ class MTFFeatureComputer:
             self.config.timeframes = [timeframe]
 
         # Set up working DataFrame with datetime index
-        df_work = df.set_index(datetime_col) if datetime_col is not None else df.copy()
+        df_work = df.set_index(datetime_col) if datetime_col is not None else df
 
         if not isinstance(df_work.index, pd.DatetimeIndex):
             raise ValueError(

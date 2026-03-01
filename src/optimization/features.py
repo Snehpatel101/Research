@@ -626,7 +626,7 @@ class FeatureOptimizer:
                 model,
                 X_val,
                 y_val,
-                n_repeats=5,
+                n_repeats=3,
                 random_state=self.random_state,
                 scoring=self.scoring,
             )

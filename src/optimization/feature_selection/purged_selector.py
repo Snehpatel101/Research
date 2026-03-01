@@ -233,6 +233,32 @@ class PurgedFeatureSelector:
             if sample_weights is not None:
                 w_train = sample_weights.iloc[train_idx].values
 
+            # Subsample large training folds for RF (MDA ranking stable at 50K)
+            MDA_MAX_TRAIN = 50_000
+            if len(X_train) > MDA_MAX_TRAIN:
+                rng = np.random.RandomState(self.random_state + fold_idx)
+                idx = rng.choice(len(X_train), MDA_MAX_TRAIN, replace=False)
+                idx.sort()  # preserve temporal order
+                X_train = X_train.iloc[idx]
+                y_train = y_train.iloc[idx]
+                if w_train is not None:
+                    w_train = w_train[idx]
+                logger.info(
+                    f"Fold {fold_idx}: subsampled train {len(train_idx)} -> {MDA_MAX_TRAIN} for MDA"
+                )
+
+            # Subsample large test folds for permutation_importance
+            MDA_MAX_TEST = 20_000
+            if len(X_test) > MDA_MAX_TEST:
+                rng = np.random.RandomState(self.random_state + fold_idx + 1000)
+                idx = rng.choice(len(X_test), MDA_MAX_TEST, replace=False)
+                idx.sort()
+                X_test = X_test.iloc[idx]
+                y_test = y_test.iloc[idx]
+                logger.info(
+                    f"Fold {fold_idx}: subsampled test {len(test_idx)} -> {MDA_MAX_TEST} for MDA"
+                )
+
             # Train RF and compute permutation importance
             rf = RandomForestClassifier(
                 n_estimators=self.n_estimators,
@@ -247,7 +273,7 @@ class PurgedFeatureSelector:
                 rf,
                 X_test,
                 y_test,
-                n_repeats=5,
+                n_repeats=3,
                 random_state=self.random_state + fold_idx,
                 n_jobs=-1,
             )
