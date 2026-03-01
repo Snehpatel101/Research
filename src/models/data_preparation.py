@@ -253,6 +253,7 @@ def dataset_to_arrays(
     # Final cleanup
     gc.collect()
     if torch.cuda.is_available():
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
 
     return X, y, w

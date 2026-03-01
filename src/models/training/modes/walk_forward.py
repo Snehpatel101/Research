@@ -518,6 +518,7 @@ class WalkForwardTrainer:
                 if hasattr(torch, "_dynamo"):
                     torch._dynamo.reset()
                 if torch.cuda.is_available():
+                    torch.cuda.synchronize()
                     torch.cuda.empty_cache()
             except ImportError:
                 pass

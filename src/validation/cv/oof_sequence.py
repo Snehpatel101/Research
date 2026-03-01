@@ -268,6 +268,7 @@ class SequenceOOFGenerator:
                 import torch
 
                 if torch.cuda.is_available():
+                    torch.cuda.synchronize()
                     torch.cuda.empty_cache()
             except ImportError:
                 pass

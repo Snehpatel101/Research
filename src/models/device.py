@@ -168,12 +168,35 @@ GPU_PROFILES = {
 }
 
 
+_cuda_alloc_conf_set = False
+
+
+def _configure_cuda_allocator() -> None:
+    """Configure CUDA memory allocator for reduced fragmentation.
+
+    Sets expandable_segments (PyTorch 2.1+) to allow dynamic segment growth
+    and max_split_size_mb to prevent over-splitting of large blocks.
+    Only sets if PYTORCH_CUDA_ALLOC_CONF is not already configured.
+    """
+    global _cuda_alloc_conf_set
+    if _cuda_alloc_conf_set:
+        return
+    _cuda_alloc_conf_set = True
+
+    if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:256"
+        logger.debug("Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:256")
+
+
 def detect_cuda_available() -> bool:
     """Check if CUDA is available."""
     try:
         import torch
 
-        return torch.cuda.is_available()
+        available = torch.cuda.is_available()
+        if available:
+            _configure_cuda_allocator()
+        return available
     except ImportError:
         return False
 

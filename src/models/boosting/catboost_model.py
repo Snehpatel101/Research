@@ -339,6 +339,8 @@ class CatBoostModel(BaseModel):
         if self._use_gpu:
             params["task_type"] = "GPU"
             params["devices"] = config.get("devices", "0")
+            # Cap GPU RAM usage to prevent interference with neural models on same GPU
+            params["gpu_ram_part"] = config.get("gpu_ram_part", 0.95)
         else:
             params["task_type"] = "CPU"
             thread_count = config.get("thread_count", -1)

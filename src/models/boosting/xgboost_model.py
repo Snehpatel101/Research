@@ -177,9 +177,11 @@ class XGBoostModel(BaseModel):
 
             logger.debug(f"Class weights applied: {class_weight_dict}")
 
-        # Create DMatrix objects
-        dtrain = xgb.DMatrix(X_train, label=y_train_xgb, weight=final_weights)
-        dval = xgb.DMatrix(X_val, label=y_val_xgb)
+        # Use QuantileDMatrix for memory-efficient histogram binning (~4x less memory).
+        # Pre-bins float32 columns to quantile buckets before loading into memory.
+        # Requires tree_method='hist' (always used). ref= links val to train bins.
+        dtrain = xgb.QuantileDMatrix(X_train, label=y_train_xgb, weight=final_weights)
+        dval = xgb.QuantileDMatrix(X_val, label=y_val_xgb, ref=dtrain)
 
         # Build parameters and train
         params = self._build_params(train_config)
