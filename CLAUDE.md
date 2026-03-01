@@ -449,6 +449,14 @@ src/
 - Hardcoded magic numbers moved to constants.py (trade rate thresholds, max_features_to_search)
 - 6 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 93: COMPLETE — Per-Symbol ADX Regime Thresholds (7 files)**
+- ADX trending threshold now per-symbol: MES=20.0, MGC=23.0, MNQ=25.0 (was hardcoded 25.0)
+- `SymbolConfig.adx_trending_threshold` field with per-symbol presets and positive validation
+- `get_regime_config(symbol)` returns REGIME_CONFIG copy with per-symbol adx_threshold
+- `PipelineConfig.__post_init__()` auto-wires regime_adx_threshold from SymbolConfig
+- `add_adx()` and `compute_adx_strong_trend()` accept threshold parameter (backward compatible)
+- 7 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

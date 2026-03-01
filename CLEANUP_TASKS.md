@@ -75,6 +75,10 @@ See **COMPLETION.md** for full task details and implementation information.
 | 87 | 3/3 tasks (all complete) | DSR gate fix (is_sharpe_like_metric guard in cv_tuner + 5d_objective), 12 Phase 86 tests (ATR, barrier stop/TP, sessions, slippage, factory wiring), notebook barrier alignment docs. 60/60 tests pass. | 2026-03-01 |
 | 88 | 5/5 tasks (all complete) | Thread-safe label cache (threading.Lock in five_dimension_objective), execution model ValueError guard, DEBUG_PATH removal, n_classes param in OOF (oof_sequence + oof_core + oof_generation), configurable alignment_loss_warn_pct. 223/223 tests pass, 8/8 verification checks. | 2026-03-01 |
 | 89 | 6/6 tasks (all complete) | MDA subsampling in purged_selector (50K train/20K test cap), numba liquidity percentile_rank (3 features), backtest numpy pre-extraction (eliminated 1.6M iloc calls + O(n^2) drawdown fix), n_repeats 5→3 (5 sites), n_estimators 100→50 (4 presets), MTF .copy() elimination. ~3-5x overall speedup. 223/223 tests pass. | 2026-03-01 |
+| 90 | 5/5 tasks (all complete) | CUDA allocator config, torch.cuda.synchronize (10 sites), CatBoost gpu_ram_part, XGBoost QuantileDMatrix. 223/223 tests pass. | 2026-03-01 |
+| 91 | 2/2 tasks (all complete) | Gradient checkpointing (PatchTST, iTransformer, TFT), TFT SDPA Flash Attention. 223/223 tests pass. | 2026-03-01 |
+| 92 | 5/5 tasks (all complete) | Annualization factor from data frequency, Optuna failed trial -inf, 12h timeout, sequential ensemble safety, Optuna config constants. 223/223 tests pass. | 2026-03-01 |
+| 93 | 5/5 tasks (all complete) | Per-symbol ADX regime thresholds (MES=20, MGC=23, MNQ=25), get_regime_config(), PipelineConfig auto-wire, parameterized ADX in both trend modules. 223/223 tests pass. | 2026-03-01 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -84,7 +88,7 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 92 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 93 are complete. See COMPLETION.md for full details.
 
 ---
 

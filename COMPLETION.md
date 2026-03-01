@@ -4,6 +4,37 @@
 
 ---
 
+## Phase 93: Per-Symbol ADX Regime Thresholds | 2026-03-01 | COMPLETE
+
+**Impact:** ADX threshold for trend regime classification is now per-symbol instead of hardcoded at 25.0. Research shows different instruments trend at different ADX levels: ES/MES (equity indices) trend at ADX 20, GC/MGC (gold) at ADX 23, NQ/MNQ at 25. Percentile-based and dimensionless detectors are already instrument-agnostic; only ADX needed customization.
+
+### Changes (5)
+
+| # | Fix | File(s) | Description |
+|:-:|-----|---------|-------------|
+| 1 | SymbolConfig ADX field | `src/config/symbol.py` | Added `adx_trending_threshold: float = 25.0` with per-symbol presets: MES=20.0, MGC=23.0, MNQ=25.0. Positive validation. Default 25.0 for unknown symbols. |
+| 2 | get_regime_config() | `src/data/pipeline/config/regime_config.py` | New function returns deep copy of REGIME_CONFIG with `trend.adx_threshold` overridden per-symbol via SymbolConfig lookup. |
+| 3 | PipelineConfig auto-wire | `src/core/config.py` | `__post_init__()` auto-populates `regime_adx_threshold` from SymbolConfig when still at default 25.0. |
+| 4 | Parameterized trend (pipeline) | `src/data/pipeline/stages/features/trend.py` | `add_adx()` accepts `adx_strong_trend_threshold` param instead of hardcoded 25. |
+| 5 | Parameterized trend (compute) | `src/data/features/compute/trend.py` | `compute_adx_strong_trend()` accepts `threshold` param instead of hardcoded 25. |
+
+Exports added to `src/data/pipeline/config/__init__.py` and `src/config/pipeline/__init__.py`.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Lint (ruff check, 7 files) | PASS |
+| Format (black --check, 7 files) | PASS |
+| SymbolConfig.for_mgc().adx_trending_threshold | 23.0 |
+| get_regime_config('MGC')['trend']['adx_threshold'] | 23.0 |
+| PipelineConfig(symbol='MGC').regime_adx_threshold | 23.0 |
+| PipelineConfig(symbol='MES').regime_adx_threshold | 20.0 |
+| Unknown symbol fallback (ZB) | 25.0 (default) |
+| Full test suite (pytest tests/ -x) | 223 passed, 0 failed |
+
+---
+
 ## Phase 84: Signal Quality — Logloss Metrics + Binary Classification Mode | 2026-02-28 | COMPLETE
 
 **Impact:** Completes all 17 audit items from AUDIT_2026-02-26.md. (1) Added `logloss_unweighted` and `logloss_weighted` metrics to `compute_classification_metrics()` — both now flow through to ExperimentResult.metrics, enabling users to see whether class weights are masking poor signal. (2) Added binary classification mode (`binary_mode=True` in LabelingConfig) that remaps triple-barrier labels {-1,0,+1} to {0,1} (no move vs significant move). Dynamic label mapping supports both n_classes=2 and n_classes=3. n_classes threaded through ExperimentConfig → PipelineConfig. Notebook BINARY_MODE config added. **7 files + notebook modified. 212/212 tests still passing.**
