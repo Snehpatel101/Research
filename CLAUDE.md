@@ -417,6 +417,13 @@ src/
 - Configurable alignment threshold: `BacktestConfig.alignment_loss_warn_pct` replaces hardcoded 5% magic number
 - 6 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 89: COMPLETE — Pipeline Speed Optimizations (~3-5x for 1.6M rows, 6 items, 9 files)**
+- MDA subsampling in purged_selector: 50K train + 20K test cap per fold (was RF on 1.28M rows — ~25x speedup for feature selection)
+- Numba liquidity: `_rolling_percentile_rank_numba` @njit replaces pandas rolling.apply for 3 liquidity regime features (~10-25x per call)
+- Backtest numpy: pre-extract columns as numpy arrays, eliminate all data.iloc[i] calls in hot loop (~5-10x backtest). Fixed O(n^2) drawdown circuit breaker.
+- Feature selection: n_repeats 5→3 (1.67x), n_estimators 100→50 (2x), MTF .copy() eliminated
+- 9 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
