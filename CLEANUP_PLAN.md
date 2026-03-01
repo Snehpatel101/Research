@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 86 COMPLETE (Wire Triple-Barrier Params into Backtest Execution)
-**Last Updated:** 2026-02-28
+**Status:** Phase 86 COMPLETE (Triple-Barrier Params + Hardcoded Fixes — 4 files, 75/75 checks)
+**Last Updated:** 2026-03-01
 
 ---
 
@@ -71,7 +71,7 @@ See **COMPLETION.md** for full details on all completed phases.
 | 83 | Audit Cleanup — min_frequency wiring + missed fixes + weight_norm | ✅ COMPLETE | 2026-02-26 |
 | 84 | Signal Quality — Logloss Metrics + Binary Classification Mode | ✅ COMPLETE | 2026-02-28 |
 | 85 | Full Audit Fixes — 8-Agent Audit + 7 Fixes (PatchTST seq_len, batch_size, OOF sentinel, y_true) | ✅ COMPLETE | 2026-02-28 |
-| 86 | Wire Triple-Barrier Params into Backtest — ATR stop/TP/max_bars from training config | ✅ COMPLETE | 2026-03-01 |
+| 86 | Triple-Barrier Params + Hardcoded Fixes — barrier stop/TP/max_bars, per-contract sessions, per-symbol slippage, logger bug | ✅ COMPLETE | 2026-03-01 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 

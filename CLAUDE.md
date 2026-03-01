@@ -389,15 +389,18 @@ src/
 - Deferred: n_classes threading (30+ files) → future phase
 - 11 files modified, 212/212 tests still passing
 
-**Phase 86: COMPLETE — Wire Triple-Barrier Params into Backtest (3 files)**
+**Phase 86: COMPLETE — Wire Triple-Barrier Params + Hardcoded Fixes (4 files, 75/75 checks)**
 - CRITICAL: Backtest was playing a different game than training — ATR never passed to `_open_position()`, stop was always 2% fallback, take_profit always None, max_holding_period always 0
 - Added `barrier_k_up` and `barrier_k_down` fields to BacktestConfig (default 0.0 = legacy mode)
 - Added `_compute_atr()` method to Backtester (ATR(14) from high/low/close)
 - Barrier-aligned stop/TP: LONG stop = price - k_down*ATR, TP = price + k_up*ATR; SHORT reversed
 - Barrier-aware position sizing: uses actual barrier distance instead of hardcoded 2%
 - Factory auto-wires from `get_barrier_params(symbol, horizon)` — k_up, k_down, max_bars
-- Backward compatible: barrier_k_up=0.0 → legacy 2% stop path unchanged
-- 2 files modified (backtest.py, factory.py), 212/212 tests passing, 8/8 verification checks pass
+- execution.py: Per-contract session times (MGC=COMEX 8:20-13:30, MES=NYSE 9:30-16:00), configurable adverse selection params
+- costs.py: Per-symbol slippage defaults (SYMBOL_SLIPPAGE_DEFAULTS) for MES/MGC/MNQ
+- Fixed logger shadowing bug in 3 circuit breaker blocks (caused UnboundLocalError with barriers active)
+- Backward compatible: barrier_k_up=0.0 → legacy path unchanged
+- 4 files modified (backtest.py, factory.py, execution.py, costs.py), 212/212 tests passing, 75/75 verification checks pass
 
 **See CLEANUP_PLAN.md for full phase details.**
 
