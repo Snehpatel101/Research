@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 86 COMPLETE (Triple-Barrier Params + Hardcoded Fixes — 4 files, 75/75 checks)
+**Status:** Phase 87 COMPLETE (DSR Metric Gate + Phase 86 Tests + Notebook Docs)
 **Last Updated:** 2026-03-01
 
 ---
@@ -72,6 +72,7 @@ See **COMPLETION.md** for full details on all completed phases.
 | 84 | Signal Quality — Logloss Metrics + Binary Classification Mode | ✅ COMPLETE | 2026-02-28 |
 | 85 | Full Audit Fixes — 8-Agent Audit + 7 Fixes (PatchTST seq_len, batch_size, OOF sentinel, y_true) | ✅ COMPLETE | 2026-02-28 |
 | 86 | Triple-Barrier Params + Hardcoded Fixes — barrier stop/TP/max_bars, per-contract sessions, per-symbol slippage, logger bug | ✅ COMPLETE | 2026-03-01 |
+| 87 | DSR Metric Gate + Phase 86 Tests + Notebook Docs (3 items, 7 files) | ✅ COMPLETE | 2026-03-01 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -127,6 +128,14 @@ See **COMPLETION.md** for full details on all completed phases.
 | 77 | Pipeline Audit Fixes (6 items, 6 files) | HIGH | 1 session | ✅ COMPLETE |
 | 78 | Deep Memory Fixes (4 items, ~19 GB saved) | CRITICAL | 1 session | ✅ COMPLETE |
 | 79 | In-Place Scaling + Factory Float32 (4 items, ~27 GB saved) | CRITICAL | 1 session | ✅ COMPLETE |
+| 80 | Audit-Driven Fixes (label balance, memory, early stopping, TCN) | HIGH | 1 session | ✅ COMPLETE |
+| 81 | Fix 5 Dead Notebook Cells | MEDIUM | 1 session | ✅ COMPLETE |
+| 82 | Checkpoint Resume — 4D additional_dfs Persistence | HIGH | 1 session | ✅ COMPLETE |
+| 83 | Audit Cleanup — min_frequency + weight_norm | HIGH | 1 session | ✅ COMPLETE |
+| 84 | Signal Quality — Logloss Metrics + Binary Mode | HIGH | 1 session | ✅ COMPLETE |
+| 85 | Full Audit Fixes — 8-Agent Audit + 7 Fixes | HIGH | 1 session | ✅ COMPLETE |
+| 86 | Triple-Barrier Params + Hardcoded Fixes | CRITICAL | 1 session | ✅ COMPLETE |
+| 87 | DSR Metric Gate + Phase 86 Tests + Notebook | HIGH | 1 session | ✅ COMPLETE |
 | 80 | Audit-Driven Fixes: Label Balance, Memory, Early Stopping, TCN | CRITICAL | 1 session | ✅ COMPLETE |
 | 81 | Fix 5 Dead Notebook Cells | HIGH | 1 session | ✅ COMPLETE |
 | 82 | Checkpoint Resume — 4D additional_dfs Persistence | CRITICAL | 1 session | ✅ COMPLETE |
@@ -138,7 +147,7 @@ See **COMPLETION.md** for full details on all completed phases.
 
 ## Active Phases
 
-**No active phases.** All phases through 85 are complete. All 17 audit items addressed. Test suite: 212/212 passing. See COMPLETION.md for details.
+**No active phases.** All phases through 87 are complete. See COMPLETION.md for full details.
 
 ---
 

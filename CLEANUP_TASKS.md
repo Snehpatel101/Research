@@ -1,6 +1,6 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 86 complete
+**Status:** All phases through 87 complete
 **Last Updated:** 2026-03-01
 
 ---
@@ -72,6 +72,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 84 | 2/2 tasks (all complete) | Logloss metrics (weighted + unweighted), binary classification mode (binary_mode config, label remapping, dynamic label_mapping, n_classes threading) | 2026-02-28 |
 | 85 | 7/7 tasks (all complete) | PatchTST seq_len 128→60, batch_size 256→512 (4 paths), OOF -99 sentinel filter, y_true in 3 OOF DataFrames, binary mode warning, notebook Cell 23+2 fixes | 2026-02-28 |
 | 86 | 6/6 tasks (all complete) | Wire triple-barrier params (barrier_k_up/k_down, _compute_atr, stop+TP in _open_position, factory auto-wire), per-contract session times (MGC=COMEX 8:20-13:30), per-symbol slippage defaults (SYMBOL_SLIPPAGE_DEFAULTS), configurable adverse selection, logger shadowing bug fix (3 circuit breakers). 75/75 verification checks pass. | 2026-03-01 |
+| 87 | 3/3 tasks (all complete) | DSR gate fix (is_sharpe_like_metric guard in cv_tuner + 5d_objective), 12 Phase 86 tests (ATR, barrier stop/TP, sessions, slippage, factory wiring), notebook barrier alignment docs. 60/60 tests pass. | 2026-03-01 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -81,7 +82,7 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 86 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 87 are complete. See COMPLETION.md for full details.
 
 ---
 

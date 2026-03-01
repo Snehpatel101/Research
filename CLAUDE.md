@@ -402,6 +402,13 @@ src/
 - Backward compatible: barrier_k_up=0.0 → legacy path unchanged
 - 4 files modified (backtest.py, factory.py, execution.py, costs.py), 212/212 tests passing, 75/75 verification checks pass
 
+**Phase 87: COMPLETE — DSR Metric Gate + Phase 86 Tests + Notebook Docs (3 items, 7 files)**
+- DSR gate fix: `is_sharpe_like_metric()` utility guards DSR computation — only applies to Sharpe-like metrics (sharpe_ratio, sortino_ratio, calmar_ratio), skips for F1/accuracy/precision/recall
+- Gated in `cv_tuner.py` (skips DSR when metric is not Sharpe-like) and `five_dimension_objective.py` (skips when custom non-Sharpe metric provided)
+- 12 new Phase 86 tests: ATR computation, barrier stop/TP (long/short/asymmetric/legacy), per-contract sessions, per-symbol slippage, factory barrier wiring (total 60 tests, all pass)
+- Notebook: barrier alignment documentation cell added before Backtest Results section
+- 7 files modified, 60/60 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
