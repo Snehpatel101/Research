@@ -57,7 +57,7 @@ class TrainingOpsMixin:
                 else:
                     sequential_models.append(model_name)
 
-            if len(boosting_models) >= 2:
+            if len(boosting_models) >= 2 and getattr(self.config, "parallel_training", False):
                 logger.info(
                     f"\nTraining {len(boosting_models)} boosting models in parallel: "
                     f"{boosting_models}"

@@ -28,7 +28,10 @@ from .purged_kfold import PurgedKFold
 
 logger = logging.getLogger(__name__)
 
-OPTUNA_MAX_SAMPLES = 50_000
+# Default kept for backward compatibility when no OptunaConfig is provided.
+_DEFAULT_MAX_SAMPLES = 50_000
+_DEFAULT_VARIANCE_PENALTY = 0.1
+_DEFAULT_N_STARTUP_TRIALS = 10
 
 
 class TimeSeriesOptunaTuner:
@@ -47,6 +50,10 @@ class TimeSeriesOptunaTuner:
         metric: str = "f1",
         pruner: Any | None = None,
         max_epochs: int | None = None,
+        n_startup_trials: int = _DEFAULT_N_STARTUP_TRIALS,
+        variance_penalty: float = _DEFAULT_VARIANCE_PENALTY,
+        max_samples: int = _DEFAULT_MAX_SAMPLES,
+        timeout: int | None = None,
     ) -> None:
         self.model_name = model_name
         self.cv = cv
@@ -55,6 +62,10 @@ class TimeSeriesOptunaTuner:
         self.metric = metric
         self.pruner = pruner
         self.max_epochs = max_epochs
+        self.n_startup_trials = n_startup_trials
+        self.variance_penalty = variance_penalty
+        self.max_samples = max_samples
+        self.timeout = timeout
 
     def tune(
         self,
@@ -95,20 +106,19 @@ class TimeSeriesOptunaTuner:
         # --- Memory guard: subsample large datasets before Optuna ---
         # For a 1.6M-row TCN dataset (13,620 flattened features), 100 trials x 5
         # folds each allocating numpy copies via fancy indexing consumes ~120 GB.
-        # Capping at 50k rows keeps peak RSS under ~8 GB for float32 3D data.
+        # Capping at max_samples rows keeps peak RSS under ~8 GB for float32 3D data.
+        max_samples = self.max_samples
         original_n = X.shape[0] if isinstance(X, np.ndarray) else len(X)
-        if original_n > OPTUNA_MAX_SAMPLES:
-            logger.info(
-                f"  Subsampling {original_n} -> {OPTUNA_MAX_SAMPLES} rows for Optuna (stratified)"
-            )
+        if original_n > max_samples:
+            logger.info(f"  Subsampling {original_n} -> {max_samples} rows for Optuna (stratified)")
             rng = np.random.default_rng(seed=42)
             y_arr = y if isinstance(y, np.ndarray) else y.to_numpy()
             classes, class_counts = np.unique(y_arr, return_counts=True)
             # Stratified: allocate quota per class proportional to its share
             class_fractions = class_counts / original_n
-            class_quotas = np.floor(class_fractions * OPTUNA_MAX_SAMPLES).astype(int)
+            class_quotas = np.floor(class_fractions * max_samples).astype(int)
             # Any remainder goes to the largest class
-            remainder = OPTUNA_MAX_SAMPLES - class_quotas.sum()
+            remainder = max_samples - class_quotas.sum()
             class_quotas[np.argmax(class_counts)] += remainder
             sub_indices = []
             for cls, quota in zip(classes, class_quotas, strict=True):
@@ -141,7 +151,7 @@ class TimeSeriesOptunaTuner:
 
         # Create study with optional pruner for early stopping of bad trials
         default_pruner = optuna.pruners.MedianPruner(
-            n_startup_trials=5,
+            n_startup_trials=self.n_startup_trials,
             n_warmup_steps=1,
             interval_steps=1,
         )
@@ -244,14 +254,16 @@ class TimeSeriesOptunaTuner:
             # Return mean score with variance penalty
             mean_score = np.mean(scores)
             std_score = np.std(scores)
-            penalty = 0.1 * std_score
+            penalty = self.variance_penalty * std_score
             return float(mean_score - penalty)
 
         # Run optimization
         optuna.logging.set_verbosity(optuna.logging.WARNING)
+        timeout = self.timeout if self.timeout and self.timeout > 0 else None
         study.optimize(
             objective,
             n_trials=self.n_trials,
+            timeout=timeout,
             show_progress_bar=False,
             callbacks=[_trial_cleanup_callback],
         )

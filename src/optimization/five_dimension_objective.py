@@ -62,6 +62,11 @@ import optuna
 import pandas as pd
 from optuna.samplers import TPESampler
 
+from src.core.constants import (
+    DEFAULT_MAX_FEATURES_TO_SEARCH,
+    DEFAULT_MIN_TRADE_RATE,
+    DEFAULT_PREFERRED_TRADE_RATE,
+)
 from src.core.contracts import FeatureSpec
 from src.core.types import ModelFamily
 from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
@@ -83,6 +88,72 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# ANNUALIZATION HELPER
+# =============================================================================
+
+
+def _infer_annualization_factor(df: pd.DataFrame) -> float:
+    """
+    Infer the annualization factor from a DataFrame's DatetimeIndex.
+
+    Computes bars_per_year from the median timedelta between rows.
+    Falls back to 252*78 (US equity 5-min bars) if inference fails.
+
+    Common results:
+        - 5-min equity:  252 * 78  = 19,656
+        - 1-min equity:  252 * 390 = 98,280
+        - 1-hour crypto: 365 * 24  = 8,760
+        - Daily equity:  252
+
+    Args:
+        df: DataFrame, ideally with a DatetimeIndex
+
+    Returns:
+        Annualization factor (bars per year)
+    """
+    _DEFAULT_FACTOR = 252 * 78  # US equity 5-min bars
+
+    if not isinstance(df.index, pd.DatetimeIndex):
+        logger.debug(
+            "DataFrame index is not DatetimeIndex, using default annualization factor "
+            f"({_DEFAULT_FACTOR})"
+        )
+        return float(_DEFAULT_FACTOR)
+
+    if len(df) < 3:
+        logger.debug(
+            f"DataFrame too short ({len(df)} rows) to infer frequency, "
+            f"using default annualization factor ({_DEFAULT_FACTOR})"
+        )
+        return float(_DEFAULT_FACTOR)
+
+    # Compute median timedelta (robust to gaps like weekends/holidays)
+    deltas = df.index.to_series().diff().dropna()
+    if deltas.empty:
+        return float(_DEFAULT_FACTOR)
+
+    median_delta = deltas.median()
+    total_seconds = median_delta.total_seconds()
+
+    if total_seconds <= 0:
+        logger.warning(
+            f"Non-positive median timedelta ({median_delta}), "
+            f"using default annualization factor ({_DEFAULT_FACTOR})"
+        )
+        return float(_DEFAULT_FACTOR)
+
+    # Compute bars per year
+    seconds_per_year = 365.25 * 24 * 3600  # ~31,557,600
+    bars_per_year = seconds_per_year / total_seconds
+
+    logger.debug(
+        f"Inferred bar frequency: {median_delta} -> " f"annualization factor: {bars_per_year:.0f}"
+    )
+
+    return float(bars_per_year)
+
+
+# =============================================================================
 # CONSTANTS
 # =============================================================================
 
@@ -94,9 +165,11 @@ UPPER_MULT_RANGE = (1.0, 3.0)  # ATR multiplier for profit barrier
 LOWER_MULT_RANGE = (0.5, 2.0)  # ATR multiplier for loss barrier
 MAX_HOLDING_BARS_RANGE = (30, 240)  # 30 bars to 240 bars
 
-# Feature selection constraints
-MIN_FEATURES = 5  # Minimum features to select
-MAX_FEATURES_TO_SEARCH = 40  # Limit feature search space for efficiency
+# Feature selection constraints — aligned with src.core.constants.
+# MIN_FEATURES is intentionally lower than DEFAULT_MIN_FEATURES (20) because
+# the 5D objective explores aggressive feature subsets during search.
+MIN_FEATURES = 5
+MAX_FEATURES_TO_SEARCH = DEFAULT_MAX_FEATURES_TO_SEARCH
 
 # Default timeframes
 DEFAULT_TIMEFRAMES = ["5min", "15min", "30min", "60min"]
@@ -455,6 +528,8 @@ def create_5d_objective(
     # Default metric function (Sharpe ratio-based for trading profitability)
     # CRITICAL: Optimize for Sharpe ratio, not F1 score (Phase 12A-1)
     if metric_fn is None:
+        # Infer annualization factor from data frequency instead of hardcoding 252*78
+        _annualization = _infer_annualization_factor(train_data)
 
         def default_metric_sharpe(y_true: np.ndarray, y_pred: np.ndarray) -> float:
             """
@@ -473,7 +548,7 @@ def create_5d_objective(
             trade_mask = y_pred != 0  # Assuming 0 is neutral
             trade_rate = trade_mask.mean()
 
-            if trade_rate < 0.10:
+            if trade_rate < DEFAULT_MIN_TRADE_RATE:
                 # Model is too selective, penalize
                 return 0.0
 
@@ -495,12 +570,12 @@ def create_5d_objective(
                 # No variance - return mean if positive, else 0
                 return max(0.0, mean_return)
 
-            # Annualized Sharpe (assuming ~252 trading days, ~78 5-min bars per day)
-            sharpe = mean_return / std_return * np.sqrt(252 * 78)
+            # Annualized Sharpe (derived from data frequency)
+            sharpe = mean_return / std_return * np.sqrt(_annualization)
 
-            # Penalize very low trade rates
-            if trade_rate < 0.20:
-                sharpe *= trade_rate / 0.20
+            # Penalize very low trade rates (linear ramp between min and preferred)
+            if trade_rate < DEFAULT_PREFERRED_TRADE_RATE:
+                sharpe *= trade_rate / DEFAULT_PREFERRED_TRADE_RATE
 
             return float(max(0.0, sharpe))
 
@@ -747,8 +822,8 @@ def create_5d_objective(
             return validation_score
 
         except Exception as e:
-            logger.warning(f"Trial {trial.number} failed: {e}")
-            return 0.0
+            logger.error(f"Trial {trial.number} failed: {e}")
+            return float("-inf")
 
     return objective
 
@@ -867,8 +942,8 @@ def _compute_validation_metric(
         return metric_fn(y_val_valid, predictions)
 
     except Exception as e:
-        logger.warning(f"Validation metric computation failed: {e}")
-        return 0.0
+        logger.error(f"Validation metric computation failed: {e}")
+        return float("-inf")
 
 
 # =============================================================================

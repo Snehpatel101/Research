@@ -62,7 +62,7 @@ class OptunaConfig(BaseConfig):
     """
 
     n_trials: int = 100
-    timeout: int = 0
+    timeout: int = 43200  # 12 hours default (prevents runaway optimization)
     n_startup_trials: int = 10  # Random trials before TPE sampler kicks in
     n_jobs: int = 1
     study_name: str | None = None
@@ -78,6 +78,15 @@ class OptunaConfig(BaseConfig):
     # Direction
     direction: str = "maximize"  # maximize or minimize
     metric: str = "f1_weighted"
+
+    # Variance penalty: penalizes cross-fold score variance during tuning.
+    # Final objective = mean_score - (variance_penalty * std_score).
+    # Higher values favor more stable models across folds.
+    variance_penalty: float = 0.1
+
+    # Maximum samples for Optuna subsampling (caps large datasets to control memory).
+    # Datasets larger than this are stratified-subsampled before tuning.
+    max_samples: int = 50_000
 
     def validate(self) -> list[str]:
         """Validate Optuna configuration."""
@@ -114,6 +123,12 @@ class OptunaConfig(BaseConfig):
         ]
         if self.metric not in valid_metrics:
             issues.append(f"metric must be one of {valid_metrics}, got '{self.metric}'")
+
+        if self.variance_penalty < 0:
+            issues.append(f"variance_penalty must be non-negative, got {self.variance_penalty}")
+
+        if self.max_samples <= 0:
+            issues.append(f"max_samples must be positive, got {self.max_samples}")
 
         return issues
 

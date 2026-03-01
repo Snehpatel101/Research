@@ -225,6 +225,13 @@ DEFAULT_FEATURE_PRUNING_TRIALS: int = 50
 DEFAULT_HYPERPARAM_TRIALS: int = 100
 DEFAULT_OPTUNA_RANDOM_STATE: int = 42
 DEFAULT_MIN_FEATURES: int = 20
+DEFAULT_MAX_FEATURES_TO_SEARCH: int = 40  # Max features in 5D search space
+
+# Trade rate thresholds for 5D objective's Sharpe-like metric.
+# Below MIN_TRADE_RATE the model is too selective (returns 0.0).
+# Between MIN and PREFERRED, the Sharpe is linearly scaled down.
+DEFAULT_MIN_TRADE_RATE: float = 0.10
+DEFAULT_PREFERRED_TRADE_RATE: float = 0.20
 
 
 # =============================================================================
@@ -321,6 +328,9 @@ __all__ = [
     "DEFAULT_HYPERPARAM_TRIALS",
     "DEFAULT_OPTUNA_RANDOM_STATE",
     "DEFAULT_MIN_FEATURES",
+    "DEFAULT_MAX_FEATURES_TO_SEARCH",
+    "DEFAULT_MIN_TRADE_RATE",
+    "DEFAULT_PREFERRED_TRADE_RATE",
     # OHLCV
     "OHLCV_COLUMNS",
     "REQUIRED_COLUMNS",

@@ -666,8 +666,8 @@ class HyperparameterOptimizer:
                 return score
 
             except Exception as e:
-                logger.warning(f"Trial {trial.number} failed: {e}")
-                return 0.0
+                logger.error(f"Trial {trial.number} failed: {e}")
+                return float("-inf")
 
             finally:
                 # Free GPU memory between trials to prevent fragmentation
