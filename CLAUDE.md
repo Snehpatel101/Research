@@ -424,6 +424,14 @@ src/
 - Feature selection: n_repeats 5→3 (1.67x), n_estimators 100→50 (2x), MTF .copy() eliminated
 - 9 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 90: COMPLETE — CUDA Memory Guards + Model-Specific Optimizations (4 items, 10 files)**
+- All 12 model families audited: GPU auto-detect, float32, proper cleanup, DataLoader settings, early stopping, OOM recovery — all verified
+- CUDA allocator config (`expandable_segments:True,max_split_size_mb:256`) in device.py — reduces GPU memory fragmentation
+- `torch.cuda.synchronize()` before `empty_cache()` at 10 sites — prevents async CUDA race conditions
+- CatBoost `gpu_ram_part=0.95` cap — prevents GPU OOM interference with other models
+- XGBoost `QuantileDMatrix` — ~4x memory reduction for data matrix (pre-bins to quantile buckets)
+- 10 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

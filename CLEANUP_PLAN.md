@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 89 COMPLETE (Pipeline Speed Optimizations — ~3-5x for 1.6M rows)
+**Status:** Phase 90 COMPLETE (CUDA Memory Guards + Model-Specific Optimizations)
 **Last Updated:** 2026-03-01
 
 ---
@@ -146,12 +146,13 @@ See **COMPLETION.md** for full details on all completed phases.
 | 83 | Audit Cleanup — min_frequency wiring + weight_norm | HIGH | 1 session | ✅ COMPLETE |
 | 84 | Signal Quality — Logloss Metrics + Binary Classification | HIGH | 1 session | ✅ COMPLETE |
 | 85 | Full Audit Fixes — 8-Agent Audit + 7 Fixes | HIGH | 1 session | ✅ COMPLETE |
+| 90 | CUDA Memory Guards + Model-Specific Optimizations | MEDIUM | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 89 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 90 are complete. See COMPLETION.md for full details.
 
 ---
 
