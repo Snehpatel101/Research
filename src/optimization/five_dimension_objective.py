@@ -72,7 +72,11 @@ from src.optimization.hyperparameters import (
     HYPERPARAMETER_SPACES,
     suggest_hyperparameters,
 )
-from src.validation.deflated_sharpe import compute_dsr_from_optuna_study, dsr_gate
+from src.validation.deflated_sharpe import (
+    compute_dsr_from_optuna_study,
+    dsr_gate,
+    is_sharpe_like_metric,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -877,6 +881,8 @@ def run_5d_optimization(
     n_trials: int = 100,
     timeframes: list[str] | None = None,
     model_name: str | None = None,
+    metric_fn: Callable[[np.ndarray, np.ndarray], float] | None = None,
+    metric_name: str = "validation_score",
     study_name: str = "5d_optimization",
     random_state: int = 42,
     timeout: int | None = None,
@@ -911,6 +917,10 @@ def run_5d_optimization(
         n_trials: Number of optimization trials
         timeframes: Available timeframes
         model_name: Specific model name
+        metric_fn: Custom validation metric function (y_true, y_pred) -> float.
+            When None (default), uses a Sharpe-like trading metric.
+        metric_name: Name of the metric for logging and DSR gate decisions.
+            DSR gate is only applied when the metric is Sharpe-like.
         study_name: Name for the study
         random_state: Random seed
         timeout: Optional timeout in seconds
@@ -958,6 +968,11 @@ def run_5d_optimization(
     # Clear label cache before starting (ensures fresh labels)
     clear_label_cache()
 
+    # Track whether the default Sharpe-like metric is used.
+    # When metric_fn is None, create_5d_objective uses a built-in Sharpe proxy,
+    # so DSR deflation is valid regardless of metric_name.
+    _using_default_sharpe_metric = metric_fn is None
+
     # Create objective
     objective = create_5d_objective(
         model_family=model_family,
@@ -967,6 +982,8 @@ def run_5d_optimization(
         val_labels=val_labels,
         timeframes=timeframes,
         model_name=model_name,
+        metric_fn=metric_fn,
+        metric_name=metric_name,
         study_name=study_name,
         generate_labels_per_trial=generate_labels_per_trial,
         atr_period=atr_period,
@@ -1000,63 +1017,75 @@ def run_5d_optimization(
 
     # =========================================================================
     # Phase 4D: Deflated Sharpe Ratio Validation
+    # DSR is only valid when the optimized metric is Sharpe-like (unbounded).
+    # For bounded metrics (F1, accuracy), DSR math is statistically invalid.
     # =========================================================================
-    try:
-        dsr_result = compute_dsr_from_optuna_study(
-            study=study,
-            deployment_threshold=0.5,
-        )
+    _dsr_applicable = _using_default_sharpe_metric or is_sharpe_like_metric(metric_name)
 
-        # Store DSR metrics in best_result
-        best_result.additional_metrics.update(
-            {
-                "dsr_raw_sharpe": dsr_result.sharpe_ratio,
-                "dsr_deflated_sharpe": dsr_result.deflated_sharpe,
-                "dsr_n_trials": dsr_result.n_trials,
-                "dsr_is_significant": dsr_result.is_significant,
-                "dsr_should_deploy": dsr_result.should_deploy,
-                "dsr_deflation_pct": dsr_result.get_deflation_pct(),
-                "dsr_risk_level": dsr_result.get_risk_level(),
-            }
-        )
-
-        # Log DSR results
-        logger.info(
-            f"DSR Validation: Raw Sharpe={dsr_result.sharpe_ratio:.3f}, "
-            f"Deflated Sharpe={dsr_result.deflated_sharpe:.3f} "
-            f"({dsr_result.get_deflation_pct():.1f}% deflation), "
-            f"Risk: {dsr_result.get_risk_level()}"
-        )
-
-        # Enforce DSR gate: reject strategies that appear good only due to selection bias
-        if enforce_dsr_gate:
-            proceed, reason = dsr_gate(dsr_result)
-            if not proceed:
-                logger.warning(f"DSR gate FAILED: {reason}")
-                raise ValueError(
-                    f"DSR gate rejected optimization result: {reason}\n"
-                    f"The observed Sharpe ratio ({dsr_result.sharpe_ratio:.3f}) is likely "
-                    f"inflated by selection bias across {dsr_result.n_trials} trials.\n"
-                    f"To disable this gate, set enforce_dsr_gate=False in PipelineConfig."
-                )
-        elif not dsr_result.should_deploy:
-            logger.warning(
-                f"DSR gate advisory: Deflated Sharpe ({dsr_result.deflated_sharpe:.3f}) "
-                f"below deployment threshold (0.5). Risk: {dsr_result.get_risk_level()}"
+    if _dsr_applicable:
+        try:
+            dsr_result = compute_dsr_from_optuna_study(
+                study=study,
+                deployment_threshold=0.5,
             )
 
-        if verbose >= 1:
-            print("\nDeflated Sharpe Ratio Analysis:")
-            print(f"  Raw Sharpe: {dsr_result.sharpe_ratio:.3f}")
-            print(f"  Deflated Sharpe: {dsr_result.deflated_sharpe:.3f}")
-            print(f"  Deflation: {dsr_result.get_deflation_pct():.1f}%")
-            print(f"  Risk Level: {dsr_result.get_risk_level()}")
-            print(f"  Deploy Recommended: {dsr_result.should_deploy}")
+            # Store DSR metrics in best_result
+            best_result.additional_metrics.update(
+                {
+                    "dsr_raw_sharpe": dsr_result.sharpe_ratio,
+                    "dsr_deflated_sharpe": dsr_result.deflated_sharpe,
+                    "dsr_n_trials": dsr_result.n_trials,
+                    "dsr_is_significant": dsr_result.is_significant,
+                    "dsr_should_deploy": dsr_result.should_deploy,
+                    "dsr_deflation_pct": dsr_result.get_deflation_pct(),
+                    "dsr_risk_level": dsr_result.get_risk_level(),
+                }
+            )
 
-    except Exception as e:
-        logger.error(f"DSR computation failed: {e}")
+            # Log DSR results
+            logger.info(
+                f"DSR Validation: Raw Sharpe={dsr_result.sharpe_ratio:.3f}, "
+                f"Deflated Sharpe={dsr_result.deflated_sharpe:.3f} "
+                f"({dsr_result.get_deflation_pct():.1f}% deflation), "
+                f"Risk: {dsr_result.get_risk_level()}"
+            )
+
+            # Enforce DSR gate: reject strategies that appear good only due to selection bias
+            if enforce_dsr_gate:
+                proceed, reason = dsr_gate(dsr_result)
+                if not proceed:
+                    logger.warning(f"DSR gate FAILED: {reason}")
+                    raise ValueError(
+                        f"DSR gate rejected optimization result: {reason}\n"
+                        f"The observed Sharpe ratio ({dsr_result.sharpe_ratio:.3f}) is likely "
+                        f"inflated by selection bias across {dsr_result.n_trials} trials.\n"
+                        f"To disable this gate, set enforce_dsr_gate=False in PipelineConfig."
+                    )
+            elif not dsr_result.should_deploy:
+                logger.warning(
+                    f"DSR gate advisory: Deflated Sharpe ({dsr_result.deflated_sharpe:.3f}) "
+                    f"below deployment threshold (0.5). Risk: {dsr_result.get_risk_level()}"
+                )
+
+            if verbose >= 1:
+                print("\nDeflated Sharpe Ratio Analysis:")
+                print(f"  Raw Sharpe: {dsr_result.sharpe_ratio:.3f}")
+                print(f"  Deflated Sharpe: {dsr_result.deflated_sharpe:.3f}")
+                print(f"  Deflation: {dsr_result.get_deflation_pct():.1f}%")
+                print(f"  Risk Level: {dsr_result.get_risk_level()}")
+                print(f"  Deploy Recommended: {dsr_result.should_deploy}")
+
+        except Exception as e:
+            logger.error(f"DSR computation failed: {e}")
+            if verbose >= 1:
+                print(f"\nDSR validation failed: {e}")
+    else:
+        logger.info(
+            f"DSR gate skipped: metric '{metric_name}' is not a Sharpe-like ratio. "
+            f"DSR deflation is only valid for unbounded Sharpe-like distributions."
+        )
         if verbose >= 1:
-            print(f"\nDSR validation failed: {e}")
+            print(f"\nDSR skipped: metric '{metric_name}' is not Sharpe-like")
 
     # Save artifacts if requested
     if save_artifacts:

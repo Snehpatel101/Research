@@ -470,10 +470,36 @@ def compute_deflated_sharpe(
 # =============================================================================
 
 
+def is_sharpe_like_metric(metric_name: str) -> bool:
+    """
+    Check whether a metric name corresponds to a Sharpe-like ratio.
+
+    DSR deflation math uses skewness/kurtosis assumptions specific to
+    unbounded Sharpe-like distributions. Applying DSR to bounded metrics
+    (F1 in [0,1], accuracy in [0,1]) is statistically invalid.
+
+    Args:
+        metric_name: The optimization metric name (e.g., "sharpe_ratio", "f1_weighted").
+
+    Returns:
+        True if the metric is Sharpe-like and DSR deflation is valid.
+    """
+    _SHARPE_LIKE_METRICS = {
+        "sharpe_ratio",
+        "sortino_ratio",
+        "sharpe",
+        "sortino",
+        "calmar_ratio",
+        "calmar",
+    }
+    return metric_name.lower().strip() in _SHARPE_LIKE_METRICS
+
+
 def compute_dsr_from_optuna_study(
     study: optuna.Study,
     deployment_threshold: float = 0.5,
     config: DSRConfig | None = None,
+    metric_name: str | None = None,
 ) -> DSRResult:
     """
     Compute DSR from Optuna study.
@@ -486,12 +512,18 @@ def compute_dsr_from_optuna_study(
         study: Completed Optuna study
         deployment_threshold: Min DSR for deployment (default: 0.5)
         config: DSRConfig for advanced settings (optional)
+        metric_name: Name of the metric being optimized. When provided and not
+            a Sharpe-like metric (e.g., "f1_weighted", "accuracy"), DSR deflation
+            is skipped because the math is only valid for unbounded Sharpe-like
+            distributions. Pass None to assume the metric is Sharpe-like (backward
+            compatible).
 
     Returns:
         DSRResult with deflated Sharpe based on optimization history
 
     Raises:
         ValueError: If study is None or has no completed trials or all trials failed
+            or metric is not Sharpe-like (when metric_name is provided)
 
     Example:
         >>> import optuna
@@ -503,6 +535,13 @@ def compute_dsr_from_optuna_study(
         >>> else:
         ...     print(f"WARNING: DSR={dsr_result.deflated_sharpe:.2f}, likely overfit")
     """
+    # Guard: skip DSR for non-Sharpe metrics
+    if metric_name is not None and not is_sharpe_like_metric(metric_name):
+        raise ValueError(
+            f"DSR deflation skipped: metric '{metric_name}' is not a Sharpe-like ratio. "
+            f"DSR math (skewness/kurtosis correction) is only valid for unbounded "
+            f"Sharpe-like distributions, not bounded metrics like F1 or accuracy."
+        )
     # Validate input
     if study is None:
         raise ValueError("Optuna study cannot be None")
@@ -698,4 +737,5 @@ __all__ = [
     "compute_dsr_from_optuna_study",
     "dsr_gate",
     "analyze_selection_bias",
+    "is_sharpe_like_metric",
 ]

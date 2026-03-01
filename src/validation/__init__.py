@@ -132,6 +132,7 @@ from src.validation.deflated_sharpe import (
     compute_deflated_sharpe,
     compute_dsr_from_optuna_study,
     dsr_gate,
+    is_sharpe_like_metric,
 )
 from src.validation.leakage_detection import (
     LeakageCheckResult,
@@ -186,6 +187,7 @@ __all__ = [
     "compute_dsr_from_optuna_study",
     "dsr_gate",
     "analyze_selection_bias",
+    "is_sharpe_like_metric",
     # Statistical tests
     "LossFunction",
     "StatisticalTestResult",

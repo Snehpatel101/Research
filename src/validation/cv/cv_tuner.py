@@ -14,7 +14,10 @@ import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
 from src.models.registry import ModelRegistry
-from src.validation.deflated_sharpe import compute_dsr_from_optuna_study
+from src.validation.deflated_sharpe import (
+    compute_dsr_from_optuna_study,
+    is_sharpe_like_metric,
+)
 
 from .param_spaces import (
     PARAM_SPACES,
@@ -253,18 +256,26 @@ class TimeSeriesOptunaTuner:
         )
 
         # Compute Deflated Sharpe Ratio to correct for selection bias
+        # DSR is only valid for Sharpe-like metrics (unbounded ratios).
+        # For bounded metrics (F1, accuracy), DSR math is invalid — skip.
         dsr_result = None
-        try:
-            # Assumes the objective is maximizing a performance metric (e.g., F1 or Sharpe)
-            # For deployment gating, DSR > 0.5 is recommended threshold
-            dsr_result = compute_dsr_from_optuna_study(study, deployment_threshold=0.5)
+        if is_sharpe_like_metric(self.metric):
+            try:
+                dsr_result = compute_dsr_from_optuna_study(
+                    study, deployment_threshold=0.5, metric_name=self.metric
+                )
+                logger.info(
+                    f"DSR computed: Raw={dsr_result.sharpe_ratio:.3f}, "
+                    f"Deflated={dsr_result.deflated_sharpe:.3f}, "
+                    f"Deploy={dsr_result.should_deploy}"
+                )
+            except Exception as e:
+                logger.warning(f"Failed to compute DSR: {e}")
+        else:
             logger.info(
-                f"DSR computed: Raw={dsr_result.sharpe_ratio:.3f}, "
-                f"Deflated={dsr_result.deflated_sharpe:.3f}, "
-                f"Deploy={dsr_result.should_deploy}"
+                f"DSR skipped: metric '{self.metric}' is not a Sharpe-like ratio. "
+                f"DSR deflation is only valid for unbounded Sharpe-like distributions."
             )
-        except Exception as e:
-            logger.warning(f"Failed to compute DSR: {e}")
 
         result = {
             "best_params": study.best_params,
