@@ -888,6 +888,16 @@ class MLFactory:
             if self.config.evaluation.slippage_ticks is not None:
                 bt_kwargs["slippage_ticks"] = self.config.evaluation.slippage_ticks
 
+            # Wire triple-barrier params from training config (Phase 86)
+            if self.config.training.horizons:
+                from src.data.pipeline.config.barriers_config import get_barrier_params
+
+                first_horizon = self.config.training.horizons[0]
+                barrier_params = get_barrier_params(symbol, first_horizon)
+                bt_kwargs["barrier_k_up"] = barrier_params["k_up"]
+                bt_kwargs["barrier_k_down"] = barrier_params["k_down"]
+                bt_kwargs["max_holding_period"] = barrier_params["max_bars"]
+
             backtest_config = BacktestConfig.from_symbol_config(
                 sym_config,
                 **bt_kwargs,

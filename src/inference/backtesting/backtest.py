@@ -84,6 +84,11 @@ class BacktestConfig:
     enable_market_hours_filter: bool = True
     contract_symbol: str = "MES"
 
+    # Triple-barrier alignment (from training config)
+    # 0.0 = not set, uses legacy hardcoded logic for backward compat
+    barrier_k_up: float = 0.0  # Upper barrier ATR multiplier
+    barrier_k_down: float = 0.0  # Lower barrier ATR multiplier
+
     @classmethod
     def from_symbol_config(cls, sym: SymbolConfig, **kwargs: Any) -> BacktestConfig:
         """Create BacktestConfig from a SymbolConfig.
@@ -458,6 +463,27 @@ class Backtester:
             probability=confidence or 0.5,  # BetSizingPositioner uses probability parameter
         )
 
+    def _compute_atr(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
+        """Compute ATR(period) from aligned price data.
+
+        Args:
+            data: Merged DataFrame with high, low, close columns
+            period: ATR lookback period (default 14)
+
+        Returns:
+            Series of ATR values aligned with data index
+        """
+        high = data["high"].astype(float)
+        low = data["low"].astype(float)
+        close = data["close"].astype(float)
+
+        prev_close = close.shift(1)
+        tr = pd.concat(
+            [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
+            axis=1,
+        ).max(axis=1)
+        return tr.rolling(window=period, min_periods=1).mean()
+
     def _open_position(
         self,
         direction: int,
@@ -470,21 +496,38 @@ class Backtester:
         atr: float | None = None,
     ) -> None:
         """Open a new position."""
-        # Phase 15E: Pass confidence for bet sizing integration
-        contracts = self._calculate_position_size(price, confidence=confidence)
+        k_up = self.config.barrier_k_up
+        k_down = self.config.barrier_k_down
+        use_barriers = (k_up > 0 or k_down > 0) and atr is not None and atr > 0
+
+        # Compute stop distance for position sizing
+        if use_barriers:
+            # Barrier-aware stop distance (matches training semantics)
+            stop_dist = k_down * atr if direction == 1 else k_up * atr
+        else:
+            # Legacy: 2% of price
+            stop_dist = price * 0.02
+
+        contracts = self._calculate_position_size(
+            price, stop_distance=stop_dist, confidence=confidence
+        )
 
         if contracts <= 0:
             return
 
-        # Calculate stop loss (2% default or 2 ATR if available)
-        stop_loss = None
-        if atr is not None and atr > 0:
-            stop_distance_atr = 2.0
-            stop_loss = price - direction * stop_distance_atr * atr
+        # Calculate stop loss and take profit
+        if use_barriers:
+            # Barrier-aligned: matches training triple-barrier semantics
+            if direction == 1:  # Long
+                stop_loss = price - k_down * atr
+                take_profit = price + k_up * atr if k_up > 0 else None
+            else:  # Short
+                stop_loss = price + k_up * atr
+                take_profit = price - k_down * atr if k_down > 0 else None
         else:
-            # Default 2% stop
-            stop_distance_pct = 0.02
-            stop_loss = price * (1 - direction * stop_distance_pct)
+            # Legacy: 2% stop, no take profit
+            stop_loss = price * (1 - direction * 0.02)
+            take_profit = None
 
         self._current_position = Position(
             direction=direction,
@@ -493,6 +536,7 @@ class Backtester:
             entry_time=timestamp,
             entry_bar=bar_idx,
             stop_loss=stop_loss,
+            take_profit=take_profit,
             label=label,
             prediction=prediction,
             confidence=confidence,
@@ -607,6 +651,16 @@ class Backtester:
         # Align data
         data = self._align_data()
 
+        # Compute ATR series when barrier params are configured
+        atr_series = None
+        if self.config.barrier_k_up > 0 or self.config.barrier_k_down > 0:
+            atr_series = self._compute_atr(data)
+            logger.info(
+                f"Barrier-aligned backtest: k_up={self.config.barrier_k_up:.2f}, "
+                f"k_down={self.config.barrier_k_down:.2f}, "
+                f"max_holding={self.config.max_holding_period}"
+            )
+
         # Initialize state
         self._equity = self.config.initial_equity
         self._trades = []
@@ -647,6 +701,9 @@ class Backtester:
                 if not self.market_hours_filter.is_tradeable_time(timestamp):
                     continue
 
+                # Get current ATR value if barrier-aligned
+                current_atr = float(atr_series.iloc[i]) if atr_series is not None else None
+
                 if prediction == 1:
                     # Long signal
                     entry_price = self._get_execution_price(bar, 1, is_entry=True)
@@ -658,6 +715,7 @@ class Backtester:
                         label=label if not pd.isna(label) else None,
                         prediction=prediction,
                         confidence=confidence,
+                        atr=current_atr,
                     )
                 elif prediction == -1 and self.config.allow_short:
                     # Short signal
@@ -670,6 +728,7 @@ class Backtester:
                         label=int(label) if not pd.isna(label) else None,
                         prediction=prediction,
                         confidence=confidence,
+                        atr=current_atr,
                     )
 
             # Record equity
