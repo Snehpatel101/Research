@@ -30,6 +30,7 @@ class OOFRequest:
     embargo_bars: int = 5
     fold_models: list[Any] | None = None  # Pre-trained fold models for 4D caching
     model_config: dict[str, Any] | None = None  # Model config (seq_length, hidden_size, etc.)
+    n_classes: int = 3  # Number of output classes (2 for binary, 3 for short/neutral/long)
 
 
 class OOFGenerationService:
@@ -186,7 +187,7 @@ class OOFGenerationService:
         y = prepared.y_train
 
         n_samples = X_4d.shape[0]
-        n_classes = 3  # short, neutral, long
+        n_classes = request.n_classes
 
         logger.info(
             f"Generating 4D OOF predictions for {model_name} "

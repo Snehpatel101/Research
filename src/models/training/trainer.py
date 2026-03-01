@@ -89,9 +89,6 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         self.config = config
         self.run_id = self._generate_run_id()
         self.output_path = config.output_dir / self.run_id
-        logger.info(
-            f"DEBUG_PATH: config.output_dir={config.output_dir}, run_id={self.run_id}, output_path={self.output_path}"
-        )
 
         # Ensure model_config contains key training params from TrainerConfig
         # This bridges the gap between TrainerConfig fields and neural model configs

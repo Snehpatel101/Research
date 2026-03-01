@@ -64,6 +64,7 @@ class SequenceOOFGenerator:
         label_end_times: pd.Series | None = None,
         symbol_column: str | None = "symbol",
         strict_validation: bool = True,  # Phase 4 SNwH: strict coverage validation
+        n_classes: int = 3,
     ) -> OOFPrediction:
         """
         Generate OOF predictions for a sequence model (LSTM, GRU, TCN, etc.).
@@ -84,6 +85,8 @@ class SequenceOOFGenerator:
             symbol_column: Column name for symbol isolation (None to use datetime gaps)
             strict_validation: If True, raise error on coverage issues (default True).
                              Set to False to proceed with warning for heterogeneous stacking.
+            n_classes: Number of output classes (default 3: short/neutral/long).
+                      Set to 2 for binary mode.
 
         Returns:
             OOFPrediction with mapped predictions and alignment metadata
@@ -98,7 +101,6 @@ class SequenceOOFGenerator:
             ValueError: If strict_validation=True and coverage is unacceptably low
         """
         n_samples = len(X)
-        n_classes = 3  # short, neutral, long
 
         # Initialize OOF storage at original sample indices
         oof_probs = np.full((n_samples, n_classes), np.nan)

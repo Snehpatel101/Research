@@ -84,6 +84,9 @@ class BacktestConfig:
     enable_market_hours_filter: bool = True
     contract_symbol: str = "MES"
 
+    # Alignment data loss warning threshold (percentage)
+    alignment_loss_warn_pct: float = 5.0
+
     # Triple-barrier alignment (from training config)
     # 0.0 = not set, uses legacy hardcoded logic for backward compat
     barrier_k_up: float = 0.0  # Upper barrier ATR multiplier
@@ -397,7 +400,7 @@ class Backtester:
         if rows_dropped > 0:
             drop_pct = rows_dropped / rows_before * 100
             logger.info(f"Alignment dropped {rows_dropped} rows ({drop_pct:.1f}%)")
-            if drop_pct > 5:
+            if drop_pct > self.config.alignment_loss_warn_pct:
                 logger.warning(
                     f"Significant data loss during alignment: {rows_dropped}/{rows_before} rows "
                     f"({drop_pct:.1f}%) dropped. Check timestamp consistency between predictions and market data."
@@ -434,7 +437,7 @@ class Backtester:
             # Approximate VWAP as midpoint
             return float((bar["high"] + bar["low"]) / 2)
         else:
-            return float(bar["close"])
+            raise ValueError(f"Unknown execution model: {model}")
 
     def _calculate_position_size(
         self,

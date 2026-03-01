@@ -163,6 +163,7 @@ class CoreOOFGenerator:
         config: dict[str, Any],
         sample_weights: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        n_classes: int = 3,
     ) -> OOFPrediction:
         """
         Generate OOF predictions for a tabular model.
@@ -175,12 +176,13 @@ class CoreOOFGenerator:
             sample_weights: Optional quality weights
             label_end_times: Optional Series of datetime when each label is resolved.
                 If provided, enables proper purging of overlapping labels in CV.
+            n_classes: Number of output classes (default 3: short/neutral/long).
+                      Set to 2 for binary mode.
 
         Returns:
             OOFPrediction with predictions and fold info
         """
         n_samples = len(X)
-        n_classes = 3  # short, neutral, long
 
         # Initialize OOF storage
         oof_probs = np.full((n_samples, n_classes), np.nan)

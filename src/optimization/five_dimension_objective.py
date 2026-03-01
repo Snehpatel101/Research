@@ -50,6 +50,7 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
@@ -106,6 +107,7 @@ LABEL_CACHE_MAXSIZE = 128  # Maximum cached label configurations
 _label_cache: OrderedDict[tuple[float, float, int, str], tuple[np.ndarray, np.ndarray]] = (
     OrderedDict()
 )
+_label_cache_lock = threading.Lock()
 
 
 # =============================================================================
@@ -298,13 +300,14 @@ def generate_labels_for_trial(
     # Build cache key from barrier params and data identifier
     if use_cache:
         full_cache_key = (upper_mult, lower_mult, max_holding_bars, cache_key)
-        if full_cache_key in _label_cache:
-            # Move to end (most recently used) for LRU behavior
-            _label_cache.move_to_end(full_cache_key)
-            cached = _label_cache[full_cache_key]
-            # Return cached labels if data length matches (basic sanity check)
-            if len(cached[0]) == len(data):
-                return cached[0].copy()
+        with _label_cache_lock:
+            if full_cache_key in _label_cache:
+                # Move to end (most recently used) for LRU behavior
+                _label_cache.move_to_end(full_cache_key)
+                cached = _label_cache[full_cache_key]
+                # Return cached labels if data length matches (basic sanity check)
+                if len(cached[0]) == len(data):
+                    return cached[0].copy()
 
     # Ensure data has ATR column (compute if missing)
     atr_col = f"atr_{atr_period}"
@@ -331,10 +334,11 @@ def generate_labels_for_trial(
 
     # Cache for reuse with LRU eviction (Phase 29: bounded cache)
     if use_cache:
-        _label_cache[full_cache_key] = (labels.copy(), labels.copy())
-        # Evict oldest entry if cache exceeds maxsize
-        while len(_label_cache) > LABEL_CACHE_MAXSIZE:
-            _label_cache.popitem(last=False)  # Remove oldest (first) entry
+        with _label_cache_lock:
+            _label_cache[full_cache_key] = (labels.copy(), labels.copy())
+            # Evict oldest entry if cache exceeds maxsize
+            while len(_label_cache) > LABEL_CACHE_MAXSIZE:
+                _label_cache.popitem(last=False)  # Remove oldest (first) entry
 
     return labels
 
@@ -374,8 +378,8 @@ def _compute_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:
 
 def clear_label_cache() -> None:
     """Clear the label cache. Call between optimization runs to free memory."""
-    global _label_cache
-    _label_cache.clear()
+    with _label_cache_lock:
+        _label_cache.clear()
 
 
 def create_5d_objective(
