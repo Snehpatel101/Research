@@ -303,7 +303,7 @@ class TrainingSection:
     def from_dict(cls, data: dict[str, Any]) -> TrainingSection:
         return cls(
             sequence_length=data.get("sequence_length", 60),
-            batch_size=data.get("batch_size", 256),
+            batch_size=data.get("batch_size", 512),
             max_epochs=data.get("max_epochs", 100),
             early_stopping_patience=data.get("early_stopping_patience", 15),
             device=data.get("device", "auto"),

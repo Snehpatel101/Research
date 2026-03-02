@@ -531,7 +531,7 @@ def validate_training(data: dict[str, Any]) -> ValidationResult:
     result = ValidationResult()
 
     training = data.get("training", {})
-    batch_size = training.get("batch_size", 256)
+    batch_size = training.get("batch_size", 512)
     max_epochs = training.get("max_epochs", 100)
     patience = training.get("early_stopping_patience", 15)
 

@@ -237,7 +237,7 @@ class PipelineConfig:
     # NEURAL NETWORK CONFIGURATION
     # =========================================================================
 
-    batch_size: int = DEFAULT_BATCH_SIZE  # 256
+    batch_size: int = DEFAULT_BATCH_SIZE  # 512 (Phase 68)
     max_epochs: int = DEFAULT_MAX_EPOCHS  # 100
     learning_rate: float = DEFAULT_LEARNING_RATE  # 0.001
     early_stopping_patience: int = DEFAULT_EARLY_STOPPING_PATIENCE  # 10

@@ -480,7 +480,7 @@ class iTransformerModel(BaseRNNModel):
         X_tensor = torch.from_numpy(np.ascontiguousarray(X).astype(np.float32))
 
         all_probs = []
-        batch_size = self._config.get("batch_size", 256)
+        batch_size = self._config.get("batch_size", 512)
 
         with torch.no_grad():
             for i in range(0, len(X_tensor), batch_size):
