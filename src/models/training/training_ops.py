@@ -133,7 +133,8 @@ class TrainingOpsMixin:
             key = f"{model_name}_h{horizon}"
             self._model_results[key] = result
             if self.config.save_oof:
-                oof = self._generate_oof(model_name, prepared, horizon)
+                trained_config = getattr(service_result.trainer.model, 'config', None)
+                oof = self._generate_oof(model_name, prepared, horizon, model_config=trained_config)
                 if oof is not None:
                     self._oof_predictions[key] = oof
                     result.oof_prediction = oof
@@ -185,7 +186,8 @@ class TrainingOpsMixin:
         offload_model_to_cpu(result.trainer)
 
         if self.config.save_oof:
-            oof = self._generate_oof(model_name, prepared, horizon)
+            trained_config = getattr(result.trainer.model, 'config', None)
+            oof = self._generate_oof(model_name, prepared, horizon, model_config=trained_config)
             if oof is not None:
                 self._oof_predictions[key] = oof
                 result.oof_prediction = oof
@@ -358,6 +360,7 @@ class TrainingOpsMixin:
         model_name: str,
         prepared: PreparedData,
         horizon: int,
+        model_config: dict[str, Any] | None = None,
     ) -> OOFPrediction | None:
         """Generate OOF predictions via OOFGenerationService."""
         # Filter -99 sentinel labels BEFORE OOF generation to prevent
@@ -370,6 +373,7 @@ class TrainingOpsMixin:
             n_splits=self.config.n_splits,
             purge_bars=self.config.purge_bars,
             embargo_bars=self.config.embargo_bars,
+            model_config=model_config,
         )
         return self._oof_service.generate_oof(request)
 
