@@ -497,6 +497,39 @@ def get_optimal_gpu_settings(model_family: str, gpu_info: GPUInfo | None = None)
             "num_workers": 4,
             "pin_memory": True,
         }
+    elif family == "tft":
+        # TFT is the most memory-hungry model (LSTM + multi-head attention +
+        # gating + variable selection).  With 2000+ features the input
+        # projection alone is huge, so scale architecture with VRAM.
+        #
+        # Reference points (measured on L4 with 2490 features):
+        #   d_model=256  → ~21 GB at batch=64   (OOM on 23 GB L4)
+        #   d_model=128  → ~6 GB  at batch=64   (comfortable on 23 GB L4)
+        #   d_model=256  → comfortable on ≥40 GB (A100/H100)
+        #   d_model=512  → needs ≥80 GB
+        if vram >= 80:
+            d_model, d_ff, n_heads = 512, 1024, 8
+        elif vram >= 40:
+            d_model, d_ff, n_heads = 256, 512, 4
+        elif vram >= 20:
+            d_model, d_ff, n_heads = 128, 256, 4
+        else:
+            d_model, d_ff, n_heads = 64, 128, 2
+
+        return {
+            "batch_size": max(8, min(128, int(32 * vram_scale))),
+            "sequence_length": 60,
+            "d_model": d_model,
+            "n_heads": n_heads,
+            "lstm_layers": 2,
+            "attention_layers": 1,
+            "d_ff": d_ff,
+            "mixed_precision": mp_config["enabled"],
+            "amp_dtype": mp_config["dtype"],
+            "grad_scaler": mp_config["grad_scaler"],
+            "num_workers": 4,
+            "pin_memory": True,
+        }
     return {
         "batch_size": max(16, min(128, int(64 * vram_scale))),
         "mixed_precision": mp_config["enabled"],

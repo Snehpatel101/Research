@@ -25,6 +25,7 @@ import torch
 import torch.nn as nn
 
 from ..base import PredictionResult
+from ..device import get_optimal_gpu_settings
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -587,20 +588,29 @@ class TFTModel(BaseRNNModel):
         self._noncausal_warning_logged = True
 
     def get_default_config(self) -> dict[str, Any]:
-        """Return default TFT hyperparameters."""
+        """Return default TFT hyperparameters.
+
+        Architecture params (d_model, d_ff, batch_size) are VRAM-adaptive:
+        they scale based on detected GPU memory via ``get_optimal_gpu_settings``.
+        Experiment-level overrides still win (applied by ``_merge_config``).
+        """
         defaults = super().get_default_config()
+
+        # Query VRAM-aware settings — returns conservative values for small GPUs
+        gpu_settings = get_optimal_gpu_settings("tft")
+
         defaults.update(
             {
-                # Architecture
-                "d_model": 256,
-                "n_heads": 4,  # Fewer heads for interpretability
-                "lstm_layers": 2,
-                "attention_layers": 1,  # Single attention layer often sufficient
-                "d_ff": 512,
+                # Architecture — adaptive to VRAM
+                "d_model": gpu_settings.get("d_model", 256),
+                "n_heads": gpu_settings.get("n_heads", 4),
+                "lstm_layers": gpu_settings.get("lstm_layers", 2),
+                "attention_layers": gpu_settings.get("attention_layers", 1),
+                "d_ff": gpu_settings.get("d_ff", 512),
                 "dropout": 0.1,
-                # Training
-                "sequence_length": 60,
-                "batch_size": 128,
+                # Training — adaptive batch size
+                "sequence_length": gpu_settings.get("sequence_length", 60),
+                "batch_size": gpu_settings.get("batch_size", 128),
                 "max_epochs": 50,
                 "learning_rate": 0.0001,
                 "weight_decay": 0.01,
