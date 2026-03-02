@@ -430,25 +430,37 @@ class FeatureSelectionMixin:
 
             for model_key, oof in self._oof_predictions.items():
                 if oof is not None and hasattr(oof, "predictions"):
-                    # Use original_indices for proper index-based alignment
-                    # instead of positional arange (which breaks for sequence
-                    # models with offsets)
+                    # Extract class predictions and probabilities as numpy arrays
+                    class_preds = oof.get_class_predictions()
+                    probs = oof.get_probabilities()
+
+                    # For sequence models with original_indices, first filter
+                    # to valid rows, then apply the common_indices mask
                     if (
                         hasattr(aligned_oof, "common_indices")
                         and hasattr(oof, "original_indices")
                         and oof.original_indices is not None
                     ):
+                        # Filter to valid predictions only (remove NaN rows)
+                        valid_preds = class_preds[oof.original_indices]
+                        valid_probs = probs[oof.original_indices]
+                        # Now mask to common indices
                         mask = np.isin(oof.original_indices, aligned_oof.common_indices)
+                        aligned_preds = valid_preds[mask]
+                        aligned_probs = valid_probs[mask]
                     else:
-                        # Fallback to positional for legacy OOF objects
-                        mask = np.isin(np.arange(len(oof.predictions)), aligned_oof.common_indices)
-                    aligned_preds = oof.predictions[mask]
+                        # Tabular models: positional indexing
+                        mask = np.isin(np.arange(len(class_preds)), aligned_oof.common_indices)
+                        aligned_preds = class_preds[mask]
+                        aligned_probs = probs[mask]
+
                     if len(aligned_preds) == len(aligned_oof.common_indices):
-                        base_predictions[model_key] = aligned_preds
-                    if hasattr(oof, "probabilities") and oof.probabilities is not None:
-                        aligned_probs = oof.probabilities[mask]
-                        if len(aligned_probs) == len(aligned_oof.common_indices):
-                            base_probabilities[model_key] = aligned_probs
+                        # Handle any remaining NaN from sequence boundaries
+                        safe_preds = np.where(np.isnan(aligned_preds), 0, aligned_preds)
+                        base_predictions[model_key] = safe_preds.astype(int)
+
+                    if len(aligned_probs) == len(aligned_oof.common_indices):
+                        base_probabilities[model_key] = aligned_probs
 
             if len(base_predictions) < 2:
                 logger.warning("Need at least 2 models for diversity analysis")
@@ -551,12 +563,41 @@ class FeatureSelectionMixin:
                 logger.info(f"Skipping {model_key} - no OOF predictions available")
                 continue
 
-            predictions = oof.predictions
-            y_true = oof.y_true if hasattr(oof, "y_true") else None
+            # Use class predictions (1D numpy array), not the raw DataFrame
+            predictions = oof.get_class_predictions()
+
+            # For sequence models, filter to valid (non-NaN) predictions only
+            valid_mask = ~np.isnan(predictions)
+            if not valid_mask.all():
+                predictions = predictions[valid_mask].astype(int)
+            else:
+                predictions = predictions.astype(int)
+
+            y_true = None
+            label_col = f"label_h{result.horizon}"
+            if label_col in df.columns:
+                y_labels = df[label_col].values[: len(oof.get_class_predictions())]
+                # Apply same valid_mask to labels and prices
+                y_true = y_labels[valid_mask] if not valid_mask.all() else y_labels[: len(predictions)]
+
             if y_true is None:
-                label_col = f"label_h{result.horizon}"
-                if label_col in df.columns:
-                    y_true = df[label_col].values[: len(predictions)]
+                logger.warning(f"Skipping {model_key} - no true labels available")
+                continue
+
+            # Get matching prices slice
+            prices_slice = prices[: len(oof.get_class_predictions())]
+            if not valid_mask.all():
+                prices_slice = prices_slice[valid_mask]
+            else:
+                prices_slice = prices_slice[: len(predictions)]
+
+            ts_slice = None
+            if timestamps is not None:
+                ts_slice = timestamps[: len(oof.get_class_predictions())]
+                if not valid_mask.all():
+                    ts_slice = ts_slice[valid_mask]
+                else:
+                    ts_slice = ts_slice[: len(predictions)]
 
             if y_true is None:
                 logger.warning(f"Skipping {model_key} - no true labels available")
@@ -569,8 +610,8 @@ class FeatureSelectionMixin:
                     horizon=result.horizon,
                     predictions=predictions,
                     y_true=y_true,
-                    prices=prices[: len(predictions)],
-                    timestamps=timestamps[: len(predictions)] if timestamps is not None else None,
+                    prices=prices_slice,
+                    timestamps=ts_slice,
                     output_dir=model_report_dir,
                     run_id=self.run_id,
                     config=config,

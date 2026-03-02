@@ -441,8 +441,16 @@ class MLFactory:
         # Save training result
         training_cache_path = self.output_dir / "cache" / "training_result.pkl"
         training_cache_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(training_cache_path, "wb") as f:
-            pickle.dump(training_result, f, protocol=pickle.HIGHEST_PROTOCOL)
+        try:
+            with open(training_cache_path, "wb") as f:
+                pickle.dump(training_result, f, protocol=pickle.HIGHEST_PROTOCOL)
+        except (RuntimeError, pickle.PicklingError) as e:
+            # torch.compile'd models cannot be pickled; save without models
+            logger.warning(
+                f"Could not pickle training result (likely torch.compile'd model): {e}. "
+                "Saving checkpoint metadata only — training cache will not be resumable."
+            )
+            training_cache_path.unlink(missing_ok=True)
 
         self._checkpoint_manager.save_checkpoint(
             stage_name="training",

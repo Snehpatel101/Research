@@ -223,24 +223,38 @@ class EnsembleService:
             probs = oof_pred.get_probabilities()
             preds = oof_pred.get_class_predictions()
 
-            n_samples = len(probs)
+            n_total = len(probs)
 
             # Use original_indices for proper alignment (critical for
             # sequence models that produce fewer samples than tabular)
             if oof_pred.original_indices is not None:
                 indices = oof_pred.original_indices
+                # Filter to only valid rows — the OOF DataFrame contains ALL
+                # samples (including NaN for sequence models), but original_indices
+                # marks which rows have actual predictions.
+                probs = probs[indices]
+                preds = preds[indices]
             else:
-                indices = np.arange(n_samples)
+                indices = np.arange(n_total)
+
+            n_samples = len(indices)
 
             # Extract fold provenance from OOF DataFrame if available
             if "fold_id" in oof_pred.predictions.columns:
-                fold_ids = oof_pred.predictions["fold_id"].values.astype(int)
+                fold_ids_full = oof_pred.predictions["fold_id"].values
+                if oof_pred.original_indices is not None:
+                    fold_ids = fold_ids_full[oof_pred.original_indices].astype(int)
+                else:
+                    fold_ids = fold_ids_full.astype(int)
             else:
                 # Fallback for legacy OOF predictions without fold_id
                 fold_ids = np.zeros(n_samples, dtype=int)
 
+            # Safe cast: NaN floats cannot be cast to int directly
+            safe_preds = np.where(np.isnan(preds), 0, preds).astype(int)
+
             oof_result = OOFResult(
-                predictions=preds.astype(int),
+                predictions=safe_preds,
                 probabilities=probs,
                 indices=indices,
                 fold_ids=fold_ids,
@@ -342,6 +356,25 @@ class EnsembleService:
 
             X_stack = stacking_dataset.get_features()
             y_stack = stacking_dataset.get_labels()
+
+            # Drop rows with NaN values (common when heterogeneous models
+            # have different coverage, e.g. sequence models produce NaN
+            # probabilities for early indices lost to windowing)
+            nan_mask = X_stack.isna().any(axis=1) | y_stack.isna()
+            n_nan = int(nan_mask.sum())
+            if n_nan > 0:
+                logger.warning(
+                    f"Dropping {n_nan}/{len(X_stack)} NaN rows from stacking dataset "
+                    f"({n_nan / len(X_stack) * 100:.1f}% of samples)"
+                )
+                X_stack = X_stack[~nan_mask].reset_index(drop=True)
+                y_stack = y_stack[~nan_mask].reset_index(drop=True)
+
+            if len(X_stack) < 10:
+                raise ValueError(
+                    f"Insufficient samples after NaN removal: {len(X_stack)} "
+                    f"(need at least 10)"
+                )
 
             # Time-based split into train/val (preserves temporal ordering)
             n_samples = len(X_stack)
