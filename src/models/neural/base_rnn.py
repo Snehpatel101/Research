@@ -522,6 +522,25 @@ class BaseRNNModel(BaseModel):
             except RuntimeError as e:
                 # Handle CUDA OOM errors with automatic batch size reduction
                 if self._oom_manager.is_oom_error(e):
+                    error_msg = str(e).lower()
+                    is_cublas_error = "cublas" in error_msg or "cudnn" in error_msg
+
+                    # cuBLAS/cuDNN internal errors are often bf16 dtype issues,
+                    # not memory issues. Fall back to fp32 before reducing batch size.
+                    if is_cublas_error and self._use_amp and amp_dtype != torch.float32:
+                        logger.warning(
+                            f"cuBLAS/cuDNN error detected with {amp_dtype} — "
+                            "disabling mixed precision and retrying with fp32"
+                        )
+                        from src.models.device import release_gpu_memory
+                        release_gpu_memory()
+                        self._use_amp = False
+                        amp_dtype = torch.float32
+                        scaler = None
+                        # Reset OOM retry counter since this is a different fix
+                        self._oom_manager._current_retries = 0
+                        continue
+
                     new_batch_size = self._oom_manager.handle_oom(current_batch_size)
                     if new_batch_size is None:
                         # Recovery failed - re-raise the error
