@@ -23,7 +23,7 @@ class OOMConfig:
     """Configuration for OOM recovery."""
 
     enabled: bool = True
-    max_retries: int = 3
+    max_retries: int = 6  # Enough to halve from 128 down to 2 (128→64→32→16→8→4→2)
     batch_reduction_factor: float = 0.5  # Reduce batch size by this factor
     min_batch_size: int = 2  # Don't reduce below this (lowered from 8 for small datasets)
     clear_cache_on_oom: bool = True
