@@ -232,8 +232,12 @@ class EnsembleService:
             else:
                 indices = np.arange(n_samples)
 
-            # TODO: Fold provenance not tracked in OOFPrediction — all assigned fold 0
-            fold_ids = np.zeros(n_samples, dtype=int)
+            # Extract fold provenance from OOF DataFrame if available
+            if "fold_id" in oof_pred.predictions.columns:
+                fold_ids = oof_pred.predictions["fold_id"].values.astype(int)
+            else:
+                # Fallback for legacy OOF predictions without fold_id
+                fold_ids = np.zeros(n_samples, dtype=int)
 
             oof_result = OOFResult(
                 predictions=preds.astype(int),

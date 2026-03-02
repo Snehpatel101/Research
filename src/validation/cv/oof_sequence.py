@@ -106,6 +106,7 @@ class SequenceOOFGenerator:
         oof_probs = np.full((n_samples, n_classes), np.nan)
         oof_preds = np.full(n_samples, np.nan)
         oof_confidence = np.full(n_samples, np.nan)
+        oof_fold_ids = np.full(n_samples, -1, dtype=int)
         fold_info: list[dict[str, Any]] = []
 
         # Create sequence builder with symbol awareness
@@ -233,6 +234,7 @@ class SequenceOOFGenerator:
                     oof_probs[original_idx] = prediction_output.class_probabilities[seq_idx]
                     oof_preds[original_idx] = prediction_output.class_predictions[seq_idx]
                     oof_confidence[original_idx] = prediction_output.confidence[seq_idx]
+                    oof_fold_ids[original_idx] = fold_idx
 
                 val_sequences_total += val_chunk.n_sequences
                 logger.debug(
@@ -326,6 +328,7 @@ class SequenceOOFGenerator:
                 f"{model_name}_prob_long": oof_probs[:, 2],
                 f"{model_name}_pred": oof_preds,
                 f"{model_name}_confidence": oof_confidence,
+                "fold_id": oof_fold_ids,
             }
         )
 

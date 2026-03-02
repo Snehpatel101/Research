@@ -188,6 +188,7 @@ class CoreOOFGenerator:
         oof_probs = np.full((n_samples, n_classes), np.nan)
         oof_preds = np.full(n_samples, np.nan)
         oof_confidence = np.full(n_samples, np.nan)
+        oof_fold_ids = np.full(n_samples, -1, dtype=int)
         fold_info: list[dict[str, Any]] = []
 
         # Determine scaling method based on model requirements
@@ -234,6 +235,7 @@ class CoreOOFGenerator:
             oof_probs[val_idx] = prediction_output.class_probabilities
             oof_preds[val_idx] = prediction_output.class_predictions
             oof_confidence[val_idx] = prediction_output.confidence
+            oof_fold_ids[val_idx] = fold_idx
 
             # Track fold info
             fold_info.append(
@@ -269,6 +271,7 @@ class CoreOOFGenerator:
                 f"{model_name}_prob_long": oof_probs[:, 2],
                 f"{model_name}_pred": oof_preds,
                 f"{model_name}_confidence": oof_confidence,
+                "fold_id": oof_fold_ids,
             }
         )
 
