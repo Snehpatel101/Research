@@ -450,6 +450,7 @@ class BaseRNNModel(BaseModel):
         )
         self._oom_manager = OOMRecoveryManager(oom_config)
         current_batch_size = train_config.get("batch_size", 64)
+        initial_batch_size = current_batch_size  # Save for dtype-fallback reset
 
         max_epochs = train_config.get("max_epochs", 100)
         patience = train_config.get("early_stopping_patience", 7)
@@ -526,7 +527,8 @@ class BaseRNNModel(BaseModel):
                     is_cublas_error = "cublas" in error_msg or "cudnn" in error_msg
 
                     # cuBLAS/cuDNN internal errors are often bf16 dtype issues,
-                    # not memory issues. Fall back to fp32 before reducing batch size.
+                    # not memory issues. Fall back to fp32 FIRST, restoring the
+                    # original batch size (the error was dtype, not memory).
                     if is_cublas_error and self._use_amp and amp_dtype != torch.float32:
                         logger.warning(
                             f"cuBLAS/cuDNN error detected with {amp_dtype} — "
@@ -537,8 +539,22 @@ class BaseRNNModel(BaseModel):
                         self._use_amp = False
                         amp_dtype = torch.float32
                         scaler = None
-                        # Reset OOM retry counter since this is a different fix
+                        # Reset OOM state — this is a dtype fix, not memory
                         self._oom_manager._current_retries = 0
+                        current_batch_size = initial_batch_size
+                        train_config["batch_size"] = current_batch_size
+                        logger.info(
+                            f"Restored batch_size={current_batch_size}, "
+                            f"switched to fp32 — recreating data loaders"
+                        )
+                        train_loader = self._create_dataloader(
+                            X_train, y_train, sample_weights, train_config, shuffle=True
+                        )
+                        val_loader = self._create_dataloader(
+                            X_val, y_val, None, train_config, shuffle=False
+                        )
+                        scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
+                        epoch = 0  # Restart training from scratch in fp32
                         continue
 
                     new_batch_size = self._oom_manager.handle_oom(current_batch_size)
