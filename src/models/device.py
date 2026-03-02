@@ -6,6 +6,7 @@ Supports any NVIDIA GPU (GTX 10xx, RTX 20xx/30xx/40xx, Tesla T4/V100/A100/H100).
 
 from __future__ import annotations
 
+import gc
 import logging
 import os
 import sys
@@ -186,6 +187,120 @@ def _configure_cuda_allocator() -> None:
     if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:256"
         logger.debug("Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:256")
+
+
+# =============================================================================
+# CENTRALIZED GPU MEMORY MANAGEMENT
+# =============================================================================
+# Every code path that needs to free GPU memory should call these functions
+# instead of inlining try/except torch.cuda blocks.  This is the SINGLE
+# source of truth for GPU cleanup — works on any hardware (T4, V100, A100,
+# H100, RTX consumer cards) and degrades gracefully to a no-op on CPU.
+# =============================================================================
+
+
+def release_gpu_memory() -> None:
+    """Release all unused GPU memory and reset compilation caches.
+
+    Safe to call from anywhere — returns silently when CUDA is unavailable
+    or torch is not installed.  Idempotent and lightweight.
+
+    Performs (in order):
+      1. Python garbage collection (frees Python-side tensor references)
+      2. CUDA synchronize (drains async GPU work)
+      3. torch._dynamo.reset (clears torch.compile caches that hold GPU tensors)
+      4. CUDA empty_cache (returns cached blocks to the CUDA driver)
+      5. Second gc.collect (catches cyclic references freed by cache clear)
+    """
+    gc.collect()
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return
+        torch.cuda.synchronize()
+        if hasattr(torch, "_dynamo"):
+            torch._dynamo.reset()
+        torch.cuda.empty_cache()
+    except ImportError:
+        return
+    gc.collect()
+
+
+def offload_model_to_cpu(trainer_or_model: Any) -> None:
+    """Move a PyTorch model (or trainer wrapping one) to CPU and free GPU memory.
+
+    Accepts any of:
+      • A raw ``torch.nn.Module``
+      • A trainer object with a ``.model`` attribute (our ``ModelTrainer``)
+      • A BaseRNNModel / TFT / etc. that stores ``._model`` as the nn.Module
+      • Any other object — silently ignored (safe for XGBoost, LightGBM, etc.)
+
+    After offloading, calls ``release_gpu_memory()`` to hand the freed VRAM
+    back to the CUDA driver immediately.
+
+    This MUST be called before OOF generation or any operation that needs
+    to allocate fresh GPU memory for new models.
+    """
+    if trainer_or_model is None:
+        return
+    try:
+        import torch
+
+        # Unwrap trainer → model wrapper → nn.Module
+        obj = trainer_or_model
+        if hasattr(obj, "model"):
+            obj = obj.model
+        # Our neural wrappers store the nn.Module in _model
+        nn_module = getattr(obj, "_model", obj)
+        if isinstance(nn_module, torch.nn.Module):
+            nn_module.cpu()
+    except (ImportError, Exception):
+        # Not a neural model, or torch not installed — nothing to offload
+        pass
+    release_gpu_memory()
+
+
+def get_gpu_memory_stats() -> dict[str, float]:
+    """Return current GPU memory statistics in GiB.
+
+    Returns dict with keys: allocated, reserved, max_allocated, free, total.
+    All values are 0.0 when CUDA is unavailable.
+    """
+    stats: dict[str, float] = {
+        "allocated": 0.0,
+        "reserved": 0.0,
+        "max_allocated": 0.0,
+        "free": 0.0,
+        "total": 0.0,
+    }
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return stats
+        GiB = 1024**3
+        stats["allocated"] = torch.cuda.memory_allocated() / GiB
+        stats["reserved"] = torch.cuda.memory_reserved() / GiB
+        stats["max_allocated"] = torch.cuda.max_memory_allocated() / GiB
+        free, total = torch.cuda.mem_get_info()
+        stats["free"] = free / GiB
+        stats["total"] = total / GiB
+    except (ImportError, Exception):
+        pass
+    return stats
+
+
+def log_gpu_memory(label: str = "") -> None:
+    """Log current GPU memory usage at DEBUG level."""
+    stats = get_gpu_memory_stats()
+    if stats["total"] == 0.0:
+        return
+    prefix = f"[{label}] " if label else ""
+    logger.debug(
+        f"{prefix}GPU mem: {stats['allocated']:.2f}/{stats['total']:.1f} GiB alloc, "
+        f"{stats['free']:.2f} GiB free, {stats['reserved']:.2f} GiB reserved"
+    )
 
 
 def detect_cuda_available() -> bool:
@@ -602,6 +717,10 @@ __all__ = [
     "get_gpu_info",
     "get_best_gpu",
     "get_device",
+    "release_gpu_memory",
+    "offload_model_to_cpu",
+    "get_gpu_memory_stats",
+    "log_gpu_memory",
     "estimate_memory_requirements",
     "get_optimal_batch_size",
     "get_amp_dtype",

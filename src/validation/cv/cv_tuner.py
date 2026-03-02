@@ -163,15 +163,9 @@ class TimeSeriesOptunaTuner:
 
         # Callback to free memory between trials (prevents accumulation over 100 trials)
         def _trial_cleanup_callback(study: Any, trial: Any) -> None:
-            gc.collect()
-            try:
-                import torch
+            from src.models.device import release_gpu_memory
 
-                if torch.cuda.is_available():
-                    torch.cuda.synchronize()
-                    torch.cuda.empty_cache()
-            except ImportError:
-                pass
+            release_gpu_memory()
 
         # Get the scoring function based on configured metric
         from src.optimization.scoring import get_score_fn

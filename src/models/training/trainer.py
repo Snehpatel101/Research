@@ -1023,16 +1023,11 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         # Free training data from memory after training completes
         # Critical for sequence models where X_train can be 10GB+
-        import gc
-
-        import torch
+        from src.models.device import release_gpu_memory
 
         del X_train, w_train
         del fit_kwargs
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
+        release_gpu_memory()
         logger.debug("Freed training data from memory after model.fit()")
 
         # Evaluate

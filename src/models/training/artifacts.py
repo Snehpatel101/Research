@@ -28,6 +28,21 @@ from .checksums import ArtifactIntegrityManager
 
 # Import MODEL_DATA_REQUIREMENTS for model requirements saving (MOD-008)
 # Canonical location: src.models.config.data_requirements
+
+
+class _NumpySafeEncoder(json.JSONEncoder):
+    """JSON encoder that handles numpy dtypes transparently."""
+
+    def default(self, o: Any) -> Any:
+        if isinstance(o, (np.integer,)):
+            return int(o)
+        if isinstance(o, (np.floating,)):
+            return float(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, np.bool_):
+            return bool(o)
+        return super().default(o)
 try:
     from src.models.config import MODEL_DATA_REQUIREMENTS
 except ImportError:
@@ -119,7 +134,7 @@ class TrainerArtifactsMixin:
 
         env_info_path = self.output_path / "config" / "environment_info.json"
         with open(env_info_path, "w") as f:
-            json.dump(env_info, f, indent=2)
+            json.dump(env_info, f, indent=2, cls=_NumpySafeEncoder)
 
         # Log environment overrides at training start
         if applied_overrides.get("environment_overrides"):
@@ -204,7 +219,7 @@ class TrainerArtifactsMixin:
         # Save to file
         requirements_path = self.output_path / "config" / "model_requirements.json"
         with open(requirements_path, "w") as f:
-            json.dump(requirements_info, f, indent=2)
+            json.dump(requirements_info, f, indent=2, cls=_NumpySafeEncoder)
 
         logger.debug(f"Saved model requirements to {requirements_path}")
 
@@ -227,7 +242,7 @@ class TrainerArtifactsMixin:
         # Training metrics
         metrics_path = self.output_path / "metrics" / "training_metrics.json"
         with open(metrics_path, "w") as f:
-            json.dump(training_metrics.to_dict(), f, indent=2)
+            json.dump(training_metrics.to_dict(), f, indent=2, cls=_NumpySafeEncoder)
 
         # Add lineage validation results to eval metrics
         if lineage_issues is None:
@@ -241,7 +256,7 @@ class TrainerArtifactsMixin:
         # Evaluation metrics (validation)
         eval_path = self.output_path / "metrics" / "evaluation_metrics.json"
         with open(eval_path, "w") as f:
-            json.dump(eval_metrics_with_lineage, f, indent=2)
+            json.dump(eval_metrics_with_lineage, f, indent=2, cls=_NumpySafeEncoder)
 
         # Validation predictions
         pred_path = self.output_path / "predictions" / "val_predictions.npz"
@@ -256,7 +271,7 @@ class TrainerArtifactsMixin:
         if test_metrics is not None:
             test_metrics_path = self.output_path / "metrics" / "test_metrics.json"
             with open(test_metrics_path, "w") as f:
-                json.dump(test_metrics, f, indent=2)
+                json.dump(test_metrics, f, indent=2, cls=_NumpySafeEncoder)
             logger.info(f"Saved test metrics to {test_metrics_path}")
 
         if test_predictions is not None:
@@ -274,7 +289,7 @@ class TrainerArtifactsMixin:
         if importance:
             importance_path = self.output_path / "metrics" / "feature_importance.json"
             with open(importance_path, "w") as f:
-                json.dump(importance, f, indent=2)
+                json.dump(importance, f, indent=2, cls=_NumpySafeEncoder)
 
         logger.debug(f"Saved artifacts to {self.output_path}")
 

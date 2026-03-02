@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.adapters import PreparedData
+from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
 
 from .services import ModelTrainingRequest, OOFRequest
@@ -177,6 +178,12 @@ class TrainingOpsMixin:
 
         key = f"{model_name}_h{horizon}"
         self._model_results[key] = result
+
+        # Offload neural model to CPU BEFORE OOF generation to free GPU memory.
+        # OOF needs to train N fold models on GPU; without this, large models
+        # (TFT, Transformer, etc.) cause CUDA OOM during OOF cross-validation.
+        offload_model_to_cpu(result.trainer)
+
         if self.config.save_oof:
             oof = self._generate_oof(model_name, prepared, horizon)
             if oof is not None:
@@ -206,22 +213,8 @@ class TrainingOpsMixin:
         )
         if cache_key in self._prepared_cache:
             del self._prepared_cache[cache_key]
-        # Move neural model to CPU and reset torch state for next model
-        try:
-            import torch
-
-            trainer = result.trainer
-            if trainer is not None and hasattr(trainer, "model"):
-                model_obj = trainer.model
-                if hasattr(model_obj, "cpu"):
-                    model_obj.cpu()
-            if hasattr(torch, "_dynamo"):
-                torch._dynamo.reset()
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
+        # GPU cleanup already done by _offload_trainer_to_cpu before OOF;
+        # just collect Python garbage here for prepared data cache eviction.
         gc.collect()
 
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:
@@ -262,15 +255,7 @@ class TrainingOpsMixin:
                 f"OOM during {model_name} training — reducing batch size "
                 f"from {original_batch} to {reduced_batch} and retrying"
             )
-            gc.collect()
-            try:
-                import torch
-
-                if torch.cuda.is_available():
-                    torch.cuda.synchronize()
-                    torch.cuda.empty_cache()
-            except ImportError:
-                pass
+            release_gpu_memory()
             request = ModelTrainingRequest(
                 model_name=model_name,
                 horizon=horizon,
@@ -748,22 +733,9 @@ class TrainingOpsMixin:
                 )
                 del prepared
                 # Move neural models to CPU and reset torch state
-                try:
-                    import torch
-
-                    for (_rname, _regime), rr in regime_result.regime_results.items():
-                        if rr.trainer is not None and hasattr(rr.trainer, "model"):
-                            model_obj = getattr(rr.trainer, "model", None)
-                            if model_obj is not None and hasattr(model_obj, "cpu"):
-                                model_obj.cpu()
-                    if hasattr(torch, "_dynamo"):
-                        torch._dynamo.reset()
-                    if torch.cuda.is_available():
-                        torch.cuda.synchronize()
-                        torch.cuda.empty_cache()
-                except ImportError:
-                    pass
-                gc.collect()
+                for (_rname, _regime), rr in regime_result.regime_results.items():
+                    offload_model_to_cpu(rr.trainer)
+                release_gpu_memory()
 
         logger.info("\nRegime-aware training complete")
 
@@ -855,22 +827,8 @@ class TrainingOpsMixin:
         # Free PreparedData — all needed values already extracted to local vars
         # (X_train, X_val, y_train, y_val, feature_names, data_rank, n_features)
         del prepared
-        # Move neural model to CPU and reset torch state
-        try:
-            import torch
-
-            if primary_result.trainer is not None and hasattr(primary_result.trainer, "model"):
-                model_obj = getattr(primary_result.trainer, "model", None)
-                if model_obj is not None and hasattr(model_obj, "cpu"):
-                    model_obj.cpu()
-            if hasattr(torch, "_dynamo"):
-                torch._dynamo.reset()
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-        except ImportError:
-            pass
-        gc.collect()
+        # Move neural model to CPU and free GPU for meta-model training
+        offload_model_to_cpu(primary_result.trainer)
 
         primary_trainer = primary_result.trainer
         if primary_trainer is None:

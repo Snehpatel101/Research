@@ -106,6 +106,10 @@ class OOFGenerationService:
         - 2D/3D: Uses the standard OOFGenerator (flatten + tabular/sequence path)
         - 4D: Uses direct 4D OOF generation (samples are already windowed)
 
+        On CUDA OOM the method frees GPU memory and retries once.  If the
+        retry also fails it falls back to CPU so that ensemble stacking
+        always gets the OOF predictions it needs — regardless of GPU size.
+
         Args:
             request: OOF generation request containing model name, horizon,
                     prepared data, and CV configuration
@@ -113,58 +117,101 @@ class OOFGenerationService:
         Returns:
             OOFPrediction object or None if generation fails
         """
+        from src.models.device import release_gpu_memory
+
         try:
-            prepared = request.prepared_data
-
-            # Route 4D models to dedicated 4D OOF path
-            if prepared.data_rank == 4:
-                return self._generate_4d_oof(request)
-
-            model_name = request.model_name
-
-            # Flatten to 2D for OOF generation (handles 3D→2D)
-            X_train_2d = self._flatten_to_2d(prepared.X_train, prepared.data_rank)
-
-            X_train_df = pd.DataFrame(
-                X_train_2d,
-                columns=[f"f{i}" for i in range(X_train_2d.shape[1])],
+            return self._generate_oof_inner(request)
+        except RuntimeError as e:
+            if "out of memory" not in str(e).lower():
+                logger.warning(f"Failed to generate OOF for {request.model_name}: {e}")
+                return None
+            # First OOM: free GPU memory and retry on same device
+            logger.warning(
+                f"CUDA OOM during OOF for {request.model_name} — "
+                "freeing memory and retrying..."
             )
-            y_train = pd.Series(prepared.y_train)
-
-            # Drop intermediate references — X_train_df/y_train hold the data
-            del X_train_2d, prepared
-            gc.collect()
-
-            # Ensure generator is initialized
-            oof_generator = self._ensure_generator(request)
-
-            oof_predictions = oof_generator.generate_oof_predictions(
-                X=X_train_df,
-                y=y_train,
-                model_configs={model_name: request.model_config or {}},
-                use_cache=True,
-            )
-
-            # Post-training fold leakage verification (C4 audit fix)
-            cv = self._ensure_cv(request)
-            fold_indices = list(cv.split(X_train_df, y_train))
-            leakage_result = OOFValidator.validate_fold_leakage(
-                fold_indices=fold_indices,
-                purge_bars=request.purge_bars,
-                embargo_bars=request.embargo_bars,
-            )
-            if not leakage_result["passed"]:
-                logger.error(
-                    "OOF fold leakage detected for %s: %d violations",
-                    model_name,
-                    leakage_result["n_violations"],
+            release_gpu_memory()
+            try:
+                return self._generate_oof_inner(request)
+            except RuntimeError as e2:
+                if "out of memory" not in str(e2).lower():
+                    logger.warning(f"OOF retry failed for {request.model_name}: {e2}")
+                    return None
+                # Second OOM: fall back to CPU
+                logger.warning(
+                    f"CUDA OOM persists for {request.model_name} — "
+                    "falling back to CPU for OOF generation"
                 )
+                import os
 
-            return oof_predictions.get(model_name)
-
+                prev = os.environ.get("CUDA_VISIBLE_DEVICES")
+                try:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+                    release_gpu_memory()
+                    return self._generate_oof_inner(request)
+                except Exception as cpu_err:
+                    logger.warning(
+                        f"OOF CPU fallback also failed for {request.model_name}: {cpu_err}"
+                    )
+                    return None
+                finally:
+                    if prev is None:
+                        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+                    else:
+                        os.environ["CUDA_VISIBLE_DEVICES"] = prev
         except Exception as e:
             logger.warning(f"Failed to generate OOF for {request.model_name}: {e}")
             return None
+
+    def _generate_oof_inner(self, request: OOFRequest) -> OOFPrediction | None:
+        """Core OOF generation logic (no error handling — called by generate_oof)."""
+        prepared = request.prepared_data
+
+        # Route 4D models to dedicated 4D OOF path
+        if prepared.data_rank == 4:
+            return self._generate_4d_oof(request)
+
+        model_name = request.model_name
+
+        # Flatten to 2D for OOF generation (handles 3D→2D)
+        X_train_2d = self._flatten_to_2d(prepared.X_train, prepared.data_rank)
+
+        X_train_df = pd.DataFrame(
+            X_train_2d,
+            columns=[f"f{i}" for i in range(X_train_2d.shape[1])],
+        )
+        y_train = pd.Series(prepared.y_train)
+
+        # Drop intermediate references — X_train_df/y_train hold the data
+        del X_train_2d, prepared
+        gc.collect()
+
+        # Ensure generator is initialized
+        oof_generator = self._ensure_generator(request)
+
+        oof_predictions = oof_generator.generate_oof_predictions(
+            X=X_train_df,
+            y=y_train,
+            model_configs={model_name: request.model_config or {}},
+            use_cache=True,
+        )
+
+        # Post-training fold leakage verification (C4 audit fix)
+        cv = self._ensure_cv(request)
+        fold_indices = list(cv.split(X_train_df, y_train))
+        leakage_result = OOFValidator.validate_fold_leakage(
+            fold_indices=fold_indices,
+            purge_bars=request.purge_bars,
+            embargo_bars=request.embargo_bars,
+        )
+        if not leakage_result["passed"]:
+            logger.error(
+                "OOF fold leakage detected for %s: %d violations",
+                model_name,
+                leakage_result["n_violations"],
+            )
+
+        return oof_predictions.get(model_name)
 
     def _generate_4d_oof(self, request: OOFRequest) -> OOFPrediction | None:
         """

@@ -10,7 +10,6 @@ Reference: Pardo (2008) "The Evaluation and Optimization of Trading Strategies"
 
 from __future__ import annotations
 
-import gc
 import logging
 import time
 from dataclasses import dataclass, field
@@ -507,21 +506,13 @@ class WalkForwardTrainer:
             # on large datasets (1M+ rows with 3D/4D reshaping).
             # X_train_scaled, y_train, w_train already freed above after model.fit().
             # Move neural model to CPU before deletion (frees GPU VRAM)
+            from src.models.device import release_gpu_memory
+
             if hasattr(model, "cpu"):
                 model.cpu()
             del model, X_test_scaled, y_test
             del prediction_output, scaler
-            gc.collect()
-            try:
-                import torch
-
-                if hasattr(torch, "_dynamo"):
-                    torch._dynamo.reset()
-                if torch.cuda.is_available():
-                    torch.cuda.synchronize()
-                    torch.cuda.empty_cache()
-            except ImportError:
-                pass
+            release_gpu_memory()
 
         # Build predictions DataFrame
         predictions_df = pd.DataFrame(

@@ -7,7 +7,6 @@ by automatically reducing batch size and retrying operations.
 
 from __future__ import annotations
 
-import gc
 import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -241,12 +240,9 @@ class OOMRecoveryManager:
 
     def _clear_memory(self) -> None:
         """Clear GPU memory and run garbage collection."""
-        if self.config.clear_cache_on_oom and torch.cuda.is_available():
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
+        from src.models.device import release_gpu_memory
 
-        if self.config.force_gc_on_oom:
-            gc.collect()
+        release_gpu_memory()
 
     def _get_memory_allocated(self) -> int | None:
         """Get currently allocated GPU memory in bytes."""

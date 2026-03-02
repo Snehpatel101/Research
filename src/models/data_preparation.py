@@ -252,10 +252,9 @@ def dataset_to_arrays(
                 torch.cuda.empty_cache()
 
     # Final cleanup
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
+    from src.models.device import release_gpu_memory
+
+    release_gpu_memory()
 
     return X, y, w
 
