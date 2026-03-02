@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 class ConformalConfig:
     """Configuration for conformal prediction.
 
+    Accepts either confidence_level (e.g. 0.90) or alpha (e.g. 0.10).
+    If both are provided, confidence_level takes precedence.
+
     Attributes:
         confidence_level: Desired coverage level (1 - error_rate)
         method: Conformal method ('lac' for least ambiguous, 'aps' for adaptive)
@@ -63,8 +66,25 @@ class ConformalConfig:
     def __post_init__(self) -> None:
         if not 0.5 < self.confidence_level < 1.0:
             raise ValueError(f"confidence_level must be in (0.5, 1.0), got {self.confidence_level}")
-        if self.method not in ("lac", "aps", "naive"):
-            raise ValueError(f"Unknown method: {self.method}")
+        valid_methods = ("lac", "aps", "naive", "raps")
+        if self.method not in valid_methods:
+            raise ValueError(f"Unknown method: {self.method}. Valid: {valid_methods}")
+
+    @classmethod
+    def from_pipeline_config(cls, pipeline_conf: Any) -> ConformalConfig:
+        """Create from src.config.training.ConformalConfig (which uses alpha).
+
+        Maps alpha -> confidence_level = 1 - alpha, and normalizes method names.
+        """
+        alpha = getattr(pipeline_conf, "alpha", 0.1)
+        method = getattr(pipeline_conf, "method", "aps")
+        # Normalize method: raps -> aps (raps is aps variant)
+        if method == "raps":
+            method = "aps"
+        return cls(
+            confidence_level=1.0 - alpha,
+            method=method,
+        )
 
 
 # =============================================================================

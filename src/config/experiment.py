@@ -218,6 +218,16 @@ class ExperimentConfig:
         # Create full output path with run_id
         self.output_dir = self.output_dir / self.run_id
 
+        # Validate purge_bars >= max(horizons) to prevent label leakage
+        if self.training.horizons:
+            max_h = max(self.training.horizons)
+            if self.training.purge_bars < max_h:
+                logger.warning(
+                    f"purge_bars ({self.training.purge_bars}) < max horizon ({max_h}). "
+                    f"This may cause label leakage. Auto-correcting to {max_h}."
+                )
+                self.training.purge_bars = max_h
+
     @property
     def symbol(self) -> str:
         """Convenience accessor for data.symbol."""
@@ -287,7 +297,7 @@ class ExperimentConfig:
             calibration=CalibrationConfig(**training_section_dict.get("calibration", {})),
             checkpoint=CheckpointConfig(**training_section_dict.get("checkpoint", {})),
             device=training_section_dict.get("device", "auto"),
-            batch_size=training_section_dict.get("batch_size", 256),
+            batch_size=training_section_dict.get("batch_size", 512),
             max_epochs=training_section_dict.get("max_epochs", 100),
             early_stopping_patience=training_section_dict.get("early_stopping_patience", 15),
             build_ensemble=training_section_dict.get("build_ensemble", True),
