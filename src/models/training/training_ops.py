@@ -107,6 +107,7 @@ class TrainingOpsMixin:
                     scoring=self.config.optuna_metric,
                     use_feature_selection=self.config.optimize_features,
                     max_epochs=self.config.max_epochs,
+                    batch_size=getattr(self.config, "batch_size", None),
                     cv_method=self.config.cv_method,
                 )
             )
@@ -237,6 +238,7 @@ class TrainingOpsMixin:
             scoring=self.config.optuna_metric,
             use_feature_selection=self.config.optimize_features,
             max_epochs=self.config.max_epochs,
+            batch_size=getattr(self.config, "batch_size", None),
             cv_method=self.config.cv_method,
         )
 
