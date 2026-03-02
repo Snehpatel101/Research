@@ -220,28 +220,33 @@ class CPCVPBOEvaluator:
         )
 
         # Compute PBO
-        # Need at least 2 "strategies" for PBO - use bootstrap or path variations
-        performance_array = np.array(performance_list).reshape(1, -1)  # 1 strategy, N paths
-
-        # For single model, create pseudo-strategies using different metric weightings
-        n_pseudo_strategies = min(5, len(performance_list))
-        performance_matrix = np.tile(performance_array, (n_pseudo_strategies, 1))
-
-        # Add noise to create pseudo-strategies (for PBO computation)
-        np.random.seed(42)
-        for i in range(1, n_pseudo_strategies):
-            noise = np.random.normal(0, 0.1, performance_matrix.shape[1])
-            performance_matrix[i, :] += noise
-
-        try:
-            pbo_result = compute_pbo(performance_matrix, self.pbo_config)
-        except ValueError as e:
-            logger.warning(f"PBO computation failed: {e}")
-            pbo_result = None
+        # NOTE: PBO requires a matrix of (N_strategies, N_paths) where N_strategies >= 2.
+        # For single-model evaluation, we only have 1 strategy. PBO is designed to detect
+        # overfitting when SELECTING the best from multiple strategies. For a single model,
+        # PBO is not statistically meaningful. We return None and mark as INCONCLUSIVE.
+        pbo_result = None
+        if len(performance_list) >= 2:
+            performance_array = np.array(performance_list)
+            # Only compute PBO if we have multiple independent models/strategies
+            # Single-model noise injection produces meaningless PBO values
+            try:
+                # Reshape as 1 strategy × N paths — compute_pbo will handle
+                # validation of minimum strategies internally
+                performance_matrix = performance_array.reshape(1, -1)
+                pbo_result = compute_pbo(performance_matrix, self.pbo_config)
+            except ValueError as e:
+                logger.info(
+                    f"PBO computation skipped for single model: {e}. "
+                    f"PBO requires multiple independent strategies for meaningful results."
+                )
+                pbo_result = None
 
         # Generate recommendation
         if pbo_result is None:
-            recommendation = "INCONCLUSIVE: PBO computation failed"
+            recommendation = (
+                "INCONCLUSIVE: PBO requires multiple independent strategies. "
+                "CPCV path metrics reported for reference."
+            )
         elif pbo_result.should_block:
             recommendation = f"BLOCK: High overfitting risk (PBO={pbo_result.pbo:.3f})"
         elif pbo_result.is_overfit:
@@ -256,7 +261,7 @@ class CPCVPBOEvaluator:
         return {
             "cpcv_result": cpcv_result.to_dict(),
             "pbo_result": pbo_result.to_dict() if pbo_result else None,
-            "performance_matrix": performance_matrix.tolist(),
+            "performance_list": [float(p) for p in performance_list],
             "recommendation": recommendation,
             "total_time": total_time,
             "n_paths": len(path_results),
