@@ -98,13 +98,17 @@ class OOMRecoveryManager:
     @staticmethod
     def is_oom_error(error: Exception) -> bool:
         """
-        Check if an exception is a CUDA OOM error.
+        Check if an exception is a CUDA OOM or related GPU memory error.
+
+        Catches not just OOM but also cuBLAS/cuDNN internal errors that
+        are often caused by insufficient GPU memory or dtype issues under
+        memory pressure.
 
         Args:
             error: The exception to check
 
         Returns:
-            True if this is a CUDA OOM error
+            True if this is a CUDA memory-related error
         """
         if not isinstance(error, RuntimeError):
             return False
@@ -116,6 +120,9 @@ class OOMRecoveryManager:
             "cudnn status bad allocation",
             "failed to allocate",
             "torch.cuda.outofmemoryerror",
+            "cublas_status_internal_error",
+            "cublas_status_alloc_failed",
+            "cudnn_status_internal_error",
         ]
         return any(indicator in error_msg for indicator in oom_indicators)
 

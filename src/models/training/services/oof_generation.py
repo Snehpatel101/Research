@@ -122,24 +122,34 @@ class OOFGenerationService:
         try:
             return self._generate_oof_inner(request)
         except RuntimeError as e:
-            if "out of memory" not in str(e).lower():
+            error_msg = str(e).lower()
+            is_cuda_error = any(
+                kw in error_msg
+                for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
+            )
+            if not is_cuda_error:
                 logger.warning(f"Failed to generate OOF for {request.model_name}: {e}")
                 return None
-            # First OOM: free GPU memory and retry on same device
+            # First CUDA error: free GPU memory and retry on same device
             logger.warning(
-                f"CUDA OOM during OOF for {request.model_name} — "
+                f"CUDA error during OOF for {request.model_name} — "
                 "freeing memory and retrying..."
             )
             release_gpu_memory()
             try:
                 return self._generate_oof_inner(request)
             except RuntimeError as e2:
-                if "out of memory" not in str(e2).lower():
+                error_msg2 = str(e2).lower()
+                is_cuda_error2 = any(
+                    kw in error_msg2
+                    for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
+                )
+                if not is_cuda_error2:
                     logger.warning(f"OOF retry failed for {request.model_name}: {e2}")
                     return None
-                # Second OOM: fall back to CPU
+                # Second CUDA error: fall back to CPU
                 logger.warning(
-                    f"CUDA OOM persists for {request.model_name} — "
+                    f"CUDA error persists for {request.model_name} — "
                     "falling back to CPU for OOF generation"
                 )
                 import os
