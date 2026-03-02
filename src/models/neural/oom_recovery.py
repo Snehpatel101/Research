@@ -316,7 +316,7 @@ class OOMContext:
 
 def create_oom_manager(
     enabled: bool = True,
-    max_retries: int = 3,
+    max_retries: int = 6,
     batch_reduction_factor: float = 0.5,
     min_batch_size: int = 2,
 ) -> OOMRecoveryManager:

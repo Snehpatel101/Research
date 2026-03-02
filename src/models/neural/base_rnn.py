@@ -444,9 +444,9 @@ class BaseRNNModel(BaseModel):
         # OOM recovery manager for graceful batch size reduction on CUDA OOM
         oom_config = OOMConfig(
             enabled=train_config.get("oom_recovery_enabled", True),
-            max_retries=train_config.get("oom_max_retries", 3),
+            max_retries=train_config.get("oom_max_retries", 6),
             batch_reduction_factor=train_config.get("oom_batch_reduction_factor", 0.5),
-            min_batch_size=train_config.get("oom_min_batch_size", 8),
+            min_batch_size=train_config.get("oom_min_batch_size", 2),
         )
         self._oom_manager = OOMRecoveryManager(oom_config)
         current_batch_size = train_config.get("batch_size", 64)

@@ -308,15 +308,15 @@ class OOMConfig(BaseConfig):
     Example:
         config = OOMConfig(
             enabled=True,
-            max_retries=3,
+            max_retries=6,
             batch_reduction_factor=0.5,
         )
     """
 
     enabled: bool = True
-    max_retries: int = 3
+    max_retries: int = 6
     batch_reduction_factor: float = 0.5
-    min_batch_size: int = 8
+    min_batch_size: int = 2
     clear_cache: bool = True
 
     def validate(self) -> list[str]:
