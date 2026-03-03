@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 
 from ..base import PredictionResult, TrainingMetrics
+from ..device import get_optimal_gpu_settings
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -343,20 +344,29 @@ class iTransformerModel(BaseRNNModel):
         pass  # Attention is over features, not time
 
     def get_default_config(self) -> dict[str, Any]:
-        """Return default iTransformer hyperparameters."""
+        """Return default iTransformer hyperparameters.
+
+        Architecture params (d_model, d_ff, n_heads, n_layers, batch_size)
+        are VRAM-adaptive: they scale based on detected GPU memory via
+        ``get_optimal_gpu_settings``.  Experiment-level overrides still win.
+        """
         defaults = super().get_default_config()
+
+        # Query VRAM-aware settings — returns conservative values for small GPUs
+        gpu_settings = get_optimal_gpu_settings("itransformer")
+
         defaults.update(
             {
-                # Architecture
-                "d_model": 256,
-                "n_heads": 8,
-                "n_layers": 2,  # Fewer layers often sufficient
-                "d_ff": 512,
+                # Architecture — adaptive to VRAM
+                "d_model": gpu_settings.get("d_model", 128),
+                "n_heads": gpu_settings.get("n_heads", 4),
+                "n_layers": gpu_settings.get("n_layers", 2),
+                "d_ff": gpu_settings.get("d_ff", 256),
                 "dropout": 0.1,
                 "activation": "gelu",
-                # Training
-                "sequence_length": 60,  # Must be fixed at training
-                "batch_size": 256,
+                # Training — adaptive batch size
+                "sequence_length": gpu_settings.get("sequence_length", 60),
+                "batch_size": gpu_settings.get("batch_size", 128),
                 "max_epochs": 50,
                 "learning_rate": 0.0001,
                 "weight_decay": 0.01,

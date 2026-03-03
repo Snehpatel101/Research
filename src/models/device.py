@@ -484,7 +484,67 @@ def get_optimal_gpu_settings(model_family: str, gpu_info: GPUInfo | None = None)
             "num_workers": 4,
             "pin_memory": True,
         }
-    elif family in ("transformer", "patchtst", "informer"):
+    elif family == "patchtst":
+        # PatchTST is 4D (multi-resolution) — memory scales with
+        # d_model * n_features * n_timeframes.  With 3 timeframes and
+        # ~60-80 features/tf, d_model=256 needs ~16 GB; d_model=128 ~6 GB.
+        if vram >= 80:
+            d_model, d_ff, n_heads, n_layers = 256, 512, 8, 4
+            batch = 256
+        elif vram >= 40:
+            d_model, d_ff, n_heads, n_layers = 256, 512, 8, 3
+            batch = 128
+        elif vram >= 20:
+            d_model, d_ff, n_heads, n_layers = 128, 256, 4, 3
+            batch = 64
+        else:
+            d_model, d_ff, n_heads, n_layers = 64, 128, 4, 2
+            batch = 32
+        return {
+            "batch_size": batch,
+            "sequence_length": 60,
+            "d_model": d_model,
+            "d_ff": d_ff,
+            "n_layers": n_layers,
+            "n_heads": n_heads,
+            "patch_len": 16,
+            "stride": 8,
+            "mixed_precision": mp_config["enabled"],
+            "amp_dtype": mp_config["dtype"],
+            "grad_scaler": mp_config["grad_scaler"],
+            "num_workers": 4,
+            "pin_memory": True,
+        }
+    elif family == "itransformer":
+        # iTransformer: attention over features (channels) — each feature is
+        # a token.  Memory scales with n_features * d_model.  With ~80
+        # features and d_model=256: ~8 GB; d_model=128: ~3 GB.
+        if vram >= 80:
+            d_model, d_ff, n_heads, n_layers = 256, 512, 8, 3
+            batch = 512
+        elif vram >= 40:
+            d_model, d_ff, n_heads, n_layers = 256, 512, 8, 2
+            batch = 256
+        elif vram >= 20:
+            d_model, d_ff, n_heads, n_layers = 128, 256, 4, 2
+            batch = 128
+        else:
+            d_model, d_ff, n_heads, n_layers = 64, 128, 4, 2
+            batch = 64
+        return {
+            "batch_size": batch,
+            "sequence_length": 60,
+            "d_model": d_model,
+            "d_ff": d_ff,
+            "n_layers": n_layers,
+            "n_heads": n_heads,
+            "mixed_precision": mp_config["enabled"],
+            "amp_dtype": mp_config["dtype"],
+            "grad_scaler": mp_config["grad_scaler"],
+            "num_workers": 4,
+            "pin_memory": True,
+        }
+    elif family in ("transformer", "informer"):
         return {
             "batch_size": max(8, min(256, int(64 * vram_scale))),
             "sequence_length": 128,

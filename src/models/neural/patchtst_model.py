@@ -23,6 +23,7 @@ import torch
 import torch.nn as nn
 
 from ..base import PredictionResult
+from ..device import get_optimal_gpu_settings
 from ..registry import register
 from .base_rnn import BaseRNNModel
 
@@ -334,23 +335,32 @@ class PatchTSTModel(BaseRNNModel):
         self._noncausal_warning_logged = True
 
     def get_default_config(self) -> dict[str, Any]:
-        """Return default PatchTST hyperparameters."""
+        """Return default PatchTST hyperparameters.
+
+        Architecture params (d_model, d_ff, n_heads, n_layers, batch_size)
+        are VRAM-adaptive: they scale based on detected GPU memory via
+        ``get_optimal_gpu_settings``.  Experiment-level overrides still win.
+        """
         defaults = super().get_default_config()
+
+        # Query VRAM-aware settings — returns conservative values for small GPUs
+        gpu_settings = get_optimal_gpu_settings("patchtst")
+
         defaults.update(
             {
-                # Architecture
-                "d_model": 256,
-                "n_heads": 8,
-                "n_layers": 3,
-                "d_ff": 512,
-                "patch_len": 16,  # Patch length in timesteps
-                "stride": 8,  # Stride (8 = 50% overlap with patch_len=16)
+                # Architecture — adaptive to VRAM
+                "d_model": gpu_settings.get("d_model", 128),
+                "n_heads": gpu_settings.get("n_heads", 4),
+                "n_layers": gpu_settings.get("n_layers", 3),
+                "d_ff": gpu_settings.get("d_ff", 256),
+                "patch_len": gpu_settings.get("patch_len", 16),
+                "stride": gpu_settings.get("stride", 8),
                 "dropout": 0.1,
                 "activation": "gelu",
                 "max_patches": 512,
-                # Training
-                "sequence_length": 60,  # Aligned to ModelContract (memory-safe default)
-                "batch_size": 128,
+                # Training — adaptive batch size
+                "sequence_length": gpu_settings.get("sequence_length", 60),
+                "batch_size": gpu_settings.get("batch_size", 64),
                 "max_epochs": 50,
                 "learning_rate": 0.0001,
                 "weight_decay": 0.01,

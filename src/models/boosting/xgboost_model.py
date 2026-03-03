@@ -112,19 +112,20 @@ class XGBoostModel(BaseModel):
 
     def get_default_config(self) -> dict[str, Any]:
         return {
-            "n_estimators": 500,
+            # More trees + lower LR = better generalization on 350k+ rows
+            "n_estimators": 1000,
             "max_depth": 6,
             "min_child_weight": 10,
             "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "learning_rate": 0.05,
-            "gamma": 0.1,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-            "early_stopping_rounds": 10,
+            "colsample_bytree": 0.7,       # More aggressive column sampling → diversity
+            "learning_rate": 0.03,          # Lower LR with more trees → smoother convergence
+            "gamma": 0.2,                   # Stronger min-loss pruning
+            "reg_alpha": 0.5,               # L1 regularization → sparser trees
+            "reg_lambda": 2.0,              # L2 regularization → smaller weights
+            "early_stopping_rounds": 30,    # Patient early stopping matches more trees
             "eval_metric": "mlogloss",
             "tree_method": "hist",
-            "use_gpu": True,  # Phase 12A-8: Enable GPU by default
+            "use_gpu": True,
             "random_state": 42,
             "n_jobs": -1,
             "verbosity": 1,

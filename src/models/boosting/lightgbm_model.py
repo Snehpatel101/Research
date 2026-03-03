@@ -146,18 +146,19 @@ class LightGBMModel(BaseModel):
 
     def get_default_config(self) -> dict[str, Any]:
         return {
-            "n_estimators": 500,
-            "max_depth": 6,
-            "num_leaves": 31,
-            "min_child_samples": 20,
+            # More trees + lower LR = better generalization on 350k+ rows
+            "n_estimators": 1000,
+            "max_depth": 7,                     # Slightly deeper than XGB for diversity
+            "num_leaves": 63,                   # 2^6-1, matches max_depth=7
+            "min_child_samples": 30,            # More conservative splits → less noise
             "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "learning_rate": 0.05,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-            "early_stopping_rounds": 20,
+            "colsample_bytree": 0.7,            # More column sampling → diversity
+            "learning_rate": 0.03,              # Lower LR with more trees
+            "reg_alpha": 0.5,                   # L1 regularization
+            "reg_lambda": 2.0,                  # L2 regularization
+            "early_stopping_rounds": 30,        # Patient early stopping
             "boosting_type": "gbdt",
-            "use_gpu": True,  # Phase 12A-8: Enable GPU by default
+            "use_gpu": True,
             "random_state": 42,
             "n_jobs": -1,
             "verbosity": -1,

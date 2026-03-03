@@ -200,15 +200,20 @@ class TCNModel(BaseRNNModel):
         pass  # TCN is inherently causal - no warning
 
     def get_default_config(self) -> dict[str, Any]:
-        """Return default TCN hyperparameters."""
+        """Return default TCN hyperparameters.
+
+        Tuned for 1-min futures OHLCV with ~2000+ engineered features.
+        Deeper network with wider channels captures multi-scale temporal patterns.
+        TCN is inherently causal — safe for production trading.
+        """
         defaults = super().get_default_config()
         defaults.update(
             {
-                "num_channels": [64, 64, 64, 64],
-                "kernel_size": 3,
-                "dropout": 0.2,
+                "num_channels": [64, 64, 128, 128],  # Wider later layers for richer representation
+                "kernel_size": 5,                      # Wider receptive field per layer
+                "dropout": 0.3,                        # Stronger dropout for 2000+ features
                 "dilation_base": 2,
-                "sequence_length": 64,  # Matches TCN receptive field (61)
+                "sequence_length": 64,  # Matches TCN receptive field
             }
         )
         return defaults
