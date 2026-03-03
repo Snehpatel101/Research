@@ -1,10 +1,111 @@
-# JACOB — TFT on Colab L4: What We're Solving & How to Test
+# JACOB — Model Configuration & Ensemble Guide
 
-## Current Score: 13/14 ✅ — TFT is the only failure
+## Current Score: 13/14 ✅ (TFT was the only failure, now VRAM-adaptive)
+
+## Update (Latest): All 4D Models Now VRAM-Adaptive
+
+**Commit `15ed438`** extends the VRAM-adaptive pattern from TFT to **PatchTST** and **iTransformer**,
+and optimizes all production model defaults for profit research on large datasets.
 
 ---
 
-## The Problem
+## 🏆 Recommended 3-Model Ensemble
+
+### Models: **XGBoost + TCN + PatchTST** with **ridge_meta** meta-learner
+
+| Model | Family | Data Rank | Causal? | Why |
+|-------|--------|-----------|---------|-----|
+| **XGBoost** | Boosting (2D) | Tabular | ✅ Yes | Fast, robust, captures cross-sectional feature interactions. Handles 2490 engineered features natively. Proven on all GPUs. |
+| **TCN** | Neural CNN (3D) | Sequence | ✅ Yes | **Only production-safe neural model** — inherently causal via dilated causal convolutions. Captures temporal patterns that boosting misses. kernel_size=5 gives receptive field covering ~2+ hours of 1-min data. |
+| **PatchTST** | Transformer (4D) | Multi-TF | ❌ No* | Captures multi-timeframe cross-correlations via patch attention across 3 timeframes (1m/5m/15m). Maximally diverse from XGBoost+TCN. Now VRAM-adaptive. |
+
+\* PatchTST is non-causal (bidirectional attention). Fine for research & pattern discovery.
+For pure production: swap PatchTST for **LightGBM** (gives 2 boosting + 1 neural, all causal).
+
+**Meta-learner: `ridge_meta`** — fast, closed-form, interpretable weights. Use `xgboost_meta` if
+you want non-linear stacking (slightly better accuracy, slower).
+
+### Why This Combo?
+
+1. **Maximum diversity**: 2D tabular + 3D temporal + 4D multi-resolution = each model sees data fundamentally differently
+2. **Complementary strengths**: XGBoost excels at feature interactions, TCN at local temporal patterns, PatchTST at long-range cross-timeframe dependencies
+3. **Risk management**: If one model family fails, the other two provide coverage
+4. **Proven on Colab**: XGBoost and TCN pass all tests. PatchTST is now VRAM-adaptive for L4
+
+### Alternative: All-Causal Ensemble (for production)
+
+| Model | Why |
+|-------|-----|
+| XGBoost | Anchor — best single-model accuracy on tabular features |
+| LightGBM | Complementary to XGBoost (different tree-building: leaf-wise vs level-wise) |
+| TCN | Temporal pattern capture, fully causal |
+
+---
+
+## 🖥️ Colab GPU Recommendation
+
+| Tier | GPU | VRAM | Monthly Cost | Recommendation |
+|------|-----|------|-------------|----------------|
+| **L4** | NVIDIA L4 | 23 GB | ~$10/mo (Pro) | ✅ **Best value.** Handles XGBoost + TCN + PatchTST with VRAM-adaptive sizing. |
+| **A100** | NVIDIA A100 | 40 GB | ~$50/mo (Pro+) | 🔥 For running ALL 14 models including TFT at full d_model=256. Overkill for 3-model ensemble. |
+| **T4** | NVIDIA T4 | 15 GB | Free tier | ⚠️ Works for XGBoost + TCN. PatchTST will run at d_model=64. Not recommended for serious research. |
+
+**Recommendation: Colab Pro with L4 runtime.** The VRAM-adaptive configs are specifically tuned for the 20-24 GB range.
+
+---
+
+## VRAM-Adaptive Model Defaults (what each GPU tier gets)
+
+### PatchTST (`src/models/neural/patchtst_model.py`)
+
+| VRAM | d_model | d_ff | n_heads | n_layers | batch |
+|------|---------|------|---------|----------|-------|
+| ≥80 GB (H100) | 256 | 512 | 8 | 4 | 256 |
+| ≥40 GB (A100) | 256 | 512 | 8 | 3 | 128 |
+| **≥20 GB (L4)** | **128** | **256** | **4** | **3** | **64** |
+| <20 GB (4070 Ti) | 64 | 128 | 4 | 2 | 32 |
+
+### iTransformer (`src/models/neural/itransformer_model.py`)
+
+| VRAM | d_model | d_ff | n_heads | n_layers | batch |
+|------|---------|------|---------|----------|-------|
+| ≥80 GB (H100) | 256 | 512 | 8 | 3 | 512 |
+| ≥40 GB (A100) | 256 | 512 | 8 | 2 | 256 |
+| **≥20 GB (L4)** | **128** | **256** | **4** | **2** | **128** |
+| <20 GB (4070 Ti) | 64 | 128 | 4 | 2 | 64 |
+
+### TFT (`src/models/neural/tft_model.py`)
+
+| VRAM | d_model | d_ff | n_heads | Expected memory |
+|------|---------|------|---------|-----------------|
+| ≥80 GB (H100) | 512 | 1024 | 8 | ~40 GB |
+| ≥40 GB (A100) | 256 | 512 | 4 | ~21 GB |
+| **≥20 GB (L4)** | **128** | **256** | **4** | **~6 GB** |
+| <20 GB (4070 Ti) | 64 | 128 | 2 | ~2 GB |
+
+### Optimized Boosting Defaults
+
+| Param | XGBoost (old→new) | LightGBM (old→new) |
+|-------|-------------------|---------------------|
+| n_estimators | 500→**1000** | 500→**1000** |
+| learning_rate | 0.05→**0.03** | 0.05→**0.03** |
+| reg_alpha | 0.1→**0.5** | 0.1→**0.5** |
+| reg_lambda | 1.0→**2.0** | 1.0→**2.0** |
+| colsample_bytree | 0.8→**0.7** | 0.8→**0.7** |
+| early_stopping | 10→**30** | 20→**30** |
+| max_depth | 6 (same) | 6→**7** |
+
+### TCN Defaults
+
+| Param | Old | New |
+|-------|-----|-----|
+| num_channels | [64,64,64,64] | **[64,64,128,128]** |
+| kernel_size | 3 | **5** |
+| dropout | 0.2 | **0.3** |
+
+---
+
+## The Problem (Historical — TFT)
 
 **TFT (Temporal Fusion Transformer) OOMs on Google Colab L4 (23 GB VRAM).**
 
@@ -137,6 +238,7 @@ The fix would be: find where those 2 extra TFTModel instances are created and ei
 
 | Commit | What it fixed |
 |--------|--------------|
+| `15ed438` | **VRAM-adaptive PatchTST/iTransformer + optimized XGBoost/LightGBM/TCN defaults** |
 | `d812695` | Notebook updates |
 | `1abbc1e` | VRAM-adaptive TFT sizing (d_model scales with GPU) |
 | `5bcec3f` | batch_size pass-through to ModelTrainingRequest |
@@ -149,11 +251,16 @@ The fix would be: find where those 2 extra TFTModel instances are created and ei
 
 | File | What it does |
 |------|-------------|
-| `src/models/device.py` | VRAM detection, adaptive config, GPU memory mgmt |
-| `src/models/neural/tft_model.py` | TFT model — `get_default_config()` now VRAM-aware |
+| `src/models/device.py` | VRAM detection, adaptive config (TFT/PatchTST/iTransformer families), GPU memory mgmt |
+| `src/models/neural/tft_model.py` | TFT model — `get_default_config()` VRAM-aware |
+| `src/models/neural/patchtst_model.py` | PatchTST model — `get_default_config()` VRAM-aware |
+| `src/models/neural/itransformer_model.py` | iTransformer model — `get_default_config()` VRAM-aware |
+| `src/models/neural/tcn_model.py` | TCN — wider channels, deeper kernel for profit research |
+| `src/models/boosting/xgboost_model.py` | XGBoost — 1000 trees, LR 0.03, stronger regularization |
+| `src/models/boosting/lightgbm_model.py` | LightGBM — matched XGBoost optimization |
 | `src/models/neural/base_rnn.py` | Base neural class — AMP fallback, OOM retry loop |
-| `src/models/neural/oom_recovery.py` | OOM detection + batch reduction |
 | `src/models/training/training_ops.py` | Training orchestration, OOF config passing |
 | `src/models/training/services/oof_generation.py` | OOF fold generation |
 | `scripts/compatibility_test.py` | The 14-test suite |
 | `notebooks/colab_test_runner.ipynb` | Colab test runner |
+| `notebooks/ml_factory_colab.ipynb` | Main training notebook |
