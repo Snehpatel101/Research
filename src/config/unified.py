@@ -356,14 +356,14 @@ class OptunaSection:
     """Optuna configuration."""
 
     n_trials: int = 100
-    timeout: int = 3600  # 1 hour
+    timeout: int = 43200  # 12 hours
     n_jobs: int = -1
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> OptunaSection:
         return cls(
             n_trials=data.get("n_trials", 100),
-            timeout=data.get("timeout", 3600),
+            timeout=data.get("timeout", 43200),
             n_jobs=data.get("n_jobs", -1),
         )
 

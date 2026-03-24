@@ -525,10 +525,6 @@ class MTFFeatureComputer:
         Returns:
             DataFrame with features for single timeframe, named: {feature}_{timeframe}
         """
-        if timeframe not in self.config.timeframes:
-            # Temporarily add timeframe
-            self.config.timeframes = [timeframe]
-
         # Set up working DataFrame with datetime index
         df_work = df.set_index(datetime_col) if datetime_col is not None else df
 

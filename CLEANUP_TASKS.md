@@ -141,6 +141,36 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ---
 
+### Phase 96: Deep Audit Phase C — 13 Medium-Priority Fixes (FIXES_NEEDED.md)
+
+**Status:** COMPLETE
+**Priority:** MEDIUM
+**Tasks:** 13/13 complete (C2 skipped — 2-week effort)
+**Date:** 2026-03-24
+
+| Task | Description | Files | Status |
+|------|-------------|-------|--------|
+| C1 | DSR Bonferroni correction (`num_tests` param, threshold shift) | `five_dimension_objective.py`, `deflated_sharpe.py` | ✅ |
+| C3 | Remove duplicate `compute_micro_trade_intensity_20` | `microstructure.py` | ✅ |
+| C4 | Delete GARCH NaN stubs (garch_vol_forecast, garch_vol_ratio) | `volatility.py` | ✅ |
+| C5 | OU half-life: both Numba+Python paths receive log prices | `mean_reversion.py` | ✅ |
+| C6 | Hurst standardization (already delegates to entropy.py) | `mean_reversion.py` — no changes needed | ✅ |
+| C7 | MTF `compute_single_timeframe` no longer mutates config | `mtf.py` | ✅ |
+| C8 | Label cache `labels.copy()` + thread-safe `_label_cache_lock` | `five_dimension_objective.py` | ✅ |
+| C9 | Dead ExperimentConfig renamed to `_ModeConfig` shim | `config.py`, `training_ops.py`, mode trainers | ✅ |
+| C10 | Optuna timeout unified to 43200s (was 3600 vs 43200 mismatch) | `unified.py` | ✅ |
+| C11 | AdapterScaler `_inverse_transform_f32` for float32 inverse scaling | `scaling.py` | ✅ |
+| C12 | Deleted orphaned `purged_selector.py` + `optimization.py` (-563 lines) | `feature_selection/` | ✅ |
+| C13 | Triple barrier ATR expanding median for cost calibration | `triple_barrier.py` | ✅ |
+| C14 | Volatility wired to slippage (`entry_atr` on Position, vol-scaled exit) | `backtest.py`, `costs.py` | ✅ |
+
+**Additional fixes during verification:**
+- NaN guard in `VolatilityScaledSlippage.estimate_slippage()` — falls back to base_volatility when NaN
+
+**Verification:** 223/223 tests passing, ruff clean, black clean. 20 files modified, -789 lines net.
+
+---
+
 ### Phase 53: Security Hardening, SymbolConfig Extraction & Resample Safety
 
 **Status:** COMPLETE

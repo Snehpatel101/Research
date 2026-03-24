@@ -341,21 +341,6 @@ def compute_micro_cum_imbalance_20(df: pd.DataFrame) -> pd.Series:
 # =============================================================================
 
 
-def compute_micro_trade_intensity_20(df: pd.DataFrame) -> pd.Series:
-    """
-    20-period trade intensity (volume acceleration).
-
-    Measures how much current volume deviates from recent average.
-    """
-    vol_sma = _sma(df["volume"], window=20)
-
-    # Avoid division by zero
-    vol_sma = vol_sma.replace(0, np.nan)
-
-    # Intensity as ratio above/below average
-    return df["volume"] / vol_sma
-
-
 def compute_micro_trade_intensity_50(df: pd.DataFrame) -> pd.Series:
     """
     50-period trade intensity.
@@ -433,7 +418,6 @@ MICROSTRUCTURE_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     "micro_volume_imbalance": compute_micro_volume_imbalance,
     "micro_cum_imbalance_20": compute_micro_cum_imbalance_20,
     # Trade Intensity
-    "micro_trade_intensity_20": compute_micro_trade_intensity_20,
     "micro_trade_intensity_50": compute_micro_trade_intensity_50,
     # Efficiency
     "micro_efficiency_10": compute_micro_efficiency_10,
@@ -442,7 +426,7 @@ MICROSTRUCTURE_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
 
 # Feature family metadata
 FEATURE_FAMILY = "microstructure"
-FEATURE_COUNT = 15
+FEATURE_COUNT = 14
 
 __all__ = [
     "MICROSTRUCTURE_FEATURES",
@@ -467,7 +451,6 @@ __all__ = [
     "compute_micro_volume_imbalance",
     "compute_micro_cum_imbalance_20",
     # Trade Intensity
-    "compute_micro_trade_intensity_20",
     "compute_micro_trade_intensity_50",
     # Efficiency
     "compute_micro_efficiency_10",

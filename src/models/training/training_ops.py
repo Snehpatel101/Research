@@ -388,17 +388,17 @@ class TrainingOpsMixin:
         from src.core.container import TimeSeriesDataContainer
         from src.models.registry import ModelRegistry
 
-        from .config import ExperimentConfig, ModelConfig
+        from .config import _ModeConfig
         from .modes import WalkForwardTrainer, WalkForwardTrainerConfig
         from .unified_orchestrator import ModelTrainingResult
 
         logger.info("Walk-forward training mode")
         horizon = self.config.horizons[0]
 
-        exp_config = ExperimentConfig(
+        exp_config = _ModeConfig(
             symbol=self.config.symbol,
             horizons=self.config.horizons,
-            models=[ModelConfig(name=m) for m in self.config.models],
+            models=list(self.config.models),
             data_dir=Path(self.config.data_path).parent,
             output_dir=self.output_dir,
         )
@@ -530,10 +530,10 @@ class TrainingOpsMixin:
                 )
 
             # Create a single-model config for the walk-forward trainer
-            single_model_config = ExperimentConfig(
+            single_model_config = _ModeConfig(
                 symbol=exp_config.symbol,
                 horizons=exp_config.horizons,
-                models=[ModelConfig(name=model_name)],
+                models=[model_name],
                 data_dir=exp_config.data_dir,
                 output_dir=exp_config.output_dir,
             )

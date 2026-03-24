@@ -317,7 +317,11 @@ class VolatilityScaledSlippage(BaseSlippageModel):
         Returns:
             Estimated slippage in price units
         """
-        vol = volatility if volatility is not None else self.base_volatility
+        vol = (
+            volatility
+            if volatility is not None and np.isfinite(volatility)
+            else self.base_volatility
+        )
 
         # Scale by volatility ratio
         vol_ratio = vol / self.base_volatility

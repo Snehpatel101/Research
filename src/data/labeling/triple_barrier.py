@@ -598,6 +598,9 @@ class TripleBarrierLabeler(LabelingStrategy):
                 logger.warning("No valid ATR values for cost calculation, using cost_in_atr=0")
                 return 0.0
 
+            # Global median is intentional: this is a training-time calibration that
+            # converts a fixed dollar cost into ATR units once for the entire dataset.
+            # An expanding median would bias early samples with higher cost adjustments.
             median_atr = np.median(valid_atr)
             return float(cost_in_price / median_atr)
         except ImportError:

@@ -305,7 +305,10 @@ class AdapterScaler:
 
         # Note: inverse_transform does not "un-clip", so values that were
         # clipped during transform will remain at the clip boundaries
-        X_unscaled = self._scaler.inverse_transform(X_2d)
+        if X.dtype == np.float32 and self._input_f32:
+            X_unscaled = self._inverse_transform_f32(X_2d)
+        else:
+            X_unscaled = self._scaler.inverse_transform(X_2d)
 
         return self._from_2d(X_unscaled, original_shape)
 
@@ -338,6 +341,36 @@ class AdapterScaler:
         else:
             # Shouldn't reach here, but fall back to sklearn
             return self._scaler.transform(X_2d)
+
+    def _inverse_transform_f32(self, X_2d: np.ndarray) -> np.ndarray:
+        """
+        Manual float32 inverse scaling — avoids sklearn's float64 upcasting.
+
+        Reverses _transform_f32: result = X * scale + center for robust/standard,
+        result = X * data_range + data_min for minmax.
+
+        Args:
+            X_2d: 2D float32 array (n_total_samples, n_features)
+
+        Returns:
+            Unscaled float32 array with same shape
+        """
+        if self.config.method == "robust":
+            result = X_2d.copy()
+            if self._f32_scale is not None:
+                result *= self._f32_scale
+            if self._f32_center is not None:
+                result += self._f32_center
+            return result
+        elif self.config.method == "standard":
+            return X_2d * self._f32_scale + self._f32_center
+        elif self.config.method == "minmax":
+            lo, hi = self.config.feature_range
+            unscaled = (X_2d - lo) / (hi - lo)
+            return unscaled * self._f32_data_range + self._f32_data_min
+        else:
+            # Shouldn't reach here, but fall back to sklearn
+            return self._scaler.inverse_transform(X_2d)
 
     def _to_2d(self, X: np.ndarray) -> np.ndarray:
         """

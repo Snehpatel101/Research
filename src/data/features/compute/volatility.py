@@ -1,7 +1,7 @@
 """
-Volatility feature computation - ATR, Bollinger Bands, Keltner Channels, Historical Vol, GARCH.
+Volatility feature computation - ATR, Bollinger Bands, Keltner Channels, Historical Vol.
 
-PHASE_1 Unified Features: 25 VOLATILITY features.
+PHASE_1 Unified Features: 23 VOLATILITY features.
 
 Performance: Uses DataFrame-id based caching for ATR computations to avoid
 redundant calculations when multiple features use the same ATR period.
@@ -392,32 +392,6 @@ def compute_return_kurt_20(df: pd.DataFrame) -> pd.Series:
 
 
 # =============================================================================
-# GARCH FEATURES (STUB)
-# =============================================================================
-
-
-def compute_garch_vol_forecast(df: pd.DataFrame) -> pd.Series:
-    """
-    GARCH(1,1) volatility forecast.
-
-    NOTE: This is a stub that returns NaN. Full implementation requires
-    arch library and is computationally expensive.
-    """
-    # Stub implementation - return NaN series
-    return pd.Series(np.nan, index=df.index, name="garch_vol_forecast")
-
-
-def compute_garch_vol_ratio(df: pd.DataFrame) -> pd.Series:
-    """
-    Ratio of GARCH forecast to realized volatility.
-
-    NOTE: This is a stub that returns NaN.
-    """
-    # Stub implementation - return NaN series
-    return pd.Series(np.nan, index=df.index, name="garch_vol_ratio")
-
-
-# =============================================================================
 # FEATURE MAP
 # =============================================================================
 
@@ -451,14 +425,11 @@ VOLATILITY_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     # Return Distribution
     "return_skew_20": compute_return_skew_20,
     "return_kurt_20": compute_return_kurt_20,
-    # GARCH (stubs)
-    "garch_vol_forecast": compute_garch_vol_forecast,
-    "garch_vol_ratio": compute_garch_vol_ratio,
 }
 
 # Feature family metadata
 FEATURE_FAMILY = "volatility"
-FEATURE_COUNT = 25
+FEATURE_COUNT = 23
 
 __all__ = [
     "VOLATILITY_FEATURES",
@@ -493,7 +464,4 @@ __all__ = [
     # Return Distribution
     "compute_return_skew_20",
     "compute_return_kurt_20",
-    # GARCH
-    "compute_garch_vol_forecast",
-    "compute_garch_vol_ratio",
 ]

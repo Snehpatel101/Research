@@ -12,9 +12,9 @@ from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 from src.data.features.compute._helpers import rolling_std, sma
+from src.data.features.compute.entropy import compute_hurst_100
 
 try:
     from numba import njit  # noqa: F401
@@ -102,17 +102,22 @@ def compute_mr_zscore_60(df: pd.DataFrame) -> pd.Series:
 
 
 def _calc_halflife(x: np.ndarray) -> float:
-    """Calculate OU half-life for a price series."""
-    if len(x) < 10:
+    """Calculate OU half-life for a log-price series.
+
+    Matches the Numba path: regresses log-returns on lagged log-prices
+    (the standard OU specification: delta_X = a + beta * X_{t-1}).
+    Half-life = -ln(2) / beta.
+    """
+    n = len(x)
+    if n < 10:
         return np.nan
 
-    # AR(1): y_t = a + b * y_{t-1} + e
-    y = x[1:]
-    y_lag = x[:-1]
+    # OU regression: delta_x = a + beta * x_{t-1}
+    y = x[1:] - x[:-1]  # log-returns
+    y_lag = x[:-1]  # lagged log-prices
 
-    # Simple OLS for speed
-    n = len(y)
-    if n < 2:
+    n_obs = len(y)
+    if n_obs < 2:
         return np.nan
 
     x_mean = y_lag.mean()
@@ -126,14 +131,13 @@ def _calc_halflife(x: np.ndarray) -> float:
 
     beta = numerator / denominator
 
-    # Half-life = -ln(2) / ln(beta)
-    # Cap at MAX_HALFLIFE instead of returning inf to prevent gradient explosion
+    # Mean reversion requires beta < 0
     MAX_HALFLIFE = 120.0
-    if beta <= 0 or beta >= 1:
-        return MAX_HALFLIFE  # No mean reversion - return max cap instead of inf
+    if beta >= 0:
+        return MAX_HALFLIFE  # No mean reversion
 
-    halflife = -np.log(2) / np.log(beta)
-    return min(halflife, MAX_HALFLIFE)  # Cap at 2x window
+    halflife = -np.log(2) / beta
+    return min(halflife, MAX_HALFLIFE)
 
 
 if NUMBA_AVAILABLE:
@@ -141,22 +145,19 @@ if NUMBA_AVAILABLE:
 
     @_njit_halflife(cache=True)
     def _calc_halflife_numba(x: np.ndarray) -> float:
-        """Numba-accelerated OU half-life calculation."""
+        """Numba-accelerated OU half-life calculation.
+
+        Expects log prices as input (caller must pass np.log(close)).
+        """
         n = len(x)
         if n < 10:
             return np.nan
-        # Log prices
-        log_x = np.empty(n)
-        for i in range(n):
-            if x[i] <= 0:
-                return np.nan
-            log_x[i] = np.log(x[i])
-        # Delta and lagged
+        # Delta and lagged (x is already log prices)
         y = np.empty(n - 1)
         x_lag = np.empty(n - 1)
         for i in range(n - 1):
-            y[i] = log_x[i + 1] - log_x[i]
-            x_lag[i] = log_x[i]
+            y[i] = x[i + 1] - x[i]
+            x_lag[i] = x[i]
         # Simple OLS: y = a + b * x_lag
         n_obs = n - 1
         sum_x = 0.0
@@ -186,9 +187,8 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
     Uses AR(1) regression to estimate the speed of mean reversion.
     Smaller values indicate faster mean reversion.
 
-    When Numba is available, uses _calc_halflife_numba which takes raw prices
-    and logs internally. Otherwise falls back to the original _calc_halflife
-    which expects pre-logged prices.
+    Both paths (Numba and pure-Python) receive log prices as input
+    to ensure consistent results regardless of which backend is active.
 
     Args:
         df: DataFrame with 'close' column
@@ -196,223 +196,8 @@ def compute_ou_halflife(df: pd.DataFrame) -> pd.Series:
     Returns:
         Series with half-life in bars (capped at MAX_HALFLIFE=120.0 if no mean reversion)
     """
-    if NUMBA_AVAILABLE:
-        # Numba version takes raw prices and logs internally
-        return df["close"].rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
-    else:
-        # Original version expects pre-logged prices
-        log_prices = np.log(df["close"])
-        return log_prices.rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
-
-
-# =============================================================================
-# HURST EXPONENT
-# =============================================================================
-
-# Try to import numba for accelerated Hurst calculation
-try:
-    from numba import jit as hurst_jit
-
-    @hurst_jit(nopython=True)
-    def _hurst_rs_numba(x: np.ndarray, max_lag: int) -> float:
-        """
-        Numba-accelerated Hurst exponent using R/S analysis.
-
-        O(max_lag * n/max_lag) = O(n) per window.
-        """
-        n = len(x)
-        if n < max_lag * 2:
-            return np.nan
-
-        # Pre-compute lags
-        n_lags = 0
-        for _lag in range(2, min(max_lag + 1, n // 2)):
-            n_lags += 1
-
-        if n_lags < 3:
-            return np.nan
-
-        log_lags = np.empty(n_lags)
-        log_rs = np.empty(n_lags)
-        valid_count = 0
-
-        lag_idx = 0
-        for lag in range(2, min(max_lag + 1, n // 2)):
-            n_chunks = n // lag
-            if n_chunks < 1:
-                continue
-
-            rs_sum = 0.0
-            rs_count = 0
-
-            for i in range(n_chunks):
-                start = i * lag
-                end = (i + 1) * lag
-
-                # Compute mean
-                chunk_sum = 0.0
-                for j in range(start, end):
-                    chunk_sum += x[j]
-                chunk_mean = chunk_sum / lag
-
-                # Compute cumsum and std
-                cumsum = 0.0
-                cumsum_min = 0.0
-                cumsum_max = 0.0
-                var_sum = 0.0
-
-                for j in range(start, end):
-                    val = x[j] - chunk_mean
-                    cumsum += val
-                    if cumsum < cumsum_min:
-                        cumsum_min = cumsum
-                    if cumsum > cumsum_max:
-                        cumsum_max = cumsum
-                    var_sum += val * val
-
-                r = cumsum_max - cumsum_min
-                s = np.sqrt(var_sum / lag)
-
-                if s > 0:
-                    rs_sum += r / s
-                    rs_count += 1
-
-            if rs_count > 0:
-                log_lags[valid_count] = np.log(lag)
-                log_rs[valid_count] = np.log(rs_sum / rs_count)
-                valid_count += 1
-
-            lag_idx += 1
-
-        if valid_count < 3:
-            return np.nan
-
-        # Simple linear regression for slope
-        x_mean = 0.0
-        y_mean = 0.0
-        for i in range(valid_count):
-            x_mean += log_lags[i]
-            y_mean += log_rs[i]
-        x_mean /= valid_count
-        y_mean /= valid_count
-
-        numerator = 0.0
-        denominator = 0.0
-        for i in range(valid_count):
-            x_diff = log_lags[i] - x_mean
-            numerator += x_diff * (log_rs[i] - y_mean)
-            denominator += x_diff * x_diff
-
-        if denominator == 0:
-            return np.nan
-
-        slope = numerator / denominator
-
-        # Clip to valid range
-        if slope < 0:
-            return 0.0
-        elif slope > 1:
-            return 1.0
-        return slope
-
-    @hurst_jit(nopython=True)
-    def _rolling_hurst_numba(
-        arr: np.ndarray, window: int, min_periods: int, max_lag: int
-    ) -> np.ndarray:
-        """
-        Numba-accelerated rolling Hurst calculation.
-
-        Total complexity: O(n * max_lag) instead of O(n^2).
-        """
-        n = len(arr)
-        result = np.empty(n)
-        result[:] = np.nan
-
-        for i in range(window - 1, n):
-            window_data = arr[i - window + 1 : i + 1]
-            # Count non-nan values
-            valid = 0
-            for v in window_data:
-                if not np.isnan(v):
-                    valid += 1
-            if valid >= min_periods:
-                result[i] = _hurst_rs_numba(window_data, max_lag)
-
-        return result
-
-    HURST_NUMBA_AVAILABLE = True
-except ImportError:
-    HURST_NUMBA_AVAILABLE = False
-
-
-def _calc_hurst(x: np.ndarray, max_lag: int = 20) -> float:
-    """Calculate Hurst exponent using R/S analysis (fallback)."""
-    if len(x) < max_lag * 2:
-        return np.nan
-
-    lags = range(2, min(max_lag + 1, len(x) // 2))
-    rs_values = []
-
-    for lag in lags:
-        n_chunks = len(x) // lag
-        if n_chunks < 1:
-            continue
-
-        rs_chunk = []
-        for i in range(n_chunks):
-            chunk = x[i * lag : (i + 1) * lag]
-            if len(chunk) < 2:
-                continue
-
-            mean_adj = chunk - np.mean(chunk)
-            cumsum = np.cumsum(mean_adj)
-            r = np.max(cumsum) - np.min(cumsum)
-            s = np.std(chunk)
-
-            if s > 0:
-                rs_chunk.append(r / s)
-
-        if rs_chunk:
-            rs_values.append((lag, np.mean(rs_chunk)))
-
-    if len(rs_values) < 3:
-        return np.nan
-
-    log_lags = np.log([v[0] for v in rs_values])
-    log_rs = np.log([v[1] for v in rs_values])
-
-    slope, _, _, _, _ = stats.linregress(log_lags, log_rs)
-
-    return np.clip(slope, 0, 1)
-
-
-def compute_hurst_exponent(df: pd.DataFrame) -> pd.Series:
-    """
-    Estimate Hurst exponent using R/S analysis.
-
-    H < 0.5: Mean reverting
-    H = 0.5: Random walk
-    H > 0.5: Trending/momentum
-
-    Uses Numba-accelerated O(n * max_lag) algorithm when available
-    instead of O(n^2) pandas rolling approach.
-
-    Args:
-        df: DataFrame with 'close' column
-
-    Returns:
-        Series with Hurst exponent estimates
-    """
     log_prices = np.log(df["close"])
-
-    if HURST_NUMBA_AVAILABLE:
-        result = _rolling_hurst_numba(log_prices.values, window=100, min_periods=40, max_lag=20)
-        return pd.Series(result, index=log_prices.index)
-    else:
-        # Fallback to pandas apply
-        return log_prices.rolling(window=100, min_periods=40).apply(
-            lambda x: _calc_hurst(x, max_lag=20), raw=True
-        )
+    return log_prices.rolling(window=60, min_periods=20).apply(_calc_halflife, raw=True)
 
 
 # =============================================================================
@@ -631,7 +416,7 @@ def compute_mr_strength(df: pd.DataFrame) -> pd.Series:
         Series with mean reversion strength (higher = stronger signal)
     """
     zscore = compute_mr_zscore_20(df)
-    hurst = compute_hurst_exponent(df)
+    hurst = compute_hurst_100(df)
 
     # Strong MR: high |zscore| + low Hurst
     # Invert Hurst contribution (1 - Hurst) so low Hurst gives high value
@@ -677,8 +462,8 @@ def compute_mean_reversion_features(
     # OU half-life (longer window needed)
     features["ou_halflife"] = compute_ou_halflife(df)
 
-    # Hurst exponent
-    features["hurst_exponent"] = compute_hurst_exponent(df)
+    # Hurst exponent (canonical implementation from entropy.py, with shift(1))
+    features["hurst_exponent"] = compute_hurst_100(df)
 
     # Variance ratios
     features["variance_ratio_2"] = compute_variance_ratio_2(df)
@@ -700,8 +485,6 @@ MEAN_REVERSION_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
     "mr_zscore_60": compute_mr_zscore_60,
     # OU Half-Life
     "ou_halflife": compute_ou_halflife,
-    # Hurst Exponent
-    "hurst_exponent": compute_hurst_exponent,
     # Variance Ratios
     "variance_ratio_2": compute_variance_ratio_2,
     "variance_ratio_4": compute_variance_ratio_4,
@@ -713,7 +496,7 @@ MEAN_REVERSION_FEATURES: dict[str, Callable[[pd.DataFrame], pd.Series]] = {
 
 # Feature family metadata
 FEATURE_FAMILY = "mean_reversion"
-FEATURE_COUNT = 10
+FEATURE_COUNT = 9
 
 __all__ = [
     "MEAN_REVERSION_FEATURES",
@@ -725,8 +508,6 @@ __all__ = [
     "compute_mr_zscore_60",
     # OU Half-Life
     "compute_ou_halflife",
-    # Hurst Exponent
-    "compute_hurst_exponent",
     # Variance Ratios
     "compute_variance_ratio_2",
     "compute_variance_ratio_4",

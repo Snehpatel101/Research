@@ -365,6 +365,7 @@ def compute_deflated_sharpe(
     n_trials: int,
     deployment_threshold: float = 0.5,
     config: DSRConfig | None = None,
+    num_tests: int = 1,
 ) -> DSRResult:
     """
     Compute Deflated Sharpe Ratio correcting for multiple testing bias.
@@ -384,12 +385,23 @@ def compute_deflated_sharpe(
         2. Variance of Sharpe estimates across trials
         3. Non-normality via gamma correction (skewness, kurtosis)
 
+    Bonferroni correction (num_tests > 1):
+        When running multiple independent experiments (e.g. Optuna studies),
+        the significance/deployment thresholds are raised to control
+        family-wise error rate. The thresholds are shifted upward by
+        ``scipy.stats.norm.ppf(1 - alpha / (2 * num_tests)) - z_base``
+        which is equivalent to dividing alpha by num_tests.
+
     Args:
         sharpe_ratio: Best observed Sharpe from trials
         trial_sharpes: Array of all trial Sharpe values
         n_trials: Number of trials evaluated
         deployment_threshold: Min DSR for deployment (default: 0.5)
         config: DSRConfig for advanced settings (optional)
+        num_tests: Number of independent experiment-level tests for
+            Bonferroni correction (default: 1, no correction). When > 1,
+            raises significance/deployment thresholds to control
+            family-wise error rate across multiple experiments.
 
     Returns:
         DSRResult with deflated Sharpe and deployment recommendation
@@ -424,6 +436,10 @@ def compute_deflated_sharpe(
                 min_trials_for_kurtosis=config.min_trials_for_kurtosis,
             )
 
+    # Validate num_tests
+    if num_tests < 1:
+        raise ValueError(f"num_tests must be >= 1, got {num_tests}")
+
     # Validate inputs
     _validate_inputs(sharpe_ratio, trial_sharpes, n_trials)
 
@@ -442,13 +458,32 @@ def compute_deflated_sharpe(
     # adjusted by gamma for non-normality
     deflated = sharpe_ratio - gamma * expected_max_sr
 
+    # Bonferroni correction: raise thresholds when running multiple experiments.
+    # Dividing alpha by num_tests is equivalent to raising the z-score threshold.
+    # For num_tests=1, bonferroni_shift=0 (no correction).
+    bonferroni_shift = 0.0
+    if num_tests > 1:
+        # Base alpha ~ 0.05 (two-sided), z_base ~ 1.96
+        _alpha = 0.05
+        z_base = stats.norm.ppf(1.0 - _alpha / 2.0)
+        z_corrected = stats.norm.ppf(1.0 - _alpha / (2.0 * num_tests))
+        bonferroni_shift = z_corrected - z_base
+        logger.info(
+            f"Bonferroni correction: num_tests={num_tests}, "
+            f"threshold shift=+{bonferroni_shift:.3f}"
+        )
+
+    sig_threshold = config.significance_threshold + bonferroni_shift
+    dep_threshold = config.deployment_threshold + bonferroni_shift
+
     # Determine significance and deployment flags
-    is_significant = deflated > config.significance_threshold
-    should_deploy = deflated > config.deployment_threshold
+    is_significant = deflated > sig_threshold
+    should_deploy = deflated > dep_threshold
 
     logger.info(
         f"DSR computed: SR={sharpe_ratio:.3f} -> DSR={deflated:.3f} "
-        f"(n={n_trials}, gamma={gamma:.3f}, deflation={expected_max_sr:.3f})"
+        f"(n={n_trials}, gamma={gamma:.3f}, deflation={expected_max_sr:.3f}"
+        f"{f', bonferroni_shift={bonferroni_shift:.3f}' if num_tests > 1 else ''})"
     )
 
     return DSRResult(
@@ -500,6 +535,7 @@ def compute_dsr_from_optuna_study(
     deployment_threshold: float = 0.5,
     config: DSRConfig | None = None,
     metric_name: str | None = None,
+    num_tests: int = 1,
 ) -> DSRResult:
     """
     Compute DSR from Optuna study.
@@ -517,6 +553,10 @@ def compute_dsr_from_optuna_study(
             is skipped because the math is only valid for unbounded Sharpe-like
             distributions. Pass None to assume the metric is Sharpe-like (backward
             compatible).
+        num_tests: Number of independent experiment-level tests for
+            Bonferroni correction (default: 1, no correction). Pass the
+            number of completed Optuna trials to apply experiment-level
+            multiple-testing correction.
 
     Returns:
         DSRResult with deflated Sharpe based on optimization history
@@ -589,6 +629,7 @@ def compute_dsr_from_optuna_study(
         n_trials=n_trials,
         deployment_threshold=deployment_threshold,
         config=config,
+        num_tests=num_tests,
     )
 
 

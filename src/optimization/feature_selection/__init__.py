@@ -19,7 +19,6 @@ Main Components:
         WalkForwardFeatureSelector: Walk-forward feature selection with MDA/MDI
         CVIntegratedFeatureSelector: CV-integrated feature selection
         OHLCVFeatureSelector: Enhanced selector with stability, correlation, and regime support
-        PurgedFeatureSelector: Selector integrated with PurgedKFold CV
         FeatureSelectionManager: High-level manager for model training integration
 
     Filtering Functions:
@@ -68,23 +67,11 @@ from .ohlcv_selector import (
     get_feature_categories,
 )
 
-# Optimization
-from .optimization import (
-    FeatureOptimizer,
-    optimize_feature_subset_simple,
-)
-
 # Priority - no external dependencies
 from .priority import (
     DEFAULT_PRIORITY,
     FEATURE_PRIORITY,
     get_feature_priority,
-)
-
-# Purged selector
-from .purged_selector import (
-    PurgedFeatureSelector,
-    create_purged_selector,
 )
 from .result import (
     FeatureSelectionResult,
@@ -131,7 +118,6 @@ __all__ = [
     "FeatureSelectionManager",
     # OHLCV selectors
     "OHLCVFeatureSelector",
-    "PurgedFeatureSelector",
     "StabilityMetrics",
     # OHLCV utilities
     "FEATURE_CATEGORIES",
@@ -140,7 +126,6 @@ __all__ = [
     "get_feature_categories",
     # Factory functions
     "create_ohlcv_selector",
-    "create_purged_selector",
     # Filtering functions
     "apply_feature_selection",
     "build_correlation_groups",
@@ -154,7 +139,4 @@ __all__ = [
     "DEFAULT_PRIORITY",
     "FEATURE_PRIORITY",
     "get_feature_priority",
-    # Optimization
-    "FeatureOptimizer",
-    "optimize_feature_subset_simple",
 ]

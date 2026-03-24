@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 from src.models import Trainer, TrainerConfig
 
-from ..config import ExperimentConfig
+from ..config import _ModeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -201,14 +201,14 @@ class MetaLabelingTrainer:
     3. Only take trades where bet_size >= threshold
 
     Example:
-        >>> config = ExperimentConfig(symbol="MES", horizons=[20], models=["xgboost"])
+        >>> config = _ModeConfig(symbol="MES", horizons=[20], models=["xgboost"])
         >>> trainer = MetaLabelingTrainer(config)
         >>> results = trainer.run(container)
     """
 
     def __init__(
         self,
-        config: ExperimentConfig,
+        config: _ModeConfig,
         meta_config: MetaLabelingConfig | None = None,
     ) -> None:
         """

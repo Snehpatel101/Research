@@ -151,6 +151,7 @@ class Position:
     label: int | None = None
     prediction: int | None = None
     confidence: float | None = None
+    entry_atr: float | None = None
 
 
 @dataclass
@@ -560,18 +561,34 @@ class Backtester:
             label=label,
             prediction=prediction,
             confidence=confidence,
+            entry_atr=atr,
         )
 
     def _close_position(
         self,
         price: float,
         timestamp: datetime,
+        current_atr: float | None = None,
     ) -> Trade | None:
-        """Close current position and record trade."""
+        """Close current position and record trade.
+
+        Args:
+            price: Exit price
+            timestamp: Exit timestamp
+            current_atr: Current ATR value for volatility-scaled slippage
+        """
         if self._current_position is None:
             return None
 
         pos = self._current_position
+
+        # Compute volatility proxies (ATR / price) for slippage scaling
+        entry_vol = None
+        if pos.entry_atr is not None and pos.entry_price > 0:
+            entry_vol = pos.entry_atr / pos.entry_price
+        exit_vol = None
+        if current_atr is not None and price > 0:
+            exit_vol = current_atr / price
 
         # Calculate P&L
         pnl_result = self.cost_calculator.calculate_pnl(
@@ -581,6 +598,8 @@ class Backtester:
             direction=pos.direction,
             point_value=self.config.point_value,
             include_costs=True,
+            entry_volatility=entry_vol,
+            exit_volatility=exit_vol,
         )
 
         # Create trade record
@@ -765,6 +784,9 @@ class Backtester:
             # Get execution price (close for most models)
             close_price = self._get_execution_price_fast(o_i, h_i, l_i, c_i, 1, is_entry=False)
 
+            # Current ATR for this bar (used for volatility-scaled slippage)
+            bar_atr = float(atr_values[i]) if np.isfinite(atr_values[i]) else None
+
             # Check if we have a position and should exit
             if self._current_position is not None:
                 exit_reason = self._should_exit_fast(
@@ -774,7 +796,7 @@ class Backtester:
                     exit_price = self._resolve_exit_price(
                         exit_reason, self._current_position, close_price
                     )
-                    self._close_position(exit_price, ts)
+                    self._close_position(exit_price, ts, current_atr=bar_atr)
 
             # If no position, check for entry
             if self._current_position is None:
@@ -860,7 +882,7 @@ class Backtester:
                 )
                 self._halt_trading = True
                 if self._current_position is not None:
-                    self._close_position(close_price, ts)
+                    self._close_position(close_price, ts, current_atr=bar_atr)
                 break
 
             # Circuit Breaker: Check daily loss limit
@@ -877,7 +899,7 @@ class Backtester:
                         logger.critical(f"DAILY LOSS LIMIT: {daily_return:.2%}")
                         self._halt_trading = True
                         if self._current_position is not None:
-                            self._close_position(close_price, ts)
+                            self._close_position(close_price, ts, current_atr=bar_atr)
                         break
                     self._day_start_equity = self._equity
 
@@ -888,7 +910,7 @@ class Backtester:
                 )
                 self._halt_trading = True
                 if self._current_position is not None:
-                    self._close_position(close_price, ts)
+                    self._close_position(close_price, ts, current_atr=bar_atr)
                 break
 
             # Skip trading if halted
@@ -899,7 +921,9 @@ class Backtester:
         if self._current_position is not None:
             final_price = closes[-1]
             final_ts = pd.Timestamp(timestamps[-1])
-            self._close_position(final_price, final_ts)
+            final_atr_val = atr_values[-1]
+            final_atr = float(final_atr_val) if np.isfinite(final_atr_val) else None
+            self._close_position(final_price, final_ts, current_atr=final_atr)
 
         # Build equity curve
         equity_curve = EquityCurve(

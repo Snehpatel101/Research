@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 from src.models import Trainer, TrainerConfig
 
-from ..config import ExperimentConfig
+from ..config import _ModeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -332,14 +332,14 @@ class RegimeAwareTrainer:
     different market conditions.
 
     Example:
-        >>> config = ExperimentConfig(symbol="MES", horizons=[20], models=["xgboost"])
+        >>> config = _ModeConfig(symbol="MES", horizons=[20], models=["xgboost"])
         >>> trainer = RegimeAwareTrainer(config)
         >>> results = trainer.run(container)
     """
 
     def __init__(
         self,
-        config: ExperimentConfig,
+        config: _ModeConfig,
         regime_config: RegimeAwareConfig | None = None,
     ) -> None:
         """
@@ -396,8 +396,7 @@ class RegimeAwareTrainer:
         logger.info("=" * 60)
         logger.info(f"Container: {container}")
 
-        # Get model names - handle both string and ModelConfig types
-        model_names = [m if isinstance(m, str) else m.name for m in self.config.models]
+        model_names = self.config.models
         logger.info(f"Models: {model_names}")
         logger.info(f"Regime type: {self.regime_config.regime_type}")
 

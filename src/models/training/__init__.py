@@ -31,7 +31,6 @@ from .artifacts import TrainerArtifactsMixin
 from .checksums import ArtifactChecksum, ArtifactIntegrityManager, compute_file_checksum
 
 # Config and loading
-from .config import ExperimentConfig, ModelConfig
 from .config_loader import ConfigLoader, load_config_from_params, load_config_from_yaml
 from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
@@ -111,9 +110,7 @@ __all__ = [
     "ModelTrainer",
     "TrainedModelArtifact",
     "train_models",
-    # Config and loading (used by legacy code, but TrainingOrchestrator removed)
-    "ExperimentConfig",
-    "ModelConfig",
+    # Config and loading
     "ConfigLoader",
     "load_config_from_params",
     "load_config_from_yaml",

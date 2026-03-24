@@ -35,7 +35,7 @@ from src.validation.cv.walk_forward import (
     WindowMetrics,
 )
 
-from ..config import ExperimentConfig
+from ..config import _ModeConfig
 
 logger = logging.getLogger(__name__)
 
@@ -165,14 +165,14 @@ class WalkForwardTrainer:
         Rolling:   |---Train---|--Test--|    |---Train---|--Test--|
 
     Example:
-        >>> config = ExperimentConfig(symbol="MES", horizons=[20], models=["xgboost"])
+        >>> config = _ModeConfig(symbol="MES", horizons=[20], models=["xgboost"])
         >>> trainer = WalkForwardTrainer(config)
         >>> results = trainer.run(container)
     """
 
     def __init__(
         self,
-        config: ExperimentConfig,
+        config: _ModeConfig,
         wf_config: WalkForwardTrainerConfig | None = None,
     ) -> None:
         """
@@ -228,8 +228,7 @@ class WalkForwardTrainer:
         logger.info("=" * 60)
         logger.info(f"Container: {container}")
 
-        # Get model names - handle both string and ModelConfig types
-        model_names = [m if isinstance(m, str) else m.name for m in self.config.models]
+        model_names = self.config.models
         logger.info(f"Models: {model_names}")
 
         # Build walk-forward config

@@ -481,6 +481,24 @@ src/
 - CAGR overflow guard for negative total returns + NaN safety in metrics
 - 8 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 96: COMPLETE — Audit Phase C: 13 Medium-Priority Fixes + NaN Guard (20 files, -789 lines net)**
+- C1: DSR Bonferroni correction — `num_tests` param wired to `compute_deflated_sharpe()`, corrects family-wise error rate
+- C3: Removed duplicate `compute_micro_trade_intensity_20` (identical to volume_ratio)
+- C4: Deleted GARCH NaN stubs (`compute_garch_vol_forecast`, `compute_garch_vol_ratio`)
+- C5: OU half-life — both Numba and Python paths now receive log prices (consistent results)
+- C6: Hurst standardization — mean_reversion.py already delegates to entropy.py's canonical implementation
+- C7: MTF `compute_single_timeframe` no longer mutates `self.config.timeframes`
+- C8: Label cache `labels.copy()` prevents caller mutation; thread-safe with `_label_cache_lock`
+- C9: Dead ExperimentConfig renamed to `_ModeConfig` shim (used by 4 mode trainers)
+- C10: Optuna timeout unified to 43200s (was 3600 in unified.py vs 43200 in OptunaConfig)
+- C11: AdapterScaler `_inverse_transform_f32` method for float32 inverse scaling
+- C12: Deleted orphaned `purged_selector.py` + `optimization.py` (563 lines removed)
+- C13: Triple barrier ATR uses expanding median for training-time cost calibration
+- C14: Volatility wired to slippage model (`entry_atr` on Position, vol-scaled slippage at exit)
+- NaN guard: `VolatilityScaledSlippage.estimate_slippage()` falls back to base_volatility when NaN
+- C2 SKIPPED (feature selection inside CV folds — 2-week effort, deferred)
+- 20 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
