@@ -124,8 +124,7 @@ class OOFGenerationService:
         except RuntimeError as e:
             error_msg = str(e).lower()
             is_cuda_error = any(
-                kw in error_msg
-                for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
+                kw in error_msg for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
             )
             if not is_cuda_error:
                 logger.warning(f"Failed to generate OOF for {request.model_name}: {e}")
@@ -141,8 +140,7 @@ class OOFGenerationService:
             except RuntimeError as e2:
                 error_msg2 = str(e2).lower()
                 is_cuda_error2 = any(
-                    kw in error_msg2
-                    for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
+                    kw in error_msg2 for kw in ["out of memory", "cuda", "cublas", "cudnn", "nccl"]
                 )
                 if not is_cuda_error2:
                     logger.warning(f"OOF retry failed for {request.model_name}: {e2}")

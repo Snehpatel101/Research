@@ -398,6 +398,15 @@ class UnifiedTrainingOrchestrator(FeatureSelectionMixin, TrainingOpsMixin):
         # This will raise PreTrainingValidationError if validation fails
         self._pre_training_validation(df)
 
+        # Run feature selection on TRAIN-ONLY data to prevent leakage.
+        # Must happen after validation (which may reject the data) but
+        # before training modes (which consume _per_model_features).
+        self._run_feature_selection_on_train_data(df)
+
+        # Contract validation runs AFTER feature selection so it can check
+        # the per-model feature counts against contract min/max bounds.
+        self._post_selection_contract_validation(df)
+
         # Route to appropriate training mode
         mode = TrainingMode(self.config.training_mode)
 

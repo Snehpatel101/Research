@@ -43,6 +43,8 @@ class _NumpySafeEncoder(json.JSONEncoder):
         if isinstance(o, np.bool_):
             return bool(o)
         return super().default(o)
+
+
 try:
     from src.models.config import MODEL_DATA_REQUIREMENTS
 except ImportError:

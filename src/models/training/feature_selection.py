@@ -148,8 +148,13 @@ class FeatureSelectionMixin:
     ) -> None:
         """Validate data before training. Raises PreTrainingValidationError on failure.
 
-        Runs: (1) feature selection pipeline (MDA + correlation + low-variance),
-        (2) contract validation, (3) leakage detection, (4) lookahead audit.
+        Runs: (1) leakage detection, (2) lookahead audit.
+
+        NOTE: Feature selection and contract validation are NOT run here.
+        Feature selection runs on train-only data via
+        ``_run_feature_selection_on_train_data()``, and contract validation
+        runs after that via ``_post_selection_contract_validation()`` — both
+        called from the orchestrator's ``train()`` method.
         """
         errors: list[str] = []
         warnings: list[str] = []
@@ -168,24 +173,14 @@ class FeatureSelectionMixin:
                 if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
             ]
 
-        # Per-model feature selection pipeline
-        if feature_names and len(feature_names) > 0:
-            self._run_feature_selection_pipeline(df, feature_names)
-
-        # 1. Contract validation
-        if self.config.strict_validation:
-            self._validate_contracts(df, feature_names, errors, warnings)
-        else:
-            logger.info("  [1/3] Data contract validation: SKIPPED (strict_validation=False)")
-
-        # 2. Leakage detection
+        # 1. Leakage detection
         if self.config.check_leakage:
             self._validate_leakage(df, feature_names, errors, warnings)
         else:
-            logger.info("  [2/3] Leakage detection: SKIPPED (check_leakage=False)")
+            logger.info("  [1/2] Leakage detection: SKIPPED (check_leakage=False)")
 
-        # 3. Lookahead audit — mandatory (consistent with data pipeline Phase 14C)
-        logger.info("  [3/3] Lookahead audit: running (mandatory)")
+        # 2. Lookahead audit — mandatory (consistent with data pipeline Phase 14C)
+        logger.info("  [2/2] Lookahead audit: running (mandatory)")
         self._validate_lookahead(errors, warnings)
 
         if warnings:
@@ -198,13 +193,82 @@ class FeatureSelectionMixin:
             raise PreTrainingValidationError(
                 f"Pre-training validation failed:\n{error_summary}\n\n"
                 f"To bypass validation, set in PipelineConfig:\n"
-                f"  - strict_validation=False (disable contract validation)\n"
                 f"  - check_leakage=False (disable leakage detection)\n"
                 f"  Note: lookahead audit is mandatory and cannot be disabled."
             )
 
         logger.info("\n  Pre-training validation: PASSED")
         logger.info("-" * 40 + "\n")
+
+    def _post_selection_contract_validation(self, df: pd.DataFrame) -> None:
+        """Validate model contracts AFTER feature selection has populated _per_model_features.
+
+        Raises PreTrainingValidationError if any model's selected feature count
+        violates its contract bounds.
+        """
+        if not self.config.strict_validation:
+            logger.info("  Contract validation: SKIPPED (strict_validation=False)")
+            return
+
+        # Determine feature columns for fallback
+        exclude_patterns = ["label", "sample_weight", "datetime", "date", "time"]
+        ohlcv_cols = ["open", "high", "low", "close", "volume"]
+        feature_names = [
+            col
+            for col in df.columns
+            if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
+        ]
+
+        errors: list[str] = []
+        warnings: list[str] = []
+        self._validate_contracts(df, feature_names, errors, warnings)
+
+        if warnings:
+            for w in warnings:
+                logger.warning(f"  Contract warning: {w}")
+
+        if errors:
+            error_summary = "\n".join([f"  - {e}" for e in errors])
+            raise PreTrainingValidationError(
+                f"Contract validation failed after feature selection:\n{error_summary}\n\n"
+                f"To bypass, set strict_validation=False in PipelineConfig."
+            )
+
+    def _run_feature_selection_on_train_data(
+        self,
+        df: pd.DataFrame,
+    ) -> None:
+        """Run feature selection pipeline on TRAINING data only.
+
+        Computes the train split boundary using ``self.config.train_ratio``
+        (matching ``UnifiedDataPreparation._split_data``) and passes only
+        the training portion to ``_run_feature_selection_pipeline``.  This
+        prevents correlation / variance statistics from leaking test-set
+        information into feature selection decisions.
+        """
+        # Determine feature columns (same logic as _pre_training_validation)
+        exclude_patterns = ["label", "sample_weight", "datetime", "date", "time"]
+        ohlcv_cols = ["open", "high", "low", "close", "volume"]
+        feature_names = [
+            col
+            for col in df.columns
+            if col not in ohlcv_cols and not any(pat in col.lower() for pat in exclude_patterns)
+        ]
+
+        if not feature_names:
+            return
+
+        # Compute train split boundary (mirrors UnifiedDataPreparation._split_data)
+        n = len(df)
+        train_end = int(n * self.config.train_ratio)
+        df_train = df.iloc[:train_end]
+
+        logger.info(
+            f"  Feature selection on train-only data: "
+            f"{train_end:,}/{n:,} rows ({self.config.train_ratio:.0%})"
+        )
+
+        self._run_feature_selection_pipeline(df_train, feature_names)
 
     def _run_feature_selection_pipeline(
         self,
@@ -578,7 +642,9 @@ class FeatureSelectionMixin:
             if label_col in df.columns:
                 y_labels = df[label_col].values[: len(oof.get_class_predictions())]
                 # Apply same valid_mask to labels and prices
-                y_true = y_labels[valid_mask] if not valid_mask.all() else y_labels[: len(predictions)]
+                y_true = (
+                    y_labels[valid_mask] if not valid_mask.all() else y_labels[: len(predictions)]
+                )
 
             if y_true is None:
                 logger.warning(f"Skipping {model_key} - no true labels available")

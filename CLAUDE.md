@@ -457,6 +457,17 @@ src/
 - `add_adx()` and `compute_adx_strong_trend()` accept threshold parameter (backward compatible)
 - 7 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 94: COMPLETE — Deep Audit Phase A: 8 Critical Fixes (19 files, 304 lines)**
+- CRITICAL: Unified ATR to Wilder's EMA (alpha=1/period) in labeling + backtest (was EMA vs SMA — labels and backtest now play same game)
+- CRITICAL: Stop/TP exits now at barrier price, not close (ExitReason enum, _get_exit_price dispatch) — eliminates systematic P&L bias
+- CRITICAL: Unified label/backtest costs (MES 2.43 ticks, MGC 3.04, MNQ 6.08) — eliminates 2.95x cost gap
+- CRITICAL: Feature selection moved to train-only data (`_run_feature_selection_on_train_data()`) — eliminates textbook data leakage
+- HIGH: 50-feature truncation replaced with importance-based selection (quick LightGBM ranking) — all features now get evaluated
+- HIGH: Cumulative features (OBV/VWAP/TWAP/cum_order_flow) reset at session boundaries via `session_cumsum()` — eliminates positional leakage
+- MEDIUM: ExperimentConfig round-trip fixed (idempotent output_dir check) — config persistence works
+- MEDIUM: Degenerate Optuna trials return -inf (was 0.0) — stops TPE pollution
+- 19 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

@@ -535,6 +535,7 @@ class BaseRNNModel(BaseModel):
                             "disabling mixed precision and retrying with fp32"
                         )
                         from src.models.device import release_gpu_memory
+
                         release_gpu_memory()
                         self._use_amp = False
                         amp_dtype = torch.float32
@@ -553,7 +554,9 @@ class BaseRNNModel(BaseModel):
                         val_loader = self._create_dataloader(
                             X_val, y_val, None, train_config, shuffle=False
                         )
-                        scheduler = self._create_scheduler(optimizer, train_config, len(train_loader))
+                        scheduler = self._create_scheduler(
+                            optimizer, train_config, len(train_loader)
+                        )
                         epoch = 0  # Restart training from scratch in fp32
                         continue
 

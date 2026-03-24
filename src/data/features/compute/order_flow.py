@@ -15,6 +15,8 @@ from collections.abc import Callable
 import numpy as np
 import pandas as pd
 
+from src.data.features.compute._helpers import session_cumsum as _session_cumsum
+
 # =============================================================================
 # CACHING INFRASTRUCTURE
 # =============================================================================
@@ -279,7 +281,7 @@ def compute_cum_order_flow(df: pd.DataFrame) -> pd.Series:
     # Center around 0 and multiply by volume
     centered = imbalance - 0.5
     flow = centered * df["volume"]
-    return flow.cumsum()
+    return _session_cumsum(flow)
 
 
 def compute_cum_order_flow_normalized(df: pd.DataFrame) -> pd.Series:
@@ -297,8 +299,8 @@ def compute_cum_order_flow_normalized(df: pd.DataFrame) -> pd.Series:
     imbalance = compute_order_imbalance(df)
     centered = imbalance - 0.5
     flow = centered * df["volume"]
-    cum_flow = flow.cumsum()
-    cum_vol = df["volume"].cumsum()
+    cum_flow = _session_cumsum(flow)
+    cum_vol = _session_cumsum(df["volume"])
 
     # Avoid division by zero
     cum_vol = cum_vol.replace(0, np.nan)

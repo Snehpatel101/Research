@@ -215,8 +215,9 @@ class ExperimentConfig:
         if isinstance(self.output_dir, str):
             self.output_dir = Path(self.output_dir)
 
-        # Create full output path with run_id
-        self.output_dir = self.output_dir / self.run_id
+        # Create full output path with run_id (idempotent — skip if already appended)
+        if self.output_dir.name != self.run_id:
+            self.output_dir = self.output_dir / self.run_id
 
         # Validate purge_bars >= max(horizons) to prevent label leakage
         if self.training.horizons:

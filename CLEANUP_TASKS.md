@@ -88,7 +88,29 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 93 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 94 are complete. See COMPLETION.md for full details.
+
+---
+
+### Phase 94: Deep Audit Phase A — 8 Critical Fixes (FIXES_NEEDED.md)
+
+**Status:** COMPLETE
+**Priority:** CRITICAL
+**Tasks:** 8/8 complete
+**Date:** 2026-03-24
+
+| Task | Description | Files | Status |
+|------|-------------|-------|--------|
+| A1 | Unify ATR to Wilder's EMA (alpha=1/period) everywhere | `triple_barrier.py:551`, `backtest.py:505` | ✅ |
+| A2 | Fix stop/TP exit at barrier price (ExitReason enum) | `backtest.py` (102 lines changed) | ✅ |
+| A3 | Unify label/backtest costs (MES 2.43, MGC 3.04, MNQ 6.08 ticks) | `barriers_config.py` | ✅ |
+| A4 | Fix 50-feature truncation (importance-based selection) | `five_dimension_objective.py` | ✅ |
+| A5 | Move feature selection to train-only data (eliminate leakage) | `feature_selection.py`, `unified_orchestrator.py` | ✅ |
+| A6 | Session-reset cumulative features (OBV/VWAP/TWAP/cum_order_flow) | `volume.py`, `order_flow.py`, `_helpers.py` | ✅ |
+| A7 | Fix ExperimentConfig round-trip (idempotent output_dir) | `experiment.py` | ✅ |
+| A8 | Return -inf for degenerate Optuna trials | `five_dimension_objective.py` | ✅ |
+
+**Verification:** 223/223 tests passing, ruff clean, black clean. 19 files modified, 304 lines added, 99 removed.
 
 ---
 

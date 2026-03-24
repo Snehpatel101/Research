@@ -210,8 +210,8 @@ class TCNModel(BaseRNNModel):
         defaults.update(
             {
                 "num_channels": [64, 64, 128, 128],  # Wider later layers for richer representation
-                "kernel_size": 5,                      # Wider receptive field per layer
-                "dropout": 0.3,                        # Stronger dropout for 2000+ features
+                "kernel_size": 5,  # Wider receptive field per layer
+                "dropout": 0.3,  # Stronger dropout for 2000+ features
                 "dilation_base": 2,
                 "sequence_length": 64,  # Matches TCN receptive field
             }

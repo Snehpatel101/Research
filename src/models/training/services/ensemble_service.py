@@ -372,8 +372,7 @@ class EnsembleService:
 
             if len(X_stack) < 10:
                 raise ValueError(
-                    f"Insufficient samples after NaN removal: {len(X_stack)} "
-                    f"(need at least 10)"
+                    f"Insufficient samples after NaN removal: {len(X_stack)} " f"(need at least 10)"
                 )
 
             # Time-based split into train/val (preserves temporal ordering)

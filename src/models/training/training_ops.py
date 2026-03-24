@@ -134,7 +134,7 @@ class TrainingOpsMixin:
             key = f"{model_name}_h{horizon}"
             self._model_results[key] = result
             if self.config.save_oof:
-                trained_config = getattr(service_result.trainer.model, 'config', None)
+                trained_config = getattr(service_result.trainer.model, "config", None)
                 oof = self._generate_oof(model_name, prepared, horizon, model_config=trained_config)
                 if oof is not None:
                     self._oof_predictions[key] = oof
@@ -187,7 +187,7 @@ class TrainingOpsMixin:
         offload_model_to_cpu(result.trainer)
 
         if self.config.save_oof:
-            trained_config = getattr(result.trainer.model, 'config', None)
+            trained_config = getattr(result.trainer.model, "config", None)
             oof = self._generate_oof(model_name, prepared, horizon, model_config=trained_config)
             if oof is not None:
                 self._oof_predictions[key] = oof

@@ -33,12 +33,18 @@ BarrierParamsDict = dict[str, float | int | str]
 # TRANSACTION COSTS - Critical for realistic fitness evaluation
 # =============================================================================
 # Commission costs in ticks (entry + exit round-trip).
+# These represent fixed costs (broker commission + exchange fees + NFA fee)
+# converted to ticks. Aligned with backtest costs in
+# src/inference/backtesting/costs.py (TransactionCosts dataclass):
+#   Fixed cost per symbol = $2.50 commission + $0.52 exchange + $0.02 NFA = $3.04
+#   Ticks = $3.04 / tick_value
 # Known symbols have specific values; unknown symbols use DEFAULT_TRANSACTION_COST.
-DEFAULT_TRANSACTION_COST = 0.5  # Default for unknown symbols (ticks round-trip)
+DEFAULT_TRANSACTION_COST = 2.43  # Default for unknown symbols (ticks round-trip)
 
 TRANSACTION_COSTS = {
-    "MES": 0.5,  # Micro E-mini S&P 500: 0.25 per side
-    "MGC": 0.3,  # Micro Gold: tighter spread
+    "MES": 2.43,  # $3.04 fixed / $1.25 tick_value = 2.43 ticks
+    "MGC": 3.04,  # $3.04 fixed / $1.00 tick_value = 3.04 ticks
+    "MNQ": 6.08,  # $3.04 fixed / $0.50 tick_value = 6.08 ticks
 }
 
 # =============================================================================
@@ -46,6 +52,7 @@ TRANSACTION_COSTS = {
 # =============================================================================
 # Slippage per fill (entry or exit) in ticks.
 # Total slippage = 2 * SLIPPAGE_TICKS (round-trip: entry + exit)
+# Aligned with costs.py: TransactionCosts.slippage_ticks = 1.0 per fill for all symbols.
 #
 # Slippage varies by volatility regime:
 # - Low volatility: Tight markets, minimal slippage
@@ -53,18 +60,22 @@ TRANSACTION_COSTS = {
 
 # Default slippage for unknown symbols
 DEFAULT_SLIPPAGE_TICKS = {
-    "low_vol": 0.5,  # Conservative default
-    "high_vol": 1.0,  # Conservative default
+    "low_vol": 1.0,  # Aligned with costs.py (1.0 tick per fill)
+    "high_vol": 2.0,  # Conservative high-vol estimate
 }
 
 SLIPPAGE_TICKS = {
     "MES": {
-        "low_vol": 0.5,  # Calm market, tight spreads
-        "high_vol": 1.0,  # Volatile market, wide spreads
+        "low_vol": 1.0,  # Aligned with costs.py slippage_ticks=1.0
+        "high_vol": 2.0,  # Volatile market, wide spreads
     },
     "MGC": {
-        "low_vol": 0.75,  # Calm market, less liquid than MES
-        "high_vol": 1.5,  # Volatile market, significant slippage
+        "low_vol": 1.0,  # Aligned with costs.py slippage_ticks=1.0
+        "high_vol": 2.0,  # Volatile market, significant slippage
+    },
+    "MNQ": {
+        "low_vol": 1.0,  # Aligned with costs.py slippage_ticks=1.0
+        "high_vol": 2.0,  # Volatile market, wider spreads
     },
 }
 
@@ -74,6 +85,7 @@ DEFAULT_TICK_VALUE = 1.00  # Default for unknown symbols
 TICK_VALUES = {
     "MES": 1.25,  # $1.25 per tick (micro E-mini S&P)
     "MGC": 1.00,  # $1.00 per tick (micro Gold)
+    "MNQ": 0.50,  # $0.50 per tick (micro E-mini Nasdaq-100)
 }
 
 # =============================================================================

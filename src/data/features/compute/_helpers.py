@@ -77,6 +77,26 @@ def ema(series: pd.Series, span: int, min_periods: int | None = None) -> pd.Seri
     return series.ewm(span=span, min_periods=min_periods, adjust=False).mean()
 
 
+def session_cumsum(series: pd.Series) -> pd.Series:
+    """
+    Cumulative sum that resets at each trading day boundary.
+
+    Prevents positional leakage by ensuring cumulative features do not
+    encode absolute position within the dataset.  For intraday data with a
+    ``DatetimeIndex``, the cumsum resets at each new calendar date.  If no
+    ``DatetimeIndex`` is available, falls back to a plain cumsum.
+
+    Args:
+        series: Input time series with a DatetimeIndex.
+
+    Returns:
+        Session-aware cumulative sum (resets daily).
+    """
+    if isinstance(series.index, pd.DatetimeIndex):
+        return series.groupby(series.index.date).cumsum()
+    return series.cumsum()
+
+
 def rolling_std(series: pd.Series, window: int, min_periods: int | None = None) -> pd.Series:
     """
     Rolling standard deviation.

@@ -758,12 +758,12 @@ def create_5d_objective(
                 n_val_valid = int(val_valid_mask.sum())
 
                 if n_train_valid < 100 or n_val_valid < 50:
-                    # Not enough valid labels, return low score
+                    # Degenerate trial — signal to TPE sampler
                     logger.warning(
                         f"Trial {trial.number}: Insufficient valid labels "
                         f"(train={n_train_valid}, val={n_val_valid}). Skipping."
                     )
-                    return 0.0
+                    return float("-inf")
 
                 current_train_labels = trial_train_labels
                 current_val_labels = trial_val_labels
@@ -775,12 +775,12 @@ def create_5d_objective(
                 train_valid_mask = current_train_labels != -99
                 val_valid_mask = current_val_labels != -99
             else:
-                # No labels available
+                # Degenerate trial — signal to TPE sampler
                 logger.warning(
                     f"Trial {trial.number}: No labels available. "
                     "Set generate_labels_per_trial=True or provide pre-computed labels."
                 )
-                return 0.0
+                return float("-inf")
 
             # ==================================================================
             # Compute Validation Metric
@@ -887,10 +887,43 @@ def _compute_validation_metric(
         X_val_valid = X_val[val_valid_mask]
         y_val_valid = val_labels[val_valid_mask]
 
-        # Limit features for speed during optimization
-        n_features = min(X_train_valid.shape[1], 50)
-        X_train_sub = X_train_valid[:, :n_features]
-        X_val_sub = X_val_valid[:, :n_features]
+        # Limit features for speed during optimization.
+        # Select top features by importance (not positional index) so that
+        # features at index >50 are not permanently excluded.
+        max_proxy_features = 50
+        if X_train_valid.shape[1] <= max_proxy_features:
+            X_train_sub = X_train_valid
+            X_val_sub = X_val_valid
+        else:
+            try:
+                import lightgbm as lgb
+
+                quick_model = lgb.LGBMClassifier(
+                    n_estimators=10,
+                    max_depth=4,
+                    learning_rate=0.1,
+                    num_leaves=15,
+                    random_state=42,
+                    n_jobs=-1,
+                    verbose=-1,
+                )
+                quick_model.fit(X_train_valid, y_train_valid)
+                importances = quick_model.feature_importances_
+                top_indices = np.argsort(importances)[::-1][:max_proxy_features]
+                top_indices = np.sort(top_indices)  # preserve column order
+                X_train_sub = X_train_valid[:, top_indices]
+                X_val_sub = X_val_valid[:, top_indices]
+            except Exception:
+                # Fallback: random column sampling (unbiased, unlike positional)
+                rng = np.random.RandomState(42)
+                rand_indices = rng.choice(
+                    X_train_valid.shape[1],
+                    size=max_proxy_features,
+                    replace=False,
+                )
+                rand_indices = np.sort(rand_indices)
+                X_train_sub = X_train_valid[:, rand_indices]
+                X_val_sub = X_val_valid[:, rand_indices]
 
         # Use a model from the same family as the optimization target.
         # For boosting, use XGBoost with the trial's actual hyperparameters.

@@ -37,6 +37,16 @@ class ExecutionModel(StrEnum):
     VWAP = "vwap"
 
 
+class ExitReason(StrEnum):
+    """Why a position exit was triggered."""
+
+    STOP_LOSS = "stop_loss"
+    TAKE_PROFIT = "take_profit"
+    MAX_HOLDING = "max_holding"
+    SIGNAL_REVERSAL = "signal_reversal"
+    SIGNAL_NEUTRAL = "signal_neutral"
+
+
 @dataclass
 class BacktestConfig:
     """
@@ -491,7 +501,8 @@ class Backtester:
             [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
             axis=1,
         ).max(axis=1)
-        return tr.rolling(window=period, min_periods=1).mean()
+        # Wilder's EMA (alpha = 1/period) — matches labeling ATR
+        return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
     def _open_position(
         self,
@@ -614,42 +625,77 @@ class Backtester:
         low: float,
         current_bar_idx: int,
         new_signal: int,
-    ) -> bool:
-        """Determine if position should be closed (numpy-fast version)."""
+    ) -> ExitReason | None:
+        """Determine if and why position should be closed (numpy-fast version).
+
+        Returns:
+            ExitReason if position should be closed, None otherwise.
+            When both stop and take-profit trigger on the same bar,
+            stop_loss wins (conservative assumption).
+        """
         # Check holding period constraints
         bars_held = current_bar_idx - position.entry_bar
 
         # Minimum holding period
         if bars_held < self.config.min_holding_period:
-            return False
+            return None
+
+        # Check barrier exits first (stop loss and take profit)
+        # Both can trigger on the same bar — stop_loss wins (conservative)
+        stop_hit = False
+        tp_hit = False
+
+        if position.stop_loss is not None:
+            if position.direction == 1 and low <= position.stop_loss:
+                stop_hit = True
+            if position.direction == -1 and high >= position.stop_loss:
+                stop_hit = True
+
+        if position.take_profit is not None:
+            if position.direction == 1 and high >= position.take_profit:
+                tp_hit = True
+            if position.direction == -1 and low <= position.take_profit:
+                tp_hit = True
+
+        if stop_hit:
+            return ExitReason.STOP_LOSS
+        if tp_hit:
+            return ExitReason.TAKE_PROFIT
 
         # Maximum holding period
         if self.config.max_holding_period > 0 and bars_held >= self.config.max_holding_period:
-            return True
+            return ExitReason.MAX_HOLDING
 
-        # Signal reversal (opposite direction or neutral)
+        # Signal reversal (opposite direction)
         if new_signal == -position.direction:
-            return True
+            return ExitReason.SIGNAL_REVERSAL
 
         # Exit on neutral if we require direction
         if new_signal == 0:
-            return True
+            return ExitReason.SIGNAL_NEUTRAL
 
-        # Stop loss (if set)
-        if position.stop_loss is not None:
-            if position.direction == 1 and low <= position.stop_loss:
-                return True
-            if position.direction == -1 and high >= position.stop_loss:
-                return True
+        return None
 
-        # Take profit (if set)
-        if position.take_profit is not None:
-            if position.direction == 1 and high >= position.take_profit:
-                return True
-            if position.direction == -1 and low <= position.take_profit:
-                return True
+    @staticmethod
+    def _resolve_exit_price(
+        reason: ExitReason,
+        position: Position,
+        close_price: float,
+    ) -> float:
+        """Determine exit price based on exit reason.
 
-        return False
+        For barrier exits (stop_loss, take_profit), use the barrier price
+        so P&L reflects the actual trigger level rather than the close.
+        For signal-based and max-holding exits, use close price.
+
+        Falls back to close_price when barrier levels are not set
+        (legacy mode with barrier_k_up=0.0).
+        """
+        if reason == ExitReason.STOP_LOSS and position.stop_loss is not None:
+            return position.stop_loss
+        if reason == ExitReason.TAKE_PROFIT and position.take_profit is not None:
+            return position.take_profit
+        return close_price
 
     def run(self) -> BacktestResult:
         """
@@ -721,10 +767,15 @@ class Backtester:
             close_price = self._get_execution_price_fast(o_i, h_i, l_i, c_i, 1, is_entry=False)
 
             # Check if we have a position and should exit
-            if self._current_position is not None and self._should_exit_fast(
-                self._current_position, h_i, l_i, i, prediction
-            ):
-                self._close_position(close_price, ts)
+            if self._current_position is not None:
+                exit_reason = self._should_exit_fast(
+                    self._current_position, h_i, l_i, i, prediction
+                )
+                if exit_reason is not None:
+                    exit_price = self._resolve_exit_price(
+                        exit_reason, self._current_position, close_price
+                    )
+                    self._close_position(exit_price, ts)
 
             # If no position, check for entry
             if self._current_position is None:
@@ -957,6 +1008,7 @@ def run_walk_forward_backtest(
 
 __all__ = [
     "ExecutionModel",
+    "ExitReason",
     "BacktestConfig",
     "Position",
     "BacktestResult",

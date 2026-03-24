@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.features.compute._helpers import rolling_std as _rolling_std
+from src.data.features.compute._helpers import session_cumsum as _session_cumsum
 from src.data.features.compute._helpers import sma as _sma
 
 # =============================================================================
@@ -89,7 +90,7 @@ def compute_obv(df: pd.DataFrame) -> pd.Series:
     # First row has no direction, use 0
     direction = direction.fillna(0)
 
-    obv = (direction * df["volume"]).cumsum()
+    obv = _session_cumsum(direction * df["volume"])
     return _set_cached(df, "obv", obv)
 
 
@@ -147,16 +148,15 @@ def compute_vwap(df: pd.DataFrame) -> pd.Series:
 
     VWAP = Cumulative(Typical Price * Volume) / Cumulative(Volume)
 
-    Note: This computes a rolling VWAP. For true session VWAP,
-    reset at session boundaries.
+    Cumsums reset at daily session boundaries to prevent positional leakage.
     """
     cached = _get_cached(df, "vwap")
     if cached is not None:
         return cached
 
     typical_price = (df["high"] + df["low"] + df["close"]) / 3
-    cum_tp_vol = (typical_price * df["volume"]).cumsum()
-    cum_vol = df["volume"].cumsum()
+    cum_tp_vol = _session_cumsum(typical_price * df["volume"])
+    cum_vol = _session_cumsum(df["volume"])
 
     # Avoid division by zero
     cum_vol = cum_vol.replace(0, np.nan)
@@ -189,6 +189,13 @@ def compute_twap(df: pd.DataFrame) -> pd.Series:
     Simple average of typical prices over time.
     """
     typical_price = (df["high"] + df["low"] + df["close"]) / 3
+    if isinstance(typical_price.index, pd.DatetimeIndex):
+        return (
+            typical_price.groupby(typical_price.index.date)
+            .expanding(min_periods=1)
+            .mean()
+            .droplevel(0)
+        )
     return typical_price.expanding(min_periods=1).mean()
 
 
