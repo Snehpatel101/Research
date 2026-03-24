@@ -536,7 +536,14 @@ class VotingEnsemble(BaseModel):
             sample_preds = all_preds[:, i]
             # Count votes for each class
             unique, counts = np.unique(sample_preds, return_counts=True)
-            majority_idx = np.argmax(counts)
+            max_count = counts.max()
+            tied_indices = np.where(counts == max_count)[0]
+            if len(tied_indices) == 1:
+                majority_idx = tied_indices[0]
+            else:
+                # Random tie-breaking with deterministic seed per sample
+                rng = np.random.RandomState(seed=42 + i)
+                majority_idx = rng.choice(tied_indices)
             class_predictions[i] = unique[majority_idx]
             # Confidence = fraction of models that agree
             confidence[i] = counts[majority_idx] / len(self._base_models)

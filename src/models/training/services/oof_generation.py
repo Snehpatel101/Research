@@ -55,11 +55,13 @@ class OOFGenerationService:
             cache_dir: Optional directory for caching OOF predictions
         """
         self._cache_dir = cache_dir
-        self._oof_generator: OOFGenerator | None = None
 
-    def _ensure_generator(self, request: OOFRequest) -> OOFGenerator:
+    def _create_generator(self, request: OOFRequest) -> OOFGenerator:
         """
-        Ensure OOF generator is initialized with appropriate CV strategy.
+        Create a fresh OOF generator from request parameters.
+
+        A new generator is created per call to prevent CV config
+        contamination when this service is shared across models.
 
         Args:
             request: OOF generation request
@@ -67,21 +69,22 @@ class OOFGenerationService:
         Returns:
             Configured OOFGenerator instance
         """
-        if self._oof_generator is None:
-            cv_config = PurgedKFoldConfig(
-                n_splits=request.n_splits,
-                purge_bars=request.purge_bars,
-                embargo_bars=request.embargo_bars,
-            )
-            cv = PurgedKFold(cv_config)
-            self._oof_generator = OOFGenerator(cv, cache_dir=self._cache_dir)
-        return self._oof_generator
+        cv_config = PurgedKFoldConfig(
+            n_splits=request.n_splits,
+            purge_bars=request.purge_bars,
+            embargo_bars=request.embargo_bars,
+        )
+        cv = PurgedKFold(cv_config)
+        return OOFGenerator(cv, cache_dir=self._cache_dir)
 
-    def _ensure_cv(self, request: OOFRequest) -> PurgedKFold:
-        """Get or create a PurgedKFold CV splitter."""
-        self._ensure_generator(request)
-        assert self._oof_generator is not None
-        return self._oof_generator.cv
+    def _create_cv(self, request: OOFRequest) -> PurgedKFold:
+        """Create a fresh PurgedKFold CV splitter from request parameters."""
+        cv_config = PurgedKFoldConfig(
+            n_splits=request.n_splits,
+            purge_bars=request.purge_bars,
+            embargo_bars=request.embargo_bars,
+        )
+        return PurgedKFold(cv_config)
 
     def _flatten_to_2d(self, X: np.ndarray, data_rank: int) -> np.ndarray:
         """
@@ -194,8 +197,7 @@ class OOFGenerationService:
         del X_train_2d, prepared
         gc.collect()
 
-        # Ensure generator is initialized
-        oof_generator = self._ensure_generator(request)
+        oof_generator = self._create_generator(request)
 
         oof_predictions = oof_generator.generate_oof_predictions(
             X=X_train_df,
@@ -205,7 +207,7 @@ class OOFGenerationService:
         )
 
         # Post-training fold leakage verification (C4 audit fix)
-        cv = self._ensure_cv(request)
+        cv = self._create_cv(request)
         fold_indices = list(cv.split(X_train_df, y_train))
         leakage_result = OOFValidator.validate_fold_leakage(
             fold_indices=fold_indices,
@@ -261,7 +263,7 @@ class OOFGenerationService:
         X_dummy = pd.DataFrame({"dummy": np.zeros(n_samples)})
         y_series = pd.Series(y)
 
-        cv = self._ensure_cv(request)
+        cv = self._create_cv(request)
 
         # Collect fold indices for post-training leakage verification
         all_fold_indices: list[tuple[np.ndarray, np.ndarray]] = []
@@ -271,10 +273,30 @@ class OOFGenerationService:
             all_fold_indices.append((train_idx, val_idx))
 
             # Slice 4D arrays directly by sample index
-            X_train_fold = X_4d[train_idx]
-            X_val_fold = X_4d[val_idx]
+            X_train_fold = X_4d[train_idx].copy()
+            X_val_fold = X_4d[val_idx].copy()
             y_train_fold = y[train_idx]
             y_val_fold = y[val_idx]
+
+            # Per-fold scaling: reshape 4D→2D, scale in-place, reshape back
+            orig_train_shape = X_train_fold.shape
+            orig_val_shape = X_val_fold.shape
+            X_train_2d = X_train_fold.reshape(-1, orig_train_shape[-1])
+            X_val_2d = X_val_fold.reshape(-1, orig_val_shape[-1])
+
+            median = np.median(X_train_2d, axis=0).astype(np.float32)
+            q75 = np.percentile(X_train_2d, 75, axis=0).astype(np.float32)
+            q25 = np.percentile(X_train_2d, 25, axis=0).astype(np.float32)
+            iqr = np.where((q75 - q25) > 1e-8, q75 - q25, np.float32(1.0))
+
+            X_train_2d -= median
+            X_train_2d /= iqr
+            X_val_2d -= median
+            X_val_2d /= iqr
+
+            X_train_fold = X_train_2d.reshape(orig_train_shape)
+            X_val_fold = X_val_2d.reshape(orig_val_shape)
+            del X_train_2d, X_val_2d, median, q75, q25, iqr
 
             # Handle sample weights
             w_train = None
@@ -366,12 +388,3 @@ class OOFGenerationService:
             coverage=coverage,
             original_indices=valid_indices,
         )
-
-    def set_cv_strategy(self, cv: PurgedKFold) -> None:
-        """
-        Set a custom CV strategy for OOF generation.
-
-        Args:
-            cv: PurgedKFold instance to use for cross-validation
-        """
-        self._oof_generator = OOFGenerator(cv, cache_dir=self._cache_dir)

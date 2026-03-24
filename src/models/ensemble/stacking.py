@@ -70,6 +70,7 @@ class StackingEnsemble(BaseModel):
         self._base_model_names: list[str] = []
         self._meta_learner_name: str = ""
         self._n_folds: int = 5
+        self._n_classes: int = self._config.get("n_classes", 3)
         self._feature_names: list[str] | None = None
         # Heterogeneous ensemble support
         self._is_heterogeneous: bool = False
@@ -393,6 +394,7 @@ class StackingEnsemble(BaseModel):
 
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         self._n_folds = train_config.get("n_folds", 5)
+        self._n_classes = train_config.get("n_classes", 3)
         meta_learner_config = train_config.get("meta_learner_config", {})
         use_probabilities = train_config.get("use_probabilities", True)
         passthrough = train_config.get("passthrough", False)
@@ -441,6 +443,7 @@ class StackingEnsemble(BaseModel):
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
             X_train_seq=X_train_seq,  # For sequence models in heterogeneous ensembles
+            n_classes=self._n_classes,
         )
 
         # Step 1.5: Analyze diversity of base model predictions
@@ -455,6 +458,7 @@ class StackingEnsemble(BaseModel):
                 y_train=y_train,
                 min_diversity_threshold=min_diversity_threshold,
                 correlation_threshold=correlation_threshold,
+                n_classes=self._n_classes,
             )
 
             # Reject ensemble if diversity is too low and rejection is enabled
@@ -525,7 +529,7 @@ class StackingEnsemble(BaseModel):
         # Use a portion of validation set for meta-learner validation
         # For heterogeneous ensembles, pass both 2D and 3D data
         val_predictions = self._generate_base_predictions(
-            X_val, fold_models, use_probabilities, X_seq=X_val_seq
+            X_val, fold_models, use_probabilities, X_seq=X_val_seq, n_classes=self._n_classes
         )
 
         # Align validation labels with predictions (may be trimmed for heterogeneous ensembles)
@@ -606,6 +610,7 @@ class StackingEnsemble(BaseModel):
         purge_bars: int = 60,
         embargo_bars: int = 1440,
         X_train_seq: np.ndarray | None = None,
+        n_classes: int = 3,
     ) -> tuple[np.ndarray, list[list[BaseModel]], dict[str, dict[str, np.ndarray]]]:
         """
         Generate out-of-fold predictions for all base models.
@@ -628,6 +633,7 @@ class StackingEnsemble(BaseModel):
             purge_bars: Number of bars to purge around validation set
             embargo_bars: Number of bars to embargo after validation set
             X_train_seq: Training sequences (3D) for sequence models in heterogeneous ensembles
+            n_classes: Number of output classes (2 for binary, 3 for ternary)
 
         Returns:
             Tuple of (oof_predictions, fold_models, oof_per_model)
@@ -636,7 +642,6 @@ class StackingEnsemble(BaseModel):
             - oof_per_model: Dict mapping model_name -> {"predictions": array, "probabilities": array}
         """
         n_samples = X_train.shape[0]
-        n_classes = 3
 
         # Initialize OOF storage
         if use_probabilities:
@@ -895,6 +900,7 @@ class StackingEnsemble(BaseModel):
         fold_models: list[list[BaseModel]],
         use_probabilities: bool,
         X_seq: np.ndarray | None = None,
+        n_classes: int = 3,
     ) -> np.ndarray:
         """
         Generate predictions from base models (averaging across folds).
@@ -906,11 +912,11 @@ class StackingEnsemble(BaseModel):
             fold_models: List of fold model lists per base model
             use_probabilities: Whether to use probabilities or class predictions
             X_seq: Sequence features (3D) for sequence models in heterogeneous ensembles
+            n_classes: Number of output classes (2 for binary, 3 for ternary)
 
         Returns:
             Predictions array (2D) - always 2D regardless of input model types
         """
-        n_classes = 3
         n_models = len(fold_models)
 
         # For heterogeneous ensembles, use the smaller of tabular/sequence size
@@ -1032,7 +1038,11 @@ class StackingEnsemble(BaseModel):
         # Generate base model predictions
         # For heterogeneous ensembles, each model gets appropriate data format
         base_predictions = self._generate_base_predictions(
-            X, self._base_models, use_probabilities, X_seq=predict_X_seq
+            X,
+            self._base_models,
+            use_probabilities,
+            X_seq=predict_X_seq,
+            n_classes=self._n_classes,
         )
 
         # Build meta-learner input
@@ -1111,6 +1121,7 @@ class StackingEnsemble(BaseModel):
             "base_model_names": self._base_model_names,
             "meta_learner_name": self._meta_learner_name,
             "n_folds": self._n_folds,
+            "n_classes": self._n_classes,
             "feature_names": self._feature_names,
             "is_heterogeneous": self._is_heterogeneous,
             "tabular_models": list(self._tabular_models),
@@ -1132,6 +1143,7 @@ class StackingEnsemble(BaseModel):
         self._base_model_names = metadata.get("base_model_names", [])
         self._meta_learner_name = metadata.get("meta_learner_name", "logistic")
         self._n_folds = metadata.get("n_folds", 5)
+        self._n_classes = metadata.get("n_classes", 3)
         self._feature_names = metadata.get("feature_names")
         self._is_heterogeneous = metadata.get("is_heterogeneous", False)
         self._tabular_models = set(metadata.get("tabular_models", []))
@@ -1256,6 +1268,7 @@ class StackingEnsemble(BaseModel):
         y_train: np.ndarray,
         min_diversity_threshold: float = 0.3,
         correlation_threshold: float = 0.8,
+        n_classes: int = 3,
     ) -> DiversityMetrics:
         """
         Analyze diversity of OOF predictions from base models.
@@ -1265,6 +1278,7 @@ class StackingEnsemble(BaseModel):
             y_train: Ground truth labels
             min_diversity_threshold: Minimum acceptable diversity score
             correlation_threshold: Maximum acceptable pairwise correlation
+            n_classes: Number of output classes (2 for binary, 3 for ternary)
 
         Returns:
             DiversityMetrics with comprehensive diversity analysis
@@ -1272,7 +1286,7 @@ class StackingEnsemble(BaseModel):
         self._diversity_analyzer = DiversityAnalyzer(
             min_diversity_threshold=min_diversity_threshold,
             correlation_threshold=correlation_threshold,
-            n_classes=3,
+            n_classes=n_classes,
         )
 
         # Extract predictions and probabilities for diversity analysis

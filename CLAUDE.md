@@ -468,6 +468,19 @@ src/
 - MEDIUM: Degenerate Optuna trials return -inf (was 0.0) — stops TPE pollution
 - 19 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 95: COMPLETE — Deep Audit Phase B: 9 High-Value Fixes (8 files)**
+- Binary mode: n_classes parameterized in stacking.py (3 sites, default=3 for backward compat)
+- Entropy lookahead: shift(1) added to all 12 entropy compute functions (prevents using current bar's close)
+- 4D OOF scaling: per-fold median/IQR scaling in _generate_4d_oof (matches 2D tabular OOF pattern)
+- Yang-Zhang k: formula parameterized by window (`(window+1)/(window-1)` instead of hardcoded 21/19)
+- Adverse selection: wired into backtest entry prices (long + short) with NaN-safe ATR proxy
+- Sharpe annualization: derived from data frequency via _derive_periods_per_year() (was hardcoded 252)
+- Hard vote tie-breaking: random selection with deterministic seed (was np.argmax bias toward class -1)
+- OOF generator: verified stateless — all config comes from OOFRequest per model call
+- Volatility annualization: _ANNUAL_FACTOR constant replaces 7x hardcoded np.sqrt(252)
+- CAGR overflow guard for negative total returns + NaN safety in metrics
+- 8 files modified, 223/223 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

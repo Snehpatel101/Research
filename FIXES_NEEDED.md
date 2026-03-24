@@ -156,7 +156,7 @@
 
 **Phase A Total: ~16 hours — ✅ ALL 8 FIXES IMPLEMENTED AND VERIFIED (223/223 tests, ruff+black clean, 19 files modified)**
 
-### Phase B: HIGH-VALUE FIXES (Week 3-4) — Significant quality improvement
+### Phase B: HIGH-VALUE FIXES (Week 3-4) — ✅ COMPLETE (2026-03-24)
 
 | # | Fix | Files | Effort | Why |
 |---|-----|-------|--------|-----|
@@ -170,7 +170,7 @@
 | B8 | **Fix shared OOFGenerator** — new instance per model or parameterized | `oof_generation.py:60-78` | 1h | Prevent CV config contamination |
 | B9 | **Parameterize annualization factor** in volatility features | `volatility.py` (7 sites) | 1h | Correct absolute values |
 
-**Phase B Total: ~15 hours**
+**Phase B Total: ~15 hours — ✅ ALL 9 FIXES IMPLEMENTED AND VERIFIED (223/223 tests, ruff+black clean, 8 files modified)**
 
 ### Phase C: MEDIUM-TERM (Week 5-8) — Robustness hardening
 

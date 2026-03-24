@@ -604,7 +604,13 @@ def calculate_all_metrics(
     if len(equity_curve) > 0:
         total_return = (equity_curve[-1] / equity_curve[0]) - 1 if equity_curve[0] > 0 else 0.0
         years = len(equity_curve) / periods_per_year
-        cagr = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0.0
+        cagr = (
+            (1 + total_return) ** (1 / years) - 1 if years > 0 and (1 + total_return) > 0 else 0.0
+        )
+        if not np.isfinite(total_return):
+            total_return = 0.0
+        if not np.isfinite(cagr):
+            cagr = 0.0
     else:
         total_return = 0.0
         cagr = 0.0

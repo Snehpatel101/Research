@@ -356,21 +356,21 @@ def _hurst_exponent(x: np.ndarray) -> float:
 
 def compute_entropy_shannon_10(df: pd.DataFrame) -> pd.Series:
     """10-period Shannon entropy of returns."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     result = _stages_rolling_shannon(returns.values.astype(np.float64), 10, 10)
     return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_shannon_20(df: pd.DataFrame) -> pd.Series:
     """20-period Shannon entropy of returns."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     result = _stages_rolling_shannon(returns.values.astype(np.float64), 20, 10)
     return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_shannon_50(df: pd.DataFrame) -> pd.Series:
     """50-period Shannon entropy of returns."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     result = _stages_rolling_shannon(returns.values.astype(np.float64), 50, 10)
     return pd.Series(result, index=returns.index)
 
@@ -381,7 +381,7 @@ def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
 
     Normalized by maximum possible entropy (log2(n_bins)).
     """
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     n_bins = 10
     max_entropy = np.log2(n_bins)
     result = _stages_rolling_shannon(returns.values.astype(np.float64), 20, n_bins)
@@ -395,7 +395,7 @@ def compute_entropy_shannon_norm_20(df: pd.DataFrame) -> pd.Series:
 
 def compute_entropy_lz_20(df: pd.DataFrame) -> pd.Series:
     """20-period Lempel-Ziv complexity."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     # Binarize: 1 if return > 0, 0 otherwise
     binary = np.where(returns.values > 0, 1.0, 0.0)
     binary[np.isnan(returns.values)] = np.nan
@@ -405,7 +405,7 @@ def compute_entropy_lz_20(df: pd.DataFrame) -> pd.Series:
 
 def compute_entropy_lz_50(df: pd.DataFrame) -> pd.Series:
     """50-period Lempel-Ziv complexity."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     binary = np.where(returns.values > 0, 1.0, 0.0)
     binary[np.isnan(returns.values)] = np.nan
     result = _stages_rolling_lz(binary, 50)
@@ -419,14 +419,14 @@ def compute_entropy_lz_50(df: pd.DataFrame) -> pd.Series:
 
 def compute_entropy_apen_20(df: pd.DataFrame) -> pd.Series:
     """20-period Approximate Entropy."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     result = _stages_rolling_apen(returns.values.astype(np.float64), 20, 2, 0.2)
     return pd.Series(result, index=returns.index)
 
 
 def compute_entropy_apen_50(df: pd.DataFrame) -> pd.Series:
     """50-period Approximate Entropy."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     result = _stages_rolling_apen(returns.values.astype(np.float64), 50, 2, 0.2)
     return pd.Series(result, index=returns.index)
 
@@ -438,7 +438,7 @@ def compute_entropy_apen_50(df: pd.DataFrame) -> pd.Series:
 
 def compute_sample_entropy_20(df: pd.DataFrame) -> pd.Series:
     """20-period Sample Entropy."""
-    returns = _log_returns(df["close"])
+    returns = _log_returns(df["close"].shift(1))
     result = _stages_rolling_sampen(returns.values.astype(np.float64), 20, 2, 0.2)
     return pd.Series(result, index=returns.index)
 
@@ -451,14 +451,14 @@ def compute_sample_entropy_20(df: pd.DataFrame) -> pd.Series:
 def compute_hurst_50(df: pd.DataFrame) -> pd.Series:
     """50-period Hurst exponent."""
     # stages _rolling_hurst expects prices, not returns
-    prices = df["close"].values.astype(np.float64)
+    prices = df["close"].shift(1).ffill().values.astype(np.float64)
     result = _stages_rolling_hurst(prices, 50)
     return pd.Series(result, index=df.index)
 
 
 def compute_hurst_100(df: pd.DataFrame) -> pd.Series:
     """100-period Hurst exponent."""
-    prices = df["close"].values.astype(np.float64)
+    prices = df["close"].shift(1).ffill().values.astype(np.float64)
     result = _stages_rolling_hurst(prices, 100)
     return pd.Series(result, index=df.index)
 

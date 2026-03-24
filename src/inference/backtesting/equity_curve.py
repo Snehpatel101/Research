@@ -210,6 +210,21 @@ class EquityCurve:
         result: np.ndarray = (equity - running_max) / running_max
         return result
 
+    def _derive_periods_per_year(self) -> int | None:
+        """Derive periods_per_year from timestamps. Returns None if insufficient data."""
+        if len(self.timestamps) < 2:
+            return None
+        try:
+            ts_first = pd.Timestamp(self.timestamps[0])
+            ts_last = pd.Timestamp(self.timestamps[-1])
+            span_days = (ts_last - ts_first).total_seconds() / 86400.0
+            if span_days > 0:
+                years = span_days / 365.25
+                return max(1, int(round(len(self.timestamps) / years)))
+        except Exception:
+            pass
+        return None
+
     def get_metrics(
         self,
         risk_free_rate: float = 0.0,
@@ -227,6 +242,12 @@ class EquityCurve:
         """
         if self._cached_metrics is not None:
             return self._cached_metrics
+
+        # Derive from timestamps if caller used the default
+        if periods_per_year == 252:
+            derived = self._derive_periods_per_year()
+            if derived is not None:
+                periods_per_year = derived
 
         trade_returns = self.trade_returns
         equity = np.array(self.equity_values)

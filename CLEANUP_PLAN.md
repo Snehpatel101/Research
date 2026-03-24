@@ -76,6 +76,7 @@ See **COMPLETION.md** for full details on all completed phases.
 | 88 | Safety Guards — Thread-Safe Label Cache, Execution Model Guard, n_classes Param (5 items, 6 files) | ✅ COMPLETE | 2026-03-01 |
 | 89 | Pipeline Speed Optimizations — MDA subsampling, numba liquidity, backtest numpy, n_repeats/n_estimators reduction (6 items, 9 files, ~3-5x) | ✅ COMPLETE | 2026-03-01 |
 | 94 | Deep Audit Phase A — 8 Critical Fixes (ATR parity, barrier exit, cost unification, feature truncation, leakage fix, session cumsum, config round-trip, Optuna -inf) | ✅ COMPLETE | 2026-03-24 |
+| 95 | Deep Audit Phase B — 9 High-Value Fixes (binary n_classes, entropy shift(1), 4D OOF scaling, Yang-Zhang k, adverse selection, Sharpe annualization, tie-breaking, OOF stateless, volatility annualization) | ✅ COMPLETE | 2026-03-24 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 

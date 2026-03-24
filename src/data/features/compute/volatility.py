@@ -16,6 +16,14 @@ from src.data.features.compute._helpers import (
     log_returns as _log_returns,
 )
 
+
+def _annualization_factor(bars_per_day: int = 1) -> float:
+    """Annualization factor: sqrt(trading_days * bars_per_day)."""
+    return float(np.sqrt(252 * bars_per_day))
+
+
+_ANNUAL_FACTOR = _annualization_factor(1)
+
 # =============================================================================
 # CACHING INFRASTRUCTURE
 # =============================================================================
@@ -270,19 +278,19 @@ def compute_kc_position(df: pd.DataFrame) -> pd.Series:
 def compute_hvol_10(df: pd.DataFrame) -> pd.Series:
     """10-period historical volatility (annualized)."""
     log_ret = _log_returns(df["close"])
-    return log_ret.rolling(window=10, min_periods=10).std() * np.sqrt(252)
+    return log_ret.rolling(window=10, min_periods=10).std() * _ANNUAL_FACTOR
 
 
 def compute_hvol_20(df: pd.DataFrame) -> pd.Series:
     """20-period historical volatility (annualized)."""
     log_ret = _log_returns(df["close"])
-    return log_ret.rolling(window=20, min_periods=20).std() * np.sqrt(252)
+    return log_ret.rolling(window=20, min_periods=20).std() * _ANNUAL_FACTOR
 
 
 def compute_hvol_60(df: pd.DataFrame) -> pd.Series:
     """60-period historical volatility (annualized)."""
     log_ret = _log_returns(df["close"])
-    return log_ret.rolling(window=60, min_periods=60).std() * np.sqrt(252)
+    return log_ret.rolling(window=60, min_periods=60).std() * _ANNUAL_FACTOR
 
 
 # =============================================================================
@@ -302,7 +310,7 @@ def compute_parkinson_vol(df: pd.DataFrame) -> pd.Series:
     parkinson = np.sqrt(
         np.maximum(factor * (log_hl**2).rolling(window=20, min_periods=20).mean(), 0)
     )
-    return parkinson * np.sqrt(252)
+    return parkinson * _ANNUAL_FACTOR
 
 
 def compute_gk_vol(df: pd.DataFrame) -> pd.Series:
@@ -320,7 +328,7 @@ def compute_gk_vol(df: pd.DataFrame) -> pd.Series:
         .mean()
     )
 
-    return np.sqrt(gk_var.clip(lower=0)) * np.sqrt(252)
+    return np.sqrt(gk_var.clip(lower=0)) * _ANNUAL_FACTOR
 
 
 def compute_rs_vol(df: pd.DataFrame) -> pd.Series:
@@ -335,10 +343,10 @@ def compute_rs_vol(df: pd.DataFrame) -> pd.Series:
     log_lc = np.log(df["low"] / df["close"])
 
     rs_var = (log_ho * log_hc + log_lo * log_lc).rolling(window=20, min_periods=20).mean()
-    return np.sqrt(rs_var.clip(lower=0)) * np.sqrt(252)
+    return np.sqrt(rs_var.clip(lower=0)) * _ANNUAL_FACTOR
 
 
-def compute_yz_vol(df: pd.DataFrame) -> pd.Series:
+def compute_yz_vol(df: pd.DataFrame, window: int = 20) -> pd.Series:
     """
     Yang-Zhang volatility estimator.
 
@@ -346,24 +354,24 @@ def compute_yz_vol(df: pd.DataFrame) -> pd.Series:
     """
     # Overnight volatility (close to open)
     log_oc = np.log(df["open"] / df["close"].shift(1))
-    overnight_var = log_oc.rolling(window=20, min_periods=20).var()
+    overnight_var = log_oc.rolling(window=window, min_periods=window).var()
 
     # Open to close volatility
     log_co = np.log(df["close"] / df["open"])
-    intraday_var = log_co.rolling(window=20, min_periods=20).var()
+    intraday_var = log_co.rolling(window=window, min_periods=window).var()
 
     # Rogers-Satchell component
     log_ho = np.log(df["high"] / df["open"])
     log_hc = np.log(df["high"] / df["close"])
     log_lo = np.log(df["low"] / df["open"])
     log_lc = np.log(df["low"] / df["close"])
-    rs_var = (log_ho * log_hc + log_lo * log_lc).rolling(window=20, min_periods=20).mean()
+    rs_var = (log_ho * log_hc + log_lo * log_lc).rolling(window=window, min_periods=window).mean()
 
     # Yang-Zhang combination
-    k = 0.34 / (1.34 + (21) / (20 - 1))
+    k = 0.34 / (1.34 + (window + 1) / (window - 1))
     yz_var = overnight_var + k * intraday_var + (1 - k) * rs_var
 
-    return np.sqrt(yz_var.clip(lower=0)) * np.sqrt(252)
+    return np.sqrt(yz_var.clip(lower=0)) * _ANNUAL_FACTOR
 
 
 # =============================================================================

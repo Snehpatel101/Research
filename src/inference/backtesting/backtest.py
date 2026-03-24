@@ -707,10 +707,9 @@ class Backtester:
         # Align data
         data = self._align_data()
 
-        # Compute ATR series when barrier params are configured
-        atr_values = None
+        # Compute ATR series (needed for barriers and adverse selection)
+        atr_values = self._compute_atr(data).values.astype(float)
         if self.config.barrier_k_up > 0 or self.config.barrier_k_down > 0:
-            atr_values = self._compute_atr(data).values.astype(float)
             logger.info(
                 f"Barrier-aligned backtest: k_up={self.config.barrier_k_up:.2f}, "
                 f"k_down={self.config.barrier_k_down:.2f}, "
@@ -784,15 +783,25 @@ class Backtester:
                     # Still record equity below
                     pass
                 else:
-                    # Get current ATR value if barrier-aligned
-                    current_atr = float(atr_values[i]) if atr_values is not None else None
+                    current_atr = float(atr_values[i])
 
                     label_clean = None if pd.isna(label_val) else label_val
+
+                    # Realized volatility proxy for adverse selection: ATR / price
+                    if np.isfinite(current_atr) and c_i > 0:
+                        realized_vol = current_atr / c_i
+                    else:
+                        realized_vol = 0.15
 
                     if prediction == 1:
                         # Long signal
                         entry_price = self._get_execution_price_fast(
                             o_i, h_i, l_i, c_i, 1, is_entry=True
+                        )
+                        entry_price = self.market_hours_filter.apply_adverse_selection(
+                            signal_price=entry_price,
+                            signal_direction=1,
+                            realized_volatility=realized_vol,
                         )
                         self._open_position(
                             direction=1,
@@ -808,6 +817,11 @@ class Backtester:
                         # Short signal
                         entry_price = self._get_execution_price_fast(
                             o_i, h_i, l_i, c_i, -1, is_entry=True
+                        )
+                        entry_price = self.market_hours_filter.apply_adverse_selection(
+                            signal_price=entry_price,
+                            signal_direction=-1,
+                            realized_volatility=realized_vol,
                         )
                         self._open_position(
                             direction=-1,
@@ -895,8 +909,21 @@ class Backtester:
             trades=self._trades,
         )
 
+        # Derive periods_per_year from data frequency
+        periods_per_year = 252  # fallback
+        if n_bars >= 2:
+            try:
+                ts_first = pd.Timestamp(timestamps[0])
+                ts_last = pd.Timestamp(timestamps[-1])
+                span_days = (ts_last - ts_first).total_seconds() / 86400.0
+                if span_days > 0:
+                    years = span_days / 365.25
+                    periods_per_year = max(1, int(round(n_bars / years)))
+            except Exception:
+                periods_per_year = 252
+
         # Calculate metrics
-        metrics = equity_curve.get_metrics()
+        metrics = equity_curve.get_metrics(periods_per_year=periods_per_year)
 
         # Additional statistics
         signals_count = {"long": signals_long, "short": signals_short, "neutral": signals_neutral}

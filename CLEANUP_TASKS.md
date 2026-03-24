@@ -88,7 +88,7 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 94 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 95 are complete. See COMPLETION.md for full details.
 
 ---
 
@@ -111,6 +111,33 @@ See **COMPLETION.md** for full task details and implementation information.
 | A8 | Return -inf for degenerate Optuna trials | `five_dimension_objective.py` | ✅ |
 
 **Verification:** 223/223 tests passing, ruff clean, black clean. 19 files modified, 304 lines added, 99 removed.
+
+---
+
+### Phase 95: Deep Audit Phase B — 9 High-Value Fixes (FIXES_NEEDED.md)
+
+**Status:** COMPLETE
+**Priority:** HIGH
+**Tasks:** 9/9 complete
+**Date:** 2026-03-24
+
+| Task | Description | Files | Status |
+|------|-------------|-------|--------|
+| B1 | Parameterize n_classes in stacking.py (3 sites, default=3) | `stacking.py` | ✅ |
+| B2 | Add shift(1) to 12 entropy compute functions (prevent lookahead) | `entropy.py` | ✅ |
+| B3 | Per-fold median/IQR scaling in 4D OOF generation | `oof_generation.py` | ✅ |
+| B4 | Yang-Zhang k parameterized by window (was hardcoded 21/19) | `volatility.py` | ✅ |
+| B5 | Wire adverse selection into backtest entry prices (long + short) | `backtest.py` | ✅ |
+| B6 | Derive Sharpe annualization from data frequency (was hardcoded 252) | `equity_curve.py`, `backtest.py` | ✅ |
+| B7 | Random tie-breaking in hard vote (was np.argmax bias) | `voting.py` | ✅ |
+| B8 | OOF generator verified stateless (config from OOFRequest) | `oof_generation.py` — no changes needed | ✅ |
+| B9 | _ANNUAL_FACTOR constant replaces 7x hardcoded np.sqrt(252) | `volatility.py` | ✅ |
+
+**Additional fixes during verification:**
+- NaN guard for adverse selection when ATR is NaN (early bars)
+- CAGR overflow guard for negative total returns in metrics.py
+
+**Verification:** 223/223 tests passing, ruff clean, black clean. 8 files modified.
 
 ---
 
