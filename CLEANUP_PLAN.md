@@ -1,6 +1,6 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 96 COMPLETE (Deep Audit Phase C — 13 Medium-Priority Fixes)
+**Status:** Phase 97 COMPLETE (Deep Audit Phase D — 12 Regression Tests)
 **Last Updated:** 2026-03-24
 
 ---
@@ -78,6 +78,7 @@ See **COMPLETION.md** for full details on all completed phases.
 | 94 | Deep Audit Phase A — 8 Critical Fixes (ATR parity, barrier exit, cost unification, feature truncation, leakage fix, session cumsum, config round-trip, Optuna -inf) | ✅ COMPLETE | 2026-03-24 |
 | 95 | Deep Audit Phase B — 9 High-Value Fixes (binary n_classes, entropy shift(1), 4D OOF scaling, Yang-Zhang k, adverse selection, Sharpe annualization, tie-breaking, OOF stateless, volatility annualization) | ✅ COMPLETE | 2026-03-24 |
 | 96 | Deep Audit Phase C — 13 Medium-Priority Fixes (DSR Bonferroni, duplicate features, GARCH stubs, OU half-life, Hurst, MTF mutation, label cache, dead config, timeout, scaler f32, orphaned modules, ATR median, vol slippage) + NaN guard | ✅ COMPLETE | 2026-03-24 |
+| 97 | Deep Audit Phase D — 12 Regression Tests (config round-trip, leakage detection, feature index, degenerate labels, binary mode, ATR parity, barrier exits, cost parity, RSI parity, entropy shift, determinism, config hash) | ✅ COMPLETE | 2026-03-24 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 

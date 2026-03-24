@@ -114,7 +114,7 @@ for _family_name, family_map in FAMILY_FEATURE_MAPS.items():
 
 # Verify feature count
 TOTAL_FEATURES = len(FEATURE_COMPUTE_MAP)
-EXPECTED_FEATURES = 196  # 162 original + 12 order_flow + 12 liquidity + 10 mean_reversion
+EXPECTED_FEATURES = 192  # 162 original + 12 order_flow + 12 liquidity + 9 mean_reversion - 2 GARCH stubs - 1 duplicate
 
 # Log warning if count mismatch (don't raise error to allow flexibility)
 if TOTAL_FEATURES != EXPECTED_FEATURES:

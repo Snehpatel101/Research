@@ -171,6 +171,34 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ---
 
+### Phase 97: Deep Audit Phase D — 12 Regression Tests (FIXES_NEEDED.md)
+
+**Status:** COMPLETE
+**Priority:** MEDIUM
+**Tasks:** 12/12 complete
+**Date:** 2026-03-24
+
+| Task | Test | What It Catches | Status |
+|------|------|----------------|--------|
+| D1 | ExperimentConfig round-trip (to_dict/from_dict) | C-CFG-1: double-nesting bug | ✅ |
+| D2 | Feature selection leakage (train-only MDA) | C-FSEL-1: full-dataset leakage | ✅ |
+| D3 | Feature index >50 evaluation | C-FSEL-2: positional truncation | ✅ |
+| D4 | Degenerate labels return -inf | C-OPT-1: 0.0 polluting best_value | ✅ |
+| D5 | Binary mode (n_classes=2) pipeline | C-OOF-1/2: binary mode crash | ✅ |
+| D6 | ATR parity (labeling == backtest) | C-BT-1: Wilder's EMA divergence | ✅ |
+| D7 | Barrier exit at barrier price, not close | C-BT-2: systematic P&L bias | ✅ |
+| D8 | Cost parity (labeling == backtest) | H-BT-2: 2.95x cost gap | ✅ |
+| D9 | RSI Numba vs pandas golden test | C-FEAT-3: Numba/pandas divergence | ✅ |
+| D10 | Entropy shift(1) prevents lookahead | H-FEAT-1: lookahead bias | ✅ |
+| D11 | Feature engineering determinism | Nondeterminism bugs | ✅ |
+| D12 | Config hash stability | Checkpoint drift | ✅ |
+
+**Additional:** Fixed EXPECTED_FEATURES constant 196→192 (Phase C removed 4 features)
+
+**Verification:** 317/317 tests passing (94 new), ruff clean, black clean. 12 new test files.
+
+---
+
 ### Phase 53: Security Hardening, SymbolConfig Extraction & Resample Safety
 
 **Status:** COMPLETE

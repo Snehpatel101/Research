@@ -499,6 +499,22 @@ src/
 - C2 SKIPPED (feature selection inside CV folds — 2-week effort, deferred)
 - 20 files modified, 223/223 tests passing, ruff + black clean
 
+**Phase 97: COMPLETE — Audit Phase D: 12 Regression Tests (12 new test files, 94 new tests)**
+- D1: ExperimentConfig round-trip (to_dict/from_dict idempotency)
+- D2: Feature selection leakage detection (train-only MDA, leaky feature rejected)
+- D3: Feature index >50 evaluation (no positional truncation, importance-based ranking)
+- D4: Degenerate labels return -inf (not 0.0) in Optuna trials
+- D5: Binary mode (n_classes=2) pipeline (stacking ensemble, no crash)
+- D6: ATR parity between labeling and backtest (Wilder's EMA, identical values)
+- D7: Barrier exit prices (stop/TP at barrier level, not bar close; 11 scenarios)
+- D8: Cost parity between labeling and backtest (same commission/tick/slippage)
+- D9: RSI Numba vs pandas golden test (Wilder's EMA, <1e-6 tolerance)
+- D10: Entropy shift(1) prevents lookahead (spike at bar N doesn't affect bar N's feature)
+- D11: Feature engineering determinism (5 features, 2 runs, exact match)
+- D12: Config hash stability (to_dict idempotent, mutation detected)
+- Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
+- 12 new test files, 317/317 tests passing (was 223), ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

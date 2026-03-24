@@ -541,7 +541,7 @@ class TestMDAHoldoutScoring:
             selector.select_features_walkforward(X, y, cv_splits)
 
         assert len(calls) == 2
-        for i, call_kwargs in enumerate(calls):
+        for _i, call_kwargs in enumerate(calls):
             assert "X_test" in call_kwargs
             assert "y_test" in call_kwargs
 
