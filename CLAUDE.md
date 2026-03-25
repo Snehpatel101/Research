@@ -515,6 +515,14 @@ src/
 - Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
 - 12 new test files, 317/317 tests passing (was 223), ruff + black clean
 
+**Phase 102: COMPLETE — Robustness Improvements (Bootstrap + Label Perturbation + Param Sensitivity, 4 files, 18 new tests)**
+- `BootstrapFeatureStability` — N bootstrap resamples, measure feature selection frequency in top-K, flag unstable features
+- `LabelPerturbationTester` — rank features under multiple label variants (different barrier params), flag features with >threshold rank change
+- `ParameterSensitivityTester` — rank features under parameter variants (different feature computation params), flag high-CV features
+- New files: `bootstrap_stability.py`, `label_perturbation.py`, `param_sensitivity.py` in `src/optimization/feature_selection/`
+- Orphaned modules (purged_selector.py, optimization.py) confirmed already deleted in Phase C12
+- 4 files modified, 440/440 tests passing (18 new), ruff + black clean
+
 **Phase 101: COMPLETE — Ticker Portability + Economic Value Scoring (E8+E9, 4 files, 20 new tests) — PHASE E COMPLETE**
 - E8: `TickerPortabilityTester` — cross-symbol feature importance comparison via permutation importance, portability ratio scoring, handles mismatched feature sets
 - E9: `EconomicValueScorer` — leave-one-out marginal Sharpe contribution per feature, slow-path complement to fast-path robustness scorer (E3)

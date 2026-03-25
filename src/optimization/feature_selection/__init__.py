@@ -38,6 +38,8 @@ Reference: Lopez de Prado (2018) "Advances in Financial Machine Learning"
 
 # Result classes - these have no external dependencies
 # Configuration - these have no external dependencies
+# Bootstrap feature stability
+from .bootstrap_stability import BootstrapFeatureStability, BootstrapStabilityResult
 from .config import (
     FeatureSelectionConfig,
     FeatureSelectorConfig,
@@ -59,6 +61,9 @@ from .filtering import (
     select_from_correlated_group,
 )
 
+# Label perturbation testing
+from .label_perturbation import LabelPerturbationTester, PerturbationResult
+
 # Feature lifecycle state machine
 from .lifecycle import FeatureLifecycle, FeatureLifecycleState
 
@@ -72,6 +77,9 @@ from .ohlcv_selector import (
     filter_ohlcv_features,
     get_feature_categories,
 )
+
+# Parameter sensitivity testing
+from .param_sensitivity import ParameterSensitivityTester, SensitivityResult
 
 # Priority - no external dependencies
 from .priority import (
@@ -165,9 +173,18 @@ __all__ = [
     # Feature registry
     "FeatureRecord",
     "FeatureRegistry",
+    # Bootstrap stability
+    "BootstrapFeatureStability",
+    "BootstrapStabilityResult",
     # Economic value scoring
     "EconomicValueScorer",
     "FeatureValueScore",
+    # Label perturbation
+    "LabelPerturbationTester",
+    "PerturbationResult",
+    # Parameter sensitivity
+    "ParameterSensitivityTester",
+    "SensitivityResult",
     # Robustness scoring
     "RobustnessScorer",
     # Timeframe budget
