@@ -515,6 +515,13 @@ src/
 - Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
 - 12 new test files, 317/317 tests passing (was 223), ruff + black clean
 
+**Phase 101: COMPLETE — Ticker Portability + Economic Value Scoring (E8+E9, 4 files, 20 new tests) — PHASE E COMPLETE**
+- E8: `TickerPortabilityTester` — cross-symbol feature importance comparison via permutation importance, portability ratio scoring, handles mismatched feature sets
+- E9: `EconomicValueScorer` — leave-one-out marginal Sharpe contribution per feature, slow-path complement to fast-path robustness scorer (E3)
+- New files: `ticker_portability.py` in `src/validation/`, `economic_value.py` in `src/optimization/feature_selection/`
+- **Phase E (Feature Governance) is now fully complete: E1-E9 all implemented**
+- 4 files modified, 422/422 tests passing (20 new), ruff + black clean
+
 **Phase 100: COMPLETE — Feature Lifecycle + Registry + Drawdown Sizer (E6+E7, 5 files, 44 new tests)**
 - E6: `FeatureLifecycleState` enum (CANDIDATE/SELECTED/ACTIVE/DEGRADED/RETIRED) + `FeatureLifecycle` class with validated transitions, history tracking, consecutive degradation counting, retirement recommendation
 - E7: `FeatureRegistry` with JSON persistence — register/update/query features by state, save/load round-trip, `FeatureRecord` dataclass with scores and transition history

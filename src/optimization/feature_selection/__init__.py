@@ -44,6 +44,9 @@ from .config import (
     ModelFamilyDefaults,
 )
 
+# Economic value scoring (slow path)
+from .economic_value import EconomicValueScorer, FeatureValueScore
+
 # Filtering functions
 from .filtering import (
     apply_feature_selection,
@@ -162,6 +165,9 @@ __all__ = [
     # Feature registry
     "FeatureRecord",
     "FeatureRegistry",
+    # Economic value scoring
+    "EconomicValueScorer",
+    "FeatureValueScore",
     # Robustness scoring
     "RobustnessScorer",
     # Timeframe budget
