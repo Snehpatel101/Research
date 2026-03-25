@@ -216,7 +216,7 @@
 |---|-----------|----------------------------------|--------|--------|
 | E1 | Feature selection inside CV (from C2) | Section 8 | Done in C2 | ✅ COMPLETE |
 | E2 | MDA stabilization (n_estimators=50, n_repeats=5) | Section 15.5 | 1 day | ✅ COMPLETE (Phase 98) |
-| E3 | 3-dimension fast-path robustness scoring | Section 4 | 1 week | |
+| E3 | 3-dimension fast-path robustness scoring | Section 4 | 1 week | ✅ COMPLETE (Phase 99) |
 | E4 | Timeframe competition | Section 6 | 3 days | ✅ COMPLETE (Phase 98) |
 | E5 | Regime-conditional selection (3-regime) | Section 5 | 1 week | ✅ COMPLETE (Phase 98) |
 | E6 | Feature lifecycle state machine | Section 11 | 2 weeks | |

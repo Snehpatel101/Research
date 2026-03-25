@@ -81,6 +81,9 @@ from .result import (
     PersistedFeatureSelection,
 )
 
+# Robustness scoring
+from .robustness_scoring import RobustnessScorer
+
 # Timeframe budget for MTF feature competition
 from .timeframe_budget import MTF_SUFFIXES, apply_timeframe_budget
 
@@ -147,6 +150,8 @@ __all__ = [
     "get_feature_priority",
     # Regime-conditional selection
     "compute_regime_importance",
+    # Robustness scoring
+    "RobustnessScorer",
     # Timeframe budget
     "MTF_SUFFIXES",
     "apply_timeframe_budget",

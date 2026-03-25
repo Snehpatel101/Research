@@ -515,6 +515,14 @@ src/
 - Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
 - 12 new test files, 317/317 tests passing (was 223), ruff + black clean
 
+**Phase 99: COMPLETE — Advanced Feature Governance (E3 + CUSUM + FracDiff, 5 files, 22 new tests)**
+- E3: RobustnessScorer class — composite scoring (0.4*stability + 0.4*predictive + 0.2*regime), wired into pipeline as diagnostic logging step
+- CUSUM filter (`cusum_filter.py`) — symmetric CUSUM with numba @njit inner loop, auto-threshold calibration via binary search
+- Fractional differentiation (`frac_diff.py`) — FFD with numba, d=0.3 preserves memory while achieving stationarity, window capped at min(500, len/2)
+- `find_min_d()` scans for minimum d passing ADF stationarity test (requires statsmodels)
+- New files: `robustness_scoring.py`, `cusum_filter.py`, `frac_diff.py`
+- 5 files modified, 358/358 tests passing (21 new + 1 skipped), ruff + black clean
+
 **Phase 98: COMPLETE — Feature Governance E2+E4+E5 (7 files, 20 new tests)**
 - E2: MDA stabilization — configurable `mda_n_repeats` (default 5), `n_estimators=50` unified across pipeline
 - E4: Timeframe competition — `apply_timeframe_budget()` limits MTF features per timeframe suffix (default 8/tf)

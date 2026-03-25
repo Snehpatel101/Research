@@ -421,6 +421,30 @@ class FeatureSelectionMixin:
                 model_features = list(feature_names)
             self._per_model_features[model_name] = model_features
 
+        # Step 5: Robustness scoring (diagnostic — logs top features, doesn't change selection)
+        if ranking is not None:
+            try:
+                from src.optimization.feature_selection.robustness_scoring import (
+                    RobustnessScorer,
+                )
+
+                scorer = RobustnessScorer()
+                scores_df = scorer.score_features(
+                    feature_names=feature_names,
+                    mda_importance=ranking,
+                )
+                if len(scores_df) > 0:
+                    top5 = scores_df.head(5)
+                    logger.info("  Robustness scores (top 5):")
+                    for _, row in top5.iterrows():
+                        logger.info(
+                            f"    {row['feature']}: "
+                            f"composite={row['composite_score']:.4f} "
+                            f"(pred={row['predictive_power']:.3f})"
+                        )
+            except Exception as e:
+                logger.debug(f"  Robustness scoring skipped: {e}")
+
     def _validate_contracts(
         self,
         df: pd.DataFrame,
