@@ -4,6 +4,83 @@
 
 ---
 
+## Phase 103: Adversarial Audit Remediation (11 Phases) | 2026-03-25 | COMPLETE
+
+**Impact:** Fixed 36 confirmed bugs + 11 partially confirmed issues from 12-agent adversarial audit. All 11 remediation phases complete. 473 tests passing (was 440), lint clean.
+
+### Phases 1-3 (Critical Fixes — committed as 250d2b1)
+
+| # | Fix | File(s) | Bug ID |
+|:-:|-----|---------|--------|
+| 1 | 4D OHLCV shift(1) anti-lookahead | `factory.py`, `bundle.py` | B01 |
+| 2 | Meta-label OOF predictions (3-fold PurgedKFold) | `training_ops.py` | B02 |
+| 3 | Neural class weights preserved with sample_weights | `base_rnn.py` | B03 |
+| 4 | Optuna ATR → Wilder's EMA (alpha=1/n) | `five_dimension_objective.py` | B04 |
+| 5 | Default MARKET_ON_OPEN execution | `backtest.py` | B06 |
+| 6 | Strided temporal subsampling (preserves purge) | `cv_tuner.py` | B07 |
+| 7 | Per-window feature selection in walk-forward | `walk_forward.py`, `unified_orchestrator.py` | B08 |
+| 8 | Dynamic n_classes OOF columns | `oof_core.py`, `oof_sequence.py`, `oof_generation.py` | B10 |
+| 9 | HP tuning embargo wired from pipeline | `hyperparameter_tuning.py`, `model_training.py` | B12 |
+| 10 | Regime feature shift(1) (9 functions) | `regime.py` | B14 |
+| 11 | Volatility annualization factor configurable | `volatility.py`, `regime_evaluation.py`, `scoring.py` | B17/B25 |
+| 12 | torch.as_tensor in MultiResolutionDataset | `multi_resolution.py` | B18 |
+| 13 | Walk-forward mmap for >10GB arrays | `walk_forward.py` | B21 |
+| 14 | OOF 4D .copy() removed (fancy indexing already copies) | `oof_generation.py` | B41 |
+| 15 | OOF sequence single backup + np.copyto restore | `oof_sequence.py` | OPT-1D |
+| 16 | Regime model cleanup between iterations | `regime_aware.py` | B40 |
+
+### Phases 4-7 (Wave 1 — verified 16/16 PASS)
+
+| # | Fix | File(s) | Bug ID |
+|:-:|-----|---------|--------|
+| 17 | Stacking fold_id overwrite fix | `oof_stacking.py` | B15 |
+| 18 | Unified regime entry point | `regime/unified.py` (NEW) | B09 |
+| 19 | Regime OHLCV fallback | `regime_trainer.py` | B13 |
+| 20 | ExperimentConfig rename (ExperimentTrackingConfig) | `training.py`, `__init__.py` | B42 |
+| 21 | CLI → MLFactory import | `pipeline.py` | B43 |
+| 22 | Triple FeatureSelectionResult dedup | `features.py`, `selection.py` | B44 |
+| 23 | k_up=0.0 falsy trap fix | `triple_barrier.py` | B27 |
+| 24 | confidence=0.0 falsy trap fix | `backtest.py` | B33 |
+| 25 | Stop-loss slippage | `backtest.py` | B11 |
+| 26 | Kelly position sizing (running stats) | `backtest.py` | B22 |
+| 27 | VWAP→MIDPOINT rename | `backtest.py` | B32 |
+| 28 | Session-end forced close | `backtest.py` | B34 |
+| 29 | SequenceDataset .copy() removal | `sequences.py` | OPT-2A |
+| 30 | Val batch 2x + worker_init_fn | `base_rnn.py` | OPT-2D/B28 |
+| 31 | Feature cache clearing | `compute/__init__.py`, `training_ops.py`, `walk_forward.py` | OPT-2F |
+
+### Phases 8-9 (Wave 2)
+
+| # | Fix | File(s) | Bug ID |
+|:-:|-----|---------|--------|
+| 32 | Self-referential calibration removed | `oof_core.py` | B29 |
+| 33 | CalibratedMetaLearner TimeSeriesSplit | `calibrated_meta.py` | B31 |
+| 34 | Regime hysteresis (min_regime_bars) | `regime/` stages | B36 |
+| 35 | PreparedData cache auto-eviction | `training_ops.py` | OPT-4A |
+| 36 | Walk-forward memory monitoring (psutil) | `walk_forward.py` | OPT-4B |
+| 37 | Deleted SmartConfig + UnifiedConfig (2,082 lines) | `smart_config.py`, `unified.py` | B45 |
+| 38 | Deleted dead constants | `default_periods.py`, `thresholds.py` | B46 |
+| 39 | ConformalPredictor docstring (not yet wired) | `conformal.py` | B30 |
+
+### Phases 10-11 (Tests + E2E Validation)
+
+- 12 regression tests in `test_phases_1_3.py` (Phases 1-3)
+- 19 regression tests in `test_phases_4_11.py` (Phases 4-9)
+- Full suite: **473 passed**, 1 skipped, 1 xfailed
+- Lint: ruff + black clean
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Full test suite | 473 passed, 1 skipped, 1 xfailed |
+| Ruff lint | PASS (0 errors) |
+| Black format | PASS (474 files unchanged) |
+| Wave 1 verification (16 items) | 16/16 PASS |
+| Phase 1-3 verification (13 items) | 13/13 PASS |
+
+---
+
 ## Phase 93: Per-Symbol ADX Regime Thresholds | 2026-03-01 | COMPLETE
 
 **Impact:** ADX threshold for trend regime classification is now per-symbol instead of hardcoded at 25.0. Research shows different instruments trend at different ADX levels: ES/MES (equity indices) trend at ADX 20, GC/MGC (gold) at ADX 23, NQ/MNQ at 25. Percentile-based and dimensionless detectors are already instrument-agnostic; only ADX needed customization.

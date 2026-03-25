@@ -398,12 +398,13 @@ class ParallelTrainingConfig(BaseConfig):
 
 
 @dataclass
-class ExperimentConfig(BaseConfig):
+class ExperimentTrackingConfig(BaseConfig):
     """
-    Configuration for experiment tracking.
+    Configuration for experiment tracking (MLflow/W&B metadata).
 
-    This is the CANONICAL ExperimentConfig. Use this instead of:
-    - ExperimentConfig in src/models/training/config.py (deprecated)
+    NOTE: This is NOT the top-level ExperimentConfig used by MLFactory.
+    That lives in src/config/experiment.py. This class is for experiment
+    tracking metadata (name, tags, backend).
 
     Attributes:
         name: Experiment name
@@ -414,7 +415,7 @@ class ExperimentConfig(BaseConfig):
         tracking_uri: URI for remote tracking server
 
     Example:
-        config = ExperimentConfig(
+        config = ExperimentTrackingConfig(
             name="mes_xgboost_h20",
             description="XGBoost on MES futures, 20-bar horizon",
             tracking_backend="mlflow",
@@ -530,5 +531,5 @@ __all__ = [
     "CheckpointConfig",
     "OOMConfig",
     "ParallelTrainingConfig",
-    "ExperimentConfig",
+    "ExperimentTrackingConfig",
 ]

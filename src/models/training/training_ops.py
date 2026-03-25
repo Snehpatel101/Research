@@ -70,10 +70,18 @@ class TrainingOpsMixin:
             for model_name in sequential_models:
                 self._train_model_sequential(df, model_name, horizon, additional_dfs)
 
-            if len(self._prepared_cache) > 20:
-                logger.warning(
-                    f"PreparedData cache has {len(self._prepared_cache)} entries — "
-                    "consider clearing if memory is constrained"
+            # Auto-evict oldest PreparedData cache entries when cache grows too large.
+            # Each entry can be several GB for 3D/4D models, so keeping stale
+            # entries risks OOM on memory-constrained machines.
+            max_cache_size = 10
+            while len(self._prepared_cache) > max_cache_size:
+                evicted_key = next(iter(self._prepared_cache))
+                del self._prepared_cache[evicted_key]
+                gc.collect()
+            if len(self._prepared_cache) > max_cache_size // 2:
+                logger.debug(
+                    f"PreparedData cache at {len(self._prepared_cache)} entries "
+                    f"(max {max_cache_size})"
                 )
 
     def _train_boosting_parallel(
@@ -219,6 +227,10 @@ class TrainingOpsMixin:
             del self._prepared_cache[cache_key]
         # GPU cleanup already done by _offload_trainer_to_cpu before OOF;
         # just collect Python garbage here for prepared data cache eviction.
+        # Also clear feature computation caches (14 dicts, ~300-480 MB) between models.
+        from src.data.features.compute import clear_all_feature_caches
+
+        clear_all_feature_caches()
         gc.collect()
 
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:

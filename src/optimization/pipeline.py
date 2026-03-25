@@ -70,7 +70,7 @@ from src.core import (
 from src.optimization.features import (
     FeatureOptimizer,
     FeaturePruningResult,
-    FeatureSelectionResult,
+    OptunaSelectionResult,
 )
 from src.optimization.hyperparameters import (
     HyperparameterOptimizer,
@@ -122,7 +122,7 @@ class FullOptimizationResult:
 
     # Stage results
     label_result: LabelOptimizationResult | None = None
-    selection_result: FeatureSelectionResult | None = None
+    selection_result: OptunaSelectionResult | None = None
     pruning_result: FeaturePruningResult | None = None
     hyperparam_results: dict[str, HyperparameterResult] = field(default_factory=dict)
 
@@ -666,7 +666,7 @@ class OptimizationPipeline:
         model_factory: Callable[[dict[str, Any]], Any],
         X_val: np.ndarray | None = None,
         y_val: np.ndarray | None = None,
-    ) -> tuple[FeatureSelectionResult, FeaturePruningResult]:
+    ) -> tuple[OptunaSelectionResult, FeaturePruningResult]:
         """
         Run only feature optimization (selection + pruning).
 
@@ -679,7 +679,7 @@ class OptimizationPipeline:
             y_val: Validation labels
 
         Returns:
-            Tuple of (FeatureSelectionResult, FeaturePruningResult)
+            Tuple of (OptunaSelectionResult, FeaturePruningResult)
         """
         self._feature_optimizer = FeatureOptimizer(
             selection_trials=self.feature_trials,

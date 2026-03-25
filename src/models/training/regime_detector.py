@@ -12,6 +12,9 @@ volatility and trend regimes using multiple methods:
 The detector is used by RegimeAwareTrainer to split data by regime
 and train separate models per regime.
 
+Note: The canonical unified entry point for regime detection is
+``src.data.pipeline.stages.regime.unified.get_regime_labels``.
+
 Example:
     from src.training.regime_detector import RegimeDetector
     from src.core import PipelineConfig

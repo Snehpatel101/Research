@@ -219,6 +219,9 @@ class RegimeAwareTrainer:
         # Store training result for inference
         self._training_result: RegimeTrainingResult | None = None
 
+        # Raw OHLCV fallback for regime detection (set in train())
+        self._raw_ohlcv: pd.DataFrame | None = None
+
         logger.info("Initialized RegimeAwareTrainer")
         logger.info(f"  Output directory: {self.output_dir}")
         logger.info(f"  Detection method: {config.regime_detection_method}")
@@ -231,6 +234,7 @@ class RegimeAwareTrainer:
         horizon: int,
         model_name: str | None = None,
         save_models: bool = True,
+        raw_ohlcv: pd.DataFrame | None = None,
     ) -> RegimeTrainingResult:
         """
         Train regime-aware models.
@@ -240,6 +244,10 @@ class RegimeAwareTrainer:
             horizon: Prediction horizon
             model_name: Optional specific model to train (None = all from config)
             save_models: Whether to save trained models
+            raw_ohlcv: Optional raw OHLCV DataFrame (close/high/low/volume).
+                If provided, used for regime detection instead of prepared
+                features (which may have had OHLCV columns removed by
+                feature selection).
 
         Returns:
             RegimeTrainingResult with all trained models and metrics
@@ -251,6 +259,9 @@ class RegimeAwareTrainer:
         logger.info("=" * 60)
         logger.info(f"Horizon: {horizon}")
         logger.info(f"Detection method: {self.config.regime_detection_method}")
+
+        # Store raw OHLCV for regime detection fallback
+        self._raw_ohlcv = raw_ohlcv
 
         # Determine models to train
         models_to_train = [model_name] if model_name else self.config.models
@@ -683,30 +694,58 @@ class RegimeAwareTrainer:
         return predictions
 
     def _create_df_for_detection(self, prepared: PreparedData) -> pd.DataFrame:
-        """Create DataFrame suitable for regime detection from PreparedData."""
-        # If we have feature names that include price data, use them
+        """Create DataFrame suitable for regime detection from PreparedData.
+
+        If OHLCV columns (close/high/low) were removed by feature selection,
+        falls back to ``raw_ohlcv`` (if provided via ``train(raw_ohlcv=...)``).
+        If neither source has the required columns, returns what is available
+        with a warning so that the detector can attempt volatility-only mode.
+        """
+        # --- Try raw_ohlcv first (guaranteed to have OHLCV) ---------------
+        raw = getattr(self, "_raw_ohlcv", None)
+        if raw is not None:
+            # Align to training indices
+            n_train = len(prepared.y_train)
+            if prepared.train_indices is not None and len(prepared.train_indices) > 0:
+                # Use stored train indices to slice raw_ohlcv
+                idx = prepared.train_indices
+                if hasattr(raw, "iloc"):
+                    ohlcv = raw.iloc[idx].reset_index(drop=True)
+                else:
+                    ohlcv = raw.loc[idx].reset_index(drop=True)
+            else:
+                ohlcv = raw.iloc[:n_train].reset_index(drop=True)
+            return ohlcv
+
+        # --- Fallback: reconstruct from prepared features ------------------
         if prepared.data_rank == 2:
             df = pd.DataFrame(
                 prepared.X_train,
                 columns=prepared.feature_names,
             )
+        elif prepared.data_rank == 3:
+            df = pd.DataFrame(
+                prepared.X_train[:, -1, :],
+                columns=prepared.feature_names,
+            )
         else:
-            # For 3D/4D data, we need to handle this differently
-            # Use last timestep of sequence as proxy
-            if prepared.data_rank == 3:
-                # Shape: (n_samples, seq_len, n_features)
-                # Use last timestep
-                df = pd.DataFrame(
-                    prepared.X_train[:, -1, :],
-                    columns=prepared.feature_names,
-                )
-            else:
-                # Shape: (n_samples, n_timeframes, seq_len, n_features)
-                # Use first timeframe, last timestep
-                df = pd.DataFrame(
-                    prepared.X_train[:, 0, -1, :],
-                    columns=prepared.feature_names,
-                )
+            df = pd.DataFrame(
+                prepared.X_train[:, 0, -1, :],
+                columns=prepared.feature_names,
+            )
+
+        # Check for required OHLCV columns
+        required = {"close", "high", "low"}
+        present = {c.lower() for c in df.columns}
+        missing = required - present
+        if missing:
+            logger.warning(
+                "Regime detection: OHLCV columns %s missing from prepared "
+                "features (likely removed by feature selection). Regime "
+                "detection may fall back to volatility-only mode. Pass "
+                "raw_ohlcv to train() to avoid this.",
+                missing,
+            )
 
         return df
 

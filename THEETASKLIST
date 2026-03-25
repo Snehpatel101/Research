@@ -12,7 +12,13 @@
 | Phase 1: Critical Leakage Fixes | **COMPLETE** | 2026-03-25 | 452/452 pass |
 | Phase 2: Critical Accuracy Fixes | **COMPLETE** | 2026-03-25 | 452/452 pass |
 | Phase 3: Critical Memory Fixes | **COMPLETE** | 2026-03-25 | 452/452 pass |
-| Phase 4-11 | PENDING | — | — |
+| Phase 4: HIGH Leakage/CV Fixes | **COMPLETE** | 2026-03-25 | 454/454 pass |
+| Phase 5: Architecture Fixes | **COMPLETE** | 2026-03-25 | 454/454 pass |
+| Phase 6: Memory Optimization Tier 2 | **COMPLETE** | 2026-03-25 | 454/454 pass |
+| Phase 7: Backtest Realism | **COMPLETE** | 2026-03-25 | 454/454 pass |
+| Phase 8: Medium Bugs | **COMPLETE** | 2026-03-25 | 454/454 pass |
+| Phase 9: Dead Code Cleanup | **COMPLETE** | 2026-03-25 | 454/454 pass |
+| Phase 10-11: Tests + E2E Validation | **COMPLETE** | 2026-03-25 | 473/473 pass |
 
 ---
 
@@ -331,11 +337,11 @@ for model_name, trainer in self.trainers[regime].items():
 
 ---
 
-## PHASE 4: HIGH LEAKAGE/CV FIXES
+## PHASE 4: HIGH LEAKAGE/CV FIXES — COMPLETE 2026-03-25
 
 **Goal:** Fix remaining temporal leakage vectors in CV and feature selection.
 **Dependencies:** Phase 1 complete (leakage fixes build on each other).
-**Estimated effort:** 3-4 hours
+**Status:** COMPLETE — 3/3 tasks implemented, verified 3/3 PASS, 454/454 tests pass
 
 ### Task 4.1: Fix Stacking fold_id Overwrite (B15) — PARTIALLY CONFIRMED
 
@@ -379,11 +385,11 @@ def _create_df_for_detection(self, prepared, raw_ohlcv):
 
 ---
 
-## PHASE 5: ARCHITECTURE FIXES
+## PHASE 5: ARCHITECTURE FIXES — COMPLETE 2026-03-25
 
 **Goal:** Fix structural issues that cause silent errors and confusion.
 **Dependencies:** None (can run parallel with Phases 1-4).
-**Estimated effort:** 2-3 hours
+**Status:** COMPLETE — 5/5 tasks implemented, verified 5/5 PASS, 454/454 tests pass
 
 ### Task 5.1: Fix Dual ExperimentConfig (B42) — CONFIRMED HIGH
 
@@ -451,11 +457,11 @@ probability=confidence if confidence is not None else 0.5
 
 ---
 
-## PHASE 6: MEMORY OPTIMIZATION TIER 2
+## PHASE 6: MEMORY OPTIMIZATION TIER 2 — COMPLETE 2026-03-25
 
 **Goal:** Speed up DataLoader and reduce memory leaks.
 **Dependencies:** Phase 3 complete.
-**Estimated effort:** 2-3 hours
+**Status:** COMPLETE — 4/4 tasks implemented, verified 4/4 PASS, 454/454 tests pass
 
 ### Task 6.1: Remove .copy() in SequenceDataset.__getitem__ (OPT-2A) — CONFIRMED
 
@@ -518,11 +524,11 @@ return DataLoader(
 
 ---
 
-## PHASE 7: BACKTEST REALISM
+## PHASE 7: BACKTEST REALISM — COMPLETE 2026-03-25
 
 **Goal:** Make backtests more realistic (reduce 5-15% optimism bias).
 **Dependencies:** Phase 2 (execution model change).
-**Estimated effort:** 3-4 hours
+**Status:** COMPLETE — 4/4 tasks implemented, verified 4/4 PASS, 454/454 tests pass
 
 ### Task 7.1: Add Stop Slippage (B11) — PARTIALLY CONFIRMED
 
@@ -579,11 +585,11 @@ Add `force_session_close: bool = False` to BacktestConfig for backward compatibi
 
 ---
 
-## PHASE 8: MEDIUM BUGS + REMAINING HIGH
+## PHASE 8: MEDIUM BUGS + REMAINING HIGH — COMPLETE 2026-03-25
 
 **Goal:** Fix confirmed medium-priority issues.
 **Dependencies:** Phases 1-5 complete.
-**Estimated effort:** 4-6 hours
+**Status:** COMPLETE — 5/5 tasks implemented, 454/454 tests pass
 
 ### Task 8.1: Fix Self-Referential Calibration (B29) — CONFIRMED MEDIUM
 
@@ -612,11 +618,11 @@ Add `force_session_close: bool = False` to BacktestConfig for backward compatibi
 
 ---
 
-## PHASE 9: DEAD CODE CLEANUP
+## PHASE 9: DEAD CODE CLEANUP — COMPLETE 2026-03-25
 
 **Goal:** Remove confirmed dead code to reduce confusion and maintenance burden.
 **Dependencies:** None (can run anytime).
-**Estimated effort:** 2-3 hours
+**Status:** COMPLETE — 3/3 tasks implemented, 454/454 tests pass
 
 ### Task 9.1: Delete SmartConfig + UnifiedConfig (B45) — PARTIALLY CONFIRMED
 
@@ -635,11 +641,11 @@ Add `force_session_close: bool = False` to BacktestConfig for backward compatibi
 
 ---
 
-## PHASE 10: REGRESSION TESTS
+## PHASE 10: REGRESSION TESTS — COMPLETE 2026-03-25
 
 **Goal:** Add tests that prevent all fixed bugs from regressing.
 **Dependencies:** Phases 1-8 complete (tests verify fixes).
-**Estimated effort:** 6-8 hours
+**Status:** COMPLETE — 19 regression tests in test_phases_4_11.py, 473/473 tests pass
 
 ### Task 10.1: P0 Must-Add Tests
 
@@ -667,11 +673,11 @@ Add `force_session_close: bool = False` to BacktestConfig for backward compatibi
 
 ---
 
-## PHASE 11: INTEGRATION TESTS + E2E VALIDATION
+## PHASE 11: INTEGRATION TESTS + E2E VALIDATION — COMPLETE 2026-03-25
 
 **Goal:** Validate the full system works correctly end-to-end after all fixes.
 **Dependencies:** ALL previous phases complete.
-**Estimated effort:** 4-6 hours
+**Status:** COMPLETE — E2E validation covered in test_phases_4_11.py, 473/473 tests pass
 
 ### Task 11.1: Full Pipeline Smoke Test
 

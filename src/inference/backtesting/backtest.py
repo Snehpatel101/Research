@@ -19,11 +19,15 @@ import pandas as pd
 if TYPE_CHECKING:
     from src.config.symbol import SymbolConfig
 
+import pytz
+
 from .costs import CostCalculator, TransactionCosts
 from .equity_curve import EquityCurve, Trade
-from .execution import MarketHoursFilter
+from .execution import CONTRACT_SESSION_TIMES, DEFAULT_SESSION, MarketHoursFilter
 from .metrics import PerformanceMetrics
 from .position_sizing import BasePositionSizer, create_position_sizer
+
+_ET_TZ = pytz.timezone("US/Eastern")
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +38,9 @@ class ExecutionModel(StrEnum):
     MARKET_ON_CLOSE = "market_on_close"
     MARKET_ON_OPEN = "market_on_open"
     FILL_AT_SIGNAL = "fill_at_signal"
-    VWAP = "vwap"
+    MIDPOINT = "midpoint"
+    # Backward compat alias — "vwap" was actually (H+L)/2 midpoint
+    VWAP = "midpoint"
 
 
 class ExitReason(StrEnum):
@@ -45,6 +51,7 @@ class ExitReason(StrEnum):
     MAX_HOLDING = "max_holding"
     SIGNAL_REVERSAL = "signal_reversal"
     SIGNAL_NEUTRAL = "signal_neutral"
+    SESSION_END = "session_end"
 
 
 @dataclass
@@ -101,6 +108,13 @@ class BacktestConfig:
     # 0.0 = not set, uses legacy hardcoded logic for backward compat
     barrier_k_up: float = 0.0  # Upper barrier ATR multiplier
     barrier_k_down: float = 0.0  # Lower barrier ATR multiplier
+
+    # Session-end forced close: close all positions at session end
+    # False = legacy behavior (positions can be held overnight)
+    force_session_close: bool = False
+
+    # Minimum completed trades before Kelly stats become active
+    kelly_min_trades: int = 30
 
     @classmethod
     def from_symbol_config(cls, sym: SymbolConfig, **kwargs: Any) -> BacktestConfig:
@@ -303,6 +317,12 @@ class Backtester:
         self._day_start_equity = self.config.initial_equity
         self._consecutive_losses = 0
 
+        # Running Kelly statistics from completed trades
+        self._kelly_win_rate: float = 0.5
+        self._kelly_avg_win: float = 100.0
+        self._kelly_avg_loss: float = 100.0
+        self._kelly_active: bool = False
+
     @staticmethod
     def _resolve_sizing_method(value: str) -> str:
         """Map canonical position_sizing values to local PositionSizingMethod values.
@@ -450,8 +470,8 @@ class Backtester:
             return open_price
         elif model == ExecutionModel.FILL_AT_SIGNAL:
             return close
-        elif model == ExecutionModel.VWAP:
-            # Approximate VWAP as midpoint
+        elif model == ExecutionModel.MIDPOINT:
+            # (H+L)/2 midpoint — previously labeled VWAP, renamed for accuracy
             return (high + low) / 2
         else:
             raise ValueError(f"Unknown execution model: {model}")
@@ -461,17 +481,23 @@ class Backtester:
         current_price: float,
         stop_distance: float | None = None,
         volatility: float | None = None,
-        win_rate: float = 0.5,
-        avg_win: float = 100.0,
-        avg_loss: float = 100.0,
         confidence: float | None = None,
     ) -> int:
-        """Calculate position size using configured method."""
+        """Calculate position size using configured method.
+
+        When Kelly sizing is active and enough trades have been completed
+        (kelly_min_trades), running win_rate/avg_win/avg_loss from actual
+        trades are passed to the sizer instead of defaults.
+        """
         # Provide reasonable defaults for position sizing
         if stop_distance is None:
             stop_distance = current_price * 0.02  # 2% default stop
 
-        # Phase 15E: Pass confidence/probability to position sizer for bet sizing
+        # Use running Kelly stats if active, otherwise defaults
+        win_rate = self._kelly_win_rate if self._kelly_active else 0.5
+        avg_win = self._kelly_avg_win if self._kelly_active else 100.0
+        avg_loss = self._kelly_avg_loss if self._kelly_active else 100.0
+
         return self.position_sizer.calculate_position_size(
             account_equity=self._equity,
             current_price=current_price,
@@ -480,7 +506,7 @@ class Backtester:
             win_rate=win_rate,
             avg_win=avg_win,
             avg_loss=avg_loss,
-            probability=confidence or 0.5,  # BetSizingPositioner uses probability parameter
+            probability=confidence if confidence is not None else 0.5,
         )
 
     def _compute_atr(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -633,9 +659,75 @@ class Backtester:
         else:
             self._consecutive_losses = 0
 
+        # Update running Kelly statistics from completed trades
+        self._update_kelly_stats()
+
         self._current_position = None
 
         return trade
+
+    def _update_kelly_stats(self) -> None:
+        """Recompute running Kelly stats from completed trades.
+
+        Once kelly_min_trades are completed, win_rate/avg_win/avg_loss
+        are derived from actual trade history and fed into position sizing.
+        """
+        n = len(self._trades)
+        if n < self.config.kelly_min_trades:
+            return
+
+        wins = [t for t in self._trades if t.net_pnl > 0]
+        losses = [t for t in self._trades if t.net_pnl <= 0]
+
+        self._kelly_win_rate = len(wins) / n
+        self._kelly_avg_win = float(np.mean([t.net_pnl for t in wins])) if wins else 0.0
+        self._kelly_avg_loss = abs(float(np.mean([t.net_pnl for t in losses]))) if losses else 1.0
+        self._kelly_active = True
+
+    def _is_session_end(self, current_ts: pd.Timestamp, next_ts: pd.Timestamp | None) -> bool:
+        """Check if current bar is the last bar of the trading session.
+
+        A bar is session-end if the next bar falls on a different session day
+        or if the next bar's ET time is before the current bar's ET time
+        (session wrapped), or if there is no next bar.
+
+        Args:
+            current_ts: Current bar timestamp
+            next_ts: Next bar timestamp (None if last bar)
+
+        Returns:
+            True if this is the last bar of the session
+        """
+        session_times = CONTRACT_SESSION_TIMES.get(
+            self.config.contract_symbol.upper(), DEFAULT_SESSION
+        )
+        session_end = session_times[1]
+
+        # Convert to Eastern Time
+        if current_ts.tzinfo is None:
+            current_et = current_ts.tz_localize("UTC").tz_convert(_ET_TZ)
+        else:
+            current_et = current_ts.tz_convert(_ET_TZ)
+
+        current_time = current_et.time()
+
+        # If current bar is at or past session end, it's session end
+        if current_time >= session_end:
+            return True
+
+        if next_ts is None:
+            # Last bar in data
+            return True
+
+        # Check if next bar is a different session day or before session start
+        if next_ts.tzinfo is None:
+            next_et = pd.Timestamp(next_ts).tz_localize("UTC").tz_convert(_ET_TZ)
+        else:
+            next_et = pd.Timestamp(next_ts).tz_convert(_ET_TZ)
+
+        if next_et.date() != current_et.date():
+            return True
+        return next_et.time() >= session_end and current_time < session_end
 
     def _should_exit_fast(
         self,
@@ -695,8 +787,8 @@ class Backtester:
 
         return None
 
-    @staticmethod
     def _resolve_exit_price(
+        self,
         reason: ExitReason,
         position: Position,
         close_price: float,
@@ -705,13 +797,23 @@ class Backtester:
 
         For barrier exits (stop_loss, take_profit), use the barrier price
         so P&L reflects the actual trigger level rather than the close.
+        Stop-loss exits include additional slippage (stops slip in fast markets).
         For signal-based and max-holding exits, use close price.
 
         Falls back to close_price when barrier levels are not set
         (legacy mode with barrier_k_up=0.0).
         """
         if reason == ExitReason.STOP_LOSS and position.stop_loss is not None:
-            return position.stop_loss
+            # Stop exits slip: price is worse than barrier by slippage amount
+            stop_price = position.stop_loss
+            slippage = self.config.slippage_ticks * self.config.tick_size
+            if position.direction == 1:
+                # Long stop: fill below the stop level
+                stop_price -= slippage
+            else:
+                # Short stop: fill above the stop level
+                stop_price += slippage
+            return stop_price
         if reason == ExitReason.TAKE_PROFIT and position.take_profit is not None:
             return position.take_profit
         return close_price
@@ -753,6 +855,10 @@ class Backtester:
         ts0 = pd.Timestamp(timestamps[0])
         self._equity_history = [(ts0, self._equity)]
         self._current_position = None
+        self._kelly_active = False
+        self._kelly_win_rate = 0.5
+        self._kelly_avg_win = 100.0
+        self._kelly_avg_loss = 100.0
 
         # Statistics
         signals_long = 0
@@ -797,6 +903,12 @@ class Backtester:
                         exit_reason, self._current_position, close_price
                     )
                     self._close_position(exit_price, ts, current_atr=bar_atr)
+
+            # Session-end forced close: close open positions at session end
+            if self.config.force_session_close and self._current_position is not None:
+                next_ts = pd.Timestamp(timestamps[i + 1]) if i + 1 < n_bars else None
+                if self._is_session_end(ts, next_ts):
+                    self._close_position(close_price, ts, current_atr=bar_atr)
 
             # If no position, check for entry
             if self._current_position is None:

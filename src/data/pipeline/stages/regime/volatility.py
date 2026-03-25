@@ -3,6 +3,9 @@ Volatility regime detection based on ATR percentile.
 
 This module classifies market volatility into low, normal, and high
 regimes using rolling percentile analysis of Average True Range (ATR).
+
+Note: The canonical unified entry point for regime detection is
+``src.data.pipeline.stages.regime.unified.get_regime_labels``.
 """
 
 import logging

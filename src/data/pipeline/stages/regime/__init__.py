@@ -74,6 +74,9 @@ from .trend import (
     calculate_sma,
 )
 
+# Unified entry point
+from .unified import get_regime_labels
+
 # Individual detectors
 from .volatility import (
     VolatilityRegimeDetector,
@@ -110,4 +113,6 @@ __all__ = [
     "RegimeRouter",
     "fit_gaussian_hmm",
     "order_states_by_volatility",
+    # Unified entry point
+    "get_regime_labels",
 ]

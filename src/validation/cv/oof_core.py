@@ -343,12 +343,18 @@ class CoreOOFGenerator:
             valid_y = y_array[valid_mask]
 
             # Fit and apply calibrator
+            # NOTE: We do NOT report before/after improvement metrics here because
+            # the calibrator is fit and evaluated on the same OOF data. Reporting
+            # "improvement" on in-sample data would be self-referential and misleading.
+            # The calibration mapping is still valid (OOF predictions are truly
+            # out-of-sample w.r.t. model training), but improvement should only be
+            # measured on a held-out set.
             from typing import Literal, cast
 
             cal_method = cast(Literal["isotonic", "sigmoid", "auto"], calibration_method)
             cal_config = CalibrationConfig(method=cal_method)
             calibrator = ProbabilityCalibrator(cal_config)
-            metrics = calibrator.fit(valid_y, valid_probs)
+            calibrator.fit(valid_y, valid_probs)
 
             calibrated_probs = calibrator.calibrate(valid_probs)
 
@@ -361,8 +367,8 @@ class CoreOOFGenerator:
             )
 
             logger.info(
-                f"  {model_name}: Brier {metrics.brier_before:.4f} -> {metrics.brier_after:.4f}, "
-                f"ECE {metrics.ece_before:.4f} -> {metrics.ece_after:.4f}"
+                f"  {model_name}: Calibration applied ({calibration_method} method, "
+                f"{valid_mask.sum()} samples)"
             )
 
         return oof_results

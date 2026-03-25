@@ -39,6 +39,21 @@ from ..config import _ModeConfig
 
 logger = logging.getLogger(__name__)
 
+# Optional memory monitoring via psutil
+try:
+    import psutil
+
+    _HAS_PSUTIL = True
+except ImportError:
+    _HAS_PSUTIL = False
+
+
+def _log_rss(label: str) -> None:
+    """Log current process RSS in MB if psutil is available."""
+    if _HAS_PSUTIL:
+        rss_mb = psutil.Process().memory_info().rss / (1024 * 1024)
+        logger.info(f"  [memory] {label}: RSS = {rss_mb:.0f} MB")
+
 
 # =============================================================================
 # CONFIGURATION
@@ -358,6 +373,7 @@ class WalkForwardTrainer:
             evaluator.split(X, y, label_end_times=label_end_times)
         ):
             window_start = time.time()
+            _log_rss(f"Window {window_idx + 1}/{wf_config.n_windows} START")
 
             logger.debug(
                 f"    Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}"
@@ -539,6 +555,12 @@ class WalkForwardTrainer:
             del model, X_test_scaled, y_test
             del prediction_output, scaler
             release_gpu_memory()
+            # Clear feature computation caches between windows to reclaim ~300-480 MB
+            from src.data.features.compute import clear_all_feature_caches
+
+            clear_all_feature_caches()
+
+            _log_rss(f"Window {window_idx + 1}/{wf_config.n_windows} END")
 
         # Clean up mmap-backed array if used
         if _mmap_file is not None:

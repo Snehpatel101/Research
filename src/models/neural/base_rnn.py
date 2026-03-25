@@ -376,7 +376,9 @@ class BaseRNNModel(BaseModel):
         train_loader = self._create_dataloader(
             X_train, y_train, sample_weights, train_config, shuffle=True
         )
-        val_loader = self._create_dataloader(X_val, y_val, None, train_config, shuffle=False)
+        # Use 2x batch size for validation (no gradients stored, so memory allows it)
+        val_config = {**train_config, "batch_size": train_config.get("batch_size", 512) * 2}
+        val_loader = self._create_dataloader(X_val, y_val, None, val_config, shuffle=False)
 
         # Setup training components
         optimizer = self._create_optimizer(train_config)
@@ -551,8 +553,12 @@ class BaseRNNModel(BaseModel):
                         train_loader = self._create_dataloader(
                             X_train, y_train, sample_weights, train_config, shuffle=True
                         )
+                        val_config = {
+                            **train_config,
+                            "batch_size": train_config.get("batch_size", 512) * 2,
+                        }
                         val_loader = self._create_dataloader(
-                            X_val, y_val, None, train_config, shuffle=False
+                            X_val, y_val, None, val_config, shuffle=False
                         )
                         scheduler = self._create_scheduler(
                             optimizer, train_config, len(train_loader)
@@ -577,8 +583,12 @@ class BaseRNNModel(BaseModel):
                     train_loader = self._create_dataloader(
                         X_train, y_train, sample_weights, train_config, shuffle=True
                     )
+                    val_config = {
+                        **train_config,
+                        "batch_size": train_config.get("batch_size", 512) * 2,
+                    }
                     val_loader = self._create_dataloader(
-                        X_val, y_val, None, train_config, shuffle=False
+                        X_val, y_val, None, val_config, shuffle=False
                     )
 
                     # Reset scheduler steps for new data loader size
@@ -762,6 +772,13 @@ class BaseRNNModel(BaseModel):
         pin_memory = config.get("pin_memory", use_cuda)
         persistent_workers = num_workers > 0
 
+        # Seed each DataLoader worker uniquely for reproducibility
+        worker_init_fn = None
+        if num_workers > 0:
+            from src.core.reproducibility import get_worker_init_fn
+
+            worker_init_fn = get_worker_init_fn(seed=config.get("random_seed", 42))
+
         return DataLoader(
             dataset,
             batch_size=config.get("batch_size", 512),
@@ -770,6 +787,7 @@ class BaseRNNModel(BaseModel):
             pin_memory=pin_memory,
             persistent_workers=persistent_workers,
             drop_last=False,
+            worker_init_fn=worker_init_fn,
         )
 
     def _create_optimizer(self, config: dict[str, Any]) -> torch.optim.Optimizer:

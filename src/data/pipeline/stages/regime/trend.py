@@ -3,6 +3,9 @@ Trend regime detection based on ADX and SMA alignment.
 
 This module classifies market trend state into uptrend, downtrend,
 and sideways regimes using ADX strength and price-to-SMA relationship.
+
+Note: The canonical unified entry point for regime detection is
+``src.data.pipeline.stages.regime.unified.get_regime_labels``.
 """
 
 import logging

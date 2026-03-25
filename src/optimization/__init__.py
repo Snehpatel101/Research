@@ -116,7 +116,7 @@ from src.optimization.ensemble_objective import (
 from src.optimization.features import (
     FeatureOptimizer,
     FeaturePruningResult,
-    FeatureSelectionResult,
+    OptunaSelectionResult,
 )
 from src.optimization.five_dimension_objective import (
     DEFAULT_TIMEFRAMES,
@@ -179,7 +179,7 @@ __all__ = [
     "TripleBarrierConfig",
     "LabelOptimizer",
     # Feature optimization
-    "FeatureSelectionResult",
+    "OptunaSelectionResult",
     "FeaturePruningResult",
     "FeatureOptimizer",
     # Base feature sets (Phase 3)

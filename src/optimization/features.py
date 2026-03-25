@@ -12,7 +12,7 @@ This module provides two complementary feature optimization approaches:
    - Finds optimal feature count via Optuna
 
 Key Components:
-    FeatureSelectionResult: Result from binary feature selection
+    OptunaSelectionResult: Result from binary feature selection
     FeaturePruningResult: Result from importance-based pruning
     FeatureOptimizer: Unified optimizer for both methods
 
@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class FeatureSelectionResult:
+class OptunaSelectionResult:
     """
     Result container for binary feature selection optimization.
 
@@ -113,7 +113,7 @@ class FeatureSelectionResult:
 
     def __repr__(self) -> str:
         return (
-            f"FeatureSelectionResult("
+            f"OptunaSelectionResult("
             f"n_original={self.n_original}, "
             f"n_selected={self.n_selected}, "
             f"reduction={self.reduction_ratio:.1%}, "
@@ -285,7 +285,7 @@ class FeatureOptimizer:
         model_factory: Callable[[dict[str, Any]], Any],
         X_val: np.ndarray | None = None,
         y_val: np.ndarray | None = None,
-    ) -> FeatureSelectionResult:
+    ) -> OptunaSelectionResult:
         """
         Optimize feature selection using binary include/exclude flags.
 
@@ -298,7 +298,7 @@ class FeatureOptimizer:
             y_val: Optional validation labels
 
         Returns:
-            FeatureSelectionResult with selected features
+            OptunaSelectionResult with selected features
 
         Note:
             For large feature sets (>100), this method may be slow.
@@ -419,7 +419,7 @@ class FeatureOptimizer:
             print(f"  Improvement: {improvement:+.2%}")
             print(f"  Time: {optimization_time:.1f}s")
 
-        return FeatureSelectionResult(
+        return OptunaSelectionResult(
             selected_features=selected_features,
             selection_mask=selection_mask,
             n_original=n_features,
@@ -650,7 +650,7 @@ class FeatureOptimizer:
         X_val: np.ndarray | None = None,
         y_val: np.ndarray | None = None,
         method: str = "both",
-    ) -> tuple[FeatureSelectionResult, FeaturePruningResult]:
+    ) -> tuple[OptunaSelectionResult, FeaturePruningResult]:
         """
         Run both selection and pruning optimization.
 
@@ -664,12 +664,12 @@ class FeatureOptimizer:
             method: "selection", "pruning", or "both"
 
         Returns:
-            Tuple of (FeatureSelectionResult, FeaturePruningResult)
+            Tuple of (OptunaSelectionResult, FeaturePruningResult)
         """
         if method not in ["selection", "pruning", "both"]:
             raise ValueError(f"Invalid method: {method}. Must be 'selection', 'pruning', or 'both'")
 
-        selection_result: FeatureSelectionResult | None = None
+        selection_result: OptunaSelectionResult | None = None
         pruning_result: FeaturePruningResult | None = None
 
         if method in ["selection", "both"]:
@@ -693,7 +693,7 @@ class FeatureOptimizer:
 # =============================================================================
 
 __all__ = [
-    "FeatureSelectionResult",
+    "OptunaSelectionResult",
     "FeaturePruningResult",
     "FeatureOptimizer",
 ]

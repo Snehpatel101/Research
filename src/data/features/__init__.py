@@ -36,8 +36,8 @@ from .registry import (
     get_features_by_model,
 )
 from .selection import (
-    FeatureSelectionResult,
     FeatureSelector,
+    OptunaFeatureResult,
     select_features,
 )
 from .strategies import (
@@ -90,7 +90,7 @@ __all__ = [
     "FeatureStrategyManager",
     "get_features_for_model",
     # Selection (PHASE_1B)
-    "FeatureSelectionResult",
+    "OptunaFeatureResult",
     "FeatureSelector",
     "select_features",
     # Pruning (PHASE_1B)

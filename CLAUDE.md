@@ -577,6 +577,38 @@ src/
   - Regime model GPU cleanup between regimes
 - 12 new regression tests, 452/452 tests passing, ruff + black clean
 
+**Phases 106-113 (THEETASKLIST Phases 4-11): COMPLETE — Adversarial Audit Remediation (39 fixes, 19 new tests)**
+- Phase 106 (THEETASKLIST P4): 3 HIGH leakage/CV fixes
+  - Stacking fold_id overwrite fix (B15)
+  - Unified regime entry point with canonical get_regime_labels() (B09)
+  - Regime OHLCV fallback for feature-selected data (B13)
+- Phase 107 (THEETASKLIST P5): 5 architecture fixes
+  - ExperimentConfig rename → ExperimentTrackingConfig (B42)
+  - CLI → MLFactory import (B43)
+  - Triple FeatureSelectionResult dedup (B44)
+  - k_up=0.0 falsy trap fix (B27)
+  - confidence=0.0 falsy trap fix (B33)
+- Phase 108 (THEETASKLIST P6): 4 memory optimizations
+  - SequenceDataset .copy() removal in __getitem__ (OPT-2A)
+  - Validation batch 2x + worker_init_fn (OPT-2D, B28)
+  - Feature cache clearing between models/windows (OPT-2F)
+- Phase 109 (THEETASKLIST P7): 4 backtest realism fixes
+  - Stop-loss slippage (B11)
+  - Kelly position sizing with running trade stats (B22)
+  - VWAP→MIDPOINT rename (B32)
+  - Session-end forced close (B34)
+- Phase 110 (THEETASKLIST P8): 5 medium bug fixes
+  - Self-referential calibration metrics removed (B29)
+  - CalibratedMetaLearner → TimeSeriesSplit (B31)
+  - Regime hysteresis with min_regime_bars (B36)
+  - PreparedData cache auto-eviction (OPT-4A)
+  - Walk-forward memory monitoring via psutil (OPT-4B)
+- Phase 111 (THEETASKLIST P9): Dead code cleanup
+  - Deleted SmartConfig + UnifiedConfig (2,082 lines) (B45)
+  - Deleted dead constants (B46)
+  - ConformalPredictor docstring update (B30)
+- Phases 112-113 (THEETASKLIST P10-11): 19 new regression tests, 473/473 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

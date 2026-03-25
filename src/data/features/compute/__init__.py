@@ -523,6 +523,33 @@ def validate_features_computed(
 
 
 # =============================================================================
+# CACHE MANAGEMENT
+# =============================================================================
+
+
+def clear_all_feature_caches() -> None:
+    """Clear all module-level feature computation caches.
+
+    There are 14 caches across 6 compute modules (volatility, microstructure,
+    regime, order_flow, volume, trend). Call between models/windows to prevent
+    stale data and reclaim 300-480 MB of memory.
+    """
+    from src.data.features.compute import (
+        microstructure,
+        order_flow,
+        regime,
+        trend,
+        volatility,
+        volume,
+    )
+
+    for mod in [volatility, microstructure, regime, order_flow, volume, trend]:
+        for attr_name in dir(mod):
+            if attr_name.endswith("_cache") and isinstance(getattr(mod, attr_name), dict):
+                getattr(mod, attr_name).clear()
+
+
+# =============================================================================
 # EXPORTS
 # =============================================================================
 
@@ -562,6 +589,8 @@ __all__ = [
     "ORDER_FLOW_FEATURES",
     "LIQUIDITY_FEATURES",
     "MEAN_REVERSION_FEATURES",
+    # Cache management
+    "clear_all_feature_caches",
     # Constants
     "TOTAL_FEATURES",
     "PYWT_AVAILABLE",

@@ -4,6 +4,9 @@ RegimeDetector - Market regime classification from raw OHLCV data.
 Classifies market regimes using volatility percentile and ADX trend strength.
 Used by RegimeBundle to route predictions to regime-specific models.
 
+Note: The canonical unified entry point for regime detection is
+``src.data.pipeline.stages.regime.unified.get_regime_labels``.
+
 Usage:
     detector = RegimeDetector(config=RegimeDetectorConfig())
     regime = detector.detect(df)  # e.g. "high_vol_trending"

@@ -66,6 +66,7 @@ class CompositeRegimeDetector:
         volatility_detector: VolatilityRegimeDetector | None = None,
         trend_detector: TrendRegimeDetector | None = None,
         structure_detector: MarketStructureDetector | None = None,
+        min_regime_bars: int = 5,
     ):
         """
         Initialize composite regime detector.
@@ -74,10 +75,14 @@ class CompositeRegimeDetector:
             volatility_detector: Volatility regime detector instance
             trend_detector: Trend regime detector instance
             structure_detector: Market structure detector instance
+            min_regime_bars: Minimum consecutive bars a new regime must persist
+                before switching. Prevents flip-flopping between regimes.
+                Set to 1 to disable hysteresis.
         """
         self.volatility_detector = volatility_detector
         self.trend_detector = trend_detector
         self.structure_detector = structure_detector
+        self.min_regime_bars = max(1, min_regime_bars)
 
         # Track which detectors are enabled
         self._enabled_detectors: list[str] = []
@@ -165,6 +170,7 @@ class CompositeRegimeDetector:
             volatility_detector=volatility_detector,
             trend_detector=trend_detector,
             structure_detector=structure_detector,
+            min_regime_bars=config.get("min_regime_bars", 5),
         )
 
     @classmethod
@@ -264,9 +270,15 @@ class CompositeRegimeDetector:
                 logger.warning(f"Failed to detect structure regime: {e}")
                 regimes["structure_regime"] = np.nan
 
+        # Apply hysteresis: require a new regime to persist for min_regime_bars
+        # consecutive bars before switching. Prevents flip-flopping.
+        regime_columns = [col for col in regimes.columns if col.endswith("_regime")]
+        if self.min_regime_bars > 1 and regime_columns:
+            for col in regime_columns:
+                regimes[col] = self._apply_hysteresis(regimes[col])
+
         # ANTI-LOOKAHEAD: Shift all regime columns by 1 bar
         # This ensures regime at bar N only uses data from bars 0..N-1
-        regime_columns = [col for col in regimes.columns if col.endswith("_regime")]
         if regime_columns:
             logger.info(f"ANTI-LOOKAHEAD: Shifting {len(regime_columns)} regime columns by 1 bar")
             for col in regime_columns:
@@ -275,6 +287,78 @@ class CompositeRegimeDetector:
                 # Downstream code should handle NaN appropriately (drop or fill)
 
         return CompositeRegimeResult(regimes=regimes, summaries=summaries, detector_configs=configs)
+
+    def _apply_hysteresis(self, raw_regimes: pd.Series) -> pd.Series:
+        """Apply hysteresis smoothing to prevent regime flip-flopping.
+
+        A regime change is only accepted when the new regime persists for
+        ``min_regime_bars`` consecutive bars. Until that threshold is met,
+        the previous (confirmed) regime is kept.
+
+        Args:
+            raw_regimes: Series of raw regime labels (may contain NaN).
+
+        Returns:
+            Smoothed regime Series with the same index.
+        """
+        values = raw_regimes.values
+        n = len(values)
+        if n == 0:
+            return raw_regimes.copy()
+
+        result = np.empty(n, dtype=object)
+        result[:] = values[:]
+
+        # Find first non-NaN to initialize
+        confirmed = None
+        for i in range(n):
+            if pd.notna(values[i]):
+                confirmed = values[i]
+                break
+
+        if confirmed is None:
+            return raw_regimes.copy()
+
+        pending = None
+        pending_count = 0
+
+        for i in range(n):
+            val = values[i]
+            if pd.isna(val):
+                result[i] = val
+                continue
+
+            if confirmed is None:
+                confirmed = val
+                result[i] = val
+                continue
+
+            if val == confirmed:
+                # Same as confirmed — reset any pending candidate
+                pending = None
+                pending_count = 0
+                result[i] = confirmed
+            elif val == pending:
+                # Continuing a pending candidate
+                pending_count += 1
+                if pending_count >= self.min_regime_bars:
+                    confirmed = pending
+                    pending = None
+                    pending_count = 0
+                    result[i] = confirmed
+                else:
+                    result[i] = confirmed
+            else:
+                # New candidate regime
+                pending = val
+                pending_count = 1
+                if self.min_regime_bars <= 1:
+                    confirmed = val
+                    pending = None
+                    pending_count = 0
+                result[i] = confirmed
+
+        return pd.Series(result, index=raw_regimes.index, dtype=raw_regimes.dtype)
 
     def add_regime_columns(self, df: pd.DataFrame, encode_numeric: bool = False) -> pd.DataFrame:
         """

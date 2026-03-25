@@ -1,11 +1,11 @@
 """
 Pipeline Commands - run, data, status, resume.
 
-These commands provide the main ML pipeline orchestration using MLPipeline.
+These commands provide the main ML pipeline orchestration using MLFactory.
 
 Note: This CLI uses the existing pipeline infrastructure:
-- src.core.config.PipelineConfig for ML pipeline configuration
-- src.orchestrator.MLPipeline for ML pipeline orchestration
+- src.config.experiment.ExperimentConfig for ML pipeline configuration
+- src.factory.MLFactory for ML pipeline orchestration
 - src.data.pipeline.runner.PipelineRunner for data pipeline
 - src.data.pipeline.data_config.DataConfig for data pipeline configuration
 """
@@ -42,21 +42,29 @@ def _build_ml_config(
     output_dir: Path,
     config_path: Path | None,
 ):
-    """Build PipelineConfig from arguments for ML pipeline."""
-    from src.core.config import PipelineConfig
+    """Build ExperimentConfig from arguments for ML pipeline."""
+    from src.config.experiment import DataSection, ExperimentConfig, TrainingSection
+    from src.config.training import OptunaConfig
 
     if config_path:
-        return PipelineConfig.load(config_path)
+        return ExperimentConfig.from_yaml(config_path)
 
-    return PipelineConfig(
-        symbol=symbol,
-        data_path=data_path,
+    n_trials = 100 if optimize_features else 0
+
+    return ExperimentConfig(
+        name=f"{symbol}_pipeline",
         output_dir=output_dir,
-        horizons=horizons,
-        models=models,
-        training_mode=training_mode,
-        build_ensemble=build_ensemble,
-        optimize_features=optimize_features,
+        data=DataSection(
+            symbol=symbol,
+            data_path=data_path,
+        ),
+        training=TrainingSection(
+            models=models,
+            horizons=horizons,
+            training_mode=training_mode,
+            build_ensemble=build_ensemble,
+            optuna=OptunaConfig(n_trials=n_trials),
+        ),
     )
 
 
@@ -113,17 +121,12 @@ def run_pipeline(
     Run full ML pipeline (data + training + evaluation).
 
     This orchestrates the complete pipeline including data preparation,
-    model training, and evaluation using MLPipeline from src.orchestrator.
+    model training, and evaluation using MLFactory.
 
     Example:
         pipeline run --symbol MES --data-path ./data/mes.parquet --output-dir ./exp
     """
-    from src.orchestrator import MLPipeline
-
-    logger.warning(
-        "The 'pipeline run' CLI command uses the deprecated MLPipeline orchestrator. "
-        "Use MLFactory for production workflows."
-    )
+    from src.factory import MLFactory
 
     # Parse comma-separated arguments
     horizon_list = [int(h.strip()) for h in horizons.split(",") if h.strip()]
@@ -145,14 +148,14 @@ def run_pipeline(
     console.print(f"Symbol: {ml_config.symbol}")
     console.print(f"Horizons: {ml_config.horizons}")
     console.print(f"Models: {ml_config.models}")
-    console.print(f"Data path: {ml_config.data_path}")
+    console.print(f"Data path: {ml_config.data.data_path}")
     console.print(f"Output dir: {ml_config.output_dir}")
     console.print()
 
-    pipeline = MLPipeline(ml_config)
+    factory = MLFactory(ml_config)
 
     try:
-        result = pipeline.run()
+        result = factory.run()
 
         console.print("\n" + "=" * 70)
         console.print("[bold green]PIPELINE COMPLETED SUCCESSFULLY[/bold green]")

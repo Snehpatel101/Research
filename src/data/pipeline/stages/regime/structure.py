@@ -3,6 +3,9 @@ Market structure regime detection based on Hurst exponent.
 
 This module classifies market structure into mean-reverting, random,
 and trending regimes using the Hurst exponent calculated via R/S analysis.
+
+Note: The canonical unified entry point for regime detection is
+``src.data.pipeline.stages.regime.unified.get_regime_labels``.
 """
 
 import logging

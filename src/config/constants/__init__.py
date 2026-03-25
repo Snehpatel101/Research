@@ -1,87 +1,14 @@
 """
-Central constants - re-exports from src.core.common and local modules.
+Central constants - re-exports from src.core.common.
 
-This module provides unified access to constants from src.core.common
-and local constant definitions (default_periods, thresholds).
+This module provides unified access to constants from src.core.common.
 
 Usage:
     from src.config.constants import CANONICAL_TIMEFRAMES, DEFAULT_SPLIT_RATIOS
     from src.config.constants import is_valid_timeframe, get_timeframe_minutes
     from src.config.constants import HorizonConfig, validate_horizons
-
-    # Technical indicator defaults
-    from src.config.constants import RSI_PERIOD, SMA_PERIOD, ATR_PERIOD
-
-    # Validation thresholds
-    from src.config.constants import LEAKAGE_CORRELATION_THRESHOLD, MAX_NAN_RATIO
 """
 
-# =============================================================================
-# TIMEFRAME CONFIGURATION
-# =============================================================================
-# =============================================================================
-# HORIZON CONFIGURATION
-# =============================================================================
-# =============================================================================
-# DEFAULT PERIODS (technical indicators)
-# =============================================================================
-from src.config.constants.default_periods import (
-    # Volatility
-    ATR_PERIOD,
-    BB_PERIOD,
-    BB_STD,
-    # Lookback
-    DEFAULT_LOOKBACK,
-    # Sequences
-    DEFAULT_SEQUENCE_LENGTH,
-    EMA_PERIOD,
-    EMA_SLOW_PERIOD,
-    MACD_SIGNAL_PERIOD,
-    MAX_LOOKBACK,
-    MAX_SEQUENCE_LENGTH,
-    MIN_LOOKBACK,
-    MIN_SEQUENCE_LENGTH,
-    OBV_PERIOD,
-    # Oscillators
-    RSI_PERIOD,
-    # Moving averages
-    SMA_PERIOD,
-    STOCH_PERIOD,
-    STOCH_SMOOTH,
-    # Volume
-    VWAP_PERIOD,
-)
-
-# =============================================================================
-# THRESHOLDS (validation and filtering)
-# =============================================================================
-from src.config.constants.thresholds import (
-    DEFAULT_CONFIDENCE,
-    FEATURE_CORRELATION_WARN,
-    HIGH_CONFIDENCE_THRESHOLD,
-    HIGH_CORRELATION_THRESHOLD,
-    # Correlation
-    LEAKAGE_CORRELATION_THRESHOLD,
-    MAX_CLASS_IMBALANCE,
-    MAX_MISSING_PCT,
-    # Data quality
-    MAX_NAN_RATIO,
-    # Performance
-    MIN_ACCURACY,
-    # Class balance
-    MIN_CLASS_RATIO,
-    MIN_F1_SCORE,
-    MIN_ROWS,
-    # Signal
-    MIN_SIGNAL_RATIO,
-    MIN_TRAIN_SAMPLES,
-    MIN_VOLATILITY,
-    OVERFITTING_GAP,
-    TARGET_CLASS_BALANCE,
-    VOL_RATIO_MAX,
-    # Volatility
-    VOL_RATIO_MIN,
-)
 from src.core.common.horizon_config import (
     # Horizon lists
     ACTIVE_HORIZONS,
@@ -183,59 +110,4 @@ __all__ = [
     "auto_scale_purge_embargo",
     "compute_embargo_bars",
     "get_default_barrier_params_for_horizon",
-    # ==========================================================================
-    # DEFAULT PERIODS (technical indicators)
-    # ==========================================================================
-    # Moving averages
-    "SMA_PERIOD",
-    "EMA_PERIOD",
-    "EMA_SLOW_PERIOD",
-    # Oscillators
-    "RSI_PERIOD",
-    "STOCH_PERIOD",
-    "STOCH_SMOOTH",
-    "MACD_SIGNAL_PERIOD",
-    # Volatility
-    "ATR_PERIOD",
-    "BB_PERIOD",
-    "BB_STD",
-    # Volume
-    "VWAP_PERIOD",
-    "OBV_PERIOD",
-    # Lookback
-    "DEFAULT_LOOKBACK",
-    "MIN_LOOKBACK",
-    "MAX_LOOKBACK",
-    # Sequences
-    "DEFAULT_SEQUENCE_LENGTH",
-    "MIN_SEQUENCE_LENGTH",
-    "MAX_SEQUENCE_LENGTH",
-    # ==========================================================================
-    # THRESHOLDS (validation and filtering)
-    # ==========================================================================
-    # Signal
-    "MIN_SIGNAL_RATIO",
-    "DEFAULT_CONFIDENCE",
-    "HIGH_CONFIDENCE_THRESHOLD",
-    # Volatility
-    "VOL_RATIO_MIN",
-    "VOL_RATIO_MAX",
-    "MIN_VOLATILITY",
-    # Data quality
-    "MAX_NAN_RATIO",
-    "MIN_ROWS",
-    "MIN_TRAIN_SAMPLES",
-    "MAX_MISSING_PCT",
-    # Correlation
-    "LEAKAGE_CORRELATION_THRESHOLD",
-    "HIGH_CORRELATION_THRESHOLD",
-    "FEATURE_CORRELATION_WARN",
-    # Class balance
-    "MIN_CLASS_RATIO",
-    "MAX_CLASS_IMBALANCE",
-    "TARGET_CLASS_BALANCE",
-    # Performance
-    "MIN_ACCURACY",
-    "MIN_F1_SCORE",
-    "OVERFITTING_GAP",
 ]

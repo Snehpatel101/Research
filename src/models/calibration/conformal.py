@@ -138,6 +138,9 @@ class ConformalPredictor:
     """
     Generate prediction sets with coverage guarantees.
 
+    Status: Available but not yet wired into the automated pipeline.
+    Use directly via ``from src.models.calibration import ConformalPredictor``.
+
     Implements split conformal prediction for multi-class classification.
     The prediction sets contain all classes whose non-conformity scores
     are below a data-dependent threshold, guaranteeing finite-sample

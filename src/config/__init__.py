@@ -2,8 +2,6 @@
 Centralized configuration package - Single Source of Truth.
 
 This package provides unified access to configuration across the codebase.
-The primary interface is UnifiedConfig, which consolidates all configuration
-from MLConfig, TrainerConfig, PipelineConfig, and HorizonConfig.
 
 CONSOLIDATED CONFIG ARCHITECTURE (~15 config classes instead of 55+)
 ====================================================================
@@ -49,22 +47,6 @@ Import configs from their canonical locations:
         BundleConfig, ServerConfig
     )
 
-Primary Interface (Recommended):
---------------------------------
-    from src.config import UnifiedConfig, get_unified_config
-
-    # Load the global unified config
-    config = get_unified_config()
-
-    # Access values through sections
-    batch_size = config.training.batch_size
-    horizons = config.horizons.active
-    train_ratio = config.splits.train
-
-    # Convert to legacy configs when needed
-    trainer_config = config.to_trainer_config(model_name="xgboost")
-    pipeline_config = config.to_pipeline_config()
-
 Configuration Access Utility:
 -----------------------------
     from src.config import get_config_value
@@ -84,7 +66,6 @@ Package Structure:
         model_configs.py    <- Model configs (XGBoost, LSTM, etc.)
         ensemble.py         <- Ensemble configs (Stacking, Voting, etc.)
         inference.py        <- Inference configs (Backtest, Server, etc.)
-        unified.py          <- UnifiedConfig (primary interface)
         utils.py            <- get_config_value (single implementation)
         validators.py       <- Schema validation
         global_config.py    <- GlobalConfig (YAML loader)
@@ -190,8 +171,11 @@ from src.config.ensemble import (
     get_predefined_ensemble,
 )
 
+# Top-level ExperimentConfig (used by MLFactory) — canonical location
+from src.config.experiment import ExperimentConfig
+
 # =============================================================================
-# GLOBAL CONFIGURATION (Legacy - prefer UnifiedConfig)
+# GLOBAL CONFIGURATION
 # =============================================================================
 from src.config.global_config import (
     GlobalConfig,
@@ -264,29 +248,6 @@ from src.config.pipeline import (
 )
 
 # =============================================================================
-# ML FOR DUMMIES: SIMPLE API
-# =============================================================================
-from src.config.smart_config import (
-    FEATURE_SETS,
-    # Configuration data
-    MODEL_DEFAULTS,
-    OPTIMIZATION_DEFAULTS,
-    ResolvedModelConfig,
-    SmartConfig,
-    describe_model,
-    # Helpers
-    list_models,
-    preview_config,
-    quick_compare,
-    resolve_config,
-    # Resolution
-    resolve_model_config,
-    show_defaults,
-    # Core API
-    train,
-)
-
-# =============================================================================
 # SYMBOL CONFIGURATION
 # =============================================================================
 from src.config.symbol import SymbolConfig
@@ -299,42 +260,11 @@ from src.config.training import (
     CalibrationConfig,
     CheckpointConfig,
     ConformalConfig,
-    ExperimentConfig,
+    ExperimentTrackingConfig,
     GAConfig,
     OOMConfig,
     OptunaConfig,
     ParallelTrainingConfig,
-)
-
-# =============================================================================
-# PRIMARY INTERFACE: UNIFIED CONFIGURATION
-# =============================================================================
-from src.config.unified import (
-    CalibrationSection,
-    CrossValidationSection,
-    FeatureGenerationSection,
-    FeatureSelectionSection,
-    FeaturesSection,
-    GASection,
-    HorizonsSection,
-    MTFSection,
-    OOMRecoverySection,
-    OptimizationSection,
-    OptunaSection,
-    ProcessingSection,
-    PurgeEmbargoSection,
-    ScalerSection,
-    SplitsSection,
-    # Section classes
-    TimeframesSection,
-    TrackingSection,
-    TrainingSection,
-    # Main class
-    UnifiedConfig,
-    # Singleton functions
-    get_unified_config,
-    reset_unified_config,
-    set_unified_config,
 )
 
 # =============================================================================
@@ -427,6 +357,7 @@ __all__ = [
     "CheckpointConfig",
     "OOMConfig",
     "ParallelTrainingConfig",
+    "ExperimentTrackingConfig",
     "ExperimentConfig",
     # ==========================================================================
     # CROSS-VALIDATION CONFIGS (consolidated)
@@ -495,33 +426,8 @@ __all__ = [
     # ==========================================================================
     "SymbolConfig",
     # ==========================================================================
-    # PRIMARY INTERFACE (use these)
+    # CONFIG ACCESS UTILITIES
     # ==========================================================================
-    # Unified config
-    "UnifiedConfig",
-    "get_unified_config",
-    "set_unified_config",
-    "reset_unified_config",
-    # Section classes
-    "TimeframesSection",
-    "SplitsSection",
-    "PurgeEmbargoSection",
-    "HorizonsSection",
-    "FeaturesSection",
-    "FeatureSelectionSection",
-    "FeatureGenerationSection",
-    "MTFSection",
-    "TrainingSection",
-    "CalibrationSection",
-    "OptimizationSection",
-    "GASection",
-    "OptunaSection",
-    "CrossValidationSection",
-    "ProcessingSection",
-    "ScalerSection",
-    "TrackingSection",
-    "OOMRecoverySection",
-    # Config access utility
     "get_config_value",
     "get_config_value_strict",
     "clear_config_cache",
@@ -577,22 +483,6 @@ __all__ = [
     "ModelDataRequirements",
     "BARRIER_PARAMS",
     "get_barrier_params",
-    # ==========================================================================
-    # ML FOR DUMMIES: SIMPLE API
-    # ==========================================================================
-    "train",
-    "SmartConfig",
-    "ResolvedModelConfig",
-    "MODEL_DEFAULTS",
-    "FEATURE_SETS",
-    "OPTIMIZATION_DEFAULTS",
-    "resolve_model_config",
-    "resolve_config",
-    "list_models",
-    "describe_model",
-    "show_defaults",
-    "preview_config",
-    "quick_compare",
     # ==========================================================================
     # DEPRECATED (for migration)
     # ==========================================================================

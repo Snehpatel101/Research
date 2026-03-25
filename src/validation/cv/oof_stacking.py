@@ -228,13 +228,13 @@ class StackingDatasetBuilder:
         first_model = model_names[0]
         stacking_df = oof_predictions[first_model].predictions.copy()
 
-        # Add other models' predictions
+        # Add other models' predictions — only model-prefixed columns
+        # (y_true and fold_id from the first model are authoritative)
         for model_name in model_names[1:]:
             oof_pred = oof_predictions[model_name].predictions
-            # Add all columns except datetime (already present)
-            for col in oof_pred.columns:
-                if col != "datetime":
-                    stacking_df[col] = oof_pred[col]
+            prob_cols = [c for c in oof_pred.columns if c.startswith(model_name)]
+            for col in prob_cols:
+                stacking_df[col] = oof_pred[col]
 
         # Add true labels
         stacking_df["y_true"] = y_true.values

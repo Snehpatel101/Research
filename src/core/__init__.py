@@ -66,7 +66,7 @@ Usage:
 # =============================================================================
 # NOTE: src.config imports are NOT included here to avoid circular imports.
 # Import directly from src.config when needed:
-#   from src.config import GlobalConfig, UnifiedConfig, TrainerConfig, etc.
+#   from src.config import GlobalConfig, TrainerConfig, etc.
 
 # =============================================================================
 # ABSORBED: src/common - Timeframes, horizons, split ratios
@@ -567,7 +567,7 @@ __all__ = [
     "ArtifactManifest",
     # =========================================================================
     # NOTE: src.config items NOT re-exported to avoid circular imports.
-    # Import directly: from src.config import GlobalConfig, UnifiedConfig, etc.
+    # Import directly: from src.config import GlobalConfig, TrainerConfig, etc.
     # =========================================================================
     # =========================================================================
     # ABSORBED: src/common

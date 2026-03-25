@@ -85,10 +85,36 @@ def _barrier_config(**overrides) -> BacktestConfig:
 # ---------------------------------------------------------------------------
 
 
+def _make_backtester_for_unit_test(**config_overrides) -> Backtester:
+    """Create a minimal Backtester for unit-testing _resolve_exit_price."""
+    defaults = {
+        "enable_market_hours_filter": False,
+        "slippage_ticks": 0.0,
+        "tick_size": 0.25,
+        "commission_per_contract": 0.0,
+    }
+    defaults.update(config_overrides)
+    cfg = BacktestConfig(**defaults)
+    # Minimal DataFrames — only used to construct the Backtester, not to run
+    ts = pd.date_range("2024-01-01", periods=2, freq="h")
+    prices = pd.DataFrame(
+        {
+            "timestamp": ts,
+            "open": [100, 100],
+            "high": [101, 101],
+            "low": [99, 99],
+            "close": [100, 100],
+        }
+    )
+    preds = pd.DataFrame({"timestamp": ts, "prediction": [0, 0], "confidence": [1.0, 1.0]})
+    return Backtester(predictions=preds, prices=prices, config=cfg)
+
+
 class TestResolveExitPrice:
-    """Unit tests for _resolve_exit_price static method."""
+    """Unit tests for _resolve_exit_price instance method."""
 
     def test_stop_loss_returns_stop_level(self):
+        bt = _make_backtester_for_unit_test(slippage_ticks=0.0)
         pos = Position(
             direction=1,
             contracts=1,
@@ -98,10 +124,12 @@ class TestResolveExitPrice:
             stop_loss=95.0,
             take_profit=110.0,
         )
-        price = Backtester._resolve_exit_price(ExitReason.STOP_LOSS, pos, close_price=98.0)
+        price = bt._resolve_exit_price(ExitReason.STOP_LOSS, pos, close_price=98.0)
         assert price == 95.0, f"Expected stop_loss=95.0, got {price}"
 
-    def test_take_profit_returns_tp_level(self):
+    def test_stop_loss_with_slippage(self):
+        """Stop exits include slippage: price worse than barrier."""
+        bt = _make_backtester_for_unit_test(slippage_ticks=2.0, tick_size=0.25)
         pos = Position(
             direction=1,
             contracts=1,
@@ -111,10 +139,42 @@ class TestResolveExitPrice:
             stop_loss=95.0,
             take_profit=110.0,
         )
-        price = Backtester._resolve_exit_price(ExitReason.TAKE_PROFIT, pos, close_price=112.0)
+        price = bt._resolve_exit_price(ExitReason.STOP_LOSS, pos, close_price=98.0)
+        # Long stop: 95.0 - 2.0*0.25 = 94.50
+        assert price == 94.50, f"Expected 94.50, got {price}"
+
+    def test_short_stop_loss_with_slippage(self):
+        """Short stop exits slip upward."""
+        bt = _make_backtester_for_unit_test(slippage_ticks=2.0, tick_size=0.25)
+        pos = Position(
+            direction=-1,
+            contracts=1,
+            entry_price=100.0,
+            entry_time=pd.Timestamp("2024-01-01"),
+            entry_bar=0,
+            stop_loss=105.0,
+            take_profit=90.0,
+        )
+        price = bt._resolve_exit_price(ExitReason.STOP_LOSS, pos, close_price=106.0)
+        # Short stop: 105.0 + 2.0*0.25 = 105.50
+        assert price == 105.50, f"Expected 105.50, got {price}"
+
+    def test_take_profit_returns_tp_level(self):
+        bt = _make_backtester_for_unit_test(slippage_ticks=0.0)
+        pos = Position(
+            direction=1,
+            contracts=1,
+            entry_price=100.0,
+            entry_time=pd.Timestamp("2024-01-01"),
+            entry_bar=0,
+            stop_loss=95.0,
+            take_profit=110.0,
+        )
+        price = bt._resolve_exit_price(ExitReason.TAKE_PROFIT, pos, close_price=112.0)
         assert price == 110.0, f"Expected take_profit=110.0, got {price}"
 
     def test_max_holding_returns_close(self):
+        bt = _make_backtester_for_unit_test()
         pos = Position(
             direction=1,
             contracts=1,
@@ -124,10 +184,11 @@ class TestResolveExitPrice:
             stop_loss=95.0,
             take_profit=110.0,
         )
-        price = Backtester._resolve_exit_price(ExitReason.MAX_HOLDING, pos, close_price=102.0)
+        price = bt._resolve_exit_price(ExitReason.MAX_HOLDING, pos, close_price=102.0)
         assert price == 102.0, f"Expected close=102.0, got {price}"
 
     def test_signal_reversal_returns_close(self):
+        bt = _make_backtester_for_unit_test()
         pos = Position(
             direction=1,
             contracts=1,
@@ -137,11 +198,12 @@ class TestResolveExitPrice:
             stop_loss=95.0,
             take_profit=110.0,
         )
-        price = Backtester._resolve_exit_price(ExitReason.SIGNAL_REVERSAL, pos, close_price=103.0)
+        price = bt._resolve_exit_price(ExitReason.SIGNAL_REVERSAL, pos, close_price=103.0)
         assert price == 103.0, f"Expected close=103.0, got {price}"
 
     def test_stop_loss_none_falls_back_to_close(self):
         """Legacy mode: stop_loss is None, should return close."""
+        bt = _make_backtester_for_unit_test()
         pos = Position(
             direction=1,
             contracts=1,
@@ -151,7 +213,7 @@ class TestResolveExitPrice:
             stop_loss=None,
             take_profit=None,
         )
-        price = Backtester._resolve_exit_price(ExitReason.STOP_LOSS, pos, close_price=97.0)
+        price = bt._resolve_exit_price(ExitReason.STOP_LOSS, pos, close_price=97.0)
         assert price == 97.0, f"Expected close=97.0 (fallback), got {price}"
 
 

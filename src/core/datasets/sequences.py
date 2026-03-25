@@ -325,8 +325,9 @@ class SequenceDataset(Dataset):
         start_idx = self._indices[idx]
         end_idx = start_idx + self.config.seq_len
 
-        # Extract sequence (copy to ensure writable for PyTorch)
-        X_seq = self._features[start_idx:end_idx].copy()
+        # Slice is a view (no copy needed); torch.from_numpy().to(dtype) below
+        # creates a new tensor, so writability of the source array is irrelevant.
+        X_seq = self._features[start_idx:end_idx]
 
         # Label and weight from the last position in the sequence
         # This is the "prediction target" for the sequence

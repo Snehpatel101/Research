@@ -276,7 +276,7 @@ class BacktestConfig(BaseConfig):
     trailing_stop: float | None = None
 
     # Execution
-    fill_at: str = "close"  # close, open, vwap
+    fill_at: str = "close"  # close, open, midpoint (formerly vwap)
     delay_bars: int = 0
 
     def validate(self) -> list[str]:

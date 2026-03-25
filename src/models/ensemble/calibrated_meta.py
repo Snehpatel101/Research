@@ -14,6 +14,7 @@ import numpy as np
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.linear_model import RidgeClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
 
 from src.core.utils.safe_pickle import safe_pickle_load
@@ -139,10 +140,14 @@ class CalibratedMetaLearner(BaseModel):
         cv = train_config.get("cv", 5)
         ensemble = train_config.get("ensemble", True)
 
+        # Use TimeSeriesSplit instead of sklearn's default StratifiedKFold.
+        # StratifiedKFold shuffles data randomly, leaking future bars into
+        # calibration training folds. TimeSeriesSplit respects temporal order.
+        ts_cv = TimeSeriesSplit(n_splits=cv)
         self._model = CalibratedClassifierCV(
             estimator=base_estimator,
             method=method,
-            cv=cv,
+            cv=ts_cv,
             ensemble=ensemble,
         )
 

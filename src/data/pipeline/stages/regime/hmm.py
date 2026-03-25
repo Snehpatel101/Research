@@ -4,6 +4,9 @@ Hidden Markov Model (HMM) regime detection using hmmlearn.
 Classifies market regimes using unsupervised Gaussian HMM trained on returns.
 Supports regime routing for adaptive model selection.
 
+Note: The canonical unified entry point for regime detection is
+``src.data.pipeline.stages.regime.unified.get_regime_labels``.
+
 Usage:
     from src.data.pipeline.stages.regime import HMMRegimeDetector
 

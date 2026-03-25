@@ -650,10 +650,10 @@ class TripleBarrierLabeler(LabelingStrategy):
                 f"Need at least {horizon} rows for meaningful labeling."
             )
 
-        # Resolve parameters
-        k_up = k_up or self.config.upper_mult
-        k_down = k_down or self.config.lower_mult
-        max_bars = max_bars or self.config.horizon
+        # Resolve parameters (use `is not None` to allow explicit 0.0 values)
+        k_up = k_up if k_up is not None else self.config.upper_mult
+        k_down = k_down if k_down is not None else self.config.lower_mult
+        max_bars = max_bars if max_bars is not None else self.config.horizon
 
         logger.info(f"Computing triple-barrier labels for horizon {horizon}")
         logger.info(f"  k_up={k_up:.3f}, k_down={k_down:.3f}, max_bars={max_bars}")

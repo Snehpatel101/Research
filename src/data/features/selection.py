@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class FeatureSelectionResult:
+class OptunaFeatureResult:
     """Result of Optuna-based feature selection.
 
     Attributes:
@@ -69,7 +69,7 @@ class FeatureSelectionResult:
 
     def __repr__(self) -> str:
         return (
-            f"FeatureSelectionResult("
+            f"OptunaFeatureResult("
             f"selected={self.n_selected}/{self.n_total}, "
             f"ratio={self.selection_ratio:.2%}, "
             f"best_score={self.best_score:.4f}, "
@@ -188,7 +188,7 @@ class FeatureSelector:
         feature_families: dict[str, list[str]] | None = None,
         initial_importance: dict[str, float] | None = None,
         storage_path: str | None = None,
-    ) -> FeatureSelectionResult:
+    ) -> OptunaFeatureResult:
         """Run feature selection optimization.
 
         Args:
@@ -208,7 +208,7 @@ class FeatureSelector:
                 uses in-memory storage.
 
         Returns:
-            FeatureSelectionResult with selected features and metadata.
+            OptunaFeatureResult with selected features and metadata.
 
         Raises:
             ValueError: If inputs are invalid or incompatible.
@@ -351,7 +351,7 @@ class FeatureSelector:
             f"score={study.best_value:.4f}, improvement={improvement:+.2%}"
         )
 
-        return FeatureSelectionResult(
+        return OptunaFeatureResult(
             selected_features=selected_features,
             all_features=feature_names,
             n_selected=len(selected_features),
@@ -412,14 +412,14 @@ class FeatureSelector:
         feature_names: list[str],
         model_fn: Callable,
         scoring: str,
-    ) -> FeatureSelectionResult:
+    ) -> OptunaFeatureResult:
         """Create result when no selection is needed."""
         score = self._compute_baseline_score(X, y, model_fn, scoring)
 
         # Create empty study for consistency
         study = optuna.create_study(direction="maximize")
 
-        return FeatureSelectionResult(
+        return OptunaFeatureResult(
             selected_features=feature_names.copy(),
             all_features=feature_names.copy(),
             n_selected=len(feature_names),
@@ -634,7 +634,7 @@ def select_features(
     scoring: str = "f1_weighted",
     cv_folds: int = DEFAULT_N_SPLITS,
     random_state: int = DEFAULT_OPTUNA_RANDOM_STATE,
-) -> FeatureSelectionResult:
+) -> OptunaFeatureResult:
     """Convenience function for feature selection.
 
     Args:
@@ -651,7 +651,7 @@ def select_features(
         random_state: Random seed.
 
     Returns:
-        FeatureSelectionResult with selected features.
+        OptunaFeatureResult with selected features.
 
     Example:
         >>> from sklearn.ensemble import RandomForestClassifier
@@ -685,7 +685,7 @@ def select_features(
 # =============================================================================
 
 __all__ = [
-    "FeatureSelectionResult",
+    "OptunaFeatureResult",
     "FeatureSelector",
     "select_features",
 ]
