@@ -18,7 +18,6 @@ from src.validation.lookahead_audit import (
     LookaheadBiasError,
     PropagationScanResult,
     ResampleConfig,
-    ResamplingParityResult,
     scan_dependency_propagation,
     validate_resample_config,
     verify_resampling_parity,
@@ -270,17 +269,13 @@ class TestDependencyPropagationScan:
     def test_auditor_method_delegates(self) -> None:
         """LookaheadAuditor.scan_dependency_propagation delegates correctly."""
         auditor = LookaheadAuditor(corruption_point=0.8)
-        result = auditor.scan_dependency_propagation(
-            SAMPLE_DAG, tainted_features=["returns"]
-        )
+        result = auditor.scan_dependency_propagation(SAMPLE_DAG, tainted_features=["returns"])
         assert isinstance(result, PropagationScanResult)
         assert "rsi" in result.propagated_features
 
     def test_unknown_tainted_feature_ignored(self) -> None:
         """A tainted feature not in the DAG is silently excluded."""
-        result = scan_dependency_propagation(
-            SAMPLE_DAG, tainted_features=["nonexistent_feature"]
-        )
+        result = scan_dependency_propagation(SAMPLE_DAG, tainted_features=["nonexistent_feature"])
         assert result.tainted_features == []
         assert result.propagated_features == []
         assert len(result.clean_features) == len(SAMPLE_DAG)

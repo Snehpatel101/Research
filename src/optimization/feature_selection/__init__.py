@@ -73,10 +73,16 @@ from .priority import (
     FEATURE_PRIORITY,
     get_feature_priority,
 )
+
+# Regime-conditional selection
+from .regime_selection import compute_regime_importance
 from .result import (
     FeatureSelectionResult,
     PersistedFeatureSelection,
 )
+
+# Timeframe budget for MTF feature competition
+from .timeframe_budget import MTF_SUFFIXES, apply_timeframe_budget
 
 # Walk-forward selectors - minimal external dependencies
 from .walk_forward import (
@@ -139,4 +145,9 @@ __all__ = [
     "DEFAULT_PRIORITY",
     "FEATURE_PRIORITY",
     "get_feature_priority",
+    # Regime-conditional selection
+    "compute_regime_importance",
+    # Timeframe budget
+    "MTF_SUFFIXES",
+    "apply_timeframe_budget",
 ]

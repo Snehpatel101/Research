@@ -45,4 +45,3 @@ def test_voting_ensemble_requires_4d_when_all_base_models_are_4d() -> None:
 def test_voting_ensemble_not_requires_4d_for_3d_sequence_models() -> None:
     ensemble = VotingEnsemble(config={"base_model_names": ["lstm", "gru"]})
     assert ensemble.requires_4d is False
-

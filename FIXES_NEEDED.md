@@ -212,17 +212,17 @@
 
 ### Phase E: FEATURE GOVERNANCE (Month 2-3) — Per improvements_sneh.md
 
-| # | Component | From improvements_sneh.md Section | Effort |
-|---|-----------|----------------------------------|--------|
-| E1 | Feature selection inside CV (from C2) | Section 8 | Done in C2 |
-| E2 | MDA stabilization (n_estimators=50, n_repeats=5) | Section 15.5 | 1 day |
-| E3 | 3-dimension fast-path robustness scoring | Section 4 | 1 week |
-| E4 | Timeframe competition | Section 6 | 3 days |
-| E5 | Regime-conditional selection (3-regime) | Section 5 | 1 week |
-| E6 | Feature lifecycle state machine | Section 11 | 2 weeks |
-| E7 | Feature registry with persistence | Section 13 | 1 week |
-| E8 | Ticker portability testing | Section 7 | 1 week |
-| E9 | Economic value scoring (slow path) | Section 10 | 2 weeks |
+| # | Component | From improvements_sneh.md Section | Effort | Status |
+|---|-----------|----------------------------------|--------|--------|
+| E1 | Feature selection inside CV (from C2) | Section 8 | Done in C2 | ✅ COMPLETE |
+| E2 | MDA stabilization (n_estimators=50, n_repeats=5) | Section 15.5 | 1 day | ✅ COMPLETE (Phase 98) |
+| E3 | 3-dimension fast-path robustness scoring | Section 4 | 1 week | |
+| E4 | Timeframe competition | Section 6 | 3 days | ✅ COMPLETE (Phase 98) |
+| E5 | Regime-conditional selection (3-regime) | Section 5 | 1 week | ✅ COMPLETE (Phase 98) |
+| E6 | Feature lifecycle state machine | Section 11 | 2 weeks | |
+| E7 | Feature registry with persistence | Section 13 | 1 week | |
+| E8 | Ticker portability testing | Section 7 | 1 week | |
+| E9 | Economic value scoring (slow path) | Section 10 | 2 weeks | |
 
 ---
 

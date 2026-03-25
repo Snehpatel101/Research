@@ -515,6 +515,15 @@ src/
 - Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
 - 12 new test files, 317/317 tests passing (was 223), ruff + black clean
 
+**Phase 98: COMPLETE — Feature Governance E2+E4+E5 (7 files, 20 new tests)**
+- E2: MDA stabilization — configurable `mda_n_repeats` (default 5), `n_estimators=50` unified across pipeline
+- E4: Timeframe competition — `apply_timeframe_budget()` limits MTF features per timeframe suffix (default 8/tf)
+- E5: Regime-conditional selection — `compute_regime_importance()` with vol-regime detection, blended into MDA ranking (70% MDA + 30% regime, behind `regime_conditional=True` flag)
+- Config: `mtf_max_per_timeframe` and `regime_conditional` fields on FeatureSelectionConfig with full serialization
+- Pipeline: Steps 1b (timeframe budget) and 1c (regime blend) wired into `_run_feature_selection_pipeline()`
+- New files: `timeframe_budget.py`, `regime_selection.py` in `src/optimization/feature_selection/`
+- 7 files modified, 337/337 tests passing (20 new), ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

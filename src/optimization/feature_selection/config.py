@@ -145,8 +145,11 @@ class FeatureSelectionConfig:
     method: str = "mda"
     min_feature_frequency: float = 0.6
     n_estimators: int = 50
+    mda_n_repeats: int = 5
     use_clustered_importance: bool = False
     max_clusters: int = 20
+    mtf_max_per_timeframe: int = 8
+    regime_conditional: bool = False
     random_state: int = 42
     model_family: str | None = None
 
@@ -171,6 +174,8 @@ class FeatureSelectionConfig:
                 )
             if self.n_estimators <= 0:
                 raise ValueError(f"n_estimators must be > 0, got {self.n_estimators}")
+            if self.mda_n_repeats <= 0:
+                raise ValueError(f"mda_n_repeats must be > 0, got {self.mda_n_repeats}")
 
     def _apply_family_defaults(self) -> None:
         """Apply model family defaults where not explicitly set."""
@@ -231,8 +236,11 @@ class FeatureSelectionConfig:
             "method": self.method,
             "min_feature_frequency": self.min_feature_frequency,
             "n_estimators": self.n_estimators,
+            "mda_n_repeats": self.mda_n_repeats,
             "use_clustered_importance": self.use_clustered_importance,
             "max_clusters": self.max_clusters,
+            "mtf_max_per_timeframe": self.mtf_max_per_timeframe,
+            "regime_conditional": self.regime_conditional,
             "random_state": self.random_state,
             "model_family": self.model_family,
             "selected_features": self._selected_features,
@@ -266,6 +274,7 @@ class FeatureSelectorConfig:
     n_features_to_select: int = 50
     selection_method: str = "mda"  # mda, mdi, or hybrid
     n_estimators: int = 50
+    mda_n_repeats: int = 5
     min_feature_frequency: float = 0.6
     use_clustered_importance: bool = False
     max_clusters: int = 20
@@ -277,6 +286,8 @@ class FeatureSelectorConfig:
             raise ValueError(
                 f"selection_method must be mda/mdi/hybrid, got {self.selection_method}"
             )
+        if self.mda_n_repeats <= 0:
+            raise ValueError(f"mda_n_repeats must be > 0, got {self.mda_n_repeats}")
         if not 0 < self.min_feature_frequency <= 1:
             raise ValueError(
                 f"min_feature_frequency must be in (0, 1], got {self.min_feature_frequency}"

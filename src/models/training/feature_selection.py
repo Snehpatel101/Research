@@ -109,7 +109,8 @@ class FeatureSelectionMixin:
             selector = WalkForwardFeatureSelector(
                 n_features_to_select=len(feature_names),
                 selection_method="mda",
-                n_estimators=20,
+                n_estimators=50,
+                mda_n_repeats=5,
                 min_feature_frequency=0.01,
                 random_state=42,
                 use_clustered_importance=True,
@@ -296,6 +297,66 @@ class FeatureSelectionMixin:
             ranking_method = "variance"
 
         logger.info(f"  Feature ranking method: {ranking_method}")
+
+        # Step 1b: Timeframe competition (E4) — budget MTF features per timeframe
+        fs_config = getattr(self.config, "feature_selection", None)
+        mtf_budget = getattr(fs_config, "mtf_max_per_timeframe", 8) if fs_config else 8
+        if ranking is not None:
+            try:
+                from src.optimization.feature_selection.timeframe_budget import (
+                    apply_timeframe_budget,
+                )
+
+                budgeted = apply_timeframe_budget(
+                    ranking, feature_names, max_per_timeframe=mtf_budget
+                )
+                if len(budgeted) < len(feature_names):
+                    logger.info(
+                        f"  Timeframe budget: {len(feature_names)} -> "
+                        f"{len(budgeted)} features (max {mtf_budget}/tf)"
+                    )
+                    feature_names = budgeted
+                    # Re-slice ranking to budgeted features
+                    ranking = ranking.loc[ranking.index.isin(feature_names)]
+            except Exception as e:
+                logger.warning(f"  Timeframe budget skipped: {e}")
+
+        # Step 1c: Regime-conditional selection (E5) — boost regime-specific features
+        regime_enabled = getattr(fs_config, "regime_conditional", False) if fs_config else False
+        if regime_enabled and ranking is not None:
+            try:
+                from src.optimization.feature_selection.regime_selection import (
+                    compute_regime_importance,
+                )
+
+                label_col = None
+                for h in self.config.horizons:
+                    candidate = f"label_h{h}"
+                    if candidate in df.columns:
+                        label_col = candidate
+                        break
+
+                if label_col is not None:
+                    result = compute_regime_importance(df, feature_names, label_col=label_col)
+                    if result is not None:
+                        regime_ranking, per_regime = result
+                        # Blend: 70% MDA + 30% regime importance (union boost)
+                        common = ranking.index.intersection(regime_ranking.index)
+                        if len(common) > 0:
+                            mda_norm = ranking.loc[common] / (ranking.loc[common].max() + 1e-9)
+                            reg_norm = regime_ranking.loc[common] / (
+                                regime_ranking.loc[common].max() + 1e-9
+                            )
+                            blended = 0.7 * mda_norm + 0.3 * reg_norm
+                            ranking = blended.sort_values(ascending=False)
+                            logger.info(
+                                f"  Regime-conditional: blended {len(per_regime)} regimes "
+                                f"into ranking ({len(common)} features)"
+                            )
+                else:
+                    logger.warning("  Regime selection: no label column found, skipped")
+            except Exception as e:
+                logger.warning(f"  Regime-conditional selection skipped: {e}")
 
         # Step 2: Correlation dedup on top-N features
         max_model_features = max(get_model_contract(m).max_features for m in self.config.models)

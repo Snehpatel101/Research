@@ -189,9 +189,14 @@ def _get_available_models():
             available.append(name)
         elif ModelRegistry.is_registered(name):
             # Registered but not available (missing dependency like catboost)
-            available.append(pytest.param(name, marks=pytest.mark.skip(
-                reason=f"{name} registered but dependencies not available"
-            )))
+            available.append(
+                pytest.param(
+                    name,
+                    marks=pytest.mark.skip(
+                        reason=f"{name} registered but dependencies not available"
+                    ),
+                )
+            )
     return available
 
 
@@ -238,9 +243,9 @@ class TestModelSmoke:
         logger.info(f"{model_name} fit in {fit_time:.1f}s")
 
         # Check training metrics
-        assert isinstance(metrics, TrainingMetrics), (
-            f"fit() should return TrainingMetrics, got {type(metrics)}"
-        )
+        assert isinstance(
+            metrics, TrainingMetrics
+        ), f"fit() should return TrainingMetrics, got {type(metrics)}"
         assert metrics.epochs_trained >= 0
         assert metrics.training_time_seconds >= 0
         assert model.is_fitted
@@ -249,16 +254,16 @@ class TestModelSmoke:
         result = model.predict(X_val)
 
         # Check prediction result
-        assert isinstance(result, PredictionResult), (
-            f"predict() should return PredictionResult, got {type(result)}"
-        )
+        assert isinstance(
+            result, PredictionResult
+        ), f"predict() should return PredictionResult, got {type(result)}"
 
         # Check predictions shape
         assert result.class_predictions is not None, "class_predictions should not be None"
         preds = np.asarray(result.class_predictions)
-        assert preds.shape[0] == N_SAMPLES_VAL, (
-            f"Expected {N_SAMPLES_VAL} predictions, got {preds.shape[0]}"
-        )
+        assert (
+            preds.shape[0] == N_SAMPLES_VAL
+        ), f"Expected {N_SAMPLES_VAL} predictions, got {preds.shape[0]}"
 
         # Check probabilities if available
         if result.class_probabilities is not None:
@@ -340,7 +345,9 @@ class TestTransformerModels:
             pytest.skip(f"{name} not available")
         config = FAST_CONFIGS[name]
         model = ModelRegistry.create(name, config=config)
-        X_train, y_train = _get_data_for_model(model, N_SAMPLES_TRAIN), _make_labels(N_SAMPLES_TRAIN)
+        X_train, y_train = _get_data_for_model(model, N_SAMPLES_TRAIN), _make_labels(
+            N_SAMPLES_TRAIN
+        )
         X_val, y_val = _get_data_for_model(model, N_SAMPLES_VAL), _make_labels(N_SAMPLES_VAL)
         metrics = model.fit(X_train, y_train, X_val, y_val)
         assert isinstance(metrics, TrainingMetrics)
@@ -356,7 +363,9 @@ class TestMLPModels:
             pytest.skip("N-BEATS not available")
         config = FAST_CONFIGS["nbeats"]
         model = ModelRegistry.create("nbeats", config=config)
-        X_train, y_train = _get_data_for_model(model, N_SAMPLES_TRAIN), _make_labels(N_SAMPLES_TRAIN)
+        X_train, y_train = _get_data_for_model(model, N_SAMPLES_TRAIN), _make_labels(
+            N_SAMPLES_TRAIN
+        )
         X_val, y_val = _get_data_for_model(model, N_SAMPLES_VAL), _make_labels(N_SAMPLES_VAL)
         metrics = model.fit(X_train, y_train, X_val, y_val)
         assert isinstance(metrics, TrainingMetrics)

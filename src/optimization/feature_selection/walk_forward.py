@@ -53,7 +53,8 @@ class WalkForwardFeatureSelector:
         self,
         n_features_to_select: int = 50,
         selection_method: str = "mda",
-        n_estimators: int = 100,
+        n_estimators: int = 50,
+        mda_n_repeats: int = 5,
         min_feature_frequency: float = 0.6,
         use_clustered_importance: bool = False,
         max_clusters: int = 20,
@@ -66,6 +67,7 @@ class WalkForwardFeatureSelector:
             n_features_to_select: Number of top features per fold
             selection_method: Importance method (mda, mdi, hybrid)
             n_estimators: Number of trees for RF importance
+            mda_n_repeats: Number of permutation repeats for MDA
             min_feature_frequency: Minimum fold frequency for stable features
             use_clustered_importance: Use clustered MDA for correlated features
             max_clusters: Max feature clusters (if clustered)
@@ -75,6 +77,7 @@ class WalkForwardFeatureSelector:
             n_features_to_select=n_features_to_select,
             selection_method=selection_method,
             n_estimators=n_estimators,
+            mda_n_repeats=mda_n_repeats,
             min_feature_frequency=min_feature_frequency,
             use_clustered_importance=use_clustered_importance,
             max_clusters=max_clusters,
@@ -282,7 +285,7 @@ class WalkForwardFeatureSelector:
             rf,
             score_X,
             score_y,
-            n_repeats=3,
+            n_repeats=self.config.mda_n_repeats,
             random_state=self.random_state,
             n_jobs=-1,
             sample_weight=score_w,
