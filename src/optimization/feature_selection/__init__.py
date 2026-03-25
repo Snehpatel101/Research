@@ -56,6 +56,9 @@ from .filtering import (
     select_from_correlated_group,
 )
 
+# Feature lifecycle state machine
+from .lifecycle import FeatureLifecycle, FeatureLifecycleState
+
 # OHLCV-specific selectors
 from .ohlcv_selector import (
     FEATURE_CATEGORIES,
@@ -76,6 +79,9 @@ from .priority import (
 
 # Regime-conditional selection
 from .regime_selection import compute_regime_importance
+
+# Feature registry with persistence
+from .registry import FeatureRecord, FeatureRegistry
 from .result import (
     FeatureSelectionResult,
     PersistedFeatureSelection,
@@ -150,6 +156,12 @@ __all__ = [
     "get_feature_priority",
     # Regime-conditional selection
     "compute_regime_importance",
+    # Feature lifecycle
+    "FeatureLifecycleState",
+    "FeatureLifecycle",
+    # Feature registry
+    "FeatureRecord",
+    "FeatureRegistry",
     # Robustness scoring
     "RobustnessScorer",
     # Timeframe budget

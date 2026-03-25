@@ -515,6 +515,13 @@ src/
 - Fixed EXPECTED_FEATURES constant (196→192 after Phase C removals)
 - 12 new test files, 317/317 tests passing (was 223), ruff + black clean
 
+**Phase 100: COMPLETE — Feature Lifecycle + Registry + Drawdown Sizer (E6+E7, 5 files, 44 new tests)**
+- E6: `FeatureLifecycleState` enum (CANDIDATE/SELECTED/ACTIVE/DEGRADED/RETIRED) + `FeatureLifecycle` class with validated transitions, history tracking, consecutive degradation counting, retirement recommendation
+- E7: `FeatureRegistry` with JSON persistence — register/update/query features by state, save/load round-trip, `FeatureRecord` dataclass with scores and transition history
+- `DrawdownAdjustedSizer` wrapping any `BasePositionSizer` — smooth scaling via `scale = max(min_scale, 1 - (dd/threshold)^power)` instead of binary circuit breaker. Quadratic default (power=2), supports linear/cubic.
+- New files: `lifecycle.py`, `registry.py` in `src/optimization/feature_selection/`; edited `position_sizing.py`
+- 5 files modified, 402/402 tests passing (44 new), ruff + black clean
+
 **Phase 99: COMPLETE — Advanced Feature Governance (E3 + CUSUM + FracDiff, 5 files, 22 new tests)**
 - E3: RobustnessScorer class — composite scoring (0.4*stability + 0.4*predictive + 0.2*regime), wired into pipeline as diagnostic logging step
 - CUSUM filter (`cusum_filter.py`) — symmetric CUSUM with numba @njit inner loop, auto-threshold calibration via binary search

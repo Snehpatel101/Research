@@ -219,8 +219,8 @@
 | E3 | 3-dimension fast-path robustness scoring | Section 4 | 1 week | ✅ COMPLETE (Phase 99) |
 | E4 | Timeframe competition | Section 6 | 3 days | ✅ COMPLETE (Phase 98) |
 | E5 | Regime-conditional selection (3-regime) | Section 5 | 1 week | ✅ COMPLETE (Phase 98) |
-| E6 | Feature lifecycle state machine | Section 11 | 2 weeks | |
-| E7 | Feature registry with persistence | Section 13 | 1 week | |
+| E6 | Feature lifecycle state machine | Section 11 | 2 weeks | ✅ COMPLETE (Phase 100) |
+| E7 | Feature registry with persistence | Section 13 | 1 week | ✅ COMPLETE (Phase 100) |
 | E8 | Ticker portability testing | Section 7 | 1 week | |
 | E9 | Economic value scoring (slow path) | Section 10 | 2 weeks | |
 

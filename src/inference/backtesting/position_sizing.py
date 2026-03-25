@@ -27,6 +27,7 @@ class PositionSizingMethod(StrEnum):
     EQUAL_WEIGHT = "equal_weight"
     FIXED_CONTRACTS = "fixed_contracts"
     BET_SIZING = "bet_sizing"  # Phase 4G: Variable sizing from model confidence
+    DRAWDOWN_ADJUSTED = "drawdown_adjusted"
 
 
 class BasePositionSizer(ABC):
@@ -525,6 +526,70 @@ class BetSizingPositioner(BasePositionSizer):
 
 
 @dataclass
+class DrawdownAdjustedSizer(BasePositionSizer):
+    """
+    Drawdown-adjusted position sizing wrapper.
+
+    Wraps any BasePositionSizer and scales its output down as drawdown
+    increases, reducing exposure during losing streaks.
+
+    Attributes:
+        inner_sizer: The wrapped sizer that does the actual calculation
+        max_drawdown_threshold: Drawdown level at which scaling reaches 0
+        scaling_power: Controls how aggressively to scale down (1=linear, 2=quadratic)
+        min_scale: Minimum scale factor (0 = can go to zero contracts)
+    """
+
+    inner_sizer: BasePositionSizer = None  # type: ignore[assignment]
+    max_drawdown_threshold: float = 0.10
+    scaling_power: float = 2.0
+    min_scale: float = 0.0
+
+    def drawdown_scale(self, current_drawdown: float) -> float:
+        """
+        Compute the drawdown scaling factor.
+
+        Args:
+            current_drawdown: Current drawdown as a positive fraction (e.g., 0.05 = 5%)
+
+        Returns:
+            Scale factor between min_scale and 1.0
+        """
+        if current_drawdown <= 0:
+            return 1.0
+        dd = current_drawdown
+        if dd <= 0:
+            return 1.0
+        if dd >= self.max_drawdown_threshold:
+            return self.min_scale
+        scale = 1.0 - (dd / self.max_drawdown_threshold) ** self.scaling_power
+        return max(self.min_scale, scale)
+
+    def calculate_position_size(
+        self,
+        account_equity: float,
+        current_drawdown: float = 0.0,
+        **kwargs: Any,
+    ) -> int:
+        """
+        Calculate drawdown-adjusted position size.
+
+        Delegates to inner_sizer then scales by drawdown factor.
+
+        Args:
+            account_equity: Current account equity
+            current_drawdown: Current drawdown as a positive fraction
+            **kwargs: Passed through to inner_sizer
+
+        Returns:
+            Number of contracts to trade
+        """
+        base_contracts = self.inner_sizer.calculate_position_size(account_equity, **kwargs)
+        scale = self.drawdown_scale(current_drawdown)
+        return self._round_to_contracts(base_contracts * scale)
+
+
+@dataclass
 class PositionSizerConfig:
     """Configuration for position sizing."""
 
@@ -609,6 +674,16 @@ def create_position_sizer(
             point_value=point_value,
         )
 
+    elif method == PositionSizingMethod.DRAWDOWN_ADJUSTED:
+        inner_method = kwargs.pop("inner_method", "fixed_fractional")
+        inner_sizer = create_position_sizer(method=inner_method, **kwargs)
+        return DrawdownAdjustedSizer(
+            inner_sizer=inner_sizer,
+            max_drawdown_threshold=kwargs.get("max_drawdown_threshold", 0.10),
+            scaling_power=kwargs.get("scaling_power", 2.0),
+            min_scale=kwargs.get("min_scale", 0.0),
+        )
+
     else:
         return FixedFractional(
             risk_per_trade=0.02,
@@ -625,6 +700,7 @@ __all__ = [
     "EqualWeight",
     "FixedContracts",
     "BetSizingPositioner",  # Phase 4G
+    "DrawdownAdjustedSizer",
     "PositionSizerConfig",
     "create_position_sizer",
 ]
