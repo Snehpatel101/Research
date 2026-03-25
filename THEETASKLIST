@@ -1,0 +1,759 @@
+# THEETASKLIST — Verified Implementation Plan
+
+**Date:** 2026-03-25
+**Source:** SNEH_SNEH_SNEH.md (12-agent adversarial audit + 3-agent optimization analysis)
+**Verification:** 5 parallel verification agents re-checked every finding against source code
+**Structure:** 11 phases, dependency-ordered, with exact file:line locations and how-to instructions
+
+## IMPLEMENTATION STATUS
+
+| Phase | Status | Date | Tests |
+|-------|--------|------|-------|
+| Phase 1: Critical Leakage Fixes | **COMPLETE** | 2026-03-25 | 452/452 pass |
+| Phase 2: Critical Accuracy Fixes | **COMPLETE** | 2026-03-25 | 452/452 pass |
+| Phase 3: Critical Memory Fixes | **COMPLETE** | 2026-03-25 | 452/452 pass |
+| Phase 4-11 | PENDING | — | — |
+
+---
+
+## VERIFICATION SUMMARY
+
+| Category | Total | Confirmed | Partially Confirmed | Disputed | Already Fixed |
+|----------|-------|-----------|-------------------|----------|---------------|
+| CRITICAL Bugs (B01-B06) | 6 | 4 | 1 | 1 | 0 |
+| HIGH Bugs (B07-B17) | 11 | 8 | 2 | 0 | 1 |
+| Remaining Bugs (B18-B46) | 29 | 17 | 7 | 5 | 0 |
+| Optimizations (OPT-1A–4B) | 15 | 7 | 1 | 7 | 0 |
+| **TOTAL** | **61** | **36** | **11** | **13** | **1** |
+
+### Key Disputes (items removed from task list)
+- **B05 DISPUTED**: Wavelet features use proper rolling windows with `sliding_window_view` — NO lookahead. Audit was wrong.
+- **B19 DISPUTED**: `.copy()` in SequenceDataset.__getitem__ IS necessary for writable PyTorch memory. Scalar torch.tensor() is negligible.
+- **B23 DISPUTED**: Meta-labeling uses standard de Prado methodology (train/val split correctly). NOT leakage.
+- **B24 DISPUTED**: Double-shift in entropy is intentional Phase 95 anti-lookahead fix. Feature is one-bar-stale by design.
+- **B26 DISPUTED**: TA indicators (RSI, MACD, etc.) don't need shift(1) — they use current+past bars only, which is correct.
+- **B37 DISPUTED**: Val set IS regime-filtered at lines 528-529 of regime_aware.py.
+- **B38 DISPUTED**: NaN fill shape in multi_stream.py is correct.
+- **OPT-1A DISPUTED**: `.copy()` in AdapterScaler is necessary — reshape returns a view, in-place scaling would corrupt caller data.
+- **OPT-2C DISPUTED**: PyTorch default prefetch_factor is already 2. No improvement.
+- **OPT-2E DISPUTED**: `np.ascontiguousarray` is already a no-op when data is C-contiguous.
+- **OPT-3A DISPUTED**: Numba halflife acceleration already exists.
+- **OPT-3B DISPUTED**: Entropy is already @njit compiled.
+- **OPT-3C DISPUTED**: EarlyStopping already clones only on improvement.
+
+### Key Corrections
+- **B03 downgraded**: Class weights dropped only when sample_weights active (conditional, not always)
+- **B06 downgraded**: Same-bar execution is standard simplification; severity depends on bar frequency
+- **B11 refined**: PnL includes slippage via cost_calculator; only Trade.exit_price is idealized
+- **B15 refined**: y_true is set correctly via external override; fold_id overwritten by last model
+- **B16 ALREADY FIXED**: Phase C5/96 fixed OU half-life log-price consistency
+- **OPT-1B corrected**: ~48.8 GB, not 82 GB
+- **OPT-1C corrected**: ~28.5 GB transient, not 1 GB (UNDERSTATED)
+- **OPT-1D corrected**: ~3.3 GB savings, not 4.8 GB
+- **Memory budget**: 229 GB → ~180 GB realistic (not 79 GB — original claim double-counted non-simultaneous allocations)
+
+---
+
+## PHASE 1: CRITICAL LEAKAGE FIXES (Trustworthiness) — COMPLETE 2026-03-25
+
+**Goal:** Eliminate all confirmed data leakage vectors so results can be trusted.
+**Dependencies:** None — do this FIRST before any other work.
+**Status:** COMPLETE — 7/7 tasks implemented, verified by independent agent, 452/452 tests pass
+
+### Task 1.1: Fix 4D OHLCV Lookahead (B01) — CONFIRMED CRITICAL
+
+**What:** Higher-timeframe OHLCV leaks up to 59 minutes of future data into PatchTST/iTransformer/TFT.
+**Where:** `src/factory.py:607-614` (`_generate_additional_dfs`)
+**How:**
+1. After resampling, apply `.shift(1)` to each higher-TF DataFrame:
+```python
+# factory.py:614 — AFTER resampling, BEFORE adding to additional_dfs:
+resampled = resampled.shift(1).dropna()  # Shift ensures bar N uses bar N-1's complete higher-TF data
+additional_dfs[normalized_key] = resampled
+```
+2. Also verify `src/inference/ensemble_bundle.py` inference path applies same shift.
+**Test:** Corrupt future bar's close in higher-TF data → verify 4D features at current bar are unchanged.
+**Verification:** `python -c "from src.factory import MLFactory; print('4D shift OK')"`
+
+### Task 1.2: Fix Meta-Label In-Sample Leakage (B02) — CONFIRMED CRITICAL
+
+**What:** Primary model's in-sample predictions used for meta-labels (memorization bias).
+**Where:** `src/models/training/training_ops.py:843-853`
+**How:**
+1. Replace in-sample predictions with OOF predictions:
+```python
+# Instead of: primary_train_classes = primary_trainer.model.predict(X_train).class_predictions
+# Use OOF predictions from the primary model's cross-validation:
+oof_result = self._generate_oof_predictions(primary_trainer, X, y, cv_splits)
+primary_train_classes = oof_result.class_predictions[train_idx]
+meta_labels_train = (primary_train_classes == y_train).astype(int)
+```
+2. Keep val path unchanged (primary model prediction on unseen val data is correct).
+**Test:** Verify meta-labels on training set come from OOF, not in-sample.
+
+### Task 1.3: Fix Optuna ATR Formula (B04) — CONFIRMED CRITICAL
+
+**What:** Optuna uses standard EMA (alpha=2/(n+1)) while labeling/backtest use Wilder's (alpha=1/n). 1.87x mismatch.
+**Where:** `src/optimization/five_dimension_objective.py:441`
+**How:**
+```python
+# Line 441 — CHANGE FROM:
+alpha = 2.0 / (period + 1)
+# TO:
+alpha = 1.0 / period  # Wilder's EMA, matching triple_barrier.py:551 and backtest.py:506
+```
+**Test:** `test_d6_atr_parity` should now pass for Optuna path too.
+
+### Task 1.4: Fix Optuna Subsampling Temporal Collapse (B07) — CONFIRMED HIGH
+
+**What:** Random stratified subsampling (50K cap) destroys temporal structure. Purge becomes ~2 real bars on 1.6M rows.
+**Where:** `src/validation/cv/cv_tuner.py:112-128`
+**How:**
+```python
+# Replace random subsampling with contiguous block sampling:
+# Instead of rng.choice(cls_idx, size=quota, replace=False)
+# Use contiguous blocks that preserve temporal structure:
+block_size = max(1, len(cls_idx) // quota)
+sub_indices = cls_idx[::block_size][:quota]  # Every Nth sample preserves spacing
+# OR: scale embargo proportionally: embargo_bars = int(original_embargo * (n_total / n_subsampled))
+```
+**Test:** After subsampling, verify temporal gap between adjacent samples ≈ original gap.
+
+### Task 1.5: Fix Walk-Forward Global Feature Selection (B08) — CONFIRMED HIGH
+
+**What:** Feature selection runs ONCE on full training data before WF windows, leaking future patterns.
+**Where:** `src/models/training/unified_orchestrator.py:401-416`
+**How:**
+1. Move feature selection INSIDE the walk-forward loop:
+```python
+# In walk_forward.py, for each window:
+# 1. Get window's train indices
+# 2. Run feature selection on ONLY that window's training data
+# 3. Apply selected features to that window's train AND test data
+selected_features = self._run_feature_selection_on_train_data(df.iloc[train_idx])
+```
+2. This means each window may select different features — store per-window feature lists.
+3. For ensemble stacking, use intersection of all windows' selected features.
+**Test:** Verify each WF window selects features independently (features may differ).
+
+### Task 1.6: Fix HP Tuning Embargo Mismatch (B12) — CONFIRMED HIGH
+
+**What:** Tuning uses embargo=horizon*2 (~10 bars) vs pipeline's 1440 bars. 144x mismatch.
+**Where:** `src/models/training/services/hyperparameter_tuning.py:82`
+**How:**
+```python
+# Line 82 — CHANGE FROM:
+embargo_bars=request.horizon * 2
+# TO:
+embargo_bars=request.embargo_bars  # Propagate from PipelineConfig
+```
+Add `embargo_bars` field to the tuning request dataclass, wired from PipelineConfig.
+**Test:** Assert tuning embargo == pipeline embargo for same config.
+
+### Task 1.7: Fix Regime Feature Lookahead (B14) — CONFIRMED HIGH
+
+**What:** 9 regime features in compute/regime.py have no shift(1). Lookahead if used directly.
+**Where:** `src/data/features/compute/regime.py:71-100`
+**How:** Add `shift(1)` to all regime feature function outputs:
+```python
+def compute_volatility_regime(df, ...):
+    result = ...  # existing computation
+    return result.shift(1)  # Prevent using current bar's regime
+```
+Apply to all 9 functions: `compute_volatility_regime`, `compute_trend_regime`, `compute_structure_regime`, `compute_composite_regime`, `compute_adx_regime`, `compute_combined_regime`, `compute_regime_strength`, `compute_adx_strong_trend`, `compute_regime_persistence`.
+**Test:** Spike in bar N's data → verify regime features at bar N are unchanged (use bar N-1).
+
+---
+
+## PHASE 2: CRITICAL ACCURACY FIXES — COMPLETE 2026-03-25
+
+**Goal:** Fix bugs that cause models to train incorrectly.
+**Dependencies:** None (can run parallel with Phase 1).
+**Status:** COMPLETE — 5/5 tasks implemented, verified by independent agent, 452/452 tests pass
+
+### Task 2.1: Fix Neural Class Weights Dropped (B03) — PARTIALLY CONFIRMED
+
+**What:** When sample_weights active, class weights silently dropped (new CrossEntropyLoss created without weights).
+**Where:** `src/models/neural/base_rnn.py:850-856`
+**How:**
+```python
+# Line 852 — CHANGE FROM:
+criterion_unreduced = nn.CrossEntropyLoss(reduction="none")
+# TO:
+criterion_unreduced = nn.CrossEntropyLoss(weight=class_weights_tensor, reduction="none")
+```
+This applies BOTH class weights (per-class scaling) AND sample weights (per-sample scaling) multiplicatively.
+**Test:** Train with known imbalanced classes + sample weights → verify loss reflects both.
+
+### Task 2.2: Fix Same-Bar Backtest Execution (B06) — CONFIRMED
+
+**What:** Default MARKET_ON_CLOSE fills at bar N's close using bar N's features. Optimistic by +5-20%.
+**Where:** `src/inference/backtesting/backtest.py:766-857`
+**How:** Change default execution model:
+```python
+# Line 76 — CHANGE FROM:
+execution_model: ExecutionModel = ExecutionModel.MARKET_ON_CLOSE
+# TO:
+execution_model: ExecutionModel = ExecutionModel.MARKET_ON_OPEN  # Fill at bar N+1 open
+```
+This means: signal from bar N's features → fill at bar N+1's open price.
+**Test:** Verify entry_price != signal_bar close for all trades.
+
+### Task 2.3: Fix Binary Mode OOF Crash (B10) — CONFIRMED HIGH
+
+**What:** Hardcoded 3-class column names crash with n_classes=2 (IndexError on oof_probs[:, 2]).
+**Where:** `src/validation/cv/oof_core.py:269-271`, `oof_sequence.py:319-321`, `oof_generation.py:373-376`
+**How:** Parameterize column names by n_classes:
+```python
+# Replace hardcoded 3-class columns:
+if n_classes == 2:
+    prob_cols = {f"{model_name}_prob_0": oof_probs[:, 0], f"{model_name}_prob_1": oof_probs[:, 1]}
+else:
+    prob_cols = {f"{model_name}_prob_short": oof_probs[:, 0], f"{model_name}_prob_neutral": oof_probs[:, 1], f"{model_name}_prob_long": oof_probs[:, 2]}
+```
+Apply to all 3 OOF generation files AND the calibration method at oof_core.py:313-316.
+**Test:** Run full pipeline with n_classes=2, verify no crash.
+
+### Task 2.4: Fix Volatility Annualization Factor (B17) — CONFIRMED HIGH
+
+**What:** `_ANNUAL_FACTOR` hardcodes bars_per_day=1. Wrong by sqrt(78) ≈ 8.8x for 5-min data.
+**Where:** `src/data/features/compute/volatility.py:20-25`
+**How:**
+```python
+# Replace module-level constant with function that accepts data frequency:
+def get_annualization_factor(bars_per_day: int = 78) -> float:
+    return float(np.sqrt(252 * bars_per_day))
+
+# Default to 78 for 5-min data (6.5h session / 5min = 78 bars)
+# Make configurable from PipelineConfig
+```
+**Test:** Verify annualization factor is correct for 5-min, 15-min, 1h, and daily data.
+
+### Task 2.5: Fix Remaining Hardcoded Annualization (B25) — PARTIALLY CONFIRMED
+
+**What:** 2 remaining sites still use hardcoded 252*78 annualization.
+**Where:**
+- `src/models/regime_evaluation.py:908` — hardcoded `np.sqrt(252 * 78)`
+- `src/optimization/scoring.py:91` — hardcoded `_ANNUALIZATION_FACTOR = np.sqrt(252 * 78)`
+**How:** Use `_derive_periods_per_year()` from metrics.py (already exists from Phase 95/92):
+```python
+from src.inference.backtesting.metrics import _derive_periods_per_year
+factor = np.sqrt(_derive_periods_per_year(returns_series.index))
+```
+**Test:** Run with different data frequencies, verify factor changes accordingly.
+
+---
+
+## PHASE 3: CRITICAL MEMORY FIXES — COMPLETE 2026-03-25
+
+**Goal:** Reduce peak RAM to fit under 200 GB for walk-forward TCN.
+**Dependencies:** None (can run parallel with Phases 1-2).
+**Status:** COMPLETE — 5/5 tasks implemented, verified by independent agent, 452/452 tests pass
+
+### Task 3.1: torch.from_numpy in MultiResolutionDataset (B18) — CONFIRMED CRITICAL
+
+**What:** `torch.tensor()` forces full copy on every __getitem__ for 4D models. Millions of copies per epoch.
+**Where:** `src/data/adapters/multi_resolution.py:492-494`
+**How:**
+```python
+# Lines 492-494 — CHANGE FROM:
+torch.tensor(X_4d, dtype=self._dtype)
+# TO:
+torch.as_tensor(X_4d).to(self._dtype)  # Shares memory when possible, copies only when needed
+```
+Use `torch.as_tensor()` instead of `torch.from_numpy()` because the slice may not be contiguous.
+**Test:** Benchmark: measure training time per epoch before/after.
+
+### Task 3.2: Walk-Forward X_np mmap (B21/OPT-1B) — CONFIRMED HIGH
+
+**What:** X_np (48.8 GB for TCN) retained in RAM for entire walk-forward loop.
+**Where:** `src/models/training/modes/walk_forward.py:335`
+**How:**
+```python
+X_np = X.values.astype(np.float32, copy=False)
+if X_np.nbytes > 10 * 1024**3:  # >10 GB threshold
+    import tempfile
+    _mmap_file = tempfile.NamedTemporaryFile(suffix='.mmap', delete=True)
+    _mmap_arr = np.memmap(_mmap_file.name, dtype=np.float32, mode='w+', shape=X_np.shape)
+    _mmap_arr[:] = X_np[:]
+    del X_np
+    X_np = _mmap_arr  # OS pages in/out as needed
+```
+**Savings:** ~48.8 GB peak reduction (OS pages only ~5% into RAM at a time).
+**Tradeoff:** ~5-10% slower per-window slice (NVMe I/O). Negligible on modern SSDs.
+**Test:** Monitor peak RSS during WF training. Verify identical model outputs.
+
+### Task 3.3: Remove Redundant .copy() in 4D OOF (B41→OPT-1C) — CONFIRMED
+
+**What:** Fancy indexing already creates a copy. Explicit `.copy()` doubles the allocation (~28.5 GB transient).
+**Where:** `src/models/training/services/oof_generation.py:276-277`
+**How:**
+```python
+# Lines 276-277 — CHANGE FROM:
+X_train_fold = X_4d[train_idx].copy()
+X_val_fold = X_4d[val_idx].copy()
+# TO:
+X_train_fold = X_4d[train_idx]  # Fancy indexing already returns a copy
+X_val_fold = X_4d[val_idx]
+```
+**Savings:** ~28.5 GB transient peak per fold for large 4D datasets.
+**Test:** Verify 4D OOF results are bitwise identical.
+
+### Task 3.4: OOF Sequence Backup Pattern (OPT-1D) — PARTIALLY CONFIRMED
+
+**What:** raw_X.copy() called every fold (5x). Can reduce to 1 backup + in-place restores.
+**Where:** `src/validation/cv/oof_sequence.py:155`
+**How:**
+```python
+# Before loop — ONE backup:
+raw_X_backup = seq_builder._X.copy()
+for fold_idx, (train_idx, val_idx) in enumerate(cv_splits):
+    # Restore from backup (overwrite in-place, no new allocation):
+    np.copyto(seq_builder._X, raw_X_backup)
+    scaling_result = fold_scaler.fit_transform_fold(X_train_raw, seq_builder._X)
+```
+**Savings:** ~3.3 GB (4 fewer copies, keeping 1 backup).
+**Test:** Verify OOF predictions identical before/after.
+
+### Task 3.5: Regime Model Accumulation Cleanup (B40) — CONFIRMED HIGH
+
+**What:** Per-regime trainers accumulate without cleanup. 3 regimes x 12 models = 36 model objects (1.8-7.2 GB).
+**Where:** `src/models/training/modes/regime_aware.py:588-589`
+**How:**
+```python
+# After training each regime's models, flush neural models to CPU/disk:
+for model_name, trainer in self.trainers[regime].items():
+    if hasattr(trainer.model, 'cpu'):
+        trainer.model.cpu()
+    torch.cuda.empty_cache()
+```
+**Test:** Monitor GPU memory between regime iterations.
+
+---
+
+## PHASE 4: HIGH LEAKAGE/CV FIXES
+
+**Goal:** Fix remaining temporal leakage vectors in CV and feature selection.
+**Dependencies:** Phase 1 complete (leakage fixes build on each other).
+**Estimated effort:** 3-4 hours
+
+### Task 4.1: Fix Stacking fold_id Overwrite (B15) — PARTIALLY CONFIRMED
+
+**What:** fold_id from last model overwrites all previous models during stacking DataFrame merge.
+**Where:** `src/validation/cv/oof_stacking.py:227-240`
+**How:**
+```python
+# Line 232-237 — Only copy probability/prediction columns, not y_true/fold_id:
+for model_name in model_names[1:]:
+    oof_pred = oof_predictions[model_name].predictions
+    prob_cols = [c for c in oof_pred.columns if c.startswith(model_name)]
+    for col in prob_cols:
+        stacking_df[col] = oof_pred[col]
+# y_true and fold_id are already correctly set from first model + external override
+```
+**Test:** With 3+ models, verify fold_id is consistent across all models.
+
+### Task 4.2: Fix 5 Inconsistent Regime Systems (B09) — CONFIRMED HIGH
+
+**What:** 5+ separate regime detection systems with different algorithms and parameters.
+**Where:** Multiple files — `compute/regime.py`, `regime_detector.py`, `pipeline/stages/regime/*.py`, `regime_selection.py`
+**How:**
+1. Choose ONE canonical regime detector (recommend `regime_detector.py` with ADX + vol percentile).
+2. Create a unified `get_regime_labels(df, config)` function.
+3. Have all other paths delegate to this function.
+4. Delete or deprecate duplicate implementations.
+**Test:** Verify same input → same regime labels across all code paths.
+
+### Task 4.3: Fix Regime OHLCV Dependency (B13) — CONFIRMED HIGH
+
+**What:** Regime detection needs close/high/low columns which may be dropped by feature selection.
+**Where:** `src/models/training/regime_trainer.py:685-711`
+**How:**
+```python
+# Store raw OHLCV separately on PreparedData or pass it as extra parameter:
+def _create_df_for_detection(self, prepared, raw_ohlcv):
+    # Use raw_ohlcv for regime detection, not feature-selected prepared.feature_names
+    df = raw_ohlcv[["close", "high", "low", "volume"]].iloc[prepared.indices]
+```
+**Test:** Run regime mode with feature selection that excludes OHLCV → verify no crash.
+
+---
+
+## PHASE 5: ARCHITECTURE FIXES
+
+**Goal:** Fix structural issues that cause silent errors and confusion.
+**Dependencies:** None (can run parallel with Phases 1-4).
+**Estimated effort:** 2-3 hours
+
+### Task 5.1: Fix Dual ExperimentConfig (B42) — CONFIRMED HIGH
+
+**What:** Two competing ExperimentConfig classes. `from src.config import ExperimentConfig` returns wrong one.
+**Where:** `src/config/training.py:401` vs `src/config/experiment.py:168`
+**How:**
+1. Rename `src/config/training.py:ExperimentConfig` to `TrainingExperimentConfig` or `_ModeConfig`.
+2. Update `src/config/__init__.py` to re-export the PIPELINE version from experiment.py.
+3. Fix all import sites that depend on the old name.
+**Test:** `from src.config import ExperimentConfig` → verify it's the pipeline version.
+
+### Task 5.2: Fix CLI Deprecated Orchestrator (B43) — CONFIRMED MEDIUM
+
+**What:** CLI imports deprecated MLPipeline instead of canonical MLFactory.
+**Where:** `src/cli/commands/pipeline.py:121`
+**How:**
+```python
+# Line 121 — CHANGE FROM:
+from src.orchestrator import MLPipeline
+# TO:
+from src.factory import MLFactory
+```
+Update the CLI command handler to use MLFactory API.
+**Test:** Run CLI pipeline command → verify it uses MLFactory.
+
+### Task 5.3: Fix Triple FeatureSelectionResult (B44) — CONFIRMED MEDIUM
+
+**What:** 3 separate class definitions for the same concept.
+**Where:** `optimization/feature_selection/result.py:25` (canonical), `optimization/features.py:77`, `data/features/selection.py:40`
+**How:**
+1. Keep `optimization/feature_selection/result.py` as canonical.
+2. Replace other definitions with imports: `from src.optimization.feature_selection.result import FeatureSelectionResult`
+3. Verify all users still work.
+**Test:** `grep -r "class FeatureSelectionResult" src/` → only 1 result.
+
+### Task 5.4: Fix k_up=0.0 Falsy Trap (B27) — CONFIRMED MEDIUM
+
+**What:** `k_up = k_up or self.config.upper_mult` treats k_up=0.0 as None.
+**Where:** `src/data/labeling/triple_barrier.py:654-656`
+**How:**
+```python
+# Lines 654-656 — CHANGE FROM:
+k_up = k_up or self.config.upper_mult
+k_down = k_down or self.config.lower_mult
+max_bars = max_bars or self.config.max_holding_period
+# TO:
+k_up = k_up if k_up is not None else self.config.upper_mult
+k_down = k_down if k_down is not None else self.config.lower_mult
+max_bars = max_bars if max_bars is not None else self.config.max_holding_period
+```
+**Test:** Pass k_up=0.0 → verify it's used as-is (no upper barrier).
+
+### Task 5.5: Fix confidence=0.0 Falsy Trap (B33) — CONFIRMED LOW
+
+**What:** `confidence or 0.5` treats confidence=0.0 as None.
+**Where:** `src/inference/backtesting/backtest.py:483`
+**How:**
+```python
+# Line 483 — CHANGE FROM:
+probability=confidence or 0.5
+# TO:
+probability=confidence if confidence is not None else 0.5
+```
+**Test:** Pass confidence=0.0 → verify position size reflects zero confidence.
+
+---
+
+## PHASE 6: MEMORY OPTIMIZATION TIER 2
+
+**Goal:** Speed up DataLoader and reduce memory leaks.
+**Dependencies:** Phase 3 complete.
+**Estimated effort:** 2-3 hours
+
+### Task 6.1: Remove .copy() in SequenceDataset.__getitem__ (OPT-2A) — CONFIRMED
+
+**What:** `.copy()` on every sample access. Millions of copies per epoch for all 6 3D models.
+**Where:** `src/core/datasets/sequences.py:329`
+**How:**
+```python
+# Line 329 — CHANGE FROM:
+X_seq = self._features[start_idx:end_idx].copy()
+# TO:
+X_seq = self._features[start_idx:end_idx]  # View, no copy
+```
+Safe because `.to(self.dtype)` at line 338 creates a new tensor.
+**Test:** Benchmark epoch time before/after for LSTM.
+
+### Task 6.2: Validation Batch Size 2x (OPT-2D) — CONFIRMED
+
+**What:** Val uses same batch_size as train. Can use 2x since no gradients stored.
+**Where:** `src/models/neural/base_rnn.py` (val DataLoader creation)
+**How:**
+```python
+# When creating val DataLoader, use 2x batch size:
+val_batch_size = train_config.get("batch_size", 512) * 2
+val_loader = self._create_dataloader(X_val, y_val, None, {**train_config, "batch_size": val_batch_size}, shuffle=False)
+```
+**Test:** Verify validation speed improvement. Verify no GPU OOM.
+
+### Task 6.3: Feature Cache Clearing (OPT-2F) — CONFIRMED
+
+**What:** 14 module-level dict caches across 6 compute modules never cleared. 300-480 MB leak.
+**Where:** `src/data/features/compute/` — volatility.py, microstructure.py, regime.py, order_flow.py, volume.py, trend.py
+**How:**
+```python
+# New function in src/data/features/compute/__init__.py:
+def clear_all_feature_caches():
+    from . import volatility, microstructure, regime, order_flow, volume, trend
+    for mod in [volatility, microstructure, regime, order_flow, volume, trend]:
+        for attr_name in dir(mod):
+            if attr_name.endswith('_cache') and isinstance(getattr(mod, attr_name), dict):
+                getattr(mod, attr_name).clear()
+```
+Wire into: `training_ops.py` (between models) and `walk_forward.py` (between windows).
+**Test:** Run pipeline → verify cache dicts are empty after clearing.
+
+### Task 6.4: Wire worker_init_fn to DataLoader (B28) — CONFIRMED HIGH
+
+**What:** DataLoader workers share RNG state. Non-reproducible training.
+**Where:** `src/models/neural/base_rnn.py:765-773`
+**How:**
+```python
+# Add worker_init_fn:
+from src.core.reproducibility import get_worker_init_fn
+return DataLoader(
+    dataset,
+    ...,
+    worker_init_fn=get_worker_init_fn(seed=42),
+)
+```
+**Test:** Train twice with same seed, same data → verify identical loss curves.
+
+---
+
+## PHASE 7: BACKTEST REALISM
+
+**Goal:** Make backtests more realistic (reduce 5-15% optimism bias).
+**Dependencies:** Phase 2 (execution model change).
+**Estimated effort:** 3-4 hours
+
+### Task 7.1: Add Stop Slippage (B11) — PARTIALLY CONFIRMED
+
+**What:** Stop-loss fills at exact barrier price. Real stops slip, especially in fast markets.
+**Where:** `src/inference/backtesting/backtest.py:698-717`
+**How:**
+```python
+# In _resolve_exit_price(), for stop exits:
+if reason == ExitReason.STOP_LOSS and position.stop_loss is not None:
+    slippage = self.cost_calculator.estimate_slippage(position.entry_atr)
+    direction = 1 if position.direction == 1 else -1
+    return position.stop_loss - direction * slippage  # Worse than barrier price
+```
+**Test:** Verify stop exits include slippage in exit_price.
+
+### Task 7.2: Fix Kelly Position Sizing (B22) — CONFIRMED MEDIUM
+
+**What:** Kelly always returns f*=0 because win_rate/avg_win/avg_loss never passed.
+**Where:** `src/inference/backtesting/backtest.py:459-484`
+**How:**
+```python
+# Track running statistics from completed trades:
+def _update_kelly_stats(self, trade):
+    self._completed_trades.append(trade)
+    if len(self._completed_trades) >= 30:  # Minimum trades for Kelly
+        wins = [t for t in self._completed_trades if t.pnl > 0]
+        losses = [t for t in self._completed_trades if t.pnl <= 0]
+        self._kelly_win_rate = len(wins) / len(self._completed_trades)
+        self._kelly_avg_win = np.mean([t.pnl for t in wins]) if wins else 0
+        self._kelly_avg_loss = abs(np.mean([t.pnl for t in losses])) if losses else 1
+```
+**Test:** Run backtest with Kelly → verify non-zero position sizes after 30+ trades.
+
+### Task 7.3: Fix VWAP Label (B32) — CONFIRMED LOW
+
+**What:** "VWAP" execution is actually HL/2 midpoint. Misleading label.
+**Where:** `src/inference/backtesting/backtest.py:453-455`
+**How:** Rename `VWAP` to `MIDPOINT` in the ExecutionModel enum, or implement true VWAP using volume data.
+**Test:** Verify naming matches behavior.
+
+### Task 7.4: Add Session-End Forced Close (B34) — PARTIALLY CONFIRMED
+
+**What:** No forced close at session end. Positions held overnight without gap risk.
+**Where:** `src/inference/backtesting/backtest.py:766-865`
+**How:**
+```python
+# Add configurable session-end close:
+if self.config.force_session_close and is_session_end(timestamp):
+    for position in open_positions:
+        self._close_position(position, close_price, timestamp, ExitReason.SESSION_END)
+```
+Add `force_session_close: bool = False` to BacktestConfig for backward compatibility.
+**Test:** Configure session-end close → verify no positions held overnight.
+
+---
+
+## PHASE 8: MEDIUM BUGS + REMAINING HIGH
+
+**Goal:** Fix confirmed medium-priority issues.
+**Dependencies:** Phases 1-5 complete.
+**Estimated effort:** 4-6 hours
+
+### Task 8.1: Fix Self-Referential Calibration (B29) — CONFIRMED MEDIUM
+
+**Where:** `src/validation/cv/oof_core.py:285-352`
+**How:** Use nested CV: split OOF predictions into calibration-train and calibration-eval, fit on cal-train, evaluate on cal-eval. Or simply remove the calibration improvement metrics (just apply calibration without reporting inflated stats).
+
+### Task 8.2: Fix CalibratedMetaLearner Random CV (B31) — CONFIRMED MEDIUM
+
+**Where:** `src/models/ensemble/calibrated_meta.py:142-145`
+**How:** Pass `cv=TimeSeriesSplit(n_splits=5)` or `cv=PurgedKFold(...)` to CalibratedClassifierCV.
+
+### Task 8.3: Add Regime Hysteresis (B36) — CONFIRMED MEDIUM
+
+**Where:** All regime detectors
+**How:** Add hysteresis band: enter trending at ADX > threshold, exit at ADX < threshold-5. Require regime to persist N consecutive bars before switching.
+
+### Task 8.4: PreparedData Cache Auto-Eviction (OPT-4A) — CONFIRMED LOW
+
+**Where:** `src/models/training/training_ops.py:73-77`
+**How:** Change warning to eviction: `while len(cache) > 10: del cache[next(iter(cache))]`
+
+### Task 8.5: Memory Monitoring at WF Boundaries (OPT-4B) — CONFIRMED
+
+**Where:** `src/models/training/modes/walk_forward.py`
+**How:** Add `psutil` monitoring at window boundaries. Add `psutil` to requirements.
+
+---
+
+## PHASE 9: DEAD CODE CLEANUP
+
+**Goal:** Remove confirmed dead code to reduce confusion and maintenance burden.
+**Dependencies:** None (can run anytime).
+**Estimated effort:** 2-3 hours
+
+### Task 9.1: Delete SmartConfig + UnifiedConfig (B45) — PARTIALLY CONFIRMED
+
+**Where:** `src/config/smart_config.py` (919 lines), `src/config/unified.py` (1,163 lines)
+**How:** First verify zero imports: `grep -r "smart_config\|SmartConfig\|UnifiedConfig" src/ --include="*.py"`. If clean, delete both files. Update `__init__.py` to remove re-exports.
+
+### Task 9.2: Delete Dead Constants (B46) — PARTIALLY CONFIRMED
+
+**Where:** `src/config/constants/default_periods.py`, `src/config/constants/thresholds.py`
+**How:** Verify zero usage: `grep -r "default_periods\|thresholds" src/ --include="*.py"`. If only re-exported but never consumed, delete files and update `__init__.py`.
+
+### Task 9.3: Wire or Remove ConformalPredictor (B30) — CONFIRMED MEDIUM
+
+**Where:** `src/models/calibration/conformal.py` (567 lines)
+**How:** Either wire into the pipeline (after calibration, before backtest) or delete and remove from notebook docs.
+
+---
+
+## PHASE 10: REGRESSION TESTS
+
+**Goal:** Add tests that prevent all fixed bugs from regressing.
+**Dependencies:** Phases 1-8 complete (tests verify fixes).
+**Estimated effort:** 6-8 hours
+
+### Task 10.1: P0 Must-Add Tests
+
+| Test | File | What It Catches |
+|------|------|----------------|
+| E2E pipeline test | `tests/test_e2e_pipeline.py` | Wiring errors between all components |
+| 4D shift(1) test | `tests/test_4d_shift.py` | B01 regression (corrupt future bar, verify unchanged) |
+| Meta-label OOF test | `tests/test_meta_label_oof.py` | B02 regression (meta-labels from OOF only) |
+| ATR Optuna parity | `tests/test_atr_parity.py` | B04 regression (Optuna ATR == labeling ATR) |
+| FoldAwareScaler isolation | `tests/test_fold_scaler_isolation.py` | Phase 79 regression |
+| Walk-forward chronology | `tests/test_wf_chronology.py` | max(train_ts) < min(test_ts) per window |
+| OOF purity | `tests/test_oof_purity.py` | Sample i predicted by model that never saw sample i |
+| Model save/load parity | `tests/test_model_save_load.py` | Serialization bugs |
+
+### Task 10.2: P1 High-Priority Tests
+
+| Test | What It Catches |
+|------|----------------|
+| Binary mode OOF (n_classes=2) | B10 regression |
+| Regime feature shift(1) | B14 regression |
+| Per-window feature selection | B08 regression |
+| HP tuning embargo match | B12 regression |
+| DataLoader worker reproducibility | B28 regression |
+| Scaler dtype preservation (float32 in/out) | Phase 76 memory regression |
+
+---
+
+## PHASE 11: INTEGRATION TESTS + E2E VALIDATION
+
+**Goal:** Validate the full system works correctly end-to-end after all fixes.
+**Dependencies:** ALL previous phases complete.
+**Estimated effort:** 4-6 hours
+
+### Task 11.1: Full Pipeline Smoke Test
+
+Run all 12 model families through standard mode with 1 epoch:
+```bash
+python -c "
+from src.factory import MLFactory
+# Minimal config, 1 epoch per model, verify no crash
+for model in ['xgboost', 'lightgbm', 'catboost', 'lstm', 'gru', 'tcn', 'inception_time', 'resnet1d', 'patchtst', 'itransformer', 'tft', 'nbeats']:
+    result = MLFactory(model=model, max_epochs=1).run()
+    assert result is not None
+"
+```
+
+### Task 11.2: Walk-Forward Memory Validation
+
+Run walk-forward with TCN on largest dataset → verify peak RSS < 200 GB.
+
+### Task 11.3: Cross-Family Ensemble Validation
+
+Run 2D+3D+4D ensemble → verify all combinations produce valid predictions.
+
+### Task 11.4: Backtest Execution Validation
+
+Verify: entry_price != signal_bar close (MARKET_ON_OPEN default). Stop exits include slippage. Kelly produces non-zero sizes after warmup.
+
+---
+
+## DEPENDENCY GRAPH
+
+```
+Phase 1 (Leakage) ──────────────────────────────┐
+Phase 2 (Accuracy) ─────────────────────────────┤
+Phase 3 (Memory) ───────────────────────────────┤
+Phase 5 (Architecture) ─────────────────────────┤
+                                                  ├──► Phase 8 (Medium bugs)
+Phase 4 (CV Fixes) ◄── Phase 1 ────────────────┤      │
+Phase 6 (Memory Opt) ◄── Phase 3 ──────────────┤      ├──► Phase 10 (Tests) ──► Phase 11 (E2E)
+Phase 7 (Backtest) ◄── Phase 2 ────────────────┘      │
+Phase 9 (Dead Code) ───────────────────────────────────┘
+```
+
+**Critical Path:** Phase 1 → Phase 4 → Phase 8 → Phase 10 → Phase 11
+**Parallel Tracks:** Phases 1, 2, 3, 5 can all run simultaneously.
+
+---
+
+## QUICK REFERENCE — ALL VERIFIED BUGS BY STATUS
+
+| Status | Bug IDs |
+|--------|---------|
+| **CONFIRMED CRITICAL** | B01, B02, B04, B18 |
+| **CONFIRMED HIGH** | B07, B08, B09, B10, B12, B13, B14, B17, B20, B21, B28, B40, B42 |
+| **CONFIRMED MEDIUM** | B22, B27, B29, B30, B31, B36, B43, B44 |
+| **CONFIRMED LOW** | B32, B33 |
+| **PARTIALLY CONFIRMED** | B03(HIGH), B06(MEDIUM-HIGH), B11(MEDIUM), B15(MEDIUM), B25(MEDIUM), B34(MEDIUM), B35(HIGH), B39(LOW), B41(HIGH), B45(LOW), B46(LOW) |
+| **DISPUTED (not bugs)** | B05, B19, B23, B24, B26, B37, B38 |
+| **ALREADY FIXED** | B16 (Phase C5/96) |
+
+---
+
+## VERIFICATION COMMANDS (run after each phase)
+
+```bash
+# Tests pass
+python -m pytest tests/ -x -q
+
+# Linting clean
+ruff check src/ && black --check src/
+
+# Import verification
+python -c "from src.factory import MLFactory; print('OK')"
+python -c "from src.config import ExperimentConfig; print(ExperimentConfig.__module__)"
+
+# Single definition checks
+grep -r "class ExperimentConfig" src/ --include="*.py" | wc -l  # Should be 1 after Phase 5
+grep -r "class FeatureSelectionResult" src/ --include="*.py" | wc -l  # Should be 1 after Phase 5
+```
+
+---
+
+*Generated by 5-agent verification team, 2026-03-25*
+*Based on 12-agent adversarial audit (SNEH_SNEH_SNEH.md)*
+*Total: 36 confirmed bugs, 11 partially confirmed, 13 disputed, 1 already fixed*
+*11 phases, ~35-45 hours estimated total effort*

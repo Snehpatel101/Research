@@ -334,6 +334,26 @@ class WalkForwardTrainer:
         # this avoids ~80GB of unnecessary DataFrame overhead per window.
         X_np = X.values.astype(np.float32, copy=False)
 
+        # For very large datasets (>10 GB), back X_np with a memory-mapped
+        # temporary file so the OS can page data to disk under memory pressure
+        # instead of triggering OOM kills.
+        _mmap_file = None
+        if X_np.nbytes > 10 * 1024**3:  # >10 GB threshold
+            import tempfile
+
+            _mmap_file = tempfile.NamedTemporaryFile(suffix=".mmap", delete=True)  # noqa: SIM115
+            _mmap_arr = np.memmap(_mmap_file.name, dtype=np.float32, mode="w+", shape=X_np.shape)
+            _mmap_arr[:] = X_np[:]
+            del X_np
+            X_np = _mmap_arr
+            logger.info(
+                f"  X_np backed by mmap ({X_np.nbytes / 1024**3:.1f} GB): {_mmap_file.name}"
+            )
+
+        # Per-window feature selection tracking (B08 fix: prevents future-pattern leakage)
+        all_window_features: list[list[int]] = []
+        feature_col_names = list(X.columns)
+
         for window_idx, (train_idx, test_idx) in enumerate(
             evaluator.split(X, y, label_end_times=label_end_times)
         ):
@@ -343,9 +363,16 @@ class WalkForwardTrainer:
                 f"    Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}"
             )
 
-            # Extract window data as numpy arrays (avoids DataFrame copy overhead)
-            X_train_raw = X_np[train_idx]
-            X_test_raw = X_np[test_idx]
+            # Per-window feature selection: rank features using only this
+            # window's training data to prevent future-pattern leakage.
+            selected_col_idx = self._select_features_for_window(
+                X_np, y, train_idx, feature_col_names, model_name
+            )
+            all_window_features.append(selected_col_idx)
+
+            # Extract window data with selected features only
+            X_train_raw = X_np[train_idx][:, selected_col_idx]
+            X_test_raw = X_np[test_idx][:, selected_col_idx]
             y_train = y.iloc[train_idx]
             y_test = y.iloc[test_idx]
 
@@ -513,6 +540,12 @@ class WalkForwardTrainer:
             del prediction_output, scaler
             release_gpu_memory()
 
+        # Clean up mmap-backed array if used
+        if _mmap_file is not None:
+            del X_np
+            _mmap_file.close()
+            _mmap_file = None
+
         # Build predictions DataFrame
         predictions_df = pd.DataFrame(
             {
@@ -558,6 +591,71 @@ class WalkForwardTrainer:
             model_paths=model_paths,
             total_time=total_time,
         )
+
+    def _select_features_for_window(
+        self,
+        X_np: np.ndarray,
+        y: pd.Series,
+        train_idx: np.ndarray,
+        feature_names: list[str],
+        model_name: str,
+    ) -> list[int]:
+        """Select features using only this window's training data.
+
+        Uses a lightweight RandomForest importance ranking (fast) on the window's
+        training subset, respecting the model contract's max_features.
+        Falls back to all features if ranking fails.
+
+        For 3D/4D models (sequences/multi-stream), feature selection is skipped
+        because flattened features are interdependent (sequence positions).
+
+        Args:
+            X_np: Full feature array (n_samples, n_features).
+            y: Full label series.
+            train_idx: Indices for this window's training data.
+            feature_names: Column names for X_np.
+            model_name: Model name (for contract lookup).
+
+        Returns:
+            List of column indices to use for this window.
+        """
+        contract = get_model_contract(model_name)
+        max_feat = contract.max_features
+        n_features = len(feature_names)
+
+        # Skip for 3D/4D models -- flattened features are interdependent
+        if contract.input_rank in (DataRank.SEQUENCE_3D, DataRank.MULTI_TF_4D):
+            return list(range(n_features))
+
+        # If already within contract limits, use all features
+        if n_features <= max_feat:
+            return list(range(n_features))
+
+        try:
+            from sklearn.ensemble import RandomForestClassifier
+
+            X_win = X_np[train_idx]
+            y_win = y.iloc[train_idx].values
+
+            # Subsample for speed if window is large
+            max_rows = 20_000
+            if len(X_win) > max_rows:
+                step = len(X_win) // max_rows
+                X_win = X_win[::step]
+                y_win = y_win[::step]
+
+            clf = RandomForestClassifier(n_estimators=30, max_depth=5, random_state=42, n_jobs=-1)
+            clf.fit(X_win, y_win)
+            importances = clf.feature_importances_
+            top_idx = np.argsort(importances)[::-1][:max_feat].tolist()
+            top_idx.sort()  # Keep original column order
+
+            logger.debug(f"    Window feature selection: {n_features} -> {len(top_idx)} features")
+            return top_idx
+
+        except Exception as e:
+            logger.warning(f"    Window feature selection failed ({e}), using all features")
+            return list(range(n_features))
 
     @staticmethod
     def _create_sequences(X: np.ndarray, seq_len: int) -> np.ndarray:

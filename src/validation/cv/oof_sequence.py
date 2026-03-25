@@ -17,7 +17,7 @@ from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 
 from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
-from .oof_core import OOFPrediction
+from .oof_core import OOFPrediction, _get_prob_column_names
 from .purged_kfold import PurgedKFold
 from .sequence_cv import SequenceCVBuilder
 
@@ -134,6 +134,13 @@ class SequenceOOFGenerator:
         # Each chunk materialises at most chunk_size * seq_len * n_features floats.
         val_chunk_size = 5000
 
+        # ONE backup of the raw feature array before the CV loop.
+        # fit_transform_fold scales in-place, so without protection seq_builder._X
+        # would be permanently modified after fold 1.  Previously we called
+        # raw_X.copy() every fold (5x); now we copy once and restore via
+        # np.copyto (in-place overwrite, no new allocation).
+        raw_X_backup = seq_builder._X.copy()
+
         # Generate predictions fold by fold
         for fold_idx, (train_idx, val_idx) in enumerate(
             self.cv.split(X, y, label_end_times=label_end_times)
@@ -144,15 +151,17 @@ class SequenceOOFGenerator:
             # This avoids building a giant 3D array, flattening, scaling, and
             # reshaping.  Instead we scale the compact 2D data ONCE, then build
             # 3D windows from the already-scaled values.
+
+            # Restore raw features from backup (in-place, no new allocation)
+            np.copyto(seq_builder._X, raw_X_backup)
             raw_X = seq_builder._X  # (n_samples, n_features)
             X_train_raw = raw_X[train_idx]
 
             # For transformation we scale ALL rows so that lookback windows
             # that reach into data outside the fold are also correctly scaled.
-            # .copy() is required because fit_transform_fold scales in-place —
-            # without it, raw_X (which is seq_builder._X) gets permanently
-            # modified, corrupting data for subsequent folds.
-            scaling_result = fold_scaler.fit_transform_fold(X_train_raw, raw_X.copy())
+            # fit_transform_fold scales in-place — the backup/restore pattern
+            # above protects seq_builder._X from permanent modification.
+            scaling_result = fold_scaler.fit_transform_fold(X_train_raw, raw_X)
 
             # scaled_builder shares boundaries/labels but uses scaled features
             scaled_builder = seq_builder.with_scaled_data(scaling_result.X_val_scaled)
@@ -311,19 +320,18 @@ class SequenceOOFGenerator:
         # Phase 4 SNwH: Store original indices for alignment
         valid_indices = np.where(~np.isnan(oof_preds))[0]
 
-        # Build result DataFrame
-        oof_df = pd.DataFrame(
-            {
-                "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-                "y_true": y.values,
-                f"{model_name}_prob_short": oof_probs[:, 0],
-                f"{model_name}_prob_neutral": oof_probs[:, 1],
-                f"{model_name}_prob_long": oof_probs[:, 2],
-                f"{model_name}_pred": oof_preds,
-                f"{model_name}_confidence": oof_confidence,
-                "fold_id": oof_fold_ids,
-            }
-        )
+        # Build result DataFrame with dynamic probability columns
+        prob_col_names = _get_prob_column_names(model_name, n_classes)
+        oof_data: dict[str, Any] = {
+            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+            "y_true": y.values,
+        }
+        for i, col_name in enumerate(prob_col_names):
+            oof_data[col_name] = oof_probs[:, i]
+        oof_data[f"{model_name}_pred"] = oof_preds
+        oof_data[f"{model_name}_confidence"] = oof_confidence
+        oof_data["fold_id"] = oof_fold_ids
+        oof_df = pd.DataFrame(oof_data)
 
         return OOFPrediction(
             model_name=model_name,

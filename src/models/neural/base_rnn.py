@@ -849,7 +849,10 @@ class BaseRNNModel(BaseModel):
 
                 if weights is not None:
                     # Use reduction='none' to get per-sample losses for weighting
-                    criterion_unreduced = nn.CrossEntropyLoss(reduction="none")
+                    # Preserve class_weights if active (criterion already has them)
+                    criterion_unreduced = nn.CrossEntropyLoss(
+                        weight=criterion.weight, reduction="none"
+                    )
                     per_sample_loss = criterion_unreduced(logits, y_batch)
                     loss = (per_sample_loss * weights).mean()
                 else:

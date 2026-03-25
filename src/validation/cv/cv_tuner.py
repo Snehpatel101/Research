@@ -107,25 +107,19 @@ class TimeSeriesOptunaTuner:
         # For a 1.6M-row TCN dataset (13,620 flattened features), 100 trials x 5
         # folds each allocating numpy copies via fancy indexing consumes ~120 GB.
         # Capping at max_samples rows keeps peak RSS under ~8 GB for float32 3D data.
+        #
+        # IMPORTANT: Use strided (every-Nth) sampling instead of random to preserve
+        # temporal structure. Random sampling collapses temporal gaps so that
+        # purge/embargo becomes ~2 real bars on 1.6M rows.
         max_samples = self.max_samples
         original_n = X.shape[0] if isinstance(X, np.ndarray) else len(X)
         if original_n > max_samples:
-            logger.info(f"  Subsampling {original_n} -> {max_samples} rows for Optuna (stratified)")
-            rng = np.random.default_rng(seed=42)
-            y_arr = y if isinstance(y, np.ndarray) else y.to_numpy()
-            classes, class_counts = np.unique(y_arr, return_counts=True)
-            # Stratified: allocate quota per class proportional to its share
-            class_fractions = class_counts / original_n
-            class_quotas = np.floor(class_fractions * max_samples).astype(int)
-            # Any remainder goes to the largest class
-            remainder = max_samples - class_quotas.sum()
-            class_quotas[np.argmax(class_counts)] += remainder
-            sub_indices = []
-            for cls, quota in zip(classes, class_quotas, strict=True):
-                cls_idx = np.where(y_arr == cls)[0]
-                chosen = rng.choice(cls_idx, size=min(quota, len(cls_idx)), replace=False)
-                sub_indices.append(chosen)
-            sub_indices = np.sort(np.concatenate(sub_indices))
+            stride = max(1, original_n // max_samples)
+            sub_indices = np.arange(0, original_n, stride)[:max_samples]
+            logger.info(
+                f"  Subsampling {original_n} -> {len(sub_indices)} rows for Optuna "
+                f"(strided, every {stride}th sample)"
+            )
             # Apply to X
             if isinstance(X, np.ndarray):
                 X = X[sub_indices]
@@ -142,6 +136,15 @@ class TimeSeriesOptunaTuner:
                     sample_weights = sample_weights[sub_indices]
                 else:
                     sample_weights = sample_weights.iloc[sub_indices].reset_index(drop=True)
+            # Scale embargo proportionally: subsampled data has compressed indices
+            # so the original embargo_bars must be scaled down by the same stride.
+            if hasattr(self.cv, "config") and hasattr(self.cv.config, "embargo_bars"):
+                orig_embargo = self.cv.config.embargo_bars
+                scaled_embargo = max(1, orig_embargo // stride)
+                self.cv.config.embargo_bars = scaled_embargo
+                logger.info(
+                    f"  Scaled embargo: {orig_embargo} -> {scaled_embargo} " f"(stride={stride})"
+                )
 
         # --- float32 conversion: halves memory for all 500 fold slices ---
         if isinstance(X, np.ndarray):

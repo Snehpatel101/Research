@@ -73,7 +73,7 @@ class BacktestConfig:
 
     initial_equity: float = 100000.0
     position_sizing: str = "fixed_contracts"
-    execution_model: ExecutionModel = ExecutionModel.MARKET_ON_CLOSE
+    execution_model: ExecutionModel = ExecutionModel.MARKET_ON_OPEN
     allow_short: bool = True
     allow_pyramiding: bool = False
     max_positions: int = 1

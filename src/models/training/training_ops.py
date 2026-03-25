@@ -109,6 +109,7 @@ class TrainingOpsMixin:
                     max_epochs=self.config.max_epochs,
                     batch_size=getattr(self.config, "batch_size", None),
                     cv_method=self.config.cv_method,
+                    embargo_bars=getattr(self.config, "embargo_bars", None),
                 )
             )
 
@@ -240,6 +241,7 @@ class TrainingOpsMixin:
             max_epochs=self.config.max_epochs,
             batch_size=getattr(self.config, "batch_size", None),
             cv_method=self.config.cv_method,
+            embargo_bars=getattr(self.config, "embargo_bars", None),
         )
 
         training_degraded = False
@@ -274,6 +276,7 @@ class TrainingOpsMixin:
                 max_epochs=self.config.max_epochs,
                 cv_method=self.config.cv_method,
                 batch_size=reduced_batch,
+                embargo_bars=getattr(self.config, "embargo_bars", None),
             )
             result = self._model_service.train_model(request)
             training_degraded = True
@@ -840,16 +843,22 @@ class TrainingOpsMixin:
         if primary_trainer is None:
             raise RuntimeError("Primary model training failed")
 
-        primary_train_classes = primary_trainer.model.predict(X_train).class_predictions
+        # Generate OOF predictions for training set to prevent memorization bias.
+        # In-sample predictions would leak: the model has already seen these samples.
+        # OOF predictions use cross-validation so each sample is predicted by a model
+        # that never saw it during training.
+        logger.info("    Generating OOF predictions for meta-labels (anti-leakage)...")
+        primary_train_classes = self._generate_meta_label_oof(primary_model_name, X_train, y_train)
+        # Val predictions from the full primary model are correct (unseen data)
         primary_val_classes = primary_trainer.model.predict(X_val).class_predictions
         primary_train_acc = (primary_train_classes == y_train).mean()
         primary_val_acc = (primary_val_classes == y_val).mean()
         logger.info(
-            f"    Primary train/val accuracy: {primary_train_acc:.4f}/{primary_val_acc:.4f}"
+            f"    Primary OOF-train/val accuracy: {primary_train_acc:.4f}/{primary_val_acc:.4f}"
         )
 
         # Stage 3: Create meta-labels (1=correct, 0=wrong)
-        logger.info("\n  STAGE 3: Creating meta-labels...")
+        logger.info("\n  STAGE 3: Creating meta-labels (from OOF predictions)...")
         meta_labels_train = (primary_train_classes == y_train).astype(int)
         meta_labels_val = (primary_val_classes == y_val).astype(int)
         logger.info(
@@ -951,6 +960,78 @@ class TrainingOpsMixin:
         if X.ndim == 2:
             return X
         return X.reshape(X.shape[0], -1)
+
+    def _generate_meta_label_oof(
+        self,
+        primary_model_name: str,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        n_splits: int = 3,
+    ) -> np.ndarray:
+        """Generate OOF predictions for meta-label training set.
+
+        Instead of using in-sample predictions (memorization bias), this uses
+        cross-validation so each training sample is predicted by a model that
+        never saw it during training.
+
+        Args:
+            primary_model_name: Name of the primary direction model.
+            X_train: Training features (2D flattened).
+            y_train: Training labels.
+            n_splits: Number of CV folds for OOF generation.
+
+        Returns:
+            OOF class predictions array, same length as X_train.
+        """
+        from src.models.registry import ModelRegistry
+        from src.validation.cv import PurgedKFold, PurgedKFoldConfig
+
+        n_samples = len(X_train)
+        oof_preds = np.full(n_samples, -99, dtype=np.int64)
+
+        # Use PurgedKFold with the pipeline's embargo to respect temporal structure
+        embargo = min(self.config.embargo_bars, int(n_samples * 0.10))
+        cv_config = PurgedKFoldConfig(
+            n_splits=n_splits,
+            purge_bars=self.config.purge_bars,
+            embargo_bars=embargo,
+        )
+        cv = PurgedKFold(cv_config)
+
+        # Create a lightweight index DataFrame for splitting
+        X_for_cv = pd.DataFrame(index=range(n_samples))
+        y_for_cv = pd.Series(y_train)
+
+        for _fold_idx, (tr_idx, val_idx) in enumerate(cv.split(X_for_cv, y_for_cv)):
+            fold_model = ModelRegistry.create(primary_model_name)
+            fold_model.fit(
+                X_train=X_train[tr_idx],
+                y_train=y_train[tr_idx],
+                X_val=X_train[val_idx],
+                y_val=y_train[val_idx],
+            )
+            fold_preds = fold_model.predict(X_train[val_idx]).class_predictions
+            oof_preds[val_idx] = fold_preds
+            del fold_model
+            gc.collect()
+
+        # Any samples not covered by CV (due to embargo) get the primary model prediction
+        uncovered = oof_preds == -99
+        n_uncovered = uncovered.sum()
+        if n_uncovered > 0:
+            logger.debug(
+                f"    Meta-label OOF: {n_uncovered} samples uncovered by CV, "
+                f"using temporal fallback"
+            )
+            # Fallback: assign the mode class (neutral=0) for uncovered samples
+            # to avoid leaking in-sample info
+            oof_preds[uncovered] = 0
+
+        logger.info(
+            f"    Meta-label OOF: {n_samples} samples, {n_splits} folds, "
+            f"{n_uncovered} uncovered"
+        )
+        return oof_preds
 
     def _create_meta_model(self, model_name: str) -> Any:
         """Create meta-model for bet sizing (logistic, random_forest, xgboost, lightgbm, catboost)."""

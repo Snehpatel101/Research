@@ -37,6 +37,7 @@ class ModelTrainingRequest:
     max_epochs: int | None = None  # Cap epochs for neural models in Optuna
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
     batch_size: int | None = None  # Override batch size (used by OOM retry)
+    embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
 
 
 @dataclass
@@ -316,6 +317,7 @@ class ModelTrainingService:
             scoring=request.scoring,
             max_epochs=request.max_epochs,
             cv_method=request.cv_method,
+            embargo_bars=request.embargo_bars,
         )
 
         result = tuning_service.optimize(tuning_request)

@@ -24,6 +24,22 @@ from .purged_kfold import PurgedKFold
 logger = logging.getLogger(__name__)
 
 
+def _get_prob_column_names(model_name: str, n_classes: int) -> list[str]:
+    """Return probability column names based on n_classes.
+
+    n_classes=3: prob_short, prob_neutral, prob_long (backward compatible)
+    n_classes=2: prob_0, prob_1
+    Otherwise:   prob_0, prob_1, ..., prob_{n-1}
+    """
+    if n_classes == 3:
+        return [
+            f"{model_name}_prob_short",
+            f"{model_name}_prob_neutral",
+            f"{model_name}_prob_long",
+        ]
+    return [f"{model_name}_prob_{i}" for i in range(n_classes)]
+
+
 # =============================================================================
 # DATA CLASSES
 # =============================================================================
@@ -261,19 +277,18 @@ class CoreOOFGenerator:
                 f"{int(np.isnan(oof_preds).sum())} samples missing predictions."
             )
 
-        # Build result DataFrame
-        oof_df = pd.DataFrame(
-            {
-                "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-                "y_true": y.values,
-                f"{model_name}_prob_short": oof_probs[:, 0],
-                f"{model_name}_prob_neutral": oof_probs[:, 1],
-                f"{model_name}_prob_long": oof_probs[:, 2],
-                f"{model_name}_pred": oof_preds,
-                f"{model_name}_confidence": oof_confidence,
-                "fold_id": oof_fold_ids,
-            }
-        )
+        # Build result DataFrame with dynamic probability columns
+        prob_col_names = _get_prob_column_names(model_name, n_classes)
+        oof_data: dict[str, Any] = {
+            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+            "y_true": y.values,
+        }
+        for i, col_name in enumerate(prob_col_names):
+            oof_data[col_name] = oof_probs[:, i]
+        oof_data[f"{model_name}_pred"] = oof_preds
+        oof_data[f"{model_name}_confidence"] = oof_confidence
+        oof_data["fold_id"] = oof_fold_ids
+        oof_df = pd.DataFrame(oof_data)
 
         return OOFPrediction(
             model_name=model_name,
@@ -309,12 +324,13 @@ class CoreOOFGenerator:
         y_array = y_true.values
 
         for model_name, oof_pred in oof_results.items():
-            # Get probability columns
+            # Get probability columns dynamically (supports binary and 3-class)
             prob_cols = [
-                f"{model_name}_prob_short",
-                f"{model_name}_prob_neutral",
-                f"{model_name}_prob_long",
+                c for c in oof_pred.predictions.columns if c.startswith(f"{model_name}_prob_")
             ]
+            if not prob_cols:
+                logger.warning(f"  {model_name}: No probability columns found")
+                continue
             probs = oof_pred.predictions[prob_cols].values
 
             # Handle NaN predictions (keep them as-is)

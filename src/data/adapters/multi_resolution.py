@@ -489,9 +489,9 @@ class MultiResolution4DDataset(Dataset):
         weight = self._weights[target_idx]
 
         return (
-            torch.tensor(X_4d, dtype=self._dtype),
-            torch.tensor(y, dtype=self._dtype),
-            torch.tensor(weight, dtype=self._dtype),
+            torch.as_tensor(X_4d).to(self._dtype),
+            torch.as_tensor(y).to(self._dtype),
+            torch.as_tensor(weight).to(self._dtype),
         )
 
     @property

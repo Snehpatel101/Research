@@ -1130,6 +1130,9 @@ class ModelBundle:
         result: dict[str, pd.DataFrame] = {}
         for tf in mtf_timeframes:
             resampled = df.resample(tf, closed="left", label="left").agg(ohlcv_agg).dropna()
+            # Anti-lookahead: shift(1) ensures bar N only sees the COMPLETED
+            # higher-TF bar (bar N-1), matching factory.py training path.
+            resampled = resampled.shift(1).dropna()
             result[tf] = resampled
             logger.debug(
                 f"_generate_mtf_dataframes: resampled 1min → {tf} " f"({len(resampled)} bars)"

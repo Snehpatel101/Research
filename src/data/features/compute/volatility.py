@@ -17,12 +17,22 @@ from src.data.features.compute._helpers import (
 )
 
 
-def _annualization_factor(bars_per_day: int = 1) -> float:
-    """Annualization factor: sqrt(trading_days * bars_per_day)."""
+def get_annualization_factor(bars_per_day: int = 78) -> float:
+    """Annualization factor: sqrt(trading_days * bars_per_day).
+
+    Args:
+        bars_per_day: Number of bars per trading day.
+            Default 78 (5-min bars for 6.5h session).
+            Use 1 for daily bars, 390 for 1-min bars.
+
+    Returns:
+        sqrt(252 * bars_per_day)
+    """
     return float(np.sqrt(252 * bars_per_day))
 
 
-_ANNUAL_FACTOR = _annualization_factor(1)
+# Module-level default for backward compatibility (5-min intraday bars)
+_ANNUAL_FACTOR = get_annualization_factor(78)
 
 # =============================================================================
 # CACHING INFRASTRUCTURE

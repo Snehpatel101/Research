@@ -23,6 +23,7 @@ class TuningRequest:
     scoring: str = "f1_weighted"  # Optimization metric (from PipelineConfig.optuna_metric)
     max_epochs: int | None = None  # Cap max_epochs for neural models during tuning
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
+    embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
 
 
 @dataclass
@@ -74,12 +75,14 @@ class HyperparameterTuningService:
         )
 
         # Create CV splitter based on method
+        # Use pipeline's actual embargo_bars if provided, else fallback to horizon*2
+        embargo = request.embargo_bars if request.embargo_bars is not None else request.horizon * 2
         if request.cv_method == "cpcv":
             cv = self._create_cpcv(request)
         else:
             cv_config = PurgedKFoldConfig(
                 n_splits=request.n_splits,
-                embargo_bars=request.horizon * 2,
+                embargo_bars=embargo,
             )
             cv = PurgedKFold(cv_config)
 

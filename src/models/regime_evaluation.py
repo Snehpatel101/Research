@@ -695,6 +695,7 @@ class RegimeEvaluator:
         """
         self.classifier = classifier or RegimeClassifier()
         self.min_samples_per_regime = min_samples_per_regime
+        self._bars_per_year: float = 252 * 78  # default for 5-min bars
 
     def evaluate(
         self,
@@ -753,6 +754,13 @@ class RegimeEvaluator:
 
         trend_regimes = self.classifier.classify_trend(prices_aligned)
         tod_regimes = self.classifier.classify_time_of_day(timestamps)
+
+        # Derive bars_per_year from timestamp frequency
+        if len(timestamps) >= 3:
+            deltas = pd.Series(timestamps).diff().dropna()
+            median_seconds = deltas.dt.total_seconds().median()
+            if median_seconds > 0:
+                self._bars_per_year = (365.25 * 24 * 3600) / median_seconds
 
         # Calculate overall metrics
         overall_metrics = self._calculate_metrics(y_true, y_pred, y_proba, returns, "overall")
@@ -901,11 +909,9 @@ class RegimeEvaluator:
         # Strategy returns: long when pred=1, short when pred=-1, flat when pred=0
         strategy_returns = returns * y_pred
 
-        # Sharpe ratio (annualized assuming 5-min bars, ~78 trading days per year)
-        # 252 days * 6.5 hours * 12 bars/hour = ~19,656 bars/year
-        # For simplicity, use sqrt(252) scaling from daily approximation
+        # Sharpe ratio (annualized from data-derived frequency)
         if strategy_returns.std() > 0:
-            sharpe = strategy_returns.mean() / strategy_returns.std() * np.sqrt(252 * 78)
+            sharpe = strategy_returns.mean() / strategy_returns.std() * np.sqrt(self._bars_per_year)
         else:
             sharpe = 0.0
 

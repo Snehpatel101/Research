@@ -610,9 +610,13 @@ class MLFactory:
                 .agg(ohlcv_agg)
                 .dropna()
             )
+            # Shift by 1 bar to prevent lookahead: bar N should only see
+            # the COMPLETED higher-TF bar (bar N-1), not the current one
+            # which may contain up to 59 minutes of future data.
+            resampled = resampled.shift(1).dropna()
             normalized_key = normalize_timeframe(tf)
             additional_dfs[normalized_key] = resampled
-            self._log(f"    {normalized_key}: {len(resampled)} bars")
+            self._log(f"    {normalized_key}: {len(resampled)} bars (shifted)")
 
         return additional_dfs
 

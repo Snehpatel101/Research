@@ -7933,6 +7933,55 @@ An 8-agent parallel audit of the entire codebase identified critical inconsisten
 
 ---
 
+## Phases 103-105 (THEETASKLIST P1-P3): Critical Leakage + Accuracy + Memory | 2026-03-25 | COMPLETE
+
+**Impact:** 17 bug fixes, 12 new regression tests, 452/452 tests passing
+
+### Summary
+
+Implemented the first 3 phases from THEETASKLIST (adversarial audit remediation). Used a 5-agent team (3 parallel implementers + 1 verifier + 1 test writer). Independent verifier confirmed 13/17 PASS, 3 PARTIAL (subsequently fixed by lead), 0 FAIL.
+
+### Phase 103 — Critical Leakage Fixes (7 tasks)
+| ID | Bug | Fix | Files |
+|----|-----|-----|-------|
+| 1.1 | B01: 4D OHLCV lookahead (59 min future data) | `.shift(1).dropna()` on higher-TF resample | factory.py, bundle.py |
+| 1.2 | B02: Meta-label in-sample memorization | OOF cross-validation via `_generate_meta_label_oof()` | training_ops.py |
+| 1.3 | B04: Optuna ATR 1.87x mismatch | `alpha = 1.0 / period` (Wilder's EMA) | five_dimension_objective.py |
+| 1.4 | B07: Random subsampling destroys temporal structure | Strided every-Nth sampling + proportional embargo scaling | cv_tuner.py |
+| 1.5 | B08: WF global feature selection leaks future | Per-window `_select_features_for_window()` | unified_orchestrator.py, walk_forward.py |
+| 1.6 | B12: HP tuning embargo 144x too small | `embargo_bars` field wired from PipelineConfig | hyperparameter_tuning.py, model_training.py, training_ops.py |
+| 1.7 | B14: 9 regime features no shift(1) | Added shift(1) to 3 base regime functions (6 derived inherit) | regime.py |
+
+### Phase 104 — Critical Accuracy Fixes (5 tasks)
+| ID | Bug | Fix | Files |
+|----|-----|-----|-------|
+| 2.1 | B03: Class weights dropped with sample_weights | `weight=criterion.weight` on unreduced criterion | base_rnn.py |
+| 2.2 | B06: Same-bar backtest execution | Default MARKET_ON_OPEN (was MARKET_ON_CLOSE) | backtest.py |
+| 2.3 | B10: Binary mode OOF IndexError | `_get_prob_column_names()` dynamic n_classes | oof_core.py, oof_sequence.py, oof_generation.py |
+| 2.4 | B17: Volatility annualization wrong by 8.8x | `get_annualization_factor(bars_per_day=78)` | volatility.py |
+| 2.5 | B25: Hardcoded 252*78 in 2 files | Data-derived frequency + configurable factor | regime_evaluation.py, scoring.py |
+
+### Phase 105 — Critical Memory Fixes (5 tasks)
+| ID | Bug | Fix | Files |
+|----|-----|-----|-------|
+| 3.1 | B18: torch.tensor() full copy per __getitem__ | `torch.as_tensor().to(dtype)` | multi_resolution.py |
+| 3.2 | B21: X_np 48.8 GB retained in RAM | np.memmap for >10 GB arrays | walk_forward.py |
+| 3.3 | B41: Redundant .copy() on fancy-indexed 4D | Removed .copy() (fancy index already copies) | oof_generation.py |
+| 3.4 | OPT-1D: 5x raw_X.copy() per fold | Single backup + np.copyto restore | oof_sequence.py |
+| 3.5 | B40: 36 regime models accumulate on GPU | model.cpu() + empty_cache() between regimes | regime_aware.py |
+
+### Verification
+- 452/452 tests passing (12 new regression tests)
+- `ruff check src/` — 0 errors
+- `black --check src/` — all formatted
+- Independent verifier agent: 13/17 PASS, 3 PARTIAL → all 3 subsequently fixed
+- PARTIAL fixes applied: inference bundle.py shift(1), embargo_bars wiring through ModelTrainingRequest
+
+### New Test File
+- `tests/test_phases_1_3.py` (549 lines, 12 tests covering all critical fixes)
+
+---
+
 <!-- TEMPLATE FOR FUTURE PHASES
 ## Phase N: [Title] | YYYY-MM-DD | [STATUS]
 

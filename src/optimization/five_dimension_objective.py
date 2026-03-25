@@ -438,7 +438,7 @@ def _compute_atr(df: pd.DataFrame, period: int = 14) -> np.ndarray:
     true_range = np.maximum(np.maximum(tr1, tr2), tr3)
 
     # EMA of true range
-    alpha = 2.0 / (period + 1)
+    alpha = 1.0 / period  # Wilder's EMA, matching triple_barrier.py and backtest.py
     atr = np.zeros_like(true_range)
     atr[0] = true_range[0]
     for i in range(1, len(true_range)):

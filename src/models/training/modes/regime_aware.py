@@ -588,6 +588,19 @@ class RegimeAwareTrainer:
             # Store trainer
             self.trainers[regime] = trainer
 
+            # Flush neural model to CPU and clear CUDA cache to prevent
+            # 36 model objects (3 regimes x 12 models) from accumulating on GPU
+            if (
+                hasattr(trainer, "model")
+                and trainer.model is not None
+                and hasattr(trainer.model, "cpu")
+            ):
+                trainer.model.cpu()
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             # Save model
             model_path = None
             if save_models:

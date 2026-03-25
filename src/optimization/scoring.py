@@ -88,7 +88,21 @@ def get_score_fn(metric_name: str) -> Callable[[np.ndarray, np.ndarray], float]:
 # Matches the logic in five_dimension_objective.py:441-487.
 # =============================================================================
 
-_ANNUALIZATION_FACTOR = np.sqrt(252 * 78)  # 5-min bars, 78 per 6.5h session (252 trading days)
+_DEFAULT_BARS_PER_YEAR = 252 * 78  # 5-min bars, 78 per 6.5h session (252 trading days)
+_annualization_factor = float(np.sqrt(_DEFAULT_BARS_PER_YEAR))
+
+
+def set_annualization_factor(bars_per_year: float) -> None:
+    """Configure the annualization factor for proxy Sharpe/Sortino metrics.
+
+    Call this once at pipeline start with the correct data frequency.
+    Common values: 252 (daily), 252*78 (5-min), 252*390 (1-min), 365*24 (hourly crypto).
+
+    Args:
+        bars_per_year: Number of bars per year for annualization.
+    """
+    global _annualization_factor
+    _annualization_factor = float(np.sqrt(bars_per_year))
 
 
 def _proxy_sharpe(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -97,7 +111,7 @@ def _proxy_sharpe(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     std = returns.std()
     if std < 1e-8:
         return 0.0
-    return float((returns.mean() / std) * _ANNUALIZATION_FACTOR)
+    return float((returns.mean() / std) * _annualization_factor)
 
 
 def _proxy_sortino(y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -105,11 +119,11 @@ def _proxy_sortino(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     returns = np.where(y_pred == y_true, 1.0, -1.0)
     downside = returns[returns < 0]
     if len(downside) == 0:
-        return float(returns.mean() * _ANNUALIZATION_FACTOR)
+        return float(returns.mean() * _annualization_factor)
     downside_std = downside.std()
     if downside_std < 1e-8:
         return 0.0
-    return float((returns.mean() / downside_std) * _ANNUALIZATION_FACTOR)
+    return float((returns.mean() / downside_std) * _annualization_factor)
 
 
 def _proxy_profit_factor(y_true: np.ndarray, y_pred: np.ndarray) -> float:

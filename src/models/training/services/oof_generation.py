@@ -13,6 +13,7 @@ from src.data.adapters import PreparedData
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 from src.validation.cv import OOFGenerator, OOFPrediction, PurgedKFold, PurgedKFoldConfig
+from src.validation.cv.oof_core import _get_prob_column_names
 from src.validation.cv.oof_validation import OOFValidator
 
 logger = logging.getLogger(__name__)
@@ -273,8 +274,9 @@ class OOFGenerationService:
             all_fold_indices.append((train_idx, val_idx))
 
             # Slice 4D arrays directly by sample index
-            X_train_fold = X_4d[train_idx].copy()
-            X_val_fold = X_4d[val_idx].copy()
+            # Fancy indexing already returns a new array (copy); .copy() is redundant
+            X_train_fold = X_4d[train_idx]
+            X_val_fold = X_4d[val_idx]
             y_train_fold = y[train_idx]
             y_val_fold = y[val_idx]
 
@@ -365,19 +367,18 @@ class OOFGenerationService:
                 f"{int(np.isnan(oof_preds).sum())} samples missing predictions."
             )
 
-        # Build result DataFrame
-        oof_df = pd.DataFrame(
-            {
-                "datetime": range(n_samples),
-                "y_true": y,
-                f"{model_name}_prob_short": oof_probs[:, 0],
-                f"{model_name}_prob_neutral": oof_probs[:, 1],
-                f"{model_name}_prob_long": oof_probs[:, 2],
-                f"{model_name}_pred": oof_preds,
-                f"{model_name}_confidence": oof_confidence,
-                "fold_id": oof_fold_ids,
-            }
-        )
+        # Build result DataFrame with dynamic probability columns
+        prob_col_names = _get_prob_column_names(model_name, n_classes)
+        oof_data: dict[str, Any] = {
+            "datetime": range(n_samples),
+            "y_true": y,
+        }
+        for i, col_name in enumerate(prob_col_names):
+            oof_data[col_name] = oof_probs[:, i]
+        oof_data[f"{model_name}_pred"] = oof_preds
+        oof_data[f"{model_name}_confidence"] = oof_confidence
+        oof_data["fold_id"] = oof_fold_ids
+        oof_df = pd.DataFrame(oof_data)
 
         valid_indices = np.where(~np.isnan(oof_preds))[0]
 

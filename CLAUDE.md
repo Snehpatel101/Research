@@ -554,6 +554,29 @@ src/
 - New files: `timeframe_budget.py`, `regime_selection.py` in `src/optimization/feature_selection/`
 - 7 files modified, 337/337 tests passing (20 new), ruff + black clean
 
+**Phases 103-105 (THEETASKLIST Phases 1-3): COMPLETE — Critical Leakage + Accuracy + Memory Fixes (17 tasks, 12 new tests)**
+- Phase 103 (THEETASKLIST P1): 7 critical leakage fixes
+  - 4D OHLCV anti-lookahead shift(1) in factory.py + inference bundle.py
+  - Meta-label OOF predictions (replaces in-sample memorization bias)
+  - Optuna ATR Wilder's EMA (alpha=1/n, was 2/(n+1) — 1.87x mismatch)
+  - Strided temporal subsampling (replaces random stratified that destroyed temporal structure)
+  - Walk-forward per-window feature selection (was global, leaking future patterns)
+  - HP tuning embargo wired from PipelineConfig (was hardcoded horizon*2)
+  - Regime feature shift(1) on all 9 compute functions
+- Phase 104 (THEETASKLIST P2): 5 critical accuracy fixes
+  - Neural class weights preserved when sample_weights active
+  - Default execution model MARKET_ON_OPEN (was MARKET_ON_CLOSE)
+  - Binary mode OOF dynamic column names (n_classes=2/3)
+  - Volatility annualization factor bars_per_day=78 (was 1)
+  - Hardcoded annualization replaced with data-derived factors
+- Phase 105 (THEETASKLIST P3): 5 critical memory fixes
+  - torch.as_tensor in MultiResolutionDataset (shares memory, no copy)
+  - Walk-forward X_np mmap for >10 GB arrays
+  - Removed redundant .copy() in 4D OOF (~28.5 GB savings)
+  - OOF sequence single backup + np.copyto restore (~3.3 GB savings)
+  - Regime model GPU cleanup between regimes
+- 12 new regression tests, 452/452 tests passing, ruff + black clean
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---

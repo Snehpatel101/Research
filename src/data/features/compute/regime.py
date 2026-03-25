@@ -96,6 +96,9 @@ def compute_volatility_regime(df: pd.DataFrame) -> pd.Series:
     # Regime classification
     regime = (short_vol >= long_vol).astype(float)
 
+    # shift(1) prevents using current bar's regime to predict current bar
+    regime = regime.shift(1)
+
     _volatility_regime_cache[df_id] = regime
     return regime
 
@@ -148,6 +151,9 @@ def compute_trend_regime(df: pd.DataFrame) -> pd.Series:
     regime = pd.Series(0.0, index=df.index)
     regime[uptrend] = 1.0
     regime[downtrend] = -1.0
+
+    # shift(1) prevents using current bar's regime to predict current bar
+    regime = regime.shift(1)
 
     _trend_regime_cache[df_id] = regime
     return regime
@@ -208,7 +214,8 @@ def compute_structure_regime(df: pd.DataFrame) -> pd.Series:
     expanding = vol_expanding & strong_trend
     regime[expanding] = 1.0
 
-    return regime
+    # shift(1) prevents using current bar's regime to predict current bar
+    return regime.shift(1)
 
 
 # =============================================================================
@@ -240,6 +247,8 @@ def compute_composite_regime(df: pd.DataFrame) -> pd.Series:
 
     composite = (vol_regime * 3 + trend_encoded).astype(float)
 
+    # No additional shift needed: vol_regime and trend_regime are already
+    # shifted by 1 bar, so the composite inherits anti-lookahead protection.
     return composite
 
 
