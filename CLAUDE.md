@@ -619,7 +619,7 @@ src/
 - Serialization/safety: ExperimentConfig YAML round-trip fixed; TrainerConfig.to_dict field-driven; AdapterScaler float32 stat persistence; `tar.extractall(filter="data")`; RSI numba short-input guard; CLI `typer.Exit` no longer swallowed by blanket except (success paths were exiting 1); `ml run --resume` added
 - Cleanup: 21,193 deletions / 838 insertions across 124 files, all grep-verified zero-consumer — dead second feature engine (18 modules) + legacy selection stack, broken MLPipeline shim, dead second CLI, 7 vestigial trainer files, dead optimization modules, 5 stale scripts, module-level matplotlib backend override removed
 - Verification infra: `pyrightconfig.json` added (1,234 errors → 0, real sites fixed not suppressed), 8 new behavioral test files (~125 tests: E2E, bundle roundtrip, WF OOF schema, barrier parity, calibrator flow, config seams, scaler persistence, CLI smoke); suite grew 475 → ~600 tests, ruff + black clean
-- OPEN DECISIONS pending user (next-phase candidates): serving/monitoring chain (wire or delete), Phase 52 special-mode bundles (wire or delete), Phase 99-102 governance modules (wire into pipeline or move to experimental), `ModelContract.sequence_length` not honored in standard mode, 5d-optimization island (tests-only), core `AdapterResult`/`TrainingResult` duplicate-class consolidation, `ExperimentConfig` unused `to_*_config` methods
+- OPEN DECISIONS pending user: **see DECISIONS.md** (root) — 12 items with options, recommendations, and effort estimates (serving chain, special-mode bundles, governance modules, contract seq_len, 5d island, AdapterResult/TrainingResult dedup, to_*_config methods, dead config layer, import SCC, source-grep tests, uv adoption)
 
 **See CLEANUP_PLAN.md for full phase details.**
 
