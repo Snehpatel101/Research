@@ -126,6 +126,12 @@ def calculate_rsi_numba(close: np.ndarray, period: int = 14) -> np.ndarray:
     n = len(close)
     rsi = np.full(n, np.nan)
 
+    # Guard: need at least period+1 closes for one full delta window —
+    # without this, rsi[period] below is an out-of-bounds write in nopython
+    # mode (numba boundscheck is off by default).
+    if n < period + 1:
+        return rsi
+
     # Calculate price changes
     deltas = np.diff(close)
 

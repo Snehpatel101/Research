@@ -80,7 +80,7 @@ def setup_colab(
 
     if mount_drive:
         try:
-            from google.colab import drive
+            from google.colab import drive  # pyright: ignore[reportMissingImports]  # Colab-only
 
             drive.mount("/content/drive")
             results["drive_mounted"] = True

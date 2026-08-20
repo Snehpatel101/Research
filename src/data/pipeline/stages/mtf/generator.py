@@ -388,7 +388,9 @@ class MTFFeatureGenerator:
                 "Raw MTF data will NOT be saved to store."
             )
 
-        # Import save_raw_mtf lazily to avoid circular imports
+        # Import save_raw_mtf lazily to avoid circular imports; bind the
+        # fallback so the name is always defined on the not-saving path.
+        save_raw_mtf = None
         if should_save:
             from src.data.store import save_raw_mtf
 

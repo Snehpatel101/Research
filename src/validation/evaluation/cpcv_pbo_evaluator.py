@@ -155,8 +155,10 @@ class CPCVPBOEvaluator:
         # Default metric function
         if metric_fn is None:
 
-            def metric_fn(y_true, y_pred):
+            def _default_accuracy(y_true, y_pred):
                 return float(np.mean(y_true == y_pred))
+
+            metric_fn = _default_accuracy
 
         # Collect path results
         path_results = []

@@ -32,6 +32,7 @@ try:
 
     HMM_AVAILABLE = True
 except ImportError:
+    hmm = None  # bound so guarded uses are well-defined
     HMM_AVAILABLE = False
 
 from .base import RegimeDetector, RegimeType

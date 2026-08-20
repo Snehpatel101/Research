@@ -26,6 +26,7 @@ try:
 
     PYWT_AVAILABLE = True
 except ImportError:
+    pywt = None  # bound so guarded uses are well-defined
     PYWT_AVAILABLE = False
     logger.warning("PyWavelets not installed. Wavelet features will be skipped.")
 

@@ -92,8 +92,8 @@ class OptunaConfig(BaseConfig):
         """Validate Optuna configuration."""
         issues = super().validate()
 
-        if self.n_trials <= 0:
-            issues.append(f"n_trials must be positive, got {self.n_trials}")
+        if self.n_trials < 0:
+            issues.append(f"n_trials must be >= 0 (0 disables tuning), got {self.n_trials}")
 
         if self.timeout < 0:
             issues.append(f"timeout must be non-negative, got {self.timeout}")

@@ -496,8 +496,8 @@ class VotingEnsemble(BaseModel):
 
         # Get class predictions from averaged probabilities
         class_predictions_idx = np.argmax(avg_probs, axis=1)
-        # Convert 0,1,2 -> -1,0,1 using canonical mapping
-        class_predictions = map_classes_to_labels(class_predictions_idx)
+        # Convert class indices to trading labels using canonical mapping
+        class_predictions = map_classes_to_labels(class_predictions_idx, self._n_classes)
 
         confidence = np.max(avg_probs, axis=1)
 
@@ -587,6 +587,7 @@ class VotingEnsemble(BaseModel):
             "weights": self._weights.tolist() if self._weights is not None else None,
             "feature_names": self._feature_names,
             "n_base_models": len(self._base_models),
+            "n_classes": self._n_classes,
         }
         joblib.dump(metadata, path / "ensemble_metadata.joblib")
 
@@ -605,6 +606,7 @@ class VotingEnsemble(BaseModel):
         weights = metadata.get("weights")
         self._weights = np.array(weights) if weights is not None else None
         self._feature_names = metadata.get("feature_names")
+        self._n_classes = int(metadata.get("n_classes", self._config.get("n_classes", 3)))
         n_base_models = metadata.get("n_base_models", 0)
 
         # Load base models
@@ -614,7 +616,7 @@ class VotingEnsemble(BaseModel):
             model_name = self._base_model_names[i]
 
             # Create empty model and load state
-            model = ModelRegistry.create(model_name)
+            model = ModelRegistry.create(model_name, config={"n_classes": self._n_classes})
             model.load(model_dir)
             self._base_models.append(model)
 

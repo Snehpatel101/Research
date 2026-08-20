@@ -1,7 +1,7 @@
 # ML Factory - Cleanup Tasks
 
-**Status:** All phases through 89 complete
-**Last Updated:** 2026-03-01
+**Status:** All phases through 114 complete (98-113 recorded in CLAUDE.md/COMPLETION.md, not yet backfilled in full task-list detail below)
+**Last Updated:** 2026-08-20
 
 ---
 
@@ -79,6 +79,8 @@ See **COMPLETION.md** for full task details and implementation information.
 | 91 | 2/2 tasks (all complete) | Gradient checkpointing (PatchTST, iTransformer, TFT), TFT SDPA Flash Attention. 223/223 tests pass. | 2026-03-01 |
 | 92 | 5/5 tasks (all complete) | Annualization factor from data frequency, Optuna failed trial -inf, 12h timeout, sequential ensemble safety, Optuna config constants. 223/223 tests pass. | 2026-03-01 |
 | 93 | 5/5 tasks (all complete) | Per-symbol ADX regime thresholds (MES=20, MGC=23, MNQ=25), get_regime_config(), PipelineConfig auto-wire, parameterized ADX in both trend modules. 223/223 tests pass. | 2026-03-01 |
+| 98-113 | multi-session (all complete) | Feature Governance E1-E9 (timeframe budget, regime selection, robustness scoring, CUSUM, FracDiff, lifecycle, registry, portability, economic value) + THEETASKLIST Adversarial Audit Remediation (leakage/accuracy/memory fixes, 39-fix 8-phase remediation). 473/473 tests pass. See CLAUDE.md/COMPLETION.md. | 2026-03-24 to 2026-03-25 |
+| 114 | 17 correctness fixes + cleanup + verification infra (all complete) | Barrier/backtest parity, binary-mode completion, config-seam fixes, 21,193-line dead code deletion (124 files), pyright baseline (1,234→0), ~125 new tests. ~600/~600 tests pass. | 2026-08-20 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -88,7 +90,19 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 95 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 114 are complete. See COMPLETION.md for full details.
+
+### Open Decisions (Phase 115 candidates, pending user)
+
+| # | Item | Notes |
+|:-:|------|-------|
+| 1 | Serving/monitoring chain | `src/inference/server.py` + `validation/monitoring` — unreachable, server has known crashes; wire or delete |
+| 2 | Phase 52 special-mode bundles | No producer/consumer; wire into `BundleBuilder` or delete |
+| 3 | Phase 99-102 governance modules | Tests-only; wire into pipeline or move to experimental |
+| 4 | ModelContract `sequence_length` not honored in standard mode | C4 — contract 64/128 vs config 60, cross-mode inconsistency |
+| 5 | 5d-optimization island | `five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver` — tests-only |
+| 6 | Core `AdapterResult` + `TrainingResult` duplicate-class consolidation | Related to the "Dual AdapterResult" documented exception in CLAUDE.md |
+| 7 | `ExperimentConfig.to_trainer_config`/`to_backtest_config`/`to_bundle_config` | Zero callers — adopt or delete |
 
 ---
 
@@ -196,6 +210,57 @@ See **COMPLETION.md** for full task details and implementation information.
 **Additional:** Fixed EXPECTED_FEATURES constant 196→192 (Phase C removed 4 features)
 
 **Verification:** 317/317 tests passing (94 new), ruff clean, black clean. 12 new test files.
+
+---
+
+### Phase 114: Repository Rehabilitation
+
+**Status:** COMPLETE
+**Priority:** CRITICAL
+**Tasks:** 17 correctness fixes + cleanup + verification infra, all complete
+**Date:** 2026-08-20
+
+#### Correctness fixes
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 114-1 | `MLFactory._resolve_barrier_params()` — single source of barrier truth (explicit `LabelingConfig` override → per-symbol `BARRIER_PARAMS`) used by both labeling and backtest; `TripleBarrierConfig` gets `symbol` + `max_bars`; barrier fields become None-auto sentinels | ✅ |
+| 114-2 | Backtest metrics always empty on `run_backtest=True` — `'label'` column collision between featured df and Backtester's injected label column swallowed a KeyError; factory now passes OHLCV-only prices | ✅ |
+| 114-3 | Walk-forward OOF schema violation — producer now emits full-length NaN-padded frames (was compact frames causing IndexError in ensemble build); defensive schema check added in `EnsembleService` | ✅ |
+| 114-4 | Parallel-boosting calibrator silently dropped (inverted `hasattr` guard) + multiclass calibration silently failed everywhere (probas collapsed to 1D before a fit requiring 2D) — both fixed | ✅ |
+| 114-5 | Binary mode (n_classes=2) finished end-to-end: config→OOFRequest→OOFGenerator→sub-generators, `OOFPrediction.get_probabilities` column-dynamic, DiversityAnalyzer/meta-learner/stacking all n_classes-aware, 12 model classes, 31 `map_classes_to_labels` sites; strict xfail now passes | ✅ |
+| 114-6 | `early_stopping_patience` threaded end-to-end (deleted `max_epochs // 2` heuristic, effective patience was silently 50) | ✅ |
+| 114-7 | Optuna timeout threaded end-to-end incl. `TuningRequest` (was unbounded) | ✅ |
+| 114-8 | global.yaml drift: batch_size 256→512, optuna timeout 3600→43200 | ✅ |
+| 114-9 | Feature selection decoupled from `n_trials` (follows `features.selection_enabled`); `OptunaConfig.validate` accepts `n_trials=0` | ✅ |
+| 114-10 | `mtf.enabled` now gates `mtf_timeframes`; `MTFConfig` default 1h→60min | ✅ |
+| 114-11 | Trainer bridge extended (mixed_precision/num_workers/pin_memory/checkpoint_interval/keep_n/oom_*); checkpoint_interval default 10→50 | ✅ |
+| 114-12 | GlobalConfig dict-walking fixed (`features.bollinger.*` resolvable); dead `validation.*` lookups replaced with plain defaults | ✅ |
+| 114-13 | ExperimentConfig YAML round-trip fixed (safe_dump + ScalerConfig.clip_range list normalization); TrainerConfig.to_dict field-driven (was dropping pipeline_run_id, feature_selection_min_frequency) | ✅ |
+| 114-14 | AdapterScaler persists manual float32 stats (loaded scalers were off by ~1e-5 on float32) | ✅ |
+| 114-15 | Misc hardening: `tar.extractall(filter="data")`, RSI numba short-input guard, `DataContractViolation` import hoist, `regime_adx_threshold` None-auto sentinel, stale TYPE_CHECKING imports (factory/orchestrator/train.py) | ✅ |
+| 114-16 | CLI: `typer.Exit` no longer swallowed by blanket except (success paths were exiting 1), clean config error messages, `ml status` markup crash fix, `ml run --resume` added | ✅ |
+
+#### Cleanup (21,193 deletions, 838 insertions, 124 files — grep-verified zero-consumer)
+
+- `src/data/features/compute/` dead second feature engine (18 modules) + legacy selection stack (`selection`/`pruning`/`optimization`/`registry.py`)
+- `src/orchestrator.py` (broken `MLPipeline` shim) + `src/__init__` exports
+- `src/cli/run_commands*` dead second CLI (4 files)
+- 7 vestigial trainer files (model_trainer, model_factory, config_loader, feature_selector, services/mode_router, modes/regime_aware, modes/meta_labeling)
+- `src/optimization/{pipeline,labels,features,ensemble_objective}.py` + `src/data/labeling/optimization.py`
+- 5 stale scripts + `./pipeline` wrapper; 2 no-op `clear_all_feature_caches` call sites
+- `charts.py` module-level `matplotlib.use("Agg")` removed; `inference/__init__` except-ImportError guards removed
+
+#### Verification infrastructure
+
+- `pyrightconfig.json` added: 1,234 errors → 0 (stub noise off, real errors kept and fixed — not suppressed)
+- 8 new behavioral test files (~125 tests): `test_factory_e2e`, `test_bundle_roundtrip`, `test_wf_oof_schema`, `test_barrier_parity`, `test_calibrator_flow`, `test_config_seams`, `test_scaler_persistence`, `test_cli_smoke`
+- D9/D10/D11/phases_1_3/phases_4_11 repointed from the deleted feature engine to the live one
+- Suite 475 → ~600 tests; `pyproject.toml` serving extra corrected, `psutil` declared, `stats` extra added; `Makefile` test-quick fixed; `config/models/README.md` documents override-layer contract
+
+**Open decisions (pending user):** see "Open Decisions" list above (Active Phases section).
+
+**Verification:** ~600/~600 tests passing (was 475), ruff clean, black clean, pyright 0 errors (new baseline).
 
 ---
 

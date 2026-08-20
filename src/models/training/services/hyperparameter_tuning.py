@@ -24,6 +24,7 @@ class TuningRequest:
     max_epochs: int | None = None  # Cap max_epochs for neural models during tuning
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
+    optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
 
 
 @dataclass
@@ -76,7 +77,15 @@ class HyperparameterTuningService:
 
         # Create CV splitter based on method
         # Use pipeline's actual embargo_bars if provided, else fallback to horizon*2
-        embargo = request.embargo_bars if request.embargo_bars is not None else request.horizon * 2
+        # Fallback floor of 60 bars: labels may resolve up to the barrier
+        # table's max_bars (largest table entry is 50), which can exceed
+        # horizon*2 for short horizons — a smaller embargo would leak
+        # validation-label resolution into training folds.
+        embargo = (
+            request.embargo_bars
+            if request.embargo_bars is not None
+            else max(request.horizon * 2, 60)
+        )
         if request.cv_method == "cpcv":
             cv = self._create_cpcv(request)
         else:
@@ -92,6 +101,7 @@ class HyperparameterTuningService:
             n_trials=request.n_trials,
             metric=request.scoring,
             max_epochs=request.max_epochs,
+            timeout=request.optuna_timeout,
         )
 
         X_train = request.prepared_data.X_train

@@ -19,11 +19,10 @@ from src.data.features.cusum_filter import (
     get_cusum_threshold,
 )
 from src.data.features.frac_diff import (
-    frac_diff_ffd,
     find_min_d,
+    frac_diff_ffd,
 )
 from src.optimization.feature_selection.robustness_scoring import RobustnessScorer
-
 
 # ---------------------------------------------------------------------------
 # E3: Robustness Scoring
@@ -77,7 +76,13 @@ class TestRobustnessScoring:
         scorer = RobustnessScorer()
         df = scorer.score_features(["a", "b"])
         assert isinstance(df, pd.DataFrame)
-        expected_cols = {"feature", "stability", "predictive_power", "regime_robustness", "composite_score"}
+        expected_cols = {
+            "feature",
+            "stability",
+            "predictive_power",
+            "regime_robustness",
+            "composite_score",
+        }
         assert set(df.columns) == expected_cols
 
     def test_select_top_features(self) -> None:
@@ -190,7 +195,7 @@ class TestFractionalDiff:
         # The FFD d=1 should closely match np.diff
         assert len(valid) > 0
         # Check last few values are close
-        np.testing.assert_allclose(valid.values[-len(expected_diffs):], expected_diffs, atol=0.1)
+        np.testing.assert_allclose(valid.values[-len(expected_diffs) :], expected_diffs, atol=0.1)
 
     def test_frac_diff_nan_handling(self) -> None:
         series = pd.Series([100.0, np.nan, 102.0, 103.0, np.nan, 105.0])

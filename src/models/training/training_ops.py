@@ -118,6 +118,8 @@ class TrainingOpsMixin:
                     batch_size=getattr(self.config, "batch_size", None),
                     cv_method=self.config.cv_method,
                     embargo_bars=getattr(self.config, "embargo_bars", None),
+                    early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
+                    optuna_timeout=getattr(self.config, "optuna_timeout", None),
                 )
             )
 
@@ -137,6 +139,7 @@ class TrainingOpsMixin:
                 training_time_seconds=service_result.training_time_seconds,
                 n_features=service_result.n_features,
                 data_rank=service_result.data_rank,
+                calibrator=getattr(service_result, "calibrator", None),
             )
             self._log_feature_importance(model_name, service_result.trainer)
 
@@ -227,10 +230,6 @@ class TrainingOpsMixin:
             del self._prepared_cache[cache_key]
         # GPU cleanup already done by _offload_trainer_to_cpu before OOF;
         # just collect Python garbage here for prepared data cache eviction.
-        # Also clear feature computation caches (14 dicts, ~300-480 MB) between models.
-        from src.data.features.compute import clear_all_feature_caches
-
-        clear_all_feature_caches()
         gc.collect()
 
     def _train_single_model(self, model_name: str, prepared: PreparedData, horizon: int) -> Any:
@@ -254,6 +253,8 @@ class TrainingOpsMixin:
             batch_size=getattr(self.config, "batch_size", None),
             cv_method=self.config.cv_method,
             embargo_bars=getattr(self.config, "embargo_bars", None),
+            early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
+            optuna_timeout=getattr(self.config, "optuna_timeout", None),
         )
 
         training_degraded = False
@@ -289,6 +290,8 @@ class TrainingOpsMixin:
                 cv_method=self.config.cv_method,
                 batch_size=reduced_batch,
                 embargo_bars=getattr(self.config, "embargo_bars", None),
+                early_stopping_patience=getattr(self.config, "early_stopping_patience", None),
+                optuna_timeout=getattr(self.config, "optuna_timeout", None),
             )
             result = self._model_service.train_model(request)
             training_degraded = True
@@ -347,9 +350,16 @@ class TrainingOpsMixin:
                 )
                 return
 
-            val_probas = result.trainer.predict_proba(prepared.X_val)
-            if val_probas.ndim == 2 and val_probas.shape[1] > 1:
-                val_probas = val_probas[:, 1]
+            # ProbabilityCalibrator.fit requires the FULL (n, n_classes)
+            # matrix. The old [:, 1] collapse handed it a 1D array, fit raised
+            # ValueError, and the broad except below silently dropped
+            # calibration for every multiclass model.
+            val_probas = np.asarray(result.trainer.predict_proba(prepared.X_val))
+            if val_probas.ndim == 1:
+                # 1D output is the positive-class probability — reconstruct
+                # the (n, 2) matrix; an (n, 1) reshape would make the
+                # calibrator treat this as a 1-class problem.
+                val_probas = np.column_stack([1.0 - val_probas, val_probas])
 
             method = self.config.calibration_method
             if method not in ("isotonic", "sigmoid", "auto"):
@@ -364,9 +374,13 @@ class TrainingOpsMixin:
                 f"    Brier improvement: {metrics.brier_improvement:.1%}, "
                 f"ECE improvement: {metrics.ece_improvement:.1%}"
             )
-            if not hasattr(result, "calibrator"):
-                result.calibrator = calibrator
-                result.calibration_metrics = metrics
+            # Always store the fitted calibrator — both result flavors accept
+            # attribute assignment (the canonical dataclass has the field; the
+            # service dataclass takes a dynamic attribute). The previous
+            # `if not hasattr(...)` guard silently dropped the calibrator on
+            # any result that already had a calibrator field.
+            result.calibrator = calibrator
+            result.calibration_metrics = metrics
         except ImportError:
             logger.warning("    Calibration module not available, skipping")
         except Exception as e:
@@ -391,6 +405,7 @@ class TrainingOpsMixin:
             purge_bars=self.config.purge_bars,
             embargo_bars=self.config.embargo_bars,
             model_config=model_config,
+            n_classes=getattr(self.config, "n_classes", 3),
         )
         return self._oof_service.generate_oof(request)
 
@@ -571,9 +586,15 @@ class TrainingOpsMixin:
                     valid_indices = np.where(valid_mask)[0]
 
                     if len(valid_indices) > 0:
-                        preds = pred_df[pred_col].values[valid_mask].astype(int)
-                        confidence = pred_df[conf_col].values[valid_mask]
-                        y_true_oof = pred_df["y_true"].values[valid_mask].astype(int)
+                        # OOFPrediction schema contract (matches the tabular and
+                        # sequence producers): the predictions DataFrame is
+                        # FULL-LENGTH (n_total_samples rows, NaN where no
+                        # prediction) and original_indices marks the valid rows.
+                        # Consumers index it positionally with original_indices,
+                        # so a compact frame would raise IndexError downstream.
+                        preds = pred_df[pred_col].values.astype(float)
+                        confidence = pred_df[conf_col].values.astype(float)
+                        y_true_oof = pred_df["y_true"].values.astype(float)
 
                         prob_cols_wf = [
                             c
@@ -591,7 +612,7 @@ class TrainingOpsMixin:
                                 if i < len(class_names)
                                 else f"{result_model_name}_prob_class{i}"
                             )
-                            oof_data[oof_col] = pred_df[col_wf].values[valid_mask]
+                            oof_data[oof_col] = pred_df[col_wf].values
 
                         fold_info = []
                         for wr in wf_result.window_results:

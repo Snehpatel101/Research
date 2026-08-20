@@ -454,9 +454,12 @@ class FeatureSelectionMixin:
     ) -> None:
         """Validate data contracts for each model."""
         logger.info("  [1/3] Validating data contracts...")
-        try:
-            from src.core.contracts import DataContractViolation, get_model_contract
+        # Import OUTSIDE the try: the except clause below references
+        # DataContractViolation, so a failed import inside the try would turn
+        # the graceful-degradation path into a NameError.
+        from src.core.contracts import DataContractViolation, get_model_contract
 
+        try:
             if feature_names and len(feature_names) > 0:
                 for model_name in self.config.models:
                     model_contract = get_model_contract(model_name)

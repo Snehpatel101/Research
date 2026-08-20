@@ -5,7 +5,7 @@ Phase 4: OOF Stacking / Leakage Fixes (2 tests)
 Phase 5: Architecture Fixes (4 tests)
 Phase 6: Memory Optimization (2 tests)
 Phase 7: Backtest Realism (4 tests)
-Phase 8: Medium Bugs (3 tests)
+Phase 8: Medium Bugs (2 tests)
 Phase 9: Dead Code Removal (1 test)
 Phase 10-11: E2E Validation (2 tests)
 """
@@ -383,35 +383,6 @@ class TestPhase7BacktestRealism:
 class TestPhase8MediumBugs:
     """Tests verifying Phase 8 medium bug fixes."""
 
-    def test_feature_cache_clearing(self) -> None:
-        """Verify clear_all_feature_caches() actually empties all caches.
-
-        Feature caches must be cleared between models/windows to prevent
-        stale data and reclaim memory.
-        """
-        from src.data.features.compute import clear_all_feature_caches, volatility
-
-        # Populate a cache (volatility module has known caches)
-        cache_names = [
-            attr
-            for attr in dir(volatility)
-            if attr.endswith("_cache") and isinstance(getattr(volatility, attr), dict)
-        ]
-        assert len(cache_names) > 0, "volatility module should have at least one cache dict"
-
-        # Populate with dummy data
-        for name in cache_names:
-            cache = getattr(volatility, name)
-            cache["test_key"] = "test_value"
-
-        # Clear all caches
-        clear_all_feature_caches()
-
-        # Verify all caches are empty
-        for name in cache_names:
-            cache = getattr(volatility, name)
-            assert len(cache) == 0, f"Cache {name} should be empty after clearing, got {cache}"
-
     def test_worker_init_fn(self) -> None:
         """Verify DataLoader creation includes worker_init_fn parameter.
 
@@ -535,7 +506,6 @@ class TestPhase10E2EImports:
         """
         from src.config.experiment import ExperimentConfig
         from src.core.datasets.sequences import SequenceDataset
-        from src.data.features.compute import clear_all_feature_caches
         from src.data.pipeline.stages.regime.composite import CompositeRegimeDetector
         from src.data.pipeline.stages.regime.unified import get_regime_labels
         from src.factory import MLFactory
@@ -565,7 +535,6 @@ class TestPhase10E2EImports:
 
         # Verify callables
         assert callable(get_regime_labels)
-        assert callable(clear_all_feature_caches)
 
 
 class TestPhase11BacktestConfigDefaults:

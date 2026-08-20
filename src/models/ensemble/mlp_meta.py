@@ -64,7 +64,6 @@ class MLPMetaLearner(BaseModel):
         self._model: MLPClassifier | None = None
         self._scaler: StandardScaler | None = None
         self._feature_names: list[str] | None = None
-        self._n_classes: int = 3
 
     @property
     def model_family(self) -> str:
@@ -130,8 +129,8 @@ class MLPMetaLearner(BaseModel):
             )
 
         # Convert labels: -1,0,1 -> 0,1,2
-        y_train_sk = map_labels_to_classes(y_train)
-        y_val_sk = map_labels_to_classes(y_val)
+        y_train_sk = map_labels_to_classes(y_train, self._n_classes)
+        y_val_sk = map_labels_to_classes(y_val, self._n_classes)
 
         # Feature scaling (important for neural networks)
         X_train_scaled = X_train
@@ -235,7 +234,7 @@ class MLPMetaLearner(BaseModel):
 
         probabilities = self._model.predict_proba(X_scaled)
         class_predictions_sk = np.argmax(probabilities, axis=1)
-        class_predictions = map_classes_to_labels(class_predictions_sk)
+        class_predictions = map_classes_to_labels(class_predictions_sk, self._n_classes)
         confidence = np.max(probabilities, axis=1)
 
         return PredictionResult(
@@ -315,7 +314,7 @@ class MLPMetaLearner(BaseModel):
         if self._model is None:
             raise RuntimeError("Meta model is not fitted")
         y_pred_sk = self._model.predict(X)
-        y_pred = map_classes_to_labels(y_pred_sk)
+        y_pred = map_classes_to_labels(y_pred_sk, self._n_classes)
 
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),

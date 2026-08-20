@@ -1,7 +1,7 @@
 """
 Regression tests for Phases 1-3 fixes in ML Factory.
 
-Phase 1: Leakage Fixes (5 tests)
+Phase 1: Leakage Fixes (7 tests)
 Phase 2: Accuracy Fixes (4 tests)
 Phase 3: Memory Fixes (3 tests)
 """
@@ -72,76 +72,127 @@ class TestPhase1LeakageFixes:
             atr, standard_atr, rtol=1e-6
         ), "ATR should use Wilder's alpha=1/period, NOT standard alpha=2/(period+1)"
 
-    def test_regime_features_shifted(self) -> None:
-        """Verify all regime features have shift(1) -- a spike at bar N must not
-        affect bar N's feature value; it should appear at bar N+1.
+    @staticmethod
+    def _make_regime_ohlcv(n: int, seed: int = 42) -> pd.DataFrame:
+        """Synthetic OHLCV data for regime shift tests."""
+        rng = np.random.RandomState(seed)
+        close = 100.0 + np.cumsum(rng.randn(n) * 0.5)
+        high = close + np.abs(rng.randn(n) * 0.3)
+        low = close - np.abs(rng.randn(n) * 0.3)
+        volume = rng.randint(100, 1000, size=n).astype(float)
+        return pd.DataFrame(
+            {"open": close, "high": high, "low": low, "close": close, "volume": volume}
+        )
+
+    def test_volatility_regime_shifted(self) -> None:
+        """Verify the live volatility regime is lagged -- a spike at bar N must
+        not affect bar N's regime; it may only appear from bar N+1 onward.
+
+        The live add_volatility_regime consumes hvol_20 which the live
+        add_historical_volatility produces already lagged by 1 bar.
         """
-        from src.data.features.compute.regime import (
-            _trend_regime_cache,
-            _volatility_regime_cache,
-            compute_structure_regime,
-            compute_trend_regime,
-            compute_volatility_regime,
+        from src.data.pipeline.stages.features.regime import add_volatility_regime
+        from src.data.pipeline.stages.features.volatility import add_historical_volatility
+
+        def pipeline(df: pd.DataFrame) -> pd.DataFrame:
+            out = add_historical_volatility(df.copy(), {}, periods=[20], timeframe="5min")
+            return add_volatility_regime(out, {})
+
+        df = self._make_regime_ohlcv(260)
+        spike_bar = 200
+
+        base = pipeline(df)
+
+        df_spiked = df.copy()
+        # Massive close spike at spike_bar (drives hvol through the roof)
+        df_spiked.loc[spike_bar, "close"] *= 2.0
+        spiked = pipeline(df_spiked)
+
+        # Bars 0..spike_bar must be identical: the spike is only visible from
+        # bar spike_bar+1 onward because hvol_20 is lagged by 1 bar.
+        pd.testing.assert_series_equal(
+            base["volatility_regime"].iloc[: spike_bar + 1],
+            spiked["volatility_regime"].iloc[: spike_bar + 1],
         )
 
-        n = 200
-        np.random.seed(42)
-        close = 100.0 + np.cumsum(np.random.randn(n) * 0.5)
-        high = close + np.abs(np.random.randn(n) * 0.3)
-        low = close - np.abs(np.random.randn(n) * 0.3)
-        volume = np.random.randint(100, 1000, size=n).astype(float)
+        # Sanity: the spike DOES propagate into the lagged hvol at bar N+1
+        assert base["hvol_20"].iloc[spike_bar + 1] != pytest.approx(
+            spiked["hvol_20"].iloc[spike_bar + 1]
+        ), "hvol_20 should reflect the spike at bar N+1 (shift(1) includes it)"
 
-        df = pd.DataFrame(
-            {
-                "open": close,
-                "high": high,
-                "low": low,
-                "close": close,
-                "volume": volume,
-            }
+    def test_trend_regime_shifted(self) -> None:
+        """Verify the live trend regime uses lagged close -- a spike at bar N
+        must not affect bar N's regime; it should appear at bar N+1.
+        """
+        from src.data.pipeline.stages.features.regime import add_trend_regime
+
+        def pipeline(close: pd.Series) -> pd.Series:
+            df = pd.DataFrame({"close": close})
+            # SMA inputs are pre-lagged, matching the live engine contract
+            df["sma_50"] = close.rolling(50).mean().shift(1)
+            df["sma_200"] = close.rolling(200).mean().shift(1)
+            out = add_trend_regime(df, {})
+            return out["trend_regime"]
+
+        # Steady uptrend: close > sma_50 > sma_200 after warmup
+        n = 260
+        close = pd.Series(100.0 + 0.1 * np.arange(n))
+        spike_bar = 250
+
+        base = pipeline(close)
+        assert base.iloc[spike_bar] == 1, "Base data should be in uptrend at spike bar"
+        assert base.iloc[spike_bar + 1] == 1, "Base data should be in uptrend after spike bar"
+
+        close_spiked = close.copy()
+        close_spiked.iloc[spike_bar] *= 0.5  # crash at spike_bar
+        spiked = pipeline(close_spiked)
+
+        # Bar N must NOT see its own crash (close is lagged inside add_trend_regime)
+        assert spiked.iloc[spike_bar] == base.iloc[spike_bar], (
+            f"Bar {spike_bar} trend regime should not see its own spike: "
+            f"base={base.iloc[spike_bar]}, spiked={spiked.iloc[spike_bar]}"
         )
 
-        # Each base regime function should return NaN at index 0 due to shift(1)
-        vol_regime = compute_volatility_regime(df)
-        trend_regime = compute_trend_regime(df)
-        structure_regime = compute_structure_regime(df)
+        # Bar N+1 SHOULD see the crash: lagged close < sma_50 breaks the uptrend
+        assert spiked.iloc[spike_bar + 1] == 0, (
+            f"Bar {spike_bar + 1} should leave uptrend after the crash, "
+            f"got {spiked.iloc[spike_bar + 1]}"
+        )
 
-        assert pd.isna(vol_regime.iloc[0]), "volatility_regime should be NaN at bar 0 (shifted)"
-        assert pd.isna(trend_regime.iloc[0]), "trend_regime should be NaN at bar 0 (shifted)"
+        # Source check: the live function lags close with shift(1)
+        src = inspect.getsource(add_trend_regime)
+        assert ".shift(1)" in src, "add_trend_regime must contain .shift(1)"
+
+    def test_structure_regime_shifted(self) -> None:
+        """Verify the live structure regime (Hurst-based) is shifted by 1 bar."""
+        from src.data.pipeline.stages.features.regime import add_structure_regime
+
+        df = self._make_regime_ohlcv(200)
+
+        base = add_structure_regime(df.copy(), {}, lookback=100)
+        assert "structure_regime" in base.columns, "structure_regime column missing"
+
+        # Bar 0 must be NaN due to shift(1)
         assert pd.isna(
-            structure_regime.iloc[0]
+            base["structure_regime"].iloc[0]
         ), "structure_regime should be NaN at bar 0 (shifted)"
 
-        # Key property: inject a sudden spike at bar N in a copy, verify bar N's
-        # feature is unchanged vs the non-spiked version. Only bar N+1 should change.
-        _volatility_regime_cache.clear()
-        _trend_regime_cache.clear()
-        vol_base = compute_volatility_regime(df)
-
-        _volatility_regime_cache.clear()
-        _trend_regime_cache.clear()
         df_spiked = df.copy()
-        spike_bar = 120
-        # Massive spike in volatility at bar 120
-        df_spiked.loc[spike_bar, "high"] = df_spiked.loc[spike_bar, "close"] + 50.0
-        df_spiked.loc[spike_bar, "low"] = df_spiked.loc[spike_bar, "close"] - 50.0
-        vol_spiked = compute_volatility_regime(df_spiked)
+        df_spiked.iloc[-1, df_spiked.columns.get_loc("close")] *= 2.0
+        spiked = add_structure_regime(df_spiked, {}, lookback=100)
 
-        # Bar 120's regime feature should NOT be affected by bar 120's spike
-        # (shift(1) means bar 120 uses data up to bar 119).
-        assert vol_base.iloc[spike_bar] == vol_spiked.iloc[spike_bar], (
-            f"Bar {spike_bar} regime should not see its own spike: "
-            f"base={vol_base.iloc[spike_bar]}, spiked={vol_spiked.iloc[spike_bar]}"
+        # Last bar's regime must not see its own spike (shift(1) excludes it)
+        base_last = base["structure_regime"].iloc[-1]
+        spiked_last = spiked["structure_regime"].iloc[-1]
+        assert not pd.isna(base_last), "structure_regime at last bar should be valid"
+        assert base_last == spiked_last, (
+            f"Last bar structure regime should not see its own spike: "
+            f"base={base_last}, spiked={spiked_last}"
         )
 
-        # Verify source code: all three base regime functions have shift(1)
-        for fn in [
-            compute_volatility_regime,
-            compute_trend_regime,
-            compute_structure_regime,
-        ]:
-            src = inspect.getsource(fn)
-            assert ".shift(1)" in src, f"{fn.__name__} must contain .shift(1)"
+        # Source check: the live function applies shift(1) to the regime series
+        src = inspect.getsource(add_structure_regime)
+        assert ".shift(1)" in src, "add_structure_regime must contain .shift(1)"
 
     def test_cv_tuner_strided_subsampling(self) -> None:
         """Verify cv_tuner uses strided (every-Nth) sampling, not random,
@@ -376,33 +427,41 @@ class TestPhase2AccuracyFixes:
         assert cols_5[4] == "model_prob_4"
 
     def test_volatility_annualization_factor(self) -> None:
-        """Verify get_annualization_factor(78) returns sqrt(252*78) and that
-        the default _ANNUAL_FACTOR uses 78 bars_per_day.
+        """Verify the live annualization factor is timeframe-derived:
+        sqrt(bars_per_day * 252), NOT a hardcoded constant.
         """
-        from src.data.features.compute.volatility import (
-            _ANNUAL_FACTOR,
+        from src.data.pipeline.stages.features.constants import (
+            ANNUALIZATION_FACTOR,
             get_annualization_factor,
+            get_bars_per_day,
         )
 
-        # Expected value: sqrt(252 * 78)
-        expected = np.sqrt(252 * 78)
-        result = get_annualization_factor(78)
+        # 5min regular session: 6.5h * 60 / 5 = 78 bars/day
+        assert get_bars_per_day("5min") == pytest.approx(78.0)
 
-        assert (
-            abs(result - expected) < 1e-10
-        ), f"get_annualization_factor(78) = {result}, expected {expected}"
+        # Expected 5min factor: sqrt(252 * 78) ~= 140.07
+        expected_5min = np.sqrt(252 * 78)
+        result_5min = get_annualization_factor("5min")
+        assert result_5min == pytest.approx(
+            expected_5min, abs=1e-10
+        ), f"get_annualization_factor('5min') = {result_5min}, expected {expected_5min}"
+        assert 140.0 < result_5min < 141.0, f"Expected ~140.07, got {result_5min}"
 
-        # Approximately 140.2
-        assert 140.0 < result < 141.0, f"Expected ~140.2, got {result}"
+        # Factor must vary by timeframe (timeframe-derived, not hardcoded)
+        result_1min = get_annualization_factor("1min")
+        assert result_1min == pytest.approx(np.sqrt(252 * 390), abs=1e-10)
+        assert result_1min != result_5min, "1min and 5min factors must differ"
+        assert get_annualization_factor("15min") < result_5min
 
-        # Module-level default should match
-        assert (
-            abs(_ANNUAL_FACTOR - expected) < 1e-10
-        ), f"_ANNUAL_FACTOR = {_ANNUAL_FACTOR}, expected {expected}"
+        # Extended (23h futures) session yields a larger factor than regular
+        assert get_annualization_factor("5min", extended_hours=True) > result_5min
 
-        # Also test other bar frequencies
-        assert get_annualization_factor(1) == pytest.approx(np.sqrt(252))
-        assert get_annualization_factor(390) == pytest.approx(np.sqrt(252 * 390))
+        # Backward-compat module default is the 5min regular-session factor
+        assert pytest.approx(expected_5min, abs=1e-10) == ANNUALIZATION_FACTOR
+
+        # Unknown timeframes are rejected, not silently defaulted
+        with pytest.raises(ValueError):
+            get_annualization_factor("13min")
 
 
 # ---------------------------------------------------------------------------

@@ -67,6 +67,9 @@ dependencies = [
     # Timezone Support
     "pytz>=2023.0",
 
+    # Memory monitoring (walk-forward + core utils)
+    "psutil>=5.9.0",
+
     # Online Drift Detection
     "river>=0.21.0",
 ]
@@ -80,14 +83,24 @@ dev = [
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
 ]
+# Model serving uses FastAPI (src/inference/server.py), not Flask
 serving = [
-    "flask>=2.3.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "prometheus-client>=0.19.0",
+]
+# Statistical tests (fractional differentiation ADF tests, feature validation)
+stats = [
+    "statsmodels>=0.14.0",
 ]
 hmm = [
     "hmmlearn>=0.3.0",
 ]
 all = [
-    "flask>=2.3.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "prometheus-client>=0.19.0",
+    "statsmodels>=0.14.0",
     "hmmlearn>=0.3.0",
 ]
 

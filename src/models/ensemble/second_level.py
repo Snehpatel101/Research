@@ -72,6 +72,7 @@ class SecondLevelStackingConfig:
     """
 
     n_clusters: int = 3
+    n_classes: int = 3  # 2 for binary mode; strides meta-feature slicing
     cluster_meta_type: str = "ridge"  # ridge, xgboost, mlp, or calibrated_ridge
     final_meta_type: str = "xgboost"  # ridge, xgboost, mlp, or calibrated_ridge
     use_diversity_clustering: bool = True
@@ -145,7 +146,7 @@ class SecondLevelStacker:
         # State
         self._cluster_info: list[ClusterInfo] = []
         self._final_meta_learner: Any = None
-        self._n_classes: int = 3
+        self._n_classes: int = self.config.n_classes
         self._is_fitted: bool = False
         self._model_names: list[str] = []
         self._n_features_per_model: int = 0

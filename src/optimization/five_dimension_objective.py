@@ -369,8 +369,8 @@ def generate_labels_for_trial(
         Labels with value -99 are invalid and should be filtered before training.
     """
     # Build cache key from barrier params and data identifier
+    full_cache_key = (upper_mult, lower_mult, max_holding_bars, cache_key)
     if use_cache:
-        full_cache_key = (upper_mult, lower_mult, max_holding_bars, cache_key)
         with _label_cache_lock:
             if full_cache_key in _label_cache:
                 # Move to end (most recently used) for LRU behavior
@@ -866,6 +866,7 @@ def _compute_validation_metric(
 
         if isinstance(train_data, pd.DataFrame):
             # Use the trial's selected features if available, falling back to all non-OHLCV
+            feature_cols: list[str] = []
             if spec.selected_features:
                 feature_cols = [f for f in spec.selected_features if f in train_data.columns]
             if not spec.selected_features or not feature_cols:

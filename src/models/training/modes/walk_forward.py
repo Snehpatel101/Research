@@ -45,6 +45,7 @@ try:
 
     _HAS_PSUTIL = True
 except ImportError:
+    psutil = None  # bound so guarded uses are well-defined
     _HAS_PSUTIL = False
 
 
@@ -327,7 +328,10 @@ class WalkForwardTrainer:
         label_end_times = container.get_label_end_times("train")
 
         n_samples = len(X)
-        n_classes = len(np.unique(y))
+        # Class count comes from config, NOT from the observed labels — a
+        # class absent from y (or a stray sentinel) would desync the prob
+        # matrix width from what the per-window models emit.
+        n_classes = int(getattr(self._pipeline_config, "n_classes", 3) or 3)
 
         # Initialize prediction storage
         all_preds = np.full(n_samples, np.nan)
@@ -555,10 +559,6 @@ class WalkForwardTrainer:
             del model, X_test_scaled, y_test
             del prediction_output, scaler
             release_gpu_memory()
-            # Clear feature computation caches between windows to reclaim ~300-480 MB
-            from src.data.features.compute import clear_all_feature_caches
-
-            clear_all_feature_caches()
 
             _log_rss(f"Window {window_idx + 1}/{wf_config.n_windows} END")
 

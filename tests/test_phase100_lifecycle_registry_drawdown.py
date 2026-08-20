@@ -15,6 +15,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from src.inference.backtesting.position_sizing import (
+    DrawdownAdjustedSizer,
+    FixedFractional,
+    PositionSizingMethod,
+)
 from src.optimization.feature_selection.lifecycle import (
     FeatureLifecycle,
     FeatureLifecycleState,
@@ -24,12 +29,6 @@ from src.optimization.feature_selection.registry import (
     FeatureRecord,
     FeatureRegistry,
 )
-from src.inference.backtesting.position_sizing import (
-    DrawdownAdjustedSizer,
-    FixedFractional,
-    PositionSizingMethod,
-)
-
 
 # ---------------------------------------------------------------------------
 # E6: Feature Lifecycle State Machine
@@ -288,7 +287,7 @@ class TestFeatureRegistry:
 
     def test_valid_states_complete(self) -> None:
         expected = {"candidate", "selected", "active", "degraded", "retired"}
-        assert VALID_STATES == expected
+        assert expected == VALID_STATES
 
     def test_feature_record_invalid_state(self) -> None:
         with pytest.raises(ValueError, match="Invalid state"):

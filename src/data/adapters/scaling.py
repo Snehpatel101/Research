@@ -433,12 +433,22 @@ class AdapterScaler:
                 pickle.dump(self._scaler, f)
             logger.debug(f"Saved sklearn scaler to {scaler_path}")
 
-        # Save config and metadata
+        # Save config and metadata (including the manual float32 stats —
+        # without them a loaded scaler routed float32 input through the
+        # sklearn float64 path and produced slightly different transforms)
+        def _arr(a):
+            return a.tolist() if a is not None else None
+
         config_dict = {
             "config": self.config.to_dict(),
             "n_features": self._n_features,
             "is_fitted": self._is_fitted,
             "original_shape": list(self._original_shape) if self._original_shape else None,
+            "input_f32": self._input_f32,
+            "f32_center": _arr(self._f32_center),
+            "f32_scale": _arr(self._f32_scale),
+            "f32_data_min": _arr(self._f32_data_min),
+            "f32_data_range": _arr(self._f32_data_range),
         }
 
         config_path = path / "scaler_config.json"
@@ -479,6 +489,18 @@ class AdapterScaler:
 
         if config_dict.get("original_shape"):
             instance._original_shape = tuple(config_dict["original_shape"])
+
+        # Restore manual float32 scaling stats (absent in old saves)
+        instance._input_f32 = bool(config_dict.get("input_f32", False))
+        for attr, key in (
+            ("_f32_center", "f32_center"),
+            ("_f32_scale", "f32_scale"),
+            ("_f32_data_min", "f32_data_min"),
+            ("_f32_data_range", "f32_data_range"),
+        ):
+            value = config_dict.get(key)
+            if value is not None:
+                setattr(instance, attr, np.asarray(value, dtype=np.float32))
 
         # Load sklearn scaler if it exists
         scaler_path = path / "scaler.pkl"

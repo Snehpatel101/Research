@@ -70,6 +70,17 @@ class OOFPrediction:
         sequence_length: int | None = None,
         n_total_samples: int | None = None,
     ):
+        # Schema contract: when n_total_samples is declared, the predictions
+        # frame must be FULL-LENGTH (NaN-padded), with original_indices
+        # marking the valid rows. Enforced here — at the root — so a compact
+        # frame fails at the offending producer, not deep inside a consumer.
+        if n_total_samples is not None and len(predictions) != n_total_samples:
+            raise ValueError(
+                f"OOFPrediction schema violation for '{model_name}': predictions "
+                f"DataFrame has {len(predictions)} rows but n_total_samples="
+                f"{n_total_samples}. Producers must emit full-length NaN-padded "
+                f"frames with original_indices marking valid rows."
+            )
         self.model_name = model_name
         self.predictions = predictions
         self.fold_info = fold_info
@@ -101,14 +112,25 @@ class OOFPrediction:
         return 0
 
     def get_probabilities(self) -> np.ndarray:
-        """Get probability matrix (n_samples, 3)."""
-        result: np.ndarray = self.predictions[
-            [
-                f"{self.model_name}_prob_short",
-                f"{self.model_name}_prob_neutral",
-                f"{self.model_name}_prob_long",
-            ]
-        ].values
+        """
+        Get probability matrix (n_samples, n_classes).
+
+        Column-dynamic: uses the canonical short/neutral/long columns when
+        present (3-class), otherwise any {model}_prob_* columns in frame
+        order (e.g. prob_0/prob_1 in binary mode).
+        """
+        canonical = _get_prob_column_names(self.model_name, 3)
+        if all(c in self.predictions.columns for c in canonical):
+            cols: list[str] = canonical
+        else:
+            prefix = f"{self.model_name}_prob_"
+            cols = [c for c in self.predictions.columns if c.startswith(prefix)]
+            if not cols:
+                raise KeyError(
+                    f"No probability columns found for model '{self.model_name}' "
+                    f"(expected columns starting with '{prefix}')"
+                )
+        result: np.ndarray = self.predictions[cols].values
         return result
 
     def get_class_predictions(self) -> np.ndarray:

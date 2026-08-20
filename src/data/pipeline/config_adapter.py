@@ -24,12 +24,21 @@ def to_data_config(config: PipelineConfig) -> DataConfig:
         for family in ["wavelets", "microstructure", "volume", "volatility"]:
             feature_toggles[family] = family in config.feature_families
 
+    # None means "no explicit override" — the labeling stage then sources
+    # barriers from the per-symbol BARRIER_PARAMS table.
     barrier_overrides = None
-    if config.upper_mult != 2.0 or config.lower_mult != 2.0:
-        barrier_overrides = {
-            "k_up": config.upper_mult,
-            "k_down": config.lower_mult,
-        }
+    if (
+        config.upper_mult is not None
+        or config.lower_mult is not None
+        or config.max_holding_bars is not None
+    ):
+        barrier_overrides = {}
+        if config.upper_mult is not None:
+            barrier_overrides["k_up"] = config.upper_mult
+        if config.lower_mult is not None:
+            barrier_overrides["k_down"] = config.lower_mult
+        if config.max_holding_bars is not None:
+            barrier_overrides["max_bars"] = config.max_holding_bars
 
     return DataConfig(
         run_id=run_id,

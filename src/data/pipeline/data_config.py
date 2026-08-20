@@ -46,20 +46,10 @@ def _generate_run_id() -> str:
 
 
 def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
-    try:
-        from src.config.global_config import get_global_config
+    """Thin wrapper over the canonical config lookup (src/config/utils.py)."""
+    from src.config.utils import get_config_value
 
-        config = get_global_config()
-        parts = attr_path.split(".")
-        value = config
-        for part in parts:
-            value = getattr(value, part)
-        return value
-    except Exception as e:
-        logger.warning(
-            f"Failed to get config attribute '{attr_path}': {e}. Using fallback: {fallback}"
-        )
-        return fallback
+    return get_config_value(attr_path, fallback)
 
 
 @dataclass
@@ -224,12 +214,10 @@ class DataConfig(PipelinePathMixin, PipelinePersistenceMixin):
     copy_scaled_to_global: bool = False
 
     # Validation options (Phase 4A, 4B)
-    check_leakage: bool = field(
-        default_factory=lambda: _get_global_or_default("validation.check_leakage", True)
-    )
-    check_lookahead: bool = field(
-        default_factory=lambda: _get_global_or_default("validation.check_lookahead", True)
-    )
+    # Plain defaults: GlobalConfig has no `validation` section, so the old
+    # _get_global_or_default("validation.*") lookups always fell back anyway.
+    check_leakage: bool = True
+    check_lookahead: bool = True
 
     # Optional configurations
     feature_toggles: dict[str, bool] | None = None

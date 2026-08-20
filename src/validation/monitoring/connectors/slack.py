@@ -84,7 +84,7 @@ class SlackAlertConnector:
         self.config = config
 
         try:
-            from slack_sdk import WebClient
+            from slack_sdk import WebClient  # pyright: ignore[reportMissingImports]  # optional dep
 
             self.client = WebClient(token=config.token)
         except ImportError as e:

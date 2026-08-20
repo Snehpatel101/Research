@@ -63,14 +63,14 @@ class EnsembleService:
     - Train base models (handled by ModelTrainingService)
     """
 
+    # Diversity thresholds (single definition — the analyzer is built
+    # per-request in _analyze_diversity with the run's n_classes)
+    MIN_DIVERSITY_THRESHOLD = 0.3
+    CORRELATION_THRESHOLD = 0.8
+
     def __init__(self) -> None:
         """Initialize EnsembleService."""
         self._aligner = OOFAligner()
-        self._diversity_analyzer = DiversityAnalyzer(
-            min_diversity_threshold=0.3,
-            correlation_threshold=0.8,
-            n_classes=3,
-        )
 
     def build_ensemble(
         self,
@@ -156,6 +156,7 @@ class EnsembleService:
                 oof_predictions=oof_predictions,
                 aligned=aligned,
                 y_aligned=y_aligned,
+                n_classes=getattr(config, "n_classes", 3),
             )
 
         if y_aligned is None:
@@ -224,6 +225,17 @@ class EnsembleService:
             preds = oof_pred.get_class_predictions()
 
             n_total = len(probs)
+
+            # Schema contract: the predictions DataFrame must be full-length
+            # (n_total_samples rows, NaN-padded). A compact frame here would
+            # be silently mis-indexed below.
+            if oof_pred.n_total_samples is not None and n_total != oof_pred.n_total_samples:
+                raise ValueError(
+                    f"OOFPrediction schema violation for '{model_name}': predictions "
+                    f"DataFrame has {n_total} rows but n_total_samples="
+                    f"{oof_pred.n_total_samples}. Producers must emit full-length "
+                    f"NaN-padded frames with original_indices marking valid rows."
+                )
 
             # Use original_indices for proper alignment (critical for
             # sequence models that produce fewer samples than tabular)
@@ -399,7 +411,11 @@ class EnsembleService:
                     f"Available: {list(meta_learner_map.keys())}"
                 )
 
-            meta_learner = meta_learner_map[meta_learner_name]()
+            # n_classes is the problem definition — the meta-learner must
+            # agree with the run's class count (binary mode uses 2).
+            meta_learner = meta_learner_map[meta_learner_name](
+                config={"n_classes": getattr(config, "n_classes", 3)}
+            )
 
             # Train meta-learner directly
             training_metrics = meta_learner.fit(
@@ -439,6 +455,7 @@ class EnsembleService:
         oof_predictions: dict[str, OOFPrediction],
         aligned: AlignedOOFResult,
         y_aligned: np.ndarray | None,
+        n_classes: int = 3,
     ) -> DiversityMetrics | None:
         """
         Analyze ensemble diversity and log warnings if diversity is low.
@@ -474,8 +491,14 @@ class EnsembleService:
                         probs = probs[valid_indices]
                     base_probabilities[model_name] = probs
 
-            # Run diversity analysis
-            diversity_metrics = self._diversity_analyzer.analyze(
+            # Analyzer is built here (its only use site) with the run's
+            # class count — binary mode uses 2.
+            analyzer = DiversityAnalyzer(
+                min_diversity_threshold=self.MIN_DIVERSITY_THRESHOLD,
+                correlation_threshold=self.CORRELATION_THRESHOLD,
+                n_classes=n_classes,
+            )
+            diversity_metrics = analyzer.analyze(
                 base_predictions=base_predictions,
                 base_probabilities=base_probabilities,
                 y_true=y_aligned,
@@ -489,11 +512,11 @@ class EnsembleService:
             logger.info(f"  - Q-statistic: {diversity_metrics.q_statistic:.3f}")
 
             # Warn if diversity is low
-            if diversity_metrics.diversity_score < self._diversity_analyzer.min_diversity_threshold:
+            if diversity_metrics.diversity_score < analyzer.min_diversity_threshold:
                 logger.warning(
                     f"Low ensemble diversity detected: "
                     f"score={diversity_metrics.diversity_score:.3f} < "
-                    f"threshold={self._diversity_analyzer.min_diversity_threshold:.3f}"
+                    f"threshold={analyzer.min_diversity_threshold:.3f}"
                 )
                 logger.warning("Consider using more diverse model families or architectures")
 

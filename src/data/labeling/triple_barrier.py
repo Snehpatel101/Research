@@ -677,6 +677,7 @@ class TripleBarrierLabeler(LabelingStrategy):
             logger.info("  Adaptive barriers enabled")
 
         # Calculate transaction cost adjustment
+        cost_in_atr = 0.0
         if self.config.apply_transaction_costs:
             cost_in_atr = self._calculate_cost_in_atr(atr)
             logger.info(

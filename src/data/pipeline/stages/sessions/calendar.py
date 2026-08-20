@@ -36,6 +36,7 @@ try:
 
     PYTZ_AVAILABLE = True
 except ImportError:
+    pytz = None  # bound so guarded uses are well-defined
     PYTZ_AVAILABLE = False
 
 try:
@@ -43,6 +44,7 @@ try:
 
     ZONEINFO_AVAILABLE = True
 except ImportError:
+    ZoneInfo = None  # type: ignore[assignment,misc]  # bound so guarded uses are well-defined
     ZONEINFO_AVAILABLE = False
 
 logger = logging.getLogger(__name__)

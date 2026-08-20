@@ -2,23 +2,17 @@
 Data Domain - Consolidates data lifecycle modules.
 
 This domain provides a unified interface for data processing:
-- pipeline: Data preparation pipeline stages
+- pipeline: Data preparation pipeline stages (the live feature engine is
+  src/data/pipeline/stages/features/)
 - adapters: Model-specific data format adapters
-- features: Feature engineering and computation
+- features: Per-model feature-set resolution (strategies) + event utilities
 - labeling: Label generation (triple-barrier, etc.)
 - store: Feature storage and versioning
 
-New import paths (preferred):
+Import paths:
     from src.data.pipeline import PipelineRunner, DataConfig
     from src.data.adapters import TabularAdapter, SequenceAdapter
-    from src.data.features import compute_all_features
-    from src.data.labeling import TripleBarrierLabeler
-    from src.data.store import FeatureStore
-
-Legacy import paths (still work, will be deprecated in v2.0):
-    from src.data.pipeline import PipelineRunner
-    from src.data.adapters import TabularAdapter
-    from src.data.features import compute_all_features
+    from src.data.features import get_features_for_model
     from src.data.labeling import TripleBarrierLabeler
     from src.data.store import FeatureStore
 """
@@ -56,42 +50,13 @@ from .adapters import (
 
 # Re-export from features (now in data/features)
 from .features import (
-    FEATURE_COMPUTE_MAP,
-    FEATURE_REGISTRY,
     MODEL_FEATURE_STRATEGIES,
-    FeatureDefinition,
-    FeatureOptimizer,
-    FeaturePruner,
-    FeaturePruningResult,
-    FeatureSelector,
     FeatureStrategyManager,
     ModelFeatureStrategy,
-    MTFConfig,
-    MTFFeatureComputer,
-    OptimizationResult,
-    OptunaFeatureResult,
     ResolvedFeatureSet,
-    compute_all_features,
-    compute_features_by_family,
-    compute_features_by_names,
-    compute_mtf_features,
-    compute_single_feature,
-    get_all_feature_names,
     get_baseline_features,
-    get_feature_families,
-    get_features_by_families,
-    get_features_by_model,
     get_features_for_model,
-    get_features_in_family,
-    get_mtf_feature_names,
     get_strategy_for_model,
-    optimize_features_for_model,
-    prune_correlated_features,
-    prune_features,
-    resample_ohlcv,
-    select_features,
-    suggest_features,
-    validate_mtf_config,
 )
 
 # Re-export from labeling (now in data/labeling)
@@ -99,11 +64,8 @@ from .labeling import (
     LabelingResult,
     LabelingStrategy,
     LabelingType,
-    LabelOptimizationResult,
-    LabelOptimizer,
     TripleBarrierConfig,
     TripleBarrierLabeler,
-    optimize_labels,
     triple_barrier_numba,
     triple_barrier_numba_with_costs,
 )
@@ -176,42 +138,13 @@ __all__ = [
     "compute_coverage_stats",
     "validate_oof_results",
     # Features
-    "FeatureDefinition",
-    "FEATURE_REGISTRY",
-    "get_features_by_families",
-    "get_features_by_model",
-    "get_feature_families",
-    "compute_all_features",
-    "compute_features_by_family",
-    "compute_features_by_names",
-    "compute_single_feature",
-    "FEATURE_COMPUTE_MAP",
-    "get_all_feature_names",
-    "get_features_in_family",
-    "MTFConfig",
-    "MTFFeatureComputer",
-    "compute_mtf_features",
-    "get_mtf_feature_names",
-    "validate_mtf_config",
-    "resample_ohlcv",
     "ModelFeatureStrategy",
     "MODEL_FEATURE_STRATEGIES",
     "get_strategy_for_model",
     "get_baseline_features",
-    "OptimizationResult",
-    "FeatureOptimizer",
-    "optimize_features_for_model",
-    "suggest_features",
     "ResolvedFeatureSet",
     "FeatureStrategyManager",
     "get_features_for_model",
-    "OptunaFeatureResult",
-    "FeatureSelector",
-    "select_features",
-    "FeaturePruningResult",
-    "FeaturePruner",
-    "prune_features",
-    "prune_correlated_features",
     # Labeling
     "LabelingResult",
     "LabelingStrategy",
@@ -220,9 +153,6 @@ __all__ = [
     "TripleBarrierLabeler",
     "triple_barrier_numba",
     "triple_barrier_numba_with_costs",
-    "LabelOptimizationResult",
-    "LabelOptimizer",
-    "optimize_labels",
     # Feature Store
     "FeatureStore",
     "FeatureStoreError",

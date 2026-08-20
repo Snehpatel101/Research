@@ -14,20 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_global_or_default(attr_path: str, fallback: Any) -> Any:
-    try:
-        from src.config.global_config import get_global_config
+    """Thin wrapper over the canonical config lookup (src/config/utils.py)."""
+    from src.config.utils import get_config_value
 
-        config = get_global_config()
-        parts = attr_path.split(".")
-        value = config
-        for part in parts:
-            value = getattr(value, part)
-        return value
-    except Exception as e:
-        logger.warning(
-            f"Failed to get config attribute '{attr_path}': {e}. Using fallback: {fallback}"
-        )
-        return fallback
+    return get_config_value(attr_path, fallback)
 
 
 @dataclass
@@ -84,7 +74,7 @@ class TrainerConfig:
     feature_selection_min_frequency: float = 0.6
     deterministic_mode: bool = False
     nan_check_raise_error: bool = True
-    checkpoint_interval: int = 10
+    checkpoint_interval: int = 50
     keep_n_checkpoints: int = 3
     checkpoint_dir: str | None = None
     tracking_enabled: bool = field(
@@ -178,58 +168,23 @@ class TrainerConfig:
             return "tabular"
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for serialization."""
-        return {
-            "model_name": self.model_name,
-            "horizon": self.horizon,
-            "feature_set": self.feature_set,
-            "sequence_length": self.sequence_length,
-            "batch_size": self.batch_size,
-            "max_epochs": self.max_epochs,
-            "early_stopping_patience": self.early_stopping_patience,
-            "random_seed": self.random_seed,
-            "experiment_name": self.experiment_name,
-            "output_dir": str(self.output_dir),
-            "model_config": self.model_config,
-            "device": self.device,
-            "mixed_precision": self.mixed_precision,
-            "num_workers": self.num_workers,
-            "pin_memory": self.pin_memory,
-            "use_calibration": self.use_calibration,
-            "calibration_method": self.calibration_method,
-            "evaluate_test_set": self.evaluate_test_set,
-            "use_feature_selection": self.use_feature_selection,
-            "feature_selection_n_features": self.feature_selection_n_features,
-            "feature_selection_method": self.feature_selection_method,
-            "feature_selection_cv_splits": self.feature_selection_cv_splits,
-            "deterministic_mode": self.deterministic_mode,
-            "nan_check_raise_error": self.nan_check_raise_error,
-            "checkpoint_interval": self.checkpoint_interval,
-            "keep_n_checkpoints": self.keep_n_checkpoints,
-            "checkpoint_dir": self.checkpoint_dir,
-            "tracking_enabled": self.tracking_enabled,
-            "tracking_backend": self.tracking_backend,
-            "tracking_uri": self.tracking_uri,
-            "tracking_tags": self.tracking_tags,
-            "oom_recovery_enabled": self.oom_recovery_enabled,
-            "oom_max_retries": self.oom_max_retries,
-            "oom_batch_reduction_factor": self.oom_batch_reduction_factor,
-            "oom_min_batch_size": self.oom_min_batch_size,
-            # Phase 1 SNwH fields
-            "primary_timeframe": self.primary_timeframe,
-            "mtf_mode": self.mtf_mode,
-            "mtf_timeframes": self.mtf_timeframes,
-            "feature_mode": self.feature_mode,
-            "adapter_id": self.adapter_id,
-            "input_rank": self.input_rank,
-            "min_features": self.min_features,
-            "max_features": self.max_features,
-            # Phase 7: validation fields
-            "check_leakage": self.check_leakage,
-            "check_lookahead": self.check_lookahead,
-            "validation_correlation_threshold": self.validation_correlation_threshold,
-            "project_root": str(self.project_root) if self.project_root else None,
-        }
+        """
+        Convert to dictionary for serialization.
+
+        Field-driven (iterates the dataclass fields) so it can never drift
+        out of sync when fields are added — the previous hand-maintained
+        key list silently dropped pipeline_run_id and
+        feature_selection_min_frequency.
+        """
+        from dataclasses import fields as dataclass_fields
+
+        result: dict[str, Any] = {}
+        for f in dataclass_fields(self):
+            value = getattr(self, f.name)
+            if isinstance(value, Path):
+                value = str(value)
+            result[f.name] = value
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "TrainerConfig":

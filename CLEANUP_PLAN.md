@@ -1,7 +1,7 @@
 # Cleanup Plan: ML Factory
 
-**Status:** Phase 99 COMPLETE (E3 Robustness Scoring + CUSUM + FracDiff)
-**Last Updated:** 2026-03-24
+**Status:** Phase 114 COMPLETE (Repository Rehabilitation). Phases 98-113 completed but not yet backfilled into the tables below in full detail — see CLAUDE.md "Current Status" and COMPLETION.md for those records.
+**Last Updated:** 2026-08-20
 
 ---
 
@@ -79,6 +79,8 @@ See **COMPLETION.md** for full details on all completed phases.
 | 95 | Deep Audit Phase B — 9 High-Value Fixes (binary n_classes, entropy shift(1), 4D OOF scaling, Yang-Zhang k, adverse selection, Sharpe annualization, tie-breaking, OOF stateless, volatility annualization) | ✅ COMPLETE | 2026-03-24 |
 | 96 | Deep Audit Phase C — 13 Medium-Priority Fixes (DSR Bonferroni, duplicate features, GARCH stubs, OU half-life, Hurst, MTF mutation, label cache, dead config, timeout, scaler f32, orphaned modules, ATR median, vol slippage) + NaN guard | ✅ COMPLETE | 2026-03-24 |
 | 97 | Deep Audit Phase D — 12 Regression Tests (config round-trip, leakage detection, feature index, degenerate labels, binary mode, ATR parity, barrier exits, cost parity, RSI parity, entropy shift, determinism, config hash) | ✅ COMPLETE | 2026-03-24 |
+| 98-113 | Feature Governance E1-E9 (timeframe budget, regime selection, robustness scoring, CUSUM, FracDiff, lifecycle, registry, portability, economic value) + THEETASKLIST Adversarial Audit Remediation (leakage/accuracy/memory fixes, 39-fix 8-phase remediation) — see CLAUDE.md/COMPLETION.md | ✅ COMPLETE | 2026-03-24 to 2026-03-25 |
+| 114 | Repository Rehabilitation — barrier/backtest parity, binary-mode completion, config-seam fixes, 21K-line dead code deletion, pyright baseline, ~125 new tests | ✅ COMPLETE | 2026-08-20 |
 
 **Phase 3 Master Implementation Plan: COMPLETE (26/26 tasks across Phases 51-52)**
 
@@ -153,12 +155,35 @@ See **COMPLETION.md** for full details on all completed phases.
 | 90 | CUDA Memory Guards + Model-Specific Optimizations | MEDIUM | 1 session | ✅ COMPLETE |
 | 91 | Gradient Checkpointing + TFT SDPA (Flash Attention) | MEDIUM | 1 session | ✅ COMPLETE |
 | 92 | Optuna Robustness + Hardcoded Values + Sequential Ensemble | HIGH | 1 session | ✅ COMPLETE |
+| 98-113 | Feature Governance (E1-E9) + THEETASKLIST Adversarial Audit Remediation | HIGH | multi-session | ✅ COMPLETE |
+| 114 | Repository Rehabilitation (correctness fixes, cleanup, verification infra) | CRITICAL | 1 session | ✅ COMPLETE |
 
 ---
 
 ## Active Phases
 
-**No active phases.** All phases through 92 are complete. See COMPLETION.md for full details.
+**No active phases.** All phases through 114 are complete. See COMPLETION.md for full details.
+
+### Open Decisions (Phase 115 candidates, pending user)
+
+- Serving/monitoring chain (`src/inference/server.py` + `validation/monitoring`) — unreachable, server has known crashes; wire or delete
+- Phase 52 special-mode bundles (WalkForward/Regime/MetaLabeling) — no producer/consumer; wire into `BundleBuilder` or delete
+- Phase 99-102 governance modules — tests-only; wire into pipeline or move to experimental
+- `ModelContract.sequence_length` not honored in standard mode (contract 64/128 vs config 60)
+- 5d-optimization island (`five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver`) — tests-only
+- Core `AdapterResult` + `TrainingResult` duplicate-class consolidation
+- `ExperimentConfig.to_trainer_config`/`to_backtest_config`/`to_bundle_config` — zero callers, adopt or delete
+
+---
+
+## Phase 114: Repository Rehabilitation (2026-08-20)
+
+**Status:** ✅ COMPLETE
+**Priority:** CRITICAL
+**Effort:** 1 session
+**Source:** Full-repository rehabilitation pass — correctness, cleanup, verification infrastructure
+
+**Overview:** Restored label/backtest barrier parity on the canonical MLFactory path, fixed backtest metrics being ALWAYS silently empty, completed binary-mode (n_classes=2) threading end-to-end, closed config seams (unbounded early stopping/Optuna timeout, decoupled feature selection from n_trials), deleted 21,193 lines of grep-verified dead code across 124 files, added a pyright baseline (1,234 errors → 0), and added ~125 new behavioral tests (suite 475 → ~600). See COMPLETION.md for full fix-by-fix detail. Full task breakdown in CLEANUP_TASKS.md Phase 114.
 
 ---
 

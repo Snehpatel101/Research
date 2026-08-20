@@ -6,7 +6,6 @@ stay in {0, 1} (not {-1, 0, 1}).
 """
 
 import numpy as np
-import pytest
 
 from src.models.ensemble.stacking import StackingEnsemble
 
@@ -46,10 +45,6 @@ def test_stacking_binary_mode_runs():
     assert result.class_probabilities.shape[0] == len(X_val)
 
 
-@pytest.mark.xfail(
-    reason="Base models' _n_classes defaults to 3; map_classes_to_labels remaps {0,1}->{-1,0}",
-    strict=True,
-)
 def test_stacking_binary_predictions_in_binary_range():
     """Output predictions from binary stacking are in {0, 1}, not {-1, 0, 1}."""
     X_train, y_train, X_val, y_val = _make_binary_data()

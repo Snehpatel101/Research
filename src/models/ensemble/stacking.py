@@ -395,7 +395,10 @@ class StackingEnsemble(BaseModel):
         self._meta_learner_name = train_config.get("meta_learner_name", "logistic")
         self._n_folds = train_config.get("n_folds", 5)
         self._n_classes = train_config.get("n_classes", 3)
-        meta_learner_config = train_config.get("meta_learner_config", {})
+        meta_learner_config = dict(train_config.get("meta_learner_config", {}))
+        # n_classes is the problem definition (not a tuned hyperparameter) —
+        # every model in the ensemble must agree on it.
+        meta_learner_config.setdefault("n_classes", self._n_classes)
         use_probabilities = train_config.get("use_probabilities", True)
         passthrough = train_config.get("passthrough", False)
         purge_bars = train_config.get("purge_bars", 60)
@@ -419,7 +422,12 @@ class StackingEnsemble(BaseModel):
                 "IGNORED: use_default_configs_for_oof=False would cause data leakage. "
                 "OOF predictions always use default configs to prevent meta-learner bias."
             )
-        oof_base_configs: dict[str, dict[str, Any]] = {}
+        # Default configs only (leakage rule) — but n_classes is the problem
+        # definition and must reach every base model, or binary-mode models
+        # would map class indices through the 3-class {0,1,2}->{-1,0,1} table.
+        oof_base_configs: dict[str, dict[str, Any]] = {
+            name: {"n_classes": self._n_classes} for name in self._base_model_names
+        }
 
         # Log ensemble configuration (extracted to reduce fit() complexity - Phase 10A)
         self._log_ensemble_config(
@@ -812,7 +820,8 @@ class StackingEnsemble(BaseModel):
 
             # Train each base model on this fold
             for model_idx, model_name in enumerate(base_model_names):
-                model_config = base_model_configs.get(model_name, {})
+                model_config = dict(base_model_configs.get(model_name, {}))
+                model_config.setdefault("n_classes", n_classes)
                 model = ModelRegistry.create(model_name, config=model_config)
 
                 # Select appropriate data format and labels based on model type
@@ -1164,7 +1173,7 @@ class StackingEnsemble(BaseModel):
             for fold_idx in range(self._n_folds):
                 fold_dir = model_dir / f"fold_{fold_idx}"
                 if fold_dir.exists():
-                    model = ModelRegistry.create(model_name)
+                    model = ModelRegistry.create(model_name, config={"n_classes": self._n_classes})
                     model.load(fold_dir)
                     fold_models.append(model)
 
@@ -1172,7 +1181,9 @@ class StackingEnsemble(BaseModel):
 
         # Load meta-learner
         meta_dir = path / "meta_learner"
-        self._meta_learner = ModelRegistry.create(self._meta_learner_name)
+        self._meta_learner = ModelRegistry.create(
+            self._meta_learner_name, config={"n_classes": self._n_classes}
+        )
         self._meta_learner.load(meta_dir)
 
         self._is_fitted = True

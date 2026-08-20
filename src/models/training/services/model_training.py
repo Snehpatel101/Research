@@ -38,6 +38,8 @@ class ModelTrainingRequest:
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
     batch_size: int | None = None  # Override batch size (used by OOM retry)
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
+    early_stopping_patience: int | None = None  # None = TrainerConfig default
+    optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
 
 
 @dataclass
@@ -51,6 +53,8 @@ class ModelTrainingResult:
     training_time_seconds: float = 0.0
     n_features: int = 0
     data_rank: int = 2
+    calibrator: Any = None  # fitted ProbabilityCalibrator (set post-training)
+    calibration_metrics: Any = None
 
 
 class ModelTrainingService:
@@ -116,9 +120,16 @@ class ModelTrainingService:
         _model_config = {}
         if request.max_epochs is not None:
             _model_config["max_epochs"] = request.max_epochs
-            _model_config["early_stopping_patience"] = max(1, request.max_epochs // 2)
+        if request.early_stopping_patience is not None:
+            # Explicitly configured patience. When None, Trainer's config
+            # bridge fills in TrainerConfig.early_stopping_patience — the old
+            # max_epochs//2 heuristic silently overrode every configured value.
+            _model_config["early_stopping_patience"] = request.early_stopping_patience
         if request.batch_size is not None:
             _model_config["batch_size"] = request.batch_size
+        _trainer_kwargs: dict[str, Any] = {}
+        if request.early_stopping_patience is not None:
+            _trainer_kwargs["early_stopping_patience"] = request.early_stopping_patience
         trainer_config = TrainerConfig(
             model_name=model_name,
             horizon=horizon,
@@ -127,6 +138,7 @@ class ModelTrainingService:
             use_feature_selection=request.use_feature_selection,
             max_epochs=request.max_epochs if request.max_epochs is not None else 100,
             model_config=_model_config,
+            **_trainer_kwargs,
         )
 
         # CRITICAL: Filter invalid labels (-99) before any training
@@ -318,6 +330,7 @@ class ModelTrainingService:
             max_epochs=request.max_epochs,
             cv_method=request.cv_method,
             embargo_bars=request.embargo_bars,
+            optuna_timeout=request.optuna_timeout,
         )
 
         result = tuning_service.optimize(tuning_request)

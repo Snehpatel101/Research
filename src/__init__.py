@@ -1,16 +1,16 @@
 """
-ML Pipeline - Unified Machine Learning Pipeline.
+ML Factory - Unified Machine Learning Pipeline.
 
 Usage:
-    from src import MLPipeline, PipelineConfig
+    from src.factory import MLFactory
+    from src.config.experiment import ExperimentConfig
 
-    config = PipelineConfig(
-        symbol="MES",
-        models=["xgboost", "lstm"],
-        build_ensemble=True,
-    )
+    config = ExperimentConfig()
+    config.data.symbol = "MES"
+    config.data.data_path = "./data/mes_1min.parquet"
+    config.training.models = ["xgboost", "lstm"]
 
-    result = MLPipeline(config).run()
+    result = MLFactory(config).run()
 
 Presets:
     from src import quick_config, production_config, research_config
@@ -26,9 +26,7 @@ __author__ = "Research Team"
 __all__ = [
     "__version__",
     "__author__",
-    "MLPipeline",
     "PipelineConfig",
-    "PipelineResult",
     "quick_config",
     "production_config",
     "research_config",
@@ -37,22 +35,10 @@ __all__ = [
 
 def __getattr__(name: str):
     """Lazy imports."""
-    if name == "MLPipeline":
-        # DEPRECATED: Use src.factory.MLFactory instead
-        from src.orchestrator import MLPipeline
-
-        return MLPipeline
-
     if name == "PipelineConfig":
         from src.core.config import PipelineConfig
 
         return PipelineConfig
-
-    if name == "PipelineResult":
-        # DEPRECATED: Use src.factory.ExperimentResult instead
-        from src.orchestrator import PipelineResult
-
-        return PipelineResult
 
     if name == "quick_config":
         from src.core.config import quick_config

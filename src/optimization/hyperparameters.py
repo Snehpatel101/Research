@@ -643,6 +643,7 @@ class HyperparameterOptimizer:
         is_neural = self._is_neural_model(model_name)
 
         def objective(trial: optuna.Trial) -> float:
+            model = None  # bound so the finally-block cleanup is well-defined
             params = suggest_hyperparameters(trial, model_name, space)
 
             try:
@@ -674,8 +675,7 @@ class HyperparameterOptimizer:
                 if is_neural:
                     import gc
 
-                    if "model" in locals():
-                        del model
+                    del model
                     gc.collect()
                     try:
                         import torch

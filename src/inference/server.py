@@ -58,6 +58,7 @@ try:
     accuracy_gauge = Gauge("model_accuracy", "Current model accuracy")
 
 except ImportError:
+    generate_latest = None  # bound so guarded uses are well-defined
     PROMETHEUS_AVAILABLE = False
     logger.info("prometheus-client not available. Install with: pip install prometheus-client")
 

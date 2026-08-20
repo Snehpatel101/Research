@@ -828,9 +828,3 @@ class FeatureEngineer:
             raise RuntimeError(f"{error_summary}. Errors: {errors[:5]}")
 
         return results
-
-
-if __name__ == "__main__":
-    from .cli import main
-
-    main()

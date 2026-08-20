@@ -197,7 +197,6 @@ class BaseRNNModel(BaseModel):
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         super().__init__(config)
         self._model: nn.Module = None  # type: ignore[assignment]
-        self._n_classes: int = 3
         self._n_features: int | None = None
         self._bidirectional_warning_logged: bool = False
 
@@ -968,10 +967,10 @@ class BaseRNNModel(BaseModel):
         }
 
     def _convert_labels_to_class(self, labels: np.ndarray) -> np.ndarray:
-        return map_labels_to_classes(labels)
+        return map_labels_to_classes(labels, self._n_classes)
 
     def _convert_labels_from_class(self, labels: np.ndarray) -> np.ndarray:
-        return map_classes_to_labels(labels)
+        return map_classes_to_labels(labels, self._n_classes)
 
 
 __all__ = [

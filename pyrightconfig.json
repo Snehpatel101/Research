@@ -1,0 +1,40 @@
+{
+    // Pyright configuration for ML Factory.
+    //
+    // Tuned from a full-triage of the 1234-error baseline (2026-08-20):
+    // ~97% of diagnostics were pandas/numpy/sklearn stub imprecision with
+    // zero real bugs in every inspected sample. Rules that only ever fired
+    // on stub noise are disabled; rules that found real bugs
+    // (possibly-unbound variables, missing imports) stay errors; rules with
+    // mixed signal (Optional handling, attribute access — the mixin
+    // architecture triggers false positives) are warnings.
+    "include": ["src", "tests"],
+    "exclude": ["**/__pycache__", "**/.venv", "build", "dist", "notebooks"],
+    "pythonVersion": "3.12",
+    "typeCheckingMode": "basic",
+
+    // Real-bug finders — keep as errors
+    "reportMissingImports": "error",
+    "reportPossiblyUnboundVariable": "error",
+    "reportRedeclaration": "error",
+    "reportUndefinedVariable": "error",
+
+    // Mixed signal — warnings (worth scanning, not build-breaking)
+    "reportOptionalMemberAccess": "warning",
+    "reportOptionalOperand": "warning",
+    "reportOptionalCall": "warning",
+    "reportOptionalSubscript": "warning",
+    "reportAttributeAccessIssue": "warning",
+    "reportInvalidTypeForm": "warning",
+    "reportGeneralTypeIssues": "warning",
+    "reportIncompatibleMethodOverride": "warning",
+
+    // Pure stub noise on this codebase — disabled
+    "reportArgumentType": "none",
+    "reportCallIssue": "none",
+    "reportReturnType": "none",
+    "reportOperatorIssue": "none",
+    "reportAssignmentType": "none",
+    "reportIndexIssue": "none",
+    "reportPrivateImportUsage": "none"
+}

@@ -163,6 +163,10 @@ class BaseModel(ABC):
         """
         self._config = self._merge_config(config)
         self._is_fitted = False
+        # Class count is the problem definition (3 = short/neutral/long,
+        # 2 = binary). Owned here so every model agrees; subclasses may
+        # override from persisted metadata on load().
+        self._n_classes: int = int(self._config.get("n_classes", 3))
 
     def _merge_config(self, config: dict[str, Any] | None) -> dict[str, Any]:
         """Merge provided config with defaults."""

@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 import typer
 
 if TYPE_CHECKING:
-    from src.config.trainer_config import TrainerConfig
-    from src.data.adapters.result import AdapterResult
+    from src.core.container import TimeSeriesDataContainer
+    from src.models.config.trainer_config import TrainerConfig
 
 from src.cli.utils import (
     DEFAULT_DATA_DIR,
@@ -180,7 +180,7 @@ def _build_config_overrides(
 def _generate_post_training_report(
     results: dict,
     trainer_config: TrainerConfig,
-    container: AdapterResult,
+    container: TimeSeriesDataContainer,
 ) -> None:
     """Generate financial report after training completion."""
     logger = logging.getLogger(__name__)

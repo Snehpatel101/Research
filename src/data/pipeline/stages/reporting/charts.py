@@ -6,13 +6,15 @@ Generates matplotlib visualizations for label distributions, quality scores, etc
 import logging
 from pathlib import Path
 
-import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from src.core.common.horizon_config import LOOKBACK_HORIZONS
 
-matplotlib.use("Agg")
+# NOTE: no module-level matplotlib.use("Agg") — that silently flipped the
+# GLOBAL backend for anything importing the pipeline (breaking notebook
+# inline backends). savefig works headless with whatever backend matplotlib
+# auto-selects (Agg when no display is available).
 
 logger = logging.getLogger(__name__)
 

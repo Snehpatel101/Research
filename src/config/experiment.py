@@ -422,7 +422,11 @@ class ExperimentConfig:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(path, "w") as f:
-            yaml.dump(self.to_dict(), f, default_flow_style=False, sort_keys=False)
+            # safe_dump pairs with the safe_load in from_yaml: the full Dumper
+            # emits python-specific tags (e.g. !!python/tuple for
+            # ScalerConfig.clip_range) that safe_load then refuses to parse,
+            # breaking every YAML round-trip.
+            yaml.safe_dump(self.to_dict(), f, default_flow_style=False, sort_keys=False)
 
     # =========================================================================
     # CONVERSION TO LEGACY CONFIGS (BACKWARD COMPATIBILITY)
@@ -465,10 +469,12 @@ class ExperimentConfig:
             wf_min_train_pct=self.training.walk_forward.min_train_pct,
             wf_test_pct=self.training.walk_forward.test_pct,
             random_state=self.random_seed,
-            # Optimization flags — disabled when n_trials=0
+            # Optimization flags — Optuna-based ones disabled when n_trials=0.
+            # Feature selection is NOT Optuna-based (MDA ranking) and follows
+            # features.selection_enabled independently of the trial count.
             optimize_hyperparams=_do_optimize,
             optimize_labels=_do_optimize,
-            optimize_features=_do_optimize,
+            optimize_features=self.data.features.selection_enabled,
             # Optuna trial counts - all driven by OptunaConfig.n_trials
             hyperparam_trials=self.training.optuna.n_trials,
             label_optimization_trials=self.training.optuna.n_trials,
@@ -476,12 +482,13 @@ class ExperimentConfig:
             feature_pruning_trials=self.training.optuna.n_trials,
             optuna_random_state=self.training.optuna.random_state,
             optuna_metric=self.training.optuna.metric,
+            optuna_timeout=self.training.optuna.timeout,
             # Feature configuration
             feature_families=self.data.features.families,
             # Labeling configuration
             labeling_method=self.data.labeling.method,
-            # MTF configuration
-            mtf_timeframes=self.data.mtf.timeframes,
+            # MTF configuration (empty list disables MTF features)
+            mtf_timeframes=self.data.mtf.timeframes if self.data.mtf.enabled else [],
             # Sequence configuration
             sequence_length=self.data.sequence.seq_len,
             # Neural network configuration

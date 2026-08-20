@@ -4,6 +4,77 @@
 
 ---
 
+## Phase 114: Repository Rehabilitation | 2026-08-20 | COMPLETE
+
+**Impact:** Full-repository rehabilitation session — restored label/backtest parity on the canonical MLFactory path, fixed a bug where backtest metrics were ALWAYS silently empty, completed binary-mode (n_classes=2) threading end-to-end, closed several config seams that left production runs unbounded or silently misconfigured, deleted 21,193 lines of grep-verified dead code across 124 files, and added a pyright baseline (1,234 errors → 0) plus ~125 new behavioral tests. Suite grew 475 → ~600 tests, all passing; ruff + black clean.
+
+### Correctness Fixes
+
+| # | Fix | Description |
+|:-:|-----|-------------|
+| 1 | Barrier parity single source of truth | New `MLFactory._resolve_barrier_params()` is used by BOTH labeling and backtest wiring (explicit `LabelingConfig` override → per-symbol `BARRIER_PARAMS` table). `TripleBarrierConfig` now receives `symbol` (per-symbol transaction costs) and `max_bars` as the time barrier. `LabelingConfig`/`PipelineConfig` barrier fields became None-auto sentinels. |
+| 2 | Backtest metrics always empty | On `MLFactory.run(run_backtest=True)`, a `'label'` column collision between the featured df (passed as prices) and the Backtester's injected label column caused a `KeyError` that was swallowed by a blanket `except`. Factory now passes OHLCV-only prices. |
+| 3 | Walk-forward OOF schema violation | Producer emitted compact frames that violated the `OOFPrediction` schema (IndexError in ensemble build). Now emits full-length NaN-padded frames; defensive schema check added in `EnsembleService`. |
+| 4 | Calibrator silently dropped/broken | Parallel-boosting calibrator conversion omitted it (inverted `hasattr` guard); multiclass calibration silently failed everywhere because probas collapsed to 1D before `ProbabilityCalibrator.fit` (requires 2D). Both fixed. |
+| 5 | Binary mode (n_classes=2) finished end-to-end | Threaded config → `OOFRequest` → `OOFGenerator` → sub-generators; `OOFPrediction.get_probabilities` column-dynamic; `DiversityAnalyzer`, meta-learner, stacking base/fold/load models all receive `n_classes`; 12 model classes read `n_classes` from config; 31 `map_classes_to_labels` call sites fixed; the strict xfail (binary stacking predicted {-1,0}) now passes. |
+| 6 | `early_stopping_patience` threaded end-to-end | Old `max_epochs // 2` heuristic deleted (effective patience was 50, silently). |
+| 7 | Optuna timeout threaded end-to-end | Including `TuningRequest` — optimization previously ran unbounded. |
+| 8 | global.yaml drift | `batch_size` 256→512 and Optuna timeout 3600→43200 to match code defaults. |
+| 9 | Feature selection / n_trials coupling removed | Feature selection now follows `features.selection_enabled` instead of being tied to `n_trials`; `OptunaConfig.validate` accepts `n_trials=0`. |
+| 10 | MTF gating | `mtf.enabled` now gates `mtf_timeframes`; `MTFConfig` default 1h→60min. |
+| 11 | Trainer bridge extended | `mixed_precision`/`num_workers`/`pin_memory`/`checkpoint_interval`/`keep_n`/`oom_*` now flow through; `checkpoint_interval` default 10→50. |
+| 12 | GlobalConfig dict-walking fixed | `features.bollinger.*` and similar nested paths now resolvable; dead `validation.*` lookups replaced with plain defaults. |
+| 13 | ExperimentConfig YAML round-trip fixed | `safe_dump` + `ScalerConfig.clip_range` list normalization. |
+| 14 | TrainerConfig.to_dict field-driven | Was dropping `pipeline_run_id`, `feature_selection_min_frequency`. |
+| 15 | AdapterScaler float32 persistence | Manual float32 stats now persisted (loaded scalers were off by ~1e-5 on float32). |
+| 16 | Misc hardening | `tar.extractall(filter="data")`; `calculate_rsi_numba` short-input guard (out-of-bounds write); `DataContractViolation` import hoisted out of its own try (NameError on degradation path); `regime_adx_threshold` None-auto sentinel (explicit 25.0 honored); stale `TYPE_CHECKING` imports fixed (factory/orchestrator/train.py). |
+| 17 | CLI fixes | `typer.Exit` no longer swallowed by `except Exception` (success paths were exiting 1!); config errors now print clean messages instead of tracebacks; `ml status` markup crash fixed; `ml run --resume` added (wires `MLFactory.run(resume=True)`). |
+
+### Cleanup (21,193 deletions, 838 insertions across 124 files, all grep-verified zero-consumer)
+
+- `src/data/features/compute/` — dead second feature engine (18 modules) + legacy selection stack (`selection`/`pruning`/`optimization`/`registry.py`); `src/data/features/` now holds only `strategies`, `strategy_manager`, `cusum_filter`, `frac_diff`
+- `src/orchestrator.py` (broken `MLPipeline` shim) + `src/__init__` exports
+- `src/cli/run_commands*` — dead second CLI (4 files)
+- 7 vestigial trainer files (`model_trainer`, `model_factory`, `config_loader`, `feature_selector`, `services/mode_router`, `modes/regime_aware`, `modes/meta_labeling`) — canonical path is `unified_orchestrator` + `training_ops` + `regime_trainer`, meta-labeling inline
+- `src/optimization/{pipeline,labels,features,ensemble_objective}.py` + `src/data/labeling/optimization.py`
+- 5 stale scripts + `./pipeline` wrapper
+- Two no-op `clear_all_feature_caches` call sites
+- `charts.py` module-level `matplotlib.use("Agg")` removed (was flipping the global backend)
+- `inference/__init__` first-party except-ImportError guards removed
+
+### Verification Infrastructure
+
+- `pyrightconfig.json` added: 1,234 errors → 0 (stub-noise rules off, `possibly-unbound`/missing-imports kept as errors; every remaining real site fixed properly, not suppressed — only `google.colab`/`slack_sdk` env-imports carry justified per-line ignores)
+- 8 new behavioral test files (~125 tests): `test_factory_e2e` (mini-E2E `MLFactory.run` + reproducibility guarantee), `test_bundle_roundtrip` (save/load/predict parity), `test_wf_oof_schema`, `test_barrier_parity`, `test_calibrator_flow`, `test_config_seams`, `test_scaler_persistence`, `test_cli_smoke`; D9/D10/D11/phases_1_3/phases_4_11 repointed from the deleted feature engine to the live one
+- Suite grew 475 → ~600 tests, all passing; ruff + black clean
+- `pyproject.toml` serving extra corrected (`flask` → `fastapi`/`uvicorn`/`prometheus`), `psutil` declared, `stats` extra added
+- `Makefile` `test-quick` target fixed
+- `config/models/README.md` documents the (previously phantom) override-layer contract
+
+### Open Decisions (pending user — next-phase candidates)
+
+| # | Item | Notes |
+|:-:|------|-------|
+| 1 | Serving/monitoring chain | `src/inference/server.py` + `validation/monitoring` — unreachable, server has known crashes; wire or delete |
+| 2 | Phase 52 special-mode bundles | No producer/consumer; wire into `BundleBuilder` or delete |
+| 3 | Phase 99-102 governance modules | Tests-only; wire into pipeline or move to experimental |
+| 4 | ModelContract `sequence_length` not honored in standard mode | C4 — contract 64/128 vs config 60, cross-mode inconsistency |
+| 5 | 5d-optimization island | `five_dimension_objective`/`hyperparameters`/`base_feature_sets`/`artifact_saver` — tests-only |
+| 6 | Core `AdapterResult` + `TrainingResult` duplicate-class consolidation | Related to the "Dual AdapterResult" documented exception in CLAUDE.md |
+| 7 | `ExperimentConfig.to_trainer_config`/`to_backtest_config`/`to_bundle_config` | Zero callers — adopt or delete |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| Full test suite | ~600 passed (was 475) |
+| Ruff lint | PASS (0 errors) |
+| Black format | PASS |
+| pyright (new baseline) | 0 errors (was 1,234) |
+| Dead-code deletions | Grep-verified zero-consumer for all 124 files touched |
+
+---
+
 ## Phase 103: Adversarial Audit Remediation (11 Phases) | 2026-03-25 | COMPLETE
 
 **Impact:** Fixed 36 confirmed bugs + 11 partially confirmed issues from 12-agent adversarial audit. All 11 remediation phases complete. 473 tests passing (was 440), lint clean.

@@ -149,10 +149,14 @@ class LabelingConfig(BaseConfig):
 
     Attributes:
         method: Labeling method ('triple_barrier', 'directional', 'threshold')
-        upper_mult: Upper barrier multiplier (ATR units)
-        lower_mult: Lower barrier multiplier (ATR units)
+        upper_mult: Upper barrier multiplier in ATR units. None (default) means
+            "auto": use the per-symbol/per-horizon BARRIER_PARAMS table, which is
+            the same source the backtester uses — keeping labels and backtest
+            playing the same game. Set explicitly to override both.
+        lower_mult: Lower barrier multiplier (ATR units). None = auto, see upper_mult.
         atr_period: ATR calculation period
-        max_holding_bars: Maximum holding period
+        max_holding_bars: Maximum holding period (time barrier, bars).
+            None = auto from BARRIER_PARAMS, see upper_mult.
         min_return_threshold: Minimum return for non-zero label
 
     Example:
@@ -165,10 +169,10 @@ class LabelingConfig(BaseConfig):
     """
 
     method: str = "triple_barrier"
-    upper_mult: float = 2.0
-    lower_mult: float = 2.0
+    upper_mult: float | None = None
+    lower_mult: float | None = None
     atr_period: int = 14
-    max_holding_bars: int = 20
+    max_holding_bars: int | None = None
     min_return_threshold: float = 0.0
 
     # Triple-barrier specific
@@ -192,16 +196,16 @@ class LabelingConfig(BaseConfig):
         if self.method not in valid_methods:
             issues.append(f"method must be one of {valid_methods}, got '{self.method}'")
 
-        if self.upper_mult <= 0:
+        if self.upper_mult is not None and self.upper_mult <= 0:
             issues.append(f"upper_mult must be positive, got {self.upper_mult}")
 
-        if self.lower_mult <= 0:
+        if self.lower_mult is not None and self.lower_mult <= 0:
             issues.append(f"lower_mult must be positive, got {self.lower_mult}")
 
         if self.atr_period <= 0:
             issues.append(f"atr_period must be positive, got {self.atr_period}")
 
-        if self.max_holding_bars <= 0:
+        if self.max_holding_bars is not None and self.max_holding_bars <= 0:
             issues.append(f"max_holding_bars must be positive, got {self.max_holding_bars}")
 
         return issues
@@ -244,6 +248,11 @@ class ScalerConfig(BaseConfig):
 
     # Category-specific scaling
     category_scalers: dict[str, str] | None = None
+
+    def __post_init__(self) -> None:
+        """Normalize clip_range — YAML/JSON round-trips deliver it as a list."""
+        if isinstance(self.clip_range, (list, tuple)) and len(self.clip_range) == 2:
+            self.clip_range = (float(self.clip_range[0]), float(self.clip_range[1]))
 
     def validate(self) -> list[str]:
         """Validate scaler configuration."""
@@ -366,7 +375,7 @@ class MTFConfig(BaseConfig):
 
     enabled: bool = True
     mode: str = "indicators"
-    timeframes: list[str] = field(default_factory=lambda: ["5min", "15min", "1h"])
+    timeframes: list[str] = field(default_factory=lambda: ["5min", "15min", "60min"])
     primary_timeframe: str = "5min"
 
     # Aggregation settings

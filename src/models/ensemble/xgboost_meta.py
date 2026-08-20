@@ -60,7 +60,6 @@ class XGBoostMeta(BaseModel):
         super().__init__(config)
         self._model: Any = None  # xgb.Booster
         self._feature_names: list[str] | None = None
-        self._n_classes: int = 3
         self._use_gpu: bool = False
 
     @property
@@ -124,8 +123,8 @@ class XGBoostMeta(BaseModel):
             self._use_gpu = self._check_cuda_available()
 
         # Convert labels: -1,0,1 -> 0,1,2
-        y_train_xgb = map_labels_to_classes(y_train)
-        y_val_xgb = map_labels_to_classes(y_val)
+        y_train_xgb = map_labels_to_classes(y_train, self._n_classes)
+        y_val_xgb = map_labels_to_classes(y_val, self._n_classes)
 
         # Apply balanced class weights
         final_weights = sample_weights
@@ -221,7 +220,7 @@ class XGBoostMeta(BaseModel):
         dmatrix = xgb.DMatrix(X)
         probabilities = self._model.predict(dmatrix)
         class_predictions_xgb = np.argmax(probabilities, axis=1)
-        class_predictions = map_classes_to_labels(class_predictions_xgb)
+        class_predictions = map_classes_to_labels(class_predictions_xgb, self._n_classes)
         confidence = np.max(probabilities, axis=1)
 
         return PredictionResult(
@@ -346,7 +345,7 @@ class XGBoostMeta(BaseModel):
         """Compute accuracy and F1 for a dataset."""
         probabilities = self._model.predict(dmatrix)
         y_pred_xgb = np.argmax(probabilities, axis=1)
-        y_pred = map_classes_to_labels(y_pred_xgb)
+        y_pred = map_classes_to_labels(y_pred_xgb, self._n_classes)
 
         return {
             "accuracy": float(accuracy_score(y_true, y_pred)),

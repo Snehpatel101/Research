@@ -43,6 +43,9 @@ catboost>=1.2.0
 # Timezone Support
 pytz>=2023.0
 
+# Memory monitoring (walk-forward + core utils)
+psutil>=5.9.0
+
 # Online Drift Detection
 river>=0.21.0
 

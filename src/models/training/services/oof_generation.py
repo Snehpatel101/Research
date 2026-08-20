@@ -76,7 +76,7 @@ class OOFGenerationService:
             embargo_bars=request.embargo_bars,
         )
         cv = PurgedKFold(cv_config)
-        return OOFGenerator(cv, cache_dir=self._cache_dir)
+        return OOFGenerator(cv, cache_dir=self._cache_dir, n_classes=request.n_classes)
 
     def _create_cv(self, request: OOFRequest) -> PurgedKFold:
         """Create a fresh PurgedKFold CV splitter from request parameters."""

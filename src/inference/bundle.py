@@ -604,7 +604,9 @@ class ModelBundle:
                         f"Unsafe path in tarball: {member.name}. "
                         "Bundle may be corrupted or malicious."
                     )
-            tar.extractall(extract_dir)
+            # filter="data" rejects absolute paths, traversal, and special
+            # files (Python 3.12+; becomes the default in 3.14)
+            tar.extractall(extract_dir, filter="data")
 
         # Find the extracted bundle directory
         # Should be the first top-level directory in the tarball

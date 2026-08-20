@@ -13,6 +13,7 @@ Created: 2025-12-22
 
 import logging
 from datetime import datetime
+from typing import Any
 
 import pandas as pd
 
@@ -244,6 +245,9 @@ class SessionFilter:
 
         datetimes = df[self.datetime_column]
 
+        session_flags: dict[str, Any] = {}
+        overlap_flags: dict[str, Any] = {}
+
         # Add session flags
         if self.config.add_session_flags:
             session_flags = self.get_session_flags(datetimes)
@@ -272,8 +276,8 @@ class SessionFilter:
                         feature_metadata[col_name] = overlap.description
 
         logger.info(
-            f"Added session features: {len(session_flags) if self.config.add_session_flags else 0} sessions, "
-            f"{len(overlap_flags) if self.config.add_overlap_flags else 0} overlaps"
+            f"Added session features: {len(session_flags)} sessions, "
+            f"{len(overlap_flags)} overlaps"
         )
 
         return df

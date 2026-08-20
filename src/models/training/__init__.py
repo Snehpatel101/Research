@@ -6,7 +6,6 @@ any combination of models, features, optimization, and ensembles.
 
 Main Components:
 - UnifiedTrainingOrchestrator: THE single entry point (PHASE_3)
-- ModelTrainer: PHASE_3 unified model trainer with adapter integration
 - Trainer: Main orchestrator for model training workflow
 - TrainerFeaturesMixin: Feature selection and feature set resolution
 - TrainerEvaluationMixin: Test set evaluation functionality
@@ -29,9 +28,6 @@ Usage:
 # Local trainer classes
 from .artifacts import TrainerArtifactsMixin
 from .checksums import ArtifactChecksum, ArtifactIntegrityManager, compute_file_checksum
-
-# Config and loading
-from .config_loader import ConfigLoader, load_config_from_params, load_config_from_yaml
 from .evaluation import INVALID_LABEL_SENTINEL, TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
 
@@ -43,9 +39,6 @@ from .meta_labeling import (
     get_strategy_description,
     predict_with_sizing,
 )
-
-# PHASE_3: Unified model trainer with adapter integration
-from .model_trainer import ModelTrainer, TrainedModelArtifact, train_models
 
 # PHASE_3: Regime-aware training components
 from .regime_detector import (
@@ -106,12 +99,4 @@ __all__ = [
     "compute_bet_sizes",
     "predict_with_sizing",
     "get_strategy_description",
-    # PHASE_3: Unified model trainer
-    "ModelTrainer",
-    "TrainedModelArtifact",
-    "train_models",
-    # Config and loading
-    "ConfigLoader",
-    "load_config_from_params",
-    "load_config_from_yaml",
 ]

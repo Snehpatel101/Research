@@ -83,6 +83,7 @@ class OOFGenerator:
         self,
         cv: PurgedKFold,
         cache_dir: Path | None = None,
+        n_classes: int = 3,
     ) -> None:
         """
         Initialize OOFGenerator.
@@ -90,8 +91,10 @@ class OOFGenerator:
         Args:
             cv: PurgedKFold cross-validator
             cache_dir: Directory for OOF prediction caching. If None, caching disabled.
+            n_classes: Number of output classes (2 for binary mode, 3 default).
         """
         self.cv = cv
+        self.n_classes = n_classes
         self._core_generator = CoreOOFGenerator(cv)
         self._sequence_generator = SequenceOOFGenerator(cv)
         self._stacking_builder = StackingDatasetBuilder()
@@ -259,6 +262,7 @@ class OOFGenerator:
                 seq_len=seq_len,
                 sample_weights=sample_weights,
                 label_end_times=label_end_times,
+                n_classes=self.n_classes,
             )
         else:
             return self._core_generator.generate_tabular_oof(
@@ -268,6 +272,7 @@ class OOFGenerator:
                 config=config,
                 sample_weights=sample_weights,
                 label_end_times=label_end_times,
+                n_classes=self.n_classes,
             )
 
     def validate_oof_coverage(

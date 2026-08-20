@@ -116,6 +116,9 @@ def run_pipeline(
         Path("./experiments"), "--output-dir", "-o", help="Output directory for results"
     ),
     config: Path | None = typer.Option(None, "--config", "-c", help="Path to JSON config file"),
+    resume: bool = typer.Option(
+        False, "--resume", help="Resume from the last MLFactory checkpoint in output dir"
+    ),
 ):
     """
     Run full ML pipeline (data + training + evaluation).
@@ -132,17 +135,21 @@ def run_pipeline(
     horizon_list = [int(h.strip()) for h in horizons.split(",") if h.strip()]
     model_list = [m.strip() for m in models.split(",") if m.strip()]
 
-    ml_config = _build_ml_config(
-        symbol=symbol,
-        horizons=horizon_list,
-        models=model_list,
-        training_mode=training_mode,
-        build_ensemble=build_ensemble,
-        optimize_features=optimize_features,
-        data_path=data_path,
-        output_dir=output_dir,
-        config_path=config,
-    )
+    try:
+        ml_config = _build_ml_config(
+            symbol=symbol,
+            horizons=horizon_list,
+            models=model_list,
+            training_mode=training_mode,
+            build_ensemble=build_ensemble,
+            optimize_features=optimize_features,
+            data_path=data_path,
+            output_dir=output_dir,
+            config_path=config,
+        )
+    except (FileNotFoundError, ValueError) as e:
+        show_error(f"Configuration error: {e}")
+        raise typer.Exit(1) from None
 
     console.print("\n[bold]Starting full ML pipeline[/bold]")
     console.print(f"Symbol: {ml_config.symbol}")
@@ -155,7 +162,7 @@ def run_pipeline(
     factory = MLFactory(ml_config)
 
     try:
-        result = factory.run()
+        result = factory.run(resume=resume)
 
         console.print("\n" + "=" * 70)
         console.print("[bold green]PIPELINE COMPLETED SUCCESSFULLY[/bold green]")
@@ -177,6 +184,8 @@ def run_pipeline(
 
         raise typer.Exit(0)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         show_error(f"Pipeline failed: {e}")
         raise typer.Exit(1) from None
@@ -237,6 +246,8 @@ def run_data(
 
         raise typer.Exit(0 if success else 1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         show_error(f"Data pipeline failed: {e}")
         raise typer.Exit(1) from None
@@ -265,8 +276,10 @@ def show_status(
 
     if not state_path.exists():
         show_error(f"Run ID '{run_id}' not found at {state_path}")
-        console.print("\n[dim]Pipeline state file not found. The run may not exist or ")
-        console.print("may have been created with a different project root.[/dim]")
+        console.print(
+            "\n[dim]Pipeline state file not found. The run may not exist or "
+            "may have been created with a different project root.[/dim]"
+        )
         raise typer.Exit(1) from None
 
     try:
@@ -299,6 +312,8 @@ def show_status(
 
         raise typer.Exit(0)
 
+    except typer.Exit:
+        raise
     except json.JSONDecodeError as e:
         show_error(f"Failed to parse pipeline state: {e}")
         raise typer.Exit(1) from None
@@ -364,6 +379,8 @@ def resume_pipeline(
 
         raise typer.Exit(0 if success else 1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         show_error(f"Resume failed: {e}")
         raise typer.Exit(1) from None

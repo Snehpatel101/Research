@@ -53,7 +53,7 @@ from src.config.experiment import ExperimentConfig
 from src.config.symbol import SymbolConfig
 
 if TYPE_CHECKING:
-    from src.models.training.result import TrainingResult
+    from src.core.interfaces import TrainingResult
 from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
 logger = logging.getLogger(__name__)
@@ -658,6 +658,42 @@ class MLFactory:
             f"(embargo={embargo_bars}, purge={purge_bars}, splits={n_splits}) — OK"
         )
 
+    def _resolve_barrier_params(self, horizon: int) -> tuple[float, float, int, str]:
+        """
+        Resolve triple-barrier parameters for one horizon.
+
+        Single source of truth shared by labeling (_run_data_pipeline) and the
+        backtester (_run_evaluation) so both always play the same game.
+
+        Priority per field:
+          1. Explicit LabelingConfig override (upper_mult / lower_mult /
+             max_holding_bars set to a non-None value)
+          2. Per-symbol, per-horizon BARRIER_PARAMS table
+
+        Returns:
+            (k_up, k_down, max_bars, source) where source describes which
+            fields came from config overrides vs the barriers table.
+        """
+        from src.data.pipeline.config.barriers_config import get_barrier_params
+
+        labeling = self.config.data.labeling
+        table = get_barrier_params(self.config.data.symbol.upper(), horizon)
+
+        k_up = labeling.upper_mult if labeling.upper_mult is not None else float(table["k_up"])
+        k_down = labeling.lower_mult if labeling.lower_mult is not None else float(table["k_down"])
+        max_bars = (
+            labeling.max_holding_bars
+            if labeling.max_holding_bars is not None
+            else int(table["max_bars"])
+        )
+
+        overridden = any(
+            v is not None
+            for v in (labeling.upper_mult, labeling.lower_mult, labeling.max_holding_bars)
+        )
+        source = "labeling-config override" if overridden else "barriers table"
+        return k_up, k_down, max_bars, source
+
     def _run_data_pipeline(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
         """
         Run data pipeline to prepare features and labels.
@@ -730,18 +766,29 @@ class MLFactory:
         self._log("  Generating labels...")
         from src.data.labeling import TripleBarrierConfig, TripleBarrierLabeler
 
-        # Create labels for each horizon using user's labeling config
+        # Create labels for each horizon. Barrier params come from a single
+        # source of truth (_resolve_barrier_params) shared with the backtester,
+        # so labels and backtest always play the same game.
         labeling = self.config.data.labeling
+        symbol = self.config.data.symbol.upper()
         for horizon in self.config.training.horizons:
+            k_up, k_down, max_bars, barrier_source = self._resolve_barrier_params(horizon)
             label_config = TripleBarrierConfig(
-                horizon=horizon,
-                upper_mult=labeling.upper_mult,
-                lower_mult=labeling.lower_mult,
+                horizon=max_bars,
+                upper_mult=k_up,
+                lower_mult=k_down,
+                atr_period=labeling.atr_period,
+                atr_column=f"atr_{labeling.atr_period}",
+                symbol=symbol,
             )
             labeler = TripleBarrierLabeler(label_config)
             labels = labeler.create_labels(df_features)
             df_features[f"label_h{horizon}"] = labels
-            self._log(f"    label_h{horizon}: {labels.value_counts().to_dict()}")
+            self._log(
+                f"    label_h{horizon}: k_up={k_up} k_down={k_down} "
+                f"max_bars={max_bars} [{barrier_source}] "
+                f"{labels.value_counts().to_dict()}"
+            )
 
         # Also create a default 'label' column using first horizon
         first_horizon = self.config.training.horizons[0]
@@ -862,14 +909,20 @@ class MLFactory:
             if "datetime" in predictions_df.columns and "timestamp" not in predictions_df.columns:
                 predictions_df = predictions_df.rename(columns={"datetime": "timestamp"})
 
-            prices_df = df.copy()
-            if "datetime" in prices_df.columns and "timestamp" not in prices_df.columns:
-                prices_df = prices_df.rename(columns={"datetime": "timestamp"})
-            elif (
-                isinstance(prices_df.index, pd.DatetimeIndex)
-                and "timestamp" not in prices_df.columns
-            ):
-                prices_df["timestamp"] = prices_df.index
+            # Pass OHLCV-only prices. The featured df also carries 'label'
+            # columns; the Backtester injects its own 'label' into predictions
+            # and its merge would rename the colliding columns to
+            # label_pred/label_price, crashing run() at data['label'] — which
+            # the except below then silently swallowed (backtest_metrics was
+            # always {}). Regression test: tests/test_factory_e2e.py.
+            ohlcv_cols = [c for c in ("open", "high", "low", "close", "volume") if c in df.columns]
+            prices_df = df[ohlcv_cols].copy()
+            if "datetime" in df.columns:
+                prices_df["timestamp"] = df["datetime"].values
+            elif "timestamp" in df.columns:
+                prices_df["timestamp"] = df["timestamp"].values
+            elif isinstance(df.index, pd.DatetimeIndex):
+                prices_df["timestamp"] = df.index
 
             # Configure backtester using local BacktestConfig
             # Note: canonical BacktestConfig (src/config/inference.py) has different fields
@@ -900,15 +953,15 @@ class MLFactory:
             if self.config.evaluation.slippage_ticks is not None:
                 bt_kwargs["slippage_ticks"] = self.config.evaluation.slippage_ticks
 
-            # Wire triple-barrier params from training config (Phase 86)
+            # Wire triple-barrier params from the SAME resolution the labeler
+            # used (Phase 86 parity guarantee: labels and backtest play the
+            # same game — see _resolve_barrier_params).
             if self.config.training.horizons:
-                from src.data.pipeline.config.barriers_config import get_barrier_params
-
                 first_horizon = self.config.training.horizons[0]
-                barrier_params = get_barrier_params(symbol, first_horizon)
-                bt_kwargs["barrier_k_up"] = barrier_params["k_up"]
-                bt_kwargs["barrier_k_down"] = barrier_params["k_down"]
-                bt_kwargs["max_holding_period"] = barrier_params["max_bars"]
+                k_up, k_down, max_bars, _src = self._resolve_barrier_params(first_horizon)
+                bt_kwargs["barrier_k_up"] = k_up
+                bt_kwargs["barrier_k_down"] = k_down
+                bt_kwargs["max_holding_period"] = max_bars
 
             backtest_config = BacktestConfig.from_symbol_config(
                 sym_config,
@@ -1127,17 +1180,24 @@ class MLFactory:
             if model_result and hasattr(model_result, "oof_prediction"):
                 oof = model_result.oof_prediction
                 if oof is not None:
+                    # Accessors return FULL-LENGTH arrays (NaN where no
+                    # prediction); original_indices marks the valid rows.
                     preds = oof.get_class_predictions()  # 1D array of {-1, 0, 1}
                     probs = oof.get_probabilities()  # (n_samples, n_classes)
-                    confidence = probs.max(axis=1)
                     indices = oof.original_indices
                     if indices is None:
-                        indices = np.arange(len(preds))
+                        # Legacy producers leave original_indices unset —
+                        # derive the valid rows from non-NaN predictions so
+                        # NaN gaps don't become fabricated neutral signals.
+                        indices = np.where(~np.isnan(preds))[0]
+                    preds = preds[indices]
+                    # Subset BEFORE the row-max: covered rows only, not n_total
+                    confidence = probs[indices].max(axis=1)
 
                     return pd.DataFrame(
                         {
                             "datetime": df.index[indices].values,
-                            "prediction": preds,
+                            "prediction": np.nan_to_num(preds, nan=0.0).astype(int),
                             "confidence": confidence,
                         }
                     )

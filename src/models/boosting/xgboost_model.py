@@ -78,7 +78,6 @@ class XGBoostModel(BaseModel):
         super().__init__(config)
         self._model: xgb.Booster | None = None
         self._feature_names: list[str] | None = None
-        self._n_classes: int = 3
         self._use_gpu: bool = self._config.get("use_gpu", self._detect_gpu())
 
         if self._use_gpu:
@@ -384,11 +383,11 @@ class XGBoostModel(BaseModel):
 
     def _convert_labels_to_xgb(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from -1,0,1 to 0,1,2."""
-        return map_labels_to_classes(labels)
+        return map_labels_to_classes(labels, self._n_classes)
 
     def _convert_labels_from_xgb(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from 0,1,2 to -1,0,1."""
-        return map_classes_to_labels(labels)
+        return map_classes_to_labels(labels, self._n_classes)
 
     def _compute_metrics(self, dmatrix: xgb.DMatrix, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""

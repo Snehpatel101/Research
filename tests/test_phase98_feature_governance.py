@@ -28,7 +28,6 @@ from src.optimization.feature_selection.timeframe_budget import (
 )
 from src.optimization.feature_selection.walk_forward import WalkForwardFeatureSelector
 
-
 # ---------------------------------------------------------------------------
 # E2: MDA Stabilization
 # ---------------------------------------------------------------------------
@@ -77,27 +76,30 @@ class TestTimeframeBudget:
 
     def test_base_features_kept_unconditionally(self) -> None:
         """Base features (no timeframe suffix) are always kept."""
-        ranking = pd.Series(
-            {"rsi_14": 0.9, "adx_14": 0.8, "log_return": 0.7}
-        )
+        ranking = pd.Series({"rsi_14": 0.9, "adx_14": 0.8, "log_return": 0.7})
         result = apply_timeframe_budget(ranking, list(ranking.index), max_per_timeframe=1)
         assert set(result) == {"rsi_14", "adx_14", "log_return"}
 
     def test_mtf_features_budgeted(self) -> None:
         """Only top N per timeframe survive."""
         features = [
-            "rsi_14_5min", "macd_line_5min", "atr_14_5min",
-            "rsi_14_15min", "macd_line_15min",
+            "rsi_14_5min",
+            "macd_line_5min",
+            "atr_14_5min",
+            "rsi_14_15min",
+            "macd_line_15min",
             "base_feat",
         ]
-        ranking = pd.Series({
-            "rsi_14_5min": 0.9,
-            "macd_line_5min": 0.6,
-            "atr_14_5min": 0.3,
-            "rsi_14_15min": 0.8,
-            "macd_line_15min": 0.5,
-            "base_feat": 0.7,
-        })
+        ranking = pd.Series(
+            {
+                "rsi_14_5min": 0.9,
+                "macd_line_5min": 0.6,
+                "atr_14_5min": 0.3,
+                "rsi_14_15min": 0.8,
+                "macd_line_15min": 0.5,
+                "base_feat": 0.7,
+            }
+        )
         result = apply_timeframe_budget(ranking, features, max_per_timeframe=2)
         # 5min: top 2 = rsi_14_5min, macd_line_5min (atr dropped)
         assert "rsi_14_5min" in result
@@ -144,13 +146,15 @@ class TestRegimeSelection:
         np.random.seed(42)
         n = 1000
         close = 100 + np.cumsum(np.random.randn(n) * 0.5)
-        df = pd.DataFrame({
-            "close": close,
-            "feat_a": np.random.randn(n),
-            "feat_b": np.random.randn(n),
-            "feat_c": np.random.randn(n),
-            "label_h1": np.random.choice([0, 1, 2], size=n),
-        })
+        df = pd.DataFrame(
+            {
+                "close": close,
+                "feat_a": np.random.randn(n),
+                "feat_b": np.random.randn(n),
+                "feat_c": np.random.randn(n),
+                "label_h1": np.random.choice([0, 1, 2], size=n),
+            }
+        )
         return df
 
     def test_detect_regimes_returns_series(self, regime_df: pd.DataFrame) -> None:
@@ -176,8 +180,12 @@ class TestRegimeSelection:
     def test_compute_regime_importance_returns_tuple(self, regime_df: pd.DataFrame) -> None:
         features = ["feat_a", "feat_b", "feat_c"]
         result = compute_regime_importance(
-            regime_df, features, label_col="label_h1",
-            min_samples_per_regime=50, n_estimators=10, n_repeats=2,
+            regime_df,
+            features,
+            label_col="label_h1",
+            min_samples_per_regime=50,
+            n_estimators=10,
+            n_repeats=2,
         )
         assert result is not None
         combined, per_regime = result
@@ -190,13 +198,17 @@ class TestRegimeSelection:
     def test_compute_regime_importance_insufficient_data(self) -> None:
         """Too few samples should return None."""
         np.random.seed(42)
-        df = pd.DataFrame({
-            "close": [100, 101, 102, 103, 104],
-            "feat_a": [1, 2, 3, 4, 5],
-            "label_h1": [0, 1, 0, 1, 0],
-        })
+        df = pd.DataFrame(
+            {
+                "close": [100, 101, 102, 103, 104],
+                "feat_a": [1, 2, 3, 4, 5],
+                "label_h1": [0, 1, 0, 1, 0],
+            }
+        )
         result = compute_regime_importance(
-            df, ["feat_a"], label_col="label_h1",
+            df,
+            ["feat_a"],
+            label_col="label_h1",
             min_samples_per_regime=100,
         )
         assert result is None

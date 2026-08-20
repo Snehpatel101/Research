@@ -609,6 +609,18 @@ src/
   - ConformalPredictor docstring update (B30)
 - Phases 112-113 (THEETASKLIST P10-11): 19 new regression tests, 473/473 tests passing, ruff + black clean
 
+**Phase 114: COMPLETE — Repository Rehabilitation (2026-08-20)**
+- Correctness: label/backtest barrier parity restored via new `MLFactory._resolve_barrier_params()` single source of truth (explicit override → per-symbol table), used by both labeling and backtest wiring
+- Backtest metrics were ALWAYS silently empty on `run_backtest=True` — 'label' column collision between featured df and Backtester's injected label column caused a swallowed KeyError; factory now passes OHLCV-only prices
+- Walk-forward OOF emitted compact frames violating the OOFPrediction schema (IndexError in ensemble build) — producer now emits full-length NaN-padded frames; defensive schema check added
+- Parallel-boosting calibrator silently dropped + multiclass calibration silently failed everywhere (probas collapsed to 1D before a fit that requires 2D) — both fixed
+- Binary mode (n_classes=2) finished end-to-end: OOFRequest → OOFGenerator → sub-generators, DiversityAnalyzer, meta-learner, stacking, all 12 model classes, 31 `map_classes_to_labels` call sites; strict xfail now passes
+- Config seams: `early_stopping_patience` and Optuna timeout threaded end-to-end (were effectively unbounded/wrong defaults); batch_size 256→512 and optuna timeout 3600→43200 in global.yaml; feature selection decoupled from n_trials; `mtf.enabled` gates mtf_timeframes; checkpoint_interval 10→50; GlobalConfig dict-walking fixed
+- Serialization/safety: ExperimentConfig YAML round-trip fixed; TrainerConfig.to_dict field-driven; AdapterScaler float32 stat persistence; `tar.extractall(filter="data")`; RSI numba short-input guard; CLI `typer.Exit` no longer swallowed by blanket except (success paths were exiting 1); `ml run --resume` added
+- Cleanup: 21,193 deletions / 838 insertions across 124 files, all grep-verified zero-consumer — dead second feature engine (18 modules) + legacy selection stack, broken MLPipeline shim, dead second CLI, 7 vestigial trainer files, dead optimization modules, 5 stale scripts, module-level matplotlib backend override removed
+- Verification infra: `pyrightconfig.json` added (1,234 errors → 0, real sites fixed not suppressed), 8 new behavioral test files (~125 tests: E2E, bundle roundtrip, WF OOF schema, barrier parity, calibrator flow, config seams, scaler persistence, CLI smoke); suite grew 475 → ~600 tests, ruff + black clean
+- OPEN DECISIONS pending user (next-phase candidates): serving/monitoring chain (wire or delete), Phase 52 special-mode bundles (wire or delete), Phase 99-102 governance modules (wire into pipeline or move to experimental), `ModelContract.sequence_length` not honored in standard mode, 5d-optimization island (tests-only), core `AdapterResult`/`TrainingResult` duplicate-class consolidation, `ExperimentConfig` unused `to_*_config` methods
+
 **See CLEANUP_PLAN.md for full phase details.**
 
 ---
@@ -667,7 +679,7 @@ grep -r "from src\.feature_selection" src/ --include="*.py" | wc -l
 
 | Exception | Reason | Status |
 |-----------|--------|--------|
-| Dual AdapterResult | Circular import prevention | Bidirectional properties added |
+| Dual AdapterResult | Circular import prevention | Bidirectional properties added; bridge drift found 2026-08 — consolidation pending user decision |
 | Pyright pandas errors | Type stub limitations | Not blocking, document when seen |
 
 ---
@@ -700,6 +712,6 @@ Use these when starting fresh or resetting documentation.
 
 ---
 
-*Last updated: 2026-02-28*
+*Last updated: 2026-08-20*
 *See CLEANUP_PLAN.md for current phase*
 *See COMMANDS.md for command reference*

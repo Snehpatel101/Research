@@ -201,6 +201,7 @@ class VariableSelectionNetwork(nn.Module):
         """
         has_time = x.dim() == 4
 
+        batch_size = seq_len = n_features = 0  # set on the has_time path below
         if has_time:
             batch_size, seq_len, n_features, input_dim = x.shape
             # Reshape for processing: (batch * seq_len, n_features, input_dim)

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.optimization.feature_selection.bootstrap_stability import (
     BootstrapFeatureStability,
@@ -22,7 +21,6 @@ from src.optimization.feature_selection.param_sensitivity import (
     ParameterSensitivityTester,
     SensitivityResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -55,9 +53,7 @@ class TestBootstrapStability:
 
     def test_evaluate_returns_results(self) -> None:
         X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(
-            n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2
-        )
+        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         assert isinstance(results, list)
         assert len(results) == 5
@@ -65,18 +61,14 @@ class TestBootstrapStability:
 
     def test_selection_frequency_range(self) -> None:
         X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(
-            n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2
-        )
+        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         for r in results:
             assert 0.0 <= r.selection_frequency <= 1.0
 
     def test_sorted_by_frequency_descending(self) -> None:
         X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(
-            n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2
-        )
+        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         freqs = [r.selection_frequency for r in results]
         assert freqs == sorted(freqs, reverse=True)
@@ -121,9 +113,7 @@ class TestBootstrapStability:
     def test_top_k_larger_than_features(self) -> None:
         """If top_k > n_features, all features should be in top-K every time."""
         X, y = _make_data(n_samples=200, n_features=3)
-        tester = BootstrapFeatureStability(
-            n_bootstrap=5, top_k=10, n_estimators=10, n_repeats=2
-        )
+        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=10, n_estimators=10, n_repeats=2)
         results = tester.evaluate(X, y)
         for r in results:
             assert r.selection_frequency == 1.0
@@ -216,9 +206,7 @@ class TestParameterSensitivity:
     def test_get_stable_features(self) -> None:
         X, y = _make_data(n_samples=300, n_features=5)
         # Same data for both variants — should be perfectly stable
-        tester = ParameterSensitivityTester(
-            cv_threshold=0.5, n_estimators=10, n_repeats=2
-        )
+        tester = ParameterSensitivityTester(cv_threshold=0.5, n_estimators=10, n_repeats=2)
         results = tester.evaluate({"v1": X, "v2": X}, y)
         stable = tester.get_stable_features(results)
         assert isinstance(stable, list)

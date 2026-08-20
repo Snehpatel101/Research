@@ -67,7 +67,6 @@ class CatBoostModel(BaseModel):
         super().__init__(config)
         self._model: CatBoostClassifier | None = None
         self._feature_names: list[str] | None = None
-        self._n_classes: int = 3
 
         # Check if task_type is explicitly set to CPU (force CPU mode)
         task_type = self._config.get("task_type", "").upper()
@@ -352,11 +351,11 @@ class CatBoostModel(BaseModel):
 
     def _convert_labels_to_cat(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from -1,0,1 to 0,1,2."""
-        return map_labels_to_classes(labels)
+        return map_labels_to_classes(labels, self._n_classes)
 
     def _convert_labels_from_cat(self, labels: np.ndarray) -> np.ndarray:
         """Convert labels from 0,1,2 to -1,0,1."""
-        return map_classes_to_labels(labels)
+        return map_classes_to_labels(labels, self._n_classes)
 
     def _compute_metrics(self, X: np.ndarray, y_true: np.ndarray) -> dict[str, float]:
         """Compute accuracy and F1 for a dataset."""

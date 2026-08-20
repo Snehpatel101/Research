@@ -92,7 +92,21 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
 
         # Ensure model_config contains key training params from TrainerConfig
         # This bridges the gap between TrainerConfig fields and neural model configs
-        _training_keys = ["max_epochs", "batch_size", "early_stopping_patience", "sequence_length"]
+        _training_keys = [
+            "max_epochs",
+            "batch_size",
+            "early_stopping_patience",
+            "sequence_length",
+            "mixed_precision",
+            "num_workers",
+            "pin_memory",
+            "checkpoint_interval",
+            "keep_n_checkpoints",
+            "oom_recovery_enabled",
+            "oom_max_retries",
+            "oom_batch_reduction_factor",
+            "oom_min_batch_size",
+        ]
         for _key in _training_keys:
             if _key not in config.model_config and hasattr(config, _key):
                 config.model_config[_key] = getattr(config, _key)

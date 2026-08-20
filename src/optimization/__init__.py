@@ -97,27 +97,6 @@ from src.optimization.base_feature_sets import (
     get_features_by_category,
     get_minimal_feature_set,
 )
-
-# =============================================================================
-# ENSEMBLE-AWARE OBJECTIVE (Phase 16)
-# =============================================================================
-from src.optimization.ensemble_objective import (
-    DEFAULT_DIVERSITY_WEIGHT,
-    DEFAULT_MAX_OVERLAP,
-    DEFAULT_SHARPE_WEIGHT,
-    EnsembleAwareObjective,
-    calculate_feature_overlap,
-    calculate_feature_overlap_ratio,
-    check_feature_diversity,
-    compute_feature_diversity_score,
-    compute_prediction_diversity,
-    diversity_aware_objective,
-)
-from src.optimization.features import (
-    FeatureOptimizer,
-    FeaturePruningResult,
-    OptunaSelectionResult,
-)
 from src.optimization.five_dimension_objective import (
     DEFAULT_TIMEFRAMES,
     LOWER_MULT_RANGE,
@@ -145,23 +124,6 @@ from src.optimization.hyperparameters import (
     # Utility functions
     suggest_hyperparameters,
 )
-
-# =============================================================================
-# LABEL OPTIMIZATION
-# =============================================================================
-from src.optimization.labels import (
-    LabelOptimizationResult,
-    LabelOptimizer,
-    TripleBarrierConfig,
-)
-
-# =============================================================================
-# UNIFIED PIPELINE
-# =============================================================================
-from src.optimization.pipeline import (
-    FullOptimizationResult,
-    OptimizationPipeline,
-)
 from src.optimization.scoring import get_score_fn, purged_train_val_split
 
 # =============================================================================
@@ -175,13 +137,7 @@ __all__ = [
     "suggest_hyperparameters",
     "get_default_hyperparameters",
     # Label optimization
-    "LabelOptimizationResult",
-    "TripleBarrierConfig",
-    "LabelOptimizer",
     # Feature optimization
-    "OptunaSelectionResult",
-    "FeaturePruningResult",
-    "FeatureOptimizer",
     # Base feature sets (Phase 3)
     "BASE_FEATURE_SETS",
     "DEFAULT_FEATURE_PARAMS",
@@ -226,19 +182,7 @@ __all__ = [
     "FEATURE_SPECS_SUBDIR",
     "MANIFEST_FILENAME",
     # Full pipeline
-    "FullOptimizationResult",
-    "OptimizationPipeline",
     # Ensemble-aware objective (Phase 16)
-    "diversity_aware_objective",
-    "compute_prediction_diversity",
-    "calculate_feature_overlap",
-    "calculate_feature_overlap_ratio",
-    "check_feature_diversity",
-    "compute_feature_diversity_score",
-    "EnsembleAwareObjective",
-    "DEFAULT_SHARPE_WEIGHT",
-    "DEFAULT_DIVERSITY_WEIGHT",
-    "DEFAULT_MAX_OVERLAP",
     # Scoring & splitting (Phase 22)
     "get_score_fn",
     "purged_train_val_split",

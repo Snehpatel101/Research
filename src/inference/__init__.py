@@ -127,6 +127,16 @@ from src.inference.errors import (
     ShapeMismatchError,
 )
 
+# UniversalInferencePipeline - THE single entry point for all inference.
+# NOTE: these are FIRST-PARTY modules — no except-ImportError guards. A
+# guard here would silently mask refactoring bugs by exporting None.
+from src.inference.meta_labeling_bundle import (
+    META_LABELING_BUNDLE_VERSION,
+    MetaLabelingBundle,
+    MetaLabelingBundleMetadata,
+    MetaLabelingPrediction,
+)
+
 # PHASE_5: InferenceOrchestrator - THE single entry point for inference
 from src.inference.orchestrator import (
     InferenceOrchestrator,
@@ -152,66 +162,29 @@ from src.inference.preprocessing_graph import (
     ScalingConfig,
     WaveletConfig,
 )
+from src.inference.regime_bundle import (
+    REGIME_BUNDLE_VERSION,
+    RegimeBundle,
+)
+from src.inference.regime_detector import (
+    REGIME_DETECTOR_VERSION,
+    RegimeDetector,
+    RegimeDetectorConfig,
+)
 from src.inference.server import (
     ModelServer,
     ServerConfig,
     start_server,
 )
-
-# UniversalInferencePipeline - THE single entry point for all inference
-try:
-    from src.inference.universal_pipeline import (
-        UniversalInferencePipeline,
-        UniversalPredictionResult,
-    )
-except ImportError:
-    UniversalInferencePipeline = None  # type: ignore[assignment,misc]
-    UniversalPredictionResult = None  # type: ignore[assignment,misc]
-
-# Special mode bundles
-try:
-    from src.inference.walk_forward_bundle import (
-        WALK_FORWARD_BUNDLE_VERSION,
-        WalkForwardBundle,
-        WalkForwardMetadata,
-    )
-except ImportError:
-    WalkForwardBundle = None  # type: ignore[assignment,misc]
-    WalkForwardMetadata = None  # type: ignore[assignment,misc]
-    WALK_FORWARD_BUNDLE_VERSION = "0.0.0"
-
-try:
-    from src.inference.regime_bundle import (
-        REGIME_BUNDLE_VERSION,
-        RegimeBundle,
-    )
-except ImportError:
-    RegimeBundle = None  # type: ignore[assignment,misc]
-    REGIME_BUNDLE_VERSION = "0.0.0"
-
-try:
-    from src.inference.regime_detector import (
-        REGIME_DETECTOR_VERSION,
-        RegimeDetector,
-        RegimeDetectorConfig,
-    )
-except ImportError:
-    RegimeDetector = None  # type: ignore[assignment,misc]
-    RegimeDetectorConfig = None  # type: ignore[assignment,misc]
-    REGIME_DETECTOR_VERSION = "0.0.0"
-
-try:
-    from src.inference.meta_labeling_bundle import (
-        META_LABELING_BUNDLE_VERSION,
-        MetaLabelingBundle,
-        MetaLabelingBundleMetadata,
-        MetaLabelingPrediction,
-    )
-except ImportError:
-    MetaLabelingBundle = None  # type: ignore[assignment,misc]
-    MetaLabelingPrediction = None  # type: ignore[assignment,misc]
-    MetaLabelingBundleMetadata = None  # type: ignore[assignment,misc]
-    META_LABELING_BUNDLE_VERSION = "0.0.0"
+from src.inference.universal_pipeline import (
+    UniversalInferencePipeline,
+    UniversalPredictionResult,
+)
+from src.inference.walk_forward_bundle import (
+    WALK_FORWARD_BUNDLE_VERSION,
+    WalkForwardBundle,
+    WalkForwardMetadata,
+)
 
 __all__ = [
     # Bundle

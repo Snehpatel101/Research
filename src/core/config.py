@@ -53,6 +53,7 @@ from src.core.constants import (
     DEFAULT_MTF_TIMEFRAMES,
     DEFAULT_N_SPLITS,
     DEFAULT_OPTUNA_RANDOM_STATE,
+    DEFAULT_OPTUNA_TIMEOUT,
     DEFAULT_PURGE_BARS,
     DEFAULT_SEQUENCE_LENGTH,
     DEFAULT_SPLIT_RATIOS,
@@ -177,11 +178,13 @@ class PipelineConfig:
     labeling_method: str = LabelingMethod.TRIPLE_BARRIER.value
     # Options: "triple_barrier", "directional", "threshold", "regression"
 
-    # Triple-barrier defaults (overridden by Optuna if optimize_labels=True)
-    upper_mult: float = 2.0  # Upper barrier = ATR * upper_mult
-    lower_mult: float = 2.0  # Lower barrier = ATR * lower_mult
+    # Triple-barrier overrides. None (default) = use the per-symbol/per-horizon
+    # BARRIER_PARAMS table (same source the backtester uses). Set explicitly to
+    # override both labeling and backtest barriers.
+    upper_mult: float | None = None  # Upper barrier = ATR * upper_mult
+    lower_mult: float | None = None  # Lower barrier = ATR * lower_mult
     atr_period: int = 14  # ATR calculation period
-    max_holding_bars: int = 20  # Maximum holding period for triple-barrier
+    max_holding_bars: int | None = None  # Maximum holding period for triple-barrier
 
     # =========================================================================
     # OPTUNA OPTIMIZATION CONFIGURATION
@@ -205,6 +208,8 @@ class PipelineConfig:
 
     # Optuna settings
     optuna_random_state: int = DEFAULT_OPTUNA_RANDOM_STATE  # 42
+    # Wall-clock cap for each Optuna study (seconds). None/0 = unbounded.
+    optuna_timeout: int | None = DEFAULT_OPTUNA_TIMEOUT  # 43200 = 12h
     optuna_metric: str = "f1_weighted"  # Optimization metric (from OptunaConfig.metric)
 
     enforce_dsr_gate: bool = True
@@ -229,7 +234,10 @@ class PipelineConfig:
     n_regimes: int = 3  # Number of regime states (2=low/high, 3=low/medium/high)
 
     regime_volatility_window: int = 20  # Rolling window for volatility calculation
-    regime_adx_threshold: float = 25.0  # ADX threshold for trending classification
+    # ADX threshold for trending classification. None (default) = auto: use the
+    # per-symbol preset from SymbolConfig (MES=20, MGC=23, MNQ=25). Any explicit
+    # float is honored as-is — including 25.0.
+    regime_adx_threshold: float | None = None
     regime_min_samples: int = 100  # Minimum samples per regime for training
     train_separate_regime_models: bool = True  # Train separate models per regime
 
@@ -438,8 +446,10 @@ class PipelineConfig:
                     actual=self.meta_labeling_threshold,
                 )
 
-        # Auto-populate regime_adx_threshold from SymbolConfig if still default
-        if self.regime_adx_threshold == 25.0:
+        # Auto-populate regime_adx_threshold from SymbolConfig when unset.
+        # None is the "auto" sentinel — an explicit user value (even 25.0,
+        # the old magic sentinel) is always honored.
+        if self.regime_adx_threshold is None:
             from src.config.symbol import SymbolConfig
 
             sym_cfg = SymbolConfig.from_symbol_or_default(self.symbol)
@@ -678,7 +688,7 @@ def regime_aware_config(
         n_regimes=3,
         regime_lookback=60,
         regime_volatility_window=20,
-        regime_adx_threshold=25.0,
+        # regime_adx_threshold left at None = auto per-symbol preset
         regime_min_samples=100,
         train_separate_regime_models=True,
         # Optimization settings

@@ -145,19 +145,12 @@ def _add_advanced_regime_features(
         )
 
         regime_add_fn = add_regime_features_to_dataframe
-    except ImportError:
-        try:
-            from src.data.pipeline.stages.regime import (
-                add_regime_features_to_dataframe as _add_regime_fn,
-            )
-
-            regime_add_fn = _add_regime_fn
-        except ImportError as e:
-            logger.warning(
-                f"Advanced regime detection not available: {e}. "
-                f"Falling back to basic regime features."
-            )
-            return _add_basic_regime_features(df, feature_metadata)
+    except ImportError as e:
+        logger.warning(
+            f"Advanced regime detection not available: {e}. "
+            f"Falling back to basic regime features."
+        )
+        return _add_basic_regime_features(df, feature_metadata)
 
     if regime_add_fn is None:
         return _add_basic_regime_features(df, feature_metadata)
@@ -277,16 +270,9 @@ def add_structure_regime(
         from src.data.pipeline.stages.regime import MarketStructureDetector
 
         structure_detector_cls = MarketStructureDetector
-    except ImportError:
-        try:
-            from src.data.pipeline.stages.regime import (
-                MarketStructureDetector as _StructureDetector,
-            )
-
-            structure_detector_cls = _StructureDetector
-        except ImportError as e:
-            logger.warning(f"Structure regime not available: {e}")
-            return df
+    except ImportError as e:
+        logger.warning(f"Structure regime not available: {e}")
+        return df
 
     if structure_detector_cls is None:
         return df

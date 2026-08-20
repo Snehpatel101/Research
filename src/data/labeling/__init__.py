@@ -1,15 +1,12 @@
 """
-Labeling Package for PHASE_1B - Triple-Barrier Labeling and Optimization.
+Labeling Package for PHASE_1B - Triple-Barrier Labeling.
 
 This package provides the triple-barrier labeling method from Lopez de Prado's
-"Advances in Financial Machine Learning" along with Optuna-based optimization
-for finding optimal labeling parameters.
+"Advances in Financial Machine Learning".
 
 Components:
     - TripleBarrierConfig: Configuration dataclass for labeling parameters
     - TripleBarrierLabeler: Triple-barrier label generation
-    - LabelOptimizer: Optuna-based parameter optimization
-    - LabelOptimizationResult: Optimization result container
 
 Labels:
     -1 = Short (lower barrier hit first)
@@ -22,12 +19,6 @@ Usage:
         >>> config = TripleBarrierConfig(upper_mult=2.0, lower_mult=2.0, horizon=20)
         >>> labeler = TripleBarrierLabeler(config)
         >>> labels = labeler.create_labels(ohlcv_df)
-
-    With Optimization:
-        >>> from src.data.labeling import LabelOptimizer, optimize_labels
-        >>> result = optimize_labels(ohlcv_df, feature_df, n_trials=100)
-        >>> print(f"Best config: {result.best_config}")
-        >>> labels = TripleBarrierLabeler(result.best_config).create_labels(ohlcv_df)
 
 Integration with PipelineConfig:
     >>> from src.core import PipelineConfig
@@ -45,11 +36,6 @@ from .base import (
     LabelingResult,
     LabelingStrategy,
     LabelingType,
-)
-from .optimization import (
-    LabelOptimizationResult,
-    LabelOptimizer,
-    optimize_labels,
 )
 from .triple_barrier import (
     TripleBarrierConfig,
@@ -71,7 +57,4 @@ __all__ = [
     "triple_barrier_numba",
     "triple_barrier_numba_with_costs",
     # Optimization
-    "LabelOptimizationResult",
-    "LabelOptimizer",
-    "optimize_labels",
 ]

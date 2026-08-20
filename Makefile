@@ -16,8 +16,8 @@ install-dev: ## Install package with development dependencies
 test: ## Run all tests with coverage
 	pytest tests/ -v --cov=src --cov-report=term-missing
 
-test-quick: ## Run quick tests only
-	pytest tests/test_new_components.py -v
+test-quick: ## Run quick behavioral tests only
+	pytest tests/test_config_seams.py tests/test_barrier_parity.py tests/test_wf_oof_schema.py tests/test_calibrator_flow.py tests/test_scaler_persistence.py tests/test_cli_smoke.py -q
 
 lint: ## Run ruff linter (with auto-fix)
 	ruff check --fix .

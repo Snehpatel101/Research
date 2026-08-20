@@ -1,19 +1,19 @@
 """
 D10: Verify entropy features use shift(1) — no lookahead.
 
-Every entropy feature computes on df["close"].shift(1), so the feature at bar N
-only sees close prices up to bar N-1. A spike at bar N must not affect bar N's
-feature value.
+The live engine (src/data/pipeline/stages/features/entropy.py) computes each
+entropy feature and then applies .shift(1) before writing the column, so the
+feature at bar N only sees data up to bar N-1. A spike at bar N must not
+affect bar N's feature value; it may only affect bar N+1 onward.
 """
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.data.features.compute.entropy import (
-    compute_entropy_shannon_10,
-    compute_entropy_shannon_20,
-    compute_hurst_50,
+from src.data.pipeline.stages.features.entropy import (
+    add_hurst_features,
+    add_shannon_entropy,
 )
 
 
@@ -28,17 +28,31 @@ def _make_ohlcv(n: int = 200, seed: int = 42) -> pd.DataFrame:
     return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume})
 
 
+def _shannon(df: pd.DataFrame, window: int) -> pd.Series:
+    """Run the live Shannon entropy feature and return its column."""
+    out = add_shannon_entropy(df.copy(), {}, windows=[window])
+    return out[f"entropy_shannon_{window}"]
+
+
+def _hurst(df: pd.DataFrame, window: int) -> pd.Series:
+    """Run the live Hurst exponent feature and return its column."""
+    out = add_hurst_features(df.copy(), {}, windows=[window])
+    return out[f"hurst_{window}"]
+
+
 class TestEntropyShiftNoLookahead:
     """Entropy features at bar N must be immune to changes at bar N's close."""
 
     def test_shannon_10_last_bar_immune_to_spike(self):
-        """compute_entropy_shannon_10: spike at last bar does not change last bar's value."""
+        """add_shannon_entropy (window=10): spike at last bar does not change last bar's value."""
         df_orig = _make_ohlcv()
         df_mod = df_orig.copy()
         df_mod.iloc[-1, df_mod.columns.get_loc("close")] *= 2.0
 
-        feat_orig = compute_entropy_shannon_10(df_orig)
-        feat_mod = compute_entropy_shannon_10(df_mod)
+        feat_orig = _shannon(df_orig, 10)
+        feat_mod = _shannon(df_mod, 10)
+
+        assert not np.isnan(feat_orig.iloc[-1]), "Shannon-10 at last bar should be valid"
 
         # Last bar should be identical (shift(1) excludes it)
         assert feat_orig.iloc[-1] == pytest.approx(
@@ -51,13 +65,15 @@ class TestEntropyShiftNoLookahead:
         ), "Shannon-10 at second-to-last bar should be identical"
 
     def test_shannon_20_last_bar_immune_to_spike(self):
-        """compute_entropy_shannon_20: spike at last bar does not change last bar's value."""
+        """add_shannon_entropy (window=20): spike at last bar does not change last bar's value."""
         df_orig = _make_ohlcv()
         df_mod = df_orig.copy()
         df_mod.iloc[-1, df_mod.columns.get_loc("close")] *= 2.0
 
-        feat_orig = compute_entropy_shannon_20(df_orig)
-        feat_mod = compute_entropy_shannon_20(df_mod)
+        feat_orig = _shannon(df_orig, 20)
+        feat_mod = _shannon(df_mod, 20)
+
+        assert not np.isnan(feat_orig.iloc[-1]), "Shannon-20 at last bar should be valid"
 
         assert feat_orig.iloc[-1] == pytest.approx(
             feat_mod.iloc[-1]
@@ -68,13 +84,15 @@ class TestEntropyShiftNoLookahead:
         ), "Shannon-20 at second-to-last bar should be identical"
 
     def test_hurst_50_last_bar_immune_to_spike(self):
-        """compute_hurst_50: spike at last bar does not change last bar's value."""
+        """add_hurst_features (window=50): spike at last bar does not change last bar's value."""
         df_orig = _make_ohlcv()
         df_mod = df_orig.copy()
         df_mod.iloc[-1, df_mod.columns.get_loc("close")] *= 2.0
 
-        feat_orig = compute_hurst_50(df_orig)
-        feat_mod = compute_hurst_50(df_mod)
+        feat_orig = _hurst(df_orig, 50)
+        feat_mod = _hurst(df_mod, 50)
+
+        assert not np.isnan(feat_orig.iloc[-1]), "Hurst-50 at last bar should be valid"
 
         assert feat_orig.iloc[-1] == pytest.approx(
             feat_mod.iloc[-1]
@@ -85,14 +103,16 @@ class TestEntropyShiftNoLookahead:
         ), "Hurst-50 at second-to-last bar should be identical"
 
     def test_spike_does_affect_next_bar(self):
-        """Sanity: the spike SHOULD affect the bar AFTER it (if one existed)."""
+        """Sanity: the spike SHOULD affect the bar AFTER it (shift(1) includes it)."""
         df_orig = _make_ohlcv()
         df_mod = df_orig.copy()
         # Spike at bar -2 so bar -1 can see it via shift(1)
         df_mod.iloc[-2, df_mod.columns.get_loc("close")] *= 2.0
 
-        feat_orig = compute_entropy_shannon_10(df_orig)
-        feat_mod = compute_entropy_shannon_10(df_mod)
+        feat_orig = _shannon(df_orig, 10)
+        feat_mod = _shannon(df_mod, 10)
+
+        assert not np.isnan(feat_orig.iloc[-1]), "Shannon-10 at last bar should be valid"
 
         # Bar -1 should differ because shift(1) lets it see bar -2's spike
         assert feat_orig.iloc[-1] != pytest.approx(

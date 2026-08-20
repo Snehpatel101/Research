@@ -6,7 +6,6 @@ Provides modular services extracted from UnifiedTrainingOrchestrator:
 - DataPreparer: Wraps UnifiedDataPreparation for data preparation
 - EnsembleService: Build ensembles from OOF predictions
 - HyperparameterTuningService: Optuna-based hyperparameter optimization
-- ModeRouter: Route to appropriate training mode
 - ModelTrainingService: Train individual models
 - OOFGenerationService: Generate out-of-fold predictions
 - ParallelTrainingService: Train multiple models in parallel
@@ -20,7 +19,6 @@ from .hyperparameter_tuning import (
     TuningRequest,
     TuningResult,
 )
-from .mode_router import ModeHandler, ModeRouter
 from .model_training import (
     ModelTrainingRequest,
     ModelTrainingResult,
@@ -47,9 +45,6 @@ __all__ = [
     "HyperparameterTuningService",
     "TuningRequest",
     "TuningResult",
-    # Mode routing
-    "ModeRouter",
-    "ModeHandler",
     # Model training
     "ModelTrainingRequest",
     "ModelTrainingResult",

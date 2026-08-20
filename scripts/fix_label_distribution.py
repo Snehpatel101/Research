@@ -230,18 +230,10 @@ def main():
         print(f"\n{'='*80}")
         print("NEXT STEPS")
         print(f"{'='*80}")
-        print("\nTo complete the fix, run these commands:")
-        print("\n1. Regenerate splits:")
-        print("   cd /Users/sneh/research")
-        print("   python -m src.phase1.stages.splits.run")
-        print("\n2. Regenerate scaled data:")
-        print("   python -m src.phase1.stages.scaling.run")
-        print("\n3. Regenerate datasets:")
-        print("   python -m src.phase1.stages.datasets.run")
-        print("\n4. Validate the fix:")
+        print("\nTo complete the fix, re-run the data pipeline:")
+        print("   python -m src.pipeline_cli data --symbol <SYMBOL> --data-path <PATH>")
+        print("\nThen validate the fix:")
         print("   python scripts/fix_label_distribution.py --validate-only")
-        print("\nOr use the pipeline CLI:")
-        print("   ./pipeline run --start-from create_splits")
 
     return 0
 

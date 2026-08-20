@@ -10,18 +10,16 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
+from src.optimization.feature_selection.economic_value import (
+    EconomicValueScorer,
+    FeatureValueScore,
+)
 from src.validation.ticker_portability import (
     PortabilityReport,
     PortabilityScore,
     TickerPortabilityTester,
 )
-from src.optimization.feature_selection.economic_value import (
-    EconomicValueScorer,
-    FeatureValueScore,
-)
-
 
 # ---------------------------------------------------------------------------
 # Helper to generate synthetic classification data
@@ -157,7 +155,13 @@ class TestEconomicValueScorer:
         scorer = EconomicValueScorer(n_estimators=10)
         df = scorer.score_features(X, y)
         assert isinstance(df, pd.DataFrame)
-        expected_cols = {"feature_name", "baseline_sharpe", "without_sharpe", "marginal_sharpe", "rank"}
+        expected_cols = {
+            "feature_name",
+            "baseline_sharpe",
+            "without_sharpe",
+            "marginal_sharpe",
+            "rank",
+        }
         assert set(df.columns) == expected_cols
         assert len(df) == 5
 
