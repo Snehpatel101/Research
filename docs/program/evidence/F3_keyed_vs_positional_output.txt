@@ -1,0 +1,28 @@
+======================================================================
+OLD PATH — OOFAligner, positional indices
+======================================================================
+  aligned rows            : 341
+  first aligned key       : 0
+  agreement (2 PERFECT)   : 0.0%
+
+======================================================================
+NEW PATH — PredictionPanel, source-bar keys
+======================================================================
+  aligned rows            : 341
+  first aligned key       : 59
+  agreement (2 PERFECT)   : 100.0%
+
+PredictionPanel: 2 models x 341 keys (bars 59..399)
+  complete rows: 341 / 341
+  xgboost                coverage 100.0%
+  lstm                   coverage 100.0%
+
+======================================================================
+VERDICT
+======================================================================
+  positional agreement :   0.0%   <- silently wrong
+  keyed agreement      : 100.0%   <- correct
+  first key, positional:   0 (claims bar 0)
+  first key, keyed     :  59 (the real first shared bar)
+
+RESULT: KEYED CONTRACT FIXES F1

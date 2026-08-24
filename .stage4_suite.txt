@@ -1,0 +1,258 @@
+........................................................................ [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 34%]
+........................................................................ [ 46%]
+........................................................................ [ 57%]
+.............................xx......................................... [ 69%]
+........................................................................ [ 80%]
+........................................................................ [ 92%]
+.................................................                        [100%]
+=============================== warnings summary ===============================
+tests/test_d4_degenerate_labels.py::TestDegenerateTrialsReturnNegInf::test_compute_validation_metric_exception_returns_neg_inf
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/linear_model/_logistic.py:1457: FutureWarning: 'n_jobs' has no effect since 1.8 and will be removed in 1.10. You provided 'n_jobs=-1', please leave it unspecified.
+    warnings.warn(msg, category=FutureWarning)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:122: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_roll_spread"] = roll_spread_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:127: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_roll_spread_pct"] = roll_spread_pct.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:173: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_kyle_lambda"] = kyle_lambda_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:242: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_cs_spread"] = pd.Series(cs_spread_raw, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:282: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_rel_spread"] = rel_spread_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:289: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = rel_spread_raw.rolling(window=period).mean().shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:328: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_volume_imbalance"] = imbalance_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:331: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_cum_imbalance_20"] = imbalance_raw.rolling(window=20).sum().shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:382: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = intensity_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:434: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = efficiency_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:477: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_vol_ratio"] = vol_ratio_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:302: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(entropy, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:307: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[norm_col_name] = df[col_name] / max_entropy
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:548: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(lz_values, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:828: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(apen, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:1381: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(sampen, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:1124: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(hurst, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:1141: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["hurst_regime"] = np.select(conditions, choices, default=np.nan)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:237: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[approx_col] = _np_shift1(_normalize_coefficients(approx))
+
+tests/test_factory_e2e.py: 12 warnings
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:247: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[detail_col] = _np_shift1(_normalize_coefficients(details[lev]))
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:286: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[approx_energy_col] = _np_shift1(np.log1p(approx_energy))
+
+tests/test_factory_e2e.py: 12 warnings
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:293: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[energy_col] = _np_shift1(np.log1p(detail_energies[lev]))
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:298: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[ratio_col] = _np_shift1(energy_ratio)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:344: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[vol_col] = _np_shift1(wavelet_vol)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:397: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[strength_col] = _np_shift1(trend_strength)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:398: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[direction_col] = _np_shift1(trend_direction)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+  /home/user/Research/src/models/training/artifacts.py:126: DeprecationWarning: get_applied_overrides() is deprecated. Use the 'applied_overrides' attribute from ConfigBuildResult returned by build_config() instead.
+    applied_overrides = get_applied_overrides()
+
+tests/test_model_smoke.py: 18 warnings
+  /home/user/Research/src/models/neural/base_rnn.py:860: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py: 18 warnings
+  /home/user/Research/src/models/neural/base_rnn.py:936: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py: 36 warnings
+  /home/user/Research/src/models/neural/base_rnn.py:960: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[lstm]
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[gru]
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[tcn]
+tests/test_model_smoke.py::TestNeuralRNNModels::test_rnn_fit_predict[lstm]
+tests/test_model_smoke.py::TestNeuralRNNModels::test_rnn_fit_predict[gru]
+tests/test_model_smoke.py::TestNeuralCNNModels::test_cnn_fit_predict[tcn]
+  /home/user/Research/src/models/neural/base_rnn.py:668: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[inceptiontime]
+tests/test_model_smoke.py::TestNeuralCNNModels::test_cnn_fit_predict[inceptiontime]
+  /home/user/Research/src/models/neural/inceptiontime_model.py:491: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[resnet1d]
+tests/test_model_smoke.py::TestNeuralCNNModels::test_cnn_fit_predict[resnet1d]
+  /home/user/Research/src/models/neural/resnet1d_model.py:518: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[patchtst]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[patchtst]
+  /home/user/Research/src/models/neural/patchtst_model.py:190: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+    self.transformer_encoder = nn.TransformerEncoder(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[patchtst]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[patchtst]
+  /home/user/Research/src/models/neural/patchtst_model.py:460: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[itransformer]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[itransformer]
+  /home/user/Research/src/models/neural/itransformer_model.py:176: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+    self.transformer_encoder = nn.TransformerEncoder(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[itransformer]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[itransformer]
+  /home/user/Research/src/models/neural/itransformer_model.py:499: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[tft]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[tft]
+  /home/user/Research/src/models/neural/tft_model.py:697: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[nbeats]
+tests/test_model_smoke.py::TestMLPModels::test_nbeats_fit_predict
+  /home/user/Research/src/models/neural/nbeats_model.py:686: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[random_forest]
+tests/test_model_smoke.py::TestClassicalModels::test_classical_fit_predict[random_forest]
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:589: UserWarning: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+    warn(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[svm]
+tests/test_model_smoke.py::TestClassicalModels::test_classical_fit_predict[svm]
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/svm/_base.py:239: FutureWarning: The `probability` parameter was deprecated in 1.9 and will be removed in version 1.11. Use `CalibratedClassifierCV(SVC(), ensemble=False)` instead of `SVC(probability=True)`
+    warnings.warn(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[svm]
+tests/test_model_smoke.py::TestClassicalModels::test_classical_fit_predict[svm]
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/svm/_base.py:340: ConvergenceWarning: Solver terminated early (max_iter=50).  Consider pre-processing your data with StandardScaler or MinMaxScaler.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+XFAIL tests/test_oof_alignment_contract.py::test_two_perfect_models_agree_after_alignment - Phase 0 F1: OOF producers emit positional indices, so the aligner intersects incompatible coordinate systems. Fixes at Stage 17.
+XFAIL tests/test_oof_alignment_contract.py::test_aligned_indices_are_source_bar_coordinates - Phase 0 F1: OOF indices are positional, not source-bar. Fixes at Stage 17.
