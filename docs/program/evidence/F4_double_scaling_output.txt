@@ -1,0 +1,53 @@
+========================================================================
+Data: 1000 rows, last 200 have 10x the volatility of the first 800
+========================================================================
+  std(first 800)      = 1.000
+  std(last 200)      = 8.708
+
+========================================================================
+Scaler statistics used to normalise the FOLD-TRAINING rows
+========================================================================
+  IQR from fold-train only (correct) : 1.3588
+  IQR from the whole split  (actual) : 1.7347
+  contamination                      : 27.7%
+
+
+  The whole-split IQR IS inflated by validation rows the fold's
+  training data must not see. Whether that matters depends on what
+  happens next -- see below.
+
+========================================================================
+Effect on the fold-training values
+========================================================================
+  std(train | correct) = 0.7361
+  std(train | actual)  = 0.7361
+  max |difference|     = 0.0000
+
+========================================================================
+VERDICT
+========================================================================
+  scaler statistics contaminated by fold-validation rows : True
+  fold-training values differ from the correct scaling   : False
+
+  Scaler STATISTICS are contaminated, but the fold-training VALUES
+  are bit-identical. Robust/standard scaling is AFFINE, and the
+  fold scaler re-derives its statistics from the pre-scaled
+  fold-train data, so the first transform cancels exactly:
+
+      pre  : z = (x - m)/s                     [global m, s]
+      fold : w = (z - med(z_tr)) / IQR(z_tr)
+           =  (x - med(x_tr)) / IQR(x_tr)      [m, s cancel]
+
+RESULT: NO LEAKAGE -- claim REFUTED
+
+  Phase 0 (Agent 4) reported 'global scaler fit precedes CV folds'
+  as HIGH-severity leakage. That is REFUTED for the CV/OOF path.
+  What remains is redundant computation, not a correctness defect.
+
+  THE INVARIANT THIS RELIES ON: every reachable scaler is affine.
+  AdapterScaler accepts only robust/standard/minmax and raises
+  otherwise; FoldAwareScaler accepts only none/robust/standard.
+  ScalerType also declares QUANTILE, which is NOT affine -- if it
+  ever becomes reachable as the pre-scaler, the cancellation breaks
+  and this DOES become real leakage. That invariant is now pinned by
+  tests/test_scaling_invariants.py rather than left implicit.

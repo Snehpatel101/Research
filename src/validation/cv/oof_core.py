@@ -239,7 +239,24 @@ class CoreOOFGenerator:
         ):
             logger.debug(f"  Fold {fold_idx + 1}: train={len(train_idx)}, val={len(val_idx)}")
 
-            # Extract fold data (raw, unscaled)
+            # Extract fold data.
+            #
+            # NOTE (Stage 5): "raw" is aspirational. When called via
+            # oof_generation.py this X is `PreparedData.X_train`, which
+            # AdapterScaler already scaled on the WHOLE train split
+            # (preparation.py, apply_scaling defaults True). So the fold
+            # scaling below is the SECOND pass.
+            #
+            # That is harmless — but only because every reachable scaler is
+            # affine, so the first transform cancels exactly once this one
+            # re-derives its statistics from fold-train data:
+            #     pre : z = (x - m)/s
+            #     fold: w = (z - med(z_tr))/IQR(z_tr) = (x - med(x_tr))/IQR(x_tr)
+            # Proof: docs/program/evidence/F4_double_scaling.py
+            # Invariant pinned by: tests/test_scaling_invariants.py
+            #
+            # If a non-affine scaler (e.g. QUANTILE) ever becomes reachable as
+            # the pre-scaler, this becomes real preprocessing leakage.
             X_train_raw, X_val_raw = X.iloc[train_idx], X.iloc[val_idx]
             y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
 
