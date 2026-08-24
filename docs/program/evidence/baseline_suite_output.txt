@@ -1,0 +1,1127 @@
+........................................................................ [ 12%]
+........................................................................ [ 24%]
+........................................................................ [ 36%]
+......................................................................FF [ 48%]
+F.F..................................................................... [ 60%]
+........................................................................ [ 72%]
+........................................................................ [ 84%]
+........................................................................ [ 96%]
+.....................                                                    [100%]
+=================================== FAILURES ===================================
+____________________ TestCleanFeature.test_sma_no_lookahead ____________________
+
+self = NumpyBlock: 200 dtype: int64
+indexer = (array([160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+       173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185,
+       186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198,
+       199]),)
+value = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def setitem(self, indexer, value) -> Block:
+        """
+        Attempt self.values[indexer] = value, possibly creating a new array.
+    
+        Parameters
+        ----------
+        indexer : tuple, list-like, array-like, slice, int
+            The subset of self.values to set
+        value : object
+            The value being set
+    
+        Returns
+        -------
+        Block
+    
+        Notes
+        -----
+        `indexer` is a direct slice/positional indexer. `value` must
+        be a compatible shape.
+        """
+    
+        value = self._standardize_fill_value(value)
+    
+        values = cast(np.ndarray, self.values)
+        if self.ndim == 2:
+            values = values.T
+    
+        # length checking
+        check_setitem_lengths(indexer, value, values)
+    
+        if self.dtype != _dtype_obj:
+            # GH48933: extract_array would convert a pd.Series value to np.ndarray
+            value = extract_array(value, extract_numpy=True)
+        try:
+>           casted = np_can_hold_element(values.dtype, value)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = dtype('int64')
+element = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def np_can_hold_element(dtype: np.dtype, element: Any) -> Any:
+        """
+        Raise if we cannot losslessly set this element into an ndarray with this dtype.
+    
+        Specifically about places where we disagree with numpy.  i.e. there are
+        cases where numpy will raise in doing the setitem that we do not check
+        for here, e.g. setting str "X" into a numeric ndarray.
+    
+        Returns
+        -------
+        Any
+            The element, potentially cast to the dtype.
+    
+        Raises
+        ------
+        ValueError : If we cannot losslessly store this element with this dtype.
+        """
+        if dtype == _dtype_obj:
+            return element
+    
+        tipo = _maybe_infer_dtype_type(element)
+    
+        if dtype.kind in "iu":
+            if isinstance(element, range):
+                if _dtype_can_hold_range(element, dtype):
+                    return element
+                raise LossySetitemError
+    
+            if is_integer(element) or (is_float(element) and element.is_integer()):
+                # e.g. test_setitem_series_int8 if we have a python int 1
+                #  tipo may be np.int32, despite the fact that it will fit
+                #  in smaller int dtypes.
+                info = np.iinfo(dtype)
+                if info.min <= element <= info.max:
+                    return dtype.type(element)
+                raise LossySetitemError
+    
+            if tipo is not None:
+                if tipo.kind not in "iu":
+                    if isinstance(element, np.ndarray) and element.dtype.kind == "f":
+                        # If all can be losslessly cast to integers, then we can hold them
+                        with np.errstate(invalid="ignore"):
+                            # We check afterwards if cast was losslessly, so no need to show
+                            # the warning
+                            casted = element.astype(dtype)
+                        comp = casted == element
+                        if comp.all():
+                            # Return the casted values bc they can be passed to
+                            #  np.putmask, whereas the raw values cannot.
+                            #  see TestSetitemFloatNDarrayIntoIntegerSeries
+                            return casted
+>                       raise LossySetitemError
+E                       pandas.errors.LossySetitemError
+
+.venv/lib/python3.11/site-packages/pandas/core/dtypes/cast.py:1705: LossySetitemError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_lookahead_audit.TestCleanFeature object at 0x7f1e4f2388d0>
+ohlcv_df =                             open         high          low        close  volume
+2024-01-01 00:00:00  4506.913895  4502....596982    1034
+2024-01-01 16:35:00  4444.977772  4445.618192  4434.535150  4444.143779    2925
+
+[200 rows x 5 columns]
+
+    def test_sma_no_lookahead(self, ohlcv_df: pd.DataFrame) -> None:
+        auditor = LookaheadAuditor(corruption_point=0.8, corruption_method="random")
+>       result = auditor.audit_feature_function(
+            ohlcv_df, sma_feature, name="SMA", raise_on_lookahead=False
+        )
+
+tests/test_lookahead_audit.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/validation/lookahead_audit.py:271: in audit_feature_function
+    df_corrupted = self._corrupt_data(df_clean.copy(), corruption_idx, price_cols)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/validation/lookahead_audit.py:376: in _corrupt_data
+    df.loc[df.index[start_idx:], col] = random_vals
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:938: in __setitem__
+    iloc._setitem_with_indexer(indexer, value, self.name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1953: in _setitem_with_indexer
+    self._setitem_with_indexer_split_path(indexer, value, name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1997: in _setitem_with_indexer_split_path
+    self._setitem_single_column(ilocs[0], value, pi)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:2181: in _setitem_single_column
+    self.obj._mgr.column_setitem(loc, plane_indexer, value)
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:1541: in column_setitem
+    new_mgr = col_mgr.setitem((idx,), value)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:620: in setitem
+    return self.apply("setitem", indexer=indexer, value=value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:445: in apply
+    applied = getattr(b, f)(**kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1118: in setitem
+    nb = self.coerce_to_target_dtype(value, raise_on_upcast=True)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NumpyBlock: 200 dtype: int64
+other = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+raise_on_upcast = True
+
+    @final
+    def coerce_to_target_dtype(self, other, raise_on_upcast: bool) -> Block:
+        """
+        coerce the current block to a dtype compat for other
+        we will return a block, possibly object, and not raise
+    
+        we can also safely try to coerce to the same dtype
+        and will receive the same block
+        """
+        new_dtype = find_result_type(self.values.dtype, other)
+        if new_dtype == self.dtype:
+            # GH#52927 avoid RecursionError
+            raise AssertionError(
+                "Something has gone wrong, please report a bug at "
+                "https://github.com/pandas-dev/pandas/issues"
+            )
+    
+        # In a future version of pandas, the default will be that
+        # setting `nan` into an integer series won't raise.
+        if (
+            is_scalar(other)
+            and is_integer_dtype(self.values.dtype)
+            and isna(other)
+            and other is not NaT
+            and not (
+                isinstance(other, (np.datetime64, np.timedelta64)) and np.isnat(other)
+            )
+        ):
+            raise_on_upcast = False
+        elif (
+            isinstance(other, np.ndarray)
+            and other.ndim == 1
+            and is_integer_dtype(self.values.dtype)
+            and is_float_dtype(other.dtype)
+            and lib.has_only_ints_or_nan(other)
+        ):
+            raise_on_upcast = False
+    
+        if raise_on_upcast:
+>           raise TypeError(f"Invalid value '{other}' for dtype '{self.values.dtype}'")
+E           TypeError: Invalid value '[1961.95484858 2240.67322061 5556.25591897 2128.94846331 4057.48470211
+E            2034.21017076 4165.63465537 3530.53872022 2901.29061738 3035.92107708
+E            2322.51244052 3601.55277531 2554.65610465 1659.30422005 1598.5022082
+E            3283.80350418 4917.9574108  3269.16841653 2945.44063579 3415.36997656
+E            4600.66680435 3338.17205743 2605.84310881 4368.62908223 3581.43435752
+E            4867.60808728 3296.17322343 1660.62493864 1493.67769995 5001.42126134
+E            5085.93207482 2874.70583064 2638.07288072 4781.26861611 1797.05392557
+E            2043.7375723  3830.73414674 2624.80704282 3077.33038001 2893.38418841]' for dtype 'int64'
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:468: TypeError
+________________ TestForwardLooking.test_forward_shift_detected ________________
+
+self = NumpyBlock: 200 dtype: int64
+indexer = (array([160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+       173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185,
+       186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198,
+       199]),)
+value = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def setitem(self, indexer, value) -> Block:
+        """
+        Attempt self.values[indexer] = value, possibly creating a new array.
+    
+        Parameters
+        ----------
+        indexer : tuple, list-like, array-like, slice, int
+            The subset of self.values to set
+        value : object
+            The value being set
+    
+        Returns
+        -------
+        Block
+    
+        Notes
+        -----
+        `indexer` is a direct slice/positional indexer. `value` must
+        be a compatible shape.
+        """
+    
+        value = self._standardize_fill_value(value)
+    
+        values = cast(np.ndarray, self.values)
+        if self.ndim == 2:
+            values = values.T
+    
+        # length checking
+        check_setitem_lengths(indexer, value, values)
+    
+        if self.dtype != _dtype_obj:
+            # GH48933: extract_array would convert a pd.Series value to np.ndarray
+            value = extract_array(value, extract_numpy=True)
+        try:
+>           casted = np_can_hold_element(values.dtype, value)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = dtype('int64')
+element = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def np_can_hold_element(dtype: np.dtype, element: Any) -> Any:
+        """
+        Raise if we cannot losslessly set this element into an ndarray with this dtype.
+    
+        Specifically about places where we disagree with numpy.  i.e. there are
+        cases where numpy will raise in doing the setitem that we do not check
+        for here, e.g. setting str "X" into a numeric ndarray.
+    
+        Returns
+        -------
+        Any
+            The element, potentially cast to the dtype.
+    
+        Raises
+        ------
+        ValueError : If we cannot losslessly store this element with this dtype.
+        """
+        if dtype == _dtype_obj:
+            return element
+    
+        tipo = _maybe_infer_dtype_type(element)
+    
+        if dtype.kind in "iu":
+            if isinstance(element, range):
+                if _dtype_can_hold_range(element, dtype):
+                    return element
+                raise LossySetitemError
+    
+            if is_integer(element) or (is_float(element) and element.is_integer()):
+                # e.g. test_setitem_series_int8 if we have a python int 1
+                #  tipo may be np.int32, despite the fact that it will fit
+                #  in smaller int dtypes.
+                info = np.iinfo(dtype)
+                if info.min <= element <= info.max:
+                    return dtype.type(element)
+                raise LossySetitemError
+    
+            if tipo is not None:
+                if tipo.kind not in "iu":
+                    if isinstance(element, np.ndarray) and element.dtype.kind == "f":
+                        # If all can be losslessly cast to integers, then we can hold them
+                        with np.errstate(invalid="ignore"):
+                            # We check afterwards if cast was losslessly, so no need to show
+                            # the warning
+                            casted = element.astype(dtype)
+                        comp = casted == element
+                        if comp.all():
+                            # Return the casted values bc they can be passed to
+                            #  np.putmask, whereas the raw values cannot.
+                            #  see TestSetitemFloatNDarrayIntoIntegerSeries
+                            return casted
+>                       raise LossySetitemError
+E                       pandas.errors.LossySetitemError
+
+.venv/lib/python3.11/site-packages/pandas/core/dtypes/cast.py:1705: LossySetitemError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_lookahead_audit.TestForwardLooking object at 0x7f1e4f238e10>
+ohlcv_df =                             open         high          low        close  volume
+2024-01-01 00:00:00  4506.913895  4502....596982    1034
+2024-01-01 16:35:00  4444.977772  4445.618192  4434.535150  4444.143779    2925
+
+[200 rows x 5 columns]
+
+    def test_forward_shift_detected(self, ohlcv_df: pd.DataFrame) -> None:
+        auditor = LookaheadAuditor(corruption_point=0.8, corruption_method="random")
+>       result = auditor.audit_feature_function(
+            ohlcv_df,
+            forward_shifted_feature,
+            name="FutureClose",
+            raise_on_lookahead=False,
+        )
+
+tests/test_lookahead_audit.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/validation/lookahead_audit.py:271: in audit_feature_function
+    df_corrupted = self._corrupt_data(df_clean.copy(), corruption_idx, price_cols)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/validation/lookahead_audit.py:376: in _corrupt_data
+    df.loc[df.index[start_idx:], col] = random_vals
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:938: in __setitem__
+    iloc._setitem_with_indexer(indexer, value, self.name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1953: in _setitem_with_indexer
+    self._setitem_with_indexer_split_path(indexer, value, name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1997: in _setitem_with_indexer_split_path
+    self._setitem_single_column(ilocs[0], value, pi)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:2181: in _setitem_single_column
+    self.obj._mgr.column_setitem(loc, plane_indexer, value)
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:1541: in column_setitem
+    new_mgr = col_mgr.setitem((idx,), value)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:620: in setitem
+    return self.apply("setitem", indexer=indexer, value=value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:445: in apply
+    applied = getattr(b, f)(**kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1118: in setitem
+    nb = self.coerce_to_target_dtype(value, raise_on_upcast=True)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NumpyBlock: 200 dtype: int64
+other = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+raise_on_upcast = True
+
+    @final
+    def coerce_to_target_dtype(self, other, raise_on_upcast: bool) -> Block:
+        """
+        coerce the current block to a dtype compat for other
+        we will return a block, possibly object, and not raise
+    
+        we can also safely try to coerce to the same dtype
+        and will receive the same block
+        """
+        new_dtype = find_result_type(self.values.dtype, other)
+        if new_dtype == self.dtype:
+            # GH#52927 avoid RecursionError
+            raise AssertionError(
+                "Something has gone wrong, please report a bug at "
+                "https://github.com/pandas-dev/pandas/issues"
+            )
+    
+        # In a future version of pandas, the default will be that
+        # setting `nan` into an integer series won't raise.
+        if (
+            is_scalar(other)
+            and is_integer_dtype(self.values.dtype)
+            and isna(other)
+            and other is not NaT
+            and not (
+                isinstance(other, (np.datetime64, np.timedelta64)) and np.isnat(other)
+            )
+        ):
+            raise_on_upcast = False
+        elif (
+            isinstance(other, np.ndarray)
+            and other.ndim == 1
+            and is_integer_dtype(self.values.dtype)
+            and is_float_dtype(other.dtype)
+            and lib.has_only_ints_or_nan(other)
+        ):
+            raise_on_upcast = False
+    
+        if raise_on_upcast:
+>           raise TypeError(f"Invalid value '{other}' for dtype '{self.values.dtype}'")
+E           TypeError: Invalid value '[1961.95484858 2240.67322061 5556.25591897 2128.94846331 4057.48470211
+E            2034.21017076 4165.63465537 3530.53872022 2901.29061738 3035.92107708
+E            2322.51244052 3601.55277531 2554.65610465 1659.30422005 1598.5022082
+E            3283.80350418 4917.9574108  3269.16841653 2945.44063579 3415.36997656
+E            4600.66680435 3338.17205743 2605.84310881 4368.62908223 3581.43435752
+E            4867.60808728 3296.17322343 1660.62493864 1493.67769995 5001.42126134
+E            5085.93207482 2874.70583064 2638.07288072 4781.26861611 1797.05392557
+E            2043.7375723  3830.73414674 2624.80704282 3077.33038001 2893.38418841]' for dtype 'int64'
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:468: TypeError
+_______________ TestForwardLooking.test_raises_in_blocking_mode ________________
+
+self = NumpyBlock: 200 dtype: int64
+indexer = (array([160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+       173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185,
+       186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198,
+       199]),)
+value = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def setitem(self, indexer, value) -> Block:
+        """
+        Attempt self.values[indexer] = value, possibly creating a new array.
+    
+        Parameters
+        ----------
+        indexer : tuple, list-like, array-like, slice, int
+            The subset of self.values to set
+        value : object
+            The value being set
+    
+        Returns
+        -------
+        Block
+    
+        Notes
+        -----
+        `indexer` is a direct slice/positional indexer. `value` must
+        be a compatible shape.
+        """
+    
+        value = self._standardize_fill_value(value)
+    
+        values = cast(np.ndarray, self.values)
+        if self.ndim == 2:
+            values = values.T
+    
+        # length checking
+        check_setitem_lengths(indexer, value, values)
+    
+        if self.dtype != _dtype_obj:
+            # GH48933: extract_array would convert a pd.Series value to np.ndarray
+            value = extract_array(value, extract_numpy=True)
+        try:
+>           casted = np_can_hold_element(values.dtype, value)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = dtype('int64')
+element = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def np_can_hold_element(dtype: np.dtype, element: Any) -> Any:
+        """
+        Raise if we cannot losslessly set this element into an ndarray with this dtype.
+    
+        Specifically about places where we disagree with numpy.  i.e. there are
+        cases where numpy will raise in doing the setitem that we do not check
+        for here, e.g. setting str "X" into a numeric ndarray.
+    
+        Returns
+        -------
+        Any
+            The element, potentially cast to the dtype.
+    
+        Raises
+        ------
+        ValueError : If we cannot losslessly store this element with this dtype.
+        """
+        if dtype == _dtype_obj:
+            return element
+    
+        tipo = _maybe_infer_dtype_type(element)
+    
+        if dtype.kind in "iu":
+            if isinstance(element, range):
+                if _dtype_can_hold_range(element, dtype):
+                    return element
+                raise LossySetitemError
+    
+            if is_integer(element) or (is_float(element) and element.is_integer()):
+                # e.g. test_setitem_series_int8 if we have a python int 1
+                #  tipo may be np.int32, despite the fact that it will fit
+                #  in smaller int dtypes.
+                info = np.iinfo(dtype)
+                if info.min <= element <= info.max:
+                    return dtype.type(element)
+                raise LossySetitemError
+    
+            if tipo is not None:
+                if tipo.kind not in "iu":
+                    if isinstance(element, np.ndarray) and element.dtype.kind == "f":
+                        # If all can be losslessly cast to integers, then we can hold them
+                        with np.errstate(invalid="ignore"):
+                            # We check afterwards if cast was losslessly, so no need to show
+                            # the warning
+                            casted = element.astype(dtype)
+                        comp = casted == element
+                        if comp.all():
+                            # Return the casted values bc they can be passed to
+                            #  np.putmask, whereas the raw values cannot.
+                            #  see TestSetitemFloatNDarrayIntoIntegerSeries
+                            return casted
+>                       raise LossySetitemError
+E                       pandas.errors.LossySetitemError
+
+.venv/lib/python3.11/site-packages/pandas/core/dtypes/cast.py:1705: LossySetitemError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_lookahead_audit.TestForwardLooking object at 0x7f1e4f239190>
+ohlcv_df =                             open         high          low        close  volume
+2024-01-01 00:00:00  4506.913895  4502....596982    1034
+2024-01-01 16:35:00  4444.977772  4445.618192  4434.535150  4444.143779    2925
+
+[200 rows x 5 columns]
+
+    def test_raises_in_blocking_mode(self, ohlcv_df: pd.DataFrame) -> None:
+        auditor = LookaheadAuditor(corruption_point=0.8, corruption_method="random")
+        with pytest.raises(LookaheadBiasError):
+>           auditor.audit_feature_function(
+                ohlcv_df,
+                forward_shifted_feature,
+                name="FutureClose",
+                raise_on_lookahead=True,
+            )
+
+tests/test_lookahead_audit.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/validation/lookahead_audit.py:271: in audit_feature_function
+    df_corrupted = self._corrupt_data(df_clean.copy(), corruption_idx, price_cols)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/validation/lookahead_audit.py:376: in _corrupt_data
+    df.loc[df.index[start_idx:], col] = random_vals
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:938: in __setitem__
+    iloc._setitem_with_indexer(indexer, value, self.name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1953: in _setitem_with_indexer
+    self._setitem_with_indexer_split_path(indexer, value, name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1997: in _setitem_with_indexer_split_path
+    self._setitem_single_column(ilocs[0], value, pi)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:2181: in _setitem_single_column
+    self.obj._mgr.column_setitem(loc, plane_indexer, value)
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:1541: in column_setitem
+    new_mgr = col_mgr.setitem((idx,), value)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:620: in setitem
+    return self.apply("setitem", indexer=indexer, value=value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:445: in apply
+    applied = getattr(b, f)(**kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1118: in setitem
+    nb = self.coerce_to_target_dtype(value, raise_on_upcast=True)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NumpyBlock: 200 dtype: int64
+other = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+raise_on_upcast = True
+
+    @final
+    def coerce_to_target_dtype(self, other, raise_on_upcast: bool) -> Block:
+        """
+        coerce the current block to a dtype compat for other
+        we will return a block, possibly object, and not raise
+    
+        we can also safely try to coerce to the same dtype
+        and will receive the same block
+        """
+        new_dtype = find_result_type(self.values.dtype, other)
+        if new_dtype == self.dtype:
+            # GH#52927 avoid RecursionError
+            raise AssertionError(
+                "Something has gone wrong, please report a bug at "
+                "https://github.com/pandas-dev/pandas/issues"
+            )
+    
+        # In a future version of pandas, the default will be that
+        # setting `nan` into an integer series won't raise.
+        if (
+            is_scalar(other)
+            and is_integer_dtype(self.values.dtype)
+            and isna(other)
+            and other is not NaT
+            and not (
+                isinstance(other, (np.datetime64, np.timedelta64)) and np.isnat(other)
+            )
+        ):
+            raise_on_upcast = False
+        elif (
+            isinstance(other, np.ndarray)
+            and other.ndim == 1
+            and is_integer_dtype(self.values.dtype)
+            and is_float_dtype(other.dtype)
+            and lib.has_only_ints_or_nan(other)
+        ):
+            raise_on_upcast = False
+    
+        if raise_on_upcast:
+>           raise TypeError(f"Invalid value '{other}' for dtype '{self.values.dtype}'")
+E           TypeError: Invalid value '[1961.95484858 2240.67322061 5556.25591897 2128.94846331 4057.48470211
+E            2034.21017076 4165.63465537 3530.53872022 2901.29061738 3035.92107708
+E            2322.51244052 3601.55277531 2554.65610465 1659.30422005 1598.5022082
+E            3283.80350418 4917.9574108  3269.16841653 2945.44063579 3415.36997656
+E            4600.66680435 3338.17205743 2605.84310881 4368.62908223 3581.43435752
+E            4867.60808728 3296.17322343 1660.62493864 1493.67769995 5001.42126134
+E            5085.93207482 2874.70583064 2638.07288072 4781.26861611 1797.05392557
+E            2043.7375723  3830.73414674 2624.80704282 3077.33038001 2893.38418841]' for dtype 'int64'
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:468: TypeError
+_________ TestCorruptionMethods.test_method_detects_lookahead[random] __________
+
+self = NumpyBlock: 200 dtype: int64
+indexer = (array([160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172,
+       173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185,
+       186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198,
+       199]),)
+value = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def setitem(self, indexer, value) -> Block:
+        """
+        Attempt self.values[indexer] = value, possibly creating a new array.
+    
+        Parameters
+        ----------
+        indexer : tuple, list-like, array-like, slice, int
+            The subset of self.values to set
+        value : object
+            The value being set
+    
+        Returns
+        -------
+        Block
+    
+        Notes
+        -----
+        `indexer` is a direct slice/positional indexer. `value` must
+        be a compatible shape.
+        """
+    
+        value = self._standardize_fill_value(value)
+    
+        values = cast(np.ndarray, self.values)
+        if self.ndim == 2:
+            values = values.T
+    
+        # length checking
+        check_setitem_lengths(indexer, value, values)
+    
+        if self.dtype != _dtype_obj:
+            # GH48933: extract_array would convert a pd.Series value to np.ndarray
+            value = extract_array(value, extract_numpy=True)
+        try:
+>           casted = np_can_hold_element(values.dtype, value)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+dtype = dtype('int64')
+element = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+
+    def np_can_hold_element(dtype: np.dtype, element: Any) -> Any:
+        """
+        Raise if we cannot losslessly set this element into an ndarray with this dtype.
+    
+        Specifically about places where we disagree with numpy.  i.e. there are
+        cases where numpy will raise in doing the setitem that we do not check
+        for here, e.g. setting str "X" into a numeric ndarray.
+    
+        Returns
+        -------
+        Any
+            The element, potentially cast to the dtype.
+    
+        Raises
+        ------
+        ValueError : If we cannot losslessly store this element with this dtype.
+        """
+        if dtype == _dtype_obj:
+            return element
+    
+        tipo = _maybe_infer_dtype_type(element)
+    
+        if dtype.kind in "iu":
+            if isinstance(element, range):
+                if _dtype_can_hold_range(element, dtype):
+                    return element
+                raise LossySetitemError
+    
+            if is_integer(element) or (is_float(element) and element.is_integer()):
+                # e.g. test_setitem_series_int8 if we have a python int 1
+                #  tipo may be np.int32, despite the fact that it will fit
+                #  in smaller int dtypes.
+                info = np.iinfo(dtype)
+                if info.min <= element <= info.max:
+                    return dtype.type(element)
+                raise LossySetitemError
+    
+            if tipo is not None:
+                if tipo.kind not in "iu":
+                    if isinstance(element, np.ndarray) and element.dtype.kind == "f":
+                        # If all can be losslessly cast to integers, then we can hold them
+                        with np.errstate(invalid="ignore"):
+                            # We check afterwards if cast was losslessly, so no need to show
+                            # the warning
+                            casted = element.astype(dtype)
+                        comp = casted == element
+                        if comp.all():
+                            # Return the casted values bc they can be passed to
+                            #  np.putmask, whereas the raw values cannot.
+                            #  see TestSetitemFloatNDarrayIntoIntegerSeries
+                            return casted
+>                       raise LossySetitemError
+E                       pandas.errors.LossySetitemError
+
+.venv/lib/python3.11/site-packages/pandas/core/dtypes/cast.py:1705: LossySetitemError
+
+During handling of the above exception, another exception occurred:
+
+self = <tests.test_lookahead_audit.TestCorruptionMethods object at 0x7f1e4f23a110>
+ohlcv_df =                             open         high          low        close  volume
+2024-01-01 00:00:00  4506.913895  4502....596982    1034
+2024-01-01 16:35:00  4444.977772  4445.618192  4434.535150  4444.143779    2925
+
+[200 rows x 5 columns]
+method = 'random'
+
+    @pytest.mark.parametrize("method", ["nan", "random", "shuffle"])
+    def test_method_detects_lookahead(self, ohlcv_df: pd.DataFrame, method: str) -> None:
+        auditor = LookaheadAuditor(
+            corruption_point=0.8, corruption_method=method  # type: ignore[arg-type]
+        )
+>       result = auditor.audit_feature_function(
+            ohlcv_df,
+            forward_shifted_feature,
+            name=f"FutureClose_{method}",
+            raise_on_lookahead=False,
+        )
+
+tests/test_lookahead_audit.py:125: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/validation/lookahead_audit.py:271: in audit_feature_function
+    df_corrupted = self._corrupt_data(df_clean.copy(), corruption_idx, price_cols)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/validation/lookahead_audit.py:376: in _corrupt_data
+    df.loc[df.index[start_idx:], col] = random_vals
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:938: in __setitem__
+    iloc._setitem_with_indexer(indexer, value, self.name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1953: in _setitem_with_indexer
+    self._setitem_with_indexer_split_path(indexer, value, name)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:1997: in _setitem_with_indexer_split_path
+    self._setitem_single_column(ilocs[0], value, pi)
+.venv/lib/python3.11/site-packages/pandas/core/indexing.py:2181: in _setitem_single_column
+    self.obj._mgr.column_setitem(loc, plane_indexer, value)
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:1541: in column_setitem
+    new_mgr = col_mgr.setitem((idx,), value)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:620: in setitem
+    return self.apply("setitem", indexer=indexer, value=value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/managers.py:445: in apply
+    applied = getattr(b, f)(**kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:1118: in setitem
+    nb = self.coerce_to_target_dtype(value, raise_on_upcast=True)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NumpyBlock: 200 dtype: int64
+other = array([1961.95484858, 2240.67322061, 5556.25591897, 2128.94846331,
+       4057.48470211, 2034.21017076, 4165.63465537,...88072, 4781.26861611, 1797.05392557, 2043.7375723 ,
+       3830.73414674, 2624.80704282, 3077.33038001, 2893.38418841])
+raise_on_upcast = True
+
+    @final
+    def coerce_to_target_dtype(self, other, raise_on_upcast: bool) -> Block:
+        """
+        coerce the current block to a dtype compat for other
+        we will return a block, possibly object, and not raise
+    
+        we can also safely try to coerce to the same dtype
+        and will receive the same block
+        """
+        new_dtype = find_result_type(self.values.dtype, other)
+        if new_dtype == self.dtype:
+            # GH#52927 avoid RecursionError
+            raise AssertionError(
+                "Something has gone wrong, please report a bug at "
+                "https://github.com/pandas-dev/pandas/issues"
+            )
+    
+        # In a future version of pandas, the default will be that
+        # setting `nan` into an integer series won't raise.
+        if (
+            is_scalar(other)
+            and is_integer_dtype(self.values.dtype)
+            and isna(other)
+            and other is not NaT
+            and not (
+                isinstance(other, (np.datetime64, np.timedelta64)) and np.isnat(other)
+            )
+        ):
+            raise_on_upcast = False
+        elif (
+            isinstance(other, np.ndarray)
+            and other.ndim == 1
+            and is_integer_dtype(self.values.dtype)
+            and is_float_dtype(other.dtype)
+            and lib.has_only_ints_or_nan(other)
+        ):
+            raise_on_upcast = False
+    
+        if raise_on_upcast:
+>           raise TypeError(f"Invalid value '{other}' for dtype '{self.values.dtype}'")
+E           TypeError: Invalid value '[1961.95484858 2240.67322061 5556.25591897 2128.94846331 4057.48470211
+E            2034.21017076 4165.63465537 3530.53872022 2901.29061738 3035.92107708
+E            2322.51244052 3601.55277531 2554.65610465 1659.30422005 1598.5022082
+E            3283.80350418 4917.9574108  3269.16841653 2945.44063579 3415.36997656
+E            4600.66680435 3338.17205743 2605.84310881 4368.62908223 3581.43435752
+E            4867.60808728 3296.17322343 1660.62493864 1493.67769995 5001.42126134
+E            5085.93207482 2874.70583064 2638.07288072 4781.26861611 1797.05392557
+E            2043.7375723  3830.73414674 2624.80704282 3077.33038001 2893.38418841]' for dtype 'int64'
+
+.venv/lib/python3.11/site-packages/pandas/core/internals/blocks.py:468: TypeError
+=============================== warnings summary ===============================
+tests/test_d4_degenerate_labels.py::TestDegenerateTrialsReturnNegInf::test_compute_validation_metric_exception_returns_neg_inf
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/linear_model/_logistic.py:1457: FutureWarning: 'n_jobs' has no effect since 1.8 and will be removed in 1.10. You provided 'n_jobs=-1', please leave it unspecified.
+    warnings.warn(msg, category=FutureWarning)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:122: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_roll_spread"] = roll_spread_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:127: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_roll_spread_pct"] = roll_spread_pct.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:173: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_kyle_lambda"] = kyle_lambda_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:242: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_cs_spread"] = pd.Series(cs_spread_raw, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:282: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_rel_spread"] = rel_spread_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:289: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = rel_spread_raw.rolling(window=period).mean().shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:328: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_volume_imbalance"] = imbalance_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:331: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_cum_imbalance_20"] = imbalance_raw.rolling(window=20).sum().shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:382: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = intensity_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:434: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = efficiency_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/microstructure.py:477: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["micro_vol_ratio"] = vol_ratio_raw.shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:302: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(entropy, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:307: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[norm_col_name] = df[col_name] / max_entropy
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:548: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(lz_values, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:828: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(apen, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:1381: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(sampen, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:1124: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[col_name] = pd.Series(hurst, index=df.index).shift(1)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/entropy.py:1141: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df["hurst_regime"] = np.select(conditions, choices, default=np.nan)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:237: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[approx_col] = _np_shift1(_normalize_coefficients(approx))
+
+tests/test_factory_e2e.py: 12 warnings
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:247: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[detail_col] = _np_shift1(_normalize_coefficients(details[lev]))
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:286: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[approx_energy_col] = _np_shift1(np.log1p(approx_energy))
+
+tests/test_factory_e2e.py: 12 warnings
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:293: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[energy_col] = _np_shift1(np.log1p(detail_energies[lev]))
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:298: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[ratio_col] = _np_shift1(energy_ratio)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:344: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[vol_col] = _np_shift1(wavelet_vol)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:397: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[strength_col] = _np_shift1(trend_strength)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+tests/test_factory_e2e.py::TestFactoryRunReproducible::test_identical_metrics_across_runs
+  /home/user/Research/src/data/pipeline/stages/features/wavelets.py:398: PerformanceWarning: DataFrame is highly fragmented.  This is usually the result of calling `frame.insert` many times, which has poor performance.  Consider joining all columns at once using pd.concat(axis=1) instead. To get a de-fragmented frame, use `newframe = frame.copy()`
+    df[direction_col] = _np_shift1(trend_direction)
+
+tests/test_factory_e2e.py::TestFactoryRunCompletes::test_run_returns_successful_result
+  /home/user/Research/src/models/training/artifacts.py:126: DeprecationWarning: get_applied_overrides() is deprecated. Use the 'applied_overrides' attribute from ConfigBuildResult returned by build_config() instead.
+    applied_overrides = get_applied_overrides()
+
+tests/test_model_smoke.py: 18 warnings
+  /home/user/Research/src/models/neural/base_rnn.py:860: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py: 18 warnings
+  /home/user/Research/src/models/neural/base_rnn.py:936: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py: 36 warnings
+  /home/user/Research/src/models/neural/base_rnn.py:960: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[lstm]
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[gru]
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[tcn]
+tests/test_model_smoke.py::TestNeuralRNNModels::test_rnn_fit_predict[lstm]
+tests/test_model_smoke.py::TestNeuralRNNModels::test_rnn_fit_predict[gru]
+tests/test_model_smoke.py::TestNeuralCNNModels::test_cnn_fit_predict[tcn]
+  /home/user/Research/src/models/neural/base_rnn.py:668: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[inceptiontime]
+tests/test_model_smoke.py::TestNeuralCNNModels::test_cnn_fit_predict[inceptiontime]
+  /home/user/Research/src/models/neural/inceptiontime_model.py:491: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[resnet1d]
+tests/test_model_smoke.py::TestNeuralCNNModels::test_cnn_fit_predict[resnet1d]
+  /home/user/Research/src/models/neural/resnet1d_model.py:518: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[patchtst]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[patchtst]
+  /home/user/Research/src/models/neural/patchtst_model.py:190: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+    self.transformer_encoder = nn.TransformerEncoder(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[patchtst]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[patchtst]
+  /home/user/Research/src/models/neural/patchtst_model.py:460: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[itransformer]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[itransformer]
+  /home/user/Research/src/models/neural/itransformer_model.py:176: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+    self.transformer_encoder = nn.TransformerEncoder(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[itransformer]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[itransformer]
+  /home/user/Research/src/models/neural/itransformer_model.py:499: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[tft]
+tests/test_model_smoke.py::TestTransformerModels::test_transformer_fit_predict[tft]
+  /home/user/Research/src/models/neural/tft_model.py:697: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[nbeats]
+tests/test_model_smoke.py::TestMLPModels::test_nbeats_fit_predict
+  /home/user/Research/src/models/neural/nbeats_model.py:686: UserWarning: CUDA is not available or torch_xla is imported. Disabling autocast.
+    with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=self._use_amp):
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[random_forest]
+tests/test_model_smoke.py::TestClassicalModels::test_classical_fit_predict[random_forest]
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/ensemble/_forest.py:589: UserWarning: Some inputs do not have OOB scores. This probably means too few trees were used to compute any reliable OOB estimates.
+    warn(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[svm]
+tests/test_model_smoke.py::TestClassicalModels::test_classical_fit_predict[svm]
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/svm/_base.py:239: FutureWarning: The `probability` parameter was deprecated in 1.9 and will be removed in version 1.11. Use `CalibratedClassifierCV(SVC(), ensemble=False)` instead of `SVC(probability=True)`
+    warnings.warn(
+
+tests/test_model_smoke.py::TestModelSmoke::test_fit_and_predict[svm]
+tests/test_model_smoke.py::TestClassicalModels::test_classical_fit_predict[svm]
+  /home/user/Research/.venv/lib/python3.11/site-packages/sklearn/svm/_base.py:340: ConvergenceWarning: Solver terminated early (max_iter=50).  Consider pre-processing your data with StandardScaler or MinMaxScaler.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_lookahead_audit.py::TestCleanFeature::test_sma_no_lookahead
+FAILED tests/test_lookahead_audit.py::TestForwardLooking::test_forward_shift_detected
+FAILED tests/test_lookahead_audit.py::TestForwardLooking::test_raises_in_blocking_mode
+FAILED tests/test_lookahead_audit.py::TestCorruptionMethods::test_method_detects_lookahead[random]
