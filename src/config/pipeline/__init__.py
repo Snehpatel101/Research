@@ -10,7 +10,7 @@ Usage:
 """
 
 # =============================================================================
-# MODEL CONFIG (canonical location: src.models.config.data_requirements)
+# MODEL CONFIG (canonical location: src.core.model_requirements)
 # =============================================================================
 # Timeframe config - import from common module (single source of truth)
 from src.core.common.timeframes import (
@@ -24,6 +24,21 @@ from src.core.common.timeframes import (
 )
 from src.core.common.timeframes import (
     validate_timeframe as validate_phase1_timeframe,
+)
+from src.core.model_requirements import (
+    ENSEMBLE_CONFIGS,
+    MODEL_DATA_REQUIREMENTS,
+    EnsembleConfig,
+    ModelDataRequirements,
+    ModelFamily,
+    ScalerType,
+    get_all_ensemble_names,
+    get_all_model_names,
+    get_combined_requirements,
+    get_ensemble_config,
+    get_model_requirements,
+    get_models_by_family,
+    validate_model_config,
 )
 
 # =============================================================================
@@ -149,21 +164,6 @@ from src.data.pipeline.config.runtime import (
 )
 from src.data.pipeline.config.runtime import (
     validate_config as validate_runtime_config,
-)
-from src.models.config.data_requirements import (
-    ENSEMBLE_CONFIGS,
-    MODEL_DATA_REQUIREMENTS,
-    EnsembleConfig,
-    ModelDataRequirements,
-    ModelFamily,
-    ScalerType,
-    get_all_ensemble_names,
-    get_all_model_names,
-    get_combined_requirements,
-    get_ensemble_config,
-    get_model_requirements,
-    get_models_by_family,
-    validate_model_config,
 )
 
 __all__ = [

@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass, field
 
 # Import from canonical location in src/models/config/
-from src.models.config.data_requirements import (
+from src.core.model_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     ModelFamily,

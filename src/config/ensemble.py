@@ -63,7 +63,7 @@ class EnsembleConfig(BaseConfig):
     Main configuration for ensemble models.
 
     This is the CANONICAL EnsembleConfig. Use this instead of:
-    - EnsembleConfig in src/models/config/data_requirements.py (deprecated)
+    - EnsembleConfig in src/core/model_requirements.py (deprecated)
 
     Attributes:
         name: Ensemble name

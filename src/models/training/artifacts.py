@@ -27,7 +27,7 @@ from ..config import detect_environment, get_applied_overrides, save_config_json
 from .checksums import ArtifactIntegrityManager
 
 # Import MODEL_DATA_REQUIREMENTS for model requirements saving (MOD-008)
-# Canonical location: src.models.config.data_requirements
+# Canonical location: src.core.model_requirements
 
 
 class _NumpySafeEncoder(json.JSONEncoder):

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import pandas as pd
 
 # Import MODEL_DATA_REQUIREMENTS for feature_set validation (MOD-005)
-# Canonical location: src.models.config.data_requirements
+# Canonical location: src.core.model_requirements
 # NOTE: This module validates against MODEL_DATA_REQUIREMENTS. MLFactory uses
 # MODEL_CONTRACTS (src/core/contracts/model_contract.py) which may define different
 # max_features limits. Both registries should be kept in sync.

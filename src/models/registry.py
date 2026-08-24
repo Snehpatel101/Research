@@ -197,6 +197,25 @@ class ModelRegistry:
         return cls._models[name_lower]
 
     @classmethod
+    def ensure_registered(cls) -> None:
+        """Guarantee the built-in model families are registered.
+
+        Registration happens as an import side effect of ``src.models``.
+        That is fragile: any caller that reaches the registry without having
+        imported ``src.models`` first sees an empty registry, and Stage 3 made
+        several facades lazy precisely so they would stop triggering that
+        import implicitly.
+
+        Call this at an entry point when you need the registry populated.
+        Idempotent and cheap after the first call (``sys.modules`` cache), but
+        the FIRST call imports torch/xgboost/lightgbm/catboost -- so do not
+        call it from module scope in a module that wants to stay light.
+        """
+        if cls._models:
+            return
+        import src.models  # noqa: F401  -- import side effect is the point
+
+    @classmethod
     def list_models(cls) -> dict[str, list[str]]:
         """
         List all registered models by family.

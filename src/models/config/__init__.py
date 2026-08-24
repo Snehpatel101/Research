@@ -8,9 +8,7 @@ data preparation. Import from here:
     from src.models.config import MODEL_DATA_REQUIREMENTS, ModelFamily
 """
 
-from src.core.types import ModelFamily
-
-from .data_requirements import (
+from src.core.model_requirements import (
     ENSEMBLE_CONFIGS,
     MODEL_DATA_REQUIREMENTS,
     EnsembleConfig,
@@ -24,6 +22,8 @@ from .data_requirements import (
     get_models_by_family,
     validate_model_config,
 )
+from src.core.types import ModelFamily
+
 from .environment import Environment, detect_environment, is_colab, resolve_device
 from .exceptions import ConfigError, ConfigValidationError
 from .loaders import (

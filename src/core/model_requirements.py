@@ -10,7 +10,7 @@ datasets that satisfy the requirements of all target model types.
 
 This is the CANONICAL location for model data requirements. Import from here:
     from src.models.config import MODEL_DATA_REQUIREMENTS, ModelFamily
-    from src.models.config.data_requirements import get_model_requirements
+    from src.core.model_requirements import get_model_requirements
 """
 
 from dataclasses import dataclass

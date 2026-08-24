@@ -228,15 +228,6 @@ from src.config.model_configs import (
 # =============================================================================
 # COMMONLY USED MODEL CONFIG (from src.config.models)
 # =============================================================================
-from src.config.models import (
-    TrainerConfig,
-    build_config,
-    detect_environment,
-    is_colab,
-    load_model_config,
-    save_config_json,
-)
-
 # =============================================================================
 # COMMONLY USED PIPELINE CONFIG (from src.config.pipeline)
 # =============================================================================
@@ -488,3 +479,29 @@ __all__ = [
     # ==========================================================================
     "_get_global_or_default",
 ]
+
+
+# Stage 3: these are re-exported LAZILY. `from src.config.models import X`
+# would execute src/models/__init__.py, which eagerly registers every model
+# family and pulls in torch/xgboost/lightgbm/catboost -- making `import
+# src.config` cost ~3.7s and require the full ML stack to read a config.
+# The PEP 562 __getattr__ below defers that to first actual use.
+_LAZY_FROM_MODELS = (
+    "TrainerConfig",
+    "build_config",
+    "detect_environment",
+    "is_colab",
+    "load_model_config",
+    "save_config_json",
+)
+
+
+def __getattr__(name: str):
+    """Lazily resolve model-config re-exports (PEP 562). See _LAZY_FROM_MODELS."""
+    if name in _LAZY_FROM_MODELS:
+        import src.config.models as _cm
+
+        value = getattr(_cm, name)
+        globals()[name] = value  # cache so later lookups skip __getattr__
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
