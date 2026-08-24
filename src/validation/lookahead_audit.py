@@ -366,6 +366,8 @@ class LookaheadAuditor:
                 continue
 
             if self.corruption_method == "nan":
+                # NaN cannot be held by an integer dtype.
+                self._widen_to_float(df, col)
                 df.loc[df.index[start_idx:], col] = np.nan
 
             elif self.corruption_method == "random":
@@ -373,14 +375,29 @@ class LookaheadAuditor:
                 col_std = df[col].iloc[:start_idx].std()
                 col_mean = df[col].iloc[:start_idx].mean()
                 random_vals = rng.normal(col_mean, col_std, n_corrupt)
+                # Gaussian noise is float; an int column cannot hold it.
+                self._widen_to_float(df, col)
                 df.loc[df.index[start_idx:], col] = random_vals
 
             elif self.corruption_method == "shuffle":
+                # Permutation preserves dtype, so no widening is needed.
                 future_vals = df[col].iloc[start_idx:].values.copy()
                 rng.shuffle(future_vals)
                 df.loc[df.index[start_idx:], col] = future_vals
 
         return df
+
+    @staticmethod
+    def _widen_to_float(df: pd.DataFrame, col: str) -> None:
+        """Widen an integer column in place so float corruption values fit.
+
+        pandas < 3 silently upcast on assignment; pandas >= 3 raises
+        ``LossySetitemError`` instead. Corrupting future values is a
+        diagnostic operation, so widening is both lossless and correct —
+        but it must be explicit to work on both majors.
+        """
+        if pd.api.types.is_integer_dtype(df[col].dtype):
+            df[col] = df[col].astype("float64")
 
     def scan_dependency_propagation(
         self,

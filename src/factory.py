@@ -64,6 +64,49 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+# Metric keys differ by producer: base-model metrics are stored as
+# `macro_f1`/`accuracy`, ensemble metrics as `val_f1`/`val_accuracy`. The
+# summary previously read only the `val_*` pair with a 0.0 default, so every
+# base model printed "F1=0.0000" no matter how it performed, and the wrong
+# number looked like a real one.
+_F1_KEYS = ("macro_f1", "val_f1", "f1", "f1_macro")
+_ACC_KEYS = ("accuracy", "val_accuracy", "acc")
+_MCC_KEYS = ("mcc", "matthews_corrcoef", "val_mcc")
+
+
+def _first_metric(metrics: dict, keys: tuple[str, ...]) -> float | None:
+    """Return the first present metric among `keys`, or None if absent.
+
+    Returns None rather than 0.0 deliberately: a missing metric must be
+    visibly missing, never silently rendered as a plausible-looking score.
+    """
+    for key in keys:
+        value = metrics.get(key)
+        if isinstance(value, int | float):
+            return float(value)
+    return None
+
+
+def _format_model_metrics(metrics: dict) -> str:
+    """Render a model's metrics, showing 'n/a' for anything genuinely absent."""
+    found = {
+        label: _first_metric(metrics, keys)
+        for label, keys in (("F1", _F1_KEYS), ("Acc", _ACC_KEYS), ("MCC", _MCC_KEYS))
+    }
+    if all(value is None for value in found.values()):
+        # Surface the real keys — this is exactly the diagnostic that would
+        # have exposed the val_f1/macro_f1 mismatch immediately.
+        return f"no recognised metrics (keys: {sorted(metrics)})"
+    parts = []
+    for label, value in found.items():
+        # MCC is the honest headline metric but is not always computed; only
+        # show it when present rather than padding the line with 'n/a'.
+        if value is None and label == "MCC":
+            continue
+        parts.append(f"{label}={value:.4f}" if value is not None else f"{label}=n/a")
+    return ", ".join(parts)
+
+
 @dataclass
 class ExperimentResult:
     """
@@ -119,9 +162,7 @@ class ExperimentResult:
         if self.metrics:
             lines.append("\nModel Performance:")
             for model_name, model_metrics in self.metrics.items():
-                f1 = model_metrics.get("val_f1", 0.0)
-                acc = model_metrics.get("val_accuracy", 0.0)
-                lines.append(f"  {model_name}: F1={f1:.4f}, Acc={acc:.4f}")
+                lines.append(f"  {model_name}: {_format_model_metrics(model_metrics)}")
 
         if self.ensemble_metrics:
             lines.append("\nEnsemble Performance:")
