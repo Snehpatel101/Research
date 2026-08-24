@@ -1,0 +1,26 @@
+========================================================================
+A. Does the DEFAULT config reproduce the OLD behaviour?
+========================================================================
+  old: 205 columns, 809 rows
+  new: 205 columns, 809 rows
+  columns only in old: none
+  columns only in new: none
+  IDENTICAL: True
+
+========================================================================
+B. Do NON-DEFAULT settings actually take effect?
+========================================================================
+  mtf.enabled=True  -> 27 MTF columns
+  mtf.enabled=False -> 0 MTF columns
+  features.mode='full'    -> 205 columns
+  features.mode='minimal' -> 127 columns
+  minimal saves 78 columns (38%)
+
+========================================================================
+VERDICT
+========================================================================
+  A. default behaviour preserved : True
+  B1. mtf.enabled is live        : True
+  B2. features.mode is live      : True
+
+RESULT: F15 FIXED — knobs live, defaults unchanged

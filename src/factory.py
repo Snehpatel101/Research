@@ -794,9 +794,41 @@ class MLFactory:
         if df_for_features.columns[0] == "index":
             df_for_features = df_for_features.rename(columns={"index": "datetime"})
 
+        # Stage 6 (Phase 0 finding F15): this used to pass only input_dir and
+        # output_dir, leaving all 16 remaining FeatureEngineer parameters at
+        # their defaults. Every `data.features.*` and `data.mtf.*` setting was
+        # therefore DEAD on the documented entry point -- notably
+        # `mtf.enabled = False` was ignored and MTF ran anyway.
+        #
+        # The mapping below is deliberately behaviour-preserving for the
+        # DEFAULT config (mtf.primary_timeframe == FeatureEngineer's "5min"
+        # default; mtf.timeframes filtered to >base gives the same
+        # ["15min", "60min"]), so wiring the knobs does not silently change
+        # anyone's existing results. Non-default values now actually take
+        # effect, which is the point.
+        fcfg = self.config.data.features
+        mcfg = self.config.data.mtf
+
+        # "minimal" trades feature breadth for speed. It is what makes a fast
+        # test tier possible at all -- previously unreachable, since mode
+        # never left the config object.
+        minimal = fcfg.mode == "minimal"
+        if minimal:
+            self._log("  Feature mode: minimal (wavelets/microstructure disabled)")
+
         engineer = FeatureEngineer(
             input_dir=self.output_dir,
             output_dir=self.output_dir,
+            timeframe=mcfg.primary_timeframe,
+            base_timeframe=mcfg.primary_timeframe,
+            enable_mtf=mcfg.enabled,
+            mtf_timeframes=list(mcfg.timeframes),
+            mtf_include_ohlcv=mcfg.aggregate_ohlcv,
+            mtf_include_indicators=mcfg.aggregate_indicators,
+            enable_wavelets=not minimal,
+            enable_microstructure=not minimal,
+            enable_volume_features=not minimal,
+            enable_volatility_features=not minimal,
         )
         df_features, _report = engineer.engineer_features(
             df_for_features,
