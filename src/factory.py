@@ -2,10 +2,16 @@
 MLFactory - Unified Entry Point for ML Factory Operations.
 
 This is THE single entry point for the ML Factory system, coordinating:
-- Data Pipeline (via PipelineRunner)
+- Data Pipeline (FeatureEngineer + TripleBarrier, inline — see below)
 - Training (via UnifiedTrainingOrchestrator)
 - Evaluation (optional)
 - Bundling (via BundleBuilder)
+
+NOTE on the data pipeline: this module does NOT use `PipelineRunner`, despite
+what these docs claimed until Stage 2. `_run_data_pipeline()` runs two steps
+inline (FeatureEngineer, then TripleBarrier labeling). The 12-stage
+`PipelineRunner` is reachable only via the `ml data` CLI command. Corrected
+after Phase 0 verified `PipelineRunner` is never imported here.
 
 The factory pattern provides a clean, high-level API while delegating
 heavy lifting to specialized components.
@@ -44,16 +50,13 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from src.config.experiment import ExperimentConfig
 from src.config.symbol import SymbolConfig
-
-if TYPE_CHECKING:
-    from src.core.interfaces import TrainingResult
 from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
 
 logger = logging.getLogger(__name__)
@@ -208,7 +211,8 @@ class MLFactory:
     4. Bundling: Package for deployment (optional)
 
     The factory delegates to specialized components:
-    - PipelineRunner: Data pipeline execution
+    - FeatureEngineer + TripleBarrier: data pipeline, run inline (NOT
+      PipelineRunner — see the module docstring)
     - UnifiedTrainingOrchestrator: Model training
     - BundleBuilder: Inference artifact creation
 
@@ -268,7 +272,6 @@ class MLFactory:
 
         # Cache for intermediate results (used during resume)
         self._cached_df: pd.DataFrame | None = None
-        self._cached_training_result: TrainingResult | None = None
 
         # Backtest artifacts (populated by _run_evaluation)
         self._last_equity_curve: Any = None

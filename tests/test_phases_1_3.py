@@ -270,23 +270,26 @@ class TestPhase1LeakageFixes:
         assert "request.horizon * 2" in source, "optimize() must fallback to request.horizon * 2"
 
     def test_higher_tf_shift(self) -> None:
-        """Verify factory._generate_additional_dfs applies shift(1) to higher-TF
-        resampled data, preventing lookahead from incomplete bars.
-        """
-        # Read the source code to verify shift(1) is present
-        source = inspect.getsource(
-            __import__("src.factory", fromlist=["MLFactory"]).MLFactory._generate_additional_dfs
-        )
-        assert (
-            ".shift(1)" in source
-        ), "_generate_additional_dfs must apply shift(1) to resampled higher-TF data"
+        """Higher-timeframe bars must carry only COMPLETED prior-bar data.
 
-        # Functional test: create minute-level data, resample to 5min
-        # Verify that the resampled output is shifted by 1 bar
+        Rewritten in Stage 2. The previous version asserted `".shift(1)" in
+        inspect.getsource(...)` and then re-implemented resample+shift inside
+        the test — so it verified pandas, never `_generate_additional_dfs`.
+        It also broke spuriously when unrelated edits moved line numbers,
+        because getsource resolves against the file on disk.
+
+        This version calls the real method and asserts the property that
+        actually matters: the value attached to bar T must come from the
+        window BEFORE T, never from T's own (still-forming) bar.
+        """
+        from types import SimpleNamespace
+
+        from src.factory import MLFactory
+
         n = 100
         dates = pd.date_range("2024-01-01 09:30", periods=n, freq="1min")
         close = 100.0 + np.arange(n, dtype=float) * 0.01
-        df = pd.DataFrame(
+        raw_df = pd.DataFrame(
             {
                 "open": close,
                 "high": close + 0.1,
@@ -297,36 +300,37 @@ class TestPhase1LeakageFixes:
             index=dates,
         )
 
-        # Resample to 5min and apply the same logic as the factory
-        ohlcv_agg = {
-            "open": "first",
-            "high": "max",
-            "low": "min",
-            "close": "last",
-            "volume": "sum",
-        }
-        resampled = (
-            df[list(ohlcv_agg.keys())]
-            .resample("5min", closed="left", label="left")
-            .agg(ohlcv_agg)
-            .dropna()
+        # Minimal stand-in for the factory: exercises the real method body
+        # without building a full ExperimentConfig.
+        stub = SimpleNamespace(
+            config=SimpleNamespace(data=SimpleNamespace(mtf=SimpleNamespace(timeframes=["5min"]))),
+            _needs_multi_stream=lambda: True,
+            _log=lambda *a, **k: None,
         )
 
-        # Without shift: first bar would have data from 09:30-09:34
-        unshifted_first_close = resampled["close"].iloc[0]
+        out = MLFactory._generate_additional_dfs(stub, raw_df)
+        assert out is not None, "multi-stream data should be generated"
+        key = next(iter(out))
+        resampled = out[key]
+        assert len(resampled) > 0
 
-        # With shift(1): first valid bar should have the PREVIOUS bar's data
-        shifted = resampled.shift(1).dropna()
-        shifted_first_close = shifted["close"].iloc[0]
-
-        # The shifted first bar should equal the unshifted first bar
-        # (shift moves everything down by 1)
-        assert (
-            shifted_first_close == unshifted_first_close
-        ), "shift(1) on resampled data should shift values down by one bar"
-
-        # The shifted data should have one fewer row than unshifted
-        assert len(shifted) == len(resampled) - 1
+        for ts, row in resampled.iterrows():
+            window = raw_df.loc[(raw_df.index >= ts) & (raw_df.index < ts + pd.Timedelta("5min"))]
+            if window.empty:
+                continue
+            # THE anti-lookahead property: the emitted close must NOT be the
+            # close of the bar that is still forming at ts.
+            assert row["close"] != window["close"].iloc[-1], (
+                f"Bar at {ts} carries its own window's closing value "
+                f"({row['close']}) — that is lookahead."
+            )
+            # And it must equal the PREVIOUS completed window's close.
+            prev = raw_df.loc[(raw_df.index >= ts - pd.Timedelta("5min")) & (raw_df.index < ts)]
+            if not prev.empty:
+                assert row["close"] == prev["close"].iloc[-1], (
+                    f"Bar at {ts} should carry the previous completed window's "
+                    f"close ({prev['close'].iloc[-1]}), got {row['close']}."
+                )
 
 
 # ---------------------------------------------------------------------------

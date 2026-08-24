@@ -7,118 +7,30 @@ must implement. This ensures consistent behavior across the entire system.
 Contracts:
 - DataContract: Specifies model data requirements
 - ModelContract: Standardized model interface (fit/predict/save/load)
-- AdapterContract: Data transformation interface
 
 Result Types:
-- AdapterResult: Output from adapter transformation
-- TrainingResult: Output from model training
 - OOFResult: Out-of-fold predictions with alignment info
 - PredictionResult: Model prediction output
+
+Removed here (Stage 2, all verified to have zero importers):
+- AdapterResult: a legacy duplicate. The canonical class lives in
+  src/data/adapters/base.py and is NOT interchangeable with the copy that
+  used to sit here (`X`/`y` vs `data`/`labels`, and `n_samples` was a field
+  there but a property here). Deliberately not re-exported from this module:
+  a core -> data import would deepen the very cycle Stage 3 must break.
+- AdapterContract: an ABC that nothing ever subclassed. The real adapter base
+  is BaseAdapter in src/data/adapters/base.py.
+- TrainingResult: constructed nowhere. The object that actually flows is
+  TrainingRunResult from src/models/training/unified_orchestrator.py.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
 import numpy as np
 import pandas as pd
-
-# =============================================================================
-# RESULT DATACLASSES
-# =============================================================================
-
-# NOTE: AdapterResult is defined in TWO locations (DOCUMENTED EXCEPTION):
-#   1. src.data.adapters.base (canonical, uses X/y ML conventions)
-#   2. Here (legacy, uses data/labels conventions)
-#
-# This is INTENTIONAL to avoid circular imports between core and data.adapters.
-# Both definitions are kept in sync via backward-compatibility properties:
-#   - adapters/base.py: primary fields X/y, with .data/.labels as aliases
-#   - interfaces.py: primary fields data/labels, with .X/.y as aliases
-#
-# Import paths:
-#   - Adapters: import from src.data.adapters.base
-#   - Other code: import from src.core.interfaces (this file)
-#
-# Phase 27: Verified as documented exception - not a consolidation target
-
-
-@dataclass
-class AdapterResult:
-    """
-    Output from any adapter transformation.
-
-    Adapters transform raw DataFrames into model-ready tensors (2D/3D/4D).
-    This dataclass standardizes the output format.
-
-    NOTE: This is the LEGACY definition. The canonical version is in
-    src.data.adapters.base which uses X/y (ML conventions) instead of
-    data/labels. Both versions provide backward-compatible properties.
-
-    Attributes:
-        data: Transformed features (2D, 3D, or 4D numpy array) [alias: X]
-        labels: Target labels (1D array) [alias: y]
-        feature_names: List of feature column names [alias: feature_columns]
-        original_indices: Original DataFrame indices for OOF alignment
-        weights: Optional sample weights
-        metadata: Additional adapter-specific metadata
-    """
-
-    data: np.ndarray  # Shape: (n, f) or (n, s, f) or (n, t, s, f)
-    labels: np.ndarray  # Shape: (n,)
-    feature_names: list[str]
-    original_indices: np.ndarray  # For OOF alignment
-    weights: np.ndarray | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def n_samples(self) -> int:
-        """Number of samples in the dataset."""
-        return int(self.data.shape[0])
-
-    @property
-    def n_features(self) -> int:
-        """Number of features (last dimension)."""
-        return int(self.data.shape[-1])
-
-    @property
-    def rank(self) -> int:
-        """Data tensor rank (2, 3, or 4)."""
-        return self.data.ndim
-
-    @property
-    def shape(self) -> tuple[int, ...]:
-        """Full data shape."""
-        return self.data.shape
-
-    # Backward compatibility with base.py (ML conventions)
-    @property
-    def X(self) -> np.ndarray:
-        """Alias for data (backward compatibility with adapters.base)."""
-        return self.data
-
-    @property
-    def y(self) -> np.ndarray:
-        """Alias for labels (backward compatibility with adapters.base)."""
-        return self.labels
-
-    @property
-    def feature_columns(self) -> list[str]:
-        """Alias for feature_names (backward compatibility with adapters.base)."""
-        return self.feature_names
-
-    def validate(self) -> None:
-        """Validate the adapter result."""
-        if self.data.size == 0:
-            raise ValueError("AdapterResult data is empty")
-        if len(self.labels) != self.n_samples:
-            raise ValueError(f"Labels length ({len(self.labels)}) != n_samples ({self.n_samples})")
-        if len(self.original_indices) != self.n_samples:
-            raise ValueError("original_indices length != n_samples")
-        if np.isnan(self.data).any():
-            raise ValueError("AdapterResult data contains NaN values")
 
 
 @dataclass
@@ -253,32 +165,6 @@ class PredictionResult:
 
 
 @dataclass
-class TrainingResult:
-    """
-    Output from model training.
-
-    Attributes:
-        model: The trained model instance
-        metrics: Training/validation metrics dict
-        oof_predictions: Out-of-fold predictions (optional)
-        feature_importance: Feature importance dict (optional)
-        training_time_seconds: Total training time
-        metadata: Additional training metadata
-    """
-
-    model: Any
-    metrics: dict[str, float]
-    oof_predictions: np.ndarray | None = None
-    feature_importance: dict[str, float] | None = None
-    training_time_seconds: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def has_oof(self) -> bool:
-        return self.oof_predictions is not None
-
-
-@dataclass
 class OOFResult:
     """
     Out-of-fold predictions with alignment info.
@@ -385,72 +271,24 @@ class OOFPredictionProtocol(Protocol):
 
 
 # =============================================================================
-# ABSTRACT CONTRACTS
+# RE-EXPORTED CONTRACTS
 # =============================================================================
 
-# NOTE: DataContract ABC was removed in Phase 27 - it was dead code.
-# The canonical DataContract is the dataclass in src/core/contracts/data_contract.py
-# which is used for lineage tracking and schema validation throughout the pipeline.
-
-
-# NOTE: ModelContract ABC was removed in Phase 27 - it was dead code.
-# The canonical ModelContract is the frozen dataclass in src/core/contracts/model_contract.py
-# which describes model data requirements (input_rank, sequence_length, feature_modes).
-# Model implementations inherit from BaseModel in src/models/base.py instead.
-#
-# Re-export ModelContract and DataContract from contracts for backward compatibility
+# The canonical ModelContract/DataContract are frozen dataclasses in
+# src/core/contracts/. Their ABC ancestors here were removed in Phase 27; this
+# re-export keeps `from src.core.interfaces import ModelContract` working and
+# backs the ModelType TypeVar below.
 from src.core.contracts import DataContract, ModelContract  # noqa: E402
-
-
-class AdapterContract(ABC):
-    """
-    Contract all adapters must implement.
-
-    Adapters transform raw DataFrames into model-ready tensors.
-    Three adapter types:
-    - TabularAdapter: 2D (n_samples, n_features)
-    - SequenceAdapter: 3D (n_samples, seq_len, n_features)
-    - MultiStreamAdapter: 4D (n_samples, n_timeframes, seq_len, n_features)
-    """
-
-    @abstractmethod
-    def transform(
-        self,
-        df: pd.DataFrame,
-        contract: DataContract,
-        label_column: str = "label",
-    ) -> AdapterResult:
-        """
-        Transform DataFrame to model-ready tensors.
-
-        Args:
-            df: Input DataFrame with features and labels
-            contract: Data contract specifying requirements
-            label_column: Name of the label column
-
-        Returns:
-            AdapterResult with transformed data
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def output_rank(self) -> int:
-        """Output tensor rank (2, 3, or 4)."""
-        pass
-
-    @property
-    def name(self) -> str:
-        """Adapter name (class name by default)."""
-        return self.__class__.__name__
-
 
 # =============================================================================
 # TYPE VARIABLES
 # =============================================================================
 
+# NOTE: an `AdapterType` TypeVar used to sit here, bound to the deleted
+# AdapterContract. It was never exported from src.core (which re-exports the
+# unrelated AdapterType StrEnum from src/core/types.py instead), so the two
+# names silently referred to different objects depending on import path.
 ModelType = TypeVar("ModelType", bound=ModelContract)
-AdapterType = TypeVar("AdapterType", bound=AdapterContract)
 
 
 # =============================================================================
@@ -459,17 +297,13 @@ AdapterType = TypeVar("AdapterType", bound=AdapterContract)
 
 __all__ = [
     # Result types
-    "AdapterResult",
     "PredictionResult",
-    "TrainingResult",
     "OOFResult",
     # Protocols (for structural typing without circular imports)
     "OOFPredictionProtocol",
     # Contracts
     "DataContract",
     "ModelContract",
-    "AdapterContract",
     # Type variables
     "ModelType",
-    "AdapterType",
 ]

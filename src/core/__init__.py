@@ -4,7 +4,7 @@ Core package - Foundational interfaces, types, and constants.
 PHASE_0: Clean ML Factory Foundation.
 
 This package is the SINGLE SOURCE OF TRUTH for:
-- Abstract interfaces (ModelContract, AdapterContract, DataContract)
+- Abstract interfaces (ModelContract, DataContract)
 - Type definitions (DataRank, ModelFamily, FeatureFamily, etc.)
 - Constants (CANONICAL_TIMEFRAMES, MODEL_FAMILIES, etc.)
 - Validation utilities
@@ -28,10 +28,7 @@ Usage:
 
         # Interfaces
         ModelContract,
-        AdapterContract,
         DataContract,
-        AdapterResult,
-        TrainingResult,
         OOFResult,
 
         # Constants
@@ -243,14 +240,11 @@ from src.core.exceptions import (
 # INTERFACES - Abstract contracts
 # =============================================================================
 from src.core.interfaces import (
-    AdapterContract,
-    # Result types
-    AdapterResult,
     # Contracts (Note: DataContract is from contracts/, not interfaces - Phase 27)
     ModelContract,
+    # Result types
     OOFResult,
     PredictionResult,
-    TrainingResult,
 )
 
 # =============================================================================
@@ -427,11 +421,8 @@ __all__ = [
     # =========================================================================
     "DataContract",
     "ModelContract",
-    "AdapterContract",
     # Result types
-    "AdapterResult",
     "PredictionResult",
-    "TrainingResult",
     "OOFResult",
     # =========================================================================
     # CONSTANTS
