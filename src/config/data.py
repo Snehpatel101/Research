@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any, ClassVar
 
 from src.config.base import BaseConfig
 from src.core.types import LabelingMethod
@@ -184,13 +185,46 @@ class LabelingConfig(BaseConfig):
     binary_mode: bool = False  # If True, remap labels to binary: 0=neutral, 1=significant_move
 
     # Optimization
-    optimize_barriers: bool = True
+    # NOTE (Stage 7): defaults to False because barrier optimisation is NOT
+    # implemented on any live path. It previously defaulted to True, which
+    # told every reader that an expensive, meaningful step was running when
+    # nothing read the field at all. See UNWIRED_FIELDS below.
+    optimize_barriers: bool = False
     optimization_trials: int = 100
     target_class_balance: dict[str, float] | None = None
+
+    # Fields with ZERO consumers anywhere in src/ (verified Stage 7 by grep
+    # over `labeling.<field>` / `.labeling.<field>`). Setting them has no
+    # effect whatsoever -- they are not merely ignored downstream, nothing
+    # reads them. Kept rather than deleted because removing config fields
+    # breaks users' saved YAML (DECISIONS.md #8 is the deletion decision);
+    # but a user who sets one now gets told it does nothing.
+    #
+    # Retire an entry from this map when you actually wire the field.
+    UNWIRED_FIELDS: ClassVar[dict[str, Any]] = {
+        "min_return_threshold": 0.0,
+        "use_dynamic_barriers": True,
+        "barrier_touch_is_exit": True,
+        "vertical_barrier_enabled": True,
+        "optimize_barriers": False,
+        "optimization_trials": 100,
+        "target_class_balance": None,
+    }
 
     def validate(self) -> list[str]:
         """Validate labeling configuration."""
         issues = super().validate()
+
+        # Tell the user when a setting they changed cannot possibly take
+        # effect. Silence here is how "optimize_barriers=True" managed to look
+        # like a working feature.
+        for field_name, inert_default in self.UNWIRED_FIELDS.items():
+            if getattr(self, field_name) != inert_default:
+                issues.append(
+                    f"{field_name}={getattr(self, field_name)!r} has NO EFFECT: "
+                    f"nothing in src/ reads LabelingConfig.{field_name}. "
+                    f"Leave it at {inert_default!r} or implement the behaviour."
+                )
 
         valid_methods = [m.value for m in LabelingMethod]
         if self.method not in valid_methods:

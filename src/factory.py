@@ -259,6 +259,20 @@ class MLFactory:
         self.verbose = verbose
         self.enable_checkpoints = enable_checkpoints
 
+        # Stage 7: actually RUN config validation.
+        #
+        # The config layer has a full `validate()` chain, but every one of its
+        # 20 call sites was a `super().validate()` inside another config class
+        # -- nothing outside the config package ever invoked it. So bounds
+        # checks (positive atr_period, valid method, ...) and the new
+        # unwired-field detection were all dead code.
+        #
+        # Reported as warnings rather than raised: turning a previously-silent
+        # validator into a hard error would reject configs that run fine
+        # today. Promoting these to errors is a deliberate follow-up, not a
+        # side effect of switching the validator on.
+        self._log_config_issues()
+
         # Create output directory
         self.output_dir = Path(config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -1298,6 +1312,31 @@ class MLFactory:
         """Log message based on verbosity setting."""
         if self.verbose >= 1:
             print(message)
+
+    def _log_config_issues(self) -> None:
+        """Surface config-validation issues at construction time.
+
+        Walks the sub-configs that expose `validate()` and reports whatever it
+        finds. This is the first place in the codebase that actually calls the
+        validation chain -- see the note in __init__.
+        """
+        sections = {
+            "data.labeling": getattr(self.config.data, "labeling", None),
+            "data.features": getattr(self.config.data, "features", None),
+            "data.mtf": getattr(self.config.data, "mtf", None),
+            "data.splits": getattr(self.config.data, "splits", None),
+            "data.scaler": getattr(self.config.data, "scaler", None),
+        }
+        for name, section in sections.items():
+            if section is None or not hasattr(section, "validate"):
+                continue
+            try:
+                issues = section.validate()
+            except Exception as exc:  # a broken validator must not block a run
+                logger.warning("config validation for %s raised %s", name, exc)
+                continue
+            for issue in issues or []:
+                logger.warning("config issue [%s]: %s", name, issue)
 
 
 # =============================================================================
