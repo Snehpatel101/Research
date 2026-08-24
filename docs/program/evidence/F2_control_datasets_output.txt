@@ -1,0 +1,35 @@
+CUDA not available, falling back to CPU
+[0]	train-mlogloss:1.09751	val-mlogloss:1.09855
+[50]	train-mlogloss:1.04625	val-mlogloss:1.09865
+[63]	train-mlogloss:1.03506	val-mlogloss:1.10008
+CUDA not available, falling back to CPU
+[0]	train-mlogloss:1.09693	val-mlogloss:1.09860
+[48]	train-mlogloss:1.05297	val-mlogloss:1.09963
+CUDA not available, falling back to CPU
+[0]	train-mlogloss:1.09368	val-mlogloss:1.09588
+[50]	train-mlogloss:0.97118	val-mlogloss:1.04680
+[100]	train-mlogloss:0.91325	val-mlogloss:1.04023
+[131]	train-mlogloss:0.88991	val-mlogloss:1.04169
+CUDA not available, falling back to CPU
+[0]	train-mlogloss:1.09727	val-mlogloss:1.09865
+[32]	train-mlogloss:1.06504	val-mlogloss:1.10066
+
+dataset        n      acc     base      MCC  MCCbase  macroF1   F1base  accShuf  MCCshuf
+----------------------------------------------------------------------------------------
+noise       5976   0.3452   0.3603   0.0170   0.0000   0.3450   0.1766   0.3597   0.0394
+signal      5976   0.4328   0.3737   0.1554   0.0000   0.4280   0.1814   0.3296  -0.0043
+
+--- control assertions ---
+  [PASS] noise: model must NOT beat baseline accuracy
+  [PASS] noise: MCC must be ~0 (no skill)
+  [PASS] signal: model MUST beat baseline accuracy
+  [PASS] signal: MCC must show real skill
+  [PASS] shuffled labels destroy skill on signal
+
+--- metric suitability ---
+  macro-F1 gain on NOISE  = +0.1684  (if > 0, macro-F1 rewards a no-skill model)
+  macro-F1 gain on SIGNAL = +0.2467
+  => macro-F1 is NOT a safe headline metric: it credits skill on pure noise.
+     Use accuracy-vs-majority and MCC for go/no-go claims.
+
+RESULT: CONTROLS VALID

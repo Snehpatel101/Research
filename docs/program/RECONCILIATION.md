@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-24
 **Inputs:** six parallel research agents + independent orchestrator verification
-**Status:** DRAFT — testing section pending Agent 6
+**Status:** COMPLETE — all six agents reconciled
 
 ---
 
@@ -200,12 +200,110 @@ Note this measures count, not quality. §U2 remains open.
 
 ---
 
+## 4c. The end-to-end runtime truth (OBSERVED) — the decisive result
+
+`MLFactory.run()` on `data/raw/MES_1m_1week.parquet`, xgboost, h=5, 2 splits,
+backtest on. **Exit 0. Status `SUCCESS`. 15m54s.** And it is worthless:
+
+| Symptom | Value |
+|---|---|
+| Label balance | **96.0 % one class** (2194 neutral / 48 long / 43 short) |
+| MCC | **−0.0176** — *worse than random* |
+| Per-class F1 | short 0.0 · neutral 0.972 · long 0.0 |
+| Test split | contains **zero** true "long" samples |
+| Backtest | **0 trades** from 50 non-neutral signals; every metric `0.0` |
+| Feature engineering | **66.3 % of rows dropped** (6825→2297); 12 wavelet cols 100 % NaN |
+| `cfg.data.mtf.enabled = False` | **ignored** |
+| Printed summary | `F1=0.0000, Acc=0.0000` while `result.metrics` holds `macro_f1=0.324` |
+
+**No existing test goes red for any of it.** This single result vindicates the
+mission's insistence on live execution: 593 passing tests coexist with an
+end-to-end path that reports SUCCESS while producing a worse-than-random model
+and silently trading nothing.
+
+Two verified root causes:
+
+- **F15 — `MLFactory` discards all feature/MTF config.** `factory.py:753`
+  constructs `FeatureEngineer(input_dir=..., output_dir=...)` and nothing else;
+  the other caller (`features/run.py:242`) threads `timeframe`, `enable_mtf`
+  and the rest. Every `data.features` / `data.mtf` setting is dead on the
+  documented entry point. Side effect: it is currently *impossible* to request
+  a cheap feature set, which is what blocks a fast test tier.
+- **F16 — the printed summary reads the wrong keys.** `factory.py:122-123`
+  does `model_metrics.get("val_f1", 0.0)` / `.get("val_accuracy", 0.0)` while
+  base-model metrics are stored as `macro_f1` / `accuracy`. Ensemble metrics
+  *do* use `val_*`, which is why this was never noticed.
+
+Related: backtest 0 trades traces to `MarketHoursFilter` treating naive
+timestamps as UTC→ET when the data's volume profile shows **Central** time
+(only 19.6 % of bars pass), compounded by `_open_position` silently returning
+on `contracts <= 0`.
+
+## 4d. Metric validity — macro-F1 credits pure noise (OBSERVED, PROVEN)
+
+Control pair built and validated: `docs/program/evidence/F2_control_datasets.py`.
+`noise` is a driftless random walk (unpredictable by construction); `signal`
+carries a real AR(1) momentum relationship. Both run through the repo's own
+`ModelRegistry`.
+
+```
+dataset        n      acc     base      MCC  macroF1   F1base  accShuf  MCCshuf
+noise       5976   0.3452   0.3603   0.0170   0.3450   0.1766   0.3597   0.0394
+signal      5976   0.4328   0.3737   0.1554   0.4280   0.1814   0.3296  -0.0043
+```
+
+All five control assertions pass: no skill on noise, real skill on signal,
+and shuffling labels destroys it. The instrument works.
+
+**The finding: macro-F1 gains +0.1684 on PURE NOISE.** A model with MCC 0.017
+and accuracy *below* the majority baseline still scores 0.345 macro-F1 against
+the baseline's 0.177. The mechanism is structural — the majority baseline earns
+zero F1 on two of three classes, so any model that merely spreads its guesses
+appears better without predicting anything correctly.
+
+**Consequence, and it is serious:** `macro_f1` is what Phase 55 uses to select
+`primary_model` for the **deploy manifest**, and `f1_weighted` is Optuna's
+default objective (`core/config.py:213`). Model selection, tuning, and
+deployment in this repo are all driven by a metric that rewards noise.
+
+**Ruling for the rest of this program:** headline go/no-go claims use
+**accuracy-vs-majority-baseline and MCC**, never macro-F1 alone. Any metric
+that cannot separate `noise` from `signal` is not measuring skill.
+
+## 4e. Test-suite quality (OBSERVED)
+
+Count is honest (§4b); quality is not. AST classification of 511 test
+functions:
+
+| Category | Count |
+|---|---|
+| Source-grep / tautological (assert on `inspect.getsource()` substrings) | **26** (`DECISIONS.md` #11 estimated ~20) |
+| Mocked (tests a mock, not the code) | 12 |
+| Type-check-only | 35 |
+| Train a model **and assert it learned anything** | **0** |
+
+`test_model_smoke.py` trains all 15 models on random features against random
+labels — it can only detect crashes. `test_factory_e2e.py::test_backtest_metrics_dict_returned`
+hides its only real assertion behind `if result.backtest_metrics:`.
+`test_cli_smoke.py` asserts `exit_code in (0, 1)`.
+
+**≈95 tests (16 %) exercise modules nothing in `src/` imports.** Only 87 of
+366 src modules are touched by any test. Ensembles, 3 of 4 training modes, and
+the entire serving layer are effectively untested.
+
+Also: **164 of 211 `except Exception` handlers swallow without re-raising.**
+The two worst — `_run_evaluation` returns `{}` on any backtest crash, and
+`generate_oof` returns `None`, silently dropping a model from the ensemble.
+That is the mechanism by which the §4c run reported SUCCESS.
+
+---
+
 ## 5. Unknowns requiring runtime investigation
 
-- **U1.** Does the standard end-to-end path actually run to completion on real
-  data today? (Agent 6 pending.)
-- **U2.** What is the true test-suite composition — how many tests assert real
-  numeric behaviour vs `is not None`? (Agent 6 pending.)
+- ~~**U1.** Does the standard end-to-end path run to completion?~~ **RESOLVED
+  (§4c):** yes — exit 0, `SUCCESS`, and worse-than-random output.
+- ~~**U2.** True test-suite composition?~~ **RESOLVED (§4e):** 597 tests,
+  **zero** of which assert that a model learned anything.
 - **U3.** With F1 fixed, does any ensemble beat its best constituent and a
   naive baseline on held-out data? **This is the question the whole program
   exists to answer, and it is currently unanswerable** because F6 means there
@@ -276,5 +374,14 @@ rewritten**.
 
 ---
 
-*Testing section (Agent 6) and the 23-stage sequencing follow once the
-end-to-end runtime result lands.*
+## 9. The single sentence that summarises Phase 0
+
+593 tests pass, the end-to-end pipeline exits `SUCCESS`, and the system it
+certifies produces a worse-than-random model, executes zero trades, prints
+`F1=0.0000`, silently ignores its own configuration, aligns heterogeneous
+ensembles 59 bars apart, and selects models for deployment using a metric that
+rewards pure noise.
+
+Nothing here is a missing feature. Every one of these is finished code that
+returns a confident wrong answer. That is what the 23-stage chain has to fix,
+and why each stage must verify its predecessor **by execution**.
