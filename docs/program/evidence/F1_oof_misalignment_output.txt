@@ -1,0 +1,18 @@
+[adapter] n_source_bars      = 400
+[adapter] n_windowed_samples = 341   (expected 341)
+[adapter] original_indices[:5] = [59 60 61 62 63]  <- SOURCE-BAR coords
+[adapter] offset of window 0   = 59   (expected seq_len-1 = 59)
+
+[producer] 3D emits indices[:5] = [0 1 2 3 4]  <- POSITIONAL
+[producer] 2D emits indices[:5] = [0 1 2 3 4]  <- POSITIONAL
+[producer] adapter's true  index for 3D row 0 = 59, producer says 0
+
+[aligner] n_common = 341
+[aligner] agreement between two PERFECT models = 0.0%
+[aligner] expected if aligned correctly        = 100.0%
+
+[diagnosis] aligned row 0 -> 2D thinks source bar 0, 3D actually predicted source bar 59
+[diagnosis] systematic shift = 59 bars
+
+RESULT: CONFIRMED -- two perfect models disagree after alignment.
+        The ensemble is learning from misaligned rows, silently.
