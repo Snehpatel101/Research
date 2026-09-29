@@ -1,4 +1,4 @@
-.PHONY: help install install-dev test test-quick lint format type-check pre-commit clean
+.PHONY: help install install-dev test test-quick test-slow lint format type-check dead-code check matrix pre-commit clean
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -6,27 +6,46 @@ help: ## Show this help message
 	@echo 'Available targets:'
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-install: ## Install package in development mode
-	pip install -e .
+install: ## Create .venv (Python 3.11, CPU torch) and install the package
+	uv venv .venv --python 3.11
+	uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+	uv pip install -e .
 
-install-dev: ## Install package with development dependencies
-	pip install -e ".[dev]"
+install-dev: install ## Install with development dependencies + git hooks
+	uv pip install -e ".[dev,stats]"
 	pre-commit install
 
-test: ## Run all tests with coverage
-	pytest tests/ -v --cov=src --cov-report=term-missing
+test: ## Run the full test suite (incl. slow end-to-end tests)
+	pytest -n auto --dist loadfile
 
-test-quick: ## Run quick behavioral tests only
-	pytest tests/test_config_seams.py tests/test_barrier_parity.py tests/test_wf_oof_schema.py tests/test_calibrator_flow.py tests/test_scaler_persistence.py tests/test_cli_smoke.py -q
+test-quick: ## Run fast tests only (excludes tests marked slow)
+	pytest -m "not slow" -n auto --dist loadfile
 
-lint: ## Run ruff linter (with auto-fix)
-	ruff check --fix .
+test-slow: ## Run slow end-to-end tests only
+	pytest -m slow -n 2 --dist loadfile
 
-format: ## Format code with ruff
-	ruff format .
+lint: ## Run ruff linter on src/ (with auto-fix)
+	ruff check src/ --fix
 
-type-check: ## Run mypy type checking
-	mypy src/ --ignore-missing-imports --no-strict-optional
+format: ## Format code with black
+	black src/ tests/
+
+type-check: ## Run pyright (must report 0 errors)
+	pyright
+
+dead-code: ## Report unused code (vulture, config in pyproject)
+	vulture
+
+check: ## Everything CI runs: lint, format, types, dead code, fast tests
+	ruff check src/
+	black --check src/ tests/
+	pyright
+	vulture
+	pytest -m "not slow" -n auto --dist loadfile
+
+matrix: ## Mix-and-match matrix: every model solo and in pairs, every meta-learner and mode
+	for k in solo pairs meta modes modes-solo binary all-in; do python scripts/mix_match.py $$k --jobs 3; done
+	python scripts/mix_match.py report
 
 pre-commit: ## Run all pre-commit hooks on all files
 	pre-commit run --all-files

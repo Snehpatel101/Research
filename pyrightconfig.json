@@ -10,7 +10,7 @@
     // architecture triggers false positives) are warnings.
     "include": ["src", "tests"],
     "exclude": ["**/__pycache__", "**/.venv", "build", "dist", "notebooks"],
-    "pythonVersion": "3.12",
+    "pythonVersion": "3.11",
     "typeCheckingMode": "basic",
 
     // Real-bug finders — keep as errors

@@ -23,6 +23,8 @@ import pytest
 from src.config.experiment import ExperimentConfig
 from src.factory import ExperimentResult, MLFactory
 
+pytestmark = pytest.mark.slow
+
 # ---------------------------------------------------------------------------
 # Synthetic data
 # ---------------------------------------------------------------------------

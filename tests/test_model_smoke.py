@@ -23,6 +23,8 @@ import pytest
 from src.models import ModelRegistry
 from src.models.base import BaseModel, PredictionResult, TrainingMetrics
 
+pytestmark = pytest.mark.slow
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
