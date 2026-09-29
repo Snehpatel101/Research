@@ -218,14 +218,42 @@ See **COMPLETION.md** for full details on all completed phases.
 
 ## Active Phases
 
-**No active phases.** All phases through 116 are complete. See COMPLETION.md for full details.
+### Phase 117: Best-in-Class Repo — IN PROGRESS (PM-approved)
 
-### Open Decisions (pending user — see DECISIONS.md)
+Every change goes implementer (isolated worktree) → adversarial reviewer →
+fixes → merge into `integration-117` → full verification → main branch.
 
-- Phase 99-102 governance modules — tests-only; wire or move to experimental
-- 5d-optimization island — deletion prepared on a branch; needs your go-ahead (the permission check blocked the file removal)
-- Import SCC — staged lazy break of facade re-exports
-- Second data pipeline (PipelineRunner behind `ml data` / `ml train` / `ml cv`) — fix, re-point at MLFactory, or delete
+- **Wave 1 (merged into integration):** one pipeline (CLI on MLFactory,
+  PipelineRunner stack deleted, shared raw-bar sanitizer for train + serve);
+  unused public API + 5-D Optuna island deleted; tests re-laid out
+  (unit / integration / e2e, behavioral only, mutation-checked); feature
+  governance as opt-in diagnostics (under review fixes).
+- **Wave 2:** seeded runs + `run_manifest.json` + determinism test + tracking
+  config (MLflow extra); harness 4D prediction parity + batched TFT variable
+  selection + binary `ml cv`; hypothesis property tests for leakage/parity
+  invariants; CUSUM event sampling, fractional differentiation, meta-probability
+  bet sizing; optional thin serving extra.
+- **Wave 3:** validated config (pydantic v2 + JSON schema + `validate-config`);
+  import-cycle break (lazy facades); package rename `src` → `mlfactory` with a
+  small public API and one CLI; mkdocs site + `examples/`; CI hardening
+  (3.11/3.12, wheel smoke, `uv lock --check`, dependabot); DIRECTION.md rewrite;
+  final adversarial review + full mix-and-match sweep; land on `main`.
+
+**Validation:** full pytest suite, ruff/black/pyright(0)/vulture, full
+mix-and-match sweep on the final commit.
+
+### Roadmap after Phase 117
+
+| Phase | Goal | Key work | Done when |
+|-------|------|----------|-----------|
+| 118 | **Prove it on real data** | Benchmark suite on MES/MGC (fixed periods, realistic epochs/tuning): leaderboard of OOS macro-F1, log loss, net Sharpe, drawdown, turnover, DSR, PBO per model + ensemble; naive baselines (always-neutral, buy-and-hold, momentum); futures roll audit (no fake jumps in features/labels) | Leaderboard reproducible from one command; every shipped config beats baselines net of costs; scheduled benchmark catches regressions |
+| 119 | **Scale & speed** | Lazy windowing for 3D/4D (index one 2D array); `--dry-run` memory/time estimator; Optuna with CPCV + pruning + DSR gate at scale; GPU profile of the zoo | 1.6M-row runs for every model on one GPU box without OOM; estimator within ±30% |
+| 120 | **Production readiness** | Streaming inference with incremental feature state + latency test; lightweight drift monitoring vs training snapshot; paper-trading replay harness (live-like bars → deployed artifact vs backtest); bet sizing + risk layer | Paper-trading replay matches backtest trades; p99 latency budget met |
+| 121 | **Breadth** | Multi-symbol pooled training (symbol id, per-symbol purge, cross-symbol validation); new models only where the benchmark shows gains (TimesNet, TiDE, state-space, quantile heads); experiment comparison report | Each addition justified by a benchmark delta |
+
+Ongoing gates: coverage floor on core modules (labeling, CV, backtest,
+bundles); nightly full sweep on larger hardware; release flow (tags,
+CHANGELOG).
 
 
 ---

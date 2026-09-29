@@ -147,16 +147,35 @@ See **COMPLETION.md** for full task details and implementation information.
 
 ## Active Phases
 
-**No active phases.** All phases through 116 are complete. See COMPLETION.md for full details.
+### Phase 117: Best-in-Class Repo — IN PROGRESS (PM-approved)
 
-### Open Decisions (pending user — see DECISIONS.md)
+| # | Task | Location | Status |
+|:-:|------|----------|:------:|
+| 1 | One pipeline: CLI (`run data status models cv walk-forward cpcv-pbo version`) on MLFactory; PipelineRunner stack, feature store, `train` CLI deleted; shared `sanitize_bars` for train + serve; `ml cv` per-fold scaling; tuner embargo on a copy | `src/cli/`, `src/factory.py`, `src/validation/cv/evaluation_data.py`, `src/data/pipeline/stages/clean/sanitize.py`, `tests/e2e/test_cli_e2e.py` | ✅ merged (integration) |
+| 2 | Delete unused public API + 5-D Optuna island (DECISIONS #5, #14); `PipelineConfig.load` drops unknown keys with a warning | `src/core/`, `src/inference/`, `src/optimization/` | ✅ merged (integration) |
+| 3 | Tests: behavioral only, `tests/{unit,integration,e2e}`, `tests/helpers.py`, layer markers, single-definition AST guard (DECISIONS #11) | `tests/` | ✅ merged (integration) |
+| 4 | Feature governance as opt-in diagnostics (`data.features.governance`), registry with lifecycle (DECISIONS #3) | `src/models/training/feature_governance.py`, `src/optimization/feature_selection/{bootstrap_stability,label_perturbation,registry}.py` | 🔄 review fixes |
+| 5 | Seeded runs, `run_manifest.json`, determinism test, `tracking` config (MLflow extra) | `src/factory.py`, `src/config/experiment.py`, `src/core/reproducibility.py` | 🔄 |
+| 6 | Harness 4D prediction parity; batched TFT variable selection; binary `ml cv` | `scripts/mix_match.py`, `src/models/neural/tft_model.py`, `src/validation/cv/cv_feature_selection.py` | 🔄 |
+| 7 | Hypothesis property tests (causality, purging, carve, labels, backtest, streaming parity, config, sanitizer) | `tests/property/` | 🔄 |
+| 8 | CUSUM event sampling, fractional differentiation, meta-probability bet sizing | `src/data/features/{cusum_filter,frac_diff}.py`, backtest sizing | ⬜ |
+| 9 | Optional thin serving extra + Dockerfile | `src/cli/`, new serve module | ⬜ |
+| 10 | Validated config (pydantic v2, JSON schema, `validate-config`) | `src/config/` | ⬜ |
+| 11 | Import-cycle break (lazy facades, DECISIONS #10) + package rename `src` → `mlfactory`, public API, entry-point model registry | package-wide | ⬜ |
+| 12 | Docs site (mkdocs-material + mkdocstrings), `examples/`, internal docs archive, regenerate `docs/MIX_AND_MATCH.md` in CI | `docs/`, `mkdocs.yml`, `examples/` | ⬜ |
+| 13 | CI hardening: 3.11/3.12 matrix, wheel build + import smoke, `uv lock --check`, dependabot | `.github/` | ⬜ |
+| 14 | DIRECTION.md rewrite; final adversarial review; full mix-and-match sweep; land on `main`; delete merged agent branches | root | ⬜ |
 
-| # | Item | Notes |
-|:-:|------|-------|
-| 3 | Phase 99-102 governance modules | Tests-only; wire into pipeline or move to experimental |
-| 5 | 5d-optimization island | Deletion prepared on branch `worktree-agent-aeee8a73f7ed7b404`; the auto-mode permission check blocked the file removal, so it needs your go-ahead |
-| 10 | Import SCC | Staged lazy break of facade re-exports |
-| 13 | Second data pipeline | `ml data`/`resume` PipelineRunner (~17k lines, own config class, currently fails its post-scaling schema check) feeds `ml train`/`ml cv`; MLFactory does not use it — fix, re-point CLI at MLFactory, or delete |
+**Verify:** `make check`; `pytest -m slow -n 2`; `python scripts/mix_match.py <kind> --resume` for every kind.
+
+### Roadmap after Phase 117 (see CLEANUP_PLAN.md for goals and exit criteria)
+
+| Phase | Tasks |
+|-------|-------|
+| 118 Prove it on real data | Benchmark command + leaderboard (MES/MGC, fixed periods, realistic epochs/tuning); baselines (always-neutral, buy-and-hold, momentum); futures roll audit; scheduled benchmark regression job |
+| 119 Scale & speed | Lazy windowed datasets for 3D/4D; `--dry-run` memory/time estimator; CPCV + pruning + DSR-gated tuning at scale; GPU profiling |
+| 120 Production readiness | Streaming inference with incremental feature state + latency test; drift monitoring vs training snapshot; paper-trading replay harness; bet sizing + risk layer |
+| 121 Breadth | Multi-symbol pooled training; benchmark-justified new models (TimesNet, TiDE, state-space, quantile heads); experiment comparison report |
 
 
 ---
