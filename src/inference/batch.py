@@ -34,6 +34,7 @@ try:
 except ImportError:
     from src.inference.pipeline import InferencePipeline  # type: ignore[assignment]
 from src.inference.pipeline import InferenceResult
+from src.models.common.label_mapping import map_classes_to_labels
 
 logger = logging.getLogger(__name__)
 
@@ -606,7 +607,9 @@ class BatchInference:
                 elif isinstance(output, np.ndarray):
                     if output.ndim == 2:
                         probabilities = output
-                        predictions = np.argmax(output, axis=1) - 1
+                        predictions = map_classes_to_labels(
+                            np.argmax(output, axis=1), output.shape[1]
+                        )
                     else:
                         predictions = output
                         probabilities = np.zeros((len(output), 3))
@@ -615,7 +618,9 @@ class BatchInference:
 
             elif hasattr(model, "predict_proba"):
                 probabilities = model.predict_proba(X)
-                predictions = np.argmax(probabilities, axis=1) - 1
+                predictions = map_classes_to_labels(
+                    np.argmax(probabilities, axis=1), probabilities.shape[1]
+                )
             else:
                 raise ValueError(f"Model {model_name} has no predict method")
 

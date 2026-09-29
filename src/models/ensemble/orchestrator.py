@@ -49,6 +49,7 @@ from src.data.adapters import (
     AlignedOOFResult,
     OOFAligner,
 )
+from src.models.common.label_mapping import map_classes_to_labels
 
 # TYPE_CHECKING import to break circular dependency:
 # cross_validation/__init__ -> cv_feature_selection -> oof_generator -> oof_core
@@ -523,7 +524,7 @@ class EnsembleOrchestrator:
         for name, probs in base_predictions.items():
             n_samples = probs.shape[0]
             indices = np.arange(n_samples)
-            predictions = np.argmax(probs, axis=1) - 1  # 0,1,2 -> -1,0,1
+            predictions = map_classes_to_labels(np.argmax(probs, axis=1), probs.shape[1])
 
             oof_result = OOFResult(
                 predictions=predictions,

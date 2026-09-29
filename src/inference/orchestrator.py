@@ -44,6 +44,7 @@ from src.core import PipelineConfig
 
 # PredictionResult: Import from canonical location (Phase 27 consolidation)
 from src.core.interfaces import PredictionResult
+from src.models.common.label_mapping import map_classes_to_labels
 
 logger = logging.getLogger(__name__)
 
@@ -531,7 +532,7 @@ class InferenceOrchestrator:
 
         # Simple averaging ensemble
         avg_probs = np.mean(list(base_predictions.values()), axis=0)
-        class_predictions = np.argmax(avg_probs, axis=1) - 1  # Map to -1, 0, 1
+        class_predictions = map_classes_to_labels(np.argmax(avg_probs, axis=1), avg_probs.shape[1])
         confidence = np.max(avg_probs, axis=1)
 
         from src.models.base import PredictionResult

@@ -51,6 +51,7 @@ from src.core.types import ScalingSource
 from src.inference.bundle import ModelBundle
 from src.inference.ensemble_bundle import EnsembleBundle
 from src.inference.errors import InferenceError
+from src.models.common.label_mapping import map_classes_to_labels
 
 if TYPE_CHECKING:
     from src.core import PipelineConfig
@@ -539,7 +540,7 @@ class UniversalInferencePipeline:
         prob_mean = stacked.mean(axis=0)
         prob_std = stacked.std(axis=0)
 
-        class_predictions = np.argmax(prob_mean, axis=1) - 1  # -1, 0, 1
+        class_predictions = map_classes_to_labels(np.argmax(prob_mean, axis=1), prob_mean.shape[1])
         confidence = np.max(prob_mean, axis=1)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
