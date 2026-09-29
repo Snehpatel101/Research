@@ -71,10 +71,20 @@ class TestStridedSubsampling:
         rows = np.unique(np.concatenate(row_recorder.seen))
         np.testing.assert_array_equal(rows, np.arange(300))
 
-    def test_embargo_shrinks_with_the_stride(self, row_recorder) -> None:
-        """One subsampled row spans `stride` bars, so the embargo is divided by it."""
+    def test_embargo_shrinks_with_the_stride(self, row_recorder, monkeypatch) -> None:
+        """One subsampled row spans `stride` bars, so the embargo is divided by it —
+        on a copy: the caller's CV (shared across models and horizons) keeps its own."""
+        used: list[int] = []
+        original_split = PurgedKFold.split
+
+        def recording_split(self, *args, **kwargs):
+            used.append(self.config.embargo_bars)
+            return original_split(self, *args, **kwargs)
+
+        monkeypatch.setattr(PurgedKFold, "split", recording_split)
         _, cv = _tune_big_frame(1000, max_samples=250, embargo=8)
-        assert cv.config.embargo_bars == 2
+        assert used and set(used) == {2}
+        assert cv.config.embargo_bars == 8
 
 
 # ---------------------------------------------------------------------------
