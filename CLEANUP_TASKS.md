@@ -175,6 +175,7 @@ See **COMPLETION.md** for full task details and implementation information.
 | 118 Prove it on real data | Benchmark command + leaderboard (MES/MGC, fixed periods, realistic epochs/tuning); baselines (always-neutral, buy-and-hold, momentum); futures roll audit; scheduled benchmark regression job |
 | 119 Scale & speed | Lazy windowed datasets for 3D/4D; `--dry-run` memory/time estimator; CPCV + pruning + DSR-gated tuning at scale; GPU profiling |
 | 120 Production readiness | Streaming inference with incremental feature state + latency test; drift monitoring vs training snapshot; paper-trading replay harness; bet sizing + risk layer |
+| 122 L2 order book (when depth data exists) | Book ingest + bar alignment (strictly before close); imbalance/microprice/spread/depth/OFI features; inference replay; benchmark vs bar-only |
 | 121 Breadth | Multi-symbol pooled training; benchmark-justified new models (TimesNet, TiDE, state-space, quantile heads); experiment comparison report |
 
 
