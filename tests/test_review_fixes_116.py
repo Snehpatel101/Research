@@ -2,7 +2,7 @@
 
 - OOF generation only survives out-of-memory; any other error propagates
   instead of silently dropping the model from stacking.
-- AdapterFactory resolves the per-model contract sequence length when
+- Data preparation resolves the per-model contract sequence length when
   PipelineConfig.sequence_length is left at None (the default).
 - ridge_meta config surfaces use its real parameters (C, class_weight).
 - Ensemble bundles written before the ridge_meta change refuse to load.
@@ -75,37 +75,41 @@ class TestOOFErrorsSurface:
         assert not oof_generation._is_out_of_memory(ValueError("out of memory"))
 
 
-class TestAdapterFactorySequenceLength:
-    def test_prepare_data_lstm_uses_contract_length(self, tmp_path: Path) -> None:
+class TestContractSequenceLength:
+    """UnifiedDataPreparation (the live data path) windows each model at its
+    contract sequence length unless PipelineConfig.sequence_length overrides it."""
+
+    @staticmethod
+    def _frame(n: int = 400) -> pd.DataFrame:
+        rng = np.random.default_rng(0)
+        return pd.DataFrame(
+            {
+                "f1": rng.normal(size=n),
+                "f2": rng.normal(size=n),
+                "label_h20": rng.choice([-1, 0, 1], size=n),
+            },
+            index=pd.date_range("2024-01-02", periods=n, freq="5min"),
+        )
+
+    def test_prepare_lstm_uses_contract_length(self, tmp_path: Path) -> None:
         from src.core.config import PipelineConfig
         from src.core.contracts import get_model_contract
-        from src.data.adapters import AdapterFactory
+        from src.data.adapters import UnifiedDataPreparation
 
         cfg = PipelineConfig(
             symbol="MES", data_path=tmp_path / "x.parquet", output_dir=tmp_path / "out"
         )
         assert cfg.sequence_length is None
-        n = 200
-        rng = np.random.default_rng(0)
-        df = pd.DataFrame(
-            {
-                "f1": rng.normal(size=n),
-                "f2": rng.normal(size=n),
-                "label_h20": rng.choice([-1, 0, 1], size=n),
-                "sample_weight_h20": 1.0,
-            },
-            index=pd.date_range("2024-01-02", periods=n, freq="5min"),
+        prepared = UnifiedDataPreparation(cfg).prepare(
+            self._frame(), model_name="lstm", label_column="label_h20"
         )
-        factory = AdapterFactory(cfg)
-        result = factory.prepare_data("lstm", df)
         seq_len = int(get_model_contract("lstm").sequence_length)
-        assert result.X.ndim == 3
-        assert result.X.shape[1] == seq_len
-        assert factory.get_model_info("lstm")["sequence_length"] == seq_len
+        assert prepared.X_train.ndim == 3
+        assert prepared.X_train.shape[1] == seq_len
 
     def test_explicit_override_wins(self, tmp_path: Path) -> None:
         from src.core.config import PipelineConfig
-        from src.data.adapters import AdapterFactory
+        from src.data.adapters import UnifiedDataPreparation
 
         cfg = PipelineConfig(
             symbol="MES",
@@ -113,7 +117,10 @@ class TestAdapterFactorySequenceLength:
             output_dir=tmp_path / "out",
             sequence_length=16,
         )
-        assert AdapterFactory(cfg).get_model_info("gru")["sequence_length"] == 16
+        prepared = UnifiedDataPreparation(cfg).prepare(
+            self._frame(), model_name="gru", label_column="label_h20"
+        )
+        assert prepared.X_train.shape[1] == 16
 
 
 class TestRidgeMetaConfig:

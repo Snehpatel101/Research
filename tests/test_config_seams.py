@@ -10,7 +10,8 @@ Covers:
    loads with a warning instead of crashing.
 5. TrainerConfig field-driven to_dict round-trip.
 6. OptunaConfig n_trials=0 valid, negative rejected.
-7. PipelineConfig regime_adx_threshold None-auto per symbol.
+7. PipelineConfig regime_adx_threshold None-auto per symbol; a saved
+   PipelineConfig with since-removed fields loads with a warning.
 8. Phase 116 wiring: split ratios, calibration enabled/method (down to
    TrainerConfig) and ExperimentConfig.verbose reach the code that runs.
 
@@ -412,6 +413,31 @@ class TestRegimeAdxThreshold:
         config = _pipeline_config(tmp_path, "MES", regime_adx_threshold=25.0)
 
         assert config.regime_adx_threshold == 25.0
+
+
+class TestPipelineConfigLoadRemovedKeys:
+    def test_saved_config_with_removed_fields_loads_with_warning(self, tmp_path, caplog):
+        """Run dirs saved before Phase 117 carry enforce_dsr_gate and
+        dsr_deployment_threshold; PipelineConfig.load (used by BundleBuilder and
+        artifact persistence) must drop them with a warning, not raise TypeError."""
+        import json
+
+        from src.core import PipelineConfig
+
+        saved = _pipeline_config(tmp_path, "MES").to_dict()
+        saved["enforce_dsr_gate"] = True
+        saved["dsr_deployment_threshold"] = 0.5
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps(saved))
+
+        with caplog.at_level("WARNING", logger="src.core.config"):
+            loaded = PipelineConfig.load(path)
+
+        assert loaded.symbol == "MES"
+        assert loaded.horizons == [5]
+        assert not hasattr(loaded, "enforce_dsr_gate")
+        assert "dsr_deployment_threshold" in caplog.text
+        assert "enforce_dsr_gate" in caplog.text
 
 
 # =============================================================================

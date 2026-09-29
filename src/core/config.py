@@ -29,7 +29,8 @@ Usage:
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+import logging
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -60,6 +61,8 @@ from src.core.constants import (
 )
 from src.core.types import CVMethod, LabelingMethod, TrainingMode
 from src.core.validation import ValidationError, validate_model_list
+
+logger = logging.getLogger(__name__)
 
 # Training sample-weighting schemes (see PipelineConfig.sample_weighting)
 SAMPLE_WEIGHTING_MODES = ("uniqueness", "none")
@@ -222,14 +225,6 @@ class PipelineConfig:
     # Wall-clock cap for each Optuna study (seconds). None/0 = unbounded.
     optuna_timeout: int | None = DEFAULT_OPTUNA_TIMEOUT  # 43200 = 12h
     optuna_metric: str = "f1_weighted"  # Optimization metric (from OptunaConfig.metric)
-
-    enforce_dsr_gate: bool = True
-    # Enforce Deflated Sharpe Ratio gate after optimization.
-    # When True, optimization raises ValueError if DSR is below deployment threshold,
-    # preventing deployment of strategies that appear good only due to selection bias.
-
-    dsr_deployment_threshold: float = 0.5
-    # Minimum Deflated Sharpe Ratio for deployment (default: 0.5)
 
     # =========================================================================
     # REGIME-AWARE TRAINING CONFIGURATION
@@ -531,7 +526,23 @@ class PipelineConfig:
         with open(path) as f:
             d = json.load(f)
 
-        return cls(**d)
+        return cls.from_dict(d, where=str(path))
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any], where: str = "PipelineConfig") -> PipelineConfig:
+        """Build a config from a dict, warning on (and dropping) unknown keys.
+
+        Run directories saved by older versions may carry fields that have since
+        been removed; they must still load.
+        """
+        known = {f.name for f in fields(cls)}
+        unknown = sorted(set(d) - known)
+        if unknown:
+            logger.warning(
+                f"Ignoring unknown PipelineConfig key(s) in {where}: {unknown} "
+                "(removed fields from an older saved config)"
+            )
+        return cls(**{k: v for k, v in d.items() if k in known})
 
     @property
     def experiment_name(self) -> str:

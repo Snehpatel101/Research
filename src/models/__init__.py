@@ -82,7 +82,6 @@ from .device import (
     get_amp_dtype,
     get_best_gpu,
     get_device,
-    get_environment_info,
     get_gpu_count,
     get_gpu_info,
     get_mixed_precision_config,
@@ -93,25 +92,8 @@ from .device import (
     get_training_device_config,
     # Environment detection
     is_colab,
-    is_kaggle,
-    is_notebook,
     print_gpu_info,
     setup_colab,
-)
-from .metrics import (
-    compute_metrics_with_regime_breakdown,
-    compute_regime_metrics,
-)
-from .regime_evaluation import (
-    RegimeClassifier,
-    RegimeEvaluationResult,
-    RegimeEvaluator,
-    RegimeMetrics,
-    TimeOfDay,
-    TrendRegime,
-    VolatilityRegime,
-    evaluate_regime_performance,
-    get_regime_summary,
 )
 from .registry import (
     ModelRegistry,
@@ -165,23 +147,8 @@ __all__ = [
     "train_model",
     "evaluate_model",
     "compute_classification_metrics",
-    # Regime evaluation
-    "VolatilityRegime",
-    "TrendRegime",
-    "TimeOfDay",
-    "RegimeMetrics",
-    "RegimeEvaluationResult",
-    "RegimeClassifier",
-    "RegimeEvaluator",
-    "evaluate_regime_performance",
-    "get_regime_summary",
-    "compute_regime_metrics",
-    "compute_metrics_with_regime_breakdown",
     # Environment detection
     "is_colab",
-    "is_kaggle",
-    "is_notebook",
-    "get_environment_info",
     "setup_colab",
     # Device utilities
     "GPUInfo",

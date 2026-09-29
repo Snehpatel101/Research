@@ -3,9 +3,8 @@ Validation utilities for ML pipeline.
 
 Provides lookahead bias detection, data quality checks,
 cross-validation integrity verification, selection bias correction,
-statistical model comparison, bootstrap confidence intervals,
-feature-label leakage detection, ensemble diversity analysis,
-regime-conditional evaluation, production backtesting,
+bootstrap confidence intervals, feature-label leakage detection,
+ensemble diversity analysis, production backtesting,
 walk-forward validation, CPCV, PBO, and feature store.
 """
 
@@ -71,17 +70,6 @@ from src.models.ensemble.diversity import (
     compute_pairwise_correlation_matrix,
     compute_q_statistic,
 )
-from src.models.regime_evaluation import (
-    RegimeClassifier,
-    RegimeEvaluationResult,
-    RegimeEvaluator,
-    RegimeMetrics,
-    TimeOfDay,
-    TrendRegime,
-    VolatilityRegime,
-    evaluate_regime_performance,
-    get_regime_summary,
-)
 from src.validation.bootstrap import (
     BootstrapResult,
     bootstrap_accuracy,
@@ -124,7 +112,6 @@ from src.validation.deflated_sharpe import (
     compute_deflated_sharpe,
     compute_deflated_sharpe_from_returns,
     compute_dsr_from_optuna_study,
-    dsr_gate,
     expected_max_sharpe,
     is_sharpe_like_metric,
     probabilistic_sharpe_ratio,
@@ -151,14 +138,6 @@ from src.validation.lookahead_audit import (
     validate_resample_config,
     verify_resampling_parity,
 )
-from src.validation.statistical_tests import (
-    LossFunction,
-    StatisticalTestResult,
-    compare_models,
-    diebold_mariano_test,
-    paired_ttest,
-    wilcoxon_test,
-)
 
 __all__ = [
     # Lookahead audit
@@ -181,18 +160,10 @@ __all__ = [
     "compute_deflated_sharpe",
     "compute_deflated_sharpe_from_returns",
     "compute_dsr_from_optuna_study",
-    "dsr_gate",
     "analyze_selection_bias",
     "expected_max_sharpe",
     "is_sharpe_like_metric",
     "probabilistic_sharpe_ratio",
-    # Statistical tests
-    "LossFunction",
-    "StatisticalTestResult",
-    "diebold_mariano_test",
-    "paired_ttest",
-    "wilcoxon_test",
-    "compare_models",
     # Bootstrap confidence intervals
     "BootstrapResult",
     "bootstrap_metric",
@@ -226,16 +197,6 @@ __all__ = [
     "compute_average_kl_divergence",
     "compute_diversity_score",
     "compute_kl_diversity_penalty",
-    # Regime-conditional evaluation (Phase 3)
-    "VolatilityRegime",
-    "TrendRegime",
-    "TimeOfDay",
-    "RegimeMetrics",
-    "RegimeEvaluationResult",
-    "RegimeClassifier",
-    "RegimeEvaluator",
-    "evaluate_regime_performance",
-    "get_regime_summary",
     # Production backtesting (Phase 4)
     "Backtester",
     "BacktestConfig",

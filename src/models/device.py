@@ -34,35 +34,6 @@ def is_colab() -> bool:
         return False
 
 
-def is_kaggle() -> bool:
-    """Detect if running in Kaggle."""
-    return os.environ.get("KAGGLE_KERNEL_RUN_TYPE") is not None
-
-
-def is_notebook() -> bool:
-    """Detect if running in a Jupyter notebook."""
-    try:
-        from IPython import get_ipython  # type: ignore[import-not-found]
-
-        shell = get_ipython()
-        if shell is None:
-            return False
-        return shell.__class__.__name__ in ("ZMQInteractiveShell", "Shell")
-    except (ImportError, NameError):
-        return False
-
-
-def get_environment_info() -> dict[str, Any]:
-    """Get information about the current environment."""
-    return {
-        "is_colab": is_colab(),
-        "is_kaggle": is_kaggle(),
-        "is_notebook": is_notebook(),
-        "platform": sys.platform,
-        "python_version": sys.version.split()[0],
-    }
-
-
 def setup_colab(
     mount_drive: bool = False, install_packages: list[str] | None = None
 ) -> dict[str, Any]:
@@ -782,9 +753,6 @@ class DeviceManager:
 
 __all__ = [
     "is_colab",
-    "is_kaggle",
-    "is_notebook",
-    "get_environment_info",
     "setup_colab",
     "GPUInfo",
     "GPU_PROFILES",

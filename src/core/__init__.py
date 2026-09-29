@@ -51,10 +51,6 @@ Usage:
         TimeSeriesDataContainer,
         DataContainerConfig,
         SplitData,
-
-        # Data Contract
-        DatasetContract,
-        SplitDatasetContract,
     )
 """
 
@@ -195,29 +191,6 @@ from src.core.contracts import (
 )
 
 # =============================================================================
-# ABSORBED: src/coordination - Temporal alignment utilities
-# =============================================================================
-from src.core.coordination import (
-    align_to_anchor,
-    apply_mtf_lag,
-    compute_sequence_offset,
-    validate_timestamp_alignment,
-)
-
-# =============================================================================
-# DATA CONTRACT - Explicit data passing between pipeline stages
-# =============================================================================
-from src.core.data_contract import (
-    DatasetContract,
-    SplitDatasetContract,
-)
-
-# =============================================================================
-# EXISTING EXPORTS (preserved from original)
-# =============================================================================
-from src.core.defaults import DEFAULTS, GlobalDefaults, as_dict, get_default
-
-# =============================================================================
 # EXCEPTIONS - Unified exception hierarchy (Phase 8B)
 # =============================================================================
 from src.core.exceptions import (
@@ -282,31 +255,6 @@ from src.core.reproducibility import (
     get_worker_init_fn,
     set_all_seeds,
 )
-
-# =============================================================================
-# RESILIENCE - Timeout protection, circuit breakers, retry (Phase 17B-E)
-# =============================================================================
-from src.core.resilience import (
-    GPU_OOM_RETRY,
-    NETWORK_RETRY,
-    TRANSIENT_RETRY,
-    CircuitBreaker,
-    CircuitBreakerConfig,
-    CircuitBreakerRegistry,
-    CircuitBreakerStats,
-    CircuitOpenError,
-    CircuitState,
-    ResilienceError,
-    ResilienceTimeoutError,
-    RetryConfig,
-    RetryExhaustedError,
-    TimeoutError,
-    get_model_breaker_registry,
-    retry,
-    retry_with_config,
-    run_with_timeout,
-    timeout,
-)
 from src.core.types import (
     AdapterType,
     Array1D,
@@ -331,27 +279,12 @@ from src.core.types import (
 # ABSORBED: src/utils - Memory, cache, notebook utilities
 # =============================================================================
 from src.core.utils import (
-    CacheConfig,
-    CacheEntry,
-    CacheManager,
-    CacheStats,
-    CheckpointManager,
-    DataCache,
-    DataCacheConfig,
     MemoryInfo,
-    cached_result,
-    check_available_memory,
     check_memory_sufficient,
     estimate_array_size,
-    estimate_object_size,
-    get_global_cache,
-    get_global_data_cache,
     get_memory_info,
-    is_colab,
     log_memory_usage,
     memory_logged,
-    setup_colab_environment,
-    setup_environment,
 )
 
 # =============================================================================
@@ -510,11 +443,6 @@ __all__ = [
     "CONFIG_ROOT",
     "CONFIG_MODELS_DIR",
     "CONFIG_DIR",
-    # Defaults
-    "DEFAULTS",
-    "GlobalDefaults",
-    "get_default",
-    "as_dict",
     # Reproducibility
     "ReproducibilityConfig",
     "ReproducibilityInfo",
@@ -530,11 +458,6 @@ __all__ = [
     "SplitData",
     "VALID_SPLITS",
     "INVALID_LABEL",
-    # =========================================================================
-    # DATA CONTRACT - Explicit data passing between pipeline stages
-    # =========================================================================
-    "DatasetContract",
-    "SplitDatasetContract",
     # =========================================================================
     # ABSORBED: src/contracts
     # =========================================================================
@@ -584,34 +507,12 @@ __all__ = [
     # =========================================================================
     # ABSORBED: src/utils
     # =========================================================================
-    "CacheManager",
-    "CacheConfig",
-    "CacheEntry",
-    "CacheStats",
     "MemoryInfo",
-    "check_available_memory",
     "check_memory_sufficient",
     "estimate_array_size",
-    "estimate_object_size",
     "get_memory_info",
     "log_memory_usage",
     "memory_logged",
-    "get_global_cache",
-    "DataCache",
-    "DataCacheConfig",
-    "cached_result",
-    "get_global_data_cache",
-    "CheckpointManager",
-    "is_colab",
-    "setup_environment",
-    "setup_colab_environment",
-    # =========================================================================
-    # ABSORBED: src/coordination
-    # =========================================================================
-    "align_to_anchor",
-    "apply_mtf_lag",
-    "compute_sequence_offset",
-    "validate_timestamp_alignment",
     # =========================================================================
     # EXCEPTIONS - Unified exception hierarchy (Phase 8B)
     # =========================================================================
@@ -630,30 +531,4 @@ __all__ = [
     # =========================================================================
     "TrainerProtocol",
     "InferenceBundle",
-    # =========================================================================
-    # RESILIENCE - Timeout protection, circuit breakers, retry (Phase 17B-E)
-    # =========================================================================
-    # Exceptions
-    "ResilienceError",
-    "ResilienceTimeoutError",
-    "TimeoutError",
-    "CircuitOpenError",
-    "RetryExhaustedError",
-    # Timeout
-    "timeout",
-    "run_with_timeout",
-    # Retry
-    "RetryConfig",
-    "retry",
-    "retry_with_config",
-    "GPU_OOM_RETRY",
-    "NETWORK_RETRY",
-    "TRANSIENT_RETRY",
-    # Circuit Breaker
-    "CircuitState",
-    "CircuitBreakerConfig",
-    "CircuitBreakerStats",
-    "CircuitBreaker",
-    "CircuitBreakerRegistry",
-    "get_model_breaker_registry",
 ]
