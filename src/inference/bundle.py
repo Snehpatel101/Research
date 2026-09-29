@@ -773,8 +773,7 @@ class ModelBundle:
                 raise ValueError(
                     "4D models require ndarray input of shape "
                     "(n_samples, n_timeframes, seq_len, n_features). "
-                    "Pass a 4D tensor produced by container.get_multi_resolution_4d() "
-                    "or container.get_multi_stream_4d()."
+                    "Pass a 4D tensor produced by container.get_multi_resolution_4d()."
                 )
 
             # Validate and reorder columns

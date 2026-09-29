@@ -37,8 +37,6 @@ Architecture:
     ModelRegistry: Plugin system for model registration
     Trainer: Training orchestration
     TrainerConfig: Training configuration
-
-    config/models/*.yaml: Model-specific configurations
 """
 
 from __future__ import annotations

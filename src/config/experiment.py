@@ -22,6 +22,7 @@ Example:
 from __future__ import annotations
 
 import logging
+import secrets
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -51,8 +52,12 @@ MAX_EMBARGO_FOLD_FRACTION = 0.25
 
 
 def _generate_run_id() -> str:
-    """Generate unique run ID with timestamp."""
-    return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    """Unique run ID: timestamp to the microsecond plus a short random suffix.
+
+    Two runs started in the same second (parallel CLI invocations, scripted loops)
+    must not share an output directory.
+    """
+    return f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{secrets.token_hex(2)}"
 
 
 def _dataclass_from_dict(cls: type[_T], raw: dict[str, Any], where: str) -> _T:  # noqa: UP047

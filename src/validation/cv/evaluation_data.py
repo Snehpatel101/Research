@@ -10,7 +10,7 @@ their own fold/window/CPCV loops (per-fold scaling, per-fold fits). They read a
 - ``label_end_h{horizon}``: row position (within the split) at which each label
   resolves, so purging drops every training sample whose label overlaps a test
   block,
-- ``close`` and ``symbol`` for strategy returns and costs (CPCV/PBO).
+- ``datetime`` (bar time), ``close`` and ``symbol`` for strategy returns and costs (CPCV/PBO).
 
 Only the chronological TRAIN split is exposed: the validation and test splits
 stay untouched for the final holdout, exactly as in ``MLFactory.run``.
@@ -62,6 +62,10 @@ def build_evaluation_container(
 
     label_col = f"label_h{horizon}"
     train_df = pd.DataFrame(prepared.X_train, columns=prepared.feature_names)
+    if isinstance(close.index, pd.DatetimeIndex):
+        # Real bar times: the container hands them out as the index of its frames, so
+        # walk-forward windows, OOF predictions and stacking datasets carry timestamps
+        train_df["datetime"] = close.index[rows]
     train_df["close"] = close.to_numpy()[rows]
     train_df["symbol"] = symbol
     train_df[label_col] = prepared.y_train

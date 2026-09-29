@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 import time
 from pathlib import Path
 
@@ -30,7 +31,7 @@ from src.cli.utils import (
     build_experiment_config,
     console,
     parse_horizon_list,
-    parse_model_list,
+    parse_tabular_model_list,
     setup_logging,
     show_error,
     show_warning,
@@ -73,7 +74,12 @@ def _load_evaluation_data(
         name=f"{symbol}_{command}",
     )
     factory = MLFactory(config, enable_checkpoints=False)
-    containers = factory.build_evaluation_containers()
+    try:
+        containers = factory.build_evaluation_containers()
+    except Exception:
+        # A failed data step leaves no half-made run directory behind
+        shutil.rmtree(factory.output_dir, ignore_errors=True)
+        raise
     results_dir = factory.output_dir / command
     results_dir.mkdir(parents=True, exist_ok=True)
     return factory, containers, results_dir
@@ -135,7 +141,7 @@ def run_cv(
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
 
-    model_list = parse_model_list(models)
+    model_list = parse_tabular_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
     logger.info(f"Models: {model_list}")
@@ -466,7 +472,7 @@ def run_walk_forward(
     setup_logging(verbose)
     logger = logging.getLogger(__name__)
 
-    model_list = parse_model_list(models)
+    model_list = parse_tabular_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
     from src.validation.cv.walk_forward import WalkForwardConfig, WalkForwardResult
@@ -788,7 +794,7 @@ def run_cpcv_pbo(
     """
     setup_logging(verbose)
 
-    model_list = parse_model_list(models)
+    model_list = parse_tabular_model_list(models)
     horizon_list = parse_horizon_list(horizons)
 
     from src.validation.cv.cpcv import CPCVConfig, CPCVResult

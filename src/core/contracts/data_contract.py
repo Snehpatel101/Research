@@ -6,8 +6,6 @@ data consistency and traceability.
 
 NOTE: This is the CANONICAL data contract for model data requirements.
 Do NOT confuse with:
-- OHLCVValidationSchema (src/data/pipeline/stages/validation/data_contract.py):
-  OHLCV-specific validation schema for pipeline data
 - DatasetContract (src/core/data_contract.py):
   Pipeline stage data passing contract
 
@@ -87,7 +85,6 @@ class DataContractSchema:
     # Label column pattern
     LABEL_PATTERN: str = "label_h{horizon}"
     WEIGHT_PATTERN: str = "sample_weight_h{horizon}"
-    LABEL_END_TIME_PATTERN: str = "label_end_time_h{horizon}"
 
     # Metadata columns (not features)
     METADATA_COLUMNS: tuple[str, ...] = (
@@ -131,8 +128,7 @@ class DataContract:
     Every data artifact stores this contract alongside the data
     to ensure traceability and compatibility.
 
-    NOTE: This is for MODEL data requirements. For OHLCV validation,
-    use OHLCVValidationSchema (src/data/pipeline/stages/validation/data_contract.py).
+    NOTE: This is for MODEL data requirements.
     """
 
     # Identity

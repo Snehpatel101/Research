@@ -13,6 +13,7 @@ labels (with label spans) -> models -> ensemble -> backtest -> deploy artifact.
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 
 import typer
@@ -53,6 +54,7 @@ def _print_run_result(result) -> None:
 
 
 def run_pipeline(
+    ctx: typer.Context,
     data_path: Path | None = typer.Option(
         None, "--data-path", "-d", help="Raw OHLCV file (parquet or csv)"
     ),
@@ -141,6 +143,22 @@ def run_pipeline(
 
     setup_logging(verbose)
 
+    if resume is not None:
+        # A resumed run keeps the settings it was started with; silently ignoring
+        # other options would hide that they have no effect
+        ignored = sorted(
+            "--" + name.replace("_", "-")
+            for name in ctx.params
+            if name not in ("resume", "verbose")
+            and getattr(ctx.get_parameter_source(name), "name", "") == "COMMANDLINE"
+        )
+        if ignored:
+            show_error(
+                f"--resume takes the run's saved settings; remove {', '.join(ignored)} "
+                f"(or start a new run)"
+            )
+            raise typer.Exit(1)
+
     try:
         if resume is not None:
             config_path = resume / RUN_CONFIG_FILE
@@ -150,7 +168,7 @@ def run_pipeline(
         elif config is not None:
             ml_config = ExperimentConfig.from_yaml(config)
             if data_path is not None:
-                ml_config.data.data_path = data_path
+                ml_config.data.data_path = data_path.resolve()
         else:
             if data_path is None:
                 raise ValueError("--data-path is required (or use --config / --resume)")
@@ -227,6 +245,7 @@ def run_data(
 
     setup_logging(verbose)
 
+    factory = None
     try:
         ml_config = build_experiment_config(
             data_path=data_path,
@@ -241,6 +260,8 @@ def run_data(
         factory = MLFactory(ml_config, enable_checkpoints=False)
         df, _ = factory.prepare_data()
     except Exception as e:
+        if factory is not None:
+            shutil.rmtree(factory.output_dir, ignore_errors=True)
         show_error(f"Data step failed: {e}")
         raise typer.Exit(1) from None
 
@@ -266,7 +287,7 @@ def show_status(
 
     Example:
 
-        ml status experiments/20260929_101500_ab12cd
+        ml status experiments/20260929_101500_123456_ab12
     """
     from src.core.checkpoint import PipelineCheckpointManager
     from src.factory import MLFactory

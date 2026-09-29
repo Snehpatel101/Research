@@ -215,7 +215,9 @@ class PreprocessingGraph:
 
     @staticmethod
     def _to_datetime_column(raw_df: pd.DataFrame) -> pd.DataFrame:
-        """Validate OHLCV input and return a frame with a sorted ``datetime`` column."""
+        """Validate and sanitize OHLCV input; return a frame with a sorted ``datetime`` column."""
+        from src.data.pipeline.stages.clean.sanitize import sanitize_bars
+
         df = raw_df.copy()
         df.columns = [str(c).lower().strip() for c in df.columns]
         missing = [c for c in OHLCV_COLUMNS if c not in df.columns]
@@ -226,8 +228,10 @@ class PreprocessingGraph:
             if not isinstance(df.index, pd.DatetimeIndex):
                 raise ValueError("DataFrame must have a 'datetime' column or DatetimeIndex")
             df = df.rename_axis("datetime").reset_index()
-        df["datetime"] = pd.to_datetime(df["datetime"])
-        return df.sort_values("datetime").reset_index(drop=True)
+        # Same cleaning as training (MLFactory): naive-UTC timestamps, sorted, no
+        # duplicate / NaN / non-positive bars, consistent high/low
+        df, _report = sanitize_bars(df.set_index("datetime"))
+        return df.reset_index()
 
     def _resample_to_bar_timeframe(self, df: pd.DataFrame) -> pd.DataFrame:
         """Resample raw bars to the training bar timeframe (same code as training)."""

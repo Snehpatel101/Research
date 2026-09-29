@@ -2,7 +2,7 @@
 GlobalConfig - typed view of config/global.yaml.
 
 Holds only sections that code actually reads: via ``get_config_value()``
-(TrainerConfig / DataConfig field defaults) or ``get_global_config()``
+(TrainerConfig field defaults) or ``get_global_config()``
 (horizon lists). Keep the YAML and these dataclasses in lock-step: a section
 here that nothing reads is a "settable but ignored" knob.
 """

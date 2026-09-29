@@ -371,7 +371,6 @@ def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
             - model_name: str (voting/stacking/blending)
             - base_model_names: List[str]
             - horizon: int
-            - stacking_data: Optional[str] (CV run ID)
 
     Returns:
         ValidationResult with errors/warnings/suggestions
@@ -399,7 +398,7 @@ def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
     base_models = config.get("base_model_names", [])
     if not base_models:
         result.add_error("No base_model_names specified for ensemble")
-        result.add_suggestion("Use --base-models xgboost,lightgbm,catboost")
+        result.add_suggestion('Set base_model_names, e.g. ["xgboost", "lightgbm", "catboost"]')
         return result
 
     if len(base_models) < 2:
@@ -425,37 +424,10 @@ def validate_ensemble_config(config: dict[str, Any]) -> ValidationResult:
     elif not isinstance(horizon, int) or horizon <= 0:
         result.add_error(f"Invalid horizon: {horizon}. Must be positive integer")
 
-    # Check Phase 3 stacking data (if provided)
-    stacking_data = config.get("stacking_data")
-    if stacking_data:
-        phase3_base = Path(config.get("phase3_base_dir", "data/stacking"))
-        stacking_dir = phase3_base / stacking_data / "stacking"
-
-        if not stacking_dir.exists():
-            result.add_error(
-                f"Phase 3 stacking data not found: {stacking_dir}\n"
-                "Run Phase 3 CV first to generate stacking data"
-            )
-            result.add_suggestion(
-                f"python scripts/run_cv.py --models {','.join(base_models[:2])} "
-                f"--horizons {horizon} --output-name {stacking_data}"
-            )
-        else:
-            # Check stacking dataset exists for horizon
-            if horizon:
-                stacking_file = stacking_dir / f"stacking_dataset_h{horizon}.parquet"
-                if not stacking_file.exists():
-                    result.add_error(
-                        f"Stacking dataset not found for horizon {horizon}: {stacking_file}"
-                    )
-                    result.add_suggestion(
-                        f"Run CV with --horizons {horizon} to generate this dataset"
-                    )
-
     # Ensemble-specific checks
     if model_name == "stacking":
         n_folds = config.get("config", {}).get("n_folds", 5)
-        if not stacking_data and n_folds < 3:
+        if n_folds < 3:
             result.add_warning(f"n_folds={n_folds} is small for stacking. Recommended: >= 5")
 
     return result

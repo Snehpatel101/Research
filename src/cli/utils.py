@@ -114,6 +114,35 @@ def parse_model_list(model_arg: str) -> list[str]:
     return models
 
 
+def parse_tabular_model_list(model_arg: str) -> list[str]:
+    """
+    Models for the standalone evaluation commands (``cv``, ``walk-forward``, ``cpcv-pbo``).
+
+    ``'all'`` expands to the tabular base models (boosting and classical families);
+    explicit names must be tabular (2D) models: sequence and multi-timeframe models are
+    evaluated with ``ml run --training-mode walk_forward``.
+
+    Raises:
+        SystemExit: If a model name is unknown or not tabular.
+    """
+    import src.models  # noqa: F401 - ensures models are registered
+    from src.core.contracts import get_model_contract
+    from src.core.types import DataRank
+    from src.models.registry import ModelRegistry
+
+    if model_arg.lower() == "all":
+        families = ModelRegistry.list_models()
+        return sorted(families.get("boosting", []) + families.get("classical", []))
+
+    models = parse_model_list(model_arg)
+    non_tabular = [m for m in models if get_model_contract(m).input_rank != DataRank.TABULAR_2D]
+    if non_tabular:
+        show_error(f"Standalone evaluation supports tabular models only, not {non_tabular}")
+        show_info("Evaluate sequence models with `ml run --training-mode walk_forward`")
+        sys.exit(1)
+    return models
+
+
 def parse_horizon_list(horizon_arg: str) -> list[int]:
     """
     Parse horizon argument into list of integers.
@@ -181,7 +210,10 @@ def build_experiment_config(
     )
     from src.config.training import OptunaConfig
 
-    data = DataSection(symbol=symbol, data_path=data_path, bar_timeframe=bar_timeframe)
+    # Absolute: the saved config must resolve from any directory (`ml run --resume`)
+    data = DataSection(
+        symbol=symbol, data_path=Path(data_path).resolve(), bar_timeframe=bar_timeframe
+    )
     data.mtf.enabled = mtf
 
     training = TrainingSection(

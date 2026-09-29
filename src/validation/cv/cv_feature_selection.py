@@ -17,10 +17,12 @@ import pandas as pd  # type: ignore[import-untyped]
 from sklearn.feature_selection import mutual_info_classif  # type: ignore[import-untyped]
 from sklearn.metrics import accuracy_score, f1_score  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
 from src.models.registry import ModelRegistry
 
 from .cv_dataclasses import FoldMetrics
 from .early_stopping_split import carve_early_stopping_split
+from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 
 # Import OOFPrediction directly from oof_core (where it's defined)
 # to reduce import chain length and avoid going through oof_generator
@@ -41,6 +43,7 @@ def run_cv_with_per_fold_feature_selection(
     tune_per_fold: bool = False,
     cv: PurgedKFold | None = None,
     tuning_trials: int = 50,
+    label_spans: LabelSpans | None = None,
 ) -> dict[str, Any]:
     """
     Run CV with per-fold feature selection to prevent leakage.
@@ -66,6 +69,11 @@ def run_cv_with_per_fold_feature_selection(
             feature selection. More accurate but slower.
         cv: PurgedKFold instance (required if tune_per_fold=True)
         tuning_trials: Number of Optuna trials for per-fold tuning
+        label_spans: Label spans of the rows of ``X`` (bar positions); inner tuning
+            folds purge on them
+
+    ``X`` is unscaled: every fold scales its features with the model's scaler fit on
+    that fold's fit rows only (early-stopping tail and validation rows are transformed).
 
     Returns:
         Dict with oof_prediction, selected_features, fold_metrics
@@ -143,11 +151,13 @@ def run_cv_with_per_fold_feature_selection(
                 model_name=model_name,
                 cv=inner_cv,
                 n_trials=max(10, tuning_trials // 3),  # Fewer trials for inner tuning
+                scale_per_fold=True,
             )
             tuning_result = tuner.tune(
                 X_train_selected,
                 y_train_fold,
                 weights.iloc[train_idx] if weights is not None else None,
+                label_spans=label_spans.subset(train_idx) if label_spans is not None else None,
             )
             fold_tuned_params = tuning_result.get("best_params", {})
             fold_config.update(fold_tuned_params)
@@ -160,17 +170,25 @@ def run_cv_with_per_fold_feature_selection(
         )
         fit_pos = np.flatnonzero(np.isin(train_idx, es_split.fit_idx))
         es_pos = np.flatnonzero(np.isin(train_idx, es_split.es_idx))
+        scaling = FoldAwareScaler(
+            method=get_scaling_method_for_model(model_name)
+        ).fit_transform_fold(
+            X_train_selected.values[fit_pos],
+            np.vstack([X_train_selected.values[es_pos], X_val_selected.values]),
+        )
+        X_es_scaled = scaling.X_val_scaled[: len(es_pos)]
+        X_val_scaled = scaling.X_val_scaled[len(es_pos) :]
         model = ModelRegistry.create(model_name, config=fold_config)
         model.fit(
-            X_train=X_train_selected.values[fit_pos],
+            X_train=scaling.X_train_scaled,
             y_train=y_train_fold.values[fit_pos],
-            X_val=X_train_selected.values[es_pos],
+            X_val=X_es_scaled,
             y_val=y_train_fold.values[es_pos],
             sample_weights=w_train[fit_pos] if w_train is not None else None,
         )
 
         # Generate OOF predictions for this fold's validation set
-        output = model.predict(X_val_selected.values)
+        output = model.predict(X_val_scaled)
         oof_predictions[val_idx] = output.class_predictions
         oof_probabilities[val_idx] = output.class_probabilities
 

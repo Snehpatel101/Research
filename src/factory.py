@@ -740,19 +740,15 @@ class MLFactory:
         # Normalize column names
         raw_df.columns = [str(c).lower().strip() for c in raw_df.columns]
 
-        # Ensure datetime index
+        # Datetime index: timestamps go through pd.to_datetime; sanitize_bars below makes
+        # them naive UTC and sorts them (tz-aware / unsorted / duplicated input is normal
+        # for exported data)
         if "datetime" in raw_df.columns:
-            raw_df["datetime"] = pd.to_datetime(raw_df["datetime"])
-            raw_df = raw_df.set_index("datetime").sort_index()
+            raw_df = raw_df.set_index("datetime")
         elif "date" in raw_df.columns:
-            raw_df["date"] = pd.to_datetime(raw_df["date"])
-            raw_df = raw_df.set_index("date").sort_index()
+            raw_df = raw_df.set_index("date")
         elif not isinstance(raw_df.index, pd.DatetimeIndex):
             raw_df.index = pd.to_datetime(raw_df.index)
-            raw_df = raw_df.sort_index()
-        else:
-            raw_df = raw_df.sort_index()
-        raw_df.index.name = "datetime"
 
         # Check for OHLCV columns
         required = ["open", "high", "low", "close", "volume"]
@@ -761,11 +757,18 @@ class MLFactory:
             raise ValueError(f"Missing required OHLCV columns: {missing}")
         raw_df = raw_df[required]
 
+        # The one cleaning step shared with inference (PreprocessingGraph)
+        from src.data.pipeline.stages.clean.sanitize import sanitize_bars, to_naive_utc
+
+        raw_df, sanitize_report = sanitize_bars(raw_df)
+        if sanitize_report.changed:
+            self._log(f"  {sanitize_report.summary()}")
+
         # Date range filtering
         if self.config.data.start_date:
-            raw_df = raw_df[raw_df.index >= pd.Timestamp(self.config.data.start_date)]
+            raw_df = raw_df[raw_df.index >= to_naive_utc(self.config.data.start_date)]
         if self.config.data.end_date:
-            raw_df = raw_df[raw_df.index <= pd.Timestamp(self.config.data.end_date)]
+            raw_df = raw_df[raw_df.index <= to_naive_utc(self.config.data.end_date)]
         if raw_df.empty:
             raise ValueError(
                 f"No rows left after date filtering "
@@ -819,6 +822,9 @@ class MLFactory:
         mtf = self.config.data.mtf
         engineer = FeatureEngineer(
             output_dir=self.output_dir,
+            # One cache per output root (run dirs are <root>/<run_id>): `ml run`, `ml cv`,
+            # `ml walk-forward` and `ml cpcv-pbo` on the same data reuse the features
+            cache_dir=self.output_dir.parent / ".feature_cache",
             timeframe=bar_timeframe,
             enable_mtf=mtf.enabled,
             mtf_timeframes=list(mtf.timeframes),

@@ -153,6 +153,15 @@ class TestRunErrorHandling:
         assert result.exit_code == 1
         assert "experiment_config.yaml" in result.output
 
+    def test_resume_rejects_other_options(self, runner: CliRunner, tmp_path: Path):
+        (tmp_path / "experiment_config.yaml").write_text("name: x\n")
+        result = runner.invoke(
+            app, ["run", "--resume", str(tmp_path), "-m", "lstm", "--horizons", "5", "-v"]
+        )
+        assert result.exit_code == 1
+        assert "--models" in result.output and "--horizons" in result.output
+        assert "--verbose" not in result.output
+
     def test_run_rejects_unknown_horizon_format(self, runner: CliRunner, tmp_path: Path):
         result = runner.invoke(
             app,
@@ -224,3 +233,42 @@ class TestModelsCommand:
     def test_models_unknown_model_exits_1(self, runner: CliRunner):
         result = runner.invoke(app, ["models", "no_such_model"])
         assert result.exit_code == 1
+
+
+# =============================================================================
+# 5. evaluation commands: model validation, no leftovers on failure
+# =============================================================================
+
+
+class TestEvaluationCommandValidation:
+    @pytest.mark.parametrize("command", ["cv", "walk-forward", "cpcv-pbo"])
+    def test_sequence_model_rejected_before_any_work(
+        self, runner: CliRunner, tmp_path: Path, command: str
+    ):
+        out = tmp_path / "out"
+        result = runner.invoke(
+            app, [command, "-d", str(tmp_path / "x.parquet"), "-m", "lstm", "-o", str(out)]
+        )
+        assert result.exit_code == 1
+        assert "tabular" in result.output.lower()
+        assert not out.exists()
+
+    def test_all_means_tabular_base_models(self):
+        from src.cli.utils import parse_tabular_model_list
+
+        models = parse_tabular_model_list("all")
+        assert {"xgboost", "lightgbm", "catboost", "logistic", "random_forest", "svm"} == set(
+            models
+        )
+
+    @pytest.mark.parametrize("command", ["cv", "walk-forward", "cpcv-pbo", "data"])
+    def test_failed_data_step_leaves_no_run_directory(
+        self, runner: CliRunner, tmp_path: Path, command: str
+    ):
+        out = tmp_path / "out"
+        args = [command, "-d", str(tmp_path / "missing.parquet"), "-o", str(out)]
+        if command != "data":
+            args += ["-m", "logistic"]
+        result = runner.invoke(app, args)
+        assert result.exit_code == 1
+        assert not out.exists() or not any(out.iterdir())

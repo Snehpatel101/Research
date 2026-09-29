@@ -67,7 +67,7 @@ def _invoke(*args: str):
 
 
 def _only_run_dir(output_dir: Path) -> Path:
-    runs = [p for p in output_dir.iterdir() if p.is_dir()]
+    runs = [p for p in output_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
     assert len(runs) == 1, f"expected exactly one run directory in {output_dir}, got {runs}"
     return runs[0]
 
@@ -83,6 +83,35 @@ class TestData:
         assert f"label_end_h{HORIZON}" in frame.columns  # label spans for purging
         assert frame.shape[1] > 100  # engineered features, not just OHLCV
         assert set(frame[f"label_h{HORIZON}"].unique()) <= {-99, -1, 0, 1}
+
+
+class TestFeatureCache:
+    def test_commands_on_the_same_data_share_one_feature_cache(
+        self, data_path: Path, tmp_path: Path
+    ) -> None:
+        _invoke("data", "-d", data_path, "--horizons", HORIZON, *FAST, "-o", tmp_path)
+        cached = sorted((tmp_path / ".feature_cache").glob("*.parquet"))
+        assert len(cached) == 1
+        mtime = cached[0].stat().st_mtime_ns
+        _invoke(
+            "cv",
+            "-d",
+            data_path,
+            "-m",
+            "logistic",
+            "--horizons",
+            HORIZON,
+            *FAST,
+            "--n-splits",
+            "2",
+            "--no-feature-selection",
+            "-o",
+            tmp_path,
+        )
+        # the second command (another run directory) reused the entry: nothing new written
+        assert sorted((tmp_path / ".feature_cache").glob("*.parquet")) == cached
+        assert cached[0].stat().st_mtime_ns == mtime
+        assert len([p for p in tmp_path.iterdir() if p.is_dir() and p.name[0] != "."]) == 2
 
 
 class TestRun:
@@ -124,6 +153,11 @@ class TestRun:
 
         resumed = _invoke("run", "--resume", run_dir)
         assert "PIPELINE COMPLETED SUCCESSFULLY" in resumed.output
+        # every completed stage came from its checkpoint, none was recomputed
+        for stage in ("Data Pipeline", "Model Training", "Evaluation"):
+            assert f"{stage} (cached)" in resumed.output
+        saved = (run_dir / "experiment_config.yaml").read_text()
+        assert str(data_path.resolve()) in saved  # absolute path in the saved config
 
     def test_run_ensemble(self, data_path: Path, tmp_path: Path) -> None:
         result = _invoke(
@@ -203,7 +237,10 @@ class TestEvaluation:
         wf_dir = _only_run_dir(tmp_path) / "walk-forward"
         result = json.loads((wf_dir / f"wf_logistic_h{HORIZON}.json").read_text())
         assert result["n_windows"] == 3
-        assert (wf_dir / f"wf_preds_logistic_h{HORIZON}.parquet").exists()
+        preds = pd.read_parquet(wf_dir / f"wf_preds_logistic_h{HORIZON}.parquet")
+        assert pd.api.types.is_datetime64_any_dtype(preds["datetime"])  # real bar times
+        assert preds["datetime"].is_monotonic_increasing
+        assert result["windows"][0]["test_start_time"] is not None
         assert (wf_dir / "walk_forward_summary.csv").exists()
 
     def test_cpcv_pbo_writes_paths_and_pbo(self, data_path: Path, tmp_path: Path) -> None:

@@ -7,14 +7,12 @@ This domain provides a unified interface for data processing:
 - adapters: Model-specific data format adapters
 - features: Per-model feature-set resolution (strategies) + event utilities
 - labeling: Label generation (triple-barrier, etc.)
-- store: Raw multi-timeframe OHLCV store (multi-stream adapter fallback)
 
 Import paths:
     from src.data.pipeline.stages.features import FeatureEngineer
     from src.data.adapters import TabularAdapter, SequenceAdapter
     from src.data.features import get_features_for_model
     from src.data.labeling import TripleBarrierLabeler
-    from src.data.store import load_raw_mtf
 """
 
 # Re-export from pipeline (now in data/pipeline)
