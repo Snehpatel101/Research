@@ -123,10 +123,14 @@ class DataContainerConfig:
     symbol_column: str = "symbol"
     datetime_column: str = "datetime"
     exclude_invalid_labels: bool = True
+    # 3: {-1, 0, +1} (short/neutral/long); 2: binary labels {0, 1} (no move/move)
+    n_classes: int = 3
 
     def __post_init__(self) -> None:
         if self.horizon <= 0:
             raise ValueError(f"horizon must be positive, got {self.horizon}")
+        if self.n_classes not in (2, 3):
+            raise ValueError(f"n_classes must be 2 or 3, got {self.n_classes}")
         if not self.label_column:
             self.label_column = f"label_h{self.horizon}"
         if not self.weight_column:
@@ -264,16 +268,19 @@ class TimeSeriesDataContainer:
         horizon: int = 20,
         feature_columns: list[str] | None = None,
         exclude_invalid_labels: bool = True,
+        n_classes: int = 3,
     ) -> TimeSeriesDataContainer:
         """
         Create container directly from DataFrames.
 
-        Useful for testing or when data is already loaded.
+        Useful for testing or when data is already loaded. ``n_classes`` is 2 for
+        binary labels (``LabelingConfig.binary_mode``), 3 otherwise.
         """
         config = DataContainerConfig(
             horizon=horizon,
             feature_columns=feature_columns or [],
             exclude_invalid_labels=exclude_invalid_labels,
+            n_classes=n_classes,
         )
 
         splits: dict[str, SplitData] = {}
@@ -335,6 +342,11 @@ class TimeSeriesDataContainer:
     def horizon(self) -> int:
         """Label horizon."""
         return self.config.horizon
+
+    @property
+    def n_classes(self) -> int:
+        """Number of label classes (2 for binary labels, 3 for short/neutral/long)."""
+        return self.config.n_classes
 
     # =========================================================================
     # LABEL SPANS (FOR PURGED CV)

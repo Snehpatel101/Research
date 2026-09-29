@@ -248,6 +248,7 @@ class CrossValidationRunner:
         # Get data for this horizon
         X, y, weights = container.get_sklearn_arrays("train", return_df=True)
         all_feature_names = list(X.columns)
+        n_classes = container.n_classes
 
         # Label spans (row positions) for overlap-aware purging
         label_spans = container.get_label_spans("train")
@@ -271,6 +272,7 @@ class CrossValidationRunner:
                 cv=self.cv,
                 n_trials=self.tuning_trials,
                 scale_per_fold=True,
+                n_classes=n_classes,
             )
             tuning_result = tuner.tune(X, y, weights, label_spans=label_spans)
             tuned_params = tuning_result.get("best_params", {})
@@ -281,7 +283,7 @@ class CrossValidationRunner:
             default_config = ModelRegistry.get_model_info(model_name).get("default_config", {})
         except ValueError:
             default_config = {}
-        config = {**default_config, **tuned_params}
+        config = {**default_config, **tuned_params, "n_classes": n_classes}
 
         # ==================================================================
         # LEAKAGE-FREE FEATURE SELECTION AND OOF GENERATION
@@ -301,6 +303,7 @@ class CrossValidationRunner:
                 cv=self.cv,
                 tuning_trials=self.tuning_trials,
                 label_spans=label_spans,
+                n_classes=n_classes,
             )
             oof_pred = oof_result["oof_prediction"]
             selected_features = oof_result["selected_features"]
@@ -324,7 +327,7 @@ class CrossValidationRunner:
                     X = X[selected_features]
 
             # Generate OOF predictions
-            oof_generator = OOFGenerator(self.cv)
+            oof_generator = OOFGenerator(self.cv, n_classes=n_classes)
             oof_predictions = oof_generator.generate_oof_predictions(
                 X=X,
                 y=y,

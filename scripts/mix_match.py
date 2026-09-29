@@ -242,12 +242,29 @@ def _check_ensemble_alignment(result) -> list[str]:
     return []
 
 
+def _cached_additional_dfs(out: Path) -> dict | None:
+    """The factory's multi-stream frames, as its checkpoint cached them.
+
+    ``MLFactory`` writes each resampled OHLCV stream to
+    ``cache/mtf_<timeframe>.parquet`` and reloads them on resume under the
+    ``<timeframe>`` key; 4D models need the same frames to re-prepare their data.
+    """
+    import pandas as pd
+
+    frames = {
+        path.stem.removeprefix("mtf_"): pd.read_parquet(path)
+        for path in sorted((out / "cache").glob("mtf_*.parquet"))
+    }
+    return frames or None
+
+
 def _check_prediction_parity(result, data_path: Path) -> list[str]:
     """Deployed bundle == trained model: same probabilities on the validation bars.
 
-    Re-prepares the validation split from the cached training frame, scores it
-    with the in-memory trained model, and compares with the bundle's
-    predict_from_raw on raw OHLCV at the same bar timestamps.
+    Re-prepares the validation split from the cached training frame (plus the
+    cached multi-stream frames for 4D models), scores it with the in-memory
+    trained model, and compares with the bundle's predict_from_raw on raw
+    OHLCV at the same bar timestamps.
     """
     import numpy as np
     import pandas as pd
@@ -263,6 +280,7 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
         return []
     df = pd.read_parquet(cache)
     raw = pd.read_parquet(data_path)
+    additional_dfs = _cached_additional_dfs(out)
     problems: list[str] = []
     for mr in tr.model_results.values():
         trainer = mr.trainer
@@ -274,8 +292,9 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
         ):
             continue
         bundle = ModelBundle.load(bundle_dir)
-        if bundle.metadata.requires_4d:
-            continue  # needs the factory's multi-stream frames; covered by deploy predict
+        if bundle.metadata.requires_4d and additional_dfs is None:
+            problems.append(f"prediction parity {mr.model_name}: no cached multi-stream frames")
+            continue
         features = set(bundle.feature_columns)
         keep = [
             c
@@ -284,7 +303,12 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
         ]
         prep = (
             UnifiedDataPreparation(tr.config)
-            .prepare(df=df[keep], model_name=mr.model_name, label_column=f"label_h{mr.horizon}")
+            .prepare(
+                df=df[keep],
+                model_name=mr.model_name,
+                label_column=f"label_h{mr.horizon}",
+                additional_dfs=additional_dfs,
+            )
             .filter_invalid_labels()
         )
         expected = trainer.model.predict(prep.X_val).class_probabilities
@@ -294,6 +318,11 @@ def _check_prediction_parity(result, data_path: Path) -> list[str]:
         ).reindex(df.index[prep.val_indices])
         covered = got.notna().all(axis=1).to_numpy()
         close = np.isclose(got.to_numpy()[covered], expected[covered], atol=1e-3).all(axis=1)
+        print(
+            f"prediction parity {mr.model_name} ({prep.data_rank}D): {len(expected)} val bars, "
+            f"covered {covered.mean():.0%}, match {close.mean():.0%}",
+            flush=True,
+        )
         if covered.mean() < 0.95 or close.mean() < 0.99:
             problems.append(
                 f"prediction parity {mr.model_name}: covered {covered.mean():.0%}, "
@@ -328,6 +357,7 @@ def _check_meta_labeling_parity(result, data_path: Path) -> list[str]:
         return []
     df = pd.read_parquet(cache)
     raw = pd.read_parquet(data_path)
+    additional_dfs = _cached_additional_dfs(out)
     problems: list[str] = []
     for mr in tr.model_results.values():
         art = mr.mode_artifacts
@@ -344,7 +374,10 @@ def _check_meta_labeling_parity(result, data_path: Path) -> list[str]:
         prep = (
             UnifiedDataPreparation(tr.config)
             .prepare(
-                df=df[keep], model_name=art["primary_model"], label_column=f"label_h{mr.horizon}"
+                df=df[keep],
+                model_name=art["primary_model"],
+                label_column=f"label_h{mr.horizon}",
+                additional_dfs=additional_dfs,
             )
             .filter_invalid_labels()
         )
@@ -367,6 +400,12 @@ def _check_meta_labeling_parity(result, data_path: Path) -> list[str]:
         covered = got_p.notna().to_numpy()
         close = np.isclose(got_p.to_numpy()[covered], expected_p[covered], atol=1e-3)
         same_trades = got_trade.to_numpy()[covered].astype(bool) == expected_trade[covered]
+        print(
+            f"meta-labeling parity {art['primary_model']} ({prep.data_rank}D): "
+            f"{len(expected_p)} val bars, covered {covered.mean():.0%}, "
+            f"P(win) match {close.mean():.0%}, trade match {same_trades.mean():.0%}",
+            flush=True,
+        )
         if covered.mean() < 0.95 or close.mean() < 0.99 or same_trades.mean() < 0.99:
             problems.append(
                 f"meta-labeling parity {mr.model_name}: covered {covered.mean():.0%}, "

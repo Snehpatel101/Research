@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 from ..base import PredictionResult
 from ..device import get_optimal_gpu_settings
@@ -133,106 +134,178 @@ class GatedResidualNetwork(nn.Module):
         return output
 
 
+def _init_linear_(weight: torch.Tensor, bias: torch.Tensor, fan_in: int, fan_out: int) -> None:
+    """Xavier-uniform weight and ``nn.Linear``'s default bias, for one (in, out) map."""
+    bound = math.sqrt(6.0 / (fan_in + fan_out))
+    nn.init.uniform_(weight, -bound, bound)
+    nn.init.uniform_(bias, -1.0 / math.sqrt(fan_in), 1.0 / math.sqrt(fan_in))
+
+
+class VariableGRNs(nn.Module):
+    """
+    One independent GRN per input variable, applied to its scalar embedding.
+
+    Each variable ``i`` is embedded by the shared ``Linear(1, d_model)``
+    (``e_i = x_i * w + b``) and transformed by its own GRN with its own weights:
+
+        eta_1 = ELU(W1_i e_i + b1_i)
+        eta_2 = W2_i eta_1 + b2_i
+        GRN_i(e_i) = LayerNorm_i(e_i + GLU_i(eta_2))
+
+    The per-variable weights are stacked along a leading variable axis and all
+    variables are computed with batched matmuls instead of one module per
+    variable. Because ``e_i`` is an affine function of a scalar, the first layer
+    folds into ``x_i * (W1_i w) + (W1_i b + b1_i)``, so the embedded
+    ``(batch, seq, n_features, d_model)`` tensor is never materialized.
+
+    Variables are processed in chunks whose ``(chunk, rows, d_model)``
+    activations stay near ``CHUNK_BYTES`` (cache-sized: the elementwise steps are
+    memory-bound). Training recomputes each chunk's activations in backward
+    (same values, same dropout masks), so only the ``(rows, n_features,
+    d_model)`` output is kept for backward.
+    """
+
+    CHUNK_BYTES = 4 * 2**20
+
+    def __init__(self, n_features: int, d_model: int, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.n_features = n_features
+        self.d_model = d_model
+        self.embedding = nn.Linear(1, d_model)
+        self.fc1_weight = nn.Parameter(torch.empty(n_features, d_model, d_model))
+        self.fc1_bias = nn.Parameter(torch.empty(n_features, d_model))
+        self.fc2_weight = nn.Parameter(torch.empty(n_features, d_model, d_model))
+        self.fc2_bias = nn.Parameter(torch.empty(n_features, d_model))
+        # GLU: first d_model outputs are the value, last d_model the gate
+        self.glu_weight = nn.Parameter(torch.empty(n_features, d_model, 2 * d_model))
+        self.glu_bias = nn.Parameter(torch.empty(n_features, 2 * d_model))
+        self.norm_weight = nn.Parameter(torch.empty(n_features, d_model))
+        self.norm_bias = nn.Parameter(torch.empty(n_features, d_model))
+        self.dropout = nn.Dropout(dropout)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Per-variable init identical to independent ``nn.Linear`` layers under Xavier."""
+        d = self.d_model
+        _init_linear_(self.embedding.weight, self.embedding.bias, 1, d)
+        for i in range(self.n_features):
+            _init_linear_(self.fc1_weight[i], self.fc1_bias[i], d, d)
+            _init_linear_(self.fc2_weight[i], self.fc2_bias[i], d, d)
+            _init_linear_(self.glu_weight[i], self.glu_bias[i], d, 2 * d)
+        nn.init.ones_(self.norm_weight)
+        nn.init.zeros_(self.norm_bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: Raw variables, shape (rows, n_features)
+
+        Returns:
+            Per-variable GRN outputs, shape (rows, n_features, d_model)
+        """
+        xt = x.t().unsqueeze(-1)  # (n_features, rows, 1)
+        recompute = self.training and torch.is_grad_enabled()
+        step = self.chunk_size(x.shape[0], x.element_size())
+        chunks = []
+        for start in range(0, self.n_features, step):
+            stop = min(start + step, self.n_features)
+            if recompute:
+                out = checkpoint(self._chunk, xt[start:stop], start, stop, use_reentrant=False)
+            else:
+                out = self._chunk(xt[start:stop], start, stop)
+            chunks.append(out)
+        return torch.cat(chunks, dim=1)
+
+    def chunk_size(self, rows: int, element_size: int) -> int:
+        """Variables per chunk for ``rows`` rows: about ``CHUNK_BYTES`` per activation."""
+        per_variable = rows * self.d_model * element_size
+        return max(1, min(self.n_features, self.CHUNK_BYTES // per_variable))
+
+    def _chunk(self, xt: torch.Tensor, start: int, stop: int) -> torch.Tensor:
+        """GRNs of variables ``start:stop``; ``xt`` is (k, rows, 1), returns (rows, k, d)."""
+        emb_w = self.embedding.weight[:, 0]  # (d,)
+        emb_b = self.embedding.bias  # (d,)
+        fc1_t = self.fc1_weight[start:stop].transpose(1, 2)  # (k, d_out, d_in)
+        slope = torch.matmul(fc1_t, emb_w).unsqueeze(1)  # (k, 1, d)
+        offset = (torch.matmul(fc1_t, emb_b) + self.fc1_bias[start:stop]).unsqueeze(1)
+
+        # In-place steps only overwrite tensors that no backward formula reads
+        hidden = torch.addcmul(offset, xt, slope)  # (k, rows, d)
+        hidden = nn.functional.elu(hidden, inplace=True)
+        hidden = torch.bmm(hidden, self.fc2_weight[start:stop]).add_(
+            self.fc2_bias[start:stop].unsqueeze(1)
+        )
+        hidden = nn.functional.dropout(hidden, self.dropout.p, self.training, inplace=True)
+        gate_input = torch.bmm(hidden, self.glu_weight[start:stop]).add_(
+            self.glu_bias[start:stop].unsqueeze(1)
+        )
+        # Residual: GLU output + the variable's embedding x * w + b
+        pre_norm = nn.functional.glu(gate_input, dim=-1).addcmul_(xt, emb_w).add_(emb_b)
+        normed = nn.functional.layer_norm(pre_norm, (self.d_model,))
+        out = torch.addcmul(
+            self.norm_bias[start:stop].unsqueeze(1),
+            normed,
+            self.norm_weight[start:stop].unsqueeze(1),
+        )
+        return out.transpose(0, 1)
+
+
 class VariableSelectionNetwork(nn.Module):
     """
     Variable Selection Network (VSN) for feature importance.
 
-    VSN applies GRN to each feature independently, then uses a softmax
-    to learn variable weights. This provides interpretable feature importance.
+    VSN applies a GRN to each variable independently (``VariableGRNs``), then
+    uses a softmax over a GRN of all of them to learn variable weights. This
+    provides interpretable feature importance.
 
-    Output = sum_i (softmax(weights)[i] * GRN(x_i))
+    Output = sum_i (softmax(weights)[i] * GRN_i(x_i))
     """
 
     def __init__(
         self,
-        input_dim: int,
         n_features: int,
         hidden_dim: int,
         dropout: float = 0.1,
-        context_dim: int | None = None,
     ) -> None:
         super().__init__()
         self.n_features = n_features
-        self.input_dim = input_dim
+        self.variable_grns = VariableGRNs(n_features, hidden_dim, dropout)
 
-        # GRN for each feature
-        self.feature_grns = nn.ModuleList(
-            [
-                GatedResidualNetwork(
-                    input_dim=input_dim,
-                    hidden_dim=hidden_dim,
-                    output_dim=hidden_dim,
-                    dropout=dropout,
-                    context_dim=context_dim,
-                )
-                for _ in range(n_features)
-            ]
-        )
-
-        # Variable weights GRN
-        # Takes flattened features as input
+        # Variable weights GRN over the flattened per-variable outputs
         self.weight_grn = GatedResidualNetwork(
             input_dim=hidden_dim * n_features,
             hidden_dim=hidden_dim,
             output_dim=n_features,
             dropout=dropout,
-            context_dim=context_dim,
         )
 
         self.softmax = nn.Softmax(dim=-1)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        context: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Apply variable selection.
 
         Args:
-            x: Input tensor, shape (batch, seq_len, n_features, input_dim)
-               or (batch, n_features, input_dim)
-            context: Optional context tensor
+            x: Raw variables, shape (batch, seq_len, n_features)
 
         Returns:
             Tuple of:
-            - Selected output, shape (batch, seq_len, hidden_dim) or (batch, hidden_dim)
-            - Variable weights, shape (batch, seq_len, n_features) or (batch, n_features)
+            - Selected output, shape (batch, seq_len, hidden_dim)
+            - Variable weights, shape (batch, seq_len, n_features)
         """
-        has_time = x.dim() == 4
+        batch_size, seq_len, n_features = x.shape
+        transformed = self.variable_grns(x.reshape(batch_size * seq_len, n_features))
 
-        batch_size = seq_len = n_features = 0  # set on the has_time path below
-        if has_time:
-            batch_size, seq_len, n_features, input_dim = x.shape
-            # Reshape for processing: (batch * seq_len, n_features, input_dim)
-            x = x.view(batch_size * seq_len, n_features, input_dim)
-            if context is not None:
-                context = context.view(batch_size * seq_len, -1)
-
-        # Apply GRN to each feature
-        transformed_list: list[torch.Tensor] = []
-        for i, grn in enumerate(self.feature_grns):
-            xi = x[:, i, :]  # (batch, input_dim)
-            transformed_list.append(grn(xi, context))
-
-        # Stack: (batch, n_features, hidden_dim)
-        transformed = torch.stack(transformed_list, dim=1)
-
-        # Compute variable weights
-        # Flatten for weight computation
-        flat_transformed = transformed.view(transformed.shape[0], -1)
-        weights = self.weight_grn(flat_transformed, context)  # (batch, n_features)
+        weights = self.weight_grn(transformed.flatten(1))  # (rows, n_features)
         weights = self.softmax(weights)
 
-        # Weighted sum
-        # (batch, n_features, hidden_dim) * (batch, n_features, 1) -> sum
-        output = (transformed * weights.unsqueeze(-1)).sum(dim=1)  # (batch, hidden_dim)
+        # Weighted sum over variables: (rows, 1, n_features) @ (rows, n_features, d)
+        output = torch.bmm(weights.unsqueeze(1), transformed).squeeze(1)
 
-        if has_time:
-            output = output.view(batch_size, seq_len, -1)
-            weights = weights.view(batch_size, seq_len, n_features)
-
-        return output, weights
+        return (
+            output.view(batch_size, seq_len, -1),
+            weights.view(batch_size, seq_len, n_features),
+        )
 
 
 class InterpretableMultiHeadAttention(nn.Module):
@@ -388,12 +461,9 @@ class TFTNetwork(nn.Module):
         self.attention_layers = attention_layers
         self.use_gradient_checkpointing = use_gradient_checkpointing
 
-        # Initial embedding: project each feature to d_model
-        self.input_embedding = nn.Linear(1, d_model)
-
-        # Variable Selection Network
+        # Variable Selection Network: embeds each feature to d_model (shared
+        # Linear(1, d_model)) and runs one GRN per feature
         self.vsn = VariableSelectionNetwork(
-            input_dim=d_model,
             n_features=input_size,
             hidden_dim=d_model,
             dropout=dropout,
@@ -446,9 +516,14 @@ class TFTNetwork(nn.Module):
         self._init_weights()
 
     def _init_weights(self) -> None:
-        """Initialize weights."""
+        """Xavier-initialize every weight matrix.
+
+        The stacked per-variable GRN weights initialize themselves one variable
+        at a time (``VariableGRNs.reset_parameters``).
+        """
+        stacked = {id(p) for p in self.vsn.variable_grns.parameters()}
         for p in self.parameters():
-            if p.dim() > 1:
+            if p.dim() > 1 and id(p) not in stacked:
                 nn.init.xavier_uniform_(p)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -461,15 +536,8 @@ class TFTNetwork(nn.Module):
         Returns:
             Output logits, shape (batch, n_classes)
         """
-        batch_size, seq_len, n_features = x.shape
-
-        # Embed each feature independently
-        # (batch, seq_len, features) -> (batch, seq_len, features, d_model)
-        x = x.unsqueeze(-1)  # (batch, seq_len, features, 1)
-        x = self.input_embedding(x)  # (batch, seq_len, features, d_model)
-
-        # Variable Selection: learn feature importance
-        # (batch, seq_len, features, d_model) -> (batch, seq_len, d_model)
+        # Variable Selection: embed each feature, learn feature importance
+        # (batch, seq_len, features) -> (batch, seq_len, d_model)
         x, var_weights = self.vsn(x)
         self._variable_weights = var_weights.detach()
 
@@ -483,8 +551,6 @@ class TFTNetwork(nn.Module):
         for attn_layer, grn in zip(self.attention_layers_list, self.attention_grns, strict=False):
             # Self-attention
             if self.use_gradient_checkpointing and self.training:
-                from torch.utils.checkpoint import checkpoint
-
                 attn_out = checkpoint(attn_layer, x, x, x, use_reentrant=False)
             else:
                 attn_out = attn_layer(x, x, x)
@@ -561,6 +627,8 @@ class TFTModel(BaseRNNModel):
         >>> # Get feature importance
         >>> importance = model.get_feature_importance()
     """
+
+    ARCH_VERSION = "2.0"  # 2.0: stacked per-variable GRN weights (VariableGRNs)
 
     _noncausal_warning_logged: bool = False
 
@@ -845,6 +913,7 @@ __all__ = [
     "TFTNetwork",
     "GatedLinearUnit",
     "GatedResidualNetwork",
+    "VariableGRNs",
     "VariableSelectionNetwork",
     "InterpretableMultiHeadAttention",
 ]

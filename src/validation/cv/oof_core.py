@@ -42,6 +42,34 @@ def _get_prob_column_names(model_name: str, n_classes: int) -> list[str]:
     return [f"{model_name}_prob_{i}" for i in range(n_classes)]
 
 
+def build_oof_frame(
+    model_name: str,
+    X: pd.DataFrame,
+    y: pd.Series,
+    probabilities: np.ndarray,
+    predictions: np.ndarray,
+    confidence: np.ndarray,
+    fold_ids: np.ndarray,
+) -> pd.DataFrame:
+    """The OOFPrediction frame: one row per sample of ``X``, NaN where not predicted.
+
+    Columns: ``datetime`` (bar times of a DatetimeIndex, else row positions),
+    ``y_true``, one ``{model}_prob_*`` column per class (see
+    ``_get_prob_column_names``), ``{model}_pred``, ``{model}_confidence``, ``fold_id``.
+    """
+    n_classes = probabilities.shape[1]
+    oof_data: dict[str, Any] = {
+        "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
+        "y_true": y.values,
+    }
+    for i, col_name in enumerate(_get_prob_column_names(model_name, n_classes)):
+        oof_data[col_name] = probabilities[:, i]
+    oof_data[f"{model_name}_pred"] = predictions
+    oof_data[f"{model_name}_confidence"] = confidence
+    oof_data["fold_id"] = fold_ids
+    return pd.DataFrame(oof_data)
+
+
 def held_out_fold_metrics(y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
     """Accuracy and macro-F1 of a fold model on its held-out fold."""
     from sklearn.metrics import accuracy_score, f1_score
@@ -410,18 +438,9 @@ class CoreOOFGenerator:
                 f"{int(np.isnan(oof_preds).sum())} samples missing predictions."
             )
 
-        # Build result DataFrame with dynamic probability columns
-        prob_col_names = _get_prob_column_names(model_name, n_classes)
-        oof_data: dict[str, Any] = {
-            "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
-            "y_true": y.values,
-        }
-        for i, col_name in enumerate(prob_col_names):
-            oof_data[col_name] = oof_probs[:, i]
-        oof_data[f"{model_name}_pred"] = oof_preds
-        oof_data[f"{model_name}_confidence"] = oof_confidence
-        oof_data["fold_id"] = oof_fold_ids
-        oof_df = pd.DataFrame(oof_data)
+        oof_df = build_oof_frame(
+            model_name, X, y, oof_probs, oof_preds, oof_confidence, oof_fold_ids
+        )
 
         return OOFPrediction(
             model_name=model_name,

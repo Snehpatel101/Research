@@ -290,6 +290,7 @@ def _run_walk_forward_for_model(
     from src.models.registry import ModelRegistry
     from src.validation.cv.early_stopping_split import carve_early_stopping_split
     from src.validation.cv.fold_scaling import FoldAwareScaler, get_scaling_method_for_model
+    from src.validation.cv.oof_core import _get_prob_column_names
     from src.validation.cv.walk_forward import (
         WalkForwardEvaluator,
         WalkForwardResult,
@@ -303,7 +304,7 @@ def _run_walk_forward_for_model(
     X, y, weights = container.get_sklearn_arrays("train", return_df=True)
 
     n_samples = len(X)
-    n_classes = 3
+    n_classes = container.n_classes
 
     # Initialize prediction storage
     all_preds = np.full(n_samples, np.nan)
@@ -351,7 +352,7 @@ def _run_walk_forward_for_model(
             w_train = weights.iloc[train_idx].values
 
         # Create and train model
-        model = ModelRegistry.create(model_name)
+        model = ModelRegistry.create(model_name, config={"n_classes": n_classes})
         model.fit(
             X_train=X_train_scaled,
             y_train=y_train.values,
@@ -404,9 +405,10 @@ def _run_walk_forward_for_model(
         {
             "datetime": X.index if isinstance(X.index, pd.DatetimeIndex) else range(len(X)),
             f"{model_name}_pred": all_preds,
-            f"{model_name}_prob_short": all_probs[:, 0],
-            f"{model_name}_prob_neutral": all_probs[:, 1],
-            f"{model_name}_prob_long": all_probs[:, 2],
+            **{
+                col: all_probs[:, i]
+                for i, col in enumerate(_get_prob_column_names(model_name, n_classes))
+            },
             f"{model_name}_confidence": all_confidence,
             "y_true": y.values,
         }
@@ -696,7 +698,7 @@ def _run_cpcv_for_model(
         X_es_scaled = scaling_result.X_val_scaled[: len(es_idx)]
         X_test_scaled = scaling_result.X_val_scaled[len(es_idx) :]
 
-        model = ModelRegistry.create(model_name)
+        model = ModelRegistry.create(model_name, config={"n_classes": container.n_classes})
         model.fit(
             X_train=scaling_result.X_train_scaled,
             y_train=y.iloc[fit_idx].values,

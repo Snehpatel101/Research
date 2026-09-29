@@ -133,7 +133,7 @@ def build_stacking_datasets_from_cv_results(
         _, y, _ = container.get_sklearn_arrays("train", return_df=True)
 
         # Build stacking dataset
-        oof_gen = OOFGenerator(cv)
+        oof_gen = OOFGenerator(cv, n_classes=container.n_classes)
         stacking_ds = oof_gen.build_stacking_dataset(
             oof_predictions=oof_predictions,
             y_true=y,

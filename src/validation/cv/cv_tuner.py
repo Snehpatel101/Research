@@ -61,6 +61,7 @@ class TimeSeriesOptunaTuner:
         timeout: int | None = None,
         purge_bars: int | None = None,
         scale_per_fold: bool = False,
+        n_classes: int = 3,
     ) -> None:
         """
         Args:
@@ -70,7 +71,9 @@ class TimeSeriesOptunaTuner:
                 on that fold's fit rows only (2D data). Set it when ``X`` is
                 unscaled (standalone ``ml cv``); leave it off when ``X`` was
                 already scaled by the training pipeline.
+            n_classes: Label classes the trial models are built for (2 = binary).
         """
+        self.n_classes = n_classes
         self.model_name = model_name
         self.cv = cv
         if purge_bars is None:
@@ -292,7 +295,7 @@ class TimeSeriesOptunaTuner:
                 w_train = w_arr[fit_idx] if w_arr is not None else None
 
                 # Train and evaluate - inject max_epochs if configured
-                model_params = dict(params)
+                model_params = {**params, "n_classes": self.n_classes}
                 if self.max_epochs is not None:
                     model_params["max_epochs"] = self.max_epochs
                     model_params["early_stopping_patience"] = max(1, self.max_epochs // 2)

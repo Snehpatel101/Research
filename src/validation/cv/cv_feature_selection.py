@@ -26,7 +26,7 @@ from .fold_scaling import FoldAwareScaler, get_scaling_method_for_model
 
 # Import OOFPrediction directly from oof_core (where it's defined)
 # to reduce import chain length and avoid going through oof_generator
-from .oof_core import OOFPrediction
+from .oof_core import OOFPrediction, build_oof_frame
 from .purged_kfold import PurgedKFold, PurgedKFoldConfig
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ def run_cv_with_per_fold_feature_selection(
     cv: PurgedKFold | None = None,
     tuning_trials: int = 50,
     label_spans: LabelSpans | None = None,
+    n_classes: int = 3,
 ) -> dict[str, Any]:
     """
     Run CV with per-fold feature selection to prevent leakage.
@@ -71,6 +72,9 @@ def run_cv_with_per_fold_feature_selection(
         tuning_trials: Number of Optuna trials for per-fold tuning
         label_spans: Label spans of the rows of ``X`` (bar positions); inner tuning
             folds purge on them
+        n_classes: Label classes (2 for binary labels, 3 for short/neutral/long);
+            fold models are built for it and the OOF frame has one probability
+            column per class
 
     ``X`` is unscaled: every fold scales its features with the model's scaler fit on
     that fold's fit rows only (early-stopping tail and validation rows are transformed).
@@ -79,7 +83,6 @@ def run_cv_with_per_fold_feature_selection(
         Dict with oof_prediction, selected_features, fold_metrics
     """
     n_samples = len(X)
-    n_classes = 3
     all_features = list(X.columns)
 
     # Track which features are selected in each fold
@@ -88,6 +91,8 @@ def run_cv_with_per_fold_feature_selection(
     # Initialize OOF prediction storage
     oof_predictions = np.full(n_samples, np.nan)
     oof_probabilities = np.full((n_samples, n_classes), np.nan)
+    oof_confidence = np.full(n_samples, np.nan)
+    oof_fold_ids = np.full(n_samples, -1, dtype=np.int32)
     fold_metrics_list = []
 
     for fold_idx, (train_idx, val_idx) in enumerate(cv_splits):
@@ -131,7 +136,7 @@ def run_cv_with_per_fold_feature_selection(
         # feature subset using only this fold's training data. This ensures
         # HPs are optimized for the actual features used in this fold.
         # ==============================================================
-        fold_config = config.copy()
+        fold_config = {**config, "n_classes": n_classes}
         if tune_per_fold and cv is not None:
             logger.debug(
                 f"  Fold {fold_idx + 1}: Tuning HPs on {len(fold_features)} selected features..."
@@ -152,6 +157,7 @@ def run_cv_with_per_fold_feature_selection(
                 cv=inner_cv,
                 n_trials=max(10, tuning_trials // 3),  # Fewer trials for inner tuning
                 scale_per_fold=True,
+                n_classes=n_classes,
             )
             tuning_result = tuner.tune(
                 X_train_selected,
@@ -191,6 +197,8 @@ def run_cv_with_per_fold_feature_selection(
         output = model.predict(X_val_scaled)
         oof_predictions[val_idx] = output.class_predictions
         oof_probabilities[val_idx] = output.class_probabilities
+        oof_confidence[val_idx] = output.confidence
+        oof_fold_ids[val_idx] = fold_idx
 
         # Compute fold metrics
         fold_accuracy = accuracy_score(y_val_fold.values, output.class_predictions)
@@ -231,18 +239,10 @@ def run_cv_with_per_fold_feature_selection(
         f"(appeared in >= {min_frequency*100:.0f}% of folds)"
     )
 
-    # Build OOF prediction object
-    oof_df = pd.DataFrame(
-        {
-            "prediction": oof_predictions,
-            "true_label": y.values,
-        },
-        index=y.index,
+    # Same schema as every other OOF producer: stacking datasets combine them
+    oof_df = build_oof_frame(
+        model_name, X, y, oof_probabilities, oof_predictions, oof_confidence, oof_fold_ids
     )
-
-    # Add probability columns
-    for c in range(n_classes):
-        oof_df[f"prob_class_{c}"] = oof_probabilities[:, c]
 
     oof_prediction = OOFPrediction(
         model_name=model_name,

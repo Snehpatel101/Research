@@ -987,7 +987,8 @@ class MLFactory:
             )
 
         df, _ = self.prepare_data()
-        preparer = DataPreparer(self._pipeline_config(n_rows=len(df)))
+        pipeline_config = self._pipeline_config(n_rows=len(df))
+        preparer = DataPreparer(pipeline_config)
         self._validate_data_sufficiency(df)
 
         containers: dict[int, TimeSeriesDataContainer] = {}
@@ -999,7 +1000,11 @@ class MLFactory:
                 apply_scaling=False,
             ).filter_invalid_labels()
             containers[horizon] = build_evaluation_container(
-                prepared, df["close"], self.config.data.symbol.upper(), horizon
+                prepared,
+                df["close"],
+                self.config.data.symbol.upper(),
+                horizon,
+                n_classes=pipeline_config.n_classes,
             )
         return containers
 
