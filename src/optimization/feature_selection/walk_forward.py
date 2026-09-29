@@ -19,6 +19,8 @@ This module consolidates walk-forward feature selection from:
 from __future__ import annotations
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import numpy as np
@@ -330,7 +332,10 @@ class WalkForwardFeatureSelector:
             n_jobs=-1,
             random_state=self.random_state,
         )
-        rf.fit(X, y, sample_weight=sample_weights)
+        rf.fit(X.to_numpy(dtype=float), y, sample_weight=sample_weights)
+        # Thousands of small predict calls follow: a thread pool per call costs
+        # far more than the prediction itself
+        rf.set_params(n_jobs=1)
         return pd.Series(rf.feature_importances_, index=X.columns)
 
     def _mda_importance(
@@ -445,40 +450,59 @@ class WalkForwardFeatureSelector:
         y_idx = y_test.map(class_to_idx).to_numpy()[keep].astype(int)
         w_eval = w_test.to_numpy(dtype=float)[keep] if w_test is not None else None
 
-        base = _neg_log_loss(
-            rf.predict_proba(pd.DataFrame(values, columns=X.columns)), y_idx, w_eval
-        )
-        rng = np.random.default_rng(self.random_state)
+        base = _neg_log_loss(rf.predict_proba(values), y_idx, w_eval)
         col_pos = {c: i for i, c in enumerate(X.columns)}
 
-        def group_importance(cols: list[str]) -> float:
+        def group_importance(
+            cols: list[str], seed: int, n_repeats: int = self.config.mda_n_repeats
+        ) -> float:
+            # Own copy: permutations run concurrently (forest prediction releases the GIL)
+            local = values.copy()
             pos = [col_pos[c] for c in cols]
-            saved = values[:, pos].copy()
+            saved = local[:, pos].copy()
+            rng = np.random.default_rng(seed)
             drops = []
-            for _ in range(self.config.mda_n_repeats):
-                values[:, pos] = saved[rng.permutation(len(saved))]
-                proba = rf.predict_proba(pd.DataFrame(values, columns=X.columns))
-                drops.append(base - _neg_log_loss(proba, y_idx, w_eval))
-            values[:, pos] = saved
+            for _ in range(n_repeats):
+                local[:, pos] = saved[rng.permutation(len(saved))]
+                drops.append(base - _neg_log_loss(rf.predict_proba(local), y_idx, w_eval))
             return float(np.mean(drops))
 
-        cluster_importance: dict[int, float] = {}
-        for cluster_id in np.unique(clusters.to_numpy()):
-            members = clusters.index[clusters == cluster_id].tolist()
-            cluster_importance[int(cluster_id)] = group_importance(members)
+        def run_all(jobs: list[tuple[list[str], int, int]]) -> list[float]:
+            with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
+                return list(pool.map(lambda job: group_importance(*job), jobs))
+
+        cluster_ids = [int(c) for c in np.unique(clusters.to_numpy())]
+        cluster_members = {c: clusters.index[clusters == c].tolist() for c in cluster_ids}
+        scores = run_all(
+            [
+                (cluster_members[c], self.random_state + c, self.config.mda_n_repeats)
+                for c in cluster_ids
+            ]
+        )
+        cluster_importance = dict(zip(cluster_ids, scores, strict=True))
 
         importance = pd.Series(
             {f: cluster_importance[int(clusters[f])] for f in X.columns}, dtype=float
         )
 
-        # Within-cluster ordering (singleton clusters need none).
-        sizes = clusters.map(clusters.value_counts())
-        for cluster_id in clusters[sizes > 1].unique():
-            members = clusters.index[clusters == cluster_id].tolist()
-            own = pd.Series({f: group_importance([f]) for f in members})
+        # Within-cluster ordering (singleton clusters need none). One repeat
+        # suffices: this only orders members inside a cluster.
+        multi = [c for c in cluster_ids if len(cluster_members[c]) > 1]
+        members_flat = [f for c in multi for f in cluster_members[c]]
+        own_all = dict(
+            zip(
+                members_flat,
+                run_all(
+                    [([f], self.random_state + 7919 + i, 1) for i, f in enumerate(members_flat)]
+                ),
+                strict=True,
+            )
+        )
+        for c in multi:
+            own = pd.Series({f: own_all[f] for f in cluster_members[c]})
             span = own.max() - own.min()
             rank01 = (own - own.min()) / span if span > 0 else own * 0.0
-            importance[members] += _WITHIN_CLUSTER_TIEBREAK * rank01
+            importance[cluster_members[c]] += _WITHIN_CLUSTER_TIEBREAK * rank01
 
         return importance
 
