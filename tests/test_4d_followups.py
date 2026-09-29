@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.core.label_spans import LabelSpans
 from src.inference.bundle import ModelBundle
 from src.models.base import PredictionResult
 from src.models.ensemble.stacking import StackingEnsemble
@@ -129,12 +130,12 @@ def test_stacking_oof_generation_handles_prewindowed_inputs(X_train: np.ndarray)
     n_samples = X_train.shape[0]
     seq_len = X_train.shape[2] if X_train.ndim == 4 else X_train.shape[1]
 
-    # Provide bar-level label_end_times longer than pre-windowed inputs
+    # Provide bar-level label spans longer than pre-windowed inputs
     n_bars = n_samples + (seq_len - 1)
-    idx = pd.date_range("2026-02-01", periods=n_bars, freq="min")
-    # Keep label_end_times non-overlapping for small synthetic data to avoid
+    # Keep spans non-overlapping for small synthetic data to avoid
     # PurgedKFold dropping below min_train_size after overlap purging.
-    label_end_times = pd.Series(idx, index=idx)
+    bars = np.arange(n_bars)
+    label_spans = LabelSpans(starts=bars, ends=bars)
 
     ensemble = StackingEnsemble()
     ensemble._n_folds = 2  # keep CV feasible for small arrays
@@ -146,7 +147,7 @@ def test_stacking_oof_generation_handles_prewindowed_inputs(X_train: np.ndarray)
         base_model_configs={},
         sample_weights=None,
         use_probabilities=True,
-        label_end_times=label_end_times,
+        label_spans=label_spans,
         purge_bars=0,
         embargo_bars=0,
         X_train_seq=None,

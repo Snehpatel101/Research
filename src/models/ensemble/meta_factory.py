@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -59,7 +59,8 @@ class MetaLearnerConfig:
 
     Attributes:
         name: Meta-learner name (ridge_meta, mlp_meta, xgboost_meta, calibrated_meta)
-        alphas: Ridge alpha values for cross-validation
+        C: ridge_meta inverse L2 strength (L2-regularized logistic)
+        class_weight: ridge_meta class weighting (None or "balanced")
         hidden_layers: MLP hidden layer sizes
         dropout: MLP dropout rate
         learning_rate: MLP learning rate
@@ -73,8 +74,9 @@ class MetaLearnerConfig:
     """
 
     name: str
-    # Ridge parameters
-    alphas: list[float] = field(default_factory=lambda: [0.1, 1.0, 10.0, 100.0])
+    # ridge_meta (L2 logistic) parameters
+    C: float = 1.0
+    class_weight: str | None = None
     # MLP parameters
     hidden_layers: tuple[int, ...] = (64, 32)
     dropout: float = 0.2
@@ -102,7 +104,7 @@ class MetaLearnerConfig:
         name = meta_learner_name or self.name
 
         params_map = {
-            "ridge_meta": {"alphas": self.alphas},
+            "ridge_meta": {"C": self.C, "class_weight": self.class_weight},
             "mlp_meta": {
                 "hidden_layer_sizes": self.hidden_layers,
                 "alpha": self.dropout,  # Used as L2 regularization

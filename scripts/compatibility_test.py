@@ -213,13 +213,12 @@ def run_single_test(tc: TestCase) -> TestResult:
             for name, mr in tr.model_results.items():
                 if "ensemble" in name:
                     has_ensemble = True
-                    ensemble_f1 = mr.val_f1
-            if hasattr(tr, "ensemble_result") and tr.ensemble_result is not None:
+                    ensemble_f1 = mr.metrics.get("val_f1")
+            if tr.ensemble_result is not None:
                 has_ensemble = True
-                if hasattr(tr.ensemble_result, "stacking_dataset"):
-                    sd = tr.ensemble_result.stacking_dataset
-                    if sd is not None:
-                        stacking_n = sd.n_samples
+                ensemble_f1 = tr.ensemble_result.metrics.get("val_f1", ensemble_f1)
+            if tr.stacking_dataset is not None:
+                stacking_n = tr.stacking_dataset.n_samples
 
             if not has_ensemble:
                 return TestResult(

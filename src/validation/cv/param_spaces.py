@@ -228,10 +228,10 @@ PARAM_SPACES: dict[str, dict[str, dict[str, Any]]] = {
         "use_probabilities": {"type": "categorical", "choices": [True, False]},
     },
     # --- META-LEARNER MODELS ---
+    # L2-regularized multinomial logistic ("ridge") meta-learner
     "ridge_meta": {
-        "alpha": {"type": "float", "low": 0.001, "high": 100.0, "log": True},
-        "fit_intercept": {"type": "categorical", "choices": [True, False]},
-        "solver": {"type": "categorical", "choices": ["auto", "svd", "cholesky", "lsqr"]},
+        "C": {"type": "float", "low": 1e-3, "high": 1e2, "log": True},
+        "class_weight": {"type": "categorical", "choices": [None, "balanced"]},
     },
     "mlp_meta": {
         "hidden_layer_sizes": {

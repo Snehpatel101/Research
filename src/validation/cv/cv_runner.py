@@ -77,7 +77,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import pandas as pd  # type: ignore[import-untyped]
+from src.core.label_spans import LabelSpans
 
 # Re-export ModelRegistry for backward compatibility
 from src.models.registry import ModelRegistry
@@ -187,33 +187,24 @@ class CrossValidationRunner:
         self.tuning_trials = tuning_trials
         self.feature_selection_inside_fold = feature_selection_inside_fold
         self.tune_per_fold = tune_per_fold
-        self._label_end_times_warning_shown = False
+        self._label_spans_warning_shown = False
 
-    def _validate_label_end_times(
-        self,
-        label_end_times: pd.Series | None,
-        model_family: str,
-    ) -> None:
+    def _warn_if_no_label_spans(self, label_spans: LabelSpans | None) -> None:
         """
-        Warn if label_end_times not provided for trading models.
+        Warn (once) when the container has no label end times.
 
-        For triple-barrier or other overlapping label schemes, label_end_times
-        is critical for proper purging. Without it, the CV splitter cannot
-        properly purge samples whose labels overlap with validation data,
-        potentially causing label leakage.
-
-        Args:
-            label_end_times: Optional Series of datetime when each label is resolved
-            model_family: Model family (boosting, neural, etc.)
+        For triple-barrier or other overlapping label schemes, label spans are
+        critical for proper purging. Without them, the CV splitter can only
+        apply its fixed purge/embargo and cannot drop training samples whose
+        labels resolve inside the validation block.
         """
-        if label_end_times is None and not self._label_end_times_warning_shown:
+        if label_spans is None and not self._label_spans_warning_shown:
             logger.warning(
-                "label_end_times not provided. This may cause label leakage "
-                "for models with overlapping labels (e.g., triple-barrier labeling). "
-                "Consider providing label_end_times to TimeSeriesDataContainer for proper purging. "
-                "Set label_end_times=None explicitly to suppress this warning if labels are non-overlapping."
+                "No label end times in the container; purging uses the fixed "
+                "purge/embargo only. This may cause label leakage for overlapping "
+                "labels (e.g., triple-barrier). Add a label_end_time_h{horizon} column."
             )
-            self._label_end_times_warning_shown = True
+            self._label_spans_warning_shown = True
 
     def run(
         self,
@@ -265,15 +256,13 @@ class CrossValidationRunner:
         except ValueError:
             model_family = "boosting"
 
-        # Validate label_end_times is provided for proper purging
-        label_end_times = None
-        if hasattr(container, "get_label_end_times"):
-            label_end_times = container.get_label_end_times("train")
-        self._validate_label_end_times(label_end_times, model_family)
+        # Label spans (row positions) for overlap-aware purging
+        label_spans = container.get_label_spans("train")
+        self._warn_if_no_label_spans(label_spans)
 
         # Adapt CV for model family
         model_cv = ModelAwareCV(model_family, self.cv)
-        cv_splits = list(model_cv.get_cv_splits(X, y))
+        cv_splits = list(model_cv.get_cv_splits(X, y, label_spans=label_spans))
 
         # ==================================================================
         # HYPERPARAMETER TUNING (if enabled)
@@ -346,6 +335,7 @@ class CrossValidationRunner:
                 y=y,
                 model_configs={model_name: config},
                 sample_weights=weights,
+                label_spans=label_spans,
             )
 
             oof_pred = oof_predictions[model_name]

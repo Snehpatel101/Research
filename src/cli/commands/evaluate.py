@@ -264,7 +264,7 @@ def _run_walk_forward_for_model(
     container,
     model_name: str,
     config,
-    label_end_times=None,
+    label_spans=None,
 ):
     """Run walk-forward evaluation for a single model."""
     from src.models.base import PredictionResult
@@ -300,9 +300,7 @@ def _run_walk_forward_for_model(
 
     logger.info(f"Running walk-forward for {model_name} ({config.n_windows} windows)")
 
-    for window_idx, (train_idx, test_idx) in enumerate(
-        wf.split(X, y, label_end_times=label_end_times)
-    ):
+    for window_idx, (train_idx, test_idx) in enumerate(wf.split(X, y, label_spans=label_spans)):
         window_start = time.time()
 
         logger.debug(f"  Window {window_idx + 1}: train={len(train_idx)}, test={len(test_idx)}")
@@ -495,14 +493,14 @@ def run_walk_forward(
                 horizon=horizon,
             )
             logger.info(f"Loaded container: {container}")
+            # Label spans (row positions) from the label end time column, if present
+            label_spans = container.get_label_spans("train")
         except Exception as e:
             show_error(f"Failed to load data for H{horizon}: {e}")
             continue
 
-        # Get label end times if available
-        label_end_times = container.get_label_end_times("train")
-        if label_end_times is not None:
-            logger.info("  Using label_end_times for overlap-aware purging")
+        if label_spans is not None:
+            logger.info("  Using label spans for overlap-aware purging")
 
         for model_name in model_list:
             try:
@@ -510,7 +508,7 @@ def run_walk_forward(
                     container=container,
                     model_name=model_name,
                     config=config,
-                    label_end_times=label_end_times,
+                    label_spans=label_spans,
                 )
                 all_results.append(result)
 
@@ -567,7 +565,8 @@ def run_walk_forward(
         summary_df.to_csv(summary_path, index=False)
         console.print(f"\nSummary saved to: {summary_path}")
     else:
-        show_warning("No results generated")
+        show_error("No results generated: every model failed")
+        raise typer.Exit(1)
 
     console.print(f"Results saved to: {output_dir}")
     raise typer.Exit(0)
@@ -633,7 +632,7 @@ def _run_cpcv_for_model(
     forward_returns: np.ndarray,
     cost_per_turnover: np.ndarray,
     groups: np.ndarray | None,
-    label_end_times=None,
+    label_spans=None,
 ):
     """
     CPCV one model and backtest every assembled path.
@@ -667,7 +666,7 @@ def _run_cpcv_for_model(
     )
 
     split_preds: dict[int, np.ndarray] = {}
-    for train_idx, test_idx, split_id in cpcv.split(X, y, label_end_times=label_end_times):
+    for train_idx, test_idx, split_id in cpcv.split(X, y, label_spans=label_spans):
         logger.debug(f"  Split {split_id}: train={len(train_idx)}, test={len(test_idx)}")
 
         es_split = carve_early_stopping_split(train_idx, purge_bars)
@@ -814,6 +813,7 @@ def run_cpcv_pbo(
     console.print(f"PBO: S={n_partitions}, thresholds warn={pbo_warn}, block={pbo_block}")
 
     all_results = []
+    n_models_evaluated = 0
 
     for horizon in horizon_list:
         console.print("-" * 60)
@@ -830,11 +830,10 @@ def run_cpcv_pbo(
             forward_returns, costs, groups = _forward_returns_and_costs(
                 split.df, split.symbol_column, include_costs=not no_costs
             )
+            label_spans = container.get_label_spans("train")
         except Exception as e:
             show_error(f"Failed to load data for H{horizon}: {e}")
             continue
-
-        label_end_times = container.get_label_end_times("train")
 
         cpcv_results: dict[str, CPCVResult] = {}
         model_returns: dict[str, np.ndarray] = {}
@@ -847,7 +846,7 @@ def run_cpcv_pbo(
                     forward_returns=forward_returns,
                     cost_per_turnover=costs,
                     groups=groups,
-                    label_end_times=label_end_times,
+                    label_spans=label_spans,
                 )
                 cpcv_results[model_name] = result
                 model_returns[model_name] = mean_returns
@@ -904,6 +903,7 @@ def run_cpcv_pbo(
         elif model_returns:
             show_warning("PBO needs at least 2 successfully evaluated models; skipped")
 
+        n_models_evaluated += len(cpcv_results)
         for model_name, result in cpcv_results.items():
             result_path = output_dir / f"cpcv_{model_name}_h{horizon}.json"
             with open(result_path, "w") as f:
@@ -924,8 +924,11 @@ def run_cpcv_pbo(
         if any(r["should_block"] for r in all_results):
             show_warning("Some horizons have PBO > block threshold!")
             raise typer.Exit(1) from None
+    elif n_models_evaluated == 0:
+        show_error("No results generated: every model failed")
+        raise typer.Exit(1)
     else:
-        show_warning("No results generated")
+        show_warning("No PBO results generated (needs 2+ evaluated models per horizon)")
 
     console.print(f"Results saved to: {output_dir}")
     raise typer.Exit(0)

@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 
+from src.core.label_spans import LabelSpans
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
@@ -159,7 +160,7 @@ class BlendingEnsemble(BaseModel):
         y_val: np.ndarray,
         sample_weights: np.ndarray | None = None,
         config: dict[str, Any] | None = None,
-        label_end_times: Any | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> TrainingMetrics:
         """
         Train blending ensemble.
@@ -177,7 +178,7 @@ class BlendingEnsemble(BaseModel):
             y_val: Validation labels
             sample_weights: Sample weights for training
             config: Optional config overrides
-            label_end_times: Unused (for API compatibility with stacking)
+            label_spans: Unused (for API compatibility with stacking)
 
         Note:
             Uses time-based split: the LAST `holdout_fraction` of training data

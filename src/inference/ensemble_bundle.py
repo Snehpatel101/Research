@@ -51,7 +51,9 @@ logger = logging.getLogger(__name__)
 # VERSION AND CONSTANTS
 # =============================================================================
 
-ENSEMBLE_BUNDLE_VERSION = "1.0.0"
+# 2.0.0: ridge_meta became an L2 multinomial logistic (different pickled
+# estimator); 1.x bundles cannot be served by this code.
+ENSEMBLE_BUNDLE_VERSION = "2.0.0"
 ENSEMBLE_MANIFEST_FILE = "manifest.json"
 ENSEMBLE_METADATA_FILE = "metadata.json"
 ENSEMBLE_META_LEARNER_DIR = "meta_learner"
@@ -375,7 +377,14 @@ class EnsembleBundle:
             raise ValueError(f"Invalid bundle: missing {ENSEMBLE_MANIFEST_FILE}")
 
         with open(manifest_path) as f:
-            EnsembleBundleManifest.from_dict(json.load(f))
+            manifest = EnsembleBundleManifest.from_dict(json.load(f))
+        bundle_major = manifest.version.split(".", 1)[0]
+        if bundle_major != ENSEMBLE_BUNDLE_VERSION.split(".", 1)[0]:
+            raise ValueError(
+                f"Ensemble bundle at {path} is version {manifest.version}, which "
+                f"predates (or is incompatible with) bundle format {ENSEMBLE_BUNDLE_VERSION}: "
+                "the ridge_meta meta-learner is now an L2 logistic model. Retrain the ensemble."
+            )
 
         # Load metadata
         metadata_path = path / ENSEMBLE_METADATA_FILE

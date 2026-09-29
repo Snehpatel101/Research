@@ -472,12 +472,12 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         # Phase 7: Run pre-training validation (leakage/lookahead detection)
         self._run_pre_training_validation(X_train_df, y_train_series, feature_names)
 
-        # Extract label_end_times for overlapping label purging
-        label_end_times = container.get_label_end_times("train")
-        if label_end_times is not None:
+        # Label spans (row positions) for purging overlapping labels
+        label_spans = container.get_label_spans("train")
+        if label_spans is not None:
             logger.info(
-                "Label end times available for purging overlapping labels "
-                "(prevents leakage in stacking/blending ensembles)"
+                "Label spans available for purging overlapping labels "
+                "(feature selection CV and stacking OOF)"
             )
 
         # Apply per-model feature set filtering (if specified)
@@ -501,7 +501,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
                 X_train_df=X_train_df,
                 y_train=y_train_series,
                 w_train=w_train_series,
-                label_end_times=label_end_times,
+                label_spans=label_spans,
             )
 
             # Apply feature selection to training data
@@ -660,7 +660,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             else:
                 self.model.set_feature_names(feature_names)
 
-        # Train model (pass label_end_times for ensemble models with internal CV)
+        # Train model (pass label_spans for ensemble models with internal CV)
         logger.info(f"Training {self.config.model_name}...")
         fit_kwargs: dict[str, Any] = {
             "X_train": X_train,
@@ -671,10 +671,10 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             "config": self.config.model_config,
         }
 
-        # Add label_end_times if model supports it (ensemble models with internal CV)
+        # Add label_spans if model supports it (ensemble models with internal CV)
         # Non-ensemble models ignore this parameter (not in their fit() signature)
-        if self.model.model_family == "ensemble" and label_end_times is not None:
-            fit_kwargs["label_end_times"] = label_end_times
+        if self.model.model_family == "ensemble" and label_spans is not None:
+            fit_kwargs["label_spans"] = label_spans
 
         # Add sequence data if heterogeneous stacking ensemble
         if self._is_heterogeneous_ensemble() and X_train_seq is not None:

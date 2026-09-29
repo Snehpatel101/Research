@@ -26,7 +26,7 @@ from .result import FeatureSelectionResult, PersistedFeatureSelection
 from .walk_forward import WalkForwardFeatureSelector
 
 if TYPE_CHECKING:
-    pass
+    from src.core.label_spans import LabelSpans
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ class FeatureSelectionManager:
         n_splits: int = 5,
         purge_bars: int = 60,
         embargo_bars: int = 1440,
-        label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> PersistedFeatureSelection:
         """
         Run walk-forward feature selection.
@@ -170,7 +170,8 @@ class FeatureSelectionManager:
             n_splits: Number of CV folds for stability analysis
             purge_bars: Number of bars to purge between train/test
             embargo_bars: Number of bars to embargo after test
-            label_end_times: Optional label end times for overlapping label purging
+            label_spans: Optional per-sample label spans (row positions of X) for
+                overlapping label purging
 
         Returns:
             PersistedFeatureSelection with selected features
@@ -223,7 +224,7 @@ class FeatureSelectionManager:
         )
 
         # Generate CV splits
-        cv_splits = list(cv.split(X, y_series, label_end_times=label_end_times))
+        cv_splits = list(cv.split(X, y_series, label_spans=label_spans))
 
         # Initialize selector
         self._selector = WalkForwardFeatureSelector(

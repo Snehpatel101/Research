@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
+from src.core.label_spans import LabelSpans
 from src.core.utils.memory import estimate_array_size
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
@@ -267,7 +268,7 @@ class StackingEnsemble(BaseModel):
         y_val: np.ndarray,
         sample_weights: np.ndarray | None = None,
         config: dict[str, Any] | None = None,
-        label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
         X_train_seq: np.ndarray | None = None,
         X_val_seq: np.ndarray | None = None,
     ) -> TrainingMetrics:
@@ -285,7 +286,9 @@ class StackingEnsemble(BaseModel):
             y_val: Validation labels
             sample_weights: Sample weights for training
             config: Optional config overrides
-            label_end_times: When each label's outcome is known (for purging overlapping labels)
+            label_spans: Per-sample label spans in bar positions (for purging
+                overlapping labels); bar-level spans longer than a pre-windowed
+                X_train are aligned by keeping the last ``len(X_train)``
             X_train_seq: Training sequences (3D) for sequence models in heterogeneous ensembles.
                 If None in heterogeneous mode, falls back to X_train for all models.
             X_val_seq: Validation sequences (3D) for sequence models in heterogeneous ensembles.
@@ -446,7 +449,7 @@ class StackingEnsemble(BaseModel):
             base_model_configs=oof_base_configs,  # Use defaults for OOF
             sample_weights=sample_weights,
             use_probabilities=use_probabilities,
-            label_end_times=label_end_times,
+            label_spans=label_spans,
             purge_bars=purge_bars,
             embargo_bars=embargo_bars,
             X_train_seq=X_train_seq,  # For sequence models in heterogeneous ensembles
@@ -613,7 +616,7 @@ class StackingEnsemble(BaseModel):
         base_model_configs: dict[str, dict[str, Any]],
         sample_weights: np.ndarray | None,
         use_probabilities: bool,
-        label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
         purge_bars: int = 60,
         embargo_bars: int = 1440,
         X_train_seq: np.ndarray | None = None,
@@ -636,7 +639,7 @@ class StackingEnsemble(BaseModel):
             base_model_configs: Config overrides per model
             sample_weights: Sample weights
             use_probabilities: If True, use class probabilities; else use class predictions
-            label_end_times: When each label is resolved (enables overlapping label purging)
+            label_spans: Per-sample label spans (enables overlapping label purging)
             purge_bars: Number of bars to purge around validation set
             embargo_bars: Number of bars to embargo after validation set
             X_train_seq: Training sequences (3D) for sequence models in heterogeneous ensembles
@@ -680,24 +683,24 @@ class StackingEnsemble(BaseModel):
         )
         kfold = PurgedKFold(purged_kfold_config)
 
-        # PurgedKFold uses only X.index/len(X) (values are irrelevant).
+        # PurgedKFold uses only len(X) (values are irrelevant).
         # Avoid pd.DataFrame(X_train) which breaks for 3D/4D inputs.
         #
-        # If label_end_times comes from the underlying bar-level DataFrame, it may be
+        # If label_spans comes from the underlying bar-level DataFrame, it may be
         # longer than pre-windowed sequence inputs (3D/4D). In that case, align by
         # taking the last n_samples (equivalent to dropping the initial lookback).
-        cv_index = None
-        if label_end_times is not None:
-            if len(label_end_times) < n_samples:
+        if label_spans is not None:
+            if len(label_spans) < n_samples:
                 raise ValueError(
-                    f"label_end_times length ({len(label_end_times)}) is smaller than "
+                    f"label_spans length ({len(label_spans)}) is smaller than "
                     f"X_train samples ({n_samples}). Cannot align for purged CV."
                 )
-            if len(label_end_times) > n_samples:
-                label_end_times = label_end_times.iloc[-n_samples:]
-            cv_index = label_end_times.index
+            if len(label_spans) > n_samples:
+                label_spans = label_spans.subset(
+                    np.arange(len(label_spans) - n_samples, len(label_spans))
+                )
 
-        X_df = pd.DataFrame(index=cv_index if cv_index is not None else pd.RangeIndex(n_samples))
+        X_df = pd.DataFrame(index=pd.RangeIndex(n_samples))
 
         # Pre-slice sequence data for heterogeneous ensembles
         X_seq_fold_train_cache: np.ndarray | None = None
@@ -734,9 +737,7 @@ class StackingEnsemble(BaseModel):
                 f"sequence={X_train_seq.shape[0]}, offset={seq_offset}"
             )
 
-        for fold_idx, (train_idx, val_idx) in enumerate(
-            kfold.split(X_df, label_end_times=label_end_times)
-        ):
+        for fold_idx, (train_idx, val_idx) in enumerate(kfold.split(X_df, label_spans=label_spans)):
             logger.debug(f"  Fold {fold_idx + 1}/{self._n_folds}")
 
             # Tabular data slicing (always done)

@@ -25,6 +25,12 @@
 | 14 | Shrink config surface to what runs; from_dict ignores unknown keys with a warning (DECISIONS #8/#9) | `src/config/`, `config/global.yaml` | ✅ |
 | 15 | Dead-code sweep from verified map | see COMPLETION.md | ✅ |
 | 16 | Tooling: py311 targets, uv CI (ruff/black/pyright/vulture/fast tests), slow marker, Makefile, pre-commit, NPY rules, uv.lock | `pyproject.toml`, `.github/workflows/ci.yml`, `Makefile`, `.pre-commit-config.yaml` | ✅ |
+| 17 | Legacy container paths purge on `LabelSpans` (`get_label_spans`), not `label_end_times` on a RangeIndex; walk-forward / cpcv-pbo exit 1 when every model fails | `src/core/container.py`, `src/cli/commands/evaluate.py`, `trainer.py`, `features.py`, `feature_selection/manager.py`, `ensemble/{stacking,voting,blending}.py`, `modes/walk_forward.py`, `cv/cv_runner.py`, `tests/test_container_label_spans.py` | ✅ |
+| 18 | OOF service survives only out-of-memory (retry, CPU fallback, then None); other errors propagate | `services/oof_generation.py`, `tests/test_review_fixes_116.py` | ✅ |
+| 19 | AdapterFactory uses per-model contract sequence length | `src/data/adapters/factory.py` | ✅ |
+| 20 | Notebooks: calibration/coverage against `y_true` with one valid-row mask (never predictions); PURGE/EMBARGO default None (derived); optimal notebook calibration + leakage cells re-synced with colab | `notebooks/ml_factory_{colab,optimal}.ipynb` | ✅ |
+| 21 | ridge_meta config surfaces use `C`/`class_weight`; EnsembleBundle format 2.0.0 refuses 1.x bundles | `cv/param_spaces.py`, `ensemble/meta_factory.py`, `inference/ensemble_bundle.py`, `docs/USER_GUIDE.md` | ✅ |
+| 22 | Stale scripts fixed (batch_inference ensemble mode, compatibility_test, test_all_models, benchmark_ensemble, verify_optuna) or deleted (phase3_validation); `scripts` in pyright include | `scripts/`, `pyrightconfig.json` | ✅ |
 
 ## Phase 115: Mix-and-Match Every Model — COMPLETE (2026-09-29)
 
