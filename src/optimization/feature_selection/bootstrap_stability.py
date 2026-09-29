@@ -17,6 +17,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
+from src.core.reproducibility import sequential_prediction
+
 logger = logging.getLogger(__name__)
 
 
@@ -82,6 +84,7 @@ class BootstrapFeatureStability:
             random_state=seed,
         )
         clf.fit(X, y)
+        sequential_prediction(clf)  # bit-reproducible scoring
 
         result = permutation_importance(
             clf,

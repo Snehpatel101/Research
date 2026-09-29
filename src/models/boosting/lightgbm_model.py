@@ -422,6 +422,10 @@ class LightGBMModel(BaseModel):
             params["device"] = "cuda"
         else:
             params["device"] = "cpu"
+            # Same inputs + params -> same model (LightGBM's reproducibility
+            # switch; pairs with force_col_wise, which skips the timing-based
+            # row/col-wise auto choice)
+            params["deterministic"] = True
             params["num_threads"] = config.get("n_jobs", -1)
             if params["num_threads"] == -1:
                 params["num_threads"] = 0  # LightGBM uses 0 for all cores

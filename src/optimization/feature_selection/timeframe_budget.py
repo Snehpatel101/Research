@@ -15,6 +15,8 @@ import logging
 
 import pandas as pd
 
+from .ranking import rank_by_importance
+
 logger = logging.getLogger(__name__)
 
 # MTF timeframe suffixes used in feature naming convention
@@ -88,7 +90,7 @@ def apply_timeframe_budget(
         tf_not_ranked = [f for f in tf_features if f not in ranking.index]
 
         if tf_in_ranking:
-            tf_scores = ranking[tf_in_ranking].sort_values(ascending=False)
+            tf_scores = rank_by_importance(ranking[tf_in_ranking])
             kept = tf_scores.head(max_per_timeframe).index.tolist()
             removed_count = len(tf_in_ranking) - len(kept)
             if removed_count > 0:

@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
+import numbers
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -59,8 +60,10 @@ from src.config.symbol import SymbolConfig
 
 if TYPE_CHECKING:
     from src.core.container import TimeSeriesDataContainer
+    from src.models.tracking import ExperimentTracker
     from src.models.training.unified_orchestrator import TrainingRunResult
 from src.core.checkpoint import PipelineCheckpointManager, compute_config_hash
+from src.core.run_manifest import RunManifest
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +95,10 @@ class ExperimentResult:
         bundle_path: Path to deployment bundle (if created)
         output_dir: Directory containing all artifacts
         error_message: Error message if failed
+        manifest_path: The run's ``run_manifest.json`` (provenance: config
+            hash, git commit, package versions, data SHA-256, final metrics)
+        tracking_run_id: Parent run in the experiment tracker (None when
+            ``tracking.backend`` is "none")
     """
 
     run_id: str
@@ -110,6 +117,8 @@ class ExperimentResult:
     training_result: TrainingRunResult | None = None
     equity_curve: Any = None
     backtest_trades: list = field(default_factory=list)
+    manifest_path: Path | None = None
+    tracking_run_id: str | None = None
 
     def summary(self) -> str:
         """Generate human-readable summary."""
@@ -153,6 +162,12 @@ class ExperimentResult:
 
         if self.output_dir:
             lines.append(f"Output: {self.output_dir}")
+
+        if self.manifest_path:
+            lines.append(f"Manifest: {self.manifest_path}")
+
+        if self.tracking_run_id:
+            lines.append(f"Tracking run: {self.tracking_run_id}")
 
         if not self.success and self.error_message:
             lines.append(f"\nError: {self.error_message}")
@@ -252,6 +267,12 @@ class MLFactory:
         # to the backtester so its stop/TP distances equal the label barriers
         self._label_cost_in_atr: dict[int, float] = {}
 
+        # Provenance + tracking of the current run (set by run())
+        self._run_manifest: RunManifest | None = None
+        self._tracker: ExperimentTracker | None = None
+        # Loaded bars (rows, time range, timeframes), recorded by _load_raw_bars
+        self._data_summary: dict[str, Any] = {}
+
         # Save config
         config_path = self.output_dir / "experiment_config.yaml"
         config.save_yaml(config_path)
@@ -287,6 +308,11 @@ class MLFactory:
         self._log(f"Starting ML Factory Experiment: {self.config.name}")
         self._log("=" * 60)
 
+        # Seeds first: nothing random may run before them
+        self._seed_everything()
+        # Provenance record (status "running" until the run ends)
+        manifest = self._begin_run_manifest()
+
         # Determine resume stage
         resume_from_stage = 0
         if resume and self._checkpoint_manager:
@@ -295,6 +321,10 @@ class MLFactory:
                 self._log(f"Resuming from stage {resume_from_stage}")
 
         try:
+            # Parent tracker run; trained models log child runs under it.
+            # Fails fast (e.g. MLflow not installed) before any training.
+            self._start_tracking(manifest)
+
             # Phase 1: Data Pipeline
             if resume_from_stage <= self.STAGE_DATA_PIPELINE:
                 self._log("\n[Phase 1/4] Data Pipeline")
@@ -312,6 +342,7 @@ class MLFactory:
                 if costs_path.exists():
                     with open(costs_path) as f:
                         self._label_cost_in_atr = {int(h): c for h, c in json.load(f).items()}
+            self._record_data(manifest, df)
 
             # Resolve purge/embargo for this data, then validate sufficiency
             self._pipeline_config(n_rows=len(df))
@@ -361,14 +392,23 @@ class MLFactory:
                 training_result=training_result,
                 equity_curve=self._last_equity_curve,
                 backtest_trades=self._last_backtest_trades,
+                manifest_path=manifest.path,
+                tracking_run_id=self._tracking_run_id(),
             )
+
+            summary = self._results_summary(result)
+            manifest.finish(success=True, results=summary)
+            self._finish_tracking(summary, success=True)
 
             self._log("\n" + result.summary())
             return result
 
-        except Exception as e:
+        except BaseException as e:
+            # BaseException: an interrupted run (Ctrl-C) is recorded as failed too
             duration = (datetime.now() - start_time).total_seconds()
             logger.exception("MLFactory experiment failed")
+            manifest.finish(success=False, error=e)
+            self._finish_tracking(None, success=False)
 
             result = ExperimentResult(
                 run_id=self.config.run_id,
@@ -377,10 +417,156 @@ class MLFactory:
                 duration_seconds=duration,
                 output_dir=self.output_dir,
                 error_message=str(e),
+                manifest_path=manifest.path,
+                tracking_run_id=self._tracking_run_id(),
             )
 
             self._log("\n" + result.summary())
             raise
+
+    # =========================================================================
+    # REPRODUCIBILITY, PROVENANCE AND TRACKING
+    # =========================================================================
+
+    def _seed_everything(self) -> None:
+        """Seed Python, NumPy and torch with ``config.random_seed``.
+
+        Models, Optuna samplers, feature selection and meta-learners receive
+        the same seed through PipelineConfig.random_state.
+        """
+        from src.core.reproducibility import set_all_seeds
+
+        set_all_seeds(self.config.random_seed, deterministic=self.config.deterministic)
+        self._log(
+            f"  Seed: {self.config.random_seed} "
+            f"(deterministic torch kernels: {'on' if self.config.deterministic else 'off'})"
+        )
+
+    def _begin_run_manifest(self) -> RunManifest:
+        """Write ``run_manifest.json`` (status running) with the run's provenance."""
+        self._run_manifest = RunManifest.begin(
+            self.output_dir,
+            run_id=self.config.run_id,
+            name=self.config.name,
+            config=self.config.to_dict(),
+            config_hash=self.config.config_hash(),
+            seed={
+                "random_seed": self.config.random_seed,
+                "deterministic": self.config.deterministic,
+            },
+            data_path=self.config.data.data_path,
+        )
+        git = self._run_manifest.provenance["git"]
+        self._log(
+            f"  Run manifest: {self._run_manifest.path} (config {self.config.config_hash()[:12]}, "
+            f"commit {(git['commit'] or 'unknown')[:12]}{' dirty' if git['dirty'] else ''})"
+        )
+        return self._run_manifest
+
+    def _start_tracking(self, manifest: RunManifest) -> None:
+        """Open the parent tracker run: config params, provenance tags."""
+        from src.models.tracking import TrackerConfig, flatten_params, get_tracker
+
+        tracking = self.config.tracking
+        if tracking.backend == "none":
+            return
+        tracker = get_tracker(
+            TrackerConfig(
+                backend=tracking.backend,
+                experiment_name=self.config.tracking_experiment_name(),
+                tracking_uri=self.config.tracking_location(),
+            )
+        )
+        provenance = manifest.provenance
+        tracker.start_run(
+            run_name=self.config.run_id,
+            tags={
+                "run_id": self.config.run_id,
+                "config_hash": provenance["config_hash"],
+                "git_commit": str(provenance["git"]["commit"]),
+                "git_dirty": str(provenance["git"]["dirty"]),
+                "data_sha256": str(provenance["data_source"]["sha256"]),
+                "symbol": self.config.data.symbol,
+                "training_mode": self.config.training.training_mode,
+                "run_manifest": str(manifest.path),
+            },
+        )
+        self._tracker = tracker
+        tracker.log_params(flatten_params(self.config.to_dict()))
+        manifest.record(
+            "tracking",
+            {
+                "backend": tracking.backend,
+                "uri": self.config.tracking_location(),
+                "experiment": self.config.tracking_experiment_name(),
+                "run_id": tracker.run_id,
+            },
+        )
+        self._log(f"  Tracking: {tracking.backend} run {tracker.run_id}")
+
+    def _tracking_run_id(self) -> str | None:
+        """Parent tracker run ID (None without tracking)."""
+        return self._tracker.run_id if self._tracker is not None else None
+
+    def _record_data(self, manifest: RunManifest, df: pd.DataFrame) -> None:
+        """Record what the run trained on: loaded bars and the labeled frame."""
+        manifest.record(
+            "data",
+            {
+                **self._data_summary,
+                "bar_timeframe": self._bar_timeframe(),
+                "n_training_rows": len(df),
+                "n_columns": len(df.columns),
+            },
+        )
+
+    def _results_summary(self, result: ExperimentResult) -> dict[str, Any]:
+        """Final metrics and artifact paths for the manifest and the tracker."""
+        backtest = {
+            k: v
+            for k, v in result.backtest_metrics.items()
+            if isinstance(v, numbers.Real | str) or v is None
+        }
+        return {
+            "n_models": result.n_models,
+            "best_model": result.best_model,
+            "metrics": result.metrics,
+            "ensemble_metrics": result.ensemble_metrics,
+            "backtest": backtest,
+            "artifacts": {
+                "output_dir": str(self.output_dir),
+                "bundles": str(result.bundle_path) if result.bundle_path else None,
+                "deploy": str(result.deploy_path) if result.deploy_path else None,
+                "run_manifest": str(result.manifest_path),
+            },
+        }
+
+    def _finish_tracking(self, summary: dict[str, Any] | None, *, success: bool) -> None:
+        """Log final metrics + artifacts to the parent run and close it.
+
+        Never raises: the run's outcome is already decided and recorded in the
+        manifest; a tracking-server hiccup at this point is logged as a warning.
+        """
+        tracker = self._tracker
+        if tracker is None or not tracker.is_active:
+            return
+        try:
+            if summary is not None:
+                tracker.log_metrics(_numeric_metrics(summary))
+                artifacts = summary["artifacts"]
+                tracker.set_tags(
+                    {f"artifact.{k}": str(v) for k, v in artifacts.items() if v is not None}
+                )
+                # Small provenance files; model files are logged by the child runs
+                tracker.log_artifact(self.output_dir / "experiment_config.yaml", "config")
+                tracker.log_artifact(Path(artifacts["run_manifest"]), "config")
+                if artifacts["deploy"]:
+                    from src.inference.deploy import DEPLOY_MANIFEST_FILE
+
+                    tracker.log_artifact(Path(artifacts["deploy"]) / DEPLOY_MANIFEST_FILE, "deploy")
+            tracker.end_run(status="FINISHED" if success else "FAILED")
+        except Exception as e:  # noqa: BLE001 - tracking must not change the run outcome
+            logger.warning(f"Experiment tracking could not record the run's end: {e}")
 
     def resume_from_checkpoint(self) -> ExperimentResult:
         """
@@ -705,7 +891,9 @@ class MLFactory:
                 f"{self.config.label_span_bars()} bars), embargo_bars={self._cv_gaps[1]} "
                 f"(bar timeframe {self._bar_timeframe()})"
             )
-        return self.config.to_pipeline_config(cv_gaps=self._cv_gaps)
+        return self.config.to_pipeline_config(
+            cv_gaps=self._cv_gaps, tracking_parent_run_id=self._tracking_run_id()
+        )
 
     def _bar_timeframe(self) -> str | None:
         """Training bar timeframe recorded by the data pipeline (None before it ran)."""
@@ -791,6 +979,13 @@ class MLFactory:
             resampled = resample_ohlcv(raw_df.reset_index(), bar_tf, include_metadata=False)
             raw_df = resampled.set_index("datetime")
             self._log(f"  Resampled {source_tf} -> {bar_tf}: {len(raw_df)} bars")
+        bars = pd.DatetimeIndex(raw_df.index)
+        self._data_summary = {
+            "n_rows": len(bars),
+            "start": pd.Timestamp(bars[0]).isoformat(),
+            "end": pd.Timestamp(bars[-1]).isoformat(),
+            "source_timeframe": source_tf,
+        }
         return raw_df, bar_tf
 
     def prepare_data(self) -> tuple[pd.DataFrame, dict[str, pd.DataFrame] | None]:
@@ -986,6 +1181,8 @@ class MLFactory:
                 "sequence input (evaluate them with `ml run --training-mode walk_forward`)"
             )
 
+        # The evaluators fit and tune models on these containers
+        self._seed_everything()
         df, _ = self.prepare_data()
         preparer = DataPreparer(self._pipeline_config(n_rows=len(df)))
         self._validate_data_sufficiency(df)
@@ -1285,6 +1482,12 @@ class MLFactory:
                 created_at=dt.now().isoformat(),
                 symbol=self.config.data.symbol,
                 horizons=horizons,
+                # Provenance of the run that produced these bundles
+                run_manifest=(
+                    self._run_manifest.reference(deploy_dir)
+                    if self._run_manifest is not None
+                    else {}
+                ),
             )
             manifest.save(deploy_dir / DEPLOY_MANIFEST_FILE)
 
@@ -1387,9 +1590,26 @@ class MLFactory:
             print(message)
 
 
+def _numeric_metrics(summary: dict[str, Any]) -> dict[str, float]:
+    """Flat tracker metrics from a results summary: ``<model>.<metric>``,
+    ``ensemble.<metric>``, ``backtest.<metric>`` (numeric values only)."""
+    flat: dict[str, float] = {"n_models": float(summary["n_models"])}
+    sections = [
+        *((model, metrics) for model, metrics in summary["metrics"].items()),
+        ("ensemble", summary["ensemble_metrics"]),
+        ("backtest", summary["backtest"]),
+    ]
+    for prefix, values in sections:
+        for name, value in (values or {}).items():
+            if isinstance(value, numbers.Real) and not isinstance(value, bool):
+                flat[f"{prefix}.{name}"] = float(value)
+    return flat
+
+
 # =============================================================================
 # EXPORTS
 # =============================================================================
+
 
 __all__ = [
     "MLFactory",

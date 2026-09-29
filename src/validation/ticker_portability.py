@@ -15,6 +15,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split
 
+from src.core.reproducibility import sequential_prediction
+
 logger = logging.getLogger(__name__)
 
 MAX_SUBSAMPLE_ROWS = 50_000
@@ -123,6 +125,7 @@ class TickerPortabilityTester:
 
         try:
             clf.fit(X_train, y_train)
+            sequential_prediction(clf)  # bit-reproducible scoring
             result = permutation_importance(
                 clf,
                 X_test,

@@ -185,7 +185,7 @@ class TestFeatureClustering:
 class _Harness(FeatureSelectionMixin):
     def __init__(self, purge_bars: int, embargo_bars: int) -> None:
         self.config = SimpleNamespace(  # type: ignore[assignment]
-            horizons=[5], purge_bars=purge_bars, embargo_bars=embargo_bars
+            horizons=[5], purge_bars=purge_bars, embargo_bars=embargo_bars, random_state=42
         )
 
 

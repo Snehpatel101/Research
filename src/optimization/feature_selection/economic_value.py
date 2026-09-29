@@ -19,6 +19,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
+from src.core.reproducibility import sequential_prediction
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,6 +106,7 @@ class EconomicValueScorer:
             n_jobs=-1,
         )
         clf.fit(X_train, y_train)
+        sequential_prediction(clf)  # bit-reproducible scoring
         y_pred = clf.predict(X_test)
         return self._compute_sharpe(y_test, y_pred)
 

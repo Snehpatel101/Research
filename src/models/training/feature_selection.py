@@ -20,6 +20,7 @@ from src.optimization.feature_selection.filtering import (
     filter_low_variance,
     select_decorrelated_by_rank,
 )
+from src.optimization.feature_selection.ranking import rank_by_importance
 from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 
 if TYPE_CHECKING:
@@ -149,7 +150,7 @@ class FeatureSelectionMixin:
                 n_estimators=50,
                 mda_n_repeats=5,
                 min_feature_frequency=0.01,
-                random_state=42,
+                random_state=self.config.random_state,
                 use_clustered_importance=True,
                 # Never force-merge uncorrelated features: the correlation-distance
                 # cut alone decides clusters (joint permutation costs the same as
@@ -165,9 +166,11 @@ class FeatureSelectionMixin:
                     if feat in fold_imp:
                         all_importances[feat].append(fold_imp[feat])
 
-            mean_importance = pd.Series(
-                {f: np.mean(scores) if scores else 0.0 for f, scores in all_importances.items()}
-            ).sort_values(ascending=False)
+            mean_importance = rank_by_importance(
+                pd.Series(
+                    {f: np.mean(scores) if scores else 0.0 for f, scores in all_importances.items()}
+                )
+            )
 
             logger.info(
                 f"  MDA ranking complete: {len(mean_importance)} features ranked "
@@ -330,9 +333,7 @@ class FeatureSelectionMixin:
         else:
             feature_df_full = df[feature_names].dropna()
             ranking = (
-                feature_df_full.var().sort_values(ascending=False)
-                if len(feature_df_full) > 0
-                else None
+                rank_by_importance(feature_df_full.var()) if len(feature_df_full) > 0 else None
             )
             ranking_method = "variance"
 
@@ -388,7 +389,7 @@ class FeatureSelectionMixin:
                                 regime_ranking.loc[common].max() + 1e-9
                             )
                             blended = 0.7 * mda_norm + 0.3 * reg_norm
-                            ranking = blended.sort_values(ascending=False)
+                            ranking = rank_by_importance(blended)
                             logger.info(
                                 f"  Regime-conditional: blended {len(per_regime)} regimes "
                                 f"into ranking ({len(common)} features)"

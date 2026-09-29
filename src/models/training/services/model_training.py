@@ -15,6 +15,7 @@ import pandas as pd
 from src.data.adapters import PreparedData
 
 if TYPE_CHECKING:
+    from src.core.config import PipelineConfig
     from src.core.container import TimeSeriesDataContainer
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,67 @@ class ModelTrainingRequest:
     # the global.yaml defaults and silently disagrees with the experiment.
     use_calibration: bool = True
     calibration_method: str = "auto"
+    # Run seed (PipelineConfig.random_state): model random_state/random_seed
+    # and the Optuna sampler
+    random_seed: int = 42
+    deterministic: bool = False
+    # Experiment tracking: the Trainer logs one run (a child of
+    # tracking_parent_run_id) — see PipelineConfig.tracking_*
+    tracking_backend: str = "none"
+    tracking_uri: str | None = None
+    tracking_experiment: str | None = None
+    tracking_parent_run_id: str | None = None
+
+    @classmethod
+    def from_pipeline_config(
+        cls,
+        config: PipelineConfig,
+        *,
+        model_name: str,
+        horizon: int,
+        prepared_data: PreparedData,
+        output_dir: Path,
+        **overrides: Any,
+    ) -> ModelTrainingRequest:
+        """
+        Request whose run-level settings all come from ``config``.
+
+        The single place a PipelineConfig becomes training-request settings
+        (tuning, CV gaps, epochs, calibration, seed, tracking), so no caller
+        can drop one. ``overrides`` replace individual fields (e.g. a reduced
+        ``batch_size`` for an OOM retry, ``use_feature_selection``).
+        """
+        settings: dict[str, Any] = {
+            "sequence_length": config.sequence_length_for(model_name),
+            "optimize_hyperparams": config.optimize_hyperparams,
+            "hyperparam_trials": config.hyperparam_trials,
+            "n_splits": config.n_splits,
+            "scoring": config.optuna_metric,
+            "max_epochs": config.max_epochs,
+            "cv_method": config.cv_method,
+            "batch_size": config.batch_size,
+            "embargo_bars": config.embargo_bars,
+            "purge_bars": config.purge_bars,
+            "n_classes": config.n_classes,
+            "early_stopping_patience": config.early_stopping_patience,
+            "optuna_timeout": config.optuna_timeout,
+            "use_calibration": config.auto_calibrate,
+            "calibration_method": config.calibration_method,
+            "random_seed": config.random_state,
+            "deterministic": config.deterministic,
+            "tracking_backend": config.tracking_backend,
+            "tracking_uri": config.tracking_uri,
+            "tracking_experiment": config.tracking_experiment,
+            "tracking_parent_run_id": config.tracking_parent_run_id,
+        }
+        settings.update(overrides)
+        return cls(
+            model_name=model_name,
+            horizon=horizon,
+            prepared_data=prepared_data,
+            output_dir=output_dir,
+            **settings,
+        )
 
 
 @dataclass
@@ -154,6 +216,12 @@ class ModelTrainingService:
             use_calibration=request.use_calibration,
             calibration_method=request.calibration_method,
             model_config=_model_config,
+            random_seed=request.random_seed,
+            deterministic_mode=request.deterministic,
+            experiment_name=request.tracking_experiment,
+            tracking_backend=request.tracking_backend,
+            tracking_uri=request.tracking_uri,
+            tracking_parent_run_id=request.tracking_parent_run_id,
             **_trainer_kwargs,
         )
 
@@ -352,6 +420,7 @@ class ModelTrainingService:
             embargo_bars=request.embargo_bars,
             purge_bars=request.purge_bars,
             optuna_timeout=request.optuna_timeout,
+            random_seed=request.random_seed,
         )
 
         result = tuning_service.optimize(tuning_request)

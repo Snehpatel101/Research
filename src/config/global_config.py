@@ -106,12 +106,6 @@ class ScalerConfig:
 
 
 @dataclass
-class TrackingConfig:
-    enabled: bool
-    backend: str
-
-
-@dataclass
 class OOMRecoveryConfig:
     enabled: bool
     max_retries: int
@@ -131,7 +125,6 @@ class GlobalConfig:
     optimization: OptimizationConfig
     processing: ProcessingConfig
     scaler: ScalerConfig
-    tracking: TrackingConfig
     oom_recovery: OOMRecoveryConfig
 
     @classmethod
@@ -157,7 +150,6 @@ class GlobalConfig:
             ),
             processing=ProcessingConfig(**data["processing"]),
             scaler=ScalerConfig(**data["scaler"]),
-            tracking=TrackingConfig(**data["tracking"]),
             oom_recovery=OOMRecoveryConfig(**data["oom_recovery"]),
         )
 
@@ -232,10 +224,6 @@ class GlobalConfig:
             },
             "scaler": {
                 "default": self.scaler.default,
-            },
-            "tracking": {
-                "enabled": self.tracking.enabled,
-                "backend": self.tracking.backend,
             },
             "oom_recovery": {
                 "enabled": self.oom_recovery.enabled,

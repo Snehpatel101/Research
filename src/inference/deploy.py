@@ -86,12 +86,18 @@ class DeployManifest:
     """Top-level deploy manifest indexing all horizons and bundles.
 
     Pure JSON — no pickle, no binary dependencies.
+
+    ``run_manifest`` points at the ``run_manifest.json`` of the run that
+    produced the bundles (``path`` relative to the deploy dir) and carries its
+    identifying provenance inline (run ID, config hash, source commit, data
+    SHA-256) plus ``provenance_sha256`` to verify the file it points at.
     """
 
     version: str = DEPLOY_VERSION
     created_at: str = ""
     symbol: str = ""
     horizons: dict[int, HorizonManifest] = field(default_factory=dict)
+    run_manifest: dict[str, Any] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -100,6 +106,7 @@ class DeployManifest:
             "created_at": self.created_at,
             "symbol": self.symbol,
             "horizons": {str(h): m.to_dict() for h, m in self.horizons.items()},
+            "run_manifest": self.run_manifest,
             "extra": self.extra,
         }
 
@@ -113,6 +120,7 @@ class DeployManifest:
             created_at=data.get("created_at", ""),
             symbol=data.get("symbol", ""),
             horizons=horizons,
+            run_manifest=data.get("run_manifest", {}),
             extra=data.get("extra", {}),
         )
 
@@ -208,6 +216,8 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
     Checks:
     - manifest.json exists and parses
     - All referenced bundle paths exist
+    - The referenced run manifest (when present) is the run's and still
+      matches its recorded provenance digest
     - Each bundle can be loaded (optional deep check)
 
     Args:
@@ -239,12 +249,36 @@ def validate_deploy_artifact(deploy_dir: str | Path) -> dict[str, Any]:
                     f"H{horizon}/{entry.model_name}: bundle not found at {entry.bundle_path}"
                 )
 
+    issues.extend(_run_manifest_issues(deploy_dir, manifest.run_manifest))
+
     return {
         "valid": len(issues) == 0,
         "issues": issues,
         "n_horizons": len(manifest.horizons),
         "version": manifest.version,
     }
+
+
+def _run_manifest_issues(deploy_dir: Path, reference: dict[str, Any]) -> list[str]:
+    """Problems with the run manifest a deploy manifest references ([] when fine).
+
+    A deploy dir shipped without its run directory is still valid: the
+    reference carries the identifying provenance inline.
+    """
+    if not reference:
+        return []
+    from src.core.run_manifest import verify_provenance
+
+    path = deploy_dir / reference["path"]
+    if not path.exists():
+        return []
+    with open(path) as f:
+        run_manifest = json.load(f)
+    if run_manifest.get("provenance_sha256") != reference.get("provenance_sha256"):
+        return [f"run manifest {path} belongs to a different run than the deploy manifest"]
+    if not verify_provenance(run_manifest):
+        return [f"run manifest {path}: provenance does not match its recorded digest"]
+    return []
 
 
 def load_deploy_artifact(

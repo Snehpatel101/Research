@@ -29,19 +29,22 @@ from __future__ import annotations
 import logging
 import secrets
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
+from src.core.reproducibility import apply_model_seed
+
 from ..calibration import CalibrationConfig, ProbabilityCalibrator
 from ..config import TrainerConfig
 from ..data_preparation import prepare_training_data
 from ..metrics import compute_classification_metrics, compute_trading_metrics
 from ..registry import ModelRegistry
-from ..tracking import TrackerConfig, get_tracker
-from ..tracking.base import ExperimentTracker
+from ..tracking import ExperimentTracker, TrackerConfig, flatten_params, get_tracker
 from .artifacts import TrainerArtifactsMixin
 from .evaluation import TrainerEvaluationMixin, _validate_labels
 from .features import TrainerFeaturesMixin
@@ -105,10 +108,13 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             "oom_max_retries",
             "oom_batch_reduction_factor",
             "oom_min_batch_size",
+            "deterministic_mode",
         ]
         for _key in _training_keys:
             if _key not in config.model_config and hasattr(config, _key):
                 config.model_config[_key] = getattr(config, _key)
+        # The run's seed reaches every model family (random_state / random_seed)
+        apply_model_seed(config.model_config, config.random_seed)
 
         # Create model from registry
         self.model = ModelRegistry.create(
@@ -350,20 +356,35 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             Configured ExperimentTracker instance
         """
         tracker_config = TrackerConfig(
-            enabled=self.config.tracking_enabled,
             backend=self.config.tracking_backend,
             experiment_name=self.config.experiment_name or f"model_{self.config.model_name}",
-            run_name=self.run_id,
             tracking_uri=self.config.tracking_uri,
             output_dir=self.config.output_dir / "tracking",
-            log_artifacts=True,
+            parent_run_id=self.config.tracking_parent_run_id,
             tags={
                 "model_name": self.config.model_name,
                 "horizon": str(self.config.horizon),
                 **self.config.tracking_tags,
             },
         )
-        return get_tracker(config=tracker_config)
+        return get_tracker(tracker_config)
+
+    @contextmanager
+    def _tracking_run(self, tags: dict[str, str]) -> Iterator[None]:
+        """One tracker run around a training call: config params in, status out.
+
+        The run ends FINISHED when the body returns and FAILED when it raises,
+        so a crashed training never leaves its run marked RUNNING.
+        """
+        tracking_run_id = self.tracker.start_run(run_name=self.run_id, tags=tags)
+        logger.info(f"Started experiment tracking run: {tracking_run_id}")
+        self.tracker.log_params(flatten_params(self.config.to_dict()))
+        try:
+            yield
+        except BaseException:
+            self.tracker.end_run(status="FAILED")
+            raise
+        self.tracker.end_run(status="FINISHED")
 
     def _setup_output_dir(self) -> None:
         """Create output directory structure."""
@@ -427,24 +448,20 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             - output_path: Path to outputs
             - feature_selection: Feature selection results (if enabled)
         """
+        tags = {
+            "model_family": self.model.model_family,
+            "feature_set": str(self.config.feature_set),
+        }
+        with self._tracking_run(tags):
+            return self._run(container, skip_save)
+
+    def _run(self, container: TimeSeriesDataContainer, skip_save: bool) -> dict[str, Any]:
+        """Body of ``run`` (inside its tracker run)."""
         start_time = time.time()
 
         # Setup
         self._setup_output_dir()
         self._save_config()
-
-        # Start experiment tracking
-        tracking_run_id = self.tracker.start_run(
-            run_name=self.run_id,
-            tags={
-                "model_family": self.model.model_family,
-                "feature_set": self.config.feature_set,
-            },
-        )
-        logger.info(f"Started experiment tracking run: {tracking_run_id}")
-
-        # Log training configuration as parameters
-        self.tracker.log_params(self.config.to_dict())
 
         # Validate pipeline lineage if pipeline_run_id is specified
         lineage_validated = True
@@ -822,10 +839,7 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
             f"time={total_time:.1f}s"
         )
 
-        # Log final metrics and end tracking run
         self.tracker.log_metrics({"total_time_seconds": total_time})
-        self.tracker.end_run(status="FINISHED")
-
         return results
 
     def run_prepared(
@@ -849,24 +863,21 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         Returns:
             Dict with training results including metrics, predictions, etc.
         """
+        tags = {
+            "model_family": self.model.model_family,
+            "feature_set": str(self.config.feature_set),
+            "data_rank": str(prepared.data_rank),
+        }
+        with self._tracking_run(tags):
+            return self._run_prepared(prepared, skip_save)
 
+    def _run_prepared(self, prepared: PreparedData, skip_save: bool) -> dict[str, Any]:
+        """Body of ``run_prepared`` (inside its tracker run)."""
         start_time = time.time()
 
         # Setup
         self._setup_output_dir()
         self._save_config()
-
-        # Start experiment tracking
-        tracking_run_id = self.tracker.start_run(
-            run_name=self.run_id,
-            tags={
-                "model_family": self.model.model_family,
-                "feature_set": self.config.feature_set,
-                "data_rank": str(prepared.data_rank),
-            },
-        )
-        logger.info(f"Started experiment tracking run: {tracking_run_id}")
-        self.tracker.log_params(self.config.to_dict())
 
         # Capture scaler + feature columns from PreparedData for TrainerProtocol.
         # Bundles read trainer.feature_columns to rebuild inputs at inference;
@@ -988,6 +999,5 @@ class Trainer(TrainerFeaturesMixin, TrainerEvaluationMixin, TrainerArtifactsMixi
         )
 
         self.tracker.log_metrics({"total_time_seconds": total_time})
-        self.tracker.end_run(status="FINISHED")
 
         return results

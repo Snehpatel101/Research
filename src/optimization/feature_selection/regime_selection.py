@@ -18,6 +18,10 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
+from src.core.reproducibility import sequential_prediction
+
+from .ranking import rank_by_importance
+
 logger = logging.getLogger(__name__)
 
 
@@ -111,6 +115,7 @@ def compute_regime_importance(
                 random_state=random_state,
             )
             rf.fit(X, y)
+            sequential_prediction(rf)  # bit-reproducible scoring
 
             result = permutation_importance(
                 rf,
@@ -146,7 +151,7 @@ def compute_regime_importance(
         combined = combined.clip(lower=0)  # Safety
         combined = pd.DataFrame({"current": combined, "new": imp_full}).max(axis=1)
 
-    combined = combined.sort_values(ascending=False)
+    combined = rank_by_importance(combined)
 
     logger.info(
         f"  Regime-conditional selection: {len(per_regime)} regimes analyzed, "

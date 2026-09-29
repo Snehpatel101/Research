@@ -24,6 +24,8 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 
+from src.core.reproducibility import sequential_prediction
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,6 +88,7 @@ class LabelPerturbationTester:
 
         # Fit on full data for permutation importance
         rf.fit(X, y)
+        sequential_prediction(rf)  # bit-reproducible scoring
 
         result = permutation_importance(
             rf,

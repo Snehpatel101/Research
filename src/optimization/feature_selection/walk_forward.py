@@ -31,7 +31,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import log_loss, make_scorer
 
+from src.core.reproducibility import sequential_prediction
+
 from .config import FeatureSelectorConfig
+from .ranking import quantize_importance
+from .ranking import top_features as rank_top_features
 from .result import FeatureSelectionResult
 
 logger = logging.getLogger(__name__)
@@ -223,7 +227,7 @@ class WalkForwardFeatureSelector:
             )
 
             # Select top features
-            top_features = importance.nlargest(self.config.n_features_to_select).index.tolist()
+            top_features = rank_top_features(importance, self.config.n_features_to_select)
             feature_selections.append(set(top_features))
 
             # Store importance history
@@ -239,14 +243,15 @@ class WalkForwardFeatureSelector:
 
             logger.debug(f"Fold {fold_idx}: selected {len(top_features)} features")
 
-        # Find stable features (appear in >= min_frequency of folds)
-        all_features = set().union(*feature_selections)
+        # Find stable features (appear in >= min_frequency of folds). Sorted:
+        # iterating a set of names would follow PYTHONHASHSEED
+        all_features = sorted(set().union(*feature_selections))
         feature_counts = {f: sum(f in s for s in feature_selections) for f in all_features}
 
         min_count = int(n_folds * self.config.min_feature_frequency)
         stable_features = [f for f, count in feature_counts.items() if count >= min_count]
 
-        # Sort stable features by selection count (most stable first)
+        # Most stable first; equal counts stay in name order (stable sort)
         stable_features.sort(key=lambda f: feature_counts[f], reverse=True)
 
         logger.info(
@@ -366,6 +371,7 @@ class WalkForwardFeatureSelector:
             random_state=self.random_state,
         )
         rf.fit(X, y, sample_weight=sample_weights)
+        sequential_prediction(rf)  # bit-reproducible scoring
 
         # Score on holdout data to avoid overfitting bias (Critical Fix #6).
         # Training-set permutation importance inflates scores for overfit features.
@@ -440,6 +446,7 @@ class WalkForwardFeatureSelector:
             random_state=self.random_state,
         )
         rf.fit(X, y, sample_weight=sample_weights)
+        sequential_prediction(rf)  # bit-reproducible scoring
 
         # Score only holdout rows whose class the forest has seen.
         class_to_idx = {c: i for i, c in enumerate(rf.classes_)}
@@ -499,7 +506,8 @@ class WalkForwardFeatureSelector:
             )
         )
         for c in multi:
-            own = pd.Series({f: own_all[f] for f in cluster_members[c]})
+            # Quantized: float noise between near-tied members must not order them
+            own = quantize_importance(pd.Series({f: own_all[f] for f in cluster_members[c]}))
             span = own.max() - own.min()
             rank01 = (own - own.min()) / span if span > 0 else own * 0.0
             importance[cluster_members[c]] += _WITHIN_CLUSTER_TIEBREAK * rank01

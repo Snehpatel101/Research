@@ -44,6 +44,12 @@ logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 
+# Top-level fields that name, place or report a run without changing its
+# results; excluded from ExperimentConfig.config_hash
+RESULT_NEUTRAL_FIELDS = frozenset(
+    {"name", "description", "run_id", "output_dir", "verbose", "tracking"}
+)
+
 # Derived embargo: one trading day. CME equity/metal futures trade ~23h a day,
 # so 1440 minutes of bars spans one session at any bar timeframe.
 EMBARGO_SPAN_MINUTES = 1440
@@ -229,6 +235,25 @@ class BundlingSection:
     deploy_artifact: bool = True
 
 
+@dataclass
+class TrackingSection:
+    """
+    Experiment tracking: one parent run per ``MLFactory.run`` plus one child
+    run per trained model.
+
+    - ``backend``: "none" (default), "local" or "mlflow"
+    - ``tracking_uri``: local = directory the runs are written to (default
+      ``<output root>/tracking``, shared by every run under that root);
+      mlflow = tracking server URI or store (default: MLflow's own default,
+      ``MLFLOW_TRACKING_URI`` or ``./mlruns``)
+    - ``experiment_name``: tracker experiment (default: ``ExperimentConfig.name``)
+    """
+
+    backend: str = "none"
+    tracking_uri: str | None = None
+    experiment_name: str | None = None
+
+
 # =============================================================================
 # EXPERIMENT CONFIG
 # =============================================================================
@@ -248,7 +273,10 @@ class ExperimentConfig:
         description: Free-text description (metadata, saved with the run)
         run_id: Unique run identifier (auto-generated)
         output_dir: Output directory for artifacts
-        random_seed: Random seed for reproducibility
+        random_seed: Seed for every random number generator of the run (Python,
+            NumPy, torch, Optuna samplers, model ``random_state``)
+        deterministic: Force deterministic torch kernels (slower on GPU; CPU
+            runs of the same config are bit-identical without it)
         verbose: Logging verbosity (0=silent, 1=info, 2=debug); MLFactory's
             default when its own ``verbose`` argument is omitted
 
@@ -256,6 +284,7 @@ class ExperimentConfig:
         training: Training configuration section
         evaluation: Evaluation configuration section
         bundling: Bundling configuration section
+        tracking: Experiment-tracking configuration section
 
     Example:
         config = ExperimentConfig(
@@ -271,6 +300,7 @@ class ExperimentConfig:
     run_id: str = field(default_factory=_generate_run_id)
     output_dir: Path = field(default_factory=lambda: Path("experiments/runs"))
     random_seed: int = 42
+    deterministic: bool = False
     verbose: int = 1
 
     # Configuration sections
@@ -278,6 +308,7 @@ class ExperimentConfig:
     training: TrainingSection = field(default_factory=TrainingSection)
     evaluation: EvaluationSection = field(default_factory=EvaluationSection)
     bundling: BundlingSection = field(default_factory=BundlingSection)
+    tracking: TrackingSection = field(default_factory=TrackingSection)
 
     def __post_init__(self) -> None:
         """Validate and normalize configuration."""
@@ -289,7 +320,7 @@ class ExperimentConfig:
         if self.output_dir.name != self.run_id:
             self.output_dir = self.output_dir / self.run_id
 
-        from src.core.config import SAMPLE_WEIGHTING_MODES
+        from src.core.config import SAMPLE_WEIGHTING_MODES, TRACKING_BACKENDS
 
         if self.training.sample_weighting not in SAMPLE_WEIGHTING_MODES:
             raise ValueError(
@@ -300,6 +331,13 @@ class ExperimentConfig:
             value = getattr(self.training, name)
             if value is not None and value < 0:
                 raise ValueError(f"training.{name} must be >= 0 or None, got {value}")
+        if self.random_seed < 0:
+            raise ValueError(f"random_seed must be >= 0, got {self.random_seed}")
+        if self.tracking.backend not in TRACKING_BACKENDS:
+            raise ValueError(
+                f"tracking.backend must be one of {TRACKING_BACKENDS}, "
+                f"got {self.tracking.backend!r}"
+            )
 
     @property
     def symbol(self) -> str:
@@ -425,6 +463,41 @@ class ExperimentConfig:
         return embargo
 
     # =========================================================================
+    # IDENTITY AND TRACKING
+    # =========================================================================
+
+    def config_hash(self) -> str:
+        """
+        SHA-256 of every setting that can change a run's results.
+
+        Two runs with the same hash, input data and code produce the same
+        output. Fields that only name, place or report the run
+        (``RESULT_NEUTRAL_FIELDS``: name, description, run_id, output_dir,
+        verbose, tracking) are excluded, so re-running an experiment under a
+        new run ID keeps its hash.
+        """
+        from src.core.run_manifest import canonical_json_sha256
+
+        definition = {k: v for k, v in self.to_dict().items() if k not in RESULT_NEUTRAL_FIELDS}
+        return canonical_json_sha256(definition)
+
+    def tracking_experiment_name(self) -> str:
+        """Tracker experiment the run is logged to (``tracking.experiment_name`` or ``name``)."""
+        return self.tracking.experiment_name or self.name
+
+    def tracking_location(self) -> str | None:
+        """
+        Where the tracker writes: ``tracking.tracking_uri`` when set; for the
+        local backend ``<output root>/tracking`` (next to the run directories);
+        None for mlflow (MLflow's default) and "none".
+        """
+        if self.tracking.tracking_uri:
+            return self.tracking.tracking_uri
+        if self.tracking.backend == "local":
+            return str(self.output_dir.parent / "tracking")
+        return None
+
+    # =========================================================================
     # SERIALIZATION
     # =========================================================================
 
@@ -498,6 +571,7 @@ class ExperimentConfig:
         cv_gaps: tuple[int, int] | None = None,
         bar_timeframe: str | None = None,
         n_rows: int | None = None,
+        tracking_parent_run_id: str | None = None,
     ) -> Any:
         """
         Convert to the PipelineConfig consumed by the training orchestrator
@@ -508,6 +582,8 @@ class ExperimentConfig:
                 they are resolved here via ``resolve_cv_gaps``.
             bar_timeframe: Training bar timeframe, for the derived embargo.
             n_rows: Rows of the labeled training frame, for the embargo cap.
+            tracking_parent_run_id: Tracker run of the factory; every trained
+                model logs a child run under it.
 
         Returns:
             PipelineConfig instance
@@ -554,6 +630,13 @@ class ExperimentConfig:
             meta_labeling_meta_model=self.training.meta_labeling.meta_model,
             meta_labeling_threshold=self.training.meta_labeling.threshold,
             random_state=self.random_seed,
+            deterministic=self.deterministic,
+            # Experiment tracking: trainers log one child run per model under
+            # the factory's parent run
+            tracking_backend=self.tracking.backend,
+            tracking_uri=self.tracking_location(),
+            tracking_experiment=self.tracking_experiment_name(),
+            tracking_parent_run_id=tracking_parent_run_id,
             # Optimization flags — Optuna-based ones disabled when n_trials=0.
             # Feature selection is NOT Optuna-based (MDA ranking) and follows
             # features.selection_enabled independently of the trial count.
@@ -593,4 +676,5 @@ __all__ = [
     "TrainingSection",
     "EvaluationSection",
     "BundlingSection",
+    "TrackingSection",
 ]

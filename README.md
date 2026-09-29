@@ -88,8 +88,41 @@ derived purge/embargo (`--purge-bars` / `--embargo-bars` override). Results go
 to `<output_dir>/<run_id>/{cv,walk-forward,cpcv-pbo}/`.
 
 Outputs of `ml run` live in `<output_dir>/<run_id>/` (default `experiments/`):
-`experiment_config.yaml`, `checkpoints/`, per-model artifacts, `bundles/` and
-`deploy/manifest.json`. Run `ml <command> --help` for every option.
+`experiment_config.yaml`, `run_manifest.json`, `checkpoints/`, per-model
+artifacts, `bundles/` and `deploy/manifest.json`. Run `ml <command> --help` for
+every option.
+
+## Reproducibility & tracking
+
+- **Seeded runs.** `random_seed` (CLI `--seed`, default 42) seeds Python, NumPy
+  and torch before any data work and reaches every model (`random_state` /
+  `random_seed`), the Optuna sampler and each trial, feature selection and the
+  meta-learner. Same config + seed + data + code = bit-identical OOF and
+  deployed predictions on CPU (`tests/e2e/test_determinism_e2e.py` runs twice in
+  separate interpreters with different `PYTHONHASHSEED`s). `deterministic: true`
+  also forces deterministic torch kernels (needed on GPU; slower).
+- **Run manifest.** Every run writes `<run_dir>/run_manifest.json`, `running`
+  until it ends `success` or `failed` (with the error): the full config and
+  `config_hash` (identical for re-runs of the same experiment under a new run
+  ID), seed, git commit + dirty flag, package versions, Python / torch / CUDA
+  environment, the data file's SHA-256, rows and time range, bar timeframe,
+  timing and the final metrics. `result.manifest_path` points to it, and
+  `deploy/manifest.json` references it (path + `provenance_sha256`, checked by
+  `validate_deploy_artifact`).
+- **Tracking.** `tracking.backend`: `none` (default), `local` (JSON runs under
+  `<output_dir>/tracking/`, no dependencies) or `mlflow`
+  (`uv pip install -e ".[mlflow]"`; `tracking.tracking_uri` = server or store).
+  One parent run per `MLFactory.run` (flattened config, config hash, commit,
+  data fingerprint, final metrics, backtest summary, artifact paths) and one
+  child run per trained model.
+
+```yaml
+random_seed: 42
+tracking:
+  backend: mlflow                # none | local | mlflow
+  tracking_uri: http://localhost:5000
+  experiment_name: mes_research  # default: the experiment name
+```
 
 ## Serve
 

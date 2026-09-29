@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from joblib import effective_n_jobs
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score, log_loss
 
+from src.core.reproducibility import sequential_prediction
 from src.core.utils.safe_pickle import safe_pickle_dump, safe_pickle_load
 
 from ..base import BaseModel, PredictionResult, TrainingMetrics
@@ -120,8 +123,10 @@ class RandomForestModel(BaseModel):
             f"max_depth={train_config.get('max_depth', 10)}"
         )
 
-        # Train model
+        # Train model (parallel over trees, deterministic per random_state);
+        # predictions then run row-parallel in a fixed tree order (_proba)
         self._model.fit(X_train, y_train_sk, sample_weight=sample_weights)
+        sequential_prediction(self._model)
 
         training_time = time.time() - start_time
 
@@ -130,8 +135,8 @@ class RandomForestModel(BaseModel):
         val_metrics = self._compute_metrics(X_val, y_val)
 
         # Compute log loss
-        train_proba = self._model.predict_proba(X_train)
-        val_proba = self._model.predict_proba(X_val)
+        train_proba = self._proba(X_train)
+        val_proba = self._proba(X_val)
         train_loss = float(log_loss(y_train_sk, train_proba))
         val_loss = float(log_loss(y_val_sk, val_proba))
 
@@ -179,7 +184,7 @@ class RandomForestModel(BaseModel):
         if self._model is None:
             raise RuntimeError("Model is not fitted")
 
-        probabilities = self._model.predict_proba(X)
+        probabilities = self._proba(X)
         class_predictions_sk = np.argmax(probabilities, axis=1)
         class_predictions = self._convert_labels_from_sklearn(class_predictions_sk)
         confidence = np.max(probabilities, axis=1)
@@ -199,8 +204,32 @@ class RandomForestModel(BaseModel):
         if self._model is None:
             raise RuntimeError("Model is not fitted")
 
-        result: np.ndarray = self._model.predict_proba(X)
-        return result
+        return self._proba(X)
+
+    def _proba(self, X: np.ndarray) -> np.ndarray:
+        """
+        Class probabilities, bit-identical from call to call.
+
+        The forest itself predicts with ``n_jobs=1`` (see
+        ``sequential_prediction``: sklearn's multi-threaded predict adds the
+        trees in thread-completion order). Parallelism comes from splitting
+        the rows instead, which leaves every row's tree-summation order fixed.
+        """
+        if self._model is None:
+            raise RuntimeError("Model is not fitted")
+        sequential_prediction(self._model)  # also for models saved before this fix
+        n_threads = min(effective_n_jobs(self._config.get("n_jobs", -1)), len(X) // 1000 or 1)
+        if n_threads <= 1:
+            return np.asarray(self._model.predict_proba(X))
+        model = self._model
+
+        def predict_rows(rows: np.ndarray) -> np.ndarray:
+            return model.predict_proba(X.iloc[rows] if hasattr(X, "iloc") else X[rows])
+
+        chunks = np.array_split(np.arange(len(X)), n_threads)
+        with ThreadPoolExecutor(max_workers=n_threads) as pool:
+            parts = list(pool.map(predict_rows, chunks))
+        return np.vstack(parts)
 
     def save(self, path: Path) -> None:
         """Save model and metadata to directory."""
@@ -264,7 +293,7 @@ class RandomForestModel(BaseModel):
         """Compute accuracy and F1 for a dataset."""
         if self._model is None:
             raise RuntimeError("Model is not fitted")
-        y_pred_sk = self._model.predict(X)
+        y_pred_sk = np.argmax(self._proba(X), axis=1)
         y_pred = self._convert_labels_from_sklearn(y_pred_sk)
 
         return {
