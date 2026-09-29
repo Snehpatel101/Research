@@ -120,6 +120,16 @@ def test_bundles_and_manifest_are_per_horizon(run: dict[str, Any]) -> None:
     for horizon, entry in horizons.items():
         paths = [e["bundle_path"] for e in entry["entries"]]
         assert paths and all(p.endswith(f"_h{horizon}") for p in paths)
+        # Every entry is named (never "unknown") and the horizon has a primary model.
+        assert [e["model_name"] for e in entry["entries"]] == ["xgboost"]
+        assert entry["primary_model"] == "xgboost"
+
+
+def test_deploy_artifact_validates(run: dict[str, Any]) -> None:
+    from src.inference.deploy import validate_deploy_artifact
+
+    validation = validate_deploy_artifact(Path(run["result"].deploy_path))
+    assert validation["valid"], validation["issues"]
 
 
 def test_backtest_is_the_primary_horizon(run: dict[str, Any]) -> None:

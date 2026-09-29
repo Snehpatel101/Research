@@ -46,3 +46,8 @@ Phase-by-phase engineering detail lives in `COMPLETION.md`.
 ### Removed
 - Dead serving/monitoring chain, aspirational config layer, phantom types and
   ~23k further lines of verified dead code.
+- 15 stale ad-hoc scripts in `scripts/` (one-off smoke/verification runs
+  superseded by `tests/e2e/`, `scripts/mix_match.py` and `ml run`, plus a
+  finished migration tool); `scripts/` is now linted and formatted in CI,
+  `make check` and pre-commit, and `notebooks/colab_test_runner.ipynb` runs
+  `scripts/mix_match.py`.
