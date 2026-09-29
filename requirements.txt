@@ -46,8 +46,5 @@ pytz>=2023.0
 # Memory monitoring (walk-forward + core utils)
 psutil>=5.9.0
 
-# Online Drift Detection
-river>=0.21.0
-
 # Optional: Model Interpretability
 # shap>=0.42.0  # Uncomment if needed

@@ -4,7 +4,6 @@ Consolidated Inference Configuration Classes.
 This module contains all inference-related configuration classes:
 - InferenceConfig: Main inference configuration
 - BundleConfig: Model bundle configuration
-- ServerConfig: Inference server configuration
 - BacktestConfig: Backtesting configuration
 - PreprocessingConfig: Preprocessing graph configuration
 
@@ -152,77 +151,6 @@ class BundleConfig(BaseConfig):
 
         if self.horizon <= 0:
             issues.append(f"horizon must be positive, got {self.horizon}")
-
-        return issues
-
-
-# =============================================================================
-# SERVER CONFIGURATION
-# =============================================================================
-
-
-@dataclass
-class ServerConfig(BaseConfig):
-    """
-    Configuration for inference server.
-
-    This is the CANONICAL ServerConfig. Use this instead of:
-    - ServerConfig in src/inference/server.py (deprecated)
-
-    Attributes:
-        host: Server host address
-        port: Server port
-        workers: Number of worker processes
-        timeout: Request timeout in seconds
-        max_batch_size: Maximum batch size
-        enable_metrics: Whether to expose metrics endpoint
-
-    Example:
-        config = ServerConfig(
-            host="0.0.0.0",
-            port=8080,
-            workers=4,
-        )
-    """
-
-    host: str = "0.0.0.0"
-    port: int = 8080
-    workers: int = 4
-    timeout: float = 30.0
-    max_batch_size: int = 1024
-    enable_metrics: bool = True
-
-    # SSL settings
-    ssl_enabled: bool = False
-    ssl_cert_path: str | None = None
-    ssl_key_path: str | None = None
-
-    # Rate limiting
-    rate_limit_enabled: bool = True
-    rate_limit_requests: int = 100
-    rate_limit_window: int = 60
-
-    def validate(self) -> list[str]:
-        """Validate server configuration."""
-        issues = super().validate()
-
-        if self.port < 1 or self.port > 65535:
-            issues.append(f"port must be in [1, 65535], got {self.port}")
-
-        if self.workers <= 0:
-            issues.append(f"workers must be positive, got {self.workers}")
-
-        if self.timeout <= 0:
-            issues.append(f"timeout must be positive, got {self.timeout}")
-
-        if self.max_batch_size <= 0:
-            issues.append(f"max_batch_size must be positive, got {self.max_batch_size}")
-
-        if self.ssl_enabled:
-            if not self.ssl_cert_path:
-                issues.append("ssl_cert_path required when ssl_enabled=True")
-            if not self.ssl_key_path:
-                issues.append("ssl_key_path required when ssl_enabled=True")
 
         return issues
 
@@ -410,60 +338,6 @@ class PreprocessingGraphConfig(BaseConfig):
 
 
 # =============================================================================
-# ALERT CONFIGURATION
-# =============================================================================
-
-
-@dataclass
-class AlertConfig(BaseConfig):
-    """
-    Configuration for monitoring alerts.
-
-    This is the CANONICAL AlertConfig. Use this instead of:
-    - AlertConfig in src/monitoring/alert_handler.py (deprecated)
-    - AlertConfig in src/validation/monitoring/alert_handler.py (deprecated)
-
-    Attributes:
-        enabled: Whether alerts are enabled
-        channels: Alert channels to use
-        severity_threshold: Minimum severity to alert on
-        cooldown_seconds: Cooldown between same alerts
-
-    Example:
-        config = AlertConfig(
-            enabled=True,
-            channels=["email", "slack"],
-            severity_threshold="warning",
-        )
-    """
-
-    enabled: bool = True
-    channels: list[str] = field(default_factory=lambda: ["log"])
-    severity_threshold: str = "warning"
-    cooldown_seconds: int = 300
-
-    # Channel-specific settings
-    email_recipients: list[str] = field(default_factory=list)
-    slack_webhook: str | None = None
-
-    def validate(self) -> list[str]:
-        """Validate alert configuration."""
-        issues = super().validate()
-
-        valid_severities = ["debug", "info", "warning", "error", "critical"]
-        if self.severity_threshold not in valid_severities:
-            issues.append(
-                f"severity_threshold must be one of {valid_severities}, "
-                f"got '{self.severity_threshold}'"
-            )
-
-        if self.cooldown_seconds < 0:
-            issues.append(f"cooldown_seconds must be non-negative, got {self.cooldown_seconds}")
-
-        return issues
-
-
-# =============================================================================
 # EXPORTS
 # =============================================================================
 
@@ -474,9 +348,7 @@ __all__ = [
     # Configs
     "InferenceConfig",
     "BundleConfig",
-    "ServerConfig",
     "BacktestConfig",
     "PositionSizerConfig",
     "PreprocessingGraphConfig",
-    "AlertConfig",
 ]

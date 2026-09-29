@@ -22,8 +22,3 @@ PyWavelets>=1.5.0
 # CLI framework (needed for module imports even if not using CLI directly)
 typer>=0.9.0
 rich>=13.0.0
-
-# Online drift detection (river) is NOT included here because
-# river>=0.21.0 requires pandas>=2.2.3, which conflicts with
-# Colab's pinned pandas==2.2.2. Install separately if needed:
-#   pip install river --no-deps

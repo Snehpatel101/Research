@@ -13,6 +13,12 @@ architecture/cleanup calls; items 11–12 are infra.
 
 ## 1. Serving / monitoring chain — wire it or delete it (~2,900 lines)
 
+> **RESOLVED in Phase 116 (2026-09-29):** option B — `inference/server.py`,
+> `inference/production/`, `validation/monitoring/` (drift detectors, alert
+> handler, Slack connector), `scripts/serve_model.py` and the unused
+> `ServerConfig`/`AlertConfig` deleted (2,568 lines), plus the `river` dependency
+> and the `serving` extra; `load_deploy_artifact()` is the deployment story.
+
 **What:** `src/inference/server.py` (FastAPI ModelServer), the drift-detection
 and monitoring stack under `src/validation/monitoring/` (incl. the Slack
 connector), and related production plumbing. None of it is reachable from any
@@ -136,6 +142,11 @@ roadmap. Tests that only exercise dead code are weight, not safety.
 
 ## 6. Dual `AdapterResult` — retire the documented exception
 
+> **RESOLVED in Phase 116 (2026-09-29):** option A — the legacy copy (and the
+> unimplemented `AdapterContract` ABC that referenced it) deleted from
+> `src/core/interfaces.py`; nothing imported it from `src.core`, so no
+> re-export was needed. `src/data/adapters/base.py` is the only definition.
+
 **What:** Two classes named `AdapterResult`: the canonical one in
 `src/data/adapters/base.py` and a legacy copy in `src/core/interfaces.py`.
 CLAUDE.md documents the duplication as intentional (circular-import
@@ -153,6 +164,9 @@ semantics, read-only metadata, missing fields).
 ---
 
 ## 7. Core `TrainingResult` — phantom type
+
+> **RESOLVED in Phase 116 (2026-09-29):** option A — `factory.py` annotated with
+> `TrainingRunResult` throughout; the phantom core `TrainingResult` deleted.
 
 **What:** `src/core/interfaces.py::TrainingResult` is constructed nowhere.
 The object that actually flows is `TrainingRunResult`
@@ -278,13 +292,13 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 
 | # | Decision | Default if you do nothing | Recommended | Effort |
 |---|----------|---------------------------|-------------|--------|
-| 1 | Serving/monitoring chain | Dead code + crashing server stays | Delete | ~0.5 day |
+| 1 | Serving/monitoring chain | ✅ Resolved (Phase 116) | — | — |
 | 2 | Special-mode bundles | ✅ Resolved (Phase 115) | — | — |
 | 3 | Governance modules | Tests-only forever | Wire lifecycle+registry, park rest | 1–2 days |
 | 4 | Contract seq_len | TCN under-windowed, mode skew | Honor contracts (results change) | 1–2 days + eval |
 | 5 | 5-D Optuna island | Dead code pinned by tests | Delete + replacement test | ~0.5 day |
-| 6 | Dual AdapterResult | Drifted duplicate stays | Delete core copy | ~2 h |
-| 7 | Core TrainingResult | Phantom annotation stays | Annotate real type, delete | ~1 h |
+| 6 | Dual AdapterResult | ✅ Resolved (Phase 116) | — | — |
+| 7 | Core TrainingResult | ✅ Resolved (Phase 116) | — | — |
 | 8 | to_*_config methods | Dead config fields stay | Adopt splits/dates/calibration | 2–3 days |
 | 9 | Dead config layer/yaml | Aspirational surface stays | Shrink to what runs | ~1 day |
 | 10 | Import SCC | 4–5s imports, GPU-stack coupling | Staged lazy break | 3–5 days |
