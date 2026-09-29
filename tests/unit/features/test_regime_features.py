@@ -18,6 +18,11 @@ from src.data.pipeline.stages.features.regime import (
     add_volatility_regime,
 )
 from src.data.pipeline.stages.features.volatility import add_historical_volatility
+from src.data.pipeline.stages.regime import (
+    MarketStructureDetector,
+    TrendRegimeDetector,
+    VolatilityRegimeDetector,
+)
 from src.data.pipeline.stages.regime.composite import CompositeRegimeDetector
 from src.data.pipeline.stages.regime.unified import get_regime_labels
 
@@ -84,24 +89,46 @@ class TestRegimeFeaturesAreLagged:
         assert spiked.iloc[spike_bar] == base.iloc[spike_bar], "bar N saw its own crash"
         assert spiked.iloc[spike_bar + 1] == 0, "bar N+1 should leave the uptrend"
 
-    def test_structure_regime_is_lagged_one_bar(self) -> None:
-        """The Hurst-based structure regime is NaN at bar 0 and blind to the current bar."""
+    def test_structure_regime_is_the_raw_hurst_regime_lagged_one_bar(self) -> None:
+        """Exact: bar N's structure regime is the raw detector's value at bar N-1.
+
+        (A spike test is not enough here: the Hurst category rarely flips at the spiked
+        bar, so a missing lag would go unnoticed.)
+        """
         df = _make_regime_ohlcv(200)
-        base = add_structure_regime(df.copy(), {}, lookback=100)
-        assert "structure_regime" in base.columns
-        assert pd.isna(base["structure_regime"].iloc[0])
+        raw = MarketStructureDetector(lookback=100).detect(df)
+        assert not raw.iloc[1:].equals(raw.shift(1).iloc[1:]), "raw regime is constant: no signal"
 
-        df_spiked = df.copy()
-        df_spiked.iloc[-1, df_spiked.columns.get_loc("close")] *= 2.0
-        spiked = add_structure_regime(df_spiked, {}, lookback=100)
+        out = add_structure_regime(df.copy(), {}, lookback=100)["structure_regime"]
 
-        base_last = base["structure_regime"].iloc[-1]
-        assert not pd.isna(base_last)
-        assert base_last == spiked["structure_regime"].iloc[-1]
+        assert pd.isna(out.iloc[0])
+        pd.testing.assert_series_equal(out, raw.shift(1), check_names=False)
 
 
 class TestUnifiedRegimeLabels:
-    def test_labels_align_with_input_and_ignore_the_current_bar(self) -> None:
+    def test_composite_regime_columns_are_raw_detector_output_lagged_one_bar(self) -> None:
+        """With hysteresis off, each column is exactly its detector's raw series shifted by 1."""
+        df = _make_regime_ohlcv(400)
+        detectors = {
+            "volatility_regime": VolatilityRegimeDetector(),
+            "trend_regime": TrendRegimeDetector(),
+            "structure_regime": MarketStructureDetector(),
+        }
+        composite = CompositeRegimeDetector(
+            volatility_detector=detectors["volatility_regime"],
+            trend_detector=detectors["trend_regime"],
+            structure_detector=detectors["structure_regime"],
+            min_regime_bars=1,
+        )
+
+        regimes = composite.detect_all(df).regimes
+
+        for column, detector in detectors.items():
+            raw = detector.detect(df)
+            assert not raw.iloc[1:].equals(raw.shift(1).iloc[1:]), f"{column}: raw is constant"
+            pd.testing.assert_series_equal(regimes[column], raw.shift(1), check_names=False)
+
+    def test_labels_align_with_input(self) -> None:
         df = _make_regime_ohlcv(400)
         labels = get_regime_labels(df)
 
@@ -109,11 +136,6 @@ class TestUnifiedRegimeLabels:
         assert labels.index.equals(df.index)
         assert pd.isna(labels.iloc[0]), "first bar is NaN because every regime is shifted"
         assert labels.iloc[100:].notna().all()
-
-        spiked = df.copy()
-        spiked.iloc[-1, spiked.columns.get_loc("close")] *= 2.0
-        spiked.iloc[-1, spiked.columns.get_loc("high")] *= 2.0
-        assert get_regime_labels(spiked).iloc[-1] == labels.iloc[-1]
 
 
 class TestRegimeHysteresis:

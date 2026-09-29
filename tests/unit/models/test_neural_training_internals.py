@@ -8,6 +8,8 @@ Neural training internals (BaseRNNModel): loss weighting, loader wiring.
 
 from __future__ import annotations
 
+import random
+
 import numpy as np
 import pytest
 import torch
@@ -103,10 +105,27 @@ class TestLoaders:
         train_loader, val_loader = model._create_fit_loaders(X, y, None, X, y, {})
         assert val_loader.batch_size == 2 * train_loader.batch_size
 
-    def test_worker_loaders_get_a_seeding_function(self, model) -> None:
+    def test_workers_get_distinct_reproducible_seeds(self, model) -> None:
         X, y = self._arrays()
-        loader = model._create_dataloader(X, y, None, {"num_workers": 2}, shuffle=False)
-        assert loader.worker_init_fn is not None
+        loader = model._create_dataloader(
+            X, y, None, {"num_workers": 2, "random_seed": 7}, shuffle=False
+        )
+        init = loader.worker_init_fn
+        assert init is not None
+
+        def draw(worker_id: int) -> tuple[int, float, float]:
+            init(worker_id)
+            return torch.initial_seed(), random.random(), float(np.random.random())  # noqa: NPY002
+
+        saved = (random.getstate(), np.random.get_state(), torch.get_rng_state())  # noqa: NPY002
+        try:
+            w0, w1 = draw(0), draw(1)
+            assert w0 != w1 and w0[0] == 7 and w1[0] == 8, "seed is base seed + worker id"
+            assert draw(1) == w1, "the same worker id must reproduce its stream"
+        finally:
+            random.setstate(saved[0])
+            np.random.set_state(saved[1])  # noqa: NPY002
+            torch.set_rng_state(saved[2])
 
     def test_single_process_loaders_need_no_worker_function(self, model) -> None:
         X, y = self._arrays()

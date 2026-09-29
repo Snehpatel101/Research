@@ -62,7 +62,7 @@ def _barrier_config(**overrides) -> BacktestConfig:
 
     The labeler's cost term is switched off (barrier_cost_in_atr=0.0) so the
     barriers sit exactly k * ATR from entry; cost parity is covered by
-    tests/test_backtest_realism.py. With the default MARKET_ON_OPEN model the
+    tests/unit/backtesting/test_backtest_realism.py. With the default MARKET_ON_OPEN model the
     bar-20 signal fills at bar 21's open and bar 21's range is watched.
     """
     defaults = {

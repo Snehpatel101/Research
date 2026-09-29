@@ -55,9 +55,9 @@
 | 16 | Inline labeling ATR | `src/factory.py`, `src/data/labeling/triple_barrier.py` | ✅ |
 | 17 | CPU DataLoader/TFT defaults | `global.yaml`, `trainer_config.py`, `base_rnn.py`, `device.py` | ✅ |
 | 18 | Config/CLI/notebook surface | `experiment.py` (`regime`, `meta_labeling`, `bar_timeframe`), `cli/commands/pipeline.py`, notebooks | ✅ |
-| 19 | Verification harness + tests + README | `scripts/mix_match.py`, `tests/test_mix_and_match_{units,e2e}.py`, `README.md`, `docs/MIX_AND_MATCH.md` | ✅ |
+| 19 | Verification harness + tests + README | `scripts/mix_match.py`, `tests/unit/models/test_mix_and_match_units.py`, `tests/e2e/test_mix_and_match_e2e.py`, `README.md`, `docs/MIX_AND_MATCH.md` | ✅ |
 
-**Verify:** `pytest tests/test_mix_and_match_units.py tests/test_mix_and_match_e2e.py`;
+**Verify:** `pytest tests/unit/models/test_mix_and_match_units.py tests/e2e/test_mix_and_match_e2e.py`;
 `python scripts/mix_match.py {solo,pairs,meta,modes,modes-solo,all-in}` then `python scripts/mix_match.py report`.
 
 ---

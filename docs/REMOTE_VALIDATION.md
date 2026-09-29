@@ -12,7 +12,7 @@ anything above Layer 4 runs in Colab.
 | 1 | Static (ruff, black, pyright) | local | `ruff check src/ tests/ && black --check src/ tests/ && pyright src/` |
 | 2 | Unit + behavioral tests (~600) | local | `python3 -m pytest tests/ -q` (~8 min, ~3.6 GB peak) |
 | 3 | Quick behavioral tier | local | `make test-quick` |
-| 4 | Mini E2E (tiny synthetic, boosting only) | local | `python3 -m pytest tests/test_factory_e2e.py -q` |
+| 4 | Mini E2E (tiny synthetic, boosting only) | local | `python3 -m pytest tests/e2e/test_factory_e2e.py -q` |
 | 5 | Full runtime (all 12 models, real data) | **Colab** | below |
 
 ## Layer 5 — Colab procedure

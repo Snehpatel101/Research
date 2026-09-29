@@ -48,8 +48,8 @@ def test_higher_timeframe_bar_only_contains_completed_data(tmp_path) -> None:
 
     for ts, row in htf.iterrows():
         # the last 1-min bar strictly before T closed at T - 1min: nothing at/after T leaks in
-        last_completed_close = raw.loc[ts - pd.Timedelta(minutes=1), "close"]
-        assert row["close"] == last_completed_close
+        last_completed_close = raw["close"].asof(ts - pd.Timedelta(minutes=1))
+        assert row["close"] == last_completed_close, f"bar {ts} holds data from the forming bar"
         assert row["high"] < raw.loc[ts, "high"]
 
 

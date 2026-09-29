@@ -1015,7 +1015,7 @@ class MLFactory:
             # and its merge would rename the colliding columns to
             # label_pred/label_price, crashing run() at data['label'] — which
             # the except below then silently swallowed (backtest_metrics was
-            # always {}). Regression test: tests/test_factory_e2e.py.
+            # always {}). Regression test: tests/e2e/test_factory_e2e.py.
             ohlcv_cols = [c for c in ("open", "high", "low", "close", "volume") if c in df.columns]
             prices_df = df[ohlcv_cols].copy()
             if "datetime" in df.columns:

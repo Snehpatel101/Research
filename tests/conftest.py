@@ -23,7 +23,10 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Mark each test with its layer (first directory under tests/)."""
     tests_dir = Path(__file__).parent
     for item in items:
-        parts = Path(str(item.fspath)).relative_to(tests_dir).parts
+        path = Path(str(item.path))
+        if not path.is_relative_to(tests_dir):
+            continue
+        parts = path.relative_to(tests_dir).parts
         if parts[0] in _LAYERS:
             item.add_marker(getattr(pytest.mark, parts[0]))
 
