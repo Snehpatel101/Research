@@ -61,6 +61,25 @@ def primary_sides(class_predictions: np.ndarray) -> np.ndarray:
     return np.asarray(class_predictions) != NEUTRAL_LABEL
 
 
+class ConstantBetFilter:
+    """Meta-model for a primary whose bets cannot train a classifier.
+
+    When the primary's sided OOF bets are all wins, all losses, or absent,
+    there is nothing to discriminate; the honest filter is the observed win
+    rate (1.0 with no bets, so the filter passes whatever the primary does).
+    """
+
+    def __init__(self, win_rate: float) -> None:
+        self.win_rate = float(win_rate)
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> ConstantBetFilter:  # noqa: ARG002
+        return self
+
+    def predict_proba(self, X: np.ndarray) -> np.ndarray:
+        p = np.full(len(X), self.win_rate)
+        return np.column_stack([1.0 - p, p])
+
+
 def build_meta_features(model_input: np.ndarray, primary_probabilities: np.ndarray) -> np.ndarray:
     """Meta-model input: primary model input, primary class probabilities, confidence.
 
