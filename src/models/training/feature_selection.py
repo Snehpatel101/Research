@@ -16,8 +16,8 @@ import pandas as pd
 
 from src.core.exceptions import PreTrainingValidationError
 from src.optimization.feature_selection.filtering import (
-    filter_correlated_features,
     filter_low_variance,
+    select_decorrelated_by_rank,
 )
 from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 
@@ -376,49 +376,38 @@ class FeatureSelectionMixin:
             except Exception as e:
                 logger.warning(f"  Regime-conditional selection skipped: {e}")
 
-        # Step 2: Correlation dedup on top-N features
-        max_model_features = max(get_model_contract(m).max_features for m in self.config.models)
-        if ranking is not None and len(ranking) > max_model_features:
-            top_n_features = ranking.head(int(max_model_features)).index.tolist()
-        else:
-            top_n_features = list(feature_names)
-
-        feature_df = df[top_n_features].dropna()
-        if len(feature_df) > 0:
-            kept_after_corr, removed_corr, corr_groups = filter_correlated_features(
-                feature_df, top_n_features, correlation_threshold=0.85
-            )
-            logger.info(
-                f"  Filter: correlation removed {len(removed_corr)}"
-                f"/{len(top_n_features)} features"
-                f" ({len(corr_groups)} correlated groups)"
-            )
-        else:
-            kept_after_corr = top_n_features
-
-        # Step 3: Low-variance cleanup
-        feature_df_clean = df[kept_after_corr].dropna()
-        if len(feature_df_clean) > 0:
-            kept_after_var, removed_low_var = filter_low_variance(
-                feature_df_clean, list(kept_after_corr), variance_threshold=0.01
-            )
-            logger.info(
-                f"  Filter: low-variance removed {len(removed_low_var)}"
-                f"/{len(kept_after_corr)} features"
-            )
-        else:
-            kept_after_var = kept_after_corr
-
-        # Safety: if filtering removed too many features, fall back
-        min_surviving = 10
-        if len(kept_after_var) >= min_surviving:
-            feature_names = kept_after_var
-            logger.info(f"  Filter result: {original_count} -> {len(feature_names)} features")
-        else:
+        # Step 2: Low-variance cleanup, then greedy decorrelation in rank order
+        contracts = [get_model_contract(m) for m in self.config.models]
+        max_model_features = int(max(c.max_features for c in contracts))
+        min_model_features = int(max(c.min_features for c in contracts))
+        ranked = (
+            [f for f in ranking.index if f in set(feature_names)]
+            if ranking is not None
+            else list(feature_names)
+        )
+        kept_after_var, removed_low_var = filter_low_variance(
+            df[ranked], ranked, variance_threshold=0.01
+        )
+        if len(kept_after_var) < min_model_features:
             logger.warning(
-                f"  Filters would reduce features to {len(kept_after_var)}"
-                f" (< {min_surviving}), skipping filters"
+                f"  Low-variance filter would leave {len(kept_after_var)} features "
+                f"(< {min_model_features}); skipped"
             )
+            kept_after_var = ranked
+        selected = select_decorrelated_by_rank(
+            df,
+            kept_after_var,
+            n_target=max_model_features,
+            n_min=min_model_features,
+            correlation_threshold=0.85,
+        )
+        logger.info(
+            f"  Filter: low-variance removed {len(removed_low_var)}, decorrelation kept "
+            f"{len(selected)}/{len(kept_after_var)} (target {max_model_features}, "
+            f"min {min_model_features})"
+        )
+        feature_names = selected
+        logger.info(f"  Filter result: {original_count} -> {len(feature_names)} features")
 
         # Re-slice ranking to surviving features
         if ranking is not None:

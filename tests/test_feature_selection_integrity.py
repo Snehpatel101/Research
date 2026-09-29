@@ -294,3 +294,33 @@ class TestLogLossScoring:
         )
         assert imp["x_sig"] > 0.005
         assert imp["x_sig"] > 5 * imp.drop("x_sig").abs().max()
+
+
+def test_rank_ordered_decorrelation_moves_past_correlated_clusters() -> None:
+    """Top of the ranking is one correlated cluster: selection must reach the next ones."""
+    from src.optimization.feature_selection.filtering import select_decorrelated_by_rank
+
+    rng = np.random.default_rng(7)
+    n = 2000
+    base = rng.normal(size=n)
+    cols = {f"cluster_{i}": base + rng.normal(scale=0.05, size=n) for i in range(10)}
+    cols.update({f"indep_{i}": rng.normal(size=n) for i in range(20)})
+    df = pd.DataFrame(cols)
+    ranked = [f"cluster_{i}" for i in range(10)] + [f"indep_{i}" for i in range(20)]
+
+    selected = select_decorrelated_by_rank(df, ranked, n_target=15, n_min=15)
+
+    assert len(selected) == 15
+    assert selected[0] == "cluster_0"
+    assert sum(f.startswith("cluster_") for f in selected) == 1
+    assert selected[1:] == [f"indep_{i}" for i in range(14)]
+
+
+def test_rank_ordered_decorrelation_tops_up_to_minimum() -> None:
+    from src.optimization.feature_selection.filtering import select_decorrelated_by_rank
+
+    rng = np.random.default_rng(8)
+    base = rng.normal(size=1000)
+    df = pd.DataFrame({f"c{i}": base + rng.normal(scale=0.01, size=1000) for i in range(8)})
+    selected = select_decorrelated_by_rank(df, list(df.columns), n_target=8, n_min=5)
+    assert selected == ["c0", "c1", "c2", "c3", "c4"]
