@@ -1,14 +1,20 @@
 """
 CPCV-PBO evaluator.
 
-Implements Combinatorially Purged Cross-Validation with Probability of
-Backtest Overfitting computation for robust model validation.
+Runs Combinatorial Purged Cross-Validation for one or more candidate models,
+assembles each model's out-of-sample predictions into the phi CPCV backtest
+paths, turns them into per-bar strategy returns, and -- when at least two
+candidates are compared -- estimates the Probability of Backtest Overfitting
+with CSCV over the T x N matrix of path-averaged per-bar returns.
 
-Reference: López de Prado (2018) "Advances in Financial Machine Learning"
+References:
+    Lopez de Prado (2018) "Advances in Financial Machine Learning", Ch. 12
+    Bailey, Borwein, Lopez de Prado, Zhu (2017) "The Probability of Backtest Overfitting"
 """
 
 import logging
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,9 +23,15 @@ import numpy as np
 import pandas as pd
 
 from src.validation.cv.cpcv import CombinatorialPurgedCV, CPCVConfig, CPCVPathResult, CPCVResult
-from src.validation.cv.pbo import PBOConfig, compute_pbo
+from src.validation.cv.pbo import PBOConfig, compute_pbo, directional_strategy_returns
+from src.validation.deflated_sharpe import sharpe_ratio_per_period
 
 logger = logging.getLogger(__name__)
+
+
+def _accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Fraction of exact class matches."""
+    return float(np.mean(y_true == y_pred))
 
 
 @dataclass
@@ -28,11 +40,11 @@ class CPCVPBOConfig:
     Configuration for CPCV-PBO evaluation.
 
     Attributes:
-        n_groups: Number of sequential time groups
-        n_test_groups: Groups held out as test per combination
-        max_combinations: Maximum combinations to evaluate
-        purge_pct: Percentage to purge before test
-        embargo_pct: Percentage to embargo after test
+        n_groups: Number of contiguous time groups N
+        n_test_groups: Test groups per CPCV split k
+        purge_bars: Label span in bars (purge window around test groups)
+        embargo_bars: Extra rows embargoed after each test group
+        pbo_partitions: CSCV row blocks S (even)
         pbo_warn_threshold: PBO threshold for warning (default 0.5)
         pbo_block_threshold: PBO threshold for blocking (default 0.8)
         output_dir: Directory for evaluation outputs
@@ -40,9 +52,9 @@ class CPCVPBOConfig:
 
     n_groups: int = 6
     n_test_groups: int = 2
-    max_combinations: int = 20
-    purge_pct: float = 0.01
-    embargo_pct: float = 0.01
+    purge_bars: int = 60
+    embargo_bars: int = 0
+    pbo_partitions: int = 16
     pbo_warn_threshold: float = 0.5
     pbo_block_threshold: float = 0.8
     output_dir: str = "experiments/evaluation/cpcv_pbo"
@@ -50,21 +62,12 @@ class CPCVPBOConfig:
 
 class CPCVPBOEvaluator:
     """
-    CPCV-PBO (Combinatorially Purged Cross-Validation with Probability of Backtest Overfitting) evaluator.
-
-    Evaluates models using advanced statistical testing to detect backtest overfitting.
-
-    This evaluator:
-    1. Runs CPCV to generate multiple train/test paths
-    2. Collects performance metrics across all paths
-    3. Computes PBO to quantify overfitting probability
-    4. Returns comprehensive metrics for decision-making
+    CPCV path backtests + CSCV PBO for model selection.
 
     Example:
-        >>> config = {"n_groups": 6, "n_test_groups": 2}
-        >>> evaluator = CPCVPBOEvaluator(config)
-        >>> result = evaluator.run(X, y, model)
-        >>> print(f"PBO: {result['pbo_result']['pbo']:.3f}")
+        >>> evaluator = CPCVPBOEvaluator({"n_groups": 6, "n_test_groups": 2, "purge_bars": 20})
+        >>> result = evaluator.run(X, y, {"xgb": xgb, "lgbm": lgbm}, forward_returns=fwd)
+        >>> print(result["pbo_result"]["pbo"])
     """
 
     def __init__(self, config: dict[str, Any] | CPCVPBOConfig):
@@ -77,176 +80,129 @@ class CPCVPBOEvaluator:
         if isinstance(config, CPCVPBOConfig):
             self.config = config
         else:
+            defaults = CPCVPBOConfig()
             self.config = CPCVPBOConfig(
-                n_groups=config.get("n_groups", 6),
-                n_test_groups=config.get("n_test_groups", 2),
-                max_combinations=config.get("max_combinations", 20),
-                purge_pct=config.get("purge_pct", 0.01),
-                embargo_pct=config.get("embargo_pct", 0.01),
-                pbo_warn_threshold=config.get("pbo_warn_threshold", 0.5),
-                pbo_block_threshold=config.get("pbo_block_threshold", 0.8),
-                output_dir=config.get("output_dir", "experiments/evaluation/cpcv_pbo"),
+                **{k: config.get(k, getattr(defaults, k)) for k in defaults.__dict__}
             )
 
         self.output_dir = Path(self.config.output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create CPCV splitter
-        cpcv_config = CPCVConfig(
-            n_groups=self.config.n_groups,
-            n_test_groups=self.config.n_test_groups,
-            max_combinations=self.config.max_combinations,
-            purge_pct=self.config.purge_pct,
-            embargo_pct=self.config.embargo_pct,
+        self.cpcv = CombinatorialPurgedCV(
+            CPCVConfig(
+                n_groups=self.config.n_groups,
+                n_test_groups=self.config.n_test_groups,
+                purge_bars=self.config.purge_bars,
+                embargo_bars=self.config.embargo_bars,
+            )
         )
-        self.cpcv = CombinatorialPurgedCV(cpcv_config)
-
-        # PBO config
         self.pbo_config = PBOConfig(
+            n_partitions=self.config.pbo_partitions,
             warn_threshold=self.config.pbo_warn_threshold,
             block_threshold=self.config.pbo_block_threshold,
         )
+        logger.info(f"Initialized CPCVPBOEvaluator: {self.cpcv}")
 
-        logger.info("Initialized CPCVPBOEvaluator")
-        logger.info(
-            f"CPCV config: {self.config.n_groups} groups, {self.config.n_test_groups} test groups"
+    def _evaluate_model(
+        self,
+        name: str,
+        model: Any,
+        X: pd.DataFrame,
+        y: pd.Series,
+        forward_returns: np.ndarray | None,
+        label_end_times: pd.Series | None,
+        metric_fn: Callable[[np.ndarray, np.ndarray], float],
+    ) -> tuple[CPCVResult, np.ndarray | None]:
+        """CPCV one model; return its path results and path-averaged per-bar returns."""
+        n_samples = len(X)
+        split_preds: dict[int, np.ndarray] = {}
+        for train_idx, test_idx, split_id in self.cpcv.split(X, y, label_end_times=label_end_times):
+            model.fit(X.iloc[train_idx], y.iloc[train_idx])
+            split_preds[split_id] = np.asarray(model.predict(X.iloc[test_idx]), dtype=np.float64)
+
+        pred_paths = self.cpcv.assemble_paths(split_preds, n_samples)
+        assignments = self.cpcv.get_path_assignments()
+        y_true = y.to_numpy()
+
+        path_results = []
+        path_returns = []
+        for p in range(self.cpcv.n_paths):
+            returns = None
+            sharpe = 0.0
+            if forward_returns is not None:
+                returns = directional_strategy_returns(pred_paths[p], forward_returns)
+                sharpe = sharpe_ratio_per_period(returns)
+                path_returns.append(returns)
+            path_results.append(
+                CPCVPathResult(
+                    path_id=p,
+                    split_ids=tuple(int(s) for s in assignments[p]),
+                    n_samples=n_samples,
+                    accuracy=float(metric_fn(y_true, pred_paths[p])),
+                    sharpe=sharpe,
+                    returns=returns,
+                )
+            )
+
+        mean_returns = np.mean(path_returns, axis=0) if path_returns else None
+        return (
+            CPCVResult(config=self.cpcv.config, path_results=path_results, model_name=name),
+            mean_returns,
         )
-        logger.info(f"Output directory: {self.output_dir}")
 
     def run(
         self,
-        X: pd.DataFrame | None = None,
-        y: pd.Series | None = None,
-        model: Any = None,
+        X: pd.DataFrame,
+        y: pd.Series,
+        models: Mapping[str, Any] | Any,
+        forward_returns: pd.Series | np.ndarray | None = None,
         label_end_times: pd.Series | None = None,
-        metric_fn: Any | None = None,
+        metric_fn: Callable[[np.ndarray, np.ndarray], float] | None = None,
     ) -> dict[str, Any]:
         """
-        Run CPCV-PBO evaluation.
+        Run CPCV for every candidate and PBO across candidates.
 
         Args:
-            X: Feature DataFrame
-            y: Target labels
-            model: Model with fit() and predict() methods (or predict_proba())
-            label_end_times: Optional label end times for purging
-            metric_fn: Optional custom metric function (default: accuracy)
+            X: Feature DataFrame (rows in time order)
+            y: Directional labels in {-1, 0, +1}
+            models: One model, or a mapping name -> model (fit/predict API).
+                Each candidate is one strategy configuration for PBO.
+            forward_returns: Return from bar t to t+1 aligned with X. Required
+                for path Sharpe ratios and PBO.
+            label_end_times: Optional label end times for label-aware purging
+            metric_fn: Path metric on (y_true, y_pred) (default: accuracy)
 
         Returns:
-            Dict with keys:
-                - cpcv_result: CPCVResult with per-path metrics
-                - pbo_result: PBOResult with overfitting probability
-                - performance_matrix: Raw performance matrix
-                - recommendation: Deployment recommendation
-                - total_time: Evaluation time in seconds
-
-        Raises:
-            ValueError: If required arguments are missing
+            Dict with per-model CPCV results, the PBO result (None with fewer
+            than two candidates or no forward returns), and a recommendation.
         """
-        logger.info("Starting CPCV-PBO evaluation")
         start_time = time.time()
+        candidates = dict(models) if isinstance(models, Mapping) else {"model": models}
+        if not candidates:
+            raise ValueError("At least one model is required for CPCV-PBO evaluation")
 
-        # Validate inputs
-        if X is None or y is None:
-            raise ValueError("X and y are required for CPCV-PBO evaluation")
+        score_fn = metric_fn if metric_fn is not None else _accuracy
+        fwd = None if forward_returns is None else np.asarray(forward_returns, dtype=np.float64)
+        if fwd is not None and len(fwd) != len(X):
+            raise ValueError(f"forward_returns length {len(fwd)} != len(X) {len(X)}")
 
-        if model is None:
-            raise ValueError("model is required for CPCV-PBO evaluation")
+        cpcv_results: dict[str, CPCVResult] = {}
+        columns: list[np.ndarray] = []
+        for name, model in candidates.items():
+            result, mean_returns = self._evaluate_model(
+                name, model, X, y, fwd, label_end_times, score_fn
+            )
+            cpcv_results[name] = result
+            if mean_returns is not None:
+                columns.append(mean_returns)
 
-        # Default metric function
-        if metric_fn is None:
-
-            def _default_accuracy(y_true, y_pred):
-                return float(np.mean(y_true == y_pred))
-
-            metric_fn = _default_accuracy
-
-        # Collect path results
-        path_results = []
-        performance_list = []
-
-        for train_idx, test_idx, path_id in self.cpcv.split(X, y, label_end_times=label_end_times):
-            logger.debug(f"Evaluating path {path_id}: train={len(train_idx)}, test={len(test_idx)}")
-
-            # Split data
-            X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-            y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-
-            try:
-                # Fit model
-                model.fit(X_train, y_train)
-
-                # Predict
-                y_pred = model.predict(X_test)
-
-                # Compute metrics
-                accuracy = metric_fn(y_test.values, y_pred)
-
-                # Get prediction probabilities if available for Sharpe-like metric
-                if hasattr(model, "predict_proba"):
-                    proba = model.predict_proba(X_test)
-                    # Use probability confidence as proxy for returns
-                    confidence = np.max(proba, axis=1)
-                    # Sharpe-like metric: mean confidence / std confidence
-                    if np.std(confidence) > 0:
-                        sharpe = float(np.mean(confidence) / np.std(confidence))
-                    else:
-                        sharpe = 0.0
-                else:
-                    sharpe = accuracy  # Use accuracy as performance proxy
-
-                path_result = CPCVPathResult(
-                    path_id=path_id,
-                    # TODO: Pass actual group indices from CPCV splitter
-                    test_groups=(),
-                    train_groups=(),
-                    train_size=len(train_idx),
-                    test_size=len(test_idx),
-                    accuracy=accuracy,
-                    sharpe=sharpe,
-                )
-                path_results.append(path_result)
-                performance_list.append(sharpe)
-
-            except Exception as e:
-                logger.warning(f"Path {path_id} failed: {e}")
-                performance_list.append(np.nan)
-                continue
-
-        if not path_results:
-            raise ValueError("All CPCV paths failed - check model and data compatibility")
-
-        # Create CPCV result
-        cpcv_result = CPCVResult(
-            config=self.cpcv.config,
-            path_results=path_results,
-        )
-
-        # Compute PBO
-        # NOTE: PBO requires a matrix of (N_strategies, N_paths) where N_strategies >= 2.
-        # For single-model evaluation, we only have 1 strategy. PBO is designed to detect
-        # overfitting when SELECTING the best from multiple strategies. For a single model,
-        # PBO is not statistically meaningful. We return None and mark as INCONCLUSIVE.
         pbo_result = None
-        if len(performance_list) >= 2:
-            performance_array = np.array(performance_list)
-            # Only compute PBO if we have multiple independent models/strategies
-            # Single-model noise injection produces meaningless PBO values
-            try:
-                # Reshape as 1 strategy × N paths — compute_pbo will handle
-                # validation of minimum strategies internally
-                performance_matrix = performance_array.reshape(1, -1)
-                pbo_result = compute_pbo(performance_matrix, self.pbo_config)
-            except ValueError as e:
-                logger.info(
-                    f"PBO computation skipped for single model: {e}. "
-                    f"PBO requires multiple independent strategies for meaningful results."
-                )
-                pbo_result = None
+        if len(columns) >= 2:
+            pbo_result = compute_pbo(np.column_stack(columns), self.pbo_config)
 
-        # Generate recommendation
         if pbo_result is None:
             recommendation = (
-                "INCONCLUSIVE: PBO requires multiple independent strategies. "
+                "INCONCLUSIVE: PBO needs >= 2 candidate strategies and forward returns. "
                 "CPCV path metrics reported for reference."
             )
         elif pbo_result.should_block:
@@ -257,18 +213,15 @@ class CPCVPBOEvaluator:
             recommendation = f"PROCEED: Low overfitting risk (PBO={pbo_result.pbo:.3f})"
 
         total_time = time.time() - start_time
-        logger.info(f"CPCV-PBO evaluation completed in {total_time:.2f}s")
-        logger.info(f"Evaluated {len(path_results)} paths, recommendation: {recommendation}")
+        logger.info(f"CPCV-PBO evaluation completed in {total_time:.2f}s: {recommendation}")
 
         return {
-            "cpcv_result": cpcv_result.to_dict(),
+            "cpcv_results": {name: r.to_dict() for name, r in cpcv_results.items()},
             "pbo_result": pbo_result.to_dict() if pbo_result else None,
-            "performance_list": [float(p) for p in performance_list],
             "recommendation": recommendation,
             "total_time": total_time,
-            "n_paths": len(path_results),
-            "mean_accuracy": cpcv_result.mean_accuracy,
-            "std_accuracy": cpcv_result.std_accuracy,
+            "n_paths": self.cpcv.n_paths,
+            "n_splits": self.cpcv.get_n_splits(),
         }
 
     def validate_data(self, X: pd.DataFrame, y: pd.Series) -> dict[str, Any]:
@@ -285,12 +238,10 @@ class CPCVPBOEvaluator:
         warnings = []
         n_samples = len(X)
 
-        # Check minimum samples
         min_samples = self.config.n_groups * 100  # At least 100 per group
         if n_samples < min_samples:
             warnings.append(f"Low sample count: {n_samples} < recommended {min_samples}")
 
-        # Check for coverage
         coverage = self.cpcv.validate_coverage(X)
         if coverage["samples_never_in_test"] > 0:
             warnings.append(f"{coverage['samples_never_in_test']} samples never appear in test set")
@@ -299,7 +250,8 @@ class CPCVPBOEvaluator:
             "is_valid": len(warnings) == 0,
             "n_samples": n_samples,
             "n_groups": self.config.n_groups,
-            "n_paths": self.cpcv.get_n_splits(),
+            "n_splits": self.cpcv.get_n_splits(),
+            "n_paths": self.cpcv.n_paths,
             "coverage": coverage,
             "warnings": warnings,
         }

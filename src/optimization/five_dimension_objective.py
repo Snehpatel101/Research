@@ -1135,36 +1135,31 @@ def run_5d_optimization(
 
     if _dsr_applicable:
         try:
-            # Bonferroni correction: pass completed trial count so DSR
-            # raises significance/deployment thresholds proportionally,
-            # controlling family-wise error rate across all trials.
-            n_completed = len(
-                [t for t in study.trials if t.state.is_finished() and t.value is not None]
-            )
+            # The number of trials N is already the multiple-testing correction
+            # inside DSR. Trial values are annualized Sharpes computed on the
+            # validation bars, so T = len(val_data).
             dsr_result = compute_dsr_from_optuna_study(
                 study=study,
-                deployment_threshold=0.5,
-                num_tests=max(1, n_completed),
+                n_observations=len(val_data),
+                periods_per_year=_infer_annualization_factor(train_data),
             )
 
             # Store DSR metrics in best_result
             best_result.additional_metrics.update(
                 {
-                    "dsr_raw_sharpe": dsr_result.sharpe_ratio,
-                    "dsr_deflated_sharpe": dsr_result.deflated_sharpe,
+                    "dsr_sharpe_per_period": dsr_result.sharpe_ratio,
+                    "dsr": dsr_result.dsr,
+                    "dsr_expected_max_sharpe": dsr_result.expected_max_sharpe,
                     "dsr_n_trials": dsr_result.n_trials,
                     "dsr_is_significant": dsr_result.is_significant,
                     "dsr_should_deploy": dsr_result.should_deploy,
-                    "dsr_deflation_pct": dsr_result.get_deflation_pct(),
                     "dsr_risk_level": dsr_result.get_risk_level(),
                 }
             )
 
-            # Log DSR results
             logger.info(
-                f"DSR Validation: Raw Sharpe={dsr_result.sharpe_ratio:.3f}, "
-                f"Deflated Sharpe={dsr_result.deflated_sharpe:.3f} "
-                f"({dsr_result.get_deflation_pct():.1f}% deflation), "
+                f"DSR Validation: per-bar Sharpe={dsr_result.sharpe_ratio:.4f}, "
+                f"SR0={dsr_result.expected_max_sharpe:.4f}, DSR={dsr_result.dsr:.3f}, "
                 f"Risk: {dsr_result.get_risk_level()}"
             )
 
@@ -1181,15 +1176,16 @@ def run_5d_optimization(
                     )
             elif not dsr_result.should_deploy:
                 logger.warning(
-                    f"DSR gate advisory: Deflated Sharpe ({dsr_result.deflated_sharpe:.3f}) "
-                    f"below deployment threshold (0.5). Risk: {dsr_result.get_risk_level()}"
+                    f"DSR gate advisory: DSR ({dsr_result.dsr:.3f}) below deployment "
+                    f"threshold ({dsr_result.config.deployment_threshold:.2f}). "
+                    f"Risk: {dsr_result.get_risk_level()}"
                 )
 
             if verbose >= 1:
                 print("\nDeflated Sharpe Ratio Analysis:")
-                print(f"  Raw Sharpe: {dsr_result.sharpe_ratio:.3f}")
-                print(f"  Deflated Sharpe: {dsr_result.deflated_sharpe:.3f}")
-                print(f"  Deflation: {dsr_result.get_deflation_pct():.1f}%")
+                print(f"  Per-bar Sharpe: {dsr_result.sharpe_ratio:.4f}")
+                print(f"  Expected max Sharpe (null): {dsr_result.expected_max_sharpe:.4f}")
+                print(f"  DSR: {dsr_result.dsr:.3f}")
                 print(f"  Risk Level: {dsr_result.get_risk_level()}")
                 print(f"  Deploy Recommended: {dsr_result.should_deploy}")
 

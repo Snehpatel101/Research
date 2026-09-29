@@ -86,13 +86,13 @@ class HyperparameterTuningService:
             if request.embargo_bars is not None
             else max(request.horizon * 2, 60)
         )
+        cv_config = PurgedKFoldConfig(
+            n_splits=request.n_splits,
+            embargo_bars=embargo,
+        )
         if request.cv_method == "cpcv":
-            cv = self._create_cpcv(request)
+            cv = self._create_cpcv(request, cv_config.purge_bars, embargo)
         else:
-            cv_config = PurgedKFoldConfig(
-                n_splits=request.n_splits,
-                embargo_bars=embargo,
-            )
             cv = PurgedKFold(cv_config)
 
         tuner = TimeSeriesOptunaTuner(
@@ -160,7 +160,7 @@ class HyperparameterTuningService:
             n_trials_completed=request.n_trials,
         )
 
-    def _create_cpcv(self, request: TuningRequest) -> Any:
+    def _create_cpcv(self, request: TuningRequest, purge_bars: int, embargo_bars: int) -> Any:
         """Create a CPCV splitter wrapped for 2-tuple compatibility with the tuner.
 
         CPCV's split() yields (train_idx, test_idx, path_id) but TimeSeriesOptunaTuner
@@ -171,9 +171,8 @@ class HyperparameterTuningService:
         cpcv_config = CPCVConfig(
             n_groups=max(6, request.n_splits),
             n_test_groups=2,
-            max_combinations=15,
-            purge_pct=0.01,
-            embargo_pct=0.01,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
         )
         cpcv = CombinatorialPurgedCV(cpcv_config)
         return _CPCVAdapter(cpcv)
