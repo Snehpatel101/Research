@@ -179,6 +179,18 @@ class PipelineConfig:
 
     compute_mtf_features: bool = True  # Whether to compute MTF features
 
+    # Opt-in feature-governance diagnostics (FeatureGovernanceConfig.to_dict()).
+    # Empty/report=False = off. Never changes the selected features.
+    governance: dict[str, Any] = field(default_factory=dict)
+    # Resolved triple-barrier params per horizon ({"20": {"k_up", "k_down", "max_bars"}}),
+    # filled by ExperimentConfig when governance label perturbation is on so the
+    # diagnostics can relabel with scaled barriers. Keys are strings (JSON-safe).
+    label_barriers: dict[str, dict[str, float]] = field(default_factory=dict)
+
+    # Training bar timeframe (e.g. "5min"); None = input bars as-is. Context only:
+    # identifies the experiment for the governance registry.
+    bar_timeframe: str | None = None
+
     # Window length for sequence models; None = each model's contract length
     sequence_length: int | None = None
 

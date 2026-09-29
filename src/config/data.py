@@ -4,7 +4,7 @@ Data-section configuration classes for ExperimentConfig.
 Every field of these classes reaches the pipeline (see
 ``ExperimentConfig.to_pipeline_config()`` and ``MLFactory.prepare_data``):
 
-- FeatureConfig: feature-selection switch
+- FeatureConfig: feature-selection switch + opt-in governance diagnostics
 - LabelingConfig: triple-barrier overrides + binary mode
 - SequenceConfig: window length for sequence models
 - MTFConfig: multi-timeframe feature switch + timeframes
@@ -64,6 +64,73 @@ class MTFMode(StrEnum):
 
 
 @dataclass
+class FeatureGovernanceConfig(BaseConfig):
+    """
+    Opt-in feature-governance diagnostics run after feature selection.
+
+    Everything here is READ-ONLY with respect to the selection: the selected
+    features are identical with the report on or off. All diagnostics use the
+    TRAIN split rows only, and every ranking inside them is the same purged-CV
+    (label-span purge + embargo) out-of-sample MDA the selection itself uses.
+    Cost: about ``n_bootstrap + len(barrier_scales)`` extra MDA rankings.
+
+    Attributes:
+        report: Master switch. Writes ``<output_dir>/feature_governance/h{h}.json``
+            (h = the ranking horizon) with per-feature MDA importance, selection
+            stability across contiguous blocks, label-perturbation rank shifts,
+            robustness score and per-model selection.
+        bootstrap_stability: Include block-subsample selection frequency
+            (stability selection). Only used when ``report`` is on.
+        label_perturbation: Include rank shifts when triple-barrier widths change
+            by ``barrier_scales``. Only used when ``report`` is on.
+        registry: Persist a cross-run FeatureRegistry (lifecycle state per
+            feature) updated from this run's selection and stability verdicts.
+            Only used when ``report`` is on.
+        registry_path: Registry JSON path. None = ``<runs dir>/feature_registry_<SYMBOL>.json``
+            next to the run directories, so every run of a symbol shares it.
+        n_bootstrap: Number of contiguous blocks for the stability estimate.
+        stability_threshold: Minimum share of blocks a feature must rank in the
+            top-K (K = the largest per-model feature budget) to count as stable.
+        window_fraction: Length of each block as a share of the train rows.
+        barrier_scales: Multipliers applied to the label's k_up and k_down for
+            the perturbed label variants (e.g. 0.75 = tighter, 1.25 = wider).
+        max_degraded_runs: Consecutive failing runs in DEGRADED before the
+            registry retires a feature (retirement is recorded, never applied).
+    """
+
+    report: bool = False
+    bootstrap_stability: bool = True
+    label_perturbation: bool = True
+    registry: bool = True
+    registry_path: str | None = None
+    n_bootstrap: int = 8
+    stability_threshold: float = 0.6
+    window_fraction: float = 0.5
+    barrier_scales: list[float] = field(default_factory=lambda: [0.75, 1.25])
+    max_degraded_runs: int = 3
+
+    def validate(self) -> list[str]:
+        """Validate governance configuration."""
+        issues = super().validate()
+        if self.n_bootstrap < 1:
+            issues.append(f"n_bootstrap must be >= 1, got {self.n_bootstrap}")
+        if not 0.0 < self.stability_threshold <= 1.0:
+            issues.append(f"stability_threshold must be in (0, 1], got {self.stability_threshold}")
+        if not 0.0 < self.window_fraction <= 1.0:
+            issues.append(f"window_fraction must be in (0, 1], got {self.window_fraction}")
+        if any(scale <= 0 for scale in self.barrier_scales):
+            issues.append(f"barrier_scales must all be positive, got {self.barrier_scales}")
+        if self.max_degraded_runs < 1:
+            issues.append(f"max_degraded_runs must be >= 1, got {self.max_degraded_runs}")
+        return issues
+
+    def __post_init__(self) -> None:
+        issues = self.validate()
+        if issues:
+            raise ValueError("Invalid features.governance config: " + "; ".join(issues))
+
+
+@dataclass
 class FeatureConfig(BaseConfig):
     """
     Feature configuration.
@@ -71,13 +138,16 @@ class FeatureConfig(BaseConfig):
     The feature set itself is fixed (``FeatureEngineer`` computes every
     family; MTF is controlled by ``MTFConfig``). What is configurable is
     whether the MDA feature-selection pipeline prunes it per model (feature
-    counts come from each model's contract).
+    counts come from each model's contract) and whether governance
+    diagnostics are written alongside it.
 
     Attributes:
         selection_enabled: Run train-only MDA feature selection per model
+        governance: Opt-in stability / label-perturbation / registry diagnostics
     """
 
     selection_enabled: bool = True
+    governance: FeatureGovernanceConfig = field(default_factory=FeatureGovernanceConfig)
 
 
 # =============================================================================
@@ -241,6 +311,7 @@ __all__ = [
     "MTFMode",
     # Configs
     "FeatureConfig",
+    "FeatureGovernanceConfig",
     "LabelingConfig",
     "SequenceConfig",
     "MTFConfig",

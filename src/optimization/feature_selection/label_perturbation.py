@@ -1,17 +1,17 @@
-"""
-Label perturbation testing for feature importance robustness.
+"""Label-perturbation robustness of feature importance.
 
-Tests whether feature importance rankings are stable when labeling parameters
-change (e.g., different barrier widths). Features whose rank shifts drastically
-under small label perturbations are likely overfitting to labeling artifacts
-rather than capturing genuine signal.
+A feature whose importance rank collapses when the triple-barrier widths change
+by a modest amount is describing one particular labeling artifact rather than a
+durable relationship. This module compares importance rankings computed under
+perturbed label variants (built by the caller with the same labeler and purged
+CV as a x1.0 CONTROL relabel) and flags features whose rank moves more than a
+tolerance. The control is relabeled exactly like the variants, so rank movement
+that the relabeling procedure itself causes (a truncated tail, a re-calibrated
+cost) is measured against the live ranking and never blamed on the perturbation:
+a feature is fragile only when its shift exceeds the control's own shift too.
 
-Approach:
-1. Compute MDA (permutation importance) ranking under each label variant.
-2. Compare ranks against the baseline (first variant).
-3. Features with max rank change <= threshold are deemed "robust".
-
-Reference: improvements_sneh.md Section 16.3 item 3.
+Only bookkeeping happens here: the importances come in, per-feature rank shifts
+and a rank-correlation summary come out.
 """
 
 from __future__ import annotations
@@ -21,181 +21,116 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.inspection import permutation_importance
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class PerturbationResult:
-    """Result of label perturbation testing for a single feature."""
+    """Rank movement of one feature across label variants."""
 
     feature_name: str
-    baseline_rank: int
+    baseline_rank: int  # rank under the reference labels (the control when given)
     perturbed_ranks: list[int]
-    max_rank_change: int
+    max_rank_change: int  # largest |variant rank - reference rank|
+    control_shift: int  # |control rank - live baseline rank| (0 without a control)
     mean_rank: float
     is_robust: bool
 
 
-class LabelPerturbationTester:
-    """Test feature importance stability across different label definitions.
+@dataclass
+class PerturbationSummary:
+    """Per-feature results plus how similar each variant's ranking is overall."""
 
-    Ranks features by MDA importance under each label variant and flags
-    features whose rank shifts beyond a configurable threshold.
+    results: list[PerturbationResult]
+    rank_correlation: dict[str, float]  # variant name -> Spearman vs the reference
+    variants_used: list[str]
+    control_rank_correlation: float | None = None  # control vs the live baseline
+
+
+class LabelPerturbationTester:
+    """Compare importance rankings under baseline vs perturbed labels.
+
+    Args:
+        rank_change_fraction: A feature is robust when its largest rank move is at
+            most this share of the feature count (relative, so the tolerance is
+            meaningful for 10 features and for 200).
+        min_rank_change: Floor on the absolute tolerance (ranks are noisy for
+            near-zero importances).
     """
 
-    def __init__(
-        self,
-        rank_change_threshold: int = 20,
-        n_estimators: int = 50,
-        n_repeats: int = 3,
-        max_samples: int = 50_000,
-        random_state: int = 42,
-    ) -> None:
-        self.rank_change_threshold = rank_change_threshold
-        self.n_estimators = n_estimators
-        self.n_repeats = n_repeats
-        self.max_samples = max_samples
-        self.random_state = random_state
-
-    def _compute_ranking(self, X: pd.DataFrame, y: pd.Series) -> pd.Series:
-        """Compute MDA importance ranking for features.
-
-        Args:
-            X: Feature matrix (n_samples, n_features).
-            y: Label vector aligned with X.
-
-        Returns:
-            Series indexed by feature name with integer ranks (1 = most important).
-        """
-        # Subsample if dataset is large
-        if len(X) > self.max_samples:
-            rng = np.random.RandomState(self.random_state)
-            idx = rng.choice(len(X), size=self.max_samples, replace=False)
-            X = X.iloc[idx]
-            y = y.iloc[idx]
-
-        rf = RandomForestClassifier(
-            n_estimators=self.n_estimators,
-            max_depth=6,
-            n_jobs=-1,
-            random_state=self.random_state,
-        )
-
-        # Fit on full data for permutation importance
-        rf.fit(X, y)
-
-        result = permutation_importance(
-            rf,
-            X,
-            y,
-            n_repeats=self.n_repeats,
-            n_jobs=-1,
-            random_state=self.random_state,
-            scoring="accuracy",
-        )
-
-        importance = pd.Series(result.importances_mean, index=X.columns)
-        # Rank descending: highest importance = rank 1
-        ranks = importance.rank(ascending=False, method="min").astype(int)
-        return ranks
+    def __init__(self, rank_change_fraction: float = 0.15, min_rank_change: int = 3) -> None:
+        if not 0.0 < rank_change_fraction <= 1.0:
+            raise ValueError(f"rank_change_fraction must be in (0, 1], got {rank_change_fraction}")
+        self.rank_change_fraction = rank_change_fraction
+        self.min_rank_change = min_rank_change
 
     def evaluate(
         self,
-        X: pd.DataFrame,
-        y_variants: dict[str, pd.Series],
-    ) -> list[PerturbationResult]:
-        """Evaluate feature ranking stability across label variants.
+        baseline: pd.Series,
+        variants: dict[str, pd.Series | None],
+        control: pd.Series | None = None,
+    ) -> PerturbationSummary:
+        """Rank shifts of every baseline feature under each usable variant.
 
         Args:
-            X: Feature matrix (n_samples, n_features).
-            y_variants: Mapping of variant name to label vector. The first
-                entry is treated as the baseline. All variants must have the
-                same length as X.
-
-        Returns:
-            List of PerturbationResult sorted by max_rank_change ascending
-            (most robust features first).
-
-        Raises:
-            ValueError: If y_variants is empty or lengths mismatch.
+            baseline: Importance per feature under the live labels.
+            variants: Importance per feature under each perturbed label variant
+                (None = the variant could not be ranked; it is skipped).
+            control: Importance under a x1.0 relabel computed like the variants.
+                When given, shifts are measured against it and a feature is
+                flagged only if its shift also exceeds ``|control - baseline|``.
         """
-        if not y_variants:
-            raise ValueError("y_variants must contain at least one label variant")
+        names = list(baseline.index)
+        threshold = max(self.min_rank_change, int(round(self.rank_change_fraction * len(names))))
 
-        variant_names = list(y_variants.keys())
-        n_samples = len(X)
+        def _ranks(imp: pd.Series) -> pd.Series:
+            return imp.reindex(names).fillna(-np.inf).rank(ascending=False, method="average")
 
-        for name, y in y_variants.items():
-            if len(y) != n_samples:
-                raise ValueError(
-                    f"Label variant '{name}' has {len(y)} samples, "
-                    f"expected {n_samples} to match X"
-                )
+        base_ranks = _ranks(baseline)
+        control_ranks = _ranks(control) if control is not None and len(control) else None
+        reference = control_ranks if control_ranks is not None else base_ranks
+        used: dict[str, pd.Series] = {
+            name: _ranks(imp) for name, imp in variants.items() if imp is not None and len(imp)
+        }
 
-        logger.info(
-            f"Label perturbation test: {len(variant_names)} variants, "
-            f"{X.shape[1]} features, {n_samples} samples"
-        )
+        def _spearman(a: pd.Series, b: pd.Series) -> float:
+            return float(a.corr(b, method="spearman")) if len(names) > 1 else 1.0
 
-        # Compute rankings for each variant
-        rankings: dict[str, pd.Series] = {}
-        for name, y in y_variants.items():
-            logger.info(f"  Computing MDA ranking for variant '{name}'...")
-            rankings[name] = self._compute_ranking(X, y)
-
-        baseline_name = variant_names[0]
-        baseline_ranks = rankings[baseline_name]
-        perturbed_names = variant_names[1:]
-
-        results: list[PerturbationResult] = []
-        for feature in X.columns:
-            b_rank = int(baseline_ranks[feature])
-
-            p_ranks = [int(rankings[name][feature]) for name in perturbed_names]
-
-            if p_ranks:
-                max_change = max(abs(r - b_rank) for r in p_ranks)
-                all_ranks = [b_rank] + p_ranks
-            else:
-                # Single variant: no perturbation, always robust
-                max_change = 0
-                all_ranks = [b_rank]
-
-            mean_r = float(np.mean(all_ranks))
-
+        correlation = {name: _spearman(reference, r) for name, r in used.items()}
+        results = []
+        for f in names:
+            ref = float(reference[f])
+            perturbed = [float(r[f]) for r in used.values()]
+            max_change = max((abs(p - ref) for p in perturbed), default=0.0)
+            own = abs(ref - float(base_ranks[f])) if control_ranks is not None else 0.0
             results.append(
                 PerturbationResult(
-                    feature_name=feature,
-                    baseline_rank=b_rank,
-                    perturbed_ranks=p_ranks,
-                    max_rank_change=max_change,
-                    mean_rank=round(mean_r, 2),
-                    is_robust=max_change <= self.rank_change_threshold,
+                    feature_name=f,
+                    baseline_rank=int(round(ref)),
+                    perturbed_ranks=[int(round(p)) for p in perturbed],
+                    max_rank_change=int(round(max_change)),
+                    control_shift=int(round(own)),
+                    mean_rank=round(float(np.mean([ref, *perturbed])), 2),
+                    is_robust=bool(used) and max_change <= max(threshold, own),
                 )
             )
-
         results.sort(key=lambda r: r.max_rank_change)
-
-        n_robust = sum(1 for r in results if r.is_robust)
         logger.info(
-            f"Label perturbation complete: {n_robust}/{len(results)} features robust "
-            f"(threshold={self.rank_change_threshold})"
+            "Label perturbation: %d/%d features robust over %d variants (rank move <= %d)",
+            sum(r.is_robust for r in results),
+            len(results),
+            len(used),
+            threshold,
         )
-        return results
-
-    def get_robust_features(self, results: list[PerturbationResult]) -> list[str]:
-        """Return sorted list of robust feature names.
-
-        Args:
-            results: Output from evaluate().
-
-        Returns:
-            Alphabetically sorted list of feature names where is_robust is True.
-        """
-        return sorted(r.feature_name for r in results if r.is_robust)
+        return PerturbationSummary(
+            results=results,
+            rank_correlation=correlation,
+            variants_used=list(used),
+            control_rank_correlation=(
+                _spearman(base_ranks, control_ranks) if control_ranks is not None else None
+            ),
+        )
 
 
-__all__ = ["LabelPerturbationTester", "PerturbationResult"]
+__all__ = ["LabelPerturbationTester", "PerturbationResult", "PerturbationSummary"]

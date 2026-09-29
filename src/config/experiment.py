@@ -522,6 +522,17 @@ class ExperimentConfig:
         # Binary mode: 2 classes instead of 3
         _n_classes = 2 if self.data.labeling.binary_mode else 3
 
+        governance = self.data.features.governance
+        label_barriers: dict[str, dict[str, float]] = {}
+        if governance.report and governance.label_perturbation:
+            for horizon in self.training.horizons:
+                k_up, k_down, max_bars, _source = self.resolve_barrier_params(horizon)
+                label_barriers[str(horizon)] = {
+                    "k_up": k_up,
+                    "k_down": k_down,
+                    "max_bars": max_bars,
+                }
+
         return PipelineConfig(
             symbol=self.data.symbol,
             data_path=str(self.data.data_path) if self.data.data_path else "",
@@ -580,6 +591,11 @@ class ExperimentConfig:
             calibration_method=self.training.calibration.method,
             # Classification mode
             n_classes=_n_classes,
+            # Opt-in feature-governance diagnostics (never changes the selection)
+            atr_period=self.data.labeling.atr_period,
+            bar_timeframe=bar_timeframe or self.data.bar_timeframe,
+            governance=governance.to_dict(),
+            label_barriers=label_barriers,
         )
 
 

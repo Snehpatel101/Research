@@ -705,7 +705,9 @@ class MLFactory:
                 f"{self.config.label_span_bars()} bars), embargo_bars={self._cv_gaps[1]} "
                 f"(bar timeframe {self._bar_timeframe()})"
             )
-        return self.config.to_pipeline_config(cv_gaps=self._cv_gaps)
+        return self.config.to_pipeline_config(
+            cv_gaps=self._cv_gaps, bar_timeframe=self._bar_timeframe()
+        )
 
     def _bar_timeframe(self) -> str | None:
         """Training bar timeframe recorded by the data pipeline (None before it ran)."""

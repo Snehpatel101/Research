@@ -35,6 +35,7 @@ Example:
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -362,9 +363,29 @@ class PipelineCheckpointManager:
         return None
 
 
+# Config paths that only steer read-only diagnostics: they never change the data,
+# features, labels or models, so changing them must not invalidate a checkpoint.
+HASH_EXCLUDED_PATHS: tuple[tuple[str, ...], ...] = (("data", "features", "governance"),)
+
+
+def _without_diagnostic_settings(config_dict: dict[str, Any]) -> dict[str, Any]:
+    """Copy of ``config_dict`` minus the ``HASH_EXCLUDED_PATHS`` entries."""
+    pruned = copy.deepcopy(config_dict)
+    for path in HASH_EXCLUDED_PATHS:
+        node: Any = pruned
+        for key in path[:-1]:
+            node = node.get(key) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            node.pop(path[-1], None)
+    return pruned
+
+
 def compute_config_hash(config: Any) -> str:
     """
     Compute a hash of a configuration object.
+
+    Diagnostics-only settings (``HASH_EXCLUDED_PATHS``, e.g. the feature-governance
+    report) are left out of the hash.
 
     Args:
         config: Configuration object (must be pickle-able or have to_dict())
@@ -381,7 +402,9 @@ def compute_config_hash(config: Any) -> str:
     try:
         # Try to use to_dict if available (for dataclasses)
         if hasattr(config, "to_dict"):
-            config_bytes = json.dumps(config.to_dict(), sort_keys=True).encode()
+            config_bytes = json.dumps(
+                _without_diagnostic_settings(config.to_dict()), sort_keys=True
+            ).encode()
         elif hasattr(config, "__dict__"):
             # For regular objects, use __dict__
             config_bytes = json.dumps(
