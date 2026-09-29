@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
 from src.models.registry import ModelRegistry
 from src.validation.deflated_sharpe import (
     compute_dsr_from_optuna_study,
@@ -71,9 +72,10 @@ class TimeSeriesOptunaTuner:
         self,
         X: pd.DataFrame | np.ndarray,
         y: pd.Series | np.ndarray,
-        sample_weights: pd.Series | None = None,
+        sample_weights: pd.Series | np.ndarray | None = None,
         param_space: dict | None = None,
         data_rank: int = 2,
+        label_spans: LabelSpans | None = None,
     ) -> dict[str, Any]:
         """
         Run hyperparameter tuning.
@@ -84,6 +86,8 @@ class TimeSeriesOptunaTuner:
             sample_weights: Optional quality weights
             param_space: Search space (uses defaults if None)
             data_rank: Dimensionality of data (2, 3, or 4)
+            label_spans: Optional per-sample label spans (bar positions); CV
+                folds purge training samples whose labels overlap validation
 
         Returns:
             Dict with best_params and study info
@@ -130,6 +134,9 @@ class TimeSeriesOptunaTuner:
                 y = y[sub_indices]
             else:
                 y = y.iloc[sub_indices].reset_index(drop=True)
+            # Spans stay in bar positions, so purging stays exact after striding
+            if label_spans is not None:
+                label_spans = label_spans.subset(sub_indices)
             # Apply to sample_weights if present
             if sample_weights is not None:
                 if isinstance(sample_weights, np.ndarray):
@@ -188,9 +195,11 @@ class TimeSeriesOptunaTuner:
             n_samples = X.shape[0]
             X_for_cv = pd.DataFrame(index=range(n_samples))
             y_for_cv = pd.Series(y) if isinstance(y, np.ndarray) else y
-            self._precomputed_splits = list(self.cv.split(X_for_cv, y_for_cv))
+            self._precomputed_splits = list(
+                self.cv.split(X_for_cv, y_for_cv, label_spans=label_spans)
+            )
         else:
-            self._precomputed_splits = list(self.cv.split(X, y))
+            self._precomputed_splits = list(self.cv.split(X, y, label_spans=label_spans))
 
         # A fold whose train or validation labels hold fewer than two classes
         # carries no hyperparameter signal: a constant predictor scores a

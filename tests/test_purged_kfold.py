@@ -161,23 +161,3 @@ class TestConfigValidation:
         cv = PurgedKFold(config)
         with pytest.raises(ValueError, match="too large"):
             list(cv.split(small_df))
-
-
-class TestFromHorizons:
-    """Factory method from_horizons computes purge_bars correctly."""
-
-    def test_default_multiplier(self) -> None:
-        config = PurgedKFoldConfig.from_horizons([5, 10, 20, 60, 120])
-        assert config.purge_bars == 360  # 120 * 3
-
-    def test_custom_multiplier(self) -> None:
-        config = PurgedKFoldConfig.from_horizons([5, 10, 20], purge_multiplier=2)
-        assert config.purge_bars == 40  # 20 * 2
-
-    def test_empty_horizons_raises(self) -> None:
-        with pytest.raises(ValueError, match="empty"):
-            PurgedKFoldConfig.from_horizons([])
-
-    def test_negative_horizon_raises(self) -> None:
-        with pytest.raises(ValueError, match="positive"):
-            PurgedKFoldConfig.from_horizons([5, -1])

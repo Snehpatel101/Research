@@ -13,6 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
 
@@ -62,6 +63,7 @@ class SequenceOOFGenerator:
         seq_len: int,
         sample_weights: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
         symbol_column: str | None = "symbol",
         strict_validation: bool = True,  # Phase 4 SNwH: strict coverage validation
         n_classes: int = 3,
@@ -82,6 +84,7 @@ class SequenceOOFGenerator:
             seq_len: Sequence length
             sample_weights: Optional sample weights
             label_end_times: Optional label end times for purging
+            label_spans: Optional label spans (bar positions) for purging
             symbol_column: Column name for symbol isolation (None to use datetime gaps)
             strict_validation: If True, raise error on coverage issues (default True).
                              Set to False to proceed with warning for heterogeneous stacking.
@@ -144,7 +147,7 @@ class SequenceOOFGenerator:
 
         # Generate predictions fold by fold
         for fold_idx, (train_idx, val_idx) in enumerate(
-            self.cv.split(X, y, label_end_times=label_end_times)
+            self.cv.split(X, y, label_end_times=label_end_times, label_spans=label_spans)
         ):
             # Early stopping selects on a purged tail of the TRAIN rows —
             # never on the held-out fold these predictions are made for.

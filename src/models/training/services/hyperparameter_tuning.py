@@ -24,6 +24,7 @@ class TuningRequest:
     max_epochs: int | None = None  # Cap max_epochs for neural models during tuning
     cv_method: str = "purged_kfold"  # CV method: "purged_kfold" or "cpcv"
     embargo_bars: int | None = None  # Pipeline embargo (overrides horizon*2 default)
+    purge_bars: int | None = None  # Pipeline purge floor (label span); None = PurgedKFold default
     optuna_timeout: int | None = None  # Wall-clock cap (s) for the Optuna study
 
 
@@ -90,6 +91,8 @@ class HyperparameterTuningService:
             n_splits=request.n_splits,
             embargo_bars=embargo,
         )
+        if request.purge_bars is not None:
+            cv_config.purge_bars = request.purge_bars
         if request.cv_method == "cpcv":
             cv = self._create_cpcv(request, cv_config.purge_bars, embargo)
         else:
@@ -106,6 +109,10 @@ class HyperparameterTuningService:
 
         X_train = request.prepared_data.X_train
         y_train = request.prepared_data.y_train
+        # Trials fit exactly like the final model: same weights, and CV purges
+        # every training sample whose label overlaps the validation fold
+        spans = request.prepared_data.label_spans("train")
+        weights = request.prepared_data.train_weights
 
         # Prepare data based on rank
         if data_rank == 2:
@@ -130,6 +137,9 @@ class HyperparameterTuningService:
                 )
                 X_input = X_input.loc[valid_mask].reset_index(drop=True)
                 y_input = y_input.loc[valid_mask].reset_index(drop=True)
+                keep = valid_mask.to_numpy()
+                spans = spans.subset(keep) if spans is not None else None
+                weights = weights[keep] if weights is not None else None
         else:
             valid_mask = y_input != INVALID_LABEL
             n_invalid = int((~valid_mask).sum())
@@ -140,11 +150,15 @@ class HyperparameterTuningService:
                 )
                 X_input = X_input[valid_mask]
                 y_input = y_input[valid_mask]
+                spans = spans.subset(valid_mask) if spans is not None else None
+                weights = weights[valid_mask] if weights is not None else None
 
         result = tuner.tune(
             X=X_input,
             y=y_input,
+            sample_weights=weights,
             data_rank=data_rank,
+            label_spans=spans,
         )
 
         logger.info(f"  Best params: {result.get('best_params', {})}")
@@ -184,9 +198,11 @@ class _CPCVAdapter:
     def __init__(self, cpcv: Any) -> None:
         self._cpcv = cpcv
 
-    def split(self, X: Any, y: Any = None, groups: Any = None) -> Any:
+    def split(self, X: Any, y: Any = None, groups: Any = None, label_spans: Any = None) -> Any:
         """Yield (train_idx, test_idx) by dropping the path_id from CPCV's 3-tuple."""
-        for train_idx, test_idx, _path_id in self._cpcv.split(X, y, groups):
+        for train_idx, test_idx, _path_id in self._cpcv.split(
+            X, y, groups, label_spans=label_spans
+        ):
             yield train_idx, test_idx
 
     def get_n_splits(self, X: Any = None, y: Any = None, groups: Any = None) -> int:

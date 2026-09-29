@@ -2,12 +2,14 @@
 MetaLabelingBundle - primary direction model + meta-model bet filter.
 
 Meta-labeling (Lopez de Prado, AFML ch. 3) trains a primary model to call the
-direction and a meta-model to predict P(primary is correct). A trade is taken
-only when that probability clears a threshold.
+side and a meta-model to predict P(the primary's bet pays off). The meta-model
+is trained only on bars where the primary takes a side (prediction != neutral)
+and a trade is taken only when that probability clears a threshold; bars where
+the primary predicts neutral are never traded.
 
-The meta-model was trained on the primary model's own (scaled) inputs, so the
-bundle stores the primary ModelBundle plus the fitted meta estimator and scores
-both from the same model input.
+Meta features (``build_meta_features``) are the primary's own scaled model
+input plus its uncalibrated class probabilities and confidence — built by the
+same function at training and at serving time (train/serve parity).
 
 Layout on disk:
     path/
@@ -18,7 +20,7 @@ Layout on disk:
 Usage:
     bundle = MetaLabelingBundle.load("./bundles/meta_labeling_xgboost_logistic_h5")
     result = bundle.predict_from_raw(raw_df)   # neutral where the filter says no
-    meta = bundle.predict_meta(raw_df)         # directions, P(correct), trade mask
+    meta = bundle.predict_meta(raw_df)         # directions, P(bet pays off), trade mask
 """
 
 from __future__ import annotations
@@ -40,13 +42,50 @@ from src.models.base import PredictionResult
 
 logger = logging.getLogger(__name__)
 
-META_LABELING_BUNDLE_VERSION = "2.0.0"
+META_LABELING_BUNDLE_VERSION = "3.0.0"
+# Version of the meta-feature layout; bundles with another layout were trained
+# on different inputs and cannot be served by this code.
+META_FEATURE_VERSION = 2
 META_LABELING_METADATA_FILE = "meta_labeling_metadata.json"
 PRIMARY_BUNDLE_DIR = "primary_bundle"
 META_MODEL_FILE = "meta_model.pkl"
 
-# Class label meaning "no trade" in both 3-class {-1,0,1} and binary {0,1} labels
+# Class label meaning "no trade" in both 3-class {-1,0,1} and binary {0,1} labels.
+# A primary "side" is any other prediction: -1/+1 (short/long) in 3-class mode,
+# 1 ("a barrier will be hit") in binary mode, whose labels carry no direction.
 NEUTRAL_LABEL = 0
+
+
+def primary_sides(class_predictions: np.ndarray) -> np.ndarray:
+    """Mask of bars where the primary takes a side (prediction != neutral)."""
+    return np.asarray(class_predictions) != NEUTRAL_LABEL
+
+
+def build_meta_features(model_input: np.ndarray, primary_probabilities: np.ndarray) -> np.ndarray:
+    """Meta-model input: primary model input, primary class probabilities, confidence.
+
+    Args:
+        model_input: The primary's scaled input in any rank (flattened per sample).
+        primary_probabilities: The primary's UNCALIBRATED class probabilities
+            (n_samples, n_classes) — out-of-fold at training time, the served
+            model's at inference time.
+
+    Returns:
+        float32 array (n_samples, n_inputs + n_classes + 1).
+    """
+    n = len(model_input)
+    probs = np.asarray(primary_probabilities, dtype=np.float32)
+    if probs.ndim != 2 or len(probs) != n:
+        raise ValueError(
+            f"primary_probabilities must be (n_samples={n}, n_classes), got {probs.shape}"
+        )
+    return np.hstack(
+        [
+            np.asarray(model_input, dtype=np.float32).reshape(n, -1),
+            probs,
+            probs.max(axis=1, keepdims=True),
+        ]
+    )
 
 
 @dataclass
@@ -56,9 +95,11 @@ class MetaLabelingPrediction:
     Attributes:
         directions: Primary model class predictions (n_samples,).
         direction_probabilities: Primary model class probabilities (n_samples, n_classes).
-        meta_probabilities: P(primary_is_correct) from the meta-model (n_samples,).
-        positions: Signed position sizes = direction * meta_probability (n_samples,).
-        trade_mask: Boolean mask where meta_probability >= threshold (n_samples,).
+        meta_probabilities: P(the primary's bet pays off) from the meta-model
+            (n_samples,); only meaningful where the primary takes a side.
+        positions: Signed position sizes = direction * meta_probability on
+            traded bars, 0 elsewhere (n_samples,).
+        trade_mask: Primary takes a side AND meta_probability >= threshold.
         threshold: The threshold used for filtering.
         timestamps: Bar timestamp of every row.
     """
@@ -101,8 +142,9 @@ class MetaLabelingBundle:
         """
         Args:
             primary_bundle: Bundle producing directional predictions.
-            meta_model: Fitted binary classifier (class 1 = primary correct)
-                with ``predict_proba``, trained on the primary's model input.
+            meta_model: Fitted binary classifier (class 1 = the primary's bet
+                paid off) with ``predict_proba``, trained on
+                ``build_meta_features`` of the primary's sided bars.
             threshold: Minimum P(correct) to take a trade.
             meta_model_name: Meta-model family name (e.g. "logistic").
             horizon: Prediction horizon in bars.
@@ -124,9 +166,24 @@ class MetaLabelingBundle:
     # -----------------------------------------------------------------
 
     def meta_probability(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
-        """P(primary is correct) for unscaled primary input X (as accepted by predict)."""
+        """P(the primary's bet pays off) for unscaled primary input X (as accepted by predict)."""
+        return self._score(X, calibrate=False)[1]
+
+    def _score(
+        self, X: pd.DataFrame | np.ndarray, calibrate: bool
+    ) -> tuple[PredictionResult, np.ndarray]:
+        """Primary prediction (optionally calibrated) and meta P(bet pays off)."""
         model_input = self.primary_bundle.model_input(X)
-        return self.meta_model.predict_proba(model_input.reshape(len(model_input), -1))[:, 1]
+        # Meta features use the primary's UNCALIBRATED probabilities, as in training
+        raw = self.primary_bundle.model.predict(model_input)
+        meta_input = build_meta_features(model_input, raw.class_probabilities)
+        p_win = self.meta_model.predict_proba(meta_input)[:, 1]
+        primary = self.primary_bundle.predict(X, calibrate=True) if calibrate else raw
+        return primary, p_win
+
+    def trade_mask(self, directions: np.ndarray, p_win: np.ndarray) -> np.ndarray:
+        """Bars that are traded: the primary takes a side and the meta filter accepts."""
+        return primary_sides(directions) & (p_win >= self.threshold)
 
     def predict_meta(
         self,
@@ -134,16 +191,16 @@ class MetaLabelingBundle:
         calibrate: bool = True,
         skip_cleaning: bool = False,
     ) -> MetaLabelingPrediction:
-        """Directions, P(correct), positions and trade mask from raw OHLCV."""
+        """Directions, P(bet pays off), positions and trade mask from raw OHLCV."""
         X, timestamps = self.primary_bundle.raw_to_input(raw_df, skip_cleaning=skip_cleaning)
-        primary = self.primary_bundle.predict(X, calibrate=calibrate)
-        p_correct = self.meta_probability(X)
+        primary, p_win = self._score(X, calibrate=calibrate)
+        trade = self.trade_mask(primary.class_predictions, p_win)
         return MetaLabelingPrediction(
             directions=primary.class_predictions,
             direction_probabilities=primary.class_probabilities,
-            meta_probabilities=p_correct,
-            positions=primary.class_predictions.astype(np.float64) * p_correct,
-            trade_mask=p_correct >= self.threshold,
+            meta_probabilities=p_win,
+            positions=np.where(trade, primary.class_predictions.astype(np.float64) * p_win, 0.0),
+            trade_mask=trade,
             threshold=self.threshold,
             timestamps=timestamps,
             metadata={"primary_model": self.primary_bundle.metadata.model_name},
@@ -155,8 +212,7 @@ class MetaLabelingBundle:
 
     def predict(self, X: pd.DataFrame | np.ndarray, calibrate: bool = True) -> PredictionResult:
         """Primary predictions with filtered-out bars set to neutral."""
-        primary = self.primary_bundle.predict(X, calibrate=calibrate)
-        return self._apply_filter(primary, self.meta_probability(X))
+        return self._apply_filter(*self._score(X, calibrate=calibrate))
 
     def predict_from_raw(
         self,
@@ -170,13 +226,13 @@ class MetaLabelingBundle:
         result.metadata["timestamps"] = timestamps
         return result
 
-    def _apply_filter(self, primary: PredictionResult, p_correct: np.ndarray) -> PredictionResult:
-        trade = p_correct >= self.threshold
+    def _apply_filter(self, primary: PredictionResult, p_win: np.ndarray) -> PredictionResult:
+        trade = self.trade_mask(primary.class_predictions, p_win)
         return PredictionResult(
             class_predictions=np.where(trade, primary.class_predictions, NEUTRAL_LABEL),
             class_probabilities=primary.class_probabilities,
             confidence=primary.confidence,
-            metadata={**primary.metadata, "meta_probability": p_correct, "trade_mask": trade},
+            metadata={**primary.metadata, "meta_probability": p_win, "trade_mask": trade},
         )
 
     # -----------------------------------------------------------------
@@ -194,6 +250,7 @@ class MetaLabelingBundle:
 
         metadata = {
             "version": META_LABELING_BUNDLE_VERSION,
+            "meta_feature_version": META_FEATURE_VERSION,
             "model_name": self.model_name,
             "horizon": self.horizon,
             "threshold": self.threshold,
@@ -217,6 +274,13 @@ class MetaLabelingBundle:
             raise FileNotFoundError(f"Missing {META_LABELING_METADATA_FILE} in {path}")
         with open(metadata_path) as f:
             metadata = json.load(f)
+        feature_version = metadata.get("meta_feature_version")
+        if feature_version != META_FEATURE_VERSION:
+            raise ValueError(
+                f"Meta-labeling bundle at {path} was trained with meta-feature layout "
+                f"{feature_version!r}; this code builds layout {META_FEATURE_VERSION}. "
+                "Retrain it — serving it would feed the meta-model different inputs."
+            )
         return cls(
             primary_bundle=ModelBundle.load(path / PRIMARY_BUNDLE_DIR),
             meta_model=safe_pickle_load(path / META_MODEL_FILE),
@@ -231,6 +295,9 @@ class MetaLabelingBundle:
 
 
 __all__ = [
+    "build_meta_features",
+    "primary_sides",
+    "META_FEATURE_VERSION",
     "MetaLabelingBundle",
     "MetaLabelingPrediction",
     "META_LABELING_BUNDLE_VERSION",

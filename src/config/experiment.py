@@ -43,6 +43,12 @@ logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 
+# Derived embargo: one trading day. CME equity/metal futures trade ~23h a day,
+# so 1440 minutes of bars spans one session at any bar timeframe.
+EMBARGO_SPAN_MINUTES = 1440
+# A derived embargo never takes more than this share of a CV fold.
+MAX_EMBARGO_FOLD_FRACTION = 0.25
+
 
 def _generate_run_id() -> str:
     """Generate unique run ID with timestamp."""
@@ -163,8 +169,16 @@ class TrainingSection:
     training_mode: str = "standard"  # standard, walk_forward, regime_aware, meta_labeling
     cv_method: str = "purged_kfold"
     n_splits: int = 5
-    purge_bars: int = 60
-    embargo_bars: int = 1440
+    # CV / split gaps in bars. None = derived by ExperimentConfig.resolve_cv_gaps:
+    # purge = longest triple-barrier label span (max_bars over the horizons),
+    # embargo = one trading day of bars at the bar timeframe, capped at 25% of a
+    # CV fold. Explicit values are kept (a purge shorter than the label span is
+    # raised to it). CV additionally purges on every label's actual end bar.
+    purge_bars: int | None = None
+    embargo_bars: int | None = None
+    # Default training sample weights: "uniqueness" (AFML average uniqueness of
+    # overlapping labels, from the training split) or "none" (all 1.0)
+    sample_weighting: str = "uniqueness"
 
     # Walk-forward validation settings (used when training_mode="walk_forward")
     walk_forward: WalkForwardConfig = field(default_factory=WalkForwardConfig)
@@ -270,15 +284,17 @@ class ExperimentConfig:
         if self.output_dir.name != self.run_id:
             self.output_dir = self.output_dir / self.run_id
 
-        # Validate purge_bars >= max(horizons) to prevent label leakage
-        if self.training.horizons:
-            max_h = max(self.training.horizons)
-            if self.training.purge_bars < max_h:
-                logger.warning(
-                    f"purge_bars ({self.training.purge_bars}) < max horizon ({max_h}). "
-                    f"This may cause label leakage. Auto-correcting to {max_h}."
-                )
-                self.training.purge_bars = max_h
+        from src.core.config import SAMPLE_WEIGHTING_MODES
+
+        if self.training.sample_weighting not in SAMPLE_WEIGHTING_MODES:
+            raise ValueError(
+                f"training.sample_weighting must be one of {SAMPLE_WEIGHTING_MODES}, "
+                f"got {self.training.sample_weighting!r}"
+            )
+        for name in ("purge_bars", "embargo_bars"):
+            value = getattr(self.training, name)
+            if value is not None and value < 0:
+                raise ValueError(f"training.{name} must be >= 0 or None, got {value}")
 
     @property
     def symbol(self) -> str:
@@ -294,6 +310,114 @@ class ExperimentConfig:
     def horizons(self) -> list[int]:
         """Convenience accessor for training.horizons."""
         return self.training.horizons
+
+    # =========================================================================
+    # LABEL SPAN AND CV GAPS
+    # =========================================================================
+
+    def resolve_barrier_params(self, horizon: int) -> tuple[float, float, int, str]:
+        """
+        Resolve triple-barrier parameters for one horizon.
+
+        Single source of truth shared by labeling, the backtester and the CV
+        purge derivation, so all three always play the same game.
+
+        Priority per field:
+          1. Explicit LabelingConfig override (upper_mult / lower_mult /
+             max_holding_bars set to a non-None value)
+          2. Per-symbol, per-horizon BARRIER_PARAMS table
+
+        Returns:
+            (k_up, k_down, max_bars, source) where source describes which
+            fields came from config overrides vs the barriers table.
+        """
+        from src.data.pipeline.config.barriers_config import get_barrier_params
+
+        labeling = self.data.labeling
+        table = get_barrier_params(self.data.symbol.upper(), horizon)
+
+        k_up = labeling.upper_mult if labeling.upper_mult is not None else float(table["k_up"])
+        k_down = labeling.lower_mult if labeling.lower_mult is not None else float(table["k_down"])
+        max_bars = (
+            labeling.max_holding_bars
+            if labeling.max_holding_bars is not None
+            else int(table["max_bars"])
+        )
+
+        overridden = any(
+            v is not None
+            for v in (labeling.upper_mult, labeling.lower_mult, labeling.max_holding_bars)
+        )
+        source = "labeling-config override" if overridden else "barriers table"
+        return k_up, k_down, max_bars, source
+
+    def label_span_bars(self) -> int:
+        """Longest label span in bars: a triple-barrier label resolves within max_bars."""
+        return max(self.resolve_barrier_params(h)[2] for h in self.training.horizons)
+
+    def resolve_cv_gaps(
+        self,
+        bar_timeframe: str | None = None,
+        n_rows: int | None = None,
+    ) -> tuple[int, int]:
+        """
+        Purge and embargo bars for CV and the train/val/test split gaps.
+
+        - purge: ``training.purge_bars`` if set, else the longest label span
+          (``label_span_bars``). An explicit purge shorter than the span is
+          raised to it with a warning — a shorter purge leaks labels that
+          resolve inside the next block.
+        - embargo: ``training.embargo_bars`` if set, else one trading day
+          (``EMBARGO_SPAN_MINUTES``) of bars at the bar timeframe, capped at
+          ``MAX_EMBARGO_FOLD_FRACTION`` of a CV fold when ``n_rows`` is known.
+
+        Args:
+            bar_timeframe: Training bar timeframe (detected or declared). Falls
+                back to ``data.bar_timeframe``.
+            n_rows: Rows of the labeled training frame (for the fold cap).
+
+        Returns:
+            (purge_bars, embargo_bars)
+        """
+        span = self.label_span_bars()
+        purge = self.training.purge_bars
+        if purge is None:
+            purge = span
+        elif purge < span:
+            logger.warning(
+                f"training.purge_bars={purge} is shorter than the longest label span "
+                f"({span} bars = max_bars over horizons {self.training.horizons}); "
+                f"raising it to {span} to prevent label leakage"
+            )
+            purge = span
+
+        embargo = self.training.embargo_bars
+        if embargo is None:
+            embargo = self._derive_embargo_bars(bar_timeframe or self.data.bar_timeframe, n_rows)
+        return int(purge), int(embargo)
+
+    def _derive_embargo_bars(self, bar_timeframe: str | None, n_rows: int | None) -> int:
+        """One trading day of bars, capped at a fraction of a CV fold."""
+        from src.core.common.horizon_config import (
+            DEFAULT_TIMEFRAME_MINUTES,
+            compute_embargo_bars,
+        )
+
+        if bar_timeframe is None:
+            bar_timeframe = f"{DEFAULT_TIMEFRAME_MINUTES}min"
+            logger.warning(
+                f"Bar timeframe unknown; deriving the embargo assuming {bar_timeframe} bars"
+            )
+        embargo = compute_embargo_bars(bar_timeframe, embargo_time_minutes=EMBARGO_SPAN_MINUTES)
+        derivation = f"{EMBARGO_SPAN_MINUTES} min of {bar_timeframe} bars"
+        if n_rows is not None:
+            fold = int(n_rows * self.data.splits.train_ratio) // self.training.n_splits
+            cap = int(fold * MAX_EMBARGO_FOLD_FRACTION)
+            if embargo > cap:
+                derivation += f", capped at {MAX_EMBARGO_FOLD_FRACTION:.0%} of a {fold}-bar fold"
+                embargo = cap
+        logger.info(f"Derived embargo_bars={embargo} ({derivation})")
+        return embargo
 
     # =========================================================================
     # SERIALIZATION
@@ -364,15 +488,28 @@ class ExperimentConfig:
     # CONVERSION TO THE TRAINING STACK'S CONFIG
     # =========================================================================
 
-    def to_pipeline_config(self) -> Any:
+    def to_pipeline_config(
+        self,
+        cv_gaps: tuple[int, int] | None = None,
+        bar_timeframe: str | None = None,
+        n_rows: int | None = None,
+    ) -> Any:
         """
         Convert to the PipelineConfig consumed by the training orchestrator
         and BundleBuilder.
+
+        Args:
+            cv_gaps: Already-resolved (purge_bars, embargo_bars). When None
+                they are resolved here via ``resolve_cv_gaps``.
+            bar_timeframe: Training bar timeframe, for the derived embargo.
+            n_rows: Rows of the labeled training frame, for the embargo cap.
 
         Returns:
             PipelineConfig instance
         """
         from src.core import PipelineConfig
+
+        purge_bars, embargo_bars = cv_gaps or self.resolve_cv_gaps(bar_timeframe, n_rows)
 
         # Derive optimization flags from trial count
         _do_optimize = self.training.optuna.n_trials > 0
@@ -391,8 +528,9 @@ class ExperimentConfig:
             training_mode=self.training.training_mode,
             cv_method=self.training.cv_method,
             n_splits=self.training.n_splits,
-            purge_bars=self.training.purge_bars,
-            embargo_bars=self.training.embargo_bars,
+            purge_bars=purge_bars,
+            embargo_bars=embargo_bars,
+            sample_weighting=self.training.sample_weighting,
             # Chronological split ratios (purge/embargo gaps sit between them)
             train_ratio=self.data.splits.train_ratio,
             val_ratio=self.data.splits.val_ratio,

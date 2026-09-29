@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.core.label_spans import LabelSpans
 from src.data.adapters import PreparedData
 from src.models.base import PredictionResult
 from src.models.registry import ModelRegistry
@@ -26,7 +27,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OOFRequest:
-    """Request to generate OOF predictions."""
+    """Request to generate OOF predictions.
+
+    Label spans for overlap purging come from ``prepared_data`` (its
+    ``label_end_positions`` mapped through ``train_indices``, so windowed
+    3D/4D samples use the span of their label bar). Pass ``label_spans`` to
+    override them; either way they must cover every training sample.
+    """
 
     model_name: str
     horizon: int
@@ -36,6 +43,13 @@ class OOFRequest:
     embargo_bars: int = 5
     model_config: dict[str, Any] | None = None  # Model config (seq_length, hidden_size, etc.)
     n_classes: int = 3  # Number of output classes (2 for binary, 3 for short/neutral/long)
+    label_spans: LabelSpans | None = None  # Override for prepared_data.label_spans("train")
+
+    def train_label_spans(self) -> LabelSpans | None:
+        """Label spans of the training samples (None = fixed purge only)."""
+        if self.label_spans is not None:
+            return self.label_spans
+        return self.prepared_data.label_spans("train")
 
 
 class OOFGenerationService:
@@ -182,12 +196,14 @@ class OOFGenerationService:
 
         model_name = request.model_name
         X_train_2d = prepared.X_train
+        spans = request.train_label_spans()
 
         X_train_df = pd.DataFrame(
             X_train_2d,
             columns=[f"f{i}" for i in range(X_train_2d.shape[1])],
         )
         y_train = pd.Series(prepared.y_train)
+        weights = pd.Series(prepared.train_weights) if prepared.has_weights else None
 
         # Drop intermediate references — X_train_df/y_train hold the data
         del X_train_2d, prepared
@@ -199,12 +215,14 @@ class OOFGenerationService:
             X=X_train_df,
             y=y_train,
             model_configs={model_name: self._model_config(request)},
+            sample_weights=weights,
+            label_spans=spans,
             use_cache=True,
         )
 
         # Post-training fold leakage verification (C4 audit fix)
         cv = self._create_cv(request)
-        fold_indices = list(cv.split(X_train_df, y_train))
+        fold_indices = list(cv.split(X_train_df, y_train, label_spans=spans))
         leakage_result = OOFValidator.validate_fold_leakage(
             fold_indices=fold_indices,
             purge_bars=request.purge_bars,
@@ -255,7 +273,7 @@ class OOFGenerationService:
         fold_info: list[dict[str, Any]] = []
 
         # Create a dummy 2D DataFrame for PurgedKFold.split() index generation
-        # (PurgedKFold only needs the length and optionally label_end_times)
+        # (PurgedKFold only needs the length; label spans purge overlapping labels)
         X_dummy = pd.DataFrame({"dummy": np.zeros(n_samples)})
         y_series = pd.Series(y)
 
@@ -264,7 +282,8 @@ class OOFGenerationService:
         # Collect fold indices for post-training leakage verification
         all_fold_indices: list[tuple[np.ndarray, np.ndarray]] = []
 
-        for fold_idx, (train_idx, val_idx) in enumerate(cv.split(X_dummy, y_series)):
+        splits = cv.split(X_dummy, y_series, label_spans=request.train_label_spans())
+        for fold_idx, (train_idx, val_idx) in enumerate(splits):
             logger.debug(f"  Fold {fold_idx + 1}: train={len(train_idx)}, val={len(val_idx)}")
             all_fold_indices.append((train_idx, val_idx))
 

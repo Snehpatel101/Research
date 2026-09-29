@@ -20,7 +20,37 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd  # type: ignore[import-untyped]
 
+from src.core.label_spans import LabelSpans
+
 logger = logging.getLogger(__name__)
+
+
+def resolve_label_spans(
+    X: pd.DataFrame | np.ndarray,
+    n_samples: int,
+    label_end_times: pd.Series | None,
+    label_spans: LabelSpans | None,
+) -> LabelSpans | None:
+    """Normalize the two ways of passing label ends to one ``LabelSpans``.
+
+    Raises instead of silently ignoring label ends that cannot be used.
+    """
+    if label_spans is not None and label_end_times is not None:
+        raise ValueError("Pass either label_spans or label_end_times, not both")
+    if label_end_times is not None:
+        index = getattr(X, "index", None)
+        if not isinstance(index, pd.DatetimeIndex):
+            raise ValueError(
+                "label_end_times needs X with a DatetimeIndex to locate label ends; "
+                "pass label_spans (integer bar positions) for other index types"
+            )
+        label_spans = LabelSpans.from_end_times(index, label_end_times)
+    if label_spans is not None and len(label_spans) != n_samples:
+        raise ValueError(
+            f"label_spans has {len(label_spans)} samples but X has {n_samples}; "
+            "label ends must be subset together with the samples"
+        )
+    return label_spans
 
 
 # =============================================================================
@@ -35,26 +65,20 @@ class PurgedKFoldConfig:
 
     Attributes:
         n_splits: Number of CV folds (default 5 for boosting, 3 for neural)
-        purge_bars: Number of bars to remove before test set (default 60 = 3x max horizon).
-            Should be at least max(horizons) * 3 to prevent label leakage.
-        embargo_bars: Number of bars to skip after test set (default 1440 = 5 days at 5min)
+        purge_bars: Samples removed immediately before each test block. A floor
+            that applies even without label spans; with spans the purge follows
+            each label's actual resolution bar (see ``PurgedKFold.split``).
+            Should be at least the longest label span (triple-barrier max_bars).
+        embargo_bars: Samples skipped after each test block (serial correlation).
         min_train_size: Minimum training set fraction (raises error if violated)
-        timeframe: Optional timeframe for auto-calculating embargo_bars from calendar time.
-            When provided, embargo_bars is computed as EMBARGO_TIME_MINUTES / timeframe_minutes.
-            This ensures consistent ~5 day buffer regardless of bar resolution.
+        timeframe: Optional bar timeframe, for documentation/tracking only.
+
+    ``ExperimentConfig.resolve_cv_gaps`` derives purge (longest label span)
+    and embargo (one trading day of bars) for factory runs.
 
     Example:
-        >>> # Legacy mode (assumes 5-min bars)
-        >>> config = PurgedKFoldConfig(n_splits=5, purge_bars=60, embargo_bars=1440)
+        >>> config = PurgedKFoldConfig(n_splits=5, purge_bars=12, embargo_bars=288)
         >>> cv = PurgedKFold(config)
-
-        >>> # Timeframe-aware mode (recommended)
-        >>> config = PurgedKFoldConfig.from_timeframe(n_splits=5, purge_bars=60, timeframe='15min')
-        >>> config.embargo_bars  # 480 bars (5 days at 15min)
-
-        >>> # Horizon-aware mode (recommended for dynamic purge calculation)
-        >>> config = PurgedKFoldConfig.from_horizons([5, 10, 20, 60, 120])
-        >>> config.purge_bars  # 360 bars (max(horizons) * 3 = 120 * 3)
     """
 
     n_splits: int = 5
@@ -62,9 +86,6 @@ class PurgedKFoldConfig:
     embargo_bars: int = 1440
     min_train_size: float = 0.3
     timeframe: str | None = None  # For documentation/tracking purposes
-
-    # Purge calculation multiplier: purge_bars = max(horizons) * PURGE_MULTIPLIER
-    PURGE_MULTIPLIER: int = 3
 
     def __post_init__(self) -> None:
         """Validate configuration parameters."""
@@ -76,235 +97,6 @@ class PurgedKFoldConfig:
             raise ValueError(f"embargo_bars must be >= 0, got {self.embargo_bars}")
         if not 0 < self.min_train_size < 1:
             raise ValueError(f"min_train_size must be in (0, 1), got {self.min_train_size}")
-
-    @classmethod
-    def from_horizons(
-        cls,
-        horizons: list[int],
-        n_splits: int = 5,
-        embargo_bars: int = 1440,
-        min_train_size: float = 0.3,
-        timeframe: str | None = None,
-        purge_multiplier: int | None = None,
-    ) -> PurgedKFoldConfig:
-        """
-        Create config with dynamically computed purge_bars based on prediction horizons.
-
-        The purge period must be large enough to prevent label leakage. Since labels
-        are computed over a horizon period (e.g., 120 bars forward), we need to purge
-        at least that many bars before the test set to ensure no training sample's
-        label depends on test data.
-
-        Formula: purge_bars = max(horizons) * multiplier
-
-        The default multiplier of 3 provides a safety margin:
-        - 1x covers the label horizon itself
-        - Additional 2x accounts for any autocorrelation in the data
-
-        Args:
-            horizons: List of prediction horizons in bars (e.g., [5, 10, 20, 60, 120])
-            n_splits: Number of CV folds
-            embargo_bars: Number of bars to skip after test set
-            min_train_size: Minimum training set fraction
-            timeframe: Optional timeframe for documentation
-            purge_multiplier: Override the default multiplier (default: 3)
-
-        Returns:
-            PurgedKFoldConfig with purge_bars = max(horizons) * multiplier
-
-        Examples:
-            >>> config = PurgedKFoldConfig.from_horizons([5, 10, 20, 60, 120])
-            >>> config.purge_bars
-            360  # max(horizons) * 3 = 120 * 3
-
-            >>> config = PurgedKFoldConfig.from_horizons([5, 10, 20], purge_multiplier=2)
-            >>> config.purge_bars
-            40   # max(horizons) * 2 = 20 * 2
-
-        Raises:
-            ValueError: If horizons list is empty or contains non-positive values
-        """
-        if not horizons:
-            raise ValueError("horizons list cannot be empty")
-
-        if any(h <= 0 for h in horizons):
-            raise ValueError(f"All horizons must be positive, got {horizons}")
-
-        multiplier = purge_multiplier if purge_multiplier is not None else cls.PURGE_MULTIPLIER
-        max_horizon = max(horizons)
-        computed_purge_bars = max_horizon * multiplier
-
-        logger.info(
-            f"Dynamic purge calculation: max(horizons)={max_horizon} * {multiplier} = {computed_purge_bars} bars"
-        )
-
-        return cls(
-            n_splits=n_splits,
-            purge_bars=computed_purge_bars,
-            embargo_bars=embargo_bars,
-            min_train_size=min_train_size,
-            timeframe=timeframe,
-        )
-
-    def validate_purge_for_horizons(self, horizons: list[int]) -> list[str]:
-        """
-        Validate that purge_bars is sufficient for the given horizons.
-
-        This method checks if the current purge_bars setting is large enough
-        to prevent label leakage for the specified prediction horizons.
-
-        Args:
-            horizons: List of prediction horizons in bars
-
-        Returns:
-            List of warning messages (empty if validation passes)
-
-        Example:
-            >>> config = PurgedKFoldConfig(purge_bars=60)
-            >>> warnings = config.validate_purge_for_horizons([5, 10, 20, 60, 120])
-            >>> # Returns warning because purge_bars=60 < max(horizons)*3=360
-        """
-        warnings = []
-        if not horizons:
-            return warnings
-
-        max_horizon = max(horizons)
-        recommended_purge = max_horizon * self.PURGE_MULTIPLIER
-
-        if self.purge_bars < recommended_purge:
-            warnings.append(
-                f"purge_bars={self.purge_bars} may be insufficient for horizons={horizons}. "
-                f"Recommended: purge_bars >= max(horizons) * {self.PURGE_MULTIPLIER} = {recommended_purge}. "
-                f"This could lead to label leakage in cross-validation."
-            )
-            logger.warning(warnings[-1])
-
-        return warnings
-
-    @classmethod
-    def from_timeframe(
-        cls,
-        timeframe: str,
-        n_splits: int = 5,
-        purge_bars: int = 60,
-        min_train_size: float = 0.3,
-        embargo_time_minutes: int | None = None,
-    ) -> PurgedKFoldConfig:
-        """
-        Create config with timeframe-aware embargo calculation.
-
-        This factory method computes embargo_bars based on calendar time
-        (default 5 days = 7200 minutes) to ensure consistent decorrelation
-        periods regardless of bar resolution.
-
-        Args:
-            timeframe: Bar timeframe (e.g., '5min', '15min', '1h')
-            n_splits: Number of CV folds
-            purge_bars: Number of bars to purge before test set
-            min_train_size: Minimum training set fraction
-            embargo_time_minutes: Embargo duration in minutes (default: 7200 = 5 days)
-
-        Returns:
-            PurgedKFoldConfig with embargo_bars computed for the given timeframe
-
-        Examples:
-            >>> config = PurgedKFoldConfig.from_timeframe('5min')
-            >>> config.embargo_bars
-            1440  # 5 days at 5-min bars
-
-            >>> config = PurgedKFoldConfig.from_timeframe('15min')
-            >>> config.embargo_bars
-            480   # 5 days at 15-min bars
-
-            >>> config = PurgedKFoldConfig.from_timeframe('1h')
-            >>> config.embargo_bars
-            120   # 5 days at 1-hour bars
-        """
-        from src.core.common.horizon_config import compute_embargo_bars
-
-        embargo_bars = compute_embargo_bars(
-            timeframe=timeframe,
-            embargo_time_minutes=embargo_time_minutes,
-        )
-
-        return cls(
-            n_splits=n_splits,
-            purge_bars=purge_bars,
-            embargo_bars=embargo_bars,
-            min_train_size=min_train_size,
-            timeframe=timeframe,
-        )
-
-    @classmethod
-    def from_horizons_and_timeframe(
-        cls,
-        horizons: list[int],
-        timeframe: str,
-        n_splits: int = 5,
-        min_train_size: float = 0.3,
-        purge_multiplier: int | None = None,
-        embargo_time_minutes: int | None = None,
-    ) -> PurgedKFoldConfig:
-        """
-        Create config with both dynamic purge (from horizons) and embargo (from timeframe).
-
-        This is the recommended factory method when you have both prediction horizons
-        and timeframe information available. It computes:
-        - purge_bars = max(horizons) * multiplier (default 3)
-        - embargo_bars = embargo_time_minutes / timeframe_minutes (default 5 days)
-
-        Args:
-            horizons: List of prediction horizons in bars (e.g., [5, 10, 20, 60, 120])
-            timeframe: Bar timeframe (e.g., '5min', '15min', '1h')
-            n_splits: Number of CV folds
-            min_train_size: Minimum training set fraction
-            purge_multiplier: Override purge multiplier (default: 3)
-            embargo_time_minutes: Embargo duration in minutes (default: 7200 = 5 days)
-
-        Returns:
-            PurgedKFoldConfig with both purge_bars and embargo_bars computed dynamically
-
-        Examples:
-            >>> config = PurgedKFoldConfig.from_horizons_and_timeframe(
-            ...     horizons=[5, 10, 20, 60, 120],
-            ...     timeframe='5min'
-            ... )
-            >>> config.purge_bars   # 360 (max * 3)
-            >>> config.embargo_bars  # 1440 (5 days at 5min)
-
-        Raises:
-            ValueError: If horizons list is empty or contains non-positive values
-        """
-        from src.core.common.horizon_config import compute_embargo_bars
-
-        if not horizons:
-            raise ValueError("horizons list cannot be empty")
-
-        if any(h <= 0 for h in horizons):
-            raise ValueError(f"All horizons must be positive, got {horizons}")
-
-        multiplier = purge_multiplier if purge_multiplier is not None else cls.PURGE_MULTIPLIER
-        max_horizon = max(horizons)
-        computed_purge_bars = max_horizon * multiplier
-
-        embargo_bars = compute_embargo_bars(
-            timeframe=timeframe,
-            embargo_time_minutes=embargo_time_minutes,
-        )
-
-        logger.info(
-            f"Dynamic CV config: purge_bars={computed_purge_bars} "
-            f"(max(horizons)={max_horizon} * {multiplier}), "
-            f"embargo_bars={embargo_bars} (timeframe={timeframe})"
-        )
-
-        return cls(
-            n_splits=n_splits,
-            purge_bars=computed_purge_bars,
-            embargo_bars=embargo_bars,
-            min_train_size=min_train_size,
-            timeframe=timeframe,
-        )
 
 
 # =============================================================================
@@ -403,26 +195,38 @@ class PurgedKFold:
         y: pd.Series | None = None,
         groups: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Generate train/test indices for each fold.
 
+        Purging always drops ``purge_bars`` samples before each test block and
+        ``embargo_bars`` after it. When label spans are known, every training
+        sample whose label span overlaps the test block's span is dropped as
+        well, wherever it sits (the fixed purge is then only a floor).
+
         Args:
-            X: Features DataFrame with DatetimeIndex or integer index
+            X: Features (only its length and, with ``label_end_times``, its
+                DatetimeIndex are used)
             y: Labels (optional, unused but kept for sklearn API compatibility)
-            groups: Symbol groups for symbol isolation (optional)
-            label_end_times: When each label's outcome is known (optional)
-                If provided, enables proper purging for overlapping labels
+            groups: Symbol groups (optional, unused)
+            label_end_times: Per-row label resolution timestamps. Requires a
+                sorted DatetimeIndex on X; converted to bar-position spans.
+            label_spans: Per-sample label spans in bar positions
+                (index-type independent). Preferred over ``label_end_times``.
 
         Yields:
             Tuple of (train_indices, test_indices) for each fold
 
         Raises:
-            ValueError: If training set becomes too small after purge/embargo or
-                       if n_splits is too large relative to data size
+            ValueError: If training set becomes too small after purge/embargo,
+                if n_splits is too large relative to data size, or if label
+                ends are given but cannot be used (length mismatch, or
+                ``label_end_times`` without a DatetimeIndex).
         """
         n_samples = len(X)
         indices = np.arange(n_samples)
+        spans = resolve_label_spans(X, n_samples, label_end_times, label_spans)
 
         # Validate n_splits is reasonable for data size
         # In k-fold CV, the worst-case training size occurs for middle folds where
@@ -433,11 +237,6 @@ class PurgedKFold:
         worst_case_train = n_samples - self.config.purge_bars - test_size - self.config.embargo_bars
 
         if worst_case_train < min_train:
-            # Calculate maximum reasonable n_splits given constraints
-            # Derived from: n_samples - purge - (n_samples/n_splits) - embargo >= min_train
-            # => n_samples/n_splits <= n_samples - purge - embargo - min_train
-            # => n_splits <= n_samples / (n_samples - purge - embargo - min_train) [invalid]
-            # Simpler: just report what the problem is
             raise ValueError(
                 f"n_splits={self.config.n_splits} is too large for {n_samples} samples. "
                 f"Worst-case training size ({worst_case_train}) would be below minimum ({min_train}). "
@@ -445,10 +244,6 @@ class PurgedKFold:
                 f"consider reducing n_splits or increasing data size."
             )
 
-        # Get timestamps if available (for label-aware purging)
-        has_datetime_index = isinstance(X.index, pd.DatetimeIndex)
-
-        # Calculate fold boundaries (test_size already calculated in validation above)
         fold_size = test_size
 
         for fold_idx in range(self.config.n_splits):
@@ -463,37 +258,19 @@ class PurgedKFold:
 
             # Training indices: everything except test + purge + embargo
             train_mask = np.ones(n_samples, dtype=bool)
-
-            # Remove test period
             train_mask[test_start:test_end] = False
 
-            # Apply purge before test
+            # Fixed purge floor before test
             purge_start = max(0, test_start - self.config.purge_bars)
             train_mask[purge_start:test_start] = False
 
-            # Apply embargo after test
+            # Embargo after test
             embargo_end = min(n_samples, test_end + self.config.embargo_bars)
             train_mask[test_end:embargo_end] = False
 
-            # Additional purge for overlapping labels (if label_end_times provided)
-            # BUG FIX: Check ALL training samples, not just those before purge_start
-            # Training data can exist on BOTH sides of the test set in k-fold CV
-            # Any sample whose label extends into test period must be excluded
-            if label_end_times is not None and has_datetime_index:
-                test_start_time = X.index[test_start]
-                test_end_time = X.index[test_end - 1]
-
-                # Vectorized label-aware purging: remove training samples whose
-                # labels overlap with the test period. Handles:
-                # 1. Samples before test whose labels extend into test period
-                # 2. Samples after embargo whose labels started during test period
-                label_ends = label_end_times.values
-                index_values = X.index.values
-                not_na = ~pd.isna(label_ends)
-                overlap_mask = (
-                    not_na & (label_ends >= test_start_time) & (index_values <= test_end_time)
-                )
-                train_mask[overlap_mask & train_mask] = False
+            # Label-overlap purge on both sides of the test block
+            if spans is not None:
+                train_mask &= ~spans.overlap_mask(test_start, test_end)
 
             train_indices = indices[train_mask]
 
@@ -635,6 +412,7 @@ class ModelAwareCV:
         X: pd.DataFrame,
         y: pd.Series | None = None,
         label_end_times: pd.Series | None = None,
+        label_spans: LabelSpans | None = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         """
         Return appropriate number of splits for model family.
@@ -643,6 +421,7 @@ class ModelAwareCV:
             X: Features DataFrame
             y: Labels (optional)
             label_end_times: When labels are resolved (optional)
+            label_spans: Label spans in bar positions (optional)
 
         Yields:
             Tuple of (train_indices, test_indices)
@@ -661,7 +440,7 @@ class ModelAwareCV:
         else:
             cv = self.base_cv
 
-        yield from cv.split(X, y, label_end_times=label_end_times)
+        yield from cv.split(X, y, label_end_times=label_end_times, label_spans=label_spans)
 
     def get_tuning_trials(self) -> int:
         """Return appropriate number of Optuna trials for model family."""
@@ -673,6 +452,7 @@ class ModelAwareCV:
 
 
 __all__ = [
+    "resolve_label_spans",
     "PurgedKFoldConfig",
     "PurgedKFold",
     "ModelAwareCV",

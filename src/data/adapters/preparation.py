@@ -33,6 +33,12 @@ from src.core.constants import (
     MODEL_DATA_RANKS,
 )
 from src.core.contracts import get_model_contract
+from src.core.label_spans import (
+    NO_LABEL_END,
+    LabelSpans,
+    label_end_column,
+    uniqueness_sample_weights,
+)
 
 from .multi_stream import MultiStreamAdapter
 from .registry import get_adapter
@@ -106,6 +112,10 @@ class PreparedData:
         scaler: The fitted scaler (for inference)
         sequence_length: Sequence length if applicable (3D/4D)
         n_timeframes: Number of timeframes if multi-stream (4D)
+        label_end_positions: Per-row label resolution position (row of the
+            prepared DataFrame at which each row's label is decided; -1 when
+            invalid), indexed by ``*_indices``. None when the DataFrame had
+            no label-end column.
     """
 
     # Data arrays - required
@@ -141,6 +151,23 @@ class PreparedData:
     sequence_length: int | None = None
     n_timeframes: int | None = None
     timeframe_names: list[str] = field(default_factory=list)
+
+    # Label ends for purging / uniqueness (row coordinates of the source DataFrame)
+    label_end_positions: np.ndarray | None = None
+
+    def label_spans(self, split: str = "train") -> LabelSpans | None:
+        """Label spans of the samples of ``split`` ("train", "val" or "test").
+
+        Returns None when label ends or the split's row indices are unknown.
+        """
+        rows = {
+            "train": self.train_indices,
+            "val": self.val_indices,
+            "test": self.test_indices,
+        }[split]
+        if self.label_end_positions is None or rows is None:
+            return None
+        return LabelSpans.from_rows(rows, self.label_end_positions)
 
     @property
     def n_train(self) -> int:
@@ -318,6 +345,7 @@ class PreparedData:
             sequence_length=self.sequence_length,
             n_timeframes=self.n_timeframes,
             timeframe_names=self.timeframe_names,
+            label_end_positions=self.label_end_positions,
         )
 
     def summary(self) -> str:
@@ -563,7 +591,22 @@ class UnifiedDataPreparation:
             X_test_scaled = test_result.X if test_result else None
             scaler = None
 
-        # 5. Build and return PreparedData
+        # 5. Label spans -> default sample weights (AFML average uniqueness,
+        # concurrency counted over the training split's labels only)
+        train_indices = train_result.original_indices
+        label_ends = self._label_end_positions(df, label_column)
+        train_weights = train_result.weights
+        if (
+            train_weights is None
+            and label_ends is not None
+            and train_indices is not None
+            and getattr(self.config, "sample_weighting", "none") == "uniqueness"
+        ):
+            train_weights = uniqueness_sample_weights(
+                LabelSpans.from_rows(train_indices, label_ends)
+            )
+
+        # 6. Build and return PreparedData
         prepared = PreparedData(
             X_train=X_train_scaled,
             y_train=train_result.y,
@@ -571,7 +614,7 @@ class UnifiedDataPreparation:
             y_val=val_result.y,
             X_test=X_test_scaled,
             y_test=test_result.y if test_result else None,
-            train_weights=train_result.weights,
+            train_weights=train_weights,
             val_weights=val_result.weights,
             test_weights=test_result.weights if test_result else None,
             model_name=model_name,
@@ -580,13 +623,14 @@ class UnifiedDataPreparation:
             feature_names=train_result.feature_columns,
             # Adapters report rows within their split; shift to rows of df so
             # every split (and every model rank) shares one coordinate system
-            train_indices=train_result.original_indices,
+            train_indices=train_indices,
             val_indices=val_result.original_indices + val_start,
             test_indices=(test_result.original_indices + test_start if test_result else None),
             scaler=scaler,
             sequence_length=train_result.sequence_length,
             n_timeframes=train_result.n_timeframes,
             timeframe_names=train_result.timeframe_names,
+            label_end_positions=label_ends,
         )
 
         # Validate the prepared data
@@ -648,6 +692,24 @@ class UnifiedDataPreparation:
             )
 
         return results
+
+    @staticmethod
+    def _label_end_positions(df: pd.DataFrame, label_column: str) -> np.ndarray | None:
+        """Per-row label-end positions from the column paired with ``label_column``."""
+        column = label_end_column(label_column)
+        if column not in df.columns:
+            return None
+        values = df[column].to_numpy()
+        if np.issubdtype(values.dtype, np.floating):
+            values = np.where(np.isnan(values), NO_LABEL_END, values)
+        ends = values.astype(np.int64)
+        known = ends >= 0
+        if np.any(ends[known] < np.flatnonzero(known)):
+            raise ValueError(
+                f"'{column}' holds positions before their own row; label ends must be "
+                "row positions of this DataFrame (re-map them after dropping rows)"
+            )
+        return ends
 
     def _split_bounds(self, n: int) -> tuple[int, int, int, int]:
         """(train_end, val_start, val_end, test_start) row positions for n rows."""

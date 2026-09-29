@@ -173,7 +173,11 @@ class TestOOFEarlyStoppingIsolation:
         X = np.random.rand(*shape).astype(np.float32)
         X[..., 0] = ids.reshape((n,) + (1,) * (rank - 2))  # row id in feature 0
         prepared = SimpleNamespace(
-            X_train=X, y_train=_labels(n), train_weights=None, data_rank=rank
+            X_train=X,
+            y_train=_labels(n),
+            train_weights=None,
+            data_rank=rank,
+            label_spans=lambda split="train": None,  # fixed purge only
         )
         request = OOFRequest(
             model_name="lstm" if rank == 3 else "patchtst",

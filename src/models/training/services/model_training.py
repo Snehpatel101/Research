@@ -350,6 +350,7 @@ class ModelTrainingService:
             max_epochs=request.max_epochs,
             cv_method=request.cv_method,
             embargo_bars=request.embargo_bars,
+            purge_bars=request.purge_bars,
             optuna_timeout=request.optuna_timeout,
         )
 

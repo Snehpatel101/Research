@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from src.core.constants import OHLCV_COLUMNS
+from src.core.label_spans import LabelSpans
 from src.data.adapters import PreparedData
 from src.models.device import offload_model_to_cpu, release_gpu_memory
 from src.validation.cv import OOFPrediction
@@ -539,6 +540,14 @@ class TrainingOpsMixin:
             row_positions = (
                 np.concatenate(index_parts) if all(p is not None for p in index_parts) else None
             )
+            # Label span of every walk-forward sample (same order): windows purge
+            # training samples whose labels resolve inside the test window, and
+            # uniqueness weights are computed on each window's training samples
+            label_spans = (
+                LabelSpans.from_rows(row_positions, prepared.label_end_positions)
+                if row_positions is not None and prepared.label_end_positions is not None
+                else None
+            )
 
             # Save metadata before freeing prepared data
             _n_features = prepared.n_features
@@ -594,6 +603,7 @@ class TrainingOpsMixin:
             X_all_df = pd.DataFrame(X_flat, columns=feature_cols, index=idx)
             feature_col_list = list(X_all_df.columns)
             X_all_df[f"label_h{horizon}"] = y_all
+            # Uniform here; WalkForwardTrainer derives uniqueness weights per window
             X_all_df[f"sample_weight_h{horizon}"] = np.ones(n_all)
 
             # Log after building DataFrame
@@ -615,6 +625,7 @@ class TrainingOpsMixin:
             )
             del X_all_df  # Container owns the data now
             gc.collect()
+            container.metadata["label_spans"] = label_spans
 
             # Store original data shape metadata for 4D model reconstruction
             if _data_rank > 2 and original_shape is not None:
@@ -904,9 +915,11 @@ class TrainingOpsMixin:
             self._model_results[key] = result
             logger.info(
                 f"  Meta-labeling complete: "
-                f"primary_acc={result.metrics.get('primary_val_accuracy', 0):.4f}, "
-                f"combined_acc={result.metrics.get('combined_accuracy', 0):.4f}, "
-                f"trade_fraction={result.metrics.get('trade_fraction', 0)*100:.1f}%"
+                f"precision {result.metrics.get('primary_precision', 0):.4f} -> "
+                f"{result.metrics.get('meta_precision', 0):.4f}, "
+                f"net/trade {result.metrics.get('meta_net_per_trade', 0):+.4f}, "
+                f"{result.metrics.get('trades_taken', 0)}/"
+                f"{result.metrics.get('primary_bets', 0)} bets taken"
             )
             gc.collect()
 
@@ -918,15 +931,26 @@ class TrainingOpsMixin:
         horizon: int,
         additional_dfs: dict[str, pd.DataFrame] | None = None,
     ) -> Any:
-        """Train a meta-labeling system (primary direction + meta bet filter).
+        """Train a meta-labeling system (AFML ch. 3): primary side + meta bet filter.
 
-        1. Primary model trains on its prepared data (any input rank).
-        2. Primary OOF predictions come from the standard OOF path, so the
-           meta-labels "primary was right" are never in-sample.
-        3. The meta-model learns P(primary correct) from the primary's own
-           model input; its cross-validated probabilities filter the primary
-           OOF into the system OOF used by the backtest.
+        1. The primary model trains on its prepared data (any input rank); its
+           out-of-fold predictions give an honest side for every training bar.
+        2. Meta-labels exist only where the primary takes a side (prediction
+           != neutral): 1 if the bet paid off (label == side), else 0. In
+           binary mode the side is "a barrier will be hit" (prediction 1).
+        3. Meta features = the primary's model input + its OOF class
+           probabilities + confidence (``build_meta_features``, shared with
+           MetaLabelingBundle so serving builds exactly the same input).
+        4. The meta-model's cross-validated P(bet pays off) — purged on label
+           spans — filters the primary OOF into the system OOF for the backtest.
         """
+        from sklearn.metrics import accuracy_score, f1_score
+
+        from src.inference.meta_labeling_bundle import (
+            NEUTRAL_LABEL,
+            build_meta_features,
+            primary_sides,
+        )
         from src.validation.cv import PurgedKFold, PurgedKFoldConfig
 
         from .unified_orchestrator import ModelTrainingResult
@@ -953,7 +977,7 @@ class TrainingOpsMixin:
         logger.info(f"    Data: {prepared.n_train} train, {prepared.n_val} val samples")
 
         # Stage 2: Primary model + its OOF predictions (at source rows)
-        logger.info("\n  STAGE 2: Training primary model (direction)...")
+        logger.info("\n  STAGE 2: Training primary model (side)...")
         primary_result = self._train_single_model(primary_model_name, prepared, horizon)
         primary_trainer = primary_result.trainer
         primary_oof = self._generate_oof(primary_model_name, prepared, horizon)
@@ -962,39 +986,53 @@ class TrainingOpsMixin:
 
         rows = prepared.train_indices
         oof_classes = primary_oof.get_class_predictions()[rows]
+        oof_probs = primary_oof.get_probabilities()[rows]
         covered = ~np.isnan(oof_classes)
-        primary_train_classes = oof_classes[covered].astype(np.int64)
-        y_train = prepared.y_train[covered]
+        # Sided training bars: covered by the OOF and the primary takes a side
+        sided = covered.copy()
+        sided[covered] = primary_sides(oof_classes[covered])
+        side_train = oof_classes[sided].astype(np.int64)
+        meta_labels_train = (prepared.y_train[sided] == side_train).astype(int)
+        if meta_labels_train.size == 0 or np.unique(meta_labels_train).size < 2:
+            raise ValueError(
+                f"Meta-labeling needs primary bets that both win and lose: the primary "
+                f"took {meta_labels_train.size} sided OOF bets with win rate "
+                f"{meta_labels_train.mean() if meta_labels_train.size else float('nan'):.2f}"
+            )
 
-        # Meta-model input = exactly what the primary model consumes
-        X_meta_train = self._primary_model_input(primary_trainer, prepared, prepared.X_train)
-        X_meta_train = X_meta_train[covered]
-        X_meta_val = self._primary_model_input(primary_trainer, prepared, prepared.X_val)
-        primary_val_classes = primary_trainer.model.predict(X_meta_val).class_predictions
+        # Stage 3: Meta features from the primary's input + OOF probabilities
+        model_input_train = self._primary_model_input(primary_trainer, prepared, prepared.X_train)
+        X_meta_train = build_meta_features(model_input_train[sided], oof_probs[sided])
+        del model_input_train
+        model_input_val = self._primary_model_input(primary_trainer, prepared, prepared.X_val)
+        primary_val = primary_trainer.model.predict(model_input_val)
+        side_val = primary_val.class_predictions
+        sided_val = primary_sides(side_val)
+        X_meta_val = build_meta_features(model_input_val, primary_val.class_probabilities)
         y_val = prepared.y_val
-        X_meta_train = X_meta_train.reshape(len(X_meta_train), -1)
-        X_meta_val = X_meta_val.reshape(len(X_meta_val), -1)
-
-        # Stage 3: Meta-labels (1 = primary correct), all out-of-sample
-        meta_labels_train = (primary_train_classes == y_train).astype(int)
-        meta_labels_val = (primary_val_classes == y_val).astype(int)
         logger.info(
-            f"\n  STAGE 3: Meta-labels: train {meta_labels_train.mean():.1%} correct, "
-            f"val {meta_labels_val.mean():.1%} correct"
+            f"\n  STAGE 3: Meta-labels on {int(sided.sum())}/{int(covered.sum())} sided OOF "
+            f"bars (primary win rate {meta_labels_train.mean():.1%})"
         )
 
-        # Stage 4: Meta-model, plus cross-validated P(correct) on train rows
+        # Stage 4: Meta-model, plus cross-validated P(win) on the sided train bars,
+        # purging every bar whose label span overlaps the held-out fold
         logger.info("\n  STAGE 4: Training meta-model (bet filter)...")
+        spans = prepared.label_spans("train")
+        sided_spans = spans.subset(sided) if spans is not None else None
+        n_meta = len(meta_labels_train)
         cv = PurgedKFold(
             PurgedKFoldConfig(
                 n_splits=self.config.n_splits,
                 purge_bars=self.config.purge_bars,
-                embargo_bars=min(self.config.embargo_bars, int(len(y_train) * 0.1)),
+                embargo_bars=min(self.config.embargo_bars, int(n_meta * 0.1)),
             )
         )
-        meta_proba_oof = np.full(len(y_train), np.nan)
-        index_frame = pd.DataFrame(index=range(len(y_train)))
-        for tr_idx, va_idx in cv.split(index_frame, pd.Series(meta_labels_train)):
+        meta_proba_oof = np.full(n_meta, np.nan)
+        index_frame = pd.DataFrame(index=range(n_meta))
+        for tr_idx, va_idx in cv.split(
+            index_frame, pd.Series(meta_labels_train), label_spans=sided_spans
+        ):
             if len(np.unique(meta_labels_train[tr_idx])) < 2:
                 continue  # a fold with one class cannot fit a classifier
             fold_meta = self._create_meta_model(meta_model_name)
@@ -1003,30 +1041,34 @@ class TrainingOpsMixin:
 
         meta_model = self._create_meta_model(meta_model_name)
         meta_model.fit(X_meta_train, meta_labels_train)
-        meta_proba_val = meta_model.predict_proba(X_meta_val)[:, 1]
-        meta_val_acc = float(((meta_proba_val >= 0.5) == meta_labels_val).mean())
+        p_win_val = meta_model.predict_proba(X_meta_val)[:, 1]
 
-        # Stage 5: Evaluate the combined system on validation
-        trades_val = meta_proba_val >= threshold
-        trade_fraction = float(trades_val.mean())
-        primary_val_acc = float((primary_val_classes == y_val).mean())
-        combined_val_acc = (
-            float((primary_val_classes[trades_val] == y_val[trades_val]).mean())
-            if trades_val.any()
-            else 0.0
-        )
+        # Stage 5: Evaluate the bets on validation — precision and net outcome of
+        # the trades taken, versus every bet the primary would have made
+        taken = sided_val & (p_win_val >= threshold)
+        win_val = y_val == side_val
+        # +1 = barrier in the bet's favour, -1 = opposite barrier, 0 = timeout
+        # (binary labels carry no direction: a missed "move" bet scores 0)
+        outcome = np.where(win_val, 1.0, np.where(y_val == -side_val, -1.0, 0.0))
+
+        def _mean(values: np.ndarray, mask: np.ndarray) -> float:
+            return float(values[mask].mean()) if mask.any() else 0.0
+
+        primary_precision = _mean(win_val, sided_val)
+        meta_precision = _mean(win_val, taken)
+        system_val = np.where(taken, side_val, NEUTRAL_LABEL)
         logger.info(
-            f"\n  STAGE 5: threshold={threshold}, trades={trade_fraction:.1%}, "
-            f"primary={primary_val_acc:.4f}, combined={combined_val_acc:.4f}"
+            f"\n  STAGE 5: threshold={threshold}: {int(taken.sum())}/{int(sided_val.sum())} "
+            f"primary bets taken; precision {primary_precision:.3f} -> {meta_precision:.3f}, "
+            f"net/trade {_mean(outcome, sided_val):+.3f} -> {_mean(outcome, taken):+.3f}"
         )
 
-        # System OOF: primary OOF, neutral where the meta filter rejects
+        # System OOF: primary OOF, neutral where the meta filter rejects a bet
         system_frame = primary_oof.predictions.copy()
         pred_col = f"{primary_model_name}_pred"
         rejected = np.zeros(len(system_frame), dtype=bool)
-        filter_rows = rows[covered]
-        rejected[filter_rows] = ~(meta_proba_oof >= threshold)
-        system_frame.loc[rejected, pred_col] = 0.0
+        rejected[rows[sided]] = ~(meta_proba_oof >= threshold)
+        system_frame.loc[rejected, pred_col] = float(NEUTRAL_LABEL)
         system_oof = OOFPrediction(
             model_name=primary_model_name,
             predictions=system_frame,
@@ -1038,17 +1080,24 @@ class TrainingOpsMixin:
         )
 
         metrics = {
-            "primary_val_accuracy": primary_val_acc,
             "primary_val_f1": primary_result.metrics.get("val_f1", 0),
-            "meta_val_accuracy": meta_val_acc,
-            "combined_accuracy": combined_val_acc,
-            "trade_fraction": trade_fraction,
-            "trades_taken": int(trades_val.sum()),
-            "total_samples": len(y_val),
+            "primary_bets": int(sided_val.sum()),
+            "trades_taken": int(taken.sum()),
+            "bets_kept_fraction": _mean(taken, sided_val),
+            "trade_fraction": float(taken.mean()) if len(taken) else 0.0,
+            "primary_precision": primary_precision,
+            "meta_precision": meta_precision,
+            "precision_lift": meta_precision - primary_precision if taken.any() else 0.0,
+            "primary_net_per_bet": _mean(outcome, sided_val),
+            "meta_net_per_trade": _mean(outcome, taken),
+            "meta_net_total": float(outcome[taken].sum()),
+            "meta_train_samples": n_meta,
+            "meta_train_win_rate": float(meta_labels_train.mean()),
             "threshold": threshold,
-            "improvement": combined_val_acc - primary_val_acc if trades_val.any() else 0.0,
-            "val_f1": combined_val_acc,
-            "val_accuracy": combined_val_acc,
+            "total_samples": len(y_val),
+            # All-bar scores of the filtered system, comparable with other models
+            "val_f1": float(f1_score(y_val, system_val, average="macro", zero_division=0)),
+            "val_accuracy": float(accuracy_score(y_val, system_val)),
         }
         model_key = f"meta_labeling_h{horizon}"
         self._trained_models[f"{model_key}_primary"] = primary_trainer
