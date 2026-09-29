@@ -82,7 +82,6 @@ from .device import (
     get_amp_dtype,
     get_best_gpu,
     get_device,
-    get_environment_info,
     get_gpu_count,
     get_gpu_info,
     get_mixed_precision_config,
@@ -93,8 +92,6 @@ from .device import (
     get_training_device_config,
     # Environment detection
     is_colab,
-    is_kaggle,
-    is_notebook,
     print_gpu_info,
     setup_colab,
 )
@@ -152,9 +149,6 @@ __all__ = [
     "compute_classification_metrics",
     # Environment detection
     "is_colab",
-    "is_kaggle",
-    "is_notebook",
-    "get_environment_info",
     "setup_colab",
     # Device utilities
     "GPUInfo",

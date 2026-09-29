@@ -15,16 +15,9 @@ from .math_utils import (
 )
 from .memory import (
     PSUTIL_AVAILABLE,
-    CacheConfig,
-    CacheEntry,
-    CacheManager,
-    CacheStats,
     MemoryInfo,
-    check_available_memory,
     check_memory_sufficient,
     estimate_array_size,
-    estimate_object_size,
-    get_global_cache,
     get_memory_info,
     log_memory_usage,
     memory_logged,
@@ -34,18 +27,11 @@ from .safe_pickle import safe_pickle_dump, safe_pickle_load
 __all__ = [
     # Memory management (MOD-007)
     "MemoryInfo",
-    "CacheEntry",
-    "CacheStats",
-    "CacheConfig",
-    "CacheManager",
     "estimate_array_size",
-    "estimate_object_size",
     "get_memory_info",
-    "check_available_memory",
     "check_memory_sufficient",
     "log_memory_usage",
     "memory_logged",
-    "get_global_cache",
     "PSUTIL_AVAILABLE",
     # Math utilities (Phase 8A)
     "safe_divide",

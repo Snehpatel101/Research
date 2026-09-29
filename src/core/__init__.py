@@ -51,10 +51,6 @@ Usage:
         TimeSeriesDataContainer,
         DataContainerConfig,
         SplitData,
-
-        # Data Contract
-        DatasetContract,
-        SplitDatasetContract,
     )
 """
 
@@ -283,16 +279,9 @@ from src.core.types import (
 # ABSORBED: src/utils - Memory, cache, notebook utilities
 # =============================================================================
 from src.core.utils import (
-    CacheConfig,
-    CacheEntry,
-    CacheManager,
-    CacheStats,
     MemoryInfo,
-    check_available_memory,
     check_memory_sufficient,
     estimate_array_size,
-    estimate_object_size,
-    get_global_cache,
     get_memory_info,
     log_memory_usage,
     memory_logged,
@@ -518,19 +507,12 @@ __all__ = [
     # =========================================================================
     # ABSORBED: src/utils
     # =========================================================================
-    "CacheManager",
-    "CacheConfig",
-    "CacheEntry",
-    "CacheStats",
     "MemoryInfo",
-    "check_available_memory",
     "check_memory_sufficient",
     "estimate_array_size",
-    "estimate_object_size",
     "get_memory_info",
     "log_memory_usage",
     "memory_logged",
-    "get_global_cache",
     # =========================================================================
     # EXCEPTIONS - Unified exception hierarchy (Phase 8B)
     # =========================================================================
