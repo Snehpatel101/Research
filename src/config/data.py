@@ -147,16 +147,18 @@ class SequenceConfig(BaseConfig):
     Sequence-window configuration for 3D/4D models.
 
     Attributes:
-        seq_len: Sequence length (number of time steps per sample)
+        seq_len: Window length (time steps per sample) for EVERY sequence model.
+            None (default) gives each model its contract length (e.g. TCN 64,
+            Transformer 128, most others 60).
     """
 
-    seq_len: int = 60
+    seq_len: int | None = None
 
     def validate(self) -> list[str]:
         """Validate sequence configuration."""
         issues = super().validate()
 
-        if self.seq_len <= 0:
+        if self.seq_len is not None and self.seq_len <= 0:
             issues.append(f"seq_len must be positive, got {self.seq_len}")
 
         return issues

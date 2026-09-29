@@ -407,7 +407,7 @@ class RegimeAwareTrainer:
                         model_name=model_name,
                         horizon=horizon,
                         prepared_data=regime_prepared,
-                        sequence_length=self.config.sequence_length,
+                        sequence_length=self.config.sequence_length_for(model_name),
                         output_dir=model_dir,
                         n_splits=self.config.n_splits,
                         # Features were already selected per model upstream

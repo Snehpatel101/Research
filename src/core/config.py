@@ -55,7 +55,6 @@ from src.core.constants import (
     DEFAULT_OPTUNA_RANDOM_STATE,
     DEFAULT_OPTUNA_TIMEOUT,
     DEFAULT_PURGE_BARS,
-    DEFAULT_SEQUENCE_LENGTH,
     DEFAULT_SPLIT_RATIOS,
     MODEL_FAMILIES,
 )
@@ -180,7 +179,8 @@ class PipelineConfig:
 
     compute_mtf_features: bool = True  # Whether to compute MTF features
 
-    sequence_length: int = DEFAULT_SEQUENCE_LENGTH  # For neural models (default: 60)
+    # Window length for sequence models; None = each model's contract length
+    sequence_length: int | None = None
 
     # =========================================================================
     # LABELING CONFIGURATION
@@ -477,6 +477,14 @@ class PipelineConfig:
 
             sym_cfg = SymbolConfig.from_symbol_or_default(self.symbol)
             self.regime_adx_threshold = sym_cfg.adx_trending_threshold
+
+    def sequence_length_for(self, model_name: str) -> int:
+        """Window length for ``model_name``: the explicit override or its contract length."""
+        if self.sequence_length is not None:
+            return self.sequence_length
+        from src.core.contracts import get_model_contract
+
+        return int(get_model_contract(model_name).sequence_length)
 
     def validate_data_path(self) -> None:
         """Validate that data_path exists (call before running pipeline)."""

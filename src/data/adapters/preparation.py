@@ -461,6 +461,7 @@ class UnifiedDataPreparation:
             )
 
         data_rank = MODEL_DATA_RANKS.get(model_key, 2)
+        sequence_length = self.config.sequence_length_for(model_key)
 
         # 1b. Check model contract for primary_timeframe and resample if needed
         # Skip resampling if data already has computed features (label columns present)
@@ -500,6 +501,7 @@ class UnifiedDataPreparation:
         # Build adapter kwargs based on adapter type
         adapter_kwargs = self._build_adapter_kwargs(
             adapter_type=adapter_type,
+            sequence_length=sequence_length,
             feature_columns=feature_columns,
             label_column=label_column,
             weight_column=weight_column,
@@ -533,7 +535,7 @@ class UnifiedDataPreparation:
                     symbol=symbol,
                     split="train",
                     timeframes=self.config.mtf_timeframes,
-                    sequence_length=self.config.sequence_length,
+                    sequence_length=sequence_length,
                     base_path=base_path,
                     feature_columns=feature_columns,
                     label_column=label_column,
@@ -543,7 +545,7 @@ class UnifiedDataPreparation:
                     symbol=symbol,
                     split="val",
                     timeframes=self.config.mtf_timeframes,
-                    sequence_length=self.config.sequence_length,
+                    sequence_length=sequence_length,
                     base_path=base_path,
                     feature_columns=feature_columns,
                     label_column=label_column,
@@ -558,7 +560,7 @@ class UnifiedDataPreparation:
                         symbol=symbol,
                         split="test",
                         timeframes=self.config.mtf_timeframes,
-                        sequence_length=self.config.sequence_length,
+                        sequence_length=sequence_length,
                         base_path=base_path,
                         feature_columns=feature_columns,
                         label_column=label_column,
@@ -844,6 +846,7 @@ class UnifiedDataPreparation:
     def _build_adapter_kwargs(
         self,
         adapter_type: str,
+        sequence_length: int,
         feature_columns: list[str] | None,
         label_column: str,
         weight_column: str | None,
@@ -853,6 +856,7 @@ class UnifiedDataPreparation:
 
         Args:
             adapter_type: Type of adapter ("tabular", "sequence", "multi_stream").
+            sequence_length: Window length for sequence / multi-stream adapters.
             feature_columns: Optional feature columns.
             label_column: Label column name.
             weight_column: Optional weight column name.
@@ -868,7 +872,7 @@ class UnifiedDataPreparation:
 
         # Add sequence-specific kwargs
         if adapter_type in ("sequence", "multi_stream"):
-            kwargs["sequence_length"] = self.config.sequence_length
+            kwargs["sequence_length"] = sequence_length
 
         # Add multi-stream specific kwargs
         if adapter_type == "multi_stream":

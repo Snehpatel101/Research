@@ -96,6 +96,12 @@ them once in anger.
 
 ## 4. ModelContract.sequence_length not honored in standard mode (results change!)
 
+> **RESOLVED in Phase 116 (2026-09-29):** option A. Every mode windows each
+> model at its contract length (TCN 64, Transformer 128, others 60) via
+> `PipelineConfig.sequence_length_for()`; `data.sequence.seq_len` is now an
+> optional override (default None) applied to all models. Bundles record the
+> contract value; prediction parity verified for TCN and Transformer.
+
 **What:** Contracts say TCN=64 (its receptive field is 61) and transformers=128,
 but standard-mode training windows everything at the global
 `sequence_length=60`. Walk-forward mode DOES use the contract values — so the
@@ -317,7 +323,7 @@ mpl_toolkits hijack) simply don't happen inside a venv.
 | 1 | Serving/monitoring chain | ✅ Resolved (Phase 116) | — | — |
 | 2 | Special-mode bundles | ✅ Resolved (Phase 115) | — | — |
 | 3 | Governance modules | Tests-only forever | Wire lifecycle+registry, park rest | 1–2 days |
-| 4 | Contract seq_len | TCN under-windowed, mode skew | Honor contracts (results change) | 1–2 days + eval |
+| 4 | Contract seq_len | ✅ Resolved (Phase 116) | — | — |
 | 5 | 5-D Optuna island | Dead code pinned by tests | Delete + replacement test | ~0.5 day |
 | 6 | Dual AdapterResult | ✅ Resolved (Phase 116) | — | — |
 | 7 | Core TrainingResult | ✅ Resolved (Phase 116) | — | — |

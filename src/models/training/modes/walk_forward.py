@@ -434,7 +434,7 @@ class WalkForwardTrainer:
             # Sequential models need 3D: (n_samples, seq_len, n_features)
             contract = get_model_contract(model_name)
             if contract.input_rank == DataRank.SEQUENCE_3D:
-                seq_len = contract.sequence_length
+                seq_len = int(container.metadata.get("sequence_length") or contract.sequence_length)
                 n_flat = X_train_scaled.shape[1]
                 if n_flat % seq_len == 0:
                     # Data was pre-sequenced then flattened — reshape back
@@ -477,7 +477,9 @@ class WalkForwardTrainer:
                     logger.debug(f"    Reshaped to 4D: {X_train_scaled.shape}")
                 else:
                     # Fallback: try to infer shape from contract
-                    seq_len = contract.sequence_length
+                    seq_len = int(
+                        container.metadata.get("sequence_length") or contract.sequence_length
+                    )
                     n_tf = container.metadata.get(
                         "n_timeframes", len(getattr(contract, "mtf_timeframes", ("5min",)))
                     )
