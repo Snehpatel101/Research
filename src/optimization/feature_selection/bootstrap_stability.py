@@ -1,203 +1,156 @@
-"""Bootstrap feature stability testing.
+"""Block-subsample feature stability (stability selection for time series).
 
-Runs N bootstrap resamples of the data, computes MDA (permutation importance)
-on each, and measures how consistently each feature ranks in the top-K.
-Stable features consistently rank high regardless of sample variation.
+Stability selection (Meinshausen & Buhlmann 2010) re-runs a base selector on
+many random subsamples and keeps the variables that are picked in a large share
+of them. An i.i.d. bootstrap is wrong for bars: rows are autocorrelated and
+overlapping labels share outcomes, so resampling single rows leaks duplicates
+across the train/test halves of any CV inside the replicate. Replicates here are
+random CONTIGUOUS blocks (a fixed fraction of the rows, random start), so each
+one is a plausible alternative history; the base ranking (purged-CV
+out-of-sample permutation importance, computed by the caller through
+``rank_fn``) is what enforces purge/embargo inside the block.
 
-Reference: Section 16.3 of improvements_sneh.md
+The class only does the bookkeeping: draw blocks, rank, count how often each
+feature lands in the top-K. It never sees data, so it cannot leak anything.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.inspection import permutation_importance
 
 logger = logging.getLogger(__name__)
+
+# rank_fn(start, stop) -> importance per feature on rows [start, stop), or None
+# when the block cannot be ranked (too few rows, single class, CV failure).
+RankFn = Callable[[int, int], "pd.Series | None"]
 
 
 @dataclass
 class BootstrapStabilityResult:
-    """Result for a single feature's bootstrap stability evaluation."""
+    """Stability of a single feature across block subsamples."""
 
     feature_name: str
-    selection_frequency: float  # fraction of bootstrap samples in top-K
-    mean_rank: float  # average rank across bootstrap samples
-    rank_std: float  # standard deviation of rank
-    is_stable: bool  # True if selection_frequency >= stability_threshold
+    selection_frequency: float  # share of usable blocks with the feature in the top-K
+    mean_rank: float  # average rank (1 = most important)
+    rank_std: float  # standard deviation of the rank
+    is_stable: bool  # selection_frequency >= stability_threshold
 
 
 class BootstrapFeatureStability:
-    """Evaluate feature stability via bootstrap resampling of MDA importance.
+    """Selection frequency of each feature over random contiguous blocks.
 
-    For each bootstrap sample, trains a RandomForest and computes permutation
-    importance. Features that consistently appear in the top-K across samples
-    are considered stable.
+    Args:
+        n_bootstrap: Number of blocks to draw.
+        top_k: A feature is "selected" in a block when it ranks within the top-K.
+        stability_threshold: Minimum selection frequency to call a feature stable
+            (Meinshausen & Buhlmann suggest 0.6-0.9).
+        window_fraction: Block length as a share of the rows (0 < f <= 1).
+        min_window_rows: Blocks shorter than this are not drawn (the data is too
+            small to subsample meaningfully).
+        random_state: Seed for the block starts (own generator; touches no global RNG).
     """
 
     def __init__(
         self,
-        n_bootstrap: int = 20,
+        n_bootstrap: int = 8,
         top_k: int = 30,
         stability_threshold: float = 0.6,
-        n_estimators: int = 50,
-        n_repeats: int = 3,
-        max_samples: int = 50_000,
+        window_fraction: float = 0.5,
+        min_window_rows: int = 300,
         random_state: int = 42,
     ) -> None:
+        if n_bootstrap < 1:
+            raise ValueError(f"n_bootstrap must be >= 1, got {n_bootstrap}")
+        if not 0.0 < window_fraction <= 1.0:
+            raise ValueError(f"window_fraction must be in (0, 1], got {window_fraction}")
+        if not 0.0 < stability_threshold <= 1.0:
+            raise ValueError(f"stability_threshold must be in (0, 1], got {stability_threshold}")
         self.n_bootstrap = n_bootstrap
         self.top_k = top_k
         self.stability_threshold = stability_threshold
-        self.n_estimators = n_estimators
-        self.n_repeats = n_repeats
-        self.max_samples = max_samples
+        self.window_fraction = window_fraction
+        self.min_window_rows = min_window_rows
         self.random_state = random_state
 
-    def _compute_importance(self, X: pd.DataFrame, y: pd.Series, seed: int) -> pd.Series:
-        """Train RF and compute permutation importance on a single sample.
+    def draw_windows(self, n_rows: int) -> list[tuple[int, int]]:
+        """Random contiguous ``[start, stop)`` blocks covering ``window_fraction`` of the rows."""
+        length = int(n_rows * self.window_fraction)
+        if length < self.min_window_rows or length > n_rows:
+            return []
+        rng = np.random.default_rng(self.random_state)
+        starts = rng.integers(0, n_rows - length + 1, size=self.n_bootstrap)
+        return [(int(s), int(s) + length) for s in starts]
+
+    def evaluate(
+        self,
+        feature_names: Sequence[str],
+        n_rows: int,
+        rank_fn: RankFn,
+    ) -> list[BootstrapStabilityResult]:
+        """Rank features on each block and summarise how consistently they place.
 
         Args:
-            X: Feature matrix.
-            y: Target labels.
-            seed: Random seed for reproducibility.
+            feature_names: Candidate features (the ranking must cover them).
+            n_rows: Rows available (blocks are drawn inside ``[0, n_rows)``).
+            rank_fn: Importance per feature on rows ``[start, stop)`` (or None).
 
         Returns:
-            Series of importance scores indexed by feature name.
+            Results sorted by selection frequency (desc) then mean rank; empty
+            when no block could be ranked.
         """
-        # Subsample if needed
-        if len(X) > self.max_samples:
-            rng = np.random.RandomState(seed)
-            idx = rng.choice(len(X), size=self.max_samples, replace=False)
-            X = X.iloc[idx]
-            y = y.iloc[idx]
-
-        clf = RandomForestClassifier(
-            n_estimators=self.n_estimators,
-            max_depth=8,
-            n_jobs=-1,
-            random_state=seed,
-        )
-        clf.fit(X, y)
-
-        result = permutation_importance(
-            clf,
-            X,
-            y,
-            n_repeats=self.n_repeats,
-            random_state=seed,
-            n_jobs=-1,
-        )
-        return pd.Series(result.importances_mean, index=X.columns)
-
-    def evaluate(self, X: pd.DataFrame, y: pd.Series) -> list[BootstrapStabilityResult]:
-        """Run bootstrap stability evaluation.
-
-        Args:
-            X: Feature matrix (n_samples, n_features).
-            y: Target labels (n_samples,).
-
-        Returns:
-            List of BootstrapStabilityResult sorted by selection_frequency
-            descending.
-        """
-        n_features = X.shape[1]
-        if n_features == 0 or len(X) == 0:
-            logger.warning("Empty data passed to bootstrap stability — returning empty results")
+        names = list(feature_names)
+        if not names:
             return []
+        top_k = min(self.top_k, len(names))
 
-        # Check for single-class target
-        n_classes = y.nunique()
-        if n_classes < 2:
-            logger.warning(
-                "Only %d class(es) in target — cannot compute MDA, returning empty results",
-                n_classes,
-            )
-            return []
-
-        effective_top_k = min(self.top_k, n_features)
-
-        # Track ranks per feature across bootstrap samples
-        all_feature_names = list(X.columns)
-        rank_records: dict[str, list[int]] = {f: [] for f in all_feature_names}
-        top_k_counts: dict[str, int] = dict.fromkeys(all_feature_names, 0)
-
-        for i in range(self.n_bootstrap):
-            logger.info("Bootstrap sample %d/%d", i + 1, self.n_bootstrap)
-
-            # Resample with replacement
-            rng = np.random.RandomState(self.random_state + i)
-            idx = rng.choice(len(X), size=len(X), replace=True)
-            X_boot = X.iloc[idx]
-            y_boot = y.iloc[idx]
-
-            # Skip if resampled target has only one class
-            if y_boot.nunique() < 2:
-                logger.warning("Bootstrap sample %d has single class — skipping", i + 1)
+        ranks_by_feature: dict[str, list[float]] = {f: [] for f in names}
+        n_usable = 0
+        for i, (start, stop) in enumerate(self.draw_windows(n_rows)):
+            importance = rank_fn(start, stop)
+            if importance is None or importance.empty:
+                logger.info("  Stability block %d [%d:%d) skipped (no ranking)", i + 1, start, stop)
                 continue
+            n_usable += 1
+            # Features missing from the ranking count as least important; ties share
+            # their average rank so an all-zero ranking cannot put everything in the top-K
+            ranks = (
+                importance.reindex(names).fillna(-np.inf).rank(ascending=False, method="average")
+            )
+            for f in names:
+                ranks_by_feature[f].append(float(ranks[f]))
 
-            importance = self._compute_importance(X_boot, y_boot, seed=self.random_state + i)
+        if n_usable == 0:
+            logger.warning("Feature stability: no block could be ranked; no stability scores")
+            return []
 
-            # Rank features (1 = most important)
-            ranks = importance.rank(ascending=False, method="min").astype(int)
-
-            for feat in all_feature_names:
-                rank = int(ranks.get(feat, n_features))
-                rank_records[feat].append(rank)
-                if rank <= effective_top_k:
-                    top_k_counts[feat] += 1
-
-        # Compute summary statistics
-        n_samples_run = len(next(iter(rank_records.values()))) if rank_records else 0
-        n_samples_run = max(n_samples_run, 1)
-
-        results: list[BootstrapStabilityResult] = []
-        for feat in all_feature_names:
-            ranks_list = rank_records[feat]
-            if ranks_list:
-                freq = top_k_counts[feat] / n_samples_run
-                mean_r = float(np.mean(ranks_list))
-                std_r = float(np.std(ranks_list))
-            else:
-                freq = 0.0
-                mean_r = float(n_features)
-                std_r = 0.0
-
+        results = []
+        for f in names:
+            ranks = np.asarray(ranks_by_feature[f], dtype=float)
+            freq = float(np.mean(ranks <= top_k))
             results.append(
                 BootstrapStabilityResult(
-                    feature_name=feat,
+                    feature_name=f,
                     selection_frequency=freq,
-                    mean_rank=mean_r,
-                    rank_std=std_r,
+                    mean_rank=float(ranks.mean()),
+                    rank_std=float(ranks.std()),
                     is_stable=freq >= self.stability_threshold,
                 )
             )
-
         results.sort(key=lambda r: (-r.selection_frequency, r.mean_rank))
-
-        n_stable = sum(1 for r in results if r.is_stable)
         logger.info(
-            "Bootstrap stability: %d/%d features stable (threshold=%.2f, top_k=%d)",
-            n_stable,
+            "Feature stability: %d/%d features stable over %d blocks (top-%d, threshold %.2f)",
+            sum(r.is_stable for r in results),
             len(results),
+            n_usable,
+            top_k,
             self.stability_threshold,
-            effective_top_k,
         )
         return results
 
-    def get_stable_features(self, results: list[BootstrapStabilityResult]) -> list[str]:
-        """Return sorted list of feature names that are stable.
 
-        Args:
-            results: Output from evaluate().
-
-        Returns:
-            Feature names where is_stable=True, sorted alphabetically.
-        """
-        return sorted(r.feature_name for r in results if r.is_stable)
-
-
-__all__ = ["BootstrapFeatureStability", "BootstrapStabilityResult"]
+__all__ = ["BootstrapFeatureStability", "BootstrapStabilityResult", "RankFn"]

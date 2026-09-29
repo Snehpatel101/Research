@@ -74,29 +74,63 @@ class FeatureSelectionMixin:
         selection on train-split rows only, so no horizon's evaluation data
         is involved).
         """
+        try:
+            label_col = self._ranking_label_column(df)
+            if label_col is None:
+                logger.warning("MDA ranking: no label column found, falling back to variance")
+                return None
+            return self._mda_importance(
+                df,
+                feature_names,
+                df[label_col].to_numpy(),
+                frame_label_ends(df, label_col),
+            )
+        except Exception as e:
+            logger.warning(f"MDA ranking failed: {e}, falling back to variance")
+            return None
+
+    def _ranking_label_column(self, df: pd.DataFrame) -> str | None:
+        """Label column the selection ranks on: the first configured horizon's."""
+        for h in self.config.horizons:
+            candidate = f"label_h{h}"
+            if candidate in df.columns:
+                return candidate
+        return None
+
+    def _mda_importance(
+        self,
+        df: pd.DataFrame,
+        feature_names: list[str],
+        labels: np.ndarray,
+        label_ends: np.ndarray | None,
+    ) -> pd.Series | None:
+        """Mean out-of-sample MDA importance of ``feature_names`` on ``df``'s rows.
+
+        Args:
+            df: Frame holding the features (rows are bar positions).
+            feature_names: Features to rank.
+            labels: Label per row of ``df`` (-99 = invalid).
+            label_ends: Bar position each label resolves at, in ``df``'s row
+                coordinates (None = no label-span purging beyond ``purge_bars``).
+
+        Returns:
+            Importance per feature sorted descending, or None when the frame
+            cannot be ranked (too few rows, one class, CV failure).
+        """
         from src.optimization.feature_selection.walk_forward import (
             WalkForwardFeatureSelector,
         )
 
         try:
-            label_col = None
-            for h in self.config.horizons:
-                candidate = f"label_h{h}"
-                if candidate in df.columns:
-                    label_col = candidate
-                    break
-
-            if label_col is None:
-                logger.warning("MDA ranking: no label column found, falling back to variance")
-                return None
-
-            cols_needed = list(feature_names) + [label_col]
             # Complete rows with a real label (-99 = no barrier outcome, not a class)
-            usable = df[cols_needed].notna().all(axis=1).to_numpy() & (
-                df[label_col].to_numpy() != INVALID_LABEL
+            usable = (
+                df[list(feature_names)].notna().all(axis=1).to_numpy()
+                & ~pd.isna(labels)
+                & (labels != INVALID_LABEL)
             )
             positions = np.flatnonzero(usable)
-            clean_df = df.iloc[positions][cols_needed]
+            clean_df = df.iloc[positions][list(feature_names)]
+            clean_y = pd.Series(labels[positions], index=clean_df.index)
 
             if len(clean_df) < 200:
                 logger.warning(
@@ -109,18 +143,18 @@ class FeatureSelectionMixin:
             # Strided (every-Nth) sampling keeps rows in temporal order; a shuffling
             # subsample would make PurgedKFold's positional purge/embargo meaningless.
             clean_df, stride = _temporal_stride_subsample(clean_df, MDA_MAX_ROWS)
+            clean_y = clean_y.iloc[::stride]
             positions = positions[::stride]
             if stride > 1:
                 logger.info(
                     f"  MDA subsampling: strided every {stride}th row → {len(clean_df):,} rows"
                 )
             # Label spans in bar positions: exact purging after row filtering
-            # and striding (None when the frame has no label-end column)
-            label_ends = frame_label_ends(df, label_col)
+            # and striding (None when there are no label ends)
             spans = LabelSpans.from_rows(positions, label_ends) if label_ends is not None else None
 
-            X = clean_df[feature_names]
-            y = clean_df[label_col]
+            X = clean_df
+            y = clean_y
 
             if y.nunique() < 2:
                 logger.warning("MDA ranking: labels have < 2 classes, falling back to variance")
@@ -320,6 +354,7 @@ class FeatureSelectionMixin:
         from src.core.contracts import get_model_contract
 
         self._all_feature_names = list(feature_names)
+        candidate_features = list(feature_names)
         original_count = len(feature_names)
 
         # Step 1: MDA importance ranking (target-aware, falls back to variance)
@@ -473,6 +508,46 @@ class FeatureSelectionMixin:
                         )
             except Exception as e:
                 logger.debug(f"  Robustness scoring skipped: {e}")
+
+        # Step 6: Opt-in governance report (diagnostic only — selection is final here)
+        # Stability cut = the size of the largest per-model selection ("would this
+        # feature make the cut?"); the raw contract budget can exceed the candidate count
+        selection_size = max((len(v) for v in self._per_model_features.values()), default=0)
+        self._run_feature_governance(df, candidate_features, mda_importance, selection_size)
+
+    def _run_feature_governance(
+        self,
+        df: pd.DataFrame,
+        candidates: list[str],
+        raw_importance: pd.Series | None,
+        top_k: int,
+    ) -> None:
+        """Write the feature-governance report when ``config.governance`` enables it.
+
+        Reads the finished selection (``_per_model_features``) and the TRAIN
+        frame; changes nothing about either. A failure here is logged and
+        never interrupts training.
+        """
+        settings = getattr(self.config, "governance", None)
+        if not settings or not settings.get("report"):
+            return
+        from src.models.training.feature_governance import FeatureGovernance
+
+        try:
+            label_col = self._ranking_label_column(df)
+            if label_col is None:
+                logger.warning("  Feature governance skipped: no label column found")
+                return
+            FeatureGovernance(self.config, self._mda_importance).run(
+                df,
+                label_col=label_col,
+                candidates=candidates,
+                raw_importance=raw_importance,
+                selected_by_model=self._per_model_features,
+                top_k=top_k,
+            )
+        except Exception as e:
+            logger.warning(f"  Feature governance skipped: {e}")
 
     def _validate_contracts(
         self,

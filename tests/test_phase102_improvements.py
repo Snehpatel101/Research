@@ -1,13 +1,14 @@
 """
-Tests for Phase 102: Improvements — Bootstrap Stability, Label Perturbation, Param Sensitivity.
-
-From improvements_sneh.md Section 16.3 "Most Robust Design".
+Tests for the feature-governance statistics: block-subsample stability and
+label-perturbation robustness (both take importances from the caller, so they
+are tested with synthetic ranking functions).
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.optimization.feature_selection.bootstrap_stability import (
     BootstrapFeatureStability,
@@ -15,231 +16,116 @@ from src.optimization.feature_selection.bootstrap_stability import (
 )
 from src.optimization.feature_selection.label_perturbation import (
     LabelPerturbationTester,
-    PerturbationResult,
-)
-from src.optimization.feature_selection.param_sensitivity import (
-    ParameterSensitivityTester,
-    SensitivityResult,
+    PerturbationSummary,
 )
 
-# ---------------------------------------------------------------------------
-# Helper
-# ---------------------------------------------------------------------------
+FEATURES = [f"f{i}" for i in range(10)]
 
 
-def _make_data(
-    n_samples: int = 500,
-    n_features: int = 10,
-    seed: int = 42,
-    informative: int = 3,
-) -> tuple[pd.DataFrame, pd.Series]:
-    rng = np.random.RandomState(seed)
-    X = pd.DataFrame(
-        rng.randn(n_samples, n_features),
-        columns=[f"feat_{i}" for i in range(n_features)],
-    )
-    signal = X.iloc[:, :informative].sum(axis=1)
-    y = pd.Series((signal > 0).astype(int), name="label")
-    return X, y
+def _ranker(good: set[str], seen: list[tuple[int, int]] | None = None):
+    """Importance ranking where ``good`` features always win; noise varies per block."""
 
+    def rank(start: int, stop: int) -> pd.Series:
+        if seen is not None:
+            seen.append((start, stop))
+        rng = np.random.default_rng(start)
+        imp = pd.Series(rng.uniform(0, 0.1, len(FEATURES)), index=FEATURES)
+        imp[list(good)] += 1.0
+        return imp
 
-# ---------------------------------------------------------------------------
-# Bootstrap Stability
-# ---------------------------------------------------------------------------
+    return rank
 
 
 class TestBootstrapStability:
-    """Bootstrap feature stability testing."""
-
-    def test_evaluate_returns_results(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, y)
-        assert isinstance(results, list)
-        assert len(results) == 5
+    def test_stable_features_are_the_consistently_ranked_ones(self) -> None:
+        tester = BootstrapFeatureStability(n_bootstrap=6, top_k=3, min_window_rows=10)
+        results = tester.evaluate(FEATURES, 1000, _ranker({"f0", "f1", "f2"}))
         assert all(isinstance(r, BootstrapStabilityResult) for r in results)
+        stable = {r.feature_name for r in results if r.is_stable}
+        assert stable == {"f0", "f1", "f2"}
+        assert all(r.selection_frequency == 1.0 for r in results if r.is_stable)
+        # Sorted: most frequently selected first
+        assert results[0].selection_frequency >= results[-1].selection_frequency
 
-    def test_selection_frequency_range(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, y)
-        for r in results:
-            assert 0.0 <= r.selection_frequency <= 1.0
+    def test_blocks_are_contiguous_and_inside_the_data(self) -> None:
+        seen: list[tuple[int, int]] = []
+        tester = BootstrapFeatureStability(n_bootstrap=5, window_fraction=0.4, min_window_rows=10)
+        tester.evaluate(FEATURES, 1000, _ranker({"f0"}, seen))
+        assert len(seen) == 5
+        for start, stop in seen:
+            assert 0 <= start < stop <= 1000
+            assert stop - start == 400
 
-    def test_sorted_by_frequency_descending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=3, n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, y)
-        freqs = [r.selection_frequency for r in results]
-        assert freqs == sorted(freqs, reverse=True)
+    def test_blocks_are_deterministic_per_seed(self) -> None:
+        tester = BootstrapFeatureStability(n_bootstrap=4, min_window_rows=10, random_state=3)
+        other = BootstrapFeatureStability(n_bootstrap=4, min_window_rows=10, random_state=4)
+        assert tester.draw_windows(500) == tester.draw_windows(500)
+        assert tester.draw_windows(500) != other.draw_windows(500)
 
-    def test_get_stable_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        tester = BootstrapFeatureStability(
-            n_bootstrap=5,
-            top_k=3,
-            stability_threshold=0.4,
-            n_estimators=10,
-            n_repeats=2,
-        )
-        results = tester.evaluate(X, y)
-        stable = tester.get_stable_features(results)
-        assert isinstance(stable, list)
-        # All returned features should have is_stable=True
-        stable_set = set(stable)
-        for r in results:
-            if r.feature_name in stable_set:
-                assert r.is_stable
+    def test_too_small_data_yields_no_blocks(self) -> None:
+        tester = BootstrapFeatureStability(n_bootstrap=4, min_window_rows=300)
+        assert tester.draw_windows(400) == []
+        assert tester.evaluate(FEATURES, 400, _ranker({"f0"})) == []
 
-    def test_empty_data(self) -> None:
-        X = pd.DataFrame(columns=["a", "b", "c"])
-        y = pd.Series(dtype=int)
-        tester = BootstrapFeatureStability(n_bootstrap=3, n_estimators=10)
-        results = tester.evaluate(X, y)
-        assert isinstance(results, list)
-        assert len(results) == 0  # Empty data returns empty results
+    def test_unrankable_blocks_are_skipped(self) -> None:
+        calls = {"n": 0}
 
-    def test_result_dataclass(self) -> None:
-        r = BootstrapStabilityResult(
-            feature_name="rsi_14",
-            selection_frequency=0.8,
-            mean_rank=3.5,
-            rank_std=1.2,
-            is_stable=True,
-        )
-        assert r.feature_name == "rsi_14"
-        assert r.is_stable is True
+        def flaky(start: int, stop: int) -> pd.Series | None:
+            calls["n"] += 1
+            return None if calls["n"] % 2 else _ranker({"f0"})(start, stop)
 
-    def test_top_k_larger_than_features(self) -> None:
-        """If top_k > n_features, all features should be in top-K every time."""
-        X, y = _make_data(n_samples=200, n_features=3)
-        tester = BootstrapFeatureStability(n_bootstrap=5, top_k=10, n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, y)
-        for r in results:
-            assert r.selection_frequency == 1.0
+        tester = BootstrapFeatureStability(n_bootstrap=6, top_k=2, min_window_rows=10)
+        results = tester.evaluate(FEATURES, 1000, flaky)
+        assert results  # half the blocks ranked
+        assert next(r for r in results if r.feature_name == "f0").selection_frequency == 1.0
 
+    def test_all_zero_ranking_does_not_make_everything_stable(self) -> None:
+        zeros = pd.Series(0.0, index=FEATURES)
+        tester = BootstrapFeatureStability(n_bootstrap=3, top_k=2, min_window_rows=10)
+        results = tester.evaluate(FEATURES, 1000, lambda a, b: zeros)
+        assert not any(r.is_stable for r in results)
 
-# ---------------------------------------------------------------------------
-# Label Perturbation
-# ---------------------------------------------------------------------------
+    def test_invalid_parameters_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            BootstrapFeatureStability(n_bootstrap=0)
+        with pytest.raises(ValueError):
+            BootstrapFeatureStability(window_fraction=1.5)
+        with pytest.raises(ValueError):
+            BootstrapFeatureStability(stability_threshold=0.0)
 
 
 class TestLabelPerturbation:
-    """Label perturbation testing for feature robustness."""
+    def test_unchanged_ranking_is_fully_robust(self) -> None:
+        base = pd.Series(np.linspace(1, 0.1, 10), index=FEATURES)
+        summary = LabelPerturbationTester().evaluate(base, {"a": base.copy(), "b": base.copy()})
+        assert isinstance(summary, PerturbationSummary)
+        assert all(r.is_robust and r.max_rank_change == 0 for r in summary.results)
+        assert summary.rank_correlation == {"a": pytest.approx(1.0), "b": pytest.approx(1.0)}
 
-    def test_evaluate_returns_results(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        rng = np.random.RandomState(99)
-        y2 = pd.Series((X.iloc[:, :3].sum(axis=1) + rng.randn(300) * 0.5 > 0).astype(int))
-        tester = LabelPerturbationTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, {"baseline": y, "perturbed": y2})
-        assert isinstance(results, list)
-        assert len(results) == 5
-        assert all(isinstance(r, PerturbationResult) for r in results)
-
-    def test_sorted_by_rank_change_ascending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        rng = np.random.RandomState(99)
-        y2 = pd.Series((X.iloc[:, :2].sum(axis=1) + rng.randn(300) * 2 > 0).astype(int))
-        tester = LabelPerturbationTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, {"baseline": y, "noisy": y2})
-        changes = [r.max_rank_change for r in results]
-        assert changes == sorted(changes)
-
-    def test_get_robust_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        y2 = y.copy()  # Same labels — all features should be robust
-        tester = LabelPerturbationTester(rank_change_threshold=5, n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, {"baseline": y, "same": y2})
-        robust = tester.get_robust_features(results)
-        assert isinstance(robust, list)
-        assert len(robust) == 5  # All should be robust (same labels)
-
-    def test_single_variant(self) -> None:
-        X, y = _make_data(n_samples=200, n_features=3)
-        tester = LabelPerturbationTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate(X, {"only_one": y})
-        assert len(results) == 3
-        for r in results:
-            assert r.max_rank_change == 0
-
-    def test_result_dataclass(self) -> None:
-        r = PerturbationResult(
-            feature_name="atr_14",
-            baseline_rank=2,
-            perturbed_ranks=[3, 4],
-            max_rank_change=2,
-            mean_rank=3.0,
-            is_robust=True,
+    def test_reversed_ranking_is_flagged(self) -> None:
+        base = pd.Series(np.linspace(1, 0.1, 10), index=FEATURES)
+        reversed_imp = pd.Series(base.to_numpy()[::-1], index=FEATURES)
+        summary = LabelPerturbationTester(rank_change_fraction=0.2).evaluate(
+            base, {"flip": reversed_imp}
         )
-        assert r.feature_name == "atr_14"
-        assert r.max_rank_change == 2
+        by_name = {r.feature_name: r for r in summary.results}
+        assert not by_name["f0"].is_robust and by_name["f0"].max_rank_change == 9
+        assert summary.rank_correlation["flip"] == pytest.approx(-1.0)
+        # Middle features move little
+        assert by_name["f4"].max_rank_change <= 1 and by_name["f4"].is_robust
 
+    def test_unrankable_variants_are_skipped_and_none_means_no_verdict(self) -> None:
+        base = pd.Series(np.linspace(1, 0.1, 10), index=FEATURES)
+        summary = LabelPerturbationTester().evaluate(base, {"a": None})
+        assert summary.variants_used == []
+        assert not any(r.is_robust for r in summary.results)
 
-# ---------------------------------------------------------------------------
-# Parameter Sensitivity
-# ---------------------------------------------------------------------------
-
-
-class TestParameterSensitivity:
-    """Parameter sensitivity testing for feature stability."""
-
-    def test_evaluate_returns_results(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        rng = np.random.RandomState(99)
-        X2 = X + rng.randn(*X.shape) * 0.1  # Slightly different feature values
-        tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate({"v1": X, "v2": X2}, y)
-        assert isinstance(results, list)
-        assert len(results) == 5
-        assert all(isinstance(r, SensitivityResult) for r in results)
-
-    def test_sorted_by_cv_ascending(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        rng = np.random.RandomState(99)
-        X2 = X + rng.randn(*X.shape) * 0.5
-        tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate({"v1": X, "v2": X2}, y)
-        cvs = [r.cv for r in results]
-        assert cvs == sorted(cvs)
-
-    def test_get_stable_features(self) -> None:
-        X, y = _make_data(n_samples=300, n_features=5)
-        # Same data for both variants — should be perfectly stable
-        tester = ParameterSensitivityTester(cv_threshold=0.5, n_estimators=10, n_repeats=2)
-        results = tester.evaluate({"v1": X, "v2": X}, y)
-        stable = tester.get_stable_features(results)
-        assert isinstance(stable, list)
-        # With identical data, CV should be 0 (or near-0 due to random seed)
-        for r in results:
-            assert r.cv < 0.01 or r.mean_importance == 0.0
-
-    def test_single_variant(self) -> None:
-        X, y = _make_data(n_samples=200, n_features=3)
-        tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate({"only": X}, y)
-        assert len(results) == 3
-        for r in results:
-            assert r.cv == 0.0  # Single variant means std=0
-
-    def test_zero_importance_features(self) -> None:
-        """Features with zero importance should have cv=0."""
-        rng = np.random.RandomState(42)
-        X = pd.DataFrame({"noise": rng.randn(200)})
-        y = pd.Series([0, 1] * 100)
-        tester = ParameterSensitivityTester(n_estimators=10, n_repeats=2)
-        results = tester.evaluate({"v1": X, "v2": X}, y)
-        # Results may have cv=0 if importance is consistently the same
-        assert len(results) == 1
-
-    def test_result_dataclass(self) -> None:
-        r = SensitivityResult(
-            feature_name="rsi_14",
-            importance_values=[0.5, 0.6, 0.4],
-            mean_importance=0.5,
-            std_importance=0.1,
-            cv=0.2,
-            is_stable=True,
-        )
-        assert r.feature_name == "rsi_14"
-        assert r.is_stable is True
+    def test_tolerance_is_relative_to_feature_count(self) -> None:
+        names = [f"g{i}" for i in range(100)]
+        base = pd.Series(np.linspace(1, 0.1, 100), index=names)
+        shifted = base.copy()
+        shifted.iloc[10], shifted.iloc[20] = shifted.iloc[20], shifted.iloc[10]  # swap = 10 ranks
+        summary = LabelPerturbationTester(rank_change_fraction=0.15).evaluate(base, {"s": shifted})
+        assert all(r.is_robust for r in summary.results)  # 10 <= 15% of 100
+        strict = LabelPerturbationTester(rank_change_fraction=0.05).evaluate(base, {"s": shifted})
+        assert not next(r for r in strict.results if r.feature_name == "g10").is_robust

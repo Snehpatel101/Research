@@ -1,23 +1,21 @@
-"""
-Feature lifecycle state machine for tracking feature status across training cycles.
+"""Feature lifecycle: states, allowed transitions and the per-run promotion policy.
 
-Manages state transitions for individual features through their lifecycle:
-CANDIDATE -> SELECTED -> ACTIVE -> DEGRADED -> RETIRED
+    CANDIDATE -> SELECTED -> ACTIVE <-> DEGRADED -> RETIRED
 
-Each transition is validated against allowed transitions and recorded
-with timestamp and reason for full auditability.
+A feature is a CANDIDATE while it has only ever been scored, SELECTED the first
+time a run's selection keeps it, ACTIVE once a later run keeps it again (and its
+stability did not contradict that), DEGRADED when a run drops it or finds it
+unstable, and RETIRED after it stayed degraded for several consecutive runs.
+RETIRED is terminal: the registry reports a retired feature that a later run
+selects again so a human can decide, rather than silently reviving it.
 
-Reference: Phase E6 of Feature Governance roadmap.
+The transition table and ``next_state`` are pure; ``FeatureRegistry`` owns the
+per-feature state and history.
 """
 
 from __future__ import annotations
 
-import logging
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from enum import StrEnum
-
-logger = logging.getLogger(__name__)
 
 
 class FeatureLifecycleState(StrEnum):
@@ -30,104 +28,66 @@ class FeatureLifecycleState(StrEnum):
     RETIRED = "retired"
 
 
-# Valid state transitions: source -> set of allowed destinations
-_VALID_TRANSITIONS: dict[FeatureLifecycleState, set[FeatureLifecycleState]] = {
-    FeatureLifecycleState.CANDIDATE: {FeatureLifecycleState.SELECTED},
-    FeatureLifecycleState.SELECTED: {
-        FeatureLifecycleState.ACTIVE,
-        FeatureLifecycleState.RETIRED,
-    },
-    FeatureLifecycleState.ACTIVE: {
-        FeatureLifecycleState.DEGRADED,
-        FeatureLifecycleState.RETIRED,
-    },
-    FeatureLifecycleState.DEGRADED: {
-        FeatureLifecycleState.ACTIVE,
-        FeatureLifecycleState.RETIRED,
-    },
-    FeatureLifecycleState.RETIRED: set(),
+VALID_TRANSITIONS: dict[FeatureLifecycleState, frozenset[FeatureLifecycleState]] = {
+    FeatureLifecycleState.CANDIDATE: frozenset({FeatureLifecycleState.SELECTED}),
+    FeatureLifecycleState.SELECTED: frozenset(
+        {FeatureLifecycleState.ACTIVE, FeatureLifecycleState.RETIRED}
+    ),
+    FeatureLifecycleState.ACTIVE: frozenset(
+        {FeatureLifecycleState.DEGRADED, FeatureLifecycleState.RETIRED}
+    ),
+    FeatureLifecycleState.DEGRADED: frozenset(
+        {FeatureLifecycleState.ACTIVE, FeatureLifecycleState.RETIRED}
+    ),
+    FeatureLifecycleState.RETIRED: frozenset(),
 }
 
+# Consecutive failing runs in DEGRADED before a feature is retired
+DEFAULT_MAX_DEGRADED_RUNS = 3
 
-@dataclass
-class FeatureLifecycle:
-    """Manage lifecycle state transitions for a single feature.
 
-    Tracks the current state, validates transitions, and maintains
-    a full history of state changes with timestamps and reasons.
+def next_state(
+    state: FeatureLifecycleState,
+    *,
+    selected: bool,
+    stable: bool | None,
+    degraded_runs: int,
+    max_degraded_runs: int = DEFAULT_MAX_DEGRADED_RUNS,
+) -> tuple[FeatureLifecycleState | None, str]:
+    """State a feature moves to after one more run, or None to stay put.
+
+    Args:
+        state: Current state.
+        selected: The run's selection kept the feature.
+        stable: Stability verdict of the run (None = not measured).
+        degraded_runs: Consecutive failing runs already spent in DEGRADED,
+            counting this one (the caller increments before asking).
+        max_degraded_runs: Failing DEGRADED runs that trigger retirement.
+
+    Returns:
+        ``(new_state, reason)``; ``new_state`` is None when nothing changes.
     """
-
-    feature_name: str
-    _state: FeatureLifecycleState = field(default=FeatureLifecycleState.CANDIDATE)
-    _history: list[tuple[str, FeatureLifecycleState, FeatureLifecycleState, str]] = field(
-        default_factory=list, repr=False
-    )
-
-    @property
-    def state(self) -> FeatureLifecycleState:
-        """Current lifecycle state."""
-        return self._state
-
-    @property
-    def history(
-        self,
-    ) -> list[tuple[str, FeatureLifecycleState, FeatureLifecycleState, str]]:
-        """Full transition history as (timestamp, from_state, to_state, reason) tuples."""
-        return list(self._history)
-
-    def transition(self, new_state: FeatureLifecycleState, reason: str = "") -> None:
-        """Transition to a new state.
-
-        Args:
-            new_state: Target state to transition to.
-            reason: Human-readable reason for the transition.
-
-        Raises:
-            ValueError: If the transition is not allowed from the current state.
-        """
-        allowed = _VALID_TRANSITIONS.get(self._state, set())
-        if new_state not in allowed:
-            raise ValueError(
-                f"Invalid transition for '{self.feature_name}': "
-                f"{self._state.value} -> {new_state.value}. "
-                f"Allowed targets: {sorted(s.value for s in allowed) or 'none (terminal state)'}"
-            )
-
-        old_state = self._state
-        self._state = new_state
-        timestamp = datetime.now(tz=UTC).isoformat()
-        self._history.append((timestamp, old_state, new_state, reason))
-
-        logger.debug(
-            "Feature '%s': %s -> %s%s",
-            self.feature_name,
-            old_state.value,
-            new_state.value,
-            f" ({reason})" if reason else "",
-        )
-
-    @property
-    def consecutive_degradations(self) -> int:
-        """Count consecutive DEGRADED transitions from the end of history."""
-        count = 0
-        for _, _, to_state, _ in reversed(self._history):
-            if to_state == FeatureLifecycleState.DEGRADED:
-                count += 1
-            else:
-                break
-        return count
-
-    def should_retire(self, max_degradations: int = 3) -> bool:
-        """Check if the feature should be retired due to repeated degradation.
-
-        Args:
-            max_degradations: Number of consecutive degradations that triggers
-                retirement recommendation. Defaults to 3.
-
-        Returns:
-            True if consecutive_degradations >= max_degradations.
-        """
-        return self.consecutive_degradations >= max_degradations
+    healthy = selected and stable is not False
+    if state is FeatureLifecycleState.CANDIDATE:
+        return (FeatureLifecycleState.SELECTED, "selected") if selected else (None, "")
+    if state is FeatureLifecycleState.SELECTED:
+        return (FeatureLifecycleState.ACTIVE, "selected again") if healthy else (None, "")
+    if state is FeatureLifecycleState.ACTIVE:
+        if healthy:
+            return None, ""
+        return FeatureLifecycleState.DEGRADED, "not selected" if not selected else "unstable"
+    if state is FeatureLifecycleState.DEGRADED:
+        if healthy:
+            return FeatureLifecycleState.ACTIVE, "recovered"
+        if degraded_runs >= max_degraded_runs:
+            return FeatureLifecycleState.RETIRED, f"degraded for {degraded_runs} consecutive runs"
+        return None, ""
+    return None, ""
 
 
-__all__ = ["FeatureLifecycleState", "FeatureLifecycle"]
+__all__ = [
+    "DEFAULT_MAX_DEGRADED_RUNS",
+    "VALID_TRANSITIONS",
+    "FeatureLifecycleState",
+    "next_state",
+]

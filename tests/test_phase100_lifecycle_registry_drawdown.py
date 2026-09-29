@@ -2,8 +2,8 @@
 Tests for Phase 100: Feature Lifecycle, Feature Registry, Drawdown-Adjusted Sizing.
 
 Covers:
-- E6: Feature lifecycle state machine (transitions, history, retirement)
-- E7: Feature registry with JSON persistence (CRUD, save/load)
+- E6: Feature lifecycle states, transition table and per-run promotion policy
+- E7: Feature registry with JSON persistence (CRUD, save/load, record_run)
 - Drawdown-adjusted position sizing (scaling, integration)
 """
 
@@ -21,8 +21,9 @@ from src.inference.backtesting.position_sizing import (
     PositionSizingMethod,
 )
 from src.optimization.feature_selection.lifecycle import (
-    FeatureLifecycle,
+    VALID_TRANSITIONS,
     FeatureLifecycleState,
+    next_state,
 )
 from src.optimization.feature_selection.registry import (
     VALID_STATES,
@@ -30,121 +31,61 @@ from src.optimization.feature_selection.registry import (
     FeatureRegistry,
 )
 
+S = FeatureLifecycleState
+
 # ---------------------------------------------------------------------------
-# E6: Feature Lifecycle State Machine
+# E6: Feature Lifecycle policy
 # ---------------------------------------------------------------------------
 
 
-class TestFeatureLifecycle:
-    """E6: Feature lifecycle state transitions and history."""
+class TestLifecyclePolicy:
+    """E6: transition table and next_state."""
 
-    def test_initial_state_is_candidate(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        assert fl.state == FeatureLifecycleState.CANDIDATE
+    def test_retired_is_terminal(self) -> None:
+        assert VALID_TRANSITIONS[S.RETIRED] == frozenset()
 
-    def test_valid_transition_candidate_to_selected(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED, "passed MDA threshold")
-        assert fl.state == FeatureLifecycleState.SELECTED
+    def test_every_state_has_a_table_entry(self) -> None:
+        assert set(VALID_TRANSITIONS) == set(S)
 
-    def test_valid_transition_selected_to_active(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.ACTIVE, "validated in production")
-        assert fl.state == FeatureLifecycleState.ACTIVE
+    @pytest.mark.parametrize(
+        ("state", "selected", "stable", "expected"),
+        [
+            (S.CANDIDATE, True, None, S.SELECTED),
+            (S.CANDIDATE, False, None, None),
+            (S.SELECTED, True, None, S.ACTIVE),
+            (S.SELECTED, True, True, S.ACTIVE),
+            (S.SELECTED, True, False, None),  # unstable: not promoted
+            (S.SELECTED, False, None, None),
+            (S.ACTIVE, True, True, None),
+            (S.ACTIVE, True, None, None),
+            (S.ACTIVE, False, None, S.DEGRADED),
+            (S.ACTIVE, True, False, S.DEGRADED),
+            (S.DEGRADED, True, True, S.ACTIVE),  # recovery
+            (S.DEGRADED, False, None, None),  # first failing run: stay
+            (S.RETIRED, True, True, None),
+        ],
+    )
+    def test_next_state(self, state, selected, stable, expected) -> None:
+        new_state, _reason = next_state(
+            state, selected=selected, stable=stable, degraded_runs=1, max_degraded_runs=3
+        )
+        assert new_state == expected
 
-    def test_valid_transition_active_to_degraded(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.ACTIVE)
-        fl.transition(FeatureLifecycleState.DEGRADED, "MDA dropped below threshold")
-        assert fl.state == FeatureLifecycleState.DEGRADED
+    def test_degraded_retires_after_max_failing_runs(self) -> None:
+        assert next_state(S.DEGRADED, selected=False, stable=None, degraded_runs=2)[0] is None
+        new_state, reason = next_state(S.DEGRADED, selected=False, stable=None, degraded_runs=3)
+        assert new_state == S.RETIRED and "3" in reason
 
-    def test_valid_transition_degraded_to_active(self) -> None:
-        """Recovery path: degraded feature recovers performance."""
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.ACTIVE)
-        fl.transition(FeatureLifecycleState.DEGRADED)
-        fl.transition(FeatureLifecycleState.ACTIVE, "performance recovered")
-        assert fl.state == FeatureLifecycleState.ACTIVE
-
-    def test_valid_transition_degraded_to_retired(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.ACTIVE)
-        fl.transition(FeatureLifecycleState.DEGRADED)
-        fl.transition(FeatureLifecycleState.RETIRED, "failed to recover")
-        assert fl.state == FeatureLifecycleState.RETIRED
-
-    def test_invalid_transition_candidate_to_active(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        with pytest.raises(ValueError, match="Invalid transition"):
-            fl.transition(FeatureLifecycleState.ACTIVE)
-
-    def test_invalid_transition_retired_to_anything(self) -> None:
-        """Retired is a terminal state."""
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.RETIRED)
-        with pytest.raises(ValueError, match="Invalid transition"):
-            fl.transition(FeatureLifecycleState.CANDIDATE)
-
-    def test_history_tracking(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED, "reason1")
-        fl.transition(FeatureLifecycleState.ACTIVE, "reason2")
-        history = fl.history
-        assert len(history) == 2
-        # Each entry: (timestamp_str, from_state, to_state, reason)
-        assert history[0][1] == FeatureLifecycleState.CANDIDATE
-        assert history[0][2] == FeatureLifecycleState.SELECTED
-        assert history[0][3] == "reason1"
-        assert history[1][2] == FeatureLifecycleState.ACTIVE
-
-    def test_history_is_copy(self) -> None:
-        """Ensure history property returns a copy, not mutable reference."""
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        h1 = fl.history
-        h1.append(("fake", FeatureLifecycleState.CANDIDATE, FeatureLifecycleState.RETIRED, ""))
-        assert len(fl.history) == 1
-
-    def test_consecutive_degradations_none(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        assert fl.consecutive_degradations == 0
-
-    def test_consecutive_degradations_count(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.ACTIVE)
-        fl.transition(FeatureLifecycleState.DEGRADED)
-        fl.transition(FeatureLifecycleState.ACTIVE)  # recovery
-        fl.transition(FeatureLifecycleState.DEGRADED)
-        fl.transition(FeatureLifecycleState.ACTIVE)  # recovery
-        fl.transition(FeatureLifecycleState.DEGRADED)  # consecutive 1
-        assert fl.consecutive_degradations == 1
-
-    def test_should_retire_false(self) -> None:
-        fl = FeatureLifecycle("rsi_14")
-        assert fl.should_retire(max_degradations=3) is False
-
-    def test_should_retire_true(self) -> None:
-        """Simulate 3 consecutive degradations via degraded->active->degraded cycle.
-
-        Note: consecutive_degradations counts trailing DEGRADED transitions,
-        but the state machine requires ACTIVE between DEGRADEDs. So we test
-        with max_degradations=1 for a single trailing degradation.
-        """
-        fl = FeatureLifecycle("rsi_14")
-        fl.transition(FeatureLifecycleState.SELECTED)
-        fl.transition(FeatureLifecycleState.ACTIVE)
-        fl.transition(FeatureLifecycleState.DEGRADED)
-        assert fl.should_retire(max_degradations=1) is True
-
-    def test_feature_name_preserved(self) -> None:
-        fl = FeatureLifecycle("atr_14_1min")
-        assert fl.feature_name == "atr_14_1min"
+    def test_policy_only_proposes_allowed_transitions(self) -> None:
+        for state in S:
+            for selected in (True, False):
+                for stable in (True, False, None):
+                    for runs in (1, 5):
+                        new_state, _ = next_state(
+                            state, selected=selected, stable=stable, degraded_runs=runs
+                        )
+                        if new_state is not None:
+                            assert new_state in VALID_TRANSITIONS[state]
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +241,99 @@ class TestFeatureRegistry:
         record = reg.get("rsi_14")
         assert record is not None
         assert record.last_selected_at is not None
+
+    def test_update_state_rejects_disallowed_transition(self) -> None:
+        reg = FeatureRegistry()
+        reg.register("rsi_14")
+        with pytest.raises(ValueError, match="Invalid transition"):
+            reg.update_state("rsi_14", "active")  # candidate -> active skips selected
+        assert reg.get("rsi_14").state == "candidate"  # type: ignore[union-attr]
+
+    def test_corrupt_file_is_moved_aside_not_overwritten(self, tmp_path: Path) -> None:
+        path = tmp_path / "registry.json"
+        path.write_text("{not json")
+        reg = FeatureRegistry(registry_path=path)
+        assert len(reg) == 0
+        assert (tmp_path / "registry.json.corrupt").read_text() == "{not json"
+        reg.register("a")
+        reg.save()
+        assert len(FeatureRegistry(registry_path=path)) == 1
+
+
+class TestRegistryRecordRun:
+    """record_run folds one run's selection + stability verdicts into lifecycles."""
+
+    @staticmethod
+    def _scores(*names: str) -> dict[str, dict[str, float]]:
+        return {n: {"mda_score": 0.1} for n in names}
+
+    def _run(self, reg, run_id, pool, selected, stable=None, **kw):
+        return reg.record_run(
+            run_id, scores=self._scores(*pool), selected=selected, stable=stable, **kw
+        )
+
+    def test_first_run_registers_and_selects(self) -> None:
+        reg = FeatureRegistry()
+        update = self._run(reg, "r1", ["a", "b", "c"], ["a", "b"])
+        assert update.n_new == 3
+        assert [r.feature_name for r in reg.get_by_state("selected")] == ["a", "b"]
+        assert [r.feature_name for r in reg.get_by_state("candidate")] == ["c"]
+        assert reg.get("a").transition_history[0]["reason"] == "r1: selected"  # type: ignore[union-attr]
+
+    def test_reselected_stable_feature_becomes_active(self) -> None:
+        reg = FeatureRegistry()
+        self._run(reg, "r1", ["a"], ["a"])
+        self._run(reg, "r2", ["a"], ["a"], stable={"a": True})
+        assert reg.get_active_features() == ["a"]
+
+    def test_unstable_reselection_is_not_promoted(self) -> None:
+        reg = FeatureRegistry()
+        self._run(reg, "r1", ["a"], ["a"])
+        self._run(reg, "r2", ["a"], ["a"], stable={"a": False})
+        assert reg.get("a").state == "selected"  # type: ignore[union-attr]
+
+    def test_active_degrades_recovers_and_retires(self) -> None:
+        reg = FeatureRegistry()
+        self._run(reg, "r1", ["a"], ["a"])
+        self._run(reg, "r2", ["a"], ["a"])
+        assert reg.get("a").state == "active"  # type: ignore[union-attr]
+        self._run(reg, "r3", ["a"], [])  # dropped
+        assert reg.get_degraded_features() == ["a"]
+        self._run(reg, "r4", ["a"], ["a"], stable={"a": True})  # recovery
+        assert reg.get("a").state == "active"  # type: ignore[union-attr]
+        assert reg.get("a").degraded_runs == 0  # type: ignore[union-attr]
+
+        for run in ["r5", "r6", "r7", "r8"]:
+            update = self._run(reg, run, ["a"], [], max_degraded_runs=3)
+        assert reg.get("a").state == "retired"  # type: ignore[union-attr]
+        assert update.transitions == []  # r8: already retired, no further move
+        history = [t["to_state"] for t in reg.get("a").transition_history]  # type: ignore[union-attr]
+        assert history == ["selected", "active", "degraded", "active", "degraded", "retired"]
+
+    def test_retired_feature_is_reported_not_revived(self) -> None:
+        reg = FeatureRegistry()
+        self._run(reg, "r1", ["a"], ["a"])
+        reg.update_state("a", "retired", "manual")
+        update = self._run(reg, "r2", ["a"], ["a"], stable={"a": True})
+        assert update.retired_but_selected == ["a"]
+        assert reg.get("a").state == "retired"  # type: ignore[union-attr]
+
+    def test_feature_missing_from_the_pool_counts_as_not_selected(self) -> None:
+        reg = FeatureRegistry()
+        self._run(reg, "r1", ["a"], ["a"])
+        self._run(reg, "r2", ["a"], ["a"])
+        self._run(reg, "r3", ["b"], ["b"])  # "a" no longer computed
+        assert reg.get("a").state == "degraded"  # type: ignore[union-attr]
+
+    def test_persists_across_registry_instances(self, tmp_path: Path) -> None:
+        path = tmp_path / "reg.json"
+        reg = FeatureRegistry(path)
+        self._run(reg, "r1", ["a"], ["a"])
+        reg.save()
+        reopened = FeatureRegistry(path)
+        self._run(reopened, "r2", ["a"], ["a"])
+        assert reopened.get("a").state == "active"  # type: ignore[union-attr]
+        assert reopened.get("a").last_run_id == "r2"  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------

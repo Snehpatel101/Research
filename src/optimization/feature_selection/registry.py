@@ -1,27 +1,39 @@
 """
 Feature registry with JSON persistence.
 
-Tracks feature lifecycle state, scores, and transition history.
+Tracks feature lifecycle state, scores, and transition history across runs.
 Each feature is stored as a FeatureRecord with composite/MDA/stability/regime
-scores and a full state transition log.
+scores and a full state transition log. ``record_run`` applies one run's
+selection + stability verdicts through the lifecycle policy
+(``lifecycle.next_state``); ``update_state`` only allows transitions from
+``lifecycle.VALID_TRANSITIONS``.
 
 Persistence is optional: pass a registry_path for JSON file storage,
-or None for in-memory only operation.
-
-Reference: Phase E7 of Feature Governance roadmap.
+or None for in-memory only operation. The file is last-writer-wins: two runs
+sharing one registry concurrently keep only the later save.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
+from collections.abc import Collection, Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .lifecycle import (
+    DEFAULT_MAX_DEGRADED_RUNS,
+    VALID_TRANSITIONS,
+    FeatureLifecycleState,
+    next_state,
+)
+
 logger = logging.getLogger(__name__)
 
-VALID_STATES = frozenset({"candidate", "selected", "active", "degraded", "retired"})
+VALID_STATES = frozenset(state.value for state in FeatureLifecycleState)
+_SCORE_FIELDS = frozenset({"composite_score", "mda_score", "stability_score", "regime_score"})
 
 
 def _now_iso() -> str:
@@ -31,7 +43,7 @@ def _now_iso() -> str:
 
 @dataclass
 class FeatureRecord:
-    """Immutable record of a single feature's lifecycle state and scores."""
+    """A single feature's lifecycle state, latest scores and transition log."""
 
     feature_name: str
     state: str = "candidate"
@@ -42,6 +54,8 @@ class FeatureRecord:
     created_at: str = ""
     last_selected_at: str | None = None
     transition_history: list[dict] = field(default_factory=list)
+    degraded_runs: int = 0  # consecutive failing runs while DEGRADED
+    last_run_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.created_at:
@@ -51,6 +65,15 @@ class FeatureRecord:
                 f"Invalid state '{self.state}' for feature '{self.feature_name}'. "
                 f"Must be one of: {sorted(VALID_STATES)}"
             )
+
+
+@dataclass
+class RunUpdate:
+    """What one ``record_run`` changed."""
+
+    transitions: list[dict] = field(default_factory=list)
+    n_new: int = 0
+    retired_but_selected: list[str] = field(default_factory=list)
 
 
 class FeatureRegistry:
@@ -79,10 +102,9 @@ class FeatureRegistry:
         Returns:
             The created or updated FeatureRecord.
         """
-        allowed_scores = {"composite_score", "mda_score", "stability_score", "regime_score"}
-        invalid = set(scores) - allowed_scores
+        invalid = set(scores) - _SCORE_FIELDS
         if invalid:
-            raise ValueError(f"Unknown score fields: {invalid}. Allowed: {sorted(allowed_scores)}")
+            raise ValueError(f"Unknown score fields: {invalid}. Allowed: {sorted(_SCORE_FIELDS)}")
 
         if feature_name in self._features:
             record = self._features[feature_name]
@@ -108,7 +130,8 @@ class FeatureRegistry:
 
         Raises:
             KeyError: If feature is not registered.
-            ValueError: If new_state is not a valid state.
+            ValueError: If new_state is not a valid state, or the move is not
+                allowed from the feature's current state.
         """
         if new_state not in VALID_STATES:
             raise ValueError(f"Invalid state '{new_state}'. Must be one of: {sorted(VALID_STATES)}")
@@ -117,6 +140,11 @@ class FeatureRegistry:
 
         record = self._features[feature_name]
         old_state = record.state
+        if (
+            FeatureLifecycleState(new_state)
+            not in VALID_TRANSITIONS[FeatureLifecycleState(old_state)]
+        ):
+            raise ValueError(f"Invalid transition for '{feature_name}': {old_state} -> {new_state}")
         record.state = new_state
         record.transition_history.append(
             {
@@ -134,6 +162,67 @@ class FeatureRegistry:
             f"Feature '{feature_name}': {old_state} -> {new_state}"
             + (f" ({reason})" if reason else "")
         )
+
+    def record_run(
+        self,
+        run_id: str,
+        *,
+        scores: Mapping[str, Mapping[str, float]],
+        selected: Collection[str],
+        stable: Mapping[str, bool] | None = None,
+        max_degraded_runs: int = DEFAULT_MAX_DEGRADED_RUNS,
+    ) -> RunUpdate:
+        """Fold one run into the registry: refresh scores, then advance lifecycles.
+
+        Every registered feature is judged, including ones this run no longer
+        produced (they count as not selected). Retired features are never
+        revived; a retired feature that is selected again is reported.
+
+        Args:
+            run_id: Identifier recorded in transition reasons and ``last_run_id``.
+            scores: Candidate pool: feature -> score fields (see ``register``).
+            selected: Features the run's selection kept.
+            stable: Stability verdict per feature (missing = not measured).
+            max_degraded_runs: Consecutive failing DEGRADED runs before retirement.
+        """
+        update = RunUpdate()
+        selected_set = set(selected)
+        stable = stable or {}
+        for name, feature_scores in scores.items():
+            if name not in self._features:
+                update.n_new += 1
+            self.register(name, **feature_scores)
+
+        for name, record in self._features.items():
+            is_selected = name in selected_set
+            verdict = stable.get(name)
+            record.last_run_id = run_id
+            if is_selected:
+                record.last_selected_at = _now_iso()
+            state = FeatureLifecycleState(record.state)
+            if state is FeatureLifecycleState.RETIRED:
+                if is_selected:
+                    update.retired_but_selected.append(name)
+                continue
+            if state is FeatureLifecycleState.DEGRADED and not (
+                is_selected and verdict is not False
+            ):
+                record.degraded_runs += 1
+            new_state, reason = next_state(
+                state,
+                selected=is_selected,
+                stable=verdict,
+                degraded_runs=record.degraded_runs,
+                max_degraded_runs=max_degraded_runs,
+            )
+            if new_state is None:
+                continue
+            self.update_state(name, new_state.value, reason=f"{run_id}: {reason}")
+            record.degraded_runs = 1 if new_state is FeatureLifecycleState.DEGRADED else 0
+            update.transitions.append(
+                {"feature": name, "from": state.value, "to": new_state.value, "reason": reason}
+            )
+        return update
 
     def get(self, feature_name: str) -> FeatureRecord | None:
         """Look up a feature by name. Returns None if not found."""
@@ -164,7 +253,9 @@ class FeatureRegistry:
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         data = self.to_dict()
-        self._path.write_text(json.dumps(data, indent=2) + "\n")
+        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2) + "\n")
+        os.replace(tmp, self._path)
         logger.info(f"Registry saved: {len(self._features)} features -> {self._path}")
 
     def load(self) -> None:
@@ -177,8 +268,11 @@ class FeatureRegistry:
             loaded = FeatureRegistry.from_dict(data, registry_path=self._path)
             self._features = loaded._features
             logger.info(f"Registry loaded: {len(self._features)} features from {self._path}")
-        except (json.JSONDecodeError, KeyError, TypeError) as exc:
-            logger.warning(f"Failed to load registry from {self._path}: {exc}")
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            # Keep the unreadable file for inspection instead of overwriting it on save
+            broken = self._path.with_suffix(self._path.suffix + ".corrupt")
+            os.replace(self._path, broken)
+            logger.warning(f"Unreadable registry {self._path} ({exc}); moved to {broken}")
 
     def to_dict(self) -> dict:
         """Serialize registry to a dict suitable for JSON."""
@@ -216,4 +310,4 @@ class FeatureRegistry:
         return f"FeatureRegistry({len(self._features)} features, path={self._path})"
 
 
-__all__ = ["FeatureRecord", "FeatureRegistry", "VALID_STATES"]
+__all__ = ["FeatureRecord", "FeatureRegistry", "RunUpdate", "VALID_STATES"]

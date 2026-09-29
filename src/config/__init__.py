@@ -82,6 +82,7 @@ from src.config.cv import WalkForwardConfig, WindowType
 from src.config.data import (
     FeatureCategory,
     FeatureConfig,
+    FeatureGovernanceConfig,
     LabelingConfig,
     MTFConfig,
     MTFMode,
@@ -167,6 +168,7 @@ __all__ = [
     # Experiment config + sections
     "ExperimentConfig",
     "FeatureConfig",
+    "FeatureGovernanceConfig",
     "LabelingConfig",
     "SequenceConfig",
     "MTFConfig",

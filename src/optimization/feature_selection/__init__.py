@@ -46,9 +46,6 @@ from .config import (
     ModelFamilyDefaults,
 )
 
-# Economic value scoring (slow path)
-from .economic_value import EconomicValueScorer, FeatureValueScore
-
 # Filtering functions
 from .filtering import (
     apply_feature_selection,
@@ -62,10 +59,14 @@ from .filtering import (
 )
 
 # Label perturbation testing
-from .label_perturbation import LabelPerturbationTester, PerturbationResult
+from .label_perturbation import (
+    LabelPerturbationTester,
+    PerturbationResult,
+    PerturbationSummary,
+)
 
 # Feature lifecycle state machine
-from .lifecycle import FeatureLifecycle, FeatureLifecycleState
+from .lifecycle import FeatureLifecycleState
 
 # OHLCV-specific selectors
 from .ohlcv_selector import (
@@ -78,9 +79,6 @@ from .ohlcv_selector import (
     get_feature_categories,
 )
 
-# Parameter sensitivity testing
-from .param_sensitivity import ParameterSensitivityTester, SensitivityResult
-
 # Priority - no external dependencies
 from .priority import (
     DEFAULT_PRIORITY,
@@ -92,7 +90,7 @@ from .priority import (
 from .regime_selection import compute_regime_importance
 
 # Feature registry with persistence
-from .registry import FeatureRecord, FeatureRegistry
+from .registry import FeatureRecord, FeatureRegistry, RunUpdate
 from .result import (
     FeatureSelectionResult,
     PersistedFeatureSelection,
@@ -169,22 +167,17 @@ __all__ = [
     "compute_regime_importance",
     # Feature lifecycle
     "FeatureLifecycleState",
-    "FeatureLifecycle",
     # Feature registry
     "FeatureRecord",
     "FeatureRegistry",
+    "RunUpdate",
     # Bootstrap stability
     "BootstrapFeatureStability",
     "BootstrapStabilityResult",
-    # Economic value scoring
-    "EconomicValueScorer",
-    "FeatureValueScore",
     # Label perturbation
     "LabelPerturbationTester",
     "PerturbationResult",
-    # Parameter sensitivity
-    "ParameterSensitivityTester",
-    "SensitivityResult",
+    "PerturbationSummary",
     # Robustness scoring
     "RobustnessScorer",
     # Timeframe budget

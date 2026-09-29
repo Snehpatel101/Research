@@ -74,6 +74,37 @@ real deployments; B if standard mode is what you actually ship.
 
 ## 3. Phase 99–102 feature-governance modules — wire, park, or delete
 
+> **RESOLVED in Phase 117 (2026-09-29):** wired as opt-in, read-only diagnostics
+> (`data.features.governance.report: true`), with three modules deleted.
+> After selection, `_run_feature_selection_pipeline` hands the finished selection
+> and the TRAIN rows to `models/training/feature_governance.py`, which writes
+> `<output_dir>/feature_governance/h{h}.json` and updates a per-symbol
+> `FeatureRegistry` (`<runs dir>/feature_registry_<SYMBOL>.json`). It never
+> changes the selected features (pinned by an e2e test: identical with and
+> without the report). Every ranking inside it is the selection's own purged-CV
+> out-of-sample MDA.
+> - `bootstrap_stability` — **wired, rewritten**: the i.i.d. row bootstrap was
+>   wrong for autocorrelated bars; now stability selection over random contiguous
+>   blocks (selection frequency in the top-K).
+> - `label_perturbation` — **wired, rewritten**: relabels the train rows with
+>   the triple-barrier widths scaled (default x0.75 / x1.25) and flags features
+>   whose MDA rank moves; no duplicate RandomForest, it reuses the live ranking.
+> - `lifecycle` + `registry` — **wired, merged**: one transition table
+>   (the `FeatureLifecycle` class duplicated the registry's history and is gone);
+>   `record_run` advances CANDIDATE -> SELECTED -> ACTIVE <-> DEGRADED ->
+>   RETIRED across runs from selection + stability verdicts. Retirement is
+>   recorded and reported, never applied.
+> - `param_sensitivity` — **deleted**: needs the whole feature set recomputed
+>   under parameter variants, which `FeatureEngineer` cannot do generically;
+>   overlaps label perturbation.
+> - `economic_value` — **deleted**: its "Sharpe" was label x prediction on a
+>   shuffled split (not returns, leaks time), and leave-one-out differences on
+>   one holdout are noise; the backtester is the honest economic test.
+> - `ticker_portability` — **deleted**: needs two symbols in one process and
+>   used a shuffled split; compare two symbols' governance reports instead.
+>
+> Cost when enabled: about `n_bootstrap + 2` extra MDA rankings (default 8 + 2).
+
 **What:** `bootstrap_stability.py`, `label_perturbation.py`,
 `param_sensitivity.py`, `lifecycle.py`, `registry.py`, `economic_value.py`
 (in `src/optimization/feature_selection/`) and `ticker_portability.py`
@@ -376,7 +407,7 @@ and add tests. **Recommendation:** delete — the supported serving API is
 |---|----------|---------------------------|-------------|--------|
 | 1 | Serving/monitoring chain | ✅ Resolved (Phase 116) | — | — |
 | 2 | Special-mode bundles | ✅ Resolved (Phase 115) | — | — |
-| 3 | Governance modules | Tests-only forever | Wire lifecycle+registry, park rest | 1–2 days |
+| 3 | Governance modules | ✅ Resolved (Phase 117: opt-in diagnostics wired, 3 modules deleted) | — | — |
 | 4 | Contract seq_len | ✅ Resolved (Phase 116) | — | — |
 | 5 | 5-D Optuna island | Dead code pinned by tests | Merge prepared branch (needs your OK) | minutes |
 | 6 | Dual AdapterResult | ✅ Resolved (Phase 116) | — | — |
